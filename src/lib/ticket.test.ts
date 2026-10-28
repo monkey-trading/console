@@ -25,10 +25,12 @@ describe("previewTicket", () => {
     const market = await btc();
     const preview = previewTicket({ market, side: "buy", notional: fixedFromInt(50_000), slippageBps: 10, account: account(10_000), houseNav: fixedFromInt(20_000_000) });
     expect(preview.quote?.price).toBeGreaterThan(market.mark ?? 0n);
-    // The quantity truncates to a millionth of a unit, so the margin is just under two percent of 50,000.
-    expect(preview.marginAdded).toBeLessThanOrEqual(fixedFromInt(1_000));
-    expect(preview.marginAdded).toBeGreaterThan(fixedFromInt(999));
-    expect(preview.marginUseBps).toBe(999);
+    // The quantity rounds up to a millionth of a unit, so the margin is just over two percent of 50,000.
+    expect(preview.marginAdded).toBeGreaterThanOrEqual(fixedFromInt(1_000));
+    expect(preview.marginAdded).toBeLessThan(fixedFromInt(1_001));
+    // Margin use is measured on the equity left after the spread this order pays.
+    expect(preview.marginUseBps).toBeGreaterThan(1_000);
+    expect(preview.marginUseBps).toBeLessThan(1_020);
     expect(preview.problems).toEqual([]);
     expect(preview.worstPrice).toBeGreaterThan(preview.quote?.price ?? 0n);
   });

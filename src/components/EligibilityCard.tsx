@@ -4,6 +4,7 @@
 
 import { useId, useRef, useState } from "react";
 
+import { maySign } from "@/lib/engine/attestation";
 import type { EligibilityClass } from "@/lib/engine/types";
 import { attestEligibility, STATEMENTS } from "@/lib/store/actions";
 
@@ -12,7 +13,7 @@ import { useConsole, useSession } from "./ConsoleProvider";
 const CLASSES: readonly EligibilityClass[] = ["professional", "eligible_client"];
 
 export function EligibilityCard() {
-  const { wallet, eligibility, busy } = useConsole();
+  const { wallet, eligibility, busy, attestation } = useConsole();
   const { store } = useSession();
   const [choice, setChoice] = useState<EligibilityClass>("professional");
   const name = useId();
@@ -34,7 +35,7 @@ export function EligibilityCard() {
               </label>
             ))}
           </fieldset>
-          <button type="submit" disabled={!wallet || busy} className="mt-4 rounded border border-glow bg-glow/10 px-4 py-2.5 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow disabled:cursor-not-allowed disabled:border-line-2 disabled:bg-transparent disabled:text-fg-3">
+          <button type="submit" disabled={!wallet || busy || !maySign(attestation)} className="mt-4 rounded border border-glow bg-glow/10 px-4 py-2.5 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow disabled:cursor-not-allowed disabled:border-line-2 disabled:bg-transparent disabled:text-fg-3">
             {busy ? "Signing…" : "Sign the declaration"}
           </button>
           {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet first.</p>}

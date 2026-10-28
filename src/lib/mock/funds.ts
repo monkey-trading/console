@@ -20,7 +20,7 @@ const wholeUsdc = (value: Fixed): Fixed => (value / USDC_UNIT) * USDC_UNIT;
  */
 export function chainDeposit(state: MockState, address: string, amount: Fixed): void {
   const account = state.account(address);
-  if (account.eligibility === null) throw new EngineError(403, "eligibility attestation required", { type: "access", reason: "eligibility_required" });
+  if (account.eligibility === null) throw new EngineError(403, "eligibility attestation required", { kind: "access", reason: "eligibility_required" });
   if (amount < MIN_DEPOSIT || amount > MAX_DEPOSIT) throw new EngineError(400, "deposits are 10 to 1,000,000,000 USDC");
   if (amount !== wholeUsdc(amount)) throw new EngineError(400, "USDC has six decimal places");
   account.pending.push({ amount, readyAt: state.now + FINALITY_MS });
@@ -56,10 +56,10 @@ export function withdraw(state: MockState, req: WithdrawalRequest): ActionResult
   const amount = requested === null ? null : wholeUsdc(requested);
   const events: EngineEvent[] = [];
   if (amount === null || amount <= 0n) {
-    events.push({ type: "withdrawal_rejected", account: req.account, amount: req.amount, reason: { type: "invalid_amount" } });
+    events.push({ type: "withdrawal_rejected", account: req.account, amount: req.amount, reason: { kind: "invalid_amount" } });
   } else if (amount > withdrawable(state, req.account)) {
     const available = fixedToWire(withdrawable(state, req.account));
-    events.push({ type: "withdrawal_rejected", account: req.account, amount: req.amount, reason: { type: "insufficient_funds", available } });
+    events.push({ type: "withdrawal_rejected", account: req.account, amount: req.amount, reason: { kind: "insufficient_funds", available } });
   } else {
     account.balance -= amount;
     const approved = state.queue.some((entry) => entry.remaining > 0n) ? 0n : wholeUsdc(minFixed(amount, state.vaultLiquidity));

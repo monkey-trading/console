@@ -2,47 +2,17 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { EngineEvent, OrderRequest } from "../engine/types";
+import type { EngineEvent } from "../engine/types";
 import { fixedFromInt, fixedToWire, parseFixed } from "../fixed";
-import { fillEvents, fillOrder } from "./execute";
-import { createMockNode, type MockNode } from "./index";
-
-const ME = "0xabc0000000000000000000000000000000000001";
-// A Wednesday at 15:00 UTC, when every market is open.
-const START = Date.UTC(2026, 9, 28, 15, 0, 0);
-const SIG = `0x${"ab".repeat(65)}`;
-
-function auth(node: MockNode) {
-  const next = node.client.state.account(ME).nextNonce;
-  return { nonce: next, expires_at: node.client.state.now + 60_000, signature: SIG };
-}
-
-/** A node with `ME` attested and funded with `dollars`, after finality. */
-async function funded(dollars: number): Promise<MockNode> {
-  const node = createMockNode(START);
-  await node.client.attestEligibility({ account: ME, class: "professional", auth: auth(node) });
-  node.controls.deposit(ME, fixedFromInt(dollars));
-  node.client.tick(START + 1_000);
-  node.client.tick(START + 7_000);
-  return node;
-}
-
-async function order(node: MockNode, qty: string, side: "buy" | "sell", extra: Partial<OrderRequest> = {}, market = 1) {
-  const mark = (await node.client.markets()).find((m) => m.id === market)?.mark ?? "0";
-  return node.client.placeOrder({
-    account: ME, client_id: 1, market, side, qty,
-    kind: { type: "market", quoted: mark, max_slippage_bps: 50 }, auth: auth(node), ...extra,
-  });
-}
-
-const types = (events: EngineEvent[]) => events.map((e) => e.type);
+import { createMockNode } from "./index";
+import { auth, funded, ME, order, START, types } from "./test-helpers";
 
 describe("access", () => {
   it("refuses the United States and sanctioned jurisdictions before anything else", async () => {
     const node = createMockNode(START);
     node.controls.setRegion("united_states");
     await expect(node.client.attestEligibility({ account: ME, class: "professional", auth: auth(node) })).rejects.toMatchObject({
-      status: 403, reject: { type: "access", reason: "united_states" },
+      status: 403, reject: { kind: "access", reason: "united_states" },
     });
     node.controls.setRegion("sanctioned_jurisdiction");
     // A deposit goes to the vault, which screens the paying address, not the connection.
@@ -66,12 +36,12 @@ describe("signed requests", () => {
     const node = await funded(10_000);
     const stale = auth(node);
     await order(node, "0.01", "buy");
-    await expect(order(node, "0.01", "buy", { auth: stale })).rejects.toMatchObject({ status: 409, reject: { type: "invalid_nonce" } });
+    await expect(order(node, "0.01", "buy", { auth: stale })).rejects.toMatchObject({ status: 409, reject: { kind: "invalid_nonce" } });
   });
 
   it("refuses a missing or malformed signature and an expired request", async () => {
     const node = await funded(10_000);
-    const bare = { account: ME, client_id: 1, market: 1, side: "buy" as const, qty: "0.01", kind: { type: "market" as const, quoted: "1" } };
+    const bare = { account: ME, client_id: 1, market: 1, side: "buy" as const, qty: "0.01", kind: { kind: "market" as const, quoted: "1" } };
     await expect(node.client.placeOrder(bare)).rejects.toMatchObject({ status: 401 });
     await expect(order(node, "0.01", "buy", { auth: { ...auth(node), signature: "0x12" } })).rejects.toMatchObject({ status: 401 });
     await expect(order(node, "0.01", "buy", { auth: { ...auth(node), expires_at: node.client.state.now - 1 } })).rejects.toMatchObject({ status: 400 });
@@ -87,7 +57,7 @@ describe("deposits", () => {
     expect(early.balance).toBe("5000");
     expect(early.unfinalised_deposits).toBe("5000");
     const locked = await node.client.withdraw({ account: ME, amount: "100", auth: auth(node) });
-    expect(locked.events[0]).toMatchObject({ type: "withdrawal_rejected", reason: { type: "insufficient_funds", available: "0" } });
+    expect(locked.events[0]).toMatchObject({ type: "withdrawal_rejected", reason: { kind: "insufficient_funds", available: "0" } });
     node.client.tick(START + 7_000);
     const view = await node.client.account(ME);
     expect(view.balance).toBe("5000");
@@ -117,27 +87,27 @@ describe("market orders", () => {
 
   it("declines when the live price has moved past the slippage bound", async () => {
     const node = await funded(100_000);
-    const result = await order(node, "0.01", "buy", { kind: { type: "market", quoted: "1", max_slippage_bps: 20 } });
-    expect(result.events[0]).toMatchObject({ type: "order_rejected", reason: { type: "slippage" } });
+    const result = await order(node, "0.01", "buy", { kind: { kind: "market", quoted: "1", max_slippage_bps: 20 } });
+    expect(result.events[0]).toMatchObject({ type: "order_rejected", reason: { kind: "slippage" } });
   });
 
   it("declines a closed market, too little margin, and a house-capacity breach", async () => {
     const node = await funded(1_000);
     node.controls.setHalted(1, true);
     node.client.tick(START + 8_000);
-    expect((await order(node, "0.01", "buy")).events[0]).toMatchObject({ reason: { type: "market_closed" } });
+    expect((await order(node, "0.01", "buy")).events[0]).toMatchObject({ reason: { kind: "market_closed" } });
     node.controls.setHalted(1, false);
     node.client.tick(START + 9_000);
-    expect((await order(node, "5", "buy")).events[0]).toMatchObject({ reason: { type: "insufficient_margin" } });
+    expect((await order(node, "5", "buy")).events[0]).toMatchObject({ reason: { kind: "insufficient_margin" } });
     const rich = await funded(50_000_000);
-    expect((await order(rich, "20", "buy")).events[0]).toMatchObject({ reason: { type: "house_capacity" } });
+    expect((await order(rich, "20", "buy")).events[0]).toMatchObject({ reason: { kind: "house_capacity" } });
   });
 
   it("rests a limit order until the quote reaches it, then fills it; an unreached one cancels on request", async () => {
     const node = await funded(100_000);
     const mark = parseFixed((await node.client.markets())[0]?.mark ?? "0") ?? 0n;
     const near = fixedToWire(mark - mark / 100n); // 1% below the index
-    const resting = await order(node, "0.1", "buy", { kind: { type: "limit", price: near } });
+    const resting = await order(node, "0.1", "buy", { kind: { kind: "limit", price: near } });
     expect(types(resting.events)).toEqual(["order_accepted"]);
     const seen: EngineEvent[] = [];
     node.client.subscribe((m) => seen.push(...m.events));
@@ -147,7 +117,7 @@ describe("market orders", () => {
     node.client.tick(START + 9_000);
     expect(seen.find((e) => e.type === "fill")).toMatchObject({ type: "fill", side: "buy" });
     expect(Object.keys((await node.client.account(ME)).orders)).toEqual([]);
-    const far = await order(node, "0.1", "buy", { kind: { type: "limit", price: "1000" } });
+    const far = await order(node, "0.1", "buy", { kind: { kind: "limit", price: "1000" } });
     expect(types(far.events)).toEqual(["order_accepted"]);
     const orderId = Number(Object.keys((await node.client.account(ME)).orders)[0]);
     const cancelled = await node.client.cancelOrder({ account: ME, order_id: orderId, auth: auth(node) });
@@ -197,8 +167,8 @@ describe("withdrawals", () => {
 
   it("refuses more than the account can withdraw and an invalid amount", async () => {
     const node = await funded(1_000);
-    expect((await node.client.withdraw({ account: ME, amount: "5000", auth: auth(node) })).events[0]).toMatchObject({ type: "withdrawal_rejected", reason: { type: "insufficient_funds" } });
-    expect((await node.client.withdraw({ account: ME, amount: "-1", auth: auth(node) })).events[0]).toMatchObject({ reason: { type: "invalid_amount" } });
+    expect((await node.client.withdraw({ account: ME, amount: "5000", auth: auth(node) })).events[0]).toMatchObject({ type: "withdrawal_rejected", reason: { kind: "insufficient_funds" } });
+    expect((await node.client.withdraw({ account: ME, amount: "-1", auth: auth(node) })).events[0]).toMatchObject({ reason: { kind: "invalid_amount" } });
   });
 });
 
@@ -218,76 +188,5 @@ describe("market hours and stress", () => {
     node.controls.setStressFloor(null, 2);
     node.client.tick(START + 1_000);
     expect((await node.client.markets()).every((m) => m.stress_level === 2)).toBe(true);
-  });
-});
-
-describe("engine rules the mock follows", () => {
-  it("fills a resting limit that is already executable when it is accepted", async () => {
-    const node = await funded(100_000);
-    const result = await order(node, "0.1", "buy", { kind: { type: "limit", price: "1000000" } });
-    expect(types(result.events)).toEqual(["order_accepted", "fill"]);
-    expect(Object.keys((await node.client.account(ME)).orders)).toEqual([]);
-  });
-
-  it("triggers a stop on the index, not on a spread that stress has widened", async () => {
-    const node = await funded(100_000);
-    const mark = parseFixed((await node.client.markets())[0]?.mark ?? "0") ?? 0n;
-    const level = fixedToWire(mark + mark / 1_000n); // 0.1% above the index: inside the stress-3 spread but above the index
-    await order(node, "0.1", "buy", { kind: { type: "stop", price: level } });
-    node.controls.setStressFloor(1, 3);
-    node.client.tick(START + 9_000);
-    expect(Object.keys((await node.client.account(ME)).orders)).toHaveLength(1);
-  });
-
-  it("charges financing as a positive amount the account pays", async () => {
-    const node = await funded(100_000);
-    await order(node, "0.5", "buy");
-    const seen: EngineEvent[] = [];
-    node.client.subscribe((m) => seen.push(...m.events));
-    node.client.tick(Date.UTC(2026, 9, 28, 22, 5, 0));
-    const charge = seen.find((e) => e.type === "financing");
-    expect(charge).toMatchObject({ type: "financing" });
-    expect(parseFixed(charge?.type === "financing" ? charge.amount : "0") ?? 0n).toBeGreaterThan(0n);
-  });
-
-  it("writes a loss beyond the balance off against the house only once the account is flat", async () => {
-    const node = await funded(1_000);
-    const { state } = node.client;
-    const account = state.account(ME);
-    // A large loser in BTC and a flat position in ETH; the balance cannot cover the loss.
-    account.balance = fixedFromInt(10);
-    account.positions.set(1, { qty: fixedFromInt(1), entry: fixedFromInt(70_000) });
-    account.positions.set(2, { qty: fixedFromInt(1), entry: state.markets.get(2)?.mid ?? 0n });
-    const houseBefore = state.houseCash;
-    const first = fillOrder(state, { address: ME, market: 1, side: "sell", qty: fixedFromInt(1), reduceOnly: true, orderId: 0, liquidation: true });
-    expect(first).toMatchObject({ ok: true, badDebt: 0n });
-    expect(account.balance).toBeLessThan(0n); // the debt stays while ETH is still open
-    expect(state.houseCash).toBeGreaterThan(houseBefore); // the house holds the loss's counterpart, not a write-off
-    const second = fillOrder(state, { address: ME, market: 2, side: "sell", qty: fixedFromInt(1), reduceOnly: true, orderId: 0, liquidation: true });
-    if (!second.ok) throw new Error("the second close fills");
-    expect(second.badDebt).toBeGreaterThan(0n);
-    expect(account.balance).toBe(0n);
-    expect(types(fillEvents(second.fill, second.badDebt))).toEqual(["fill", "bad_debt"]);
-  });
-
-  it("treats a flip to the other side as added risk, so a reduce-only order cannot flip", async () => {
-    const node = await funded(100_000);
-    await order(node, "0.5", "buy");
-    const flip = await order(node, "1.5", "sell", { reduce_only: true });
-    expect(flip.events[0]).toMatchObject({ type: "order_rejected", reason: { type: "reduce_only" } });
-  });
-});
-
-describe("history", () => {
-  it("pages by per-event cursors without losing events inside one command", async () => {
-    const node = await funded(100_000);
-    const result = await order(node, "0.5", "buy");
-    expect(types(result.events)).toEqual(["order_accepted", "fill"]);
-    const first = await node.client.history(ME, { limit: 1 });
-    expect(first.events[0]?.type).toBe("fill");
-    expect(first.events[0]?.cursor).toMatch(/^\d+:1$/);
-    const second = await node.client.history(ME, { limit: 1, before: first.next ?? undefined });
-    expect(second.events[0]?.type).toBe("order_accepted");
-    expect(second.events[0]?.cursor).toMatch(/^\d+:0$/);
   });
 });

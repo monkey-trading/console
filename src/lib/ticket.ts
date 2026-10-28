@@ -3,7 +3,7 @@
 import { bpsOf, divFixed, fixedFromWire, mulFixed, SCALE, type Fixed } from "./fixed";
 import type { Side } from "./engine/types";
 import type { AccountModel, MarketModel } from "./models";
-import { growthOf, notionalOf, quoteOrder, slicedBps, tieredMargin, type Quote } from "./pricing";
+import { executionCost, growthOf, notionalOf, quoteOrder, slicedBps, tieredMargin, type Quote } from "./pricing";
 
 /** The smallest step of a quantity: a millionth of a unit. */
 const QTY_STEP: Fixed = SCALE / 1_000_000n;
@@ -74,7 +74,8 @@ export function previewTicket(input: TicketInput): TicketPreview {
       marginUseBps: null, marginRateBps: rate, impliedLeverage: null, houseCap, problems: ["No price yet."],
     };
   }
-  const qty = (divFixed(notional, mark) / QTY_STEP) * QTY_STEP;
+  // Rounded up to the step, so the order is never a hair under the size the user entered (and its minimum).
+  const qty = ((divFixed(notional, mark) + QTY_STEP - 1n) / QTY_STEP) * QTY_STEP;
   const current = held(account, market.id);
   const quoteSide = (s: Side) =>
     quoteOrder({ index: mark, side: s, baseSpreadBps: market.baseSpreadBps, spreadTiers: spec.spread_tiers, stress: market.stress, held: current, qty });
@@ -87,7 +88,10 @@ export function previewTicket(input: TicketInput): TicketPreview {
   const after = tieredMargin(spec.margin_tiers, mulFixed(current + delta, mark));
   const marginAfter = (account?.margin ?? 0n) - before + after;
   const equity = account?.equity ?? 0n;
-  const useBps = equity > 0n ? Number((marginAfter * 10_000n) / equity) : null;
+  // The check the node runs: equity after the spread this fill pays, against the margin the account then needs.
+  const cost = executionCost({ held: current, entry: account?.positions.find((p) => p.market === market.id)?.entry ?? null, delta, price: quote.price, index: mark });
+  const afterCost = equity - cost;
+  const useBps = afterCost > 0n ? Number((marginAfter * 10_000n) / afterCost) : equity > 0n ? 10_001 : null;
   const worst = side === "buy" ? bpsOf(quote.price, input.slippageBps) : -bpsOf(quote.price, input.slippageBps);
   if (!market.open && !input.resting) problems.push("This market is closed.");
   if (market.reduceOnly && grows) problems.push("This market only accepts orders that reduce a position.");

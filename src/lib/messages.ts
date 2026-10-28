@@ -13,9 +13,9 @@ const usd = (wire: string) => formatUsd(fixedFromWire(wire));
 
 /** One sentence for a typed refusal. */
 export function describeReject(reject: Reject): string {
-  switch (reject.type) {
+  switch (reject.kind) {
     case "access":
-      return reject.reason === "eligibility_required" ? "Attest your eligibility first." : "This account cannot use the service from here.";
+      return reject.reason === "eligibility_required" ? "Attest your eligibility first." : reject.reason === "already_attested" ? "Your eligibility is already recorded." : "This account cannot use the service from here.";
     case "market_closed": return "The market is closed.";
     case "reduce_only": return "The market only accepts orders that reduce a position.";
     case "no_price": return "The market has no price right now.";

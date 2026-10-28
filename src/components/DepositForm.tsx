@@ -4,6 +4,7 @@
 
 import { useId, useState } from "react";
 
+import { maySign } from "@/lib/engine/attestation";
 import { deposit, parseAmount } from "@/lib/store/actions";
 import { isWholeUsdc, MAX_DEPOSIT, MIN_DEPOSIT } from "@/lib/vault";
 
@@ -14,7 +15,7 @@ const SUBMIT = "mt-4 rounded border border-glow bg-glow/10 px-4 py-2.5 text-capt
 
 /** Deposits come from the wallet to the vault; the node credits them once final. */
 export function DepositForm() {
-  const { wallet, eligibility, busy } = useConsole();
+  const { wallet, eligibility, busy, attestation } = useConsole();
   const { store } = useSession();
   const [amount, setAmount] = useState("1000");
   const id = useId();
@@ -27,7 +28,7 @@ export function DepositForm() {
         <label htmlFor={id} className="mt-4 block text-caption text-fg-2">Amount (USDC)</label>
         <input id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} aria-describedby={`${id}-hint`} className={INPUT} />
         <p id={`${id}-hint`} className="mt-1 text-label leading-relaxed text-fg-3">10 to 1,000,000,000 USDC. The node counts a deposit as collateral at once and releases it for withdrawal when it is final.</p>
-        <button type="submit" disabled={!wallet || eligibility === null || !valid || busy} className={SUBMIT}>Deposit</button>
+        <button type="submit" disabled={!wallet || eligibility === null || !valid || busy || !maySign(attestation)} className={SUBMIT}>Deposit</button>
         {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet first.</p>}
         {wallet && eligibility === null && <p className="mt-2 text-label text-fg-3">Sign the eligibility declaration first.</p>}
         {wallet && amount.trim() !== "" && !valid && <p className="mt-2 text-label text-ember">Enter an amount from 10 to 1,000,000,000 USDC, to at most six decimal places.</p>}

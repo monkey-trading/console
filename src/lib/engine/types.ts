@@ -54,10 +54,11 @@ export interface Position {
   entry: string;
 }
 
+/** Tagged by `kind`, as the engine serializes it. */
 export type OrderKind =
-  | { type: "market"; quoted: string; max_slippage_bps?: number }
-  | { type: "limit"; price: string }
-  | { type: "stop"; price: string };
+  | { kind: "market"; quoted: string; max_slippage_bps?: number }
+  | { kind: "limit"; price: string }
+  | { kind: "stop"; price: string };
 
 export interface RestingOrder {
   order_id: OrderId;
@@ -126,23 +127,24 @@ export interface EligibilityView {
 
 export type AccessReject = "united_states" | "sanctioned_jurisdiction" | "eligibility_required" | "already_attested";
 
+/** Tagged by `kind`, as the engine serializes it. */
 export type Reject =
-  | { type: "access"; reason: AccessReject }
-  | { type: "market_closed" }
-  | { type: "reduce_only" }
-  | { type: "no_price" }
-  | { type: "unknown_market" }
-  | { type: "unknown_order" }
-  | { type: "invalid_order"; reason: string }
-  | { type: "invalid_amount" }
-  | { type: "slippage"; quoted: string; live: string; slippage_bps: number }
-  | { type: "insufficient_margin"; equity: string; required: string }
-  | { type: "insufficient_funds"; available: string }
-  | { type: "house_capacity" }
-  | { type: "invalid_signature" }
-  | { type: "missing_signature" }
-  | { type: "invalid_nonce"; expected: number }
-  | { type: "payout_unavailable" };
+  | { kind: "access"; reason: AccessReject }
+  | { kind: "market_closed" }
+  | { kind: "reduce_only" }
+  | { kind: "no_price" }
+  | { kind: "unknown_market" }
+  | { kind: "unknown_order" }
+  | { kind: "invalid_order"; reason: string }
+  | { kind: "invalid_amount" }
+  | { kind: "slippage"; quoted: string; live: string; slippage_bps: number }
+  | { kind: "insufficient_margin"; equity: string; required: string }
+  | { kind: "insufficient_funds"; available: string }
+  | { kind: "house_capacity" }
+  | { kind: "invalid_signature" }
+  | { kind: "missing_signature" }
+  | { kind: "invalid_nonce"; expected: number }
+  | { kind: "payout_unavailable" };
 
 export interface Fill {
   account: Address;

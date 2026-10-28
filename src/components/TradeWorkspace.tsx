@@ -9,7 +9,7 @@ export function TradeWorkspace() {
   return (
     <div className="grid min-h-0 flex-1 lg:grid-cols-[210px_minmax(0,1fr)_290px] xl:grid-cols-[230px_minmax(0,1fr)_310px]">
       <div className="min-h-0 lg:overflow-y-auto"><Watchlist /></div>
-      <div className="flex min-h-0 min-w-0 flex-col lg:overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-col lg:overflow-y-auto">
         <ChartPanel />
         <BottomPanel />
       </div>

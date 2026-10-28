@@ -128,7 +128,7 @@ export class ConsoleStore {
 
   /** Marks the caller as refused when `error` is an access refusal; true if it was. */
   noteAccess(error: unknown): boolean {
-    if (error instanceof EngineError && error.reject?.type === "access") {
+    if (error instanceof EngineError && error.reject?.kind === "access") {
       const reason = error.reject.reason;
       if (reason === "united_states" || reason === "sanctioned_jurisdiction") {
         this.patch({ blocked: reason satisfies BlockReason, fundingOpen: false });

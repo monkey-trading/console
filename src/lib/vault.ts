@@ -14,10 +14,10 @@ export function isWholeUsdc(amount: Fixed): boolean {
   return amount % USDC_UNIT === 0n;
 }
 
-/** What an account may withdraw: equity above margin and never more than its unlocked cash. */
+/** What an account may withdraw: the smaller of its unlocked cash and its equity above margin. */
 export function withdrawableNow(balance: Fixed, equity: Fixed, margin: Fixed, locked: Fixed = 0n): Fixed {
   const cash = balance - locked;
-  const free = equity - margin - locked;
+  const free = equity - margin;
   const most = cash < free ? cash : free;
   return most > 0n ? most : 0n;
 }

@@ -28,7 +28,7 @@ matches the current action.
 - **src/lib/** — pure TypeScript with no React or DOM. Logic modules have adjacent `*.test.ts`:
   `site.ts` holds identity and `siteUrl()`, the one environment-variable reader; `fixed.ts` is the
   engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `bars.ts` (marks into bars per timeframe) and
-  `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
+  `vault.ts` (deposit bounds, the withdrawable amount) and `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
   margin and market-hours rules and the ticket preview; `models.ts` and `messages.ts` decode and
   describe engine data; `build.ts` says whether this build accepts the mock attestation.
   `engine/` holds the node's wire shapes (`types.ts`), the display facts the console keeps per
@@ -42,7 +42,7 @@ matches the current action.
   `agentRules: false`, so `next dev` leaves this index alone, and `devIndicators: false`, so its
   overlay does not cover the terminal.
 - **eslint.config.mjs** — ESLint flat config: `@eslint/js`, `typescript-eslint`, `react-hooks`, and
-  `jsx-a11y` strict, which lets a scrolling `log` take focus; the 300-line `max-lines` cap; and no
+  `jsx-a11y` strict, which lets a scrolling `log` or `tabpanel` take focus; the 300-line `max-lines` cap; and no
   non-null assertions. `npm run lint` allows no warnings.
 - **tsconfig.json** — `strict` and `noUncheckedIndexedAccess`; `@/*` maps to `src/*`.
 - **vitest.config.ts** — runs `src/**/*.test.ts` in the Node environment.

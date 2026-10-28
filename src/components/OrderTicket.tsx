@@ -50,8 +50,8 @@ export function OrderTicket() {
   const show = (value: bigint | null) => (value === null ? "—" : formatPrice(fixedToNumber(value), places));
   const submit = () => {
     const base = { market: market.id, side, notional, slippageBps: slippage, reduceOnly: false };
-    if (kind === "market") void placeOrder(store, { ...base, kind: { type: "market" } });
-    else if (triggerPrice !== null) void placeOrder(store, { ...base, kind: { type: kind, price: triggerPrice } });
+    if (kind === "market") void placeOrder(store, { ...base, kind: { kind: "market" } });
+    else if (triggerPrice !== null) void placeOrder(store, { ...base, kind: { kind, price: triggerPrice } });
   };
   return (
     <>

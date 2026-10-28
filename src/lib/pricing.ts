@@ -6,6 +6,9 @@ import type { Side, Tier } from "./engine/types";
 /** Extra spread each side pays, in basis points, at stress levels 0 to 3. */
 export const STRESS_SPREAD_BPS = [0, 4, 12, 30] as const;
 
+/** The share of a realised profit the house keeps, in basis points. */
+export const PROFIT_FEE_BPS = 1_000;
+
 /** An account is closed out when its equity falls below this share of its margin, in basis points. */
 export const CLOSE_OUT_BPS = 5_000;
 
@@ -124,4 +127,16 @@ export function adverseBps(side: Side, quoted: Fixed, live: Fixed): number {
 /** `qty` units at `price`, in dollars. */
 export function notionalOf(qty: Fixed, price: Fixed): Fixed {
   return absFixed(mulFixed(qty, price));
+}
+
+/**
+ * What filling `qty` units at `price` costs the account's equity right away: the spread paid against
+ * the index, and the fee on any profit a reversal realises by closing the old side first.
+ */
+export function executionCost(args: { held: Fixed; entry: Fixed | null; delta: Fixed; price: Fixed; index: Fixed }): Fixed {
+  const { held, delta, price, index } = args;
+  const closing = held !== ZERO && (held > ZERO) !== (held + delta > ZERO) ? held : ZERO;
+  const realised = mulFixed(closing, price - (args.entry ?? price));
+  const fee = realised > ZERO ? bpsOf(realised, PROFIT_FEE_BPS) : ZERO;
+  return mulFixed(absFixed(delta), absFixed(price - index)) + fee;
 }

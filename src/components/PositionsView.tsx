@@ -40,7 +40,7 @@ export function PositionsView() {
                     <td className={`px-4 py-4 ${pnl < 0n ? "text-ember" : "text-glow"}`}>{formatUsd(pnl)}</td>
                     <td className="px-4 py-4 text-right">
                       <button type="button" disabled={busy || !market?.open} className={BUTTON} aria-label={`Close ${market?.symbol ?? ""} position`}
-                        onClick={(event) => { keepFocus(event.currentTarget); void placeOrder(store, { market: p.market, side: p.qty > 0n ? "sell" : "buy", notional: absFixed(mulFixed(p.qty, mark)), slippageBps: 25, kind: { type: "market" }, reduceOnly: true, qty: absFixed(p.qty) }); }}>
+                        onClick={(event) => { keepFocus(event.currentTarget); void placeOrder(store, { market: p.market, side: p.qty > 0n ? "sell" : "buy", notional: absFixed(mulFixed(p.qty, mark)), slippageBps: 25, kind: { kind: "market" }, reduceOnly: true, qty: absFixed(p.qty) }); }}>
                         Close
                       </button>
                     </td>

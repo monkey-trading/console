@@ -35,4 +35,16 @@ describe("liquidationPrice", () => {
     expect(liquidationPrice(account(1_000, 400, fixedFromInt(-1), 60_000), btc, all)).toBe(fixedFromInt(60_800));
     expect(liquidationPrice({ ...account(1_000, 0, 0n, 0), positions: [] }, btc, all)).toBeNull();
   });
+
+  it("counts the other positions' profit and loss, and has no price at or below zero", async () => {
+    const all = await markets();
+    const btc = all.find((m) => m.id === 1);
+    const eth = all.find((m) => m.id === 2);
+    if (!btc || !eth) throw new Error("BTC-USD and ETH-USD are listed");
+    const ethMark = eth.mark ?? 0n;
+    const withOther = { ...account(1_000, 400, fixedFromInt(1), 60_000), positions: [{ market: 1, qty: fixedFromInt(1), entry: fixedFromInt(60_000) }, { market: 2, qty: fixedFromInt(1), entry: ethMark + fixedFromInt(100) }] };
+    // ETH is 100 under its entry, so BTC has 100 less to lose before the threshold.
+    expect(liquidationPrice(withOther, btc, all)).toBe(fixedFromInt(59_300));
+    expect(liquidationPrice(account(1_000_000, 400, fixedFromInt(1), 1_000), btc, all)).toBeNull();
+  });
 });

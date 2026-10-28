@@ -24,8 +24,8 @@ export function createMockNode(startMs: number, demo = false): MockNode {
   const state = new MockState(demo ? startMs - DEMO_SPAN_MS : startMs);
   for (const entry of SEEDED_QUEUE) {
     state.account(entry.account);
-    state.queue.push({ account: entry.account, amount: entry.amount, remaining: entry.amount, requestedSeq: state.seq });
-    state.emit({ type: "withdraw" }, [{ type: "withdrawal_queued", account: entry.account, amount: fixedToWire(entry.amount), requested_seq: state.seq }]);
+    state.queue.push({ account: entry.account, amount: entry.amount, remaining: entry.amount, requestedSeq: state.seq + 1 });
+    state.emit({ type: "withdraw" }, [{ type: "withdrawal_queued", account: entry.account, amount: fixedToWire(entry.amount), requested_seq: state.seq + 1 }]);
   }
   if (demo) seedDemoAccount(state, startMs);
   const client = new MockEngineClient(state);

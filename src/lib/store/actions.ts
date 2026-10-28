@@ -118,7 +118,7 @@ export interface OrderParams {
   side: Side;
   notional: Fixed;
   slippageBps: number;
-  kind: { type: "market" } | { type: "limit" | "stop"; price: Fixed };
+  kind: { kind: "market" } | { kind: "limit" | "stop"; price: Fixed };
   reduceOnly: boolean;
   /** An exact quantity, such as a position being closed; the size above then only prices the quote. */
   qty?: Fixed;
@@ -134,11 +134,11 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams): Prom
   if (!preview.quote || units <= 0n) return;
   const qty = fixedToWire(units);
   const kind: OrderKind =
-    params.kind.type === "market"
-      ? { type: "market", quoted: fixedToWire(preview.quote.price), max_slippage_bps: params.slippageBps }
-      : { type: params.kind.type, price: fixedToWire(params.kind.price) };
+    params.kind.kind === "market"
+      ? { kind: "market", quoted: fixedToWire(preview.quote.price), max_slippage_bps: params.slippageBps }
+      : { kind: params.kind.kind, price: fixedToWire(params.kind.price) };
   const shown = formatFixedPlaces(preview.quote.price, market.places);
-  const summary = `${params.side} ${qty} ${market.symbol}${params.kind.type === "market" ? ` at ${shown}, up to ${params.slippageBps} bps worse` : ""}`;
+  const summary = `${params.side} ${qty} ${market.symbol}${params.kind.kind === "market" ? ` at ${shown}, up to ${params.slippageBps} bps worse` : ""}`;
   const out = await signed(store, { primaryType: "Order", summary, message: { market: market.id, side: params.side, qty } }, (auth, wallet) =>
     store.deps.client.placeOrder({ account: wallet.address, client_id: store.id(), market: market.id, side: params.side, qty, kind, reduce_only: params.reduceOnly, auth }),
   );

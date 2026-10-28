@@ -33,7 +33,7 @@ async function funded() {
   return ctx;
 }
 
-const buy = (store: ConsoleStore, notional: number, kind: Parameters<typeof placeOrder>[1]["kind"] = { type: "market" }) =>
+const buy = (store: ConsoleStore, notional: number, kind: Parameters<typeof placeOrder>[1]["kind"] = { kind: "market" }) =>
   placeOrder(store, { market: 1, side: "buy", notional: fixedFromInt(notional), slippageBps: 10, kind, reduceOnly: false });
 
 describe("the user's path", () => {
@@ -74,7 +74,7 @@ describe("the user's path", () => {
     const { store } = await funded();
     await buy(store, 5_000_000);
     expect(store.getSnapshot().toasts.at(-1)?.text).toMatch(/equity|house|too|Not enough/i);
-    await buy(store, 10_000, { type: "limit", price: parseFixed("1000") ?? 0n });
+    await buy(store, 10_000, { kind: "limit", price: parseFixed("1000") ?? 0n });
     const order = store.getSnapshot().account?.orders[0];
     expect(order).toBeDefined();
     await cancelOrder(store, order?.order_id ?? 0);

@@ -23,7 +23,7 @@ function markersFor(state: ConsoleState, market: MarketModel): PriceMarker[] {
     if (liq !== null) out.push({ price: fixedToNumber(liq), tone: "ember", style: "dashed", title: "Close-out (est.)" });
   }
   for (const order of state.account?.orders ?? []) {
-    if (order.market === market.id && order.kind.type !== "market") out.push({ price: Number(order.kind.price), tone: "amber", style: "dotted", title: `${order.kind.type} ${order.side}` });
+    if (order.market === market.id && order.kind.kind !== "market") out.push({ price: Number(order.kind.price), tone: "amber", style: "dotted", title: `${order.kind.kind} ${order.side}` });
   }
   return out;
 }
@@ -38,7 +38,7 @@ export function ChartPanel() {
   const change = market.mark !== null && market.reference !== null ? moveBps(market.reference, market.mark) : 0;
   const [whole, decimals] = splitDecimals(mark === null ? "—" : formatPrice(mark, market.places));
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="flex min-h-[26rem] min-w-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <div>
           <h2 className="text-sm font-medium">{market.symbol.replace("-", " / ")} <span className="ml-2 text-caption font-normal text-fg-3">{market.name}</span></h2>

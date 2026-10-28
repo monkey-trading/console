@@ -16,6 +16,12 @@ export function FundingDrawer() {
   const { fundingOpen, wallet, toasts } = useConsole();
   const { store } = useSession();
   const dialog = useRef<HTMLDialogElement>(null);
+  const connected = useRef(wallet !== null);
+  useEffect(() => {
+    // Connecting from the drawer removes the button that was used; focus moves to the drawer's heading.
+    if (fundingOpen && wallet !== null && !connected.current) document.getElementById("funding-title")?.focus();
+    connected.current = wallet !== null;
+  }, [wallet, fundingOpen]);
   useEffect(() => {
     const el = dialog.current;
     if (!el) return;

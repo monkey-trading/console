@@ -28,7 +28,7 @@ export function HistoryList() {
       ) : (
         <ol>
           {rows.map(({ entry, text }) => (
-            <li key={entry.cursor} className="grid grid-cols-[7.5rem_6.5rem_1fr] gap-3 border-b border-line px-4 py-3 text-caption last:border-b-0">
+            <li key={entry.cursor} className="grid grid-cols-1 gap-1 border-b border-line px-4 py-3 text-caption last:border-b-0 sm:grid-cols-[7.5rem_6.5rem_1fr] sm:gap-3">
               <time className="text-fg-3">{formatStamp(entry.ts)}</time>
               <span className="text-fg-2">{KIND[entry.type] ?? "Event"}</span>
               <span className={entry.type === "close_out" || entry.type.endsWith("rejected") || entry.type === "bad_debt" ? "text-ember" : "text-fg"}>{text}</span>
