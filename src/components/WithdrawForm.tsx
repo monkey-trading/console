@@ -7,7 +7,7 @@ import { useId, useState } from "react";
 import { maySign } from "@/lib/engine/attestation";
 import { formatFixedPlaces } from "@/lib/fixed";
 import { parseAmount, withdraw } from "@/lib/store/actions";
-import { withdrawableNow } from "@/lib/vault";
+import { MIN_WITHDRAWAL, withdrawableNow } from "@/lib/vault";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 
@@ -22,7 +22,7 @@ export function WithdrawForm() {
   const id = useId();
   const max = account ? withdrawableNow(account.balance, account.equity, account.margin, account.unfinalised) : 0n;
   const value = parseAmount(amount);
-  const valid = value !== null && value <= max;
+  const valid = value !== null && value >= MIN_WITHDRAWAL && value <= max;
   return (
     <section aria-labelledby="withdraw-title" className="rounded-xl border border-line-2 bg-ink-1 p-5">
       <h2 id="withdraw-title" className="text-label tracking-caps text-fg-3 uppercase">3 · Withdraw</h2>
@@ -35,6 +35,7 @@ export function WithdrawForm() {
         <p className="mt-1 text-label leading-relaxed text-fg-3">The amount leaves your balance when you ask. The vault pays requests in order as it has liquidity, to six decimal places; the rest waits in the queue below.</p>
         <button type="submit" aria-disabled={!wallet || !valid || busy || !maySign(attestation)} className={SUBMIT}>Request withdrawal</button>
         {amount.trim() !== "" && value === null && <p className="mt-2 text-label text-ember">Enter the amount in digits with a decimal point if needed, such as 1250.50.</p>}
+        {value !== null && value < MIN_WITHDRAWAL && <p className="mt-2 text-label text-ember">The smallest withdrawal is 10 USDC.</p>}
         {value !== null && value > max && <p className="mt-2 text-label text-ember">You can withdraw up to ${formatFixedPlaces(max, 2)} while your positions use margin.</p>}
       </form>
     </section>

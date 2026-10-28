@@ -176,6 +176,9 @@ export class ConsoleStore {
 
   private onMessage(message: StreamMessage): void {
     for (const event of message.events) {
+      if (event.type === "close_out" && this.isMine(event)) {
+        this.toast("error", "Your account was closed out: its equity fell below half its margin, so positions were closed at market. See History.");
+      }
       // A resting order the node cancels later, on a tick, is something the user must be told.
       if (event.type === "order_cancelled" && event.reason !== "client" && this.isMine(event)) {
         this.toast("error", `Order ${event.order_id} could not be filled and was cancelled.`);

@@ -51,6 +51,18 @@ describe("previewTicket", () => {
     expect(tiny.problems).toContain("Not enough equity for the margin this needs.");
   });
 
+  it("checks the minimum on the rounded quantity at the mark, or at a resting order's trigger price, and shows no worst price for a resting order", async () => {
+    const market = await btc();
+    const houseNav = fixedFromInt(20_000_000);
+    const base = { market, side: "buy" as const, slippageBps: 10, account: account(10_000), houseNav };
+    expect(previewTicket({ ...base, notional: fixedFromInt(100) }).problems).toEqual([]); // the quantity rounds up, so $100 holds
+    expect(previewTicket({ ...base, notional: fixedFromInt(99) }).problems).toContain("Minimum order is 100 USD.");
+    const resting = previewTicket({ ...base, notional: fixedFromInt(1_000), resting: true, triggerPrice: fixedFromInt(5_000) });
+    expect(resting.problems).toContain("Minimum order is 100 USD.");
+    expect(resting.worstPrice).toBeNull();
+    expect(previewTicket({ ...base, notional: fixedFromInt(1_000) }).worstPrice).not.toBeNull();
+  });
+
   it("shows the best bid and offer for the size, and the spread widens as the size grows", async () => {
     const market = await btc();
     const houseNav = fixedFromInt(20_000_000);

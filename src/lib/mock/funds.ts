@@ -4,7 +4,7 @@ import { EngineError, type ActionResult } from "../engine/client";
 import type { EngineEvent, QueuedWithdrawal, WithdrawalPage, WithdrawalRequest } from "../engine/types";
 import { fixedToWire, minFixed, parseFixed, type Fixed } from "../fixed";
 import { equityOf, marginOf } from "./accounts";
-import { MAX_DEPOSIT, MIN_DEPOSIT, USDC_UNIT, withdrawableNow } from "../vault";
+import { MAX_DEPOSIT, MIN_DEPOSIT, MIN_WITHDRAWAL, USDC_UNIT, withdrawableNow } from "../vault";
 import { checkAccess, checkAuth } from "./orders";
 import { FINALITY_MS, type MockState } from "./state";
 
@@ -62,14 +62,16 @@ export function withdraw(state: MockState, req: WithdrawalRequest): ActionResult
   // The engine reserves whole USDC base units; any finer dust of the request stays in account cash.
   const amount = requested === null ? null : wholeUsdc(requested);
   const events: EngineEvent[] = [];
-  if (amount === null || amount <= 0n) {
+  if (amount === null || amount < MIN_WITHDRAWAL) {
     events.push({ type: "withdrawal_rejected", account: req.account, amount: req.amount, reason: { kind: "invalid_amount" } });
   } else if (amount > withdrawable(state, req.account)) {
     const available = fixedToWire(withdrawable(state, req.account));
     events.push({ type: "withdrawal_rejected", account: req.account, amount: req.amount, reason: { kind: "insufficient_funds", available } });
   } else {
     account.balance -= amount;
-    const approved = state.queue.some((entry) => entry.remaining > 0n) ? 0n : wholeUsdc(minFixed(amount, state.vaultLiquidity));
+    const room = state.queue.some((entry) => entry.remaining > 0n) ? 0n : wholeUsdc(minFixed(amount, state.vaultLiquidity));
+    // A part under the minimum is deferred unless it settles the whole request.
+    const approved = room < MIN_WITHDRAWAL && room < amount ? 0n : room;
     if (approved > 0n) {
       state.vaultLiquidity -= approved;
       events.push({ type: "withdrawal_approved", account: req.account, amount: fixedToWire(approved), nonce: ++account.approvalNonce });
@@ -89,7 +91,8 @@ export function payQueue(state: MockState, added: Fixed): EngineEvent[] {
   for (const entry of state.queue) {
     if (entry.remaining <= 0n) continue;
     const pay = wholeUsdc(minFixed(entry.remaining, state.vaultLiquidity));
-    if (pay <= 0n) break; // first in, first out: a later request never jumps the head
+    // A part below the minimum waits unless it settles the request, as the engine defers it; FIFO holds.
+    if (pay <= 0n || (pay < MIN_WITHDRAWAL && pay < entry.remaining)) break; // first in, first out: a later request never jumps the head
     state.vaultLiquidity -= pay;
     entry.remaining -= pay;
     events.push({ type: "withdrawal_approved", account: entry.account, amount: fixedToWire(pay), nonce: ++state.account(entry.account).approvalNonce });

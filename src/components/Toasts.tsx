@@ -25,7 +25,11 @@ export function Toasts() {
   }, [latest, fundingOpen]);
   useEffect(() => {
     if (latest === 0) return;
-    const timer = setTimeout(() => store.clearToasts(), TOAST_MS);
+    const timer = setTimeout(() => {
+      // A message that expires under the keyboard's focus would drop it; move it somewhere deliberate first.
+      if (popover.current?.contains(document.activeElement)) document.getElementById("main")?.focus();
+      store.clearToasts();
+    }, TOAST_MS);
     return () => clearTimeout(timer);
   }, [latest, store]);
   return (

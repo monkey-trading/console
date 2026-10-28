@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
 import type { Tier } from "./engine/types";
-import { adverseBps, exceedsSlippage, growthOf, quoteFor, slicedBps, tierCost, tieredMargin } from "./pricing";
+import { adverseBps, executionCost, exceedsSlippage, growthOf, quoteFor, slicedBps, tierCost, tieredMargin } from "./pricing";
 
 const SPREAD: Tier[] = [
   { up_to: "250000", bps: 0 },
@@ -90,5 +90,18 @@ describe("a reversal's size charge", () => {
     const reversal = quoteFor({ ...base, heldNotional: 0n, orderNotional: fixedFromInt(1_000_000), executedNotional: fixedFromInt(2_000_000) });
     const full = quoteFor({ ...base, heldNotional: 0n, orderNotional: fixedFromInt(1_000_000), executedNotional: fixedFromInt(1_000_000) });
     expect(reversal.spreadBps).toBeLessThan(full.spreadBps);
+  });
+});
+
+describe("executionCost", () => {
+  const index = fixedFromInt(100);
+  it("charges the profit fee on a partial reduction, an exact close and a reversal, but not on a loss or an add", () => {
+    const profitable = { entry: fixedFromInt(80), price: fixedFromInt(100), index };
+    const fee = (held: number, delta: number) => executionCost({ held: fixedFromInt(held), delta: fixedFromInt(delta), ...profitable });
+    expect(fee(10, -4)).toBe(fixedFromInt(4 * 20) / 10n); // 4 units close at +20: the fee is a tenth of 80
+    expect(fee(10, -10)).toBe(fixedFromInt(200) / 10n);
+    expect(fee(10, -13)).toBe(fixedFromInt(200) / 10n);
+    expect(fee(10, 5)).toBe(0n);
+    expect(executionCost({ held: fixedFromInt(10), delta: fixedFromInt(-4), entry: fixedFromInt(120), price: fixedFromInt(100), index })).toBe(0n);
   });
 });

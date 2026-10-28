@@ -105,7 +105,7 @@ export function previewTicket(input: TicketInput): TicketPreview {
     else if (marginAfter > afterCost) problems.push("Not enough equity for the margin this needs.");
   }
   return {
-    qty, quote, offer: offer.price, bid: bid.price, spreadBps: Number(((offer.price - bid.price) * 10_000n) / mark), worstPrice: quote.price + worst,
+    qty, quote, offer: offer.price, bid: bid.price, spreadBps: Number(((offer.price - bid.price) * 10_000n) / mark), worstPrice: input.resting ? null : quote.price + worst,
     marginAfter, marginAdded: after - before, marginUseBps: useBps, marginRateBps: positionRate,
     impliedLeverage: after > 0n ? Number((resulting * 100n) / after) / 100 : null, houseCap, problems,
   };

@@ -54,8 +54,13 @@ function applyToHolding(held: Holding, delta: Fixed, price: Fixed): Fixed {
  * Checks an order against the market, the quote, the account's margin, and the house's cap; then
  * fills it. Every refusal is a typed `Reject`, as the engine logs it.
  */
-export function fillOrder(state: MockState, req: FillRequest): FillOutcome {
-  const runtime = state.markets.get(req.market);
+export function fillOrder(state: MockState, order: FillRequest): FillOutcome {
+  const runtime = state.markets.get(order.market);
+  const heldNow = state.account(order.address).positions.get(order.market)?.qty ?? 0n;
+  // A reduce-only order is clamped to what it can reduce, and refused when it would reduce nothing.
+  const reducible = (order.side === "buy") === (heldNow < 0n) ? absFixed(heldNow) : 0n;
+  if (order.reduceOnly && !order.liquidation && reducible === 0n) return { ok: false, reject: { kind: "reduce_only" } };
+  const req = order.reduceOnly && order.qty > reducible ? { ...order, qty: reducible } : order;
   const account = state.account(req.address);
   if (!runtime) return { ok: false, reject: { kind: "unknown_market" } };
   if (!runtime.open || runtime.halted) return { ok: false, reject: { kind: "market_closed" } };

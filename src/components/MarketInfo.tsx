@@ -41,7 +41,7 @@ export function MarketInfo({ market, preview, notional }: { market: MarketModel;
           <div className={ROW}><dt className="text-fg-3">Required margin</dt><dd>{usd(preview.marginAdded)}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Implied leverage</dt><dd>{preview.impliedLeverage === null ? "—" : `${preview.impliedLeverage}×`}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Quoted price</dt><dd>{preview.quote ? formatMark(preview.quote.price, market.places) : "—"}</dd></div>
-          <div className={ROW}><dt className="text-fg-3">Worst price allowed</dt><dd>{preview.worstPrice ? formatMark(preview.worstPrice, market.places) : "—"}</dd></div>
+          {preview.worstPrice !== null && <div className={ROW}><dt className="text-fg-3">Worst price allowed</dt><dd>{preview.worstPrice ? formatMark(preview.worstPrice, market.places) : "—"}</dd></div>}
         </dl>
         <div>
           <p className="flex justify-between text-label"><span className="text-fg-3">Margin use after order</span><span className={useBps !== null && useBps > 9_000 ? "text-ember" : "text-glow"}>{useBps === null ? "—" : formatMovePercent(useBps).replace("+", "")}</span></p>

@@ -6,6 +6,9 @@ import { fixedFromInt, type Fixed } from "./fixed";
 export const MIN_DEPOSIT: Fixed = fixedFromInt(10);
 export const MAX_DEPOSIT: Fixed = fixedFromInt(1_000_000_000);
 
+/** The least a withdrawal may reserve, as the engine's latest protocol requires: 10 USDC. */
+export const MIN_WITHDRAWAL: Fixed = fixedFromInt(10);
+
 /** One USDC base unit (six decimals) in the nine-decimal representation. */
 export const USDC_UNIT: Fixed = 1_000n;
 

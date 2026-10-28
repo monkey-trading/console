@@ -95,11 +95,19 @@ describe("engine rules the mock follows", () => {
     expect(types(fillEvents(second.fill, second.badDebt))).toEqual(["fill", "bad_debt"]);
   });
 
-  it("treats a flip to the other side as added risk, so a reduce-only order cannot flip", async () => {
+  it("treats a flip as added risk, but clamps an oversized reduce-only order to what it can reduce", async () => {
     const node = await funded(100_000);
     await order(node, "0.5", "buy");
-    const flip = await order(node, "1.5", "sell", { reduce_only: true });
-    expect(flip.events[0]).toMatchObject({ type: "order_rejected", reason: { kind: "reduce_only" } });
+    const held = (await node.client.account(ME)).positions["1"]?.qty ?? "0";
+    const clamped = await order(node, "1.5", "sell", { reduce_only: true });
+    expect(clamped.events[1]).toMatchObject({ type: "fill", qty: held, position: "0" });
+    const same = await order(node, "0.1", "buy", { reduce_only: true });
+    expect(same.events[0]).toMatchObject({ type: "order_rejected", reason: { kind: "reduce_only" } });
+    const flip = await order(node, "0.5", "buy");
+    expect(types(flip.events)).toEqual(["order_accepted", "fill"]);
+    const reverse = await order(node, "1.2", "sell");
+    expect(reverse.events[1]).toMatchObject({ type: "fill", side: "sell" });
+    expect(parseFixed((reverse.events[1] as { position: string }).position) ?? 0n).toBeLessThan(0n);
   });
 });
 
@@ -128,6 +136,47 @@ describe("finalized deposits", () => {
     const forSecond = (events: EngineEvent[]) => events.flatMap((e) => (e.type === "withdrawal_approved" && e.account.startsWith("0x2222") ? [e.nonce] : []));
     expect(forSecond(approved)).toEqual([1]);
     expect(forSecond(second)).toEqual([2]);
+  });
+});
+
+describe("minimums and the vault", () => {
+  it("refuses an order under the minimum notional, at its market price and at a resting order's trigger price", async () => {
+    const node = await funded(100_000);
+    const market = await order(node, "0.001", "buy"); // about $67
+    expect(market.events[0]).toMatchObject({ type: "order_rejected", reason: { kind: "invalid_order" } });
+    const resting = await order(node, "0.1", "buy", { kind: { kind: "limit", price: "500" } }); // $50 at its own price
+    expect(resting.events[0]).toMatchObject({ type: "order_rejected", reason: { kind: "invalid_order" } });
+    const fine = await order(node, "0.01", "buy");
+    expect(types(fine.events)).toEqual(["order_accepted", "fill"]);
+  });
+
+  it("approves what the vault holds at request time, queues the rest, and defers a part under 10 USDC", async () => {
+    const node = await funded(100_000);
+    const { state } = node.client;
+    state.queue.splice(0);
+    state.vaultLiquidity = fixedFromInt(300);
+    const split = await node.client.withdraw({ account: ME, amount: "1000", auth: auth(node) });
+    expect(types(split.events)).toEqual(["withdrawal_approved", "withdrawal_queued"]);
+    expect(split.events[0]).toMatchObject({ amount: "300", nonce: 1 });
+    expect(split.events[1]).toMatchObject({ amount: "700" });
+    state.vaultLiquidity = fixedFromInt(5);
+    const deferred = node.controls.addLiquidity(0n);
+    expect(types(deferred)).toEqual([]); // 5 USDC is under the minimum part and does not settle the request
+    const small = await node.client.withdraw({ account: ME, amount: "9", auth: auth(node) });
+    expect(small.events[0]).toMatchObject({ type: "withdrawal_rejected", reason: { kind: "invalid_amount" } });
+  });
+
+  it("evaluates only the newly inserted resting order, not older ones", async () => {
+    const node = await funded(100_000);
+    const mark = parseFixed((await node.client.markets())[0]?.mark ?? "0") ?? 0n;
+    const older = await order(node, "0.1", "buy", { kind: { kind: "limit", price: fixedToWire(mark - mark / 100n) } });
+    expect(types(older.events)).toEqual(["order_accepted"]);
+    // Make the older BTC order executable without a tick, by moving the index down directly.
+    const btc = node.client.state.markets.get(1);
+    if (!btc) throw new Error("BTC-USD is listed");
+    btc.mid -= btc.mid / 50n;
+    const other = await order(node, "1", "buy", { kind: { kind: "limit", price: "1000" } }, 2);
+    expect(types(other.events)).toEqual(["order_accepted"]); // the older BTC order did not fire as a side effect
   });
 });
 

@@ -78,7 +78,7 @@ function orderEvents(state: MockState, req: OrderRequest, account: AccountState)
   // A resting order is admitted while its market is closed; it cannot trigger until the market trades.
   account.orders.set(orderId, { order_id: orderId, client_id: req.client_id, market: req.market, side: req.side, qty: req.qty, kind: req.kind, reduce_only: req.reduce_only ?? false });
   // A newly accepted order that is already executable fills at once, as the engine checks it on insertion.
-  return [accepted, ...triggerResting(state, req.account)];
+  return [accepted, ...triggerResting(state, req.account, orderId)];
 }
 
 /** Sequences the cancel of a resting order. */
@@ -105,15 +105,15 @@ export function attestEligibility(state: MockState, req: EligibilityRequest): Ac
 
 /**
  * Fires every resting order of an open market whose trigger has been reached (of one account, or of
- * all). A limit order waits for the quote it would fill at to reach its price; a stop waits for the
+ * all; or only the one just inserted). A limit order waits for the quote it would fill at to reach its price; a stop waits for the
  * index itself to trade through its price, so a widening spread alone never triggers it.
  */
-export function triggerResting(state: MockState, only?: string): EngineEvent[] {
+export function triggerResting(state: MockState, only?: string, orderId?: number): EngineEvent[] {
   const events: EngineEvent[] = [];
   const queued: { address: string; account: AccountState; order: RestingOrder }[] = [];
   for (const [address, account] of state.accounts) {
     if (only !== undefined && address !== only.toLowerCase()) continue;
-    for (const order of account.orders.values()) queued.push({ address, account, order });
+    for (const order of account.orders.values()) if (orderId === undefined || order.order_id === orderId) queued.push({ address, account, order });
   }
   // The engine works through triggered orders by global order id, oldest first, whoever placed them.
   queued.sort((a, b) => a.order.order_id - b.order.order_id);

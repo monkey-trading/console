@@ -131,11 +131,13 @@ export function notionalOf(qty: Fixed, price: Fixed): Fixed {
 
 /**
  * What filling `qty` units at `price` costs the account's equity right away: the spread paid against
- * the index, and the fee on any profit a reversal realises by closing the old side first.
+ * the index, and the fee on any profit realised by closing all or part of the old side first.
  */
 export function executionCost(args: { held: Fixed; entry: Fixed | null; delta: Fixed; price: Fixed; index: Fixed }): Fixed {
   const { held, delta, price, index } = args;
-  const closing = held !== ZERO && (held > ZERO) !== (held + delta > ZERO) ? held : ZERO;
+  // Any order against the other side of the holding closes up to the whole holding, and realises P&L on that part.
+  const against = held !== ZERO && delta !== ZERO && (held > ZERO) !== (delta > ZERO);
+  const closing = against ? (absFixed(delta) < absFixed(held) ? -delta : held) : ZERO;
   const realised = mulFixed(closing, price - (args.entry ?? price));
   const fee = realised > ZERO ? bpsOf(realised, PROFIT_FEE_BPS) : ZERO;
   return mulFixed(absFixed(delta), absFixed(price - index)) + fee;
