@@ -8,7 +8,8 @@ import { formatClock } from "@/lib/time";
 
 import { useConsole } from "./ConsoleProvider";
 import { HistoryList } from "./HistoryList";
-import { OrdersView, PositionsView } from "./PositionsTable";
+import { OrdersView } from "./OrdersView";
+import { PositionsView } from "./PositionsView";
 
 const TABS = ["positions", "orders", "history", "activity"] as const;
 type Tab = (typeof TABS)[number];

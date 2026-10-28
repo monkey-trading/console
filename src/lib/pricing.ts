@@ -18,13 +18,9 @@ function overlap(from: Fixed, to: Fixed, lower: Fixed, upTo: Fixed | null): Fixe
   return maxFixed(ZERO, top - maxFixed(from, lower));
 }
 
-/**
- * The weighted basis points `tiers` charge on the slice of notional between `from` and `to`, each
- * band applying to the part of the slice inside it. Truncates toward zero.
- */
-export function slicedBps(tiers: readonly Tier[], from: Fixed, to: Fixed): number {
-  const width = to - from;
-  if (width <= ZERO) return 0;
+/** What `tiers` charge on the slice of notional between `from` and `to`, each band on the part inside it, exactly. */
+export function tierCost(tiers: readonly Tier[], from: Fixed, to: Fixed): Fixed {
+  if (to <= from) return ZERO;
   let lower = ZERO;
   let charged = ZERO;
   for (const tier of tiers) {
@@ -32,12 +28,30 @@ export function slicedBps(tiers: readonly Tier[], from: Fixed, to: Fixed): numbe
     charged += bpsOf(overlap(from, to, lower, upTo), tier.bps);
     if (upTo !== null) lower = upTo;
   }
-  return Number((charged * 10_000n) / width);
+  return charged;
+}
+
+/** The weighted basis points `tiers` charge on that slice, truncated toward zero, for display. */
+export function slicedBps(tiers: readonly Tier[], from: Fixed, to: Fixed): number {
+  return to <= from ? 0 : Number((tierCost(tiers, from, to) * 10_000n) / (to - from));
 }
 
 /** The initial margin `tiers` require for a position of `notional` (absolute, in dollars). */
 export function tieredMargin(tiers: readonly Tier[], notional: Fixed): Fixed {
-  return bpsOf(absFixed(notional), slicedBps(tiers, ZERO, absFixed(notional)));
+  return tierCost(tiers, ZERO, absFixed(notional));
+}
+
+/**
+ * How an order of signed quantity `delta` against a holding of `held` adds risk. The slice that
+ * grows the absolute position runs from the held size, or from zero when the order flips the
+ * position to the other side, up to the new size; an order that only reduces adds none.
+ */
+export function growthOf(held: Fixed, delta: Fixed): { grows: boolean; fromQty: Fixed; toQty: Fixed } {
+  const next = held + delta;
+  const flips = held !== ZERO && (held > ZERO) !== (next > ZERO) && next !== ZERO;
+  if (flips) return { grows: true, fromQty: ZERO, toQty: absFixed(next) };
+  const grows = absFixed(next) > absFixed(held);
+  return { grows, fromQty: absFixed(held), toQty: absFixed(next) };
 }
 
 /** The most leverage the first margin band allows, such as 50 for a two percent band. */
@@ -54,9 +68,9 @@ export interface Quote {
 }
 
 /**
- * The quote for an order of `notional` that takes the position from `held` to `held + signed`:
- * the index, moved against the trader by the base spread, the stress add-on, and the size spread
- * on the slice that grows the account's absolute notional.
+ * The quote for an order whose growing slice runs from `heldNotional` to `heldNotional +
+ * orderNotional` (see `growthOf`): the index, moved against the trader by the base spread, the
+ * stress add-on, and the exact size charge spread over the order.
  */
 export function quoteFor(args: {
   index: Fixed;
@@ -64,17 +78,37 @@ export function quoteFor(args: {
   baseSpreadBps: number;
   spreadTiers: readonly Tier[];
   stress: number;
+  /** Notional where the growing slice starts, in dollars. */
   heldNotional: Fixed;
+  /** Notional of the growing slice, in dollars; zero for an order that only reduces. */
   orderNotional: Fixed;
-  /** Whether the order grows the account's absolute position. */
-  grows: boolean;
 }): Quote {
   const { index, side, spreadTiers, heldNotional, orderNotional } = args;
-  const sizeBps = args.grows ? slicedBps(spreadTiers, absFixed(heldNotional), absFixed(heldNotional) + orderNotional) : 0;
   const stressBps = STRESS_SPREAD_BPS[Math.min(args.stress, MAX_STRESS)] ?? 0;
-  const spreadBps = args.baseSpreadBps + stressBps + sizeBps;
-  const move = bpsOf(index, spreadBps);
+  const flat = bpsOf(index, args.baseSpreadBps + stressBps);
+  const sizeCost = orderNotional > ZERO ? tierCost(spreadTiers, heldNotional, heldNotional + orderNotional) : ZERO;
+  const size = orderNotional > ZERO ? (index * sizeCost) / orderNotional : ZERO;
+  const move = flat + size;
+  const spreadBps = Number((move * 10_000n) / index);
   return { price: side === "buy" ? index + move : index - move, spreadBps };
+}
+
+/** The quote for `qty` units on `side` against a holding of `held` units, with whether the order adds risk. */
+export function quoteOrder(args: {
+  index: Fixed;
+  side: Side;
+  baseSpreadBps: number;
+  spreadTiers: readonly Tier[];
+  stress: number;
+  held: Fixed;
+  qty: Fixed;
+}): Quote & { grows: boolean } {
+  const growth = growthOf(args.held, args.side === "buy" ? args.qty : -args.qty);
+  const quote = quoteFor({
+    index: args.index, side: args.side, baseSpreadBps: args.baseSpreadBps, spreadTiers: args.spreadTiers, stress: args.stress,
+    heldNotional: mulFixed(growth.fromQty, args.index), orderNotional: mulFixed(growth.toQty - growth.fromQty, args.index),
+  });
+  return { ...quote, grows: growth.grows };
 }
 
 /** Largest adverse move from `quoted` to `live`, in basis points; zero when `live` is better. */

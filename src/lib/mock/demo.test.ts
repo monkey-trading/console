@@ -41,7 +41,7 @@ describe("the demo account", () => {
     let before: string | undefined;
     for (let page = 0; page < 10; page++) {
       const result = await node.client.history(DEMO_ADDRESS, { limit: 200, before });
-      for (const item of result.events) kinds.add(item.event.type);
+      for (const item of result.events) kinds.add(item.type);
       if (!result.next) break;
       before = result.next;
     }

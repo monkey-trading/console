@@ -85,16 +85,21 @@ export async function attestEligibility(store: ConsoleStore, cls: EligibilityCla
   const out = await signed(store, { primaryType: "Eligibility", summary: STATEMENTS[cls], message: { class: cls } }, (auth, wallet) =>
     store.deps.client.attestEligibility({ account: wallet.address, class: cls, auth }),
   );
-  if (out.ok) {
-    store.toast("ok", "Eligibility recorded.");
-    await store.refresh(true);
-  }
+  if (!out.ok) return;
+  const refused = out.result.events.find((e) => e.type === "eligibility_rejected");
+  if (refused && refused.type === "eligibility_rejected") store.toast("error", describeReject(refused.reason));
+  else store.toast("ok", "Eligibility recorded.");
+  await store.refresh(true);
 }
 
 /** Sends a deposit from the wallet to the vault; the node credits it once it is final. */
 export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void> {
   const wallet = walletOf(store);
   if (!wallet) return;
+  if (!maySign(store.getSnapshot().attestation)) {
+    store.toast("error", "The node's attestation is not verified, so the console will not send a deposit for it.");
+    return;
+  }
   try {
     await wallet.deposit(amount);
     store.toast("info", `Deposit of $${formatFixedPlaces(amount, 2)} sent. It is credited when the vault's transaction is final.`);
@@ -151,18 +156,23 @@ export async function cancelOrder(store: ConsoleStore, orderId: number): Promise
   }
 }
 
-/** Asks to withdraw `amount`; the vault pays whole USDC first-in first-out. */
-export async function withdraw(store: ConsoleStore, amount: Fixed): Promise<void> {
+/** Asks to withdraw `amount`; true when the node took the request, false when it refused it. */
+export async function withdraw(store: ConsoleStore, amount: Fixed): Promise<boolean> {
   const wire = fixedToWire(amount);
   const out = await signed(store, { primaryType: "Withdrawal", summary: `withdraw ${wire} USDC`, message: { amount: wire } }, (auth, wallet) =>
     store.deps.client.withdraw({ account: wallet.address, amount: wire, auth }),
   );
-  if (!out.ok) return;
+  if (!out.ok) return false;
   const refused = out.result.events.find((e) => e.type === "withdrawal_rejected");
-  if (refused && refused.type === "withdrawal_rejected") store.toast("error", describeReject(refused.reason));
-  else if (out.result.events.some((e) => e.type === "withdrawal_queued")) store.toast("info", "Withdrawal queued. The vault pays the queue in order as it has liquidity.");
+  if (refused && refused.type === "withdrawal_rejected") {
+    store.toast("error", describeReject(refused.reason));
+    await store.refresh(true);
+    return false;
+  }
+  if (out.result.events.some((e) => e.type === "withdrawal_queued")) store.toast("info", "Withdrawal queued. The vault pays the queue in order as it has liquidity.");
   else store.toast("ok", "Withdrawal approved.");
   await store.refresh(true);
+  return true;
 }
 
 /** Parses an amount typed by the user, or null. */

@@ -72,7 +72,7 @@ export function Select<T extends string>({ label, value, options, onChange, hide
           setActive(Math.max(selected, 0));
           setOpen(!open);
         }}
-        className={`${hideLabel ? "" : "mt-1"} flex w-full items-center justify-between gap-2 rounded border border-line-2 bg-ink px-2 py-2 text-left text-data text-fg hover:border-glow focus-visible:outline-2 focus-visible:outline-glow`}
+        className={`${hideLabel ? "" : "mt-1"} flex w-full items-center justify-between gap-2 rounded border border-edge bg-ink px-2 py-2 text-left text-data text-fg hover:border-glow focus-visible:outline-2 focus-visible:outline-glow`}
       >
         <span className="truncate">{options[selected]?.label ?? ""}</span>
         <span aria-hidden="true" className="text-fg-3">▾</span>

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { EngineError } from "../engine/client";
 import type { EngineEvent, OrderRequest } from "../engine/types";
-import { fixedFromInt, parseFixed } from "../fixed";
+import { fixedFromInt, fixedToWire, parseFixed } from "../fixed";
 import { createMockNode, type MockNode } from "./index";
 
 const ME = "0xabc0000000000000000000000000000000000001";
@@ -107,7 +107,7 @@ describe("market orders", () => {
     expect(Object.keys(view.positions)).toEqual(["1"]);
     expect(parseFixed(view.margin) ?? 0n).toBeGreaterThan(0n);
     const history = await node.client.history(ME, {});
-    expect(history.events[0]?.event.type).toBe("fill");
+    expect(history.events[0]?.type).toBe("fill");
   });
 
   it("declines when the live price has moved past the slippage bound", async () => {
@@ -156,7 +156,7 @@ describe("close-out", () => {
 });
 
 describe("withdrawals", () => {
-  it("queues behind earlier requests and pays whole USDC from the head as liquidity arrives", async () => {
+  it("queues behind earlier requests and pays whole USDC base units from the head as liquidity arrives", async () => {
     const node = await funded(1_000_000);
     const result = await node.client.withdraw({ account: ME, amount: "100000.5", auth: auth(node) });
     expect(types(result.events)).toEqual(["withdrawal_queued"]);
@@ -169,8 +169,14 @@ describe("withdrawals", () => {
     node.controls.addLiquidity(fixedFromInt(60_000));
     expect((await node.client.withdrawalQueue(ME)).queue[0]?.remaining).toBe("40000.5");
     const rest = node.controls.addLiquidity(fixedFromInt(100_000));
-    expect(rest.some((e) => e.type === "withdrawal_approved" && e.amount === "40000")).toBe(true);
-    expect((await node.client.withdrawalQueue(ME)).queue[0]?.remaining).toBe("0.5");
+    expect(rest.some((e) => e.type === "withdrawal_approved" && e.amount === "40000.5")).toBe(true);
+    expect((await node.client.withdrawalQueue(ME)).queue).toEqual([]);
+  });
+
+  it("reserves whole base units only: a request finer than a millionth keeps its dust in cash (nothing is lost)", async () => {
+    const node = await funded(1_000);
+    await node.client.withdraw({ account: ME, amount: "100.0000009", auth: auth(node) });
+    expect((await node.client.account(ME)).balance).toBe("900");
   });
 
   it("refuses more than the account can withdraw and an invalid amount", async () => {
@@ -196,5 +202,69 @@ describe("market hours and stress", () => {
     node.controls.setStressFloor(null, 2);
     node.client.tick(START + 1_000);
     expect((await node.client.markets()).every((m) => m.stress_level === 2)).toBe(true);
+  });
+});
+
+describe("engine rules the mock follows", () => {
+  it("fills a resting limit that is already executable when it is accepted", async () => {
+    const node = await funded(100_000);
+    const result = await order(node, "0.1", "buy", { kind: { type: "limit", price: "1000000" } });
+    expect(types(result.events)).toEqual(["order_accepted", "fill"]);
+    expect(Object.keys((await node.client.account(ME)).orders)).toEqual([]);
+  });
+
+  it("triggers a stop on the index, not on a spread that stress has widened", async () => {
+    const node = await funded(100_000);
+    const mark = parseFixed((await node.client.markets())[0]?.mark ?? "0") ?? 0n;
+    const level = fixedToWire(mark + mark / 1_000n); // 0.1% above the index: inside the stress-3 spread but above the index
+    await order(node, "0.1", "buy", { kind: { type: "stop", price: level } });
+    node.controls.setStressFloor(1, 3);
+    node.client.tick(START + 9_000);
+    expect(Object.keys((await node.client.account(ME)).orders)).toHaveLength(1);
+  });
+
+  it("charges financing as a positive amount the account pays", async () => {
+    const node = await funded(100_000);
+    await order(node, "0.5", "buy");
+    const seen: EngineEvent[] = [];
+    node.client.subscribe((m) => seen.push(...m.events));
+    node.client.tick(Date.UTC(2026, 9, 28, 22, 5, 0));
+    const charge = seen.find((e) => e.type === "financing");
+    expect(charge).toMatchObject({ type: "financing" });
+    expect(parseFixed(charge?.type === "financing" ? charge.amount : "0") ?? 0n).toBeGreaterThan(0n);
+  });
+
+  it("writes a loss beyond the balance off against the house only once the account is flat", async () => {
+    const node = await funded(2_000);
+    await order(node, "0.5", "buy");
+    await order(node, "10", "sell", {}, 3);
+    node.controls.shock(1, -3_000);
+    const seen: EngineEvent[] = [];
+    node.client.subscribe((m) => seen.push(...m.events));
+    node.client.tick(START + 9_000);
+    expect(types(seen)).toContain("close_out");
+    const view = await node.client.account(ME);
+    expect(parseFixed(view.balance) ?? -1n).toBeGreaterThanOrEqual(0n);
+  });
+
+  it("treats a flip to the other side as added risk, so a reduce-only order cannot flip", async () => {
+    const node = await funded(100_000);
+    await order(node, "0.5", "buy");
+    const flip = await order(node, "1.5", "sell", { reduce_only: true });
+    expect(flip.events[0]).toMatchObject({ type: "order_rejected", reason: { type: "reduce_only" } });
+  });
+});
+
+describe("history", () => {
+  it("pages by per-event cursors without losing events inside one command", async () => {
+    const node = await funded(100_000);
+    const result = await order(node, "0.5", "buy");
+    expect(types(result.events)).toEqual(["order_accepted", "fill"]);
+    const first = await node.client.history(ME, { limit: 1 });
+    expect(first.events[0]?.type).toBe("fill");
+    expect(first.events[0]?.cursor).toMatch(/^\d+:1$/);
+    const second = await node.client.history(ME, { limit: 1, before: first.next ?? undefined });
+    expect(second.events[0]?.type).toBe("order_accepted");
+    expect(second.events[0]?.cursor).toMatch(/^\d+:0$/);
   });
 });

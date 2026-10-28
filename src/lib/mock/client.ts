@@ -103,12 +103,16 @@ export class MockEngineClient implements EngineClient {
     };
   }
 
+  /** Mock only: what a live node would tell the console about the caller's region. It is not a node route. */
+  async accessProbe(): Promise<void> {
+    checkAccess(this.state);
+  }
+
   async nonce(address: Address): Promise<{ next_nonce: number }> {
     return { next_nonce: this.state.account(address).nextNonce };
   }
 
   async eligibility(address: Address): Promise<EligibilityView> {
-    checkAccess(this.state); // the node screens the caller on public reads too
     const given = this.state.account(address).eligibility;
     const statement = given === "professional" ? "I attest that I am a professional client." : "I attest that I am an eligible client.";
     return { class: given, statement: given ? statement : null };
@@ -137,11 +141,12 @@ export class MockEngineClient implements EngineClient {
   async history(address: Address, params: { limit?: number; before?: string }): Promise<HistoryPage> {
     const items = this.state.history.get(address.toLowerCase()) ?? [];
     const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
-    const beforeSeq = params.before ? Number(params.before.split(":")[0]) : Number.POSITIVE_INFINITY;
-    const newest = items.filter((item) => Number(item.offset.split(":")[0]) < beforeSeq).reverse();
-    const page = newest.slice(0, limit);
+    const [beforeSeq = Number.POSITIVE_INFINITY, beforeIndex = 0] = params.before ? params.before.split(":").map(Number) : [];
+    // Strictly older than the cursor, which names one event, not the whole command.
+    const older = items.filter((item) => item.seq < beforeSeq || (item.seq === beforeSeq && item.index < beforeIndex)).reverse();
+    const page = older.slice(0, limit);
     const last = page[page.length - 1];
-    return { events: page, next: newest.length > limit && last ? last.offset : null };
+    return { events: page.map((item) => ({ ...item.event, cursor: item.cursor, ts: item.ts })), next: older.length > limit && last ? last.cursor : null };
   }
 
   subscribe(onMessage: (message: StreamMessage) => void): Unsubscribe {

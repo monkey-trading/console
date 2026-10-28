@@ -46,7 +46,7 @@ describe("the user's path", () => {
     await buy(store, 20_000);
     expect(store.getSnapshot().account?.positions).toHaveLength(1);
     expect(store.getSnapshot().toasts.at(-1)?.text).toContain("Filled");
-    expect(store.getSnapshot().history[0]?.event.type).toBe("fill");
+    expect(store.getSnapshot().history[0]?.type).toBe("fill");
   });
 
   it("refuses to sign for a node whose attestation it cannot verify", async () => {
@@ -85,5 +85,42 @@ describe("the user's path", () => {
     const { store } = await funded();
     await withdraw(store, fixedFromInt(10_000));
     expect(store.getSnapshot().queue[0]?.position).toBe(4);
+  });
+});
+
+describe("what the store refuses or hides", () => {
+  it("sends no deposit for a node whose attestation it cannot verify", async () => {
+    const { node, store } = setup();
+    await store.checkNode();
+    await connectWallet(store, "browser");
+    await attestEligibility(store, "professional");
+    node.controls.setAttestationMode("unverifiable");
+    await store.checkNode();
+    await deposit(store, fixedFromInt(1_000));
+    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("will not send a deposit");
+    expect(node.client.state.account(store.getSnapshot().wallet?.address ?? "").pending).toEqual([]);
+  });
+
+  it("shows the activity of market events and of the connected account only", async () => {
+    const { node, store } = await funded();
+    node.controls.addLiquidity(fixedFromInt(1_000_000));
+    await store.refresh(true);
+    const mine = store.getSnapshot().wallet?.address.toLowerCase() ?? "";
+    const feedText = store.getSnapshot().feed.map((f) => f.text).join("\n");
+    expect(feedText).not.toMatch(/0x1111/);
+    expect(mine).not.toBe("");
+  });
+
+  it("keeps a withdrawal's amount for the user to correct when the node refuses it", async () => {
+    const { store } = await funded();
+    expect(await withdraw(store, fixedFromInt(900_000))).toBe(false);
+    expect(await withdraw(store, fixedFromInt(1_000))).toBe(true);
+  });
+
+  it("does not advance the node's clock backwards", () => {
+    const { node, store } = setup();
+    store.tick(START + 5_000);
+    store.tick(START + 1_000);
+    expect(node.client.state.now).toBe(START + 5_000);
   });
 });

@@ -39,6 +39,8 @@ interface Live {
   lines: IPriceLine[];
   key: string;
   count: number;
+  /** The time of the first bar loaded, so a series that dropped its oldest bar reloads. */
+  first: number;
 }
 
 const VISIBLE_BARS = 100;
@@ -48,6 +50,7 @@ function token(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
 }
 
+// The library brands its time type; our bars hold UTC seconds, which is what it means.
 const toData = (bar: Bar) => ({ ...bar, time: bar.time as import("lightweight-charts").UTCTimestamp });
 
 export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) {
@@ -55,7 +58,9 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
   const live = useRef<Live | null>(null);
   const [ready, setReady] = useState(0);
   const [hovered, setHovered] = useState<Bar | null>(null);
+  const [failed, setFailed] = useState(false);
   const markerKey = JSON.stringify(markers);
+  // `markerKey` was made from `PriceMarker[]`, so parsing it gives the same shape back.
   const stable = useMemo(() => JSON.parse(markerKey) as PriceMarker[], [markerKey]);
 
   useEffect(() => {
@@ -84,9 +89,12 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
         const point = param.seriesData.get(series);
         setHovered(point && "open" in point ? { time: Number(point.time), open: point.open, high: point.high, low: point.low, close: point.close } : null);
       });
-      live.current = { chart, series, lineStyle: LineStyle, lines: [], key: "", count: 0 };
+      live.current = { chart, series, lineStyle: LineStyle, lines: [], key: "", count: 0, first: 0 };
       dispose = () => chart.remove();
       setReady((n) => n + 1);
+    }).catch(() => {
+      // The library did not load (a failed chunk) or could not start; say so instead of leaving a blank pane.
+      if (!cancelled) setFailed(true);
     });
     return () => {
       cancelled = true;
@@ -100,7 +108,7 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
     const last = bars[bars.length - 1];
     if (!c || !last) return;
     c.series.applyOptions({ priceFormat: { type: "price", precision: places, minMove: 1 / 10 ** places } });
-    if (c.key !== seriesKey || bars.length < c.count || bars.length - c.count > 1) {
+    if (c.key !== seriesKey || bars.length < c.count || bars.length - c.count > 1 || bars[0]?.time !== c.first) {
       c.series.setData(bars.map(toData));
       c.chart.timeScale().setVisibleLogicalRange({ from: bars.length - VISIBLE_BARS, to: bars.length + 4 });
     } else {
@@ -108,6 +116,7 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
     }
     c.key = seriesKey;
     c.count = bars.length;
+    c.first = bars[0]?.time ?? 0;
   }, [ready, bars, seriesKey, places]);
 
   useEffect(() => {
@@ -121,7 +130,8 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
   const shown = hovered ?? bars[bars.length - 1] ?? null;
   return (
     <div className="relative h-80 min-h-64 w-full lg:h-auto lg:flex-1">
-      <div ref={host} role="img" aria-label={`${symbol} candlestick chart`} className="absolute inset-0" />
+      <div ref={host} role="group" aria-label={`${symbol} candlestick chart`} className="absolute inset-0" />
+      {failed && <p role="alert" className="absolute inset-0 z-10 flex items-center justify-center text-caption text-ember">The chart could not load. Reload the page to try again.</p>}
       {shown && (
         <p aria-hidden="true" className="pointer-events-none absolute top-2 left-3 z-10 flex flex-wrap gap-x-3 text-label text-fg-2">
           <span>O <span className="text-fg">{formatPrice(shown.open, places)}</span></span>

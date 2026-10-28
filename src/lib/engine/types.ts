@@ -173,6 +173,8 @@ export type EngineEvent =
   | { type: "withdrawal_queue_updated"; account: Address; requested_seq: number; remaining: string }
   | { type: "withdrawal_rejected"; account: Address; amount: string; reason: Reject }
   | { type: "financing"; account: Address; market: MarketId; amount: string }
+  | { type: "bad_debt"; account: Address; amount: string }
+  | { type: "eligibility_rejected"; account: Address; reason: Reject }
   | { type: "market_opened"; market: MarketId }
   | { type: "market_closed"; market: MarketId }
   | { type: "stress_changed"; market: MarketId; level: number };
@@ -225,7 +227,11 @@ export interface WithdrawalPage {
   next: number | null;
 }
 
+/** An account event with where it sits in the log: `cursor` is `<seq>:<index>`, as the node serializes it. */
+export type HistoryEvent = EngineEvent & { cursor: string; ts: number };
+
+/** `GET /v1/accounts/{address}/history`, newest first; `next` is the `before` of the next page. */
 export interface HistoryPage {
-  events: { offset: string; ts: number; event: EngineEvent }[];
+  events: HistoryEvent[];
   next: string | null;
 }

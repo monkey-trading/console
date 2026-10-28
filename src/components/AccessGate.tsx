@@ -17,10 +17,10 @@ export function AccessGate({ children }: { children: ReactNode }) {
   return (
     <section aria-labelledby="blocked-title" className="mx-auto max-w-xl rounded-xl border border-ember/50 bg-ink-1 p-8 text-center">
       <p className="text-label tracking-caps text-ember uppercase">Not available</p>
-      <h1 id="blocked-title" className="mt-3 text-lg tracking-tight">This service is not offered where you are</h1>
+      <h2 id="blocked-title" className="mt-3 text-lg tracking-tight">This service is not offered where you are</h2>
       <p className="mt-4 text-data leading-relaxed text-fg-2">{REASON[blocked]}</p>
       <p className="mt-4 text-caption leading-relaxed text-fg-3">
-        The node decides this from where your connection comes from and refuses every request, including deposits and orders sent straight to the API or the vault. Nothing in this app can change it.
+        The node decides this from where your connection comes from and refuses your orders, withdrawals and declarations. Deposits sent straight to the vault are screened on the paying address. Nothing in this app can change it.
       </p>
     </section>
   );

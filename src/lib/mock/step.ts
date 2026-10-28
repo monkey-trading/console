@@ -75,9 +75,10 @@ function chargeFinancing(state: MockState, previous: number): EngineEvent[] {
     for (const [id, held] of account.positions) {
       const market = state.markets.get(id);
       if (!market) continue;
-      const charge = -bpsOf(absFixed(mulFixed(held.qty, market.mid)), FINANCING_BPS);
-      account.balance += charge;
-      state.houseCash -= charge;
+      // As in the engine, the amount is what the account pays: positive is a charge.
+      const charge = bpsOf(absFixed(mulFixed(held.qty, market.mid)), FINANCING_BPS);
+      account.balance -= charge;
+      state.houseCash += charge;
       events.push({ type: "financing", account: address, market: id, amount: fixedToWire(charge) });
     }
   }
@@ -90,7 +91,8 @@ function chargeFinancing(state: MockState, previous: number): EngineEvent[] {
  * credited deposits, and queue payments).
  */
 export function advance(state: MockState, ms: number, options: { liquidity?: boolean } = {}): void {
-  const seconds = Math.min(Math.max(ms - state.now, 0), MAX_STEP_MS) / 1000;
+  if (ms <= state.now) return; // the clock never runs backwards
+  const seconds = Math.min(ms - state.now, MAX_STEP_MS) / 1000;
   const previous = state.now;
   state.now = ms;
   const events: EngineEvent[] = [];

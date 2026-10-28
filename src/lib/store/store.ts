@@ -3,15 +3,13 @@
 import { pushTick, TIMEFRAMES, type TimeframeId } from "../bars";
 import { checkAttestation } from "../engine/attestation";
 import { EngineError, type EngineClient } from "../engine/client";
-import type { HouseView, MarketId, MarketView, StreamMessage } from "../engine/types";
+import type { EngineEvent, HouseView, MarketId, MarketView, StreamMessage } from "../engine/types";
 import type { Wallet, WalletConnector } from "../engine/wallet";
 import { fixedToNumber } from "../fixed";
 import { describeEvent } from "../messages";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
 import { initialState, seedAllBars, type BlockReason, type ConsoleState, type FeedLine, type HistorySource, type ToastMessage } from "./state";
 
-/** The address the access probe reads, since the node screens the caller, not the account. */
-const PROBE_ADDRESS = "0x0000000000000000000000000000000000000000";
 const FEED_LIMIT = 150;
 
 export interface StoreDeps {
@@ -19,7 +17,7 @@ export interface StoreDeps {
   wallets: WalletConnector;
   /** Advances a node that runs in this page; absent for a live node. */
   drive?: (ms: number) => void;
-  initial: { markets: MarketView[]; house: HouseView; startMs: number; recent?: StreamMessage[] };
+  initial: { markets: MarketView[]; house: HouseView; startMs: number; recent?: StreamMessage[]; /** The account whose events the activity log shows before a wallet connects. */ viewer?: string };
   /** Price history for the chart, ending at the current mark. */
   history: HistorySource;
 }
@@ -42,11 +40,19 @@ export class ConsoleStore {
     this.snapshot = { ...state, feed: this.feedFrom(deps.initial.recent ?? [], state.markets) };
   }
 
+  /** Whether an event belongs in this user's activity: market events, and events of their own account. */
+  private isMine(event: EngineEvent): boolean {
+    if (!("account" in event)) return true;
+    const mine = this.snapshot?.wallet?.address ?? this.deps.initial.viewer;
+    return mine !== undefined && event.account.toLowerCase() === mine.toLowerCase();
+  }
+
   /** Activity lines for a batch of messages, newest first, as the stream handler adds them. */
   private feedFrom(messages: readonly StreamMessage[], markets: readonly { id: MarketId; symbol: string }[]): FeedLine[] {
     const symbolOf = (id: MarketId) => markets.find((m) => m.id === id)?.symbol ?? `market ${id}`;
     const lines = messages.flatMap((message) =>
       message.events.flatMap((event) => {
+        if (!this.isMine(event)) return [];
         const text = describeEvent(event, symbolOf);
         return text === null ? [] : [{ id: this.id(), ts: message.ts, text }];
       }),
@@ -86,6 +92,10 @@ export class ConsoleStore {
 
   select(id: MarketId): void {
     this.patch({ selected: id });
+  }
+
+  setPaused(paused: boolean): void {
+    this.patch({ paused });
   }
 
   setTimeframe(timeframe: TimeframeId): void {
@@ -137,7 +147,7 @@ export class ConsoleStore {
       this.patch({ attestation: { kind: "unverified", reason: error instanceof Error ? error.message : "The attestation could not be read." } });
     }
     try {
-      await this.deps.client.eligibility(PROBE_ADDRESS);
+      await this.deps.client.accessProbe();
       this.patch({ blocked: null });
     } catch (error) {
       if (!this.noteAccess(error)) this.toast("error", "The node did not answer the access check.");
@@ -146,6 +156,7 @@ export class ConsoleStore {
 
   private onMessage(message: StreamMessage): void {
     const lines = message.events.flatMap((event) => {
+      if (!this.isMine(event)) return [];
       const text = describeEvent(event, (id) => this.snapshot.markets.find((m) => m.id === id)?.symbol ?? `market ${id}`);
       return text === null ? [] : [{ id: this.id(), ts: message.ts, text }];
     });
@@ -178,6 +189,7 @@ export class ConsoleStore {
         const frames = bars[m.id];
         if (m.mark === null || !m.open || !frames) continue;
         const price = fixedToNumber(m.mark);
+        // `fromEntries` loses the key type; the keys are exactly the timeframes `frames` holds.
         bars[m.id] = Object.fromEntries(TIMEFRAMES.map((tf) => [tf.id, pushTick(frames[tf.id], this.snapshot.now, price, tf.seconds)])) as typeof frames;
       }
       this.patch({ markets, bars, house: decodeHouse(house) });
@@ -202,9 +214,12 @@ export class ConsoleStore {
     } catch (error) {
       if (!(error instanceof EngineError && error.status === 404)) throw error;
     }
+    // The wallet may have changed while the reads ran; an answer for another account is dropped.
+    if (this.snapshot.wallet?.address !== wallet.address) return;
     this.patch({ eligibility: eligibility.class, queue: queue.queue, account });
     if (withHistory || this.snapshot.history.length === 0) {
-      this.patch({ history: (await client.history(wallet.address, { limit: 100 })).events });
+      const history = (await client.history(wallet.address, { limit: 100 })).events;
+      if (this.snapshot.wallet?.address === wallet.address) this.patch({ history });
     }
   }
 }

@@ -1,10 +1,10 @@
 /** Fills an order against the house at the live quote, or says why it cannot. */
 
-import { absFixed, bpsOf, fixedToWire, mulFixed, type Fixed } from "../fixed";
+import { absFixed, bpsOf, fixedFromWire, fixedToWire, mulFixed, type Fixed } from "../fixed";
 import { metaFor } from "../engine/meta";
 import type { EngineEvent, Fill, MarketId, Reject, Side } from "../engine/types";
 import { equityOf, houseNav, houseNetNotional, marginOf } from "./accounts";
-import { adverseBps, notionalOf, quoteFor, tieredMargin, type Quote } from "../pricing";
+import { adverseBps, notionalOf, quoteOrder, tieredMargin, type Quote } from "../pricing";
 import type { Holding, MockState } from "./state";
 
 /** The share of a realised profit the house keeps, in basis points. */
@@ -23,25 +23,18 @@ export interface FillRequest {
   liquidation?: boolean;
 }
 
-export type FillOutcome = { ok: true; fill: Fill } | { ok: false; reject: Reject };
+/** A filled order, with any loss beyond the balance that the house wrote off because the account is flat. */
+export type FillOutcome = { ok: true; fill: Fill; badDebt: Fixed } | { ok: false; reject: Reject };
 
 const signed = (side: Side, qty: Fixed): Fixed => (side === "buy" ? qty : -qty);
 
-/** The quote for `qty` of `market` on `side` for the account's current holding. */
-export function liveQuote(state: MockState, address: string, market: MarketId, side: Side, qty: Fixed): Quote | null {
+/** The quote for `qty` of `market` on `side` for the account's current holding, with whether it adds risk. */
+export function liveQuote(state: MockState, address: string, market: MarketId, side: Side, qty: Fixed): (Quote & { grows: boolean }) | null {
   const runtime = state.markets.get(market);
   if (!runtime) return null;
-  const held = state.account(address).positions.get(market)?.qty ?? 0n;
-  const delta = signed(side, qty);
-  return quoteFor({
-    index: runtime.mid,
-    side,
-    baseSpreadBps: metaFor(runtime.listed.spec.symbol).baseSpreadBps,
-    spreadTiers: runtime.listed.spec.spread_tiers,
-    stress: runtime.stress,
-    heldNotional: mulFixed(held, runtime.mid),
-    orderNotional: notionalOf(qty, runtime.mid),
-    grows: absFixed(held + delta) > absFixed(held),
+  return quoteOrder({
+    index: runtime.mid, side, baseSpreadBps: metaFor(runtime.listed.spec.symbol).baseSpreadBps, spreadTiers: runtime.listed.spec.spread_tiers,
+    stress: runtime.stress, held: state.account(address).positions.get(market)?.qty ?? 0n, qty,
   });
 }
 
@@ -68,12 +61,12 @@ export function fillOrder(state: MockState, req: FillRequest): FillOutcome {
   const runtime = state.markets.get(req.market);
   const account = state.account(req.address);
   if (!runtime) return { ok: false, reject: { type: "unknown_market" } };
-  if ((!runtime.open || runtime.halted) && !req.liquidation) return { ok: false, reject: { type: "market_closed" } };
+  if (!runtime.open || runtime.halted) return { ok: false, reject: { type: "market_closed" } };
   const quote = liveQuote(state, req.address, req.market, req.side, req.qty);
   if (!quote) return { ok: false, reject: { type: "no_price" } };
   const held = account.positions.get(req.market)?.qty ?? 0n;
   const delta = signed(req.side, req.qty);
-  const grows = absFixed(held + delta) > absFixed(held);
+  const grows = quote.grows;
   if (req.slippage) {
     const cap = Math.min(req.slippage.maxBps, runtime.listed.spec.max_slippage_bps);
     const bps = adverseBps(req.side, req.slippage.quoted, quote.price);
@@ -83,7 +76,8 @@ export function fillOrder(state: MockState, req: FillRequest): FillOutcome {
     }
   }
   if (!req.liquidation && grows) {
-    const refusal = riskRefusal(state, req, runtime.reduceOnly, delta, held);
+    const spreadLoss = mulFixed(req.qty, absFixed(quote.price - runtime.mid));
+    const refusal = riskRefusal(state, req, runtime.reduceOnly, delta, held, spreadLoss);
     if (refusal) return { ok: false, reject: refusal };
   }
   const holding = account.positions.get(req.market) ?? { qty: 0n, entry: 0n };
@@ -93,12 +87,16 @@ export function fillOrder(state: MockState, req: FillRequest): FillOutcome {
   const fee = pnl > 0n ? bpsOf(pnl, PROFIT_FEE_BPS) : 0n;
   account.balance += pnl - fee;
   state.houseCash += fee - pnl;
-  if (account.balance < 0n) {
-    state.houseCash += account.balance; // the house absorbs a loss beyond the balance
+  // As the engine does, a loss beyond the balance is written off against the house only once the account is flat.
+  let badDebt = 0n;
+  if (account.balance < 0n && account.positions.size === 0) {
+    badDebt = -account.balance;
+    state.houseCash -= badDebt;
     account.balance = 0n;
   }
   return {
     ok: true,
+    badDebt,
     fill: {
       account: req.address, order_id: req.orderId, market: req.market, side: req.side,
       qty: fixedToWire(req.qty), price: fixedToWire(quote.price), index: fixedToWire(runtime.mid),
@@ -109,18 +107,19 @@ export function fillOrder(state: MockState, req: FillRequest): FillOutcome {
 }
 
 /** The refusal for an order that adds risk, or `null` when margin, capacity, and the flags allow it. */
-function riskRefusal(state: MockState, req: FillRequest, reduceOnly: boolean, delta: Fixed, held: Fixed): Reject | null {
+function riskRefusal(state: MockState, req: FillRequest, reduceOnly: boolean, delta: Fixed, held: Fixed, spreadLoss: Fixed): Reject | null {
   const runtime = state.markets.get(req.market);
   const account = state.account(req.address);
   if (!runtime) return { type: "unknown_market" };
   if (reduceOnly || req.reduceOnly) return { type: "reduce_only" };
   const spec = runtime.listed.spec;
-  if (notionalOf(req.qty, runtime.mid) < BigInt(spec.min_order_notional) * 1_000_000_000n) {
+  if (notionalOf(req.qty, runtime.mid) < fixedFromWire(spec.min_order_notional)) {
     return { type: "invalid_order", reason: `below the minimum order of ${spec.min_order_notional} USD` };
   }
   const current = tieredMargin(spec.margin_tiers, mulFixed(held, runtime.mid));
   const after = marginOf(state, account) - current + tieredMargin(spec.margin_tiers, mulFixed(held + delta, runtime.mid));
-  const equity = equityOf(state, account);
+  // The check runs on the account as the fill leaves it: the spread just paid comes off equity first.
+  const equity = equityOf(state, account) - spreadLoss;
   if (equity < after) return { type: "insufficient_margin", equity: fixedToWire(equity), required: fixedToWire(after) };
   const net = houseNetNotional(state, req.market);
   const netAfter = net - mulFixed(delta, runtime.mid);
@@ -130,6 +129,8 @@ function riskRefusal(state: MockState, req: FillRequest, reduceOnly: boolean, de
 }
 
 /** The events a fill produces. */
-export function fillEvents(fill: Fill): EngineEvent[] {
-  return [{ type: "fill", ...fill }];
+export function fillEvents(fill: Fill, badDebt: Fixed = 0n): EngineEvent[] {
+  const events: EngineEvent[] = [{ type: "fill", ...fill }];
+  if (badDebt > 0n) events.push({ type: "bad_debt", account: fill.account, amount: fixedToWire(badDebt) });
+  return events;
 }

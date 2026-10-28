@@ -4,6 +4,7 @@
 
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
+import { DEMO_ADDRESS } from "@/lib/mock/demo";
 import { mockHistory } from "@/lib/mock/history";
 import { createMockNode, SIM_EPOCH_MS, type MockNode } from "@/lib/mock";
 import { connectWallet } from "@/lib/store/actions";
@@ -27,20 +28,38 @@ function createSession(): Session {
     wallets: node.wallets,
     drive: (ms) => node.client.tick(ms),
     history: mockHistory,
-    initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS, recent: node.client.recentLog(1000) },
+    initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS, recent: node.client.recentLog(1000), viewer: DEMO_ADDRESS },
   });
   return { store, node };
 }
 
-/** Provides the console's session to every screen. */
+/** The most simulated time one tick may add, so a stalled timer does not jump the prices. */
+const MAX_TICK_MS = 5_000;
+
+/**
+ * Provides the console's session to every screen. The node's clock starts at the demo's fixed
+ * instant and advances with real time, but only while the simulation runs: it stands still when
+ * the user pauses it, when the tab is hidden, and from the start for a visitor who prefers reduced
+ * motion, until they press play.
+ */
 export function ConsoleProvider({ children }: { children: ReactNode }) {
   const [session] = useState(createSession);
   const { store } = session;
   useEffect(() => {
-    const stop = store.start(Date.now());
+    const stop = store.start(SIM_EPOCH_MS);
     // The demo account is connected on load, so no screen starts empty.
     void connectWallet(store, "browser", true);
-    const timer = setInterval(() => store.tick(Date.now()), TICK_MS);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) store.setPaused(true);
+    let simulated = SIM_EPOCH_MS;
+    let last = Date.now();
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const elapsed = Math.min(now - last, MAX_TICK_MS);
+      last = now;
+      if (store.getSnapshot().paused || document.visibilityState === "hidden") return;
+      simulated += elapsed;
+      store.tick(simulated);
+    }, TICK_MS);
     return () => {
       clearInterval(timer);
       stop();

@@ -20,7 +20,7 @@ matches the current action.
   and drives the clock; `Shell`, `TopBar`, `AttestationBanner`, `RiskStrip` and `Toasts` frame it;
   `TradeWorkspace` lays out `Watchlist`, `ChartPanel` (with `PriceChart`, which loads Lightweight
   Charts in the browser), `OrderTicket` (order type, side, best bid and offer, size, Advanced, and
-  `MarketInfo`) and `BottomPanel` (positions, orders, history, activity); `FundingDrawer` holds
+  `MarketInfo`) and `BottomPanel` (`PositionsView`, `OrdersView`, `HistoryList`, activity); `FundingDrawer` holds
   `EligibilityCard`, `DepositForm`, `WithdrawForm`, `WithdrawalQueue` and `AccountSummary`;
   `Select` is the console's accessible select; `AccessGate` shows the geo-block; `WalletButton` and
   `MockControls` drive the mock.
@@ -36,7 +36,8 @@ matches the current action.
   the first-in first-out withdrawal queue, the clock step, the demo account's backstory in `demo.ts`, and the controls the mock build exposes).
 - **next.config.ts** — the security headers on every path (a CSP without nonces, nosniff, referrer,
   frame, opener, and permissions policies), `reactStrictMode`, `poweredByHeader: false`, and
-  `agentRules: false`, so `next dev` leaves this index alone.
+  `agentRules: false`, so `next dev` leaves this index alone, and `devIndicators: false`, so its
+  overlay does not cover the terminal.
 - **eslint.config.mjs** — ESLint flat config: `@eslint/js`, `typescript-eslint`, `react-hooks`, and
   `jsx-a11y` strict, which lets a scrolling `log` take focus; the 300-line `max-lines` cap; and no
   non-null assertions. `npm run lint` allows no warnings.

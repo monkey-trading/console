@@ -7,12 +7,13 @@ import { useEffect, useRef } from "react";
 import { AccountSummary } from "./AccountSummary";
 import { useConsole, useSession } from "./ConsoleProvider";
 import { EligibilityCard } from "./EligibilityCard";
-import { DepositForm, WithdrawForm } from "./FundsForms";
+import { DepositForm } from "./DepositForm";
 import { WalletButton } from "./WalletButton";
+import { WithdrawForm } from "./WithdrawForm";
 import { WithdrawalQueue } from "./WithdrawalQueue";
 
 export function FundingDrawer() {
-  const { fundingOpen, wallet } = useConsole();
+  const { fundingOpen, wallet, toasts } = useConsole();
   const { store } = useSession();
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -40,6 +41,8 @@ export function FundingDrawer() {
         <h2 id="funding-title" className="text-label tracking-caps text-glow uppercase">Funding</h2>
         <button type="button" onClick={() => store.setFundingOpen(false)} className="rounded border border-line-2 px-3 py-1.5 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Close</button>
       </div>
+      {/* The page behind a modal is inert, so the drawer announces results itself. */}
+      <p role="status" aria-live="polite" className="sr-only">{toasts[toasts.length - 1]?.text ?? ""}</p>
       <div className="space-y-5 p-5">
         <AccountSummary />
         {!wallet && (

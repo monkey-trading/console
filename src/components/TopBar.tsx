@@ -14,7 +14,7 @@ const usd = (value: Fixed) => `$${formatFixedPlaces(value, 2)}`;
 const BUTTON = "rounded border border-edge px-3 py-2 text-caption text-fg hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
 
 export function TopBar() {
-  const { account, now } = useConsole();
+  const { account, now, paused } = useConsole();
   const { store } = useSession();
   const free = account ? account.equity - account.margin : 0n;
   const stats: [string, string, string][] = [
@@ -41,6 +41,7 @@ export function TopBar() {
         <span className="hidden text-label tracking-caps text-fg-3 uppercase xl:inline">
           Node clock <span aria-hidden="true" className="text-fg-2">{formatClock(now)} UTC</span>
         </span>
+        <button type="button" aria-pressed={paused} onClick={() => store.setPaused(!paused)} className={BUTTON}>{paused ? "Play" : "Pause"}<span className="sr-only"> the simulation</span></button>
         <button type="button" onClick={() => store.setFundingOpen(true)} className={BUTTON}>Funding</button>
         <WalletButton />
         <MockControls />

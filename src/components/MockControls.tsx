@@ -30,6 +30,7 @@ export function MockControls() {
   const id = useId();
   const market = markets.find((m) => m.id === selected);
   const { controls } = node;
+  const haltedNow = market ? node.client.state.markets.get(market.id)?.halted === true : false;
   const resetDemoAccount = () => {
     if (!wallet) return;
     controls.resetAccount(wallet.address);
@@ -59,7 +60,7 @@ export function MockControls() {
               <div className="flex flex-wrap gap-2">
                 <button type="button" className={BUTTON} onClick={() => controls.shock(market.id, -300)}>Drop 3%</button>
                 <button type="button" className={BUTTON} onClick={() => controls.shock(market.id, 300)}>Jump 3%</button>
-                <button type="button" className={BUTTON} onClick={() => controls.setHalted(market.id, market.open)}>{market.open ? "Halt market" : "Resume market"}</button>
+                <button type="button" className={BUTTON} onClick={() => controls.setHalted(market.id, !haltedNow)}>{haltedNow ? "Resume market" : "Halt market"}</button>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-fg-3">Stress floor</span>

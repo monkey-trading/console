@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
 import type { Tier } from "./engine/types";
-import { adverseBps, maxLeverage, quoteFor, slicedBps, tieredMargin } from "./pricing";
+import { adverseBps, growthOf, maxLeverage, quoteFor, slicedBps, tierCost, tieredMargin } from "./pricing";
 
 const SPREAD: Tier[] = [
   { up_to: "250000", bps: 0 },
@@ -39,7 +39,7 @@ describe("tieredMargin", () => {
 });
 
 describe("quoteFor", () => {
-  const base = { index: fixedFromInt(100), baseSpreadBps: 10, spreadTiers: SPREAD, stress: 0, heldNotional: 0n, orderNotional: fixedFromInt(1_000), grows: true };
+  const base = { index: fixedFromInt(100), baseSpreadBps: 10, spreadTiers: SPREAD, stress: 0, heldNotional: 0n, orderNotional: fixedFromInt(1_000) };
 
   it("moves a buy up and a sell down by the spread", () => {
     expect(quoteFor({ ...base, side: "buy" }).price).toBe(fixedFromInt(100) + fixedFromInt(100) / 1000n);
@@ -48,7 +48,7 @@ describe("quoteFor", () => {
 
   it("adds the stress and size spreads, but no size spread to an order that does not grow the position", () => {
     expect(quoteFor({ ...base, side: "buy", stress: 2 }).spreadBps).toBe(22);
-    expect(quoteFor({ ...base, side: "buy", orderNotional: fixedFromInt(2_000_000), grows: false }).spreadBps).toBe(10);
+    expect(quoteFor({ ...base, side: "buy", orderNotional: 0n }).spreadBps).toBe(10);
     expect(quoteFor({ ...base, side: "buy", orderNotional: fixedFromInt(2_000_000) }).spreadBps).toBe(10 + 5);
   });
 });
@@ -58,5 +58,22 @@ describe("adverseBps", () => {
     expect(adverseBps("buy", fixedFromInt(100), fixedFromInt(101))).toBe(100);
     expect(adverseBps("buy", fixedFromInt(100), fixedFromInt(99))).toBe(0);
     expect(adverseBps("sell", fixedFromInt(100), fixedFromInt(99))).toBe(100);
+  });
+});
+
+describe("exact tier charges", () => {
+  it("keeps fractional basis points: a 110,000 position pays 2,500 of margin, not 2,497", () => {
+    expect(tieredMargin(MARGIN, fixedFromInt(110_000))).toBe(fixedFromInt(2_000) + fixedFromInt(10_000) * 500n / 10_000n);
+    expect(tierCost(MARGIN, 0n, fixedFromInt(110_000))).toBe(fixedFromInt(2_500));
+  });
+});
+
+describe("growthOf", () => {
+  it("counts the whole new side of a reversal as growth, and a pure reduction as none", () => {
+    expect(growthOf(fixedFromInt(10), fixedFromInt(5))).toEqual({ grows: true, fromQty: fixedFromInt(10), toQty: fixedFromInt(15) });
+    expect(growthOf(fixedFromInt(10), fixedFromInt(-4))).toMatchObject({ grows: false });
+    expect(growthOf(fixedFromInt(10), fixedFromInt(-13))).toEqual({ grows: true, fromQty: 0n, toQty: fixedFromInt(3) });
+    expect(growthOf(fixedFromInt(10), fixedFromInt(-10))).toMatchObject({ grows: false });
+    expect(growthOf(0n, fixedFromInt(-2))).toEqual({ grows: true, fromQty: 0n, toQty: fixedFromInt(2) });
   });
 });

@@ -1,9 +1,9 @@
 /** What an order ticket shows before the user places the order: the quote, the margin it uses, the limits. */
 
-import { absFixed, bpsOf, divFixed, fixedFromWire, mulFixed, SCALE, type Fixed } from "./fixed";
+import { bpsOf, divFixed, fixedFromWire, mulFixed, SCALE, type Fixed } from "./fixed";
 import type { Side } from "./engine/types";
 import type { AccountModel, MarketModel } from "./models";
-import { notionalOf, quoteFor, slicedBps, tieredMargin, type Quote } from "./pricing";
+import { growthOf, quoteOrder, slicedBps, tieredMargin, type Quote } from "./pricing";
 
 /** The smallest step of a quantity: a millionth of a unit. */
 const QTY_STEP: Fixed = SCALE / 1_000_000n;
@@ -17,6 +17,8 @@ export interface TicketInput {
   /** The size the user entered, in dollars. */
   notional: Fixed;
   slippageBps: number;
+  /** A limit or stop order, admitted without the margin and capacity checks that run when it triggers. */
+  resting?: boolean;
   account: AccountModel | null;
   houseNav: Fixed;
 }
@@ -72,18 +74,13 @@ export function previewTicket(input: TicketInput): TicketPreview {
   }
   const qty = (divFixed(notional, mark) / QTY_STEP) * QTY_STEP;
   const current = held(account, market.id);
-  const quoteSide = (s: Side): Quote => {
-    const delta = s === "buy" ? qty : -qty;
-    return quoteFor({
-      index: mark, side: s, baseSpreadBps: market.baseSpreadBps, spreadTiers: spec.spread_tiers, stress: market.stress,
-      heldNotional: mulFixed(current, mark), orderNotional: notionalOf(qty, mark), grows: absFixed(current + delta) > absFixed(current),
-    });
-  };
+  const quoteSide = (s: Side) =>
+    quoteOrder({ index: mark, side: s, baseSpreadBps: market.baseSpreadBps, spreadTiers: spec.spread_tiers, stress: market.stress, held: current, qty });
   const offer = quoteSide("buy");
   const bid = quoteSide("sell");
   const quote = side === "buy" ? offer : bid;
   const delta = side === "buy" ? qty : -qty;
-  const grows = absFixed(current + delta) > absFixed(current);
+  const grows = growthOf(current, delta).grows;
   const before = tieredMargin(spec.margin_tiers, mulFixed(current, mark));
   const after = tieredMargin(spec.margin_tiers, mulFixed(current + delta, mark));
   const marginAfter = (account?.margin ?? 0n) - before + after;
@@ -94,9 +91,11 @@ export function previewTicket(input: TicketInput): TicketPreview {
   if (market.reduceOnly && grows) problems.push("This market only accepts orders that reduce a position.");
   if (qty <= 0n) problems.push("Enter a size.");
   else if (grows && notional < fixedFromWire(spec.min_order_notional)) problems.push(`Minimum order is ${spec.min_order_notional} USD.`);
-  if (grows && useBps !== null && useBps > 10_000) problems.push("Not enough equity for the margin this needs.");
-  if (grows && equity <= 0n) problems.push("Fund your account to trade.");
-  if (grows && notional > houseCap) problems.push("Larger than the house will take in this market.");
+  if (grows && !input.resting) {
+    if (useBps !== null && useBps > 10_000) problems.push("Not enough equity for the margin this needs.");
+    if (equity <= 0n) problems.push("Fund your account to trade.");
+    if (notional > houseCap) problems.push("Larger than the house will take in this market.");
+  }
   return {
     qty, quote, offer: offer.price, bid: bid.price, spreadBps: Number(((offer.price - bid.price) * 10_000n) / mark), worstPrice: quote.price + worst,
     marginAfter, marginAdded: after - before, marginUseBps: useBps, marginRateBps: rate,

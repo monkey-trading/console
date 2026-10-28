@@ -11,14 +11,14 @@ import { useConsole } from "./ConsoleProvider";
 const KIND: Partial<Record<EngineEvent["type"], string>> = {
   fill: "Fill", close_out: "Close-out", deposited: "Deposit", withdrawal_approved: "Withdrawal", withdrawal_queued: "Withdrawal",
   withdrawal_queue_updated: "Withdrawal", withdrawal_rejected: "Withdrawal", order_rejected: "Order", order_cancelled: "Order",
-  eligibility_attested: "Eligibility", financing: "Financing",
+  eligibility_attested: "Eligibility", eligibility_rejected: "Eligibility", financing: "Financing", bad_debt: "Close-out",
 };
 
 export function HistoryList() {
   const { history, markets, wallet } = useConsole();
   const symbolOf = (id: number) => markets.find((m) => m.id === id)?.symbol ?? `market ${id}`;
   const rows = history.flatMap((entry) => {
-    const text = describeEvent(entry.event, symbolOf);
+    const text = describeEvent(entry, symbolOf);
     return text === null ? [] : [{ entry, text }];
   });
   return (
@@ -28,10 +28,10 @@ export function HistoryList() {
       ) : (
         <ol>
           {rows.map(({ entry, text }) => (
-            <li key={`${entry.offset}-${entry.event.type}-${text}`} className="grid grid-cols-[7.5rem_6.5rem_1fr] gap-3 border-b border-line px-4 py-3 text-caption last:border-b-0">
+            <li key={entry.cursor} className="grid grid-cols-[7.5rem_6.5rem_1fr] gap-3 border-b border-line px-4 py-3 text-caption last:border-b-0">
               <time className="text-fg-3">{formatStamp(entry.ts)}</time>
-              <span className="text-fg-2">{KIND[entry.event.type] ?? "Event"}</span>
-              <span className={entry.event.type === "close_out" || entry.event.type.endsWith("rejected") ? "text-ember" : "text-fg"}>{text}</span>
+              <span className="text-fg-2">{KIND[entry.type] ?? "Event"}</span>
+              <span className={entry.type === "close_out" || entry.type.endsWith("rejected") || entry.type === "bad_debt" ? "text-ember" : "text-fg"}>{text}</span>
             </li>
           ))}
         </ol>

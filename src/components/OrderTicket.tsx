@@ -20,7 +20,7 @@ const KINDS = [
   { value: "limit", label: "Limit" },
   { value: "stop", label: "Stop" },
 ] as const;
-const INPUT = "mt-1 w-full rounded border border-line-2 bg-ink px-2 py-2 text-data text-fg focus-visible:outline-2 focus-visible:outline-glow";
+const INPUT = "mt-1 w-full rounded border border-edge bg-ink px-2 py-2 text-data text-fg focus-visible:outline-2 focus-visible:outline-glow";
 
 /** Opens the funding drawer. */
 function FundingLink() {
@@ -41,7 +41,7 @@ export function OrderTicket() {
   if (!market) return null;
   const notional = parseFixed(size.replace(/,/g, "")) ?? 0n;
   const triggerPrice = parseFixed(price);
-  const preview = previewTicket({ market, side, notional, slippageBps: slippage, account: state.account, houseNav: state.house.nav });
+  const preview = previewTicket({ market, side, notional, slippageBps: slippage, resting: kind !== "market", account: state.account, houseNav: state.house.nav });
   const problems = [...preview.problems];
   if (kind !== "market" && triggerPrice === null) problems.push("Enter a trigger price.");
   const gate = !state.wallet ? "Connect a wallet to trade." : state.eligibility === null ? "Attest your eligibility before trading." : !maySign(state.attestation) ? "The node's attestation is not verified." : null;
@@ -70,7 +70,7 @@ export function OrderTicket() {
           <button type="button" aria-pressed={side === "buy"} onClick={() => setSide("buy")} className={`rounded border py-2.5 text-caption focus-visible:outline-2 focus-visible:outline-glow ${side === "buy" ? "border-glow bg-glow/10 text-glow" : "border-line-2 text-fg-2"}`}>Buy / Long</button>
           <button type="button" aria-pressed={side === "sell"} onClick={() => setSide("sell")} className={`rounded border py-2.5 text-caption focus-visible:outline-2 focus-visible:outline-ember ${side === "sell" ? "border-ember bg-ember/10 text-ember" : "border-line-2 text-fg-2"}`}>Sell / Short</button>
         </fieldset>
-        <div className="mt-4 grid grid-cols-2 divide-x divide-line rounded border border-line-2 text-center" aria-label="Best bid and offer for this size">
+        <div className="mt-4 grid grid-cols-2 divide-x divide-line rounded border border-edge text-center">
           <div className="px-2 py-3"><p className="text-label text-fg-3">Bid (you sell)</p><p className={`mt-1 text-data ${side === "sell" ? "text-ember" : "text-fg-2"}`}>{show(preview.bid)}</p></div>
           <div className="px-2 py-3"><p className="text-label text-fg-3">Offer (you buy)</p><p className={`mt-1 text-data ${side === "buy" ? "text-glow" : "text-fg-2"}`}>{show(preview.offer)}</p></div>
           <p className="col-span-2 border-t border-line px-2 py-2 text-label text-fg-3">Spread for this size <span className="text-fg-2">{(preview.spreadBps / 100).toFixed(2)}%</span> <span className="text-fg-3">({preview.spreadBps} bps)</span></p>
@@ -78,7 +78,7 @@ export function OrderTicket() {
         <div className="mt-4">
           <label htmlFor={`${id}-size`} className="block text-caption text-fg-2">Position size (USD)</label>
           <input id={`${id}-size`} value={size} inputMode="decimal" onChange={(event) => setSize(event.target.value)} className={INPUT} />
-          <p className="mt-1 text-label text-fg-3" aria-live="polite">≈ {formatFixedPlaces(preview.qty, 6)} {market.symbol.split("-")[0]} · ${formatFixedPlaces(notional, 2)}</p>
+          <p className="mt-1 text-label text-fg-3">≈ {formatFixedPlaces(preview.qty, 6)} {market.symbol.split("-")[0]} · ${formatFixedPlaces(notional, 2)}</p>
         </div>
         <details className="mt-4 rounded border border-line-2">
           <summary className="px-3 py-2 text-caption text-fg-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-glow">Advanced</summary>

@@ -62,14 +62,15 @@ function orderEvents(state: MockState, req: OrderRequest, account: AccountState)
       address: req.account, market: req.market, side: req.side, qty, reduceOnly: req.reduce_only ?? false, orderId,
       slippage: { quoted, maxBps: req.kind.max_slippage_bps ?? runtime.listed.spec.max_slippage_bps },
     });
-    return outcome.ok ? [accepted, ...fillEvents(outcome.fill)] : rejected(req, outcome.reject);
+    return outcome.ok ? [accepted, ...fillEvents(outcome.fill, outcome.badDebt)] : rejected(req, outcome.reject);
   }
   const price = parseFixed(req.kind.price);
   if (price === null || price <= 0n) return rejected(req, { type: "invalid_order", reason: "trigger price" });
   if (account.orders.size >= MAX_RESTING) return rejected(req, { type: "invalid_order", reason: `at most ${MAX_RESTING} resting orders` });
   if (!runtime.open || runtime.halted) return rejected(req, { type: "market_closed" });
   account.orders.set(orderId, { order_id: orderId, client_id: req.client_id, market: req.market, side: req.side, qty: req.qty, kind: req.kind, reduce_only: req.reduce_only ?? false });
-  return [accepted];
+  // A newly accepted order that is already executable fills at once, as the engine checks it on insertion.
+  return [accepted, ...triggerResting(state, req.account)];
 }
 
 /** Sequences the cancel of a resting order. */
@@ -94,21 +95,29 @@ export function attestEligibility(state: MockState, req: EligibilityRequest): Ac
   return { seq: state.emit({ type: "attest_eligibility" }, events).seq, events };
 }
 
-/** Fires every resting order whose trigger the live quote has reached. */
-export function triggerResting(state: MockState): EngineEvent[] {
+/**
+ * Fires every resting order of an open market whose trigger has been reached (of one account, or of
+ * all). A limit order waits for the quote it would fill at to reach its price; a stop waits for the
+ * index itself to trade through its price, so a widening spread alone never triggers it.
+ */
+export function triggerResting(state: MockState, only?: string): EngineEvent[] {
   const events: EngineEvent[] = [];
   for (const [address, account] of state.accounts) {
+    if (only !== undefined && address !== only.toLowerCase()) continue;
     for (const order of [...account.orders.values()]) {
+      const runtime = state.markets.get(order.market);
       const qty = parseFixed(order.qty);
-      const level = parseFixed(order.kind.type === "market" ? "0" : order.kind.price);
-      const quote = qty === null ? null : liveQuote(state, address, order.market, order.side, qty);
-      if (qty === null || level === null || !quote) continue;
+      const level = order.kind.type === "market" ? null : parseFixed(order.kind.price);
+      if (!runtime || !runtime.open || runtime.halted || qty === null || level === null) continue;
+      const quote = liveQuote(state, address, order.market, order.side, qty);
+      if (!quote) continue;
       const buy = order.side === "buy";
-      const hit = order.kind.type === "limit" ? (buy ? quote.price <= level : quote.price >= level) : buy ? quote.price >= level : quote.price <= level;
+      const hit =
+        order.kind.type === "limit" ? (buy ? quote.price <= level : quote.price >= level) : buy ? runtime.mid >= level : runtime.mid <= level;
       if (!hit) continue;
       account.orders.delete(order.order_id);
       const outcome = fillOrder(state, { address, market: order.market, side: order.side, qty, reduceOnly: order.reduce_only, orderId: order.order_id });
-      if (outcome.ok) events.push(...fillEvents(outcome.fill));
+      if (outcome.ok) events.push(...fillEvents(outcome.fill, outcome.badDebt));
       else events.push({ type: "order_cancelled", account: address, order_id: order.order_id, reason: "unfillable" });
     }
   }

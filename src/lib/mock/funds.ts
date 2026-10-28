@@ -2,7 +2,7 @@
 
 import { EngineError, type ActionResult } from "../engine/client";
 import type { EngineEvent, QueuedWithdrawal, WithdrawalPage, WithdrawalRequest } from "../engine/types";
-import { fixedFromInt, fixedToWire, maxFixed, minFixed, parseFixed, SCALE, type Fixed } from "../fixed";
+import { fixedFromInt, fixedToWire, maxFixed, minFixed, parseFixed, type Fixed } from "../fixed";
 import { equityOf, marginOf } from "./accounts";
 import { checkAccess, checkAuth } from "./orders";
 import { FINALITY_MS, type MockState } from "./state";
@@ -11,8 +11,11 @@ import { FINALITY_MS, type MockState } from "./state";
 export const MIN_DEPOSIT = fixedFromInt(10);
 export const MAX_DEPOSIT = fixedFromInt(1_000_000_000);
 
-/** Rounds down to whole USDC, since partial approvals are whole-USDC. */
-const wholeDollars = (value: Fixed): Fixed => (value / SCALE) * SCALE;
+/** One USDC base unit (six decimals) in the nine-decimal representation. */
+const USDC_UNIT: Fixed = 1_000n;
+
+/** Rounds toward zero to whole USDC base units, as the engine does; the dust stays in account cash. */
+const wholeUsdc = (value: Fixed): Fixed => (value / USDC_UNIT) * USDC_UNIT;
 
 /**
  * A deposit the wallet sent to the vault: unfinalised until the node sees it final, then credited.
@@ -49,7 +52,7 @@ export function withdrawable(state: MockState, address: string): Fixed {
 
 /**
  * Sequences a withdrawal. The amount leaves the balance at once; the vault approves what its
- * liquidity covers, whole USDC at a time and only when no earlier request waits, and the rest queues.
+ * liquidity covers in whole USDC base units, and only when no earlier request waits; the rest queues.
  * Error cases (as HTTP errors):
  * - the region is refused (403) or the request's signature fields are wrong (see `checkAuth`)
  */
@@ -57,7 +60,9 @@ export function withdraw(state: MockState, req: WithdrawalRequest): ActionResult
   checkAccess(state);
   const account = state.account(req.account);
   checkAuth(state, account, req.auth);
-  const amount = parseFixed(req.amount);
+  const requested = parseFixed(req.amount);
+  // The engine reserves whole USDC base units; any finer dust of the request stays in account cash.
+  const amount = requested === null ? null : wholeUsdc(requested);
   const events: EngineEvent[] = [];
   if (amount === null || amount <= 0n) {
     events.push({ type: "withdrawal_rejected", account: req.account, amount: req.amount, reason: { type: "invalid_amount" } });
@@ -66,7 +71,7 @@ export function withdraw(state: MockState, req: WithdrawalRequest): ActionResult
     events.push({ type: "withdrawal_rejected", account: req.account, amount: req.amount, reason: { type: "insufficient_funds", available } });
   } else {
     account.balance -= amount;
-    const approved = state.queue.some((entry) => entry.remaining > 0n) ? 0n : wholeDollars(minFixed(amount, state.vaultLiquidity));
+    const approved = state.queue.some((entry) => entry.remaining > 0n) ? 0n : wholeUsdc(minFixed(amount, state.vaultLiquidity));
     if (approved > 0n) {
       state.vaultLiquidity -= approved;
       events.push({ type: "withdrawal_approved", account: req.account, amount: fixedToWire(approved), nonce: state.seq + 1 });
@@ -79,13 +84,13 @@ export function withdraw(state: MockState, req: WithdrawalRequest): ActionResult
   return { seq: state.emit({ type: "withdraw" }, events).seq, events };
 }
 
-/** Adds liquidity to the vault and approves the queue's heads, in order, whole USDC at a time. */
+/** Adds liquidity to the vault and approves the queue's heads, in order, in whole USDC base units. */
 export function payQueue(state: MockState, added: Fixed): EngineEvent[] {
   state.vaultLiquidity += added;
   const events: EngineEvent[] = [];
   for (const entry of state.queue) {
     if (entry.remaining <= 0n) continue;
-    const pay = wholeDollars(minFixed(entry.remaining, state.vaultLiquidity));
+    const pay = wholeUsdc(minFixed(entry.remaining, state.vaultLiquidity));
     if (pay <= 0n) break; // first in, first out: a later request never jumps the head
     state.vaultLiquidity -= pay;
     entry.remaining -= pay;

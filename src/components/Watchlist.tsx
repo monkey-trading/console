@@ -44,7 +44,7 @@ export function Watchlist() {
           );
         })}
       </ul>
-      <p className="hidden px-4 py-5 text-label leading-relaxed text-fg-3 lg:block">Crypto, FX, indices,<br />commodities and shares.</p>
+      <p className="hidden px-4 py-5 text-label leading-relaxed text-fg-3 lg:block">Crypto, FX, an index<br />and gold.</p>
     </div>
   );
 }

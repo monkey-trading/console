@@ -54,6 +54,12 @@ export interface EngineClient {
   house(): Promise<HouseView>;
   /** Rejects with a 404 `EngineError` for an account the engine has never credited. */
   account(address: Address): Promise<AccountView>;
+  /**
+   * Whether the node serves the caller's region; rejects with a 403 access `EngineError` if not.
+   * The engine has no such route, since it screens each action as it is sequenced, so a live client
+   * derives the answer from the node's refusals, or the node offers a probe (an open decision).
+   */
+  accessProbe(): Promise<void>;
   nonce(address: Address): Promise<{ next_nonce: number }>;
   eligibility(address: Address): Promise<EligibilityView>;
   attestEligibility(request: EligibilityRequest): Promise<ActionResult>;

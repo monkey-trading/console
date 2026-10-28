@@ -2,7 +2,7 @@
 
 import { DEFAULT_TIMEFRAME, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
 import type { AttestationStatus } from "../engine/attestation";
-import type { HistoryPage, MarketId, MarketView, HouseView, QueuedWithdrawal } from "../engine/types";
+import type { HistoryEvent, MarketId, MarketView, HouseView, QueuedWithdrawal } from "../engine/types";
 import { fixedToNumber } from "../fixed";
 import { decodeHouse, decodeMarket, type AccountModel, type Eligibility, type HouseModel, type MarketModel } from "../models";
 
@@ -20,7 +20,7 @@ export interface FeedLine {
   text: string;
 }
 
-export type HistoryEntry = HistoryPage["events"][number];
+export type HistoryEntry = HistoryEvent;
 
 export interface ConsoleState {
   /** The node's clock: the stamp of the latest message. */
@@ -45,6 +45,8 @@ export interface ConsoleState {
   busy: boolean;
   /** Whether the funding drawer is open. */
   fundingOpen: boolean;
+  /** Whether the simulation is paused: the node clock and every price stand still. */
+  paused: boolean;
 }
 
 /** Where the bars of a market and timeframe come from: history ending at the current mark. */
@@ -55,6 +57,7 @@ export function seedAllBars(markets: readonly MarketModel[], startMs: number, hi
   const out: ConsoleState["bars"] = {};
   for (const m of markets) {
     const price = m.mark === null ? 1 : fixedToNumber(m.mark);
+    // Filled for every timeframe in the loop below before it is read.
     const perFrame = {} as Record<TimeframeId, Bar[]>;
     for (const tf of TIMEFRAMES) perFrame[tf.id] = history(m.symbol, tf.seconds, startMs, price);
     out[m.id] = perFrame;
@@ -83,5 +86,6 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     toasts: [],
     busy: false,
     fundingOpen: false,
+    paused: false,
   };
 }

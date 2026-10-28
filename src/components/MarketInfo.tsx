@@ -38,7 +38,7 @@ export function MarketInfo({ market, preview, notional }: { market: MarketModel;
           <div className={ROW}><dt className="text-fg-3">Market hours</dt><dd className={market.open ? "text-glow" : "text-ember"}>{market.open ? "Open" : "Closed"} · {describeSchedule(market.view.schedule)}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Stress level</dt><dd className={STRESS_TONE[market.stress] ?? ""}>{market.stress} · {stress}{market.stress > 0 ? ` (+${STRESS_SPREAD_BPS[market.stress]} bps)` : ""}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Margin rate</dt><dd>{formatMovePercent(preview.marginRateBps).replace("+", "")} of the position</dd></div>
-          <div className={ROW}><dt className="text-fg-3">Required margin</dt><dd><output aria-live="polite" aria-atomic="true"><span className="sr-only">Required margin: </span>{usd(preview.marginAdded)}</output></dd></div>
+          <div className={ROW}><dt className="text-fg-3">Required margin</dt><dd>{usd(preview.marginAdded)}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Implied leverage</dt><dd>{preview.impliedLeverage === null ? "—" : `${preview.impliedLeverage}×`}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Quoted price</dt><dd>{preview.quote ? formatPrice(fixedToNumber(preview.quote.price), market.places) : "—"}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Worst price allowed</dt><dd>{preview.worstPrice ? formatPrice(fixedToNumber(preview.worstPrice), market.places) : "—"}</dd></div>
@@ -57,7 +57,7 @@ export function MarketInfo({ market, preview, notional }: { market: MarketModel;
         <dl className="space-y-3 border-t border-line pt-4 text-label leading-relaxed text-fg-3">
           <div><dt className="text-fg-2">Reference</dt><dd>The multi-venue median of the node's price feeds.</dd></div>
           <div><dt className="text-fg-2">Execution</dt><dd>Fills at the reference price moved by the spread for your size.</dd></div>
-          <div><dt className="text-fg-2">Risk</dt><dd>Stress widens the spread. Your account is closed out when equity falls below {formatMovePercent(CLOSE_OUT_BPS / 100).replace("+", "").replace(".00", "")} of its margin.</dd></div>
+          <div><dt className="text-fg-2">Risk</dt><dd>Stress widens the spread. Your account is closed out when equity falls below {CLOSE_OUT_BPS / 100}% of its margin.</dd></div>
         </dl>
       </div>
     </details>

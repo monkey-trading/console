@@ -60,8 +60,11 @@ export interface QueueEntry {
   requestedSeq: number;
 }
 
+/** An event with its cursor: the command's seq and the event's index among that command's events. */
 export interface HistoryItem {
-  offset: string;
+  cursor: string;
+  seq: number;
+  index: number;
   ts: number;
   event: EngineEvent;
 }
@@ -129,14 +132,14 @@ export class MockState {
     const message: StreamMessage = { offset: `${this.seq}:0`, type: "command", seq: this.seq, ts: this.now, cmd, events };
     this.log.push(message);
     if (this.log.length > LOG_LIMIT) this.log.shift();
-    for (const event of events) {
+    events.forEach((event, index) => {
       if ("account" in event) {
         const key = event.account.toLowerCase();
         const items = this.history.get(key) ?? [];
-        items.push({ offset: message.offset, ts: this.now, event });
+        items.push({ cursor: `${message.seq}:${index}`, seq: message.seq, index, ts: this.now, event });
         this.history.set(key, items);
       }
-    }
+    });
     for (const listener of this.listeners) listener(message);
     return message;
   }
