@@ -2,8 +2,8 @@
 
 /** Open positions with their profit and loss and a Close button. */
 
-import { formatPrice } from "@/lib/price-format";
-import { absFixed, fixedToNumber, formatFixedPlaces, formatUsd, mulFixed, type Fixed } from "@/lib/fixed";
+import { formatMark } from "@/lib/price-format";
+import { absFixed, formatFixedPlaces, formatUsd, mulFixed, type Fixed } from "@/lib/fixed";
 import { placeOrder } from "@/lib/store/actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -35,8 +35,8 @@ export function PositionsView() {
                     <td className="px-4 py-4 text-fg">{market?.symbol ?? p.market}</td>
                     <td className={`px-4 py-4 ${p.qty > 0n ? "text-glow" : "text-ember"}`}>{p.qty > 0n ? "Long" : "Short"}</td>
                     <td className="px-4 py-4">{formatFixedPlaces(absFixed(p.qty), 6)}</td>
-                    <td className="px-4 py-4">{formatPrice(fixedToNumber(p.entry), places)}</td>
-                    <td className="px-4 py-4">{formatPrice(fixedToNumber(mark), places)}</td>
+                    <td className="px-4 py-4">{formatMark(p.entry, places)}</td>
+                    <td className="px-4 py-4">{formatMark(mark, places)}</td>
                     <td className={`px-4 py-4 ${pnl < 0n ? "text-ember" : "text-glow"}`}>{formatUsd(pnl)}</td>
                     <td className="px-4 py-4 text-right">
                       <button type="button" disabled={busy || !market?.open} className={BUTTON} aria-label={`Close ${market?.symbol ?? ""} position`}

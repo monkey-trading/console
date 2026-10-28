@@ -38,7 +38,7 @@ export function Toasts() {
           {toasts.map((toast) => (
             <div key={toast.id} className={`flex items-start justify-between gap-3 rounded border bg-ink-2 px-3 py-3 text-caption shadow-platform ${TONE[toast.tone]}`}>
               <p aria-hidden="true" className="min-w-0 break-words">{toast.text}</p>
-              <button type="button" onClick={() => store.dismissToast(toast.id)} aria-label={`Dismiss notification: ${toast.text}`} className="shrink-0 px-1 text-fg-3 hover:text-fg focus-visible:outline-2 focus-visible:outline-glow">×</button>
+              <button type="button" onClick={() => { store.dismissToast(toast.id); document.getElementById("main")?.focus(); }} aria-label={`Dismiss notification: ${toast.text}`} className="shrink-0 px-1 text-fg-3 hover:text-fg focus-visible:outline-2 focus-visible:outline-glow">×</button>
             </div>
           ))}
         </div>

@@ -5,8 +5,8 @@
 import { useId, useState } from "react";
 
 import { maySign } from "@/lib/engine/attestation";
-import { fixedToNumber, formatFixedPlaces, parseFixed } from "@/lib/fixed";
-import { formatPrice } from "@/lib/price-format";
+import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
+import { formatMark } from "@/lib/price-format";
 import { placeOrder } from "@/lib/store/actions";
 import { previewTicket, SLIPPAGE_CHOICES } from "@/lib/ticket";
 
@@ -39,7 +39,7 @@ export function OrderTicket() {
   const [slippage, setSlippage] = useState<number>(10);
   const market = state.markets.find((m) => m.id === state.selected);
   if (!market) return null;
-  const notional = parseFixed(size.replace(/,/g, "")) ?? 0n;
+  const notional = parseFixed(size) ?? 0n;
   const triggerPrice = parseFixed(price);
   const preview = previewTicket({ market, side, notional, slippageBps: slippage, resting: kind !== "market", triggerPrice, account: state.account, houseNav: state.house.nav });
   const problems = [...preview.problems];
@@ -47,7 +47,7 @@ export function OrderTicket() {
   const gate = !state.wallet ? "Connect a wallet to trade." : state.eligibility === null ? "Attest your eligibility before trading." : !maySign(state.attestation) ? "The node's attestation is not verified." : null;
   const canPlace = gate === null && problems.length === 0 && !state.busy;
   const places = market.places;
-  const show = (value: bigint | null) => (value === null ? "—" : formatPrice(fixedToNumber(value), places));
+  const show = (value: bigint | null) => (value === null ? "—" : formatMark(value, places));
   const submit = () => {
     const base = { market: market.id, side, notional, slippageBps: slippage, reduceOnly: false };
     if (kind === "market") void placeOrder(store, { ...base, kind: { kind: "market" } });
@@ -93,7 +93,7 @@ export function OrderTicket() {
             <p className="mt-2 text-label leading-relaxed text-fg-3">{kind === "market" ? "The node declines the order if the live price is more than this worse than the quote shown." : "Resting orders fill at the live price when triggered."}</p>
           </fieldset>
         </details>
-        <button type="submit" disabled={!canPlace} className={`mt-4 w-full rounded border py-3 text-caption focus-visible:outline-2 focus-visible:outline-glow disabled:border-line-2 disabled:bg-transparent disabled:text-fg-3 ${side === "buy" ? "border-glow bg-glow/10 text-glow hover:bg-glow/20" : "border-ember bg-ember/10 text-ember hover:bg-ember/20"}`}>
+        <button type="submit" aria-disabled={!canPlace} className={`mt-4 w-full rounded border py-3 text-caption focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 ${side === "buy" ? "border-glow bg-glow/10 text-glow hover:bg-glow/20" : "border-ember bg-ember/10 text-ember hover:bg-ember/20"}`}>
           {state.busy ? "Signing…" : `Trade: ${side === "buy" ? "Buy" : "Sell"} ${market.symbol}`}
         </button>
         <div aria-live="polite" className="mt-3 space-y-1 text-label leading-relaxed text-ember">

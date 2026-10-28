@@ -24,7 +24,7 @@ export function EligibilityCard() {
       {eligibility ? (
         <p className="mt-4 text-caption text-glow">Recorded: {STATEMENTS[eligibility]} You can deposit.</p>
       ) : (
-        <form className="mt-4" onSubmit={(event) => { event.preventDefault(); void attestEligibility(store, choice).then(() => heading.current?.focus()); }}>
+        <form className="mt-4" onSubmit={(event) => { event.preventDefault(); if (!wallet || busy || !maySign(attestation)) return; void attestEligibility(store, choice).then(() => heading.current?.focus()); }}>
           <p className="text-caption leading-relaxed text-fg-2">Before your first deposit you declare, with your wallet, that you are a professional or eligible client. The declaration is recorded in the public log against your account.</p>
           <fieldset className="mt-4 space-y-2">
             <legend className="sr-only">Client class</legend>
@@ -35,7 +35,7 @@ export function EligibilityCard() {
               </label>
             ))}
           </fieldset>
-          <button type="submit" disabled={!wallet || busy || !maySign(attestation)} className="mt-4 rounded border border-glow bg-glow/10 px-4 py-2.5 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow disabled:cursor-not-allowed disabled:border-line-2 disabled:bg-transparent disabled:text-fg-3">
+          <button type="submit" aria-disabled={!wallet || busy || !maySign(attestation)} className="mt-4 rounded border border-glow bg-glow/10 px-4 py-2.5 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3">
             {busy ? "Signing…" : "Sign the declaration"}
           </button>
           {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet first.</p>}

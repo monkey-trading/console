@@ -8,27 +8,42 @@ import { fillEvents, fillOrder } from "./execute";
 import { funded, ME, order, START, types } from "./test-helpers";
 
 describe("close-out of several positions", () => {
-  it("closes the largest tradable loser first, stops once healthy, skips a halted market, and announces once", async () => {
+  async function setup(btcLoss: number) {
     const node = await funded(3_000);
     const { state } = node.client;
     const account = state.account(ME);
     const mid = (id: number) => state.markets.get(id)?.mid ?? 0n;
-    // BTC loses the most, ETH loses a little; EUR (halted) loses too but cannot trade.
-    account.positions.set(1, { qty: fixedFromInt(1), entry: mid(1) + fixedFromInt(2_000) });
+    account.positions.set(1, { qty: fixedFromInt(1), entry: mid(1) + fixedFromInt(btcLoss) });
     account.positions.set(2, { qty: fixedFromInt(1), entry: mid(2) + fixedFromInt(50) });
     account.positions.set(3, { qty: fixedFromInt(1_000), entry: mid(3) + fixedFromInt(1) });
+    return { node, account };
+  }
+
+  it("closes the largest tradable loser first, skips a halted market, and announces once", async () => {
+    const { node, account } = await setup(2_000);
     node.controls.setHalted(3, true);
     const seen: EngineEvent[] = [];
     node.client.subscribe((m) => seen.push(...m.events));
     node.client.tick(START + 9_000);
-    const fills = seen.filter((e) => e.type === "fill");
-    expect(fills[0]).toMatchObject({ market: 1, liquidation: true });
+    expect(seen.filter((e) => e.type === "fill")[0]).toMatchObject({ market: 1, liquidation: true });
     expect(types(seen).filter((t) => t === "close_out")).toHaveLength(1);
     expect(account.positions.has(3)).toBe(true); // a halted market's position waits
     node.client.tick(START + 10_000);
     expect(types(seen).filter((t) => t === "close_out")).toHaveLength(1); // not repeated while nothing can trade
   });
+
+  it("stops as soon as the account is healthy again, leaving the other positions open", async () => {
+    // BTC's 1,500 loss puts equity under half the margin; with BTC closed, equity covers what is left.
+    const { node, account } = await setup(1_500);
+    const seen: EngineEvent[] = [];
+    node.client.subscribe((m) => seen.push(...m.events));
+    node.client.tick(START + 9_000);
+    const closed = seen.filter((e) => e.type === "fill").map((e) => (e.type === "fill" ? e.market : 0));
+    expect(closed).toEqual([1]);
+    expect([...account.positions.keys()].sort()).toEqual([2, 3]);
+  });
 });
+
 
 describe("engine rules the mock follows", () => {
   it("fills a resting limit that is already executable when it is accepted", async () => {
@@ -84,6 +99,16 @@ describe("engine rules the mock follows", () => {
     await order(node, "0.5", "buy");
     const flip = await order(node, "1.5", "sell", { reduce_only: true });
     expect(flip.events[0]).toMatchObject({ type: "order_rejected", reason: { kind: "reduce_only" } });
+  });
+});
+
+describe("resting orders that cannot fill", () => {
+  it("is cancelled as unfillable when it triggers but the account cannot carry it", async () => {
+    const node = await funded(1_000);
+    // Admitted without a margin check, already executable, so it triggers at once and fails the check.
+    const result = await order(node, "5", "buy", { kind: { kind: "limit", price: "1000000" } });
+    expect(types(result.events)).toEqual(["order_accepted", "order_cancelled"]);
+    expect(result.events[1]).toMatchObject({ reason: "unfillable" });
   });
 });
 

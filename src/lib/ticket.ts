@@ -1,6 +1,6 @@
 /** What an order ticket shows before the user places the order: the quote, the margin it uses, the limits. */
 
-import { bpsOf, divFixed, fixedFromWire, mulFixed, SCALE, type Fixed } from "./fixed";
+import { absFixed, bpsOf, divFixed, fixedFromWire, mulFixed, SCALE, type Fixed } from "./fixed";
 import type { Side } from "./engine/types";
 import type { AccountModel, MarketModel } from "./models";
 import { executionCost, growthOf, notionalOf, quoteOrder, slicedBps, tieredMargin, type Quote } from "./pricing";
@@ -87,6 +87,9 @@ export function previewTicket(input: TicketInput): TicketPreview {
   const before = tieredMargin(spec.margin_tiers, mulFixed(current, mark));
   const after = tieredMargin(spec.margin_tiers, mulFixed(current + delta, mark));
   const marginAfter = (account?.margin ?? 0n) - before + after;
+  // The rate the whole resulting position pays, the basis the required margin and the implied leverage use.
+  const resulting = absFixed(mulFixed(current + delta, mark));
+  const positionRate = resulting > 0n ? Number((after * 10_000n) / resulting) : rate;
   const equity = account?.equity ?? 0n;
   // The check the node runs: equity after the spread this fill pays, against the margin the account then needs.
   const cost = executionCost({ held: current, entry: account?.positions.find((p) => p.market === market.id)?.entry ?? null, delta, price: quote.price, index: mark });
@@ -98,12 +101,12 @@ export function previewTicket(input: TicketInput): TicketPreview {
   if (qty <= 0n) problems.push("Enter a size.");
   else if (grows && notionalOf(qty, input.resting && input.triggerPrice ? input.triggerPrice : mark) < fixedFromWire(spec.min_order_notional)) problems.push(`Minimum order is ${spec.min_order_notional} USD.`);
   if (grows && !input.resting) {
-    if (useBps !== null && useBps > 10_000) problems.push("Not enough equity for the margin this needs.");
+    if (marginAfter > afterCost && afterCost > 0n) problems.push("Not enough equity for the margin this needs.");
     if (equity <= 0n) problems.push("Fund your account to trade.");
   }
   return {
     qty, quote, offer: offer.price, bid: bid.price, spreadBps: Number(((offer.price - bid.price) * 10_000n) / mark), worstPrice: quote.price + worst,
-    marginAfter, marginAdded: after - before, marginUseBps: useBps, marginRateBps: rate,
+    marginAfter, marginAdded: after - before, marginUseBps: useBps, marginRateBps: positionRate,
     impliedLeverage: after - before > 0n ? Number((notional * 100n) / (after - before)) / 100 : null, houseCap, problems,
   };
 }

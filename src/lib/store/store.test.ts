@@ -1,6 +1,6 @@
 /** Tests for the store driving the mock node through the user's whole path. */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { fixedFromInt, parseFixed } from "../fixed";
 import { createMockNode, SIM_EPOCH_MS } from "../mock";
@@ -126,5 +126,20 @@ describe("what the store refuses or hides", () => {
     store.tick(START + 5_000);
     store.tick(START + 1_000);
     expect(node.client.state.now).toBe(START + 5_000);
+  });
+
+  it("reads again when a refresh was asked for while another ran, so a stale answer never stands", async () => {
+    const { node, store } = await funded();
+    const address = store.getSnapshot().wallet?.address ?? "";
+    const stale = await node.client.account(address);
+    vi.spyOn(node.client, "account").mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return stale;
+    });
+    const first = store.refresh(true);
+    node.client.state.account(address).balance += fixedFromInt(5);
+    const second = store.refresh(true);
+    await Promise.all([first, second]);
+    expect(store.getSnapshot().account?.balance).toBe((parseFixed(stale.balance) ?? 0n) + fixedFromInt(5));
   });
 });

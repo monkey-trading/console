@@ -92,10 +92,9 @@ export function Select<T extends string>({ label, value, options, onChange }: Pr
               role="option"
               aria-selected={option.value === value}
               tabIndex={-1}
-              onMouseDown={(event) => {
-                event.preventDefault();
-                choose(index);
-              }}
+              onMouseDown={(event) => event.preventDefault()} // keeps focus on the list until the click lands
+              onClick={() => choose(index)}
+              onKeyDown={onKey}
               onMouseEnter={() => setActive(index)}
               className={`rounded px-2 py-2 text-data ${index === active ? "bg-glow/10 text-glow" : "text-fg-2"} ${option.value === value ? "font-medium" : ""}`}
             >

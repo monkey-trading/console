@@ -2,9 +2,9 @@
 
 /** The left pane: every listed market with its mark, move, and whether it is open. */
 
-import { formatPrice } from "@/lib/price-format";
+import { formatMark } from "@/lib/price-format";
 import { formatMovePercent } from "@/lib/format";
-import { fixedToNumber, moveBps } from "@/lib/fixed";
+import { moveBps } from "@/lib/fixed";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 
@@ -33,7 +33,7 @@ export function Watchlist() {
                 </span>
                 <span aria-hidden="true" className="mt-2 flex flex-wrap justify-between gap-1 text-caption text-fg-3">
                   <span>{m.name}</span>
-                  <span className="text-fg-2">{m.mark === null ? "—" : formatPrice(fixedToNumber(m.mark), m.places)}</span>
+                  <span className="text-fg-2">{m.mark === null ? "—" : formatMark(m.mark, m.places)}</span>
                 </span>
                 <span aria-hidden="true" className="mt-2 flex items-center gap-1.5 text-label text-fg-3">
                   <span className={`size-1.5 rounded-full ${m.open ? "bg-glow" : "bg-ember"}`} />

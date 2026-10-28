@@ -8,14 +8,23 @@ import { createMockNode } from "./index";
 import { auth, funded, ME, order, START, types } from "./test-helpers";
 
 describe("access", () => {
-  it("refuses the United States and sanctioned jurisdictions before anything else", async () => {
+  it("refuses the United States and sanctioned jurisdictions on every screened action, before auth and eligibility", async () => {
     const node = createMockNode(START);
+    const bad = { nonce: 99, expires_at: 0, signature: "0x" };
     node.controls.setRegion("united_states");
-    await expect(node.client.attestEligibility({ account: ME, class: "professional", auth: auth(node) })).rejects.toMatchObject({
+    await expect(node.client.attestEligibility({ account: ME, class: "professional", auth: bad })).rejects.toMatchObject({
       status: 403, reject: { kind: "access", reason: "united_states" },
     });
     node.controls.setRegion("sanctioned_jurisdiction");
-    // A deposit goes to the vault, which screens the paying address, not the connection.
+    for (const attempt of [
+      node.client.attestEligibility({ account: ME, class: "professional", auth: bad }),
+      node.client.placeOrder({ account: ME, client_id: 1, market: 1, side: "buy", qty: "1", kind: { kind: "market", quoted: "1" }, auth: bad }),
+      node.client.withdraw({ account: ME, amount: "10", auth: bad }),
+    ]) {
+      await expect(attempt).rejects.toMatchObject({ status: 403, reject: { kind: "access", reason: "sanctioned_jurisdiction" } });
+    }
+    await expect(node.client.accessProbe()).rejects.toMatchObject({ status: 403 });
+    // A vault deposit is screened on the paying address, not the connection, so the region does not refuse it.
     expect(() => node.controls.deposit(ME, fixedFromInt(100))).toThrow("eligibility attestation required");
   });
 

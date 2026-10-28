@@ -50,7 +50,7 @@ export function disconnectWallet(store: ConsoleStore): void {
  */
 async function signed(
   store: ConsoleStore,
-  request: SignRequest,
+  build: (terms: { nonce: number; expires_at: number }) => SignRequest,
   send: (auth: RequestAuth, wallet: Wallet) => Promise<ActionResult>,
 ): Promise<Outcome> {
   const wallet = walletOf(store);
@@ -66,8 +66,10 @@ async function signed(
   store.patch({ busy: true });
   try {
     const { next_nonce } = await store.deps.client.nonce(wallet.address);
-    const signature = await wallet.sign(request);
-    const result = await send({ nonce: next_nonce, expires_at: state.now + REQUEST_TTL_MS, signature }, wallet);
+    const terms = { nonce: next_nonce, expires_at: state.now + REQUEST_TTL_MS };
+    // What the wallet signs carries every field the request depends on, nonce and expiry included.
+    const signature = await wallet.sign(build(terms));
+    const result = await send({ ...terms, signature }, wallet);
     return { ok: true, result };
   } catch (error) {
     if (!store.noteAccess(error)) store.toast("error", errorText(error));
@@ -83,7 +85,7 @@ function errorText(error: unknown): string {
 }
 
 export async function attestEligibility(store: ConsoleStore, cls: EligibilityClass): Promise<void> {
-  const out = await signed(store, { primaryType: "Eligibility", summary: STATEMENTS[cls], message: { class: cls } }, (auth, wallet) =>
+  const out = await signed(store, (t) => ({ primaryType: "Eligibility", summary: STATEMENTS[cls], message: { account: store.getSnapshot().wallet?.address ?? "", class: cls, statement: STATEMENTS[cls], ...t } }), (auth, wallet) =>
     store.deps.client.attestEligibility({ account: wallet.address, class: cls, auth }),
   );
   if (!out.ok) return;
@@ -104,7 +106,7 @@ export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void>
   store.patch({ busy: true });
   try {
     await wallet.deposit(amount);
-    store.toast("info", `Deposit of $${formatFixedPlaces(amount, 2)} sent. It is credited when the vault's transaction is final.`);
+    store.toast("info", `Deposit of $${formatFixedPlaces(amount, 2)} sent. It counts as collateral now and can be withdrawn once the vault's transaction is final.`);
     await store.refresh(true);
   } catch (error) {
     if (!store.noteAccess(error)) store.toast("error", errorText(error));
@@ -139,8 +141,9 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams): Prom
       : { kind: params.kind.kind, price: fixedToWire(params.kind.price) };
   const shown = formatFixedPlaces(preview.quote.price, market.places);
   const summary = `${params.side} ${qty} ${market.symbol}${params.kind.kind === "market" ? ` at ${shown}, up to ${params.slippageBps} bps worse` : ""}`;
-  const out = await signed(store, { primaryType: "Order", summary, message: { market: market.id, side: params.side, qty } }, (auth, wallet) =>
-    store.deps.client.placeOrder({ account: wallet.address, client_id: store.id(), market: market.id, side: params.side, qty, kind, reduce_only: params.reduceOnly, auth }),
+  const clientId = store.id();
+  const out = await signed(store, (t) => ({ primaryType: "Order", summary, message: { account: store.getSnapshot().wallet?.address ?? "", client_id: clientId, market: market.id, side: params.side, qty, kind: kind.kind, price: kind.kind === "market" ? kind.quoted : kind.price, max_slippage_bps: kind.kind === "market" ? kind.max_slippage_bps ?? 0 : 0, reduce_only: params.reduceOnly ? 1 : 0, ...t } }), (auth, wallet) =>
+    store.deps.client.placeOrder({ account: wallet.address, client_id: clientId, market: market.id, side: params.side, qty, kind, reduce_only: params.reduceOnly, auth }),
   );
   if (!out.ok) return;
   const rejected = out.result.events.find((e) => e.type === "order_rejected");
@@ -152,7 +155,7 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams): Prom
 }
 
 export async function cancelOrder(store: ConsoleStore, orderId: number): Promise<void> {
-  const out = await signed(store, { primaryType: "Cancel", summary: `cancel order ${orderId}`, message: { order_id: orderId } }, (auth, wallet) =>
+  const out = await signed(store, (t) => ({ primaryType: "Cancel", summary: `cancel order ${orderId}`, message: { account: store.getSnapshot().wallet?.address ?? "", order_id: orderId, ...t } }), (auth, wallet) =>
     store.deps.client.cancelOrder({ account: wallet.address, order_id: orderId, auth }),
   );
   if (!out.ok) return;
@@ -165,7 +168,7 @@ export async function cancelOrder(store: ConsoleStore, orderId: number): Promise
 /** Asks to withdraw `amount`; true when the node took the request, false when it refused it. */
 export async function withdraw(store: ConsoleStore, amount: Fixed): Promise<boolean> {
   const wire = fixedToWire(amount);
-  const out = await signed(store, { primaryType: "Withdrawal", summary: `withdraw ${wire} USDC`, message: { amount: wire } }, (auth, wallet) =>
+  const out = await signed(store, (t) => ({ primaryType: "Withdrawal", summary: `withdraw ${wire} USDC`, message: { account: store.getSnapshot().wallet?.address ?? "", amount: wire, ...t } }), (auth, wallet) =>
     store.deps.client.withdraw({ account: wallet.address, amount: wire, auth }),
   );
   if (!out.ok) return false;
@@ -181,8 +184,8 @@ export async function withdraw(store: ConsoleStore, amount: Fixed): Promise<bool
   return true;
 }
 
-/** Parses an amount typed by the user, or null. */
+/** Parses an amount typed by the user, or null: digits and one decimal point only, so `100,50` is refused, not read as 10050. */
 export function parseAmount(text: string): Fixed | null {
-  const value = parseFixed(text.replace(/[,\s]/g, ""));
+  const value = parseFixed(text);
   return value !== null && value > 0n ? value : null;
 }
