@@ -574,7 +574,7 @@ class CheckDocsTest(unittest.TestCase):
         )
 
     def test_a_heading_ends_a_list_and_its_lazy_lines(self):
-        page = "- item\n# Heading\n```\n[rule](rules/none.md)\n```\n"
+        page = "- item\n# Heading\n  ```\n[rule](rules/none.md)\n  ```\n"
         result = run_check({"agents/AGENTS.md": page}, {})
         self.assertEqual(
             (result.returncode, result.stdout, result.stderr),
