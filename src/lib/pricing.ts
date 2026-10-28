@@ -82,12 +82,14 @@ export function quoteFor(args: {
   heldNotional: Fixed;
   /** Notional of the growing slice, in dollars; zero for an order that only reduces. */
   orderNotional: Fixed;
+  /** Notional of the whole order, which the size charge is spread over; the engine divides by the full quantity. */
+  executedNotional: Fixed;
 }): Quote {
-  const { index, side, spreadTiers, heldNotional, orderNotional } = args;
+  const { index, side, spreadTiers, heldNotional, orderNotional, executedNotional } = args;
   const stressBps = STRESS_SPREAD_BPS[Math.min(args.stress, MAX_STRESS)] ?? 0;
   const flat = bpsOf(index, args.baseSpreadBps + stressBps);
   const sizeCost = orderNotional > ZERO ? tierCost(spreadTiers, heldNotional, heldNotional + orderNotional) : ZERO;
-  const size = orderNotional > ZERO ? (index * sizeCost) / orderNotional : ZERO;
+  const size = orderNotional > ZERO && executedNotional > ZERO ? (index * sizeCost) / executedNotional : ZERO;
   const move = flat + size;
   const spreadBps = Number((move * 10_000n) / index);
   return { price: side === "buy" ? index + move : index - move, spreadBps };
@@ -107,8 +109,15 @@ export function quoteOrder(args: {
   const quote = quoteFor({
     index: args.index, side: args.side, baseSpreadBps: args.baseSpreadBps, spreadTiers: args.spreadTiers, stress: args.stress,
     heldNotional: mulFixed(growth.fromQty, args.index), orderNotional: mulFixed(growth.toQty - growth.fromQty, args.index),
+    executedNotional: mulFixed(args.qty, args.index),
   });
   return { ...quote, grows: growth.grows };
+}
+
+/** Whether the live price is further from the quote than `capBps` allows, compared exactly in fixed point. */
+export function exceedsSlippage(side: Side, quoted: Fixed, live: Fixed, capBps: number): boolean {
+  const diff = side === "buy" ? live - quoted : quoted - live;
+  return diff > ZERO && diff * 10_000n > quoted * BigInt(capBps);
 }
 
 /** Largest adverse move from `quoted` to `live`, in basis points; zero when `live` is better. */

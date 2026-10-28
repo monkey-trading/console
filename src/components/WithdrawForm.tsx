@@ -31,9 +31,10 @@ export function WithdrawForm() {
     <section aria-labelledby="withdraw-title" className="rounded-xl border border-line-2 bg-ink-1 p-5">
       <h2 id="withdraw-title" className="text-label tracking-caps text-fg-3 uppercase">3 · Withdraw</h2>
       <form onSubmit={(event) => { event.preventDefault(); if (valid && value) void withdraw(store, value).then((taken) => taken && setAmount("")); }}>
-        <label htmlFor={id} className="mt-4 flex justify-between text-caption text-fg-2">Amount (USDC)
+        <div className="mt-4 flex justify-between text-caption text-fg-2">
+          <label htmlFor={id}>Amount (USDC)</label>
           <button type="button" onClick={() => setAmount(formatFixedPlaces(max, 2).replaceAll(",", ""))} className="text-glow underline focus-visible:outline-2 focus-visible:outline-glow">Max ${formatFixedPlaces(max, 2)}</button>
-        </label>
+        </div>
         <input id={id} value={amount} inputMode="decimal" onChange={(event) => setAmount(event.target.value)} className={INPUT} />
         <p className="mt-1 text-label leading-relaxed text-fg-3">The amount leaves your balance when you ask. The vault pays requests in order, in whole USDC, as it has liquidity; the rest waits in the queue below.</p>
         <button type="submit" disabled={!wallet || !valid || busy || !maySign(attestation)} className={SUBMIT}>Request withdrawal</button>

@@ -1,5 +1,3 @@
-"use client";
-
 /** The terminal's frame: one full view with a slim top strip, the workspace, and a risk line. */
 
 import type { ReactNode } from "react";

@@ -237,7 +237,7 @@ describe("engine rules the mock follows", () => {
   it("writes a loss beyond the balance off against the house only once the account is flat", async () => {
     const node = await funded(2_000);
     await order(node, "0.5", "buy");
-    await order(node, "10", "sell", {}, 3);
+    await order(node, "1000", "sell", {}, 3);
     node.controls.shock(1, -3_000);
     const seen: EngineEvent[] = [];
     node.client.subscribe((m) => seen.push(...m.events));

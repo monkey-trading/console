@@ -18,6 +18,8 @@ export interface FeedLine {
   id: number;
   ts: number;
   text: string;
+  /** The account the line is about, when it is about one. */
+  account?: string;
 }
 
 export type HistoryEntry = HistoryEvent;

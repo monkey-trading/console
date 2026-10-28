@@ -103,12 +103,16 @@ describe("what the store refuses or hides", () => {
 
   it("shows the activity of market events and of the connected account only", async () => {
     const { node, store } = await funded();
-    node.controls.addLiquidity(fixedFromInt(1_000_000));
-    await store.refresh(true);
-    const mine = store.getSnapshot().wallet?.address.toLowerCase() ?? "";
-    const feedText = store.getSnapshot().feed.map((f) => f.text).join("\n");
-    expect(feedText).not.toMatch(/0x1111/);
-    expect(mine).not.toBe("");
+    const mine = store.getSnapshot().wallet?.address ?? "";
+    node.client.state.emit({ type: "tick" }, [
+      { type: "deposited", account: "0x2222222222222222222222222222222222222222", amount: "5" },
+      { type: "deposited", account: mine, amount: "7" },
+      { type: "market_closed", market: 4 },
+    ]);
+    const text = store.getSnapshot().feed.map((f) => f.text);
+    expect(text).toContain("Deposit credited: $7.00");
+    expect(text).toContain("US500 closed");
+    expect(text).not.toContain("Deposit credited: $5.00");
   });
 
   it("keeps a withdrawal's amount for the user to correct when the node refuses it", async () => {

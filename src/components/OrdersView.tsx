@@ -5,6 +5,7 @@
 import { cancelOrder } from "@/lib/store/actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
+import { keepFocus } from "./keep-focus";
 
 const TH = "px-4 py-3 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
 const BUTTON = "rounded border border-line-2 px-2 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40";
@@ -31,7 +32,7 @@ export function OrdersView() {
                   <td className="px-4 py-4">{o.qty}</td>
                   <td className="px-4 py-4">{o.kind.type === "market" ? "—" : o.kind.price}</td>
                   <td className="px-4 py-4 text-right">
-                    <button type="button" disabled={busy} className={BUTTON} aria-label={`Cancel order ${o.order_id}`} onClick={() => void cancelOrder(store, o.order_id)}>Cancel</button>
+                    <button type="button" disabled={busy} className={BUTTON} aria-label={`Cancel order ${o.order_id}`} onClick={(event) => { keepFocus(event.currentTarget); void cancelOrder(store, o.order_id); }}>Cancel</button>
                   </td>
                 </tr>
               ))}

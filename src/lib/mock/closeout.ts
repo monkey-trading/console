@@ -25,15 +25,12 @@ function worstTradable(state: MockState, account: AccountState): MarketId | null
 /**
  * For each account below the threshold, closes its largest tradable loser, re-checks its health,
  * and repeats until it is healthy or nothing it holds can trade; positions in a closed market wait.
- * A closed position's resting orders are cancelled.
  */
 export function closeOutUnderwater(state: MockState): EngineEvent[] {
   const events: EngineEvent[] = [];
   for (const [address, account] of state.accounts) {
-    if (!underwater(state, account)) continue;
-    events.push({
-      type: "close_out", account: address, equity: fixedToWire(equityOf(state, account)), margin: fixedToWire(marginOf(state, account)),
-    });
+    // The close-out is announced with its first fill, so an account whose positions cannot trade says nothing until they can.
+    let announced = false;
     while (underwater(state, account)) {
       const id = worstTradable(state, account);
       const held = id === null ? undefined : account.positions.get(id);
@@ -42,12 +39,11 @@ export function closeOutUnderwater(state: MockState): EngineEvent[] {
         address, market: id, side: held.qty > 0n ? "sell" : "buy", qty: absFixed(held.qty), reduceOnly: true, orderId: 0, liquidation: true,
       });
       if (!outcome.ok) break;
-      events.push(...fillEvents(outcome.fill, outcome.badDebt));
-      for (const order of [...account.orders.values()]) {
-        if (order.market !== id) continue;
-        account.orders.delete(order.order_id);
-        events.push({ type: "order_cancelled", account: address, order_id: order.order_id, reason: "unfillable" });
+      if (!announced) {
+        announced = true;
+        events.push({ type: "close_out", account: address, equity: fixedToWire(equityOf(state, account)), margin: fixedToWire(marginOf(state, account)) });
       }
+      events.push(...fillEvents(outcome.fill, outcome.badDebt));
     }
   }
   return events;

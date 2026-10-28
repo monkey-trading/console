@@ -7,6 +7,7 @@ import { absFixed, fixedToNumber, formatFixedPlaces, formatUsd, mulFixed, type F
 import { placeOrder } from "@/lib/store/actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
+import { keepFocus } from "./keep-focus";
 
 const TH = "px-4 py-3 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
 const BUTTON = "rounded border border-line-2 px-2 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40";
@@ -39,7 +40,7 @@ export function PositionsView() {
                     <td className={`px-4 py-4 ${pnl < 0n ? "text-ember" : "text-glow"}`}>{formatUsd(pnl)}</td>
                     <td className="px-4 py-4 text-right">
                       <button type="button" disabled={busy || !market?.open} className={BUTTON} aria-label={`Close ${market?.symbol ?? ""} position`}
-                        onClick={() => void placeOrder(store, { market: p.market, side: p.qty > 0n ? "sell" : "buy", notional: absFixed(mulFixed(p.qty, mark)), slippageBps: 25, kind: { type: "market" }, reduceOnly: true, qty: absFixed(p.qty) })}>
+                        onClick={(event) => { keepFocus(event.currentTarget); void placeOrder(store, { market: p.market, side: p.qty > 0n ? "sell" : "buy", notional: absFixed(mulFixed(p.qty, mark)), slippageBps: 25, kind: { type: "market" }, reduceOnly: true, qty: absFixed(p.qty) }); }}>
                         Close
                       </button>
                     </td>

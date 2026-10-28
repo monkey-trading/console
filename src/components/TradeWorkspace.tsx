@@ -1,5 +1,3 @@
-"use client";
-
 /** The trading workspace: watchlist, chart with the account panels, and the order ticket. */
 
 import { BottomPanel } from "./BottomPanel";

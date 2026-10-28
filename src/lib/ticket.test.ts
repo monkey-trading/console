@@ -33,13 +33,14 @@ describe("previewTicket", () => {
     expect(preview.worstPrice).toBeGreaterThan(preview.quote?.price ?? 0n);
   });
 
-  it("lists why an order cannot go: no equity, too much margin, too large for the house, closed", async () => {
+  it("lists why an order cannot go: no equity, too much margin, closed; a resting order is admitted while closed", async () => {
     const market = await btc();
     const houseNav = fixedFromInt(20_000_000);
     expect(previewTicket({ market, side: "buy", notional: fixedFromInt(50_000), slippageBps: 10, account: null, houseNav }).problems).toContain("Fund your account to trade.");
     expect(previewTicket({ market, side: "buy", notional: fixedFromInt(900_000), slippageBps: 10, account: account(1_000), houseNav }).problems).toContain("Not enough equity for the margin this needs.");
-    expect(previewTicket({ market, side: "buy", notional: fixedFromInt(2_000_000), slippageBps: 10, account: account(1_000_000), houseNav }).problems).toContain("Larger than the house will take in this market.");
     expect(previewTicket({ market: { ...market, open: false }, side: "buy", notional: fixedFromInt(1_000), slippageBps: 10, account: account(1_000), houseNav }).problems).toContain("This market is closed.");
+    const closed = { market: { ...market, open: false }, side: "buy" as const, notional: fixedFromInt(1_000), slippageBps: 10, account: account(1), houseNav };
+    expect(previewTicket({ ...closed, resting: true }).problems).toEqual([]);
   });
 
   it("shows the best bid and offer for the size, and the spread widens as the size grows", async () => {

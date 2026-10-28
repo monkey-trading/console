@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
 import type { Tier } from "./engine/types";
-import { adverseBps, growthOf, maxLeverage, quoteFor, slicedBps, tierCost, tieredMargin } from "./pricing";
+import { adverseBps, exceedsSlippage, growthOf, maxLeverage, quoteFor, slicedBps, tierCost, tieredMargin } from "./pricing";
 
 const SPREAD: Tier[] = [
   { up_to: "250000", bps: 0 },
@@ -39,7 +39,7 @@ describe("tieredMargin", () => {
 });
 
 describe("quoteFor", () => {
-  const base = { index: fixedFromInt(100), baseSpreadBps: 10, spreadTiers: SPREAD, stress: 0, heldNotional: 0n, orderNotional: fixedFromInt(1_000) };
+  const base = { index: fixedFromInt(100), baseSpreadBps: 10, spreadTiers: SPREAD, stress: 0, heldNotional: 0n, orderNotional: fixedFromInt(1_000), executedNotional: fixedFromInt(1_000) };
 
   it("moves a buy up and a sell down by the spread", () => {
     expect(quoteFor({ ...base, side: "buy" }).price).toBe(fixedFromInt(100) + fixedFromInt(100) / 1000n);
@@ -48,8 +48,8 @@ describe("quoteFor", () => {
 
   it("adds the stress and size spreads, but no size spread to an order that does not grow the position", () => {
     expect(quoteFor({ ...base, side: "buy", stress: 2 }).spreadBps).toBe(22);
-    expect(quoteFor({ ...base, side: "buy", orderNotional: 0n }).spreadBps).toBe(10);
-    expect(quoteFor({ ...base, side: "buy", orderNotional: fixedFromInt(2_000_000) }).spreadBps).toBe(10 + 5);
+    expect(quoteFor({ ...base, side: "buy", orderNotional: 0n, executedNotional: fixedFromInt(1_000) }).spreadBps).toBe(10);
+    expect(quoteFor({ ...base, side: "buy", orderNotional: fixedFromInt(2_000_000), executedNotional: fixedFromInt(2_000_000) }).spreadBps).toBe(10 + 5);
   });
 });
 
@@ -75,5 +75,23 @@ describe("growthOf", () => {
     expect(growthOf(fixedFromInt(10), fixedFromInt(-13))).toEqual({ grows: true, fromQty: 0n, toQty: fixedFromInt(3) });
     expect(growthOf(fixedFromInt(10), fixedFromInt(-10))).toMatchObject({ grows: false });
     expect(growthOf(0n, fixedFromInt(-2))).toEqual({ grows: true, fromQty: 0n, toQty: fixedFromInt(2) });
+  });
+});
+
+describe("exceedsSlippage", () => {
+  it("compares the exact difference, so 20.9 bps does not pass a 20 bps bound", () => {
+    const quoted = fixedFromInt(10_000);
+    expect(exceedsSlippage("buy", quoted, quoted + (quoted * 209n) / 10_000n / 10n, 20)).toBe(true);
+    expect(exceedsSlippage("buy", quoted, quoted + (quoted * 20n) / 10_000n, 20)).toBe(false);
+    expect(exceedsSlippage("sell", quoted, quoted + 1n, 0)).toBe(false);
+  });
+});
+
+describe("a reversal's size charge", () => {
+  it("is spread over the whole order, not only its growing slice", () => {
+    const base = { index: fixedFromInt(100), side: "buy" as const, baseSpreadBps: 0, spreadTiers: SPREAD, stress: 0 };
+    const reversal = quoteFor({ ...base, heldNotional: 0n, orderNotional: fixedFromInt(1_000_000), executedNotional: fixedFromInt(2_000_000) });
+    const full = quoteFor({ ...base, heldNotional: 0n, orderNotional: fixedFromInt(1_000_000), executedNotional: fixedFromInt(1_000_000) });
+    expect(reversal.spreadBps).toBeLessThan(full.spreadBps);
   });
 });

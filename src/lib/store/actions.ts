@@ -29,7 +29,7 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
   try {
     const wallet = await store.deps.wallets.connect(optionId);
     store.liveWallet = wallet;
-    store.patch({ wallet: { address: wallet.address, label: wallet.label } });
+    store.setWallet({ address: wallet.address, label: wallet.label });
     await store.loadAccount(true);
     if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);
   } catch (error) {
@@ -40,7 +40,8 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
 
 export function disconnectWallet(store: ConsoleStore): void {
   store.liveWallet = null;
-  store.patch({ wallet: null, account: null, eligibility: null, queue: [], history: [] });
+  store.setWallet(null);
+  store.patch({ account: null, eligibility: null, queue: [], history: [] });
 }
 
 /**
@@ -142,6 +143,7 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams): Prom
   const rejected = out.result.events.find((e) => e.type === "order_rejected");
   if (rejected && rejected.type === "order_rejected") store.toast("error", describeReject(rejected.reason));
   else if (out.result.events.some((e) => e.type === "fill")) store.toast("ok", `Filled: ${summary}.`);
+  else if (out.result.events.some((e) => e.type === "order_cancelled")) store.toast("error", "The order was accepted but could not be filled, so it was cancelled.");
   else store.toast("ok", "Order placed and resting.");
   await store.refresh(true);
 }
@@ -150,10 +152,11 @@ export async function cancelOrder(store: ConsoleStore, orderId: number): Promise
   const out = await signed(store, { primaryType: "Cancel", summary: `cancel order ${orderId}`, message: { order_id: orderId } }, (auth, wallet) =>
     store.deps.client.cancelOrder({ account: wallet.address, order_id: orderId, auth }),
   );
-  if (out.ok) {
-    store.toast("ok", `Order ${orderId} cancelled.`);
-    await store.refresh(true);
-  }
+  if (!out.ok) return;
+  const refused = out.result.events.find((e) => e.type === "order_rejected");
+  if (refused && refused.type === "order_rejected") store.toast("error", describeReject(refused.reason));
+  else store.toast("ok", `Order ${orderId} cancelled.`);
+  await store.refresh(true);
 }
 
 /** Asks to withdraw `amount`; true when the node took the request, false when it refused it. */

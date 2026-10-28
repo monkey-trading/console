@@ -37,7 +37,7 @@ export function BottomPanel() {
   const counts: Partial<Record<Tab, number>> = { positions: account?.positions.length, orders: account?.orders.length };
   return (
     <section aria-label="Account activity" className="flex h-60 min-w-0 shrink-0 flex-col border-t border-line">
-      <div role="tablist" aria-label="Account panels" className="flex gap-1 border-b border-line px-2">
+      <div role="tablist" aria-label="Account panels" className="flex flex-wrap gap-x-1 border-b border-line px-2">
         {TABS.map((t) => (
           <button key={t} type="button" role="tab" id={`${id}-${t}`} aria-selected={tab === t} aria-controls={`${id}-panel`} onClick={() => setTab(t)}
             className={`border-b-2 px-3 py-3 text-label tracking-caps uppercase focus-visible:outline-2 focus-visible:outline-glow ${tab === t ? "border-glow text-glow" : "border-transparent text-fg-3 hover:text-fg-2"}`}>
@@ -45,7 +45,7 @@ export function BottomPanel() {
           </button>
         ))}
       </div>
-      <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${tab}`} className="min-h-0 flex-1 overflow-y-auto">
+      <div role="tabpanel" tabIndex={0} id={`${id}-panel`} aria-labelledby={`${id}-${tab}`} className="min-h-0 flex-1 overflow-y-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
         {tab === "positions" && <PositionsView />}
         {tab === "orders" && <OrdersView />}
         {tab === "history" && <HistoryList />}

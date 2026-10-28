@@ -3,7 +3,7 @@
 import { bpsOf, divFixed, fixedFromWire, mulFixed, SCALE, type Fixed } from "./fixed";
 import type { Side } from "./engine/types";
 import type { AccountModel, MarketModel } from "./models";
-import { growthOf, quoteOrder, slicedBps, tieredMargin, type Quote } from "./pricing";
+import { growthOf, notionalOf, quoteOrder, slicedBps, tieredMargin, type Quote } from "./pricing";
 
 /** The smallest step of a quantity: a millionth of a unit. */
 const QTY_STEP: Fixed = SCALE / 1_000_000n;
@@ -87,14 +87,13 @@ export function previewTicket(input: TicketInput): TicketPreview {
   const equity = account?.equity ?? 0n;
   const useBps = equity > 0n ? Number((marginAfter * 10_000n) / equity) : null;
   const worst = side === "buy" ? bpsOf(quote.price, input.slippageBps) : -bpsOf(quote.price, input.slippageBps);
-  if (!market.open) problems.push("This market is closed.");
+  if (!market.open && !input.resting) problems.push("This market is closed.");
   if (market.reduceOnly && grows) problems.push("This market only accepts orders that reduce a position.");
   if (qty <= 0n) problems.push("Enter a size.");
-  else if (grows && notional < fixedFromWire(spec.min_order_notional)) problems.push(`Minimum order is ${spec.min_order_notional} USD.`);
+  else if (grows && notionalOf(qty, mark) < fixedFromWire(spec.min_order_notional)) problems.push(`Minimum order is ${spec.min_order_notional} USD.`);
   if (grows && !input.resting) {
     if (useBps !== null && useBps > 10_000) problems.push("Not enough equity for the margin this needs.");
     if (equity <= 0n) problems.push("Fund your account to trade.");
-    if (notional > houseCap) problems.push("Larger than the house will take in this market.");
   }
   return {
     qty, quote, offer: offer.price, bid: bid.price, spreadBps: Number(((offer.price - bid.price) * 10_000n) / mark), worstPrice: quote.price + worst,

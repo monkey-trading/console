@@ -2,7 +2,7 @@
 
 /** Connects and disconnects the wallet. */
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { shortHex } from "@/lib/format";
 import { connectWallet, disconnectWallet } from "@/lib/store/actions";
@@ -16,6 +16,13 @@ export function WalletButton() {
   const { store } = useSession();
   const [open, setOpen] = useState(false);
   const menu = useId();
+  const primary = useRef<HTMLButtonElement>(null);
+  const moved = useRef(false);
+  useEffect(() => {
+    // The button the user used has been replaced; keep their place by focusing its successor.
+    if (moved.current) primary.current?.focus();
+    moved.current = false;
+  }, [wallet]);
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
@@ -26,13 +33,13 @@ export function WalletButton() {
     return (
       <div className="flex items-center gap-2">
         <span className="rounded border border-line-2 px-2 py-2 text-caption text-fg-2" title={wallet.address}>{shortHex(wallet.address)}</span>
-        <button type="button" onClick={() => disconnectWallet(store)} className={BUTTON}>Disconnect</button>
+        <button ref={primary} type="button" onClick={() => { moved.current = true; disconnectWallet(store); }} className={BUTTON}>Disconnect</button>
       </div>
     );
   }
   return (
     <div className="relative">
-      <button type="button" aria-expanded={open} aria-controls={menu} onClick={() => setOpen(!open)} className={BUTTON}>
+      <button ref={primary} type="button" aria-expanded={open} aria-controls={menu} onClick={() => setOpen(!open)} className={BUTTON}>
         Connect wallet
       </button>
       {open && (
@@ -43,6 +50,7 @@ export function WalletButton() {
                 type="button"
                 onClick={() => {
                   setOpen(false);
+                  moved.current = true;
                   void connectWallet(store, option.id);
                 }}
                 className="w-full rounded px-3 py-2 text-left hover:bg-glow/10 focus-visible:outline-2 focus-visible:outline-glow"

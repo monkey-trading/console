@@ -32,7 +32,7 @@ export function Select<T extends string>({ label, value, options, onChange, hide
 
   useEffect(() => {
     if (!open) return;
-    const away = (event: MouseEvent) => !root.current?.contains(event.target as Node) && setOpen(false);
+    const away = (event: MouseEvent) => event.target instanceof Node && !root.current?.contains(event.target) && setOpen(false);
     document.addEventListener("mousedown", away);
     return () => document.removeEventListener("mousedown", away);
   }, [open]);

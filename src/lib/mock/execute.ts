@@ -4,7 +4,7 @@ import { absFixed, bpsOf, fixedFromWire, fixedToWire, mulFixed, type Fixed } fro
 import { metaFor } from "../engine/meta";
 import type { EngineEvent, Fill, MarketId, Reject, Side } from "../engine/types";
 import { equityOf, houseNav, houseNetNotional, marginOf } from "./accounts";
-import { adverseBps, notionalOf, quoteOrder, tieredMargin, type Quote } from "../pricing";
+import { adverseBps, exceedsSlippage, notionalOf, quoteOrder, tieredMargin, type Quote } from "../pricing";
 import type { Holding, MockState } from "./state";
 
 /** The share of a realised profit the house keeps, in basis points. */
@@ -70,13 +70,18 @@ export function fillOrder(state: MockState, req: FillRequest): FillOutcome {
   if (req.slippage) {
     const cap = Math.min(req.slippage.maxBps, runtime.listed.spec.max_slippage_bps);
     const bps = adverseBps(req.side, req.slippage.quoted, quote.price);
-    if (bps > cap) {
+    if (exceedsSlippage(req.side, req.slippage.quoted, quote.price, cap)) {
       const reject: Reject = { type: "slippage", quoted: fixedToWire(req.slippage.quoted), live: fixedToWire(quote.price), slippage_bps: bps };
       return { ok: false, reject };
     }
   }
   if (!req.liquidation && grows) {
-    const spreadLoss = mulFixed(req.qty, absFixed(quote.price - runtime.mid));
+    // The account as the fill leaves it: the spread just paid, and the fee on a profit a reversal realises.
+    const entry = account.positions.get(req.market)?.entry ?? quote.price;
+    const closing = held !== 0n && (held > 0n) !== (held + delta > 0n) ? held : 0n;
+    const realised = mulFixed(closing, quote.price - entry);
+    const fee = realised > 0n ? bpsOf(realised, PROFIT_FEE_BPS) : 0n;
+    const spreadLoss = mulFixed(req.qty, absFixed(quote.price - runtime.mid)) + fee;
     const refusal = riskRefusal(state, req, runtime.reduceOnly, delta, held, spreadLoss);
     if (refusal) return { ok: false, reject: refusal };
   }

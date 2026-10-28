@@ -29,6 +29,8 @@ export class ConsoleStore {
   private snapshot: ConsoleState;
   private readonly listeners = new Set<() => void>();
   private nextId = 1;
+  /** The account whose activity shows before any wallet is connected. */
+  private viewer: string | undefined;
   private inflight: Promise<void> | null = null;
   /** A refresh asked for while one ran: its answer may predate the change, so it reads again. */
   private rerun: { accountChanged: boolean } | null = null;
@@ -36,6 +38,7 @@ export class ConsoleStore {
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
+    this.viewer = deps.initial.viewer;
     const state = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs, deps.history);
     this.snapshot = { ...state, feed: this.feedFrom(deps.initial.recent ?? [], state.markets) };
   }
@@ -43,7 +46,7 @@ export class ConsoleStore {
   /** Whether an event belongs in this user's activity: market events, and events of their own account. */
   private isMine(event: EngineEvent): boolean {
     if (!("account" in event)) return true;
-    const mine = this.snapshot?.wallet?.address ?? this.deps.initial.viewer;
+    const mine = this.snapshot?.wallet?.address ?? this.viewer;
     return mine !== undefined && event.account.toLowerCase() === mine.toLowerCase();
   }
 
@@ -54,7 +57,7 @@ export class ConsoleStore {
       message.events.flatMap((event) => {
         if (!this.isMine(event)) return [];
         const text = describeEvent(event, symbolOf);
-        return text === null ? [] : [{ id: this.id(), ts: message.ts, text }];
+        return text === null ? [] : [{ id: this.id(), ts: message.ts, text, ...("account" in event ? { account: event.account.toLowerCase() } : {}) }];
       }),
     );
     return lines.reverse().slice(0, FEED_LIMIT);
@@ -92,6 +95,13 @@ export class ConsoleStore {
 
   select(id: MarketId): void {
     this.patch({ selected: id });
+  }
+
+  /** Sets the connected wallet (or none) and drops activity lines that belong to another account. */
+  setWallet(wallet: { address: string; label: string } | null): void {
+    this.viewer = undefined; // once a wallet has been connected or left, the starting viewer no longer applies
+    const mine = wallet?.address.toLowerCase();
+    this.patch({ wallet, feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
   }
 
   setPaused(paused: boolean): void {
@@ -158,8 +168,10 @@ export class ConsoleStore {
     const lines = message.events.flatMap((event) => {
       if (!this.isMine(event)) return [];
       const text = describeEvent(event, (id) => this.snapshot.markets.find((m) => m.id === id)?.symbol ?? `market ${id}`);
-      return text === null ? [] : [{ id: this.id(), ts: message.ts, text }];
+      return text === null ? [] : [{ id: this.id(), ts: message.ts, text, ...("account" in event ? { account: event.account.toLowerCase() } : {}) }];
     });
+    // Price updates change nothing on screen by themselves; only the node's tick moves the clock and the log.
+    if (message.cmd.type === "prices" && lines.length === 0) return;
     this.patch({ now: message.ts, feed: [...lines.reverse(), ...this.snapshot.feed].slice(0, FEED_LIMIT) });
     if (message.cmd.type === "tick") void this.refresh(message.events.some((e) => "account" in e));
   }

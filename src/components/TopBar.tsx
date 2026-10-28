@@ -41,7 +41,7 @@ export function TopBar() {
         <span className="hidden text-label tracking-caps text-fg-3 uppercase xl:inline">
           Node clock <span aria-hidden="true" className="text-fg-2">{formatClock(now)} UTC</span>
         </span>
-        <button type="button" aria-pressed={paused} onClick={() => store.setPaused(!paused)} className={BUTTON}>{paused ? "Play" : "Pause"}<span className="sr-only"> the simulation</span></button>
+        <button type="button" onClick={() => store.setPaused(!paused)} className={BUTTON}>{paused ? "Play" : "Pause"}<span className="sr-only"> the simulation</span></button>
         <button type="button" onClick={() => store.setFundingOpen(true)} className={BUTTON}>Funding</button>
         <WalletButton />
         <MockControls />

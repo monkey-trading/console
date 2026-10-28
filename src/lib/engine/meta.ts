@@ -4,7 +4,11 @@ export interface MarketMeta {
   name: string;
   /** Places shown after the decimal point. */
   places: number;
-  /** The half-spread each side pays at normal size in calm markets, in basis points. */
+  /**
+   * The half-spread each side pays at normal size in calm markets, in basis points. A simplification: the
+   * engine has no per-market base spread (it charges stress, toxicity and size), and the node publishes no
+   * quote route, so how the live console learns the price it shows is an open decision.
+   */
   baseSpreadBps: number;
 }
 

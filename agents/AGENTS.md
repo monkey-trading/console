@@ -24,13 +24,16 @@ matches the current action.
   `EligibilityCard`, `DepositForm`, `WithdrawForm`, `WithdrawalQueue` and `AccountSummary`;
   `Select` is the console's accessible select; `AccessGate` shows the geo-block; `WalletButton` and
   `MockControls` drive the mock.
+- **public/** — the supplied logo bitmap, served from the app's own origin; `Logo.tsx` frames it.
 - **src/lib/** — pure TypeScript with no React or DOM. Logic modules have adjacent `*.test.ts`:
   `site.ts` holds identity and `siteUrl()`, the one environment-variable reader; `fixed.ts` is the
   engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `bars.ts` (marks into bars per timeframe) and
   `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
   margin and market-hours rules and the ticket preview; `models.ts` and `messages.ts` decode and
   describe engine data; `build.ts` says whether this build accepts the mock attestation.
-  `engine/` holds the node's wire shapes (`types.ts`), the `EngineClient` and wallet interfaces,
+  `engine/` holds the node's wire shapes (`types.ts`), the display facts the console keeps per
+  market (`meta.ts`: names, places, and the mock's base quote spread, a simplification of the engine's
+  own formula that the owner has yet to settle), the `EngineClient` and wallet interfaces,
   and the attestation check. `store/` holds the state, the store that follows the node's stream,
   and the user's actions. `mock/` is the in-browser node (state, orders, fills, close-out, funds and
   the first-in first-out withdrawal queue, the clock step, the demo account's backstory in `demo.ts`, and the controls the mock build exposes).
@@ -105,6 +108,10 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   may make a route dynamic or add a route handler (`route.ts`), server action, or proxy
   (`proxy.ts`, or the deprecated `middleware.ts`) without the owner's approval. The app talks to
   the engine node from the browser only.
+- **The mock follows the engine where it models it,** and keeps two known simplifications for the
+  owner to settle: a base quote spread per market (`src/lib/engine/meta.ts`), and a funding order of
+  eligibility declaration before the first deposit, where the engine admits a never-credited
+  account's declaration only after a deposit is pending.
 - **The engine is the source of truth.** Every number, rule, and message the app shows about the
   engine matches the engine's README and its decision issues.
 - **Private by construction.** No analytics, cookies, browser storage, trackers, third-party

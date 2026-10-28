@@ -58,14 +58,14 @@ export function MockControls() {
             <fieldset className="space-y-2">
               <legend className="text-fg-2">{market.symbol}</legend>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className={BUTTON} onClick={() => controls.shock(market.id, -300)}>Drop 3%</button>
-                <button type="button" className={BUTTON} onClick={() => controls.shock(market.id, 300)}>Jump 3%</button>
-                <button type="button" className={BUTTON} onClick={() => controls.setHalted(market.id, !haltedNow)}>{haltedNow ? "Resume market" : "Halt market"}</button>
+                <button type="button" className={BUTTON} onClick={() => { controls.shock(market.id, -300); void store.refresh(false); }}>Drop 3%</button>
+                <button type="button" className={BUTTON} onClick={() => { controls.shock(market.id, 300); void store.refresh(false); }}>Jump 3%</button>
+                <button type="button" className={BUTTON} onClick={() => { controls.setHalted(market.id, !haltedNow); void store.refresh(false); }}>{haltedNow ? "Resume market" : "Halt market"}</button>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-fg-3">Stress floor</span>
                 {Array.from({ length: MAX_STRESS + 1 }, (_, level) => (
-                  <button key={level} type="button" className={BUTTON} onClick={() => controls.setStressFloor(market.id, level)}>{level}</button>
+                  <button key={level} type="button" className={BUTTON} onClick={() => { controls.setStressFloor(market.id, level); void store.refresh(false); }}>{level}</button>
                 ))}
               </div>
             </fieldset>

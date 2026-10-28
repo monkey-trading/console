@@ -67,7 +67,7 @@ function orderEvents(state: MockState, req: OrderRequest, account: AccountState)
   const price = parseFixed(req.kind.price);
   if (price === null || price <= 0n) return rejected(req, { type: "invalid_order", reason: "trigger price" });
   if (account.orders.size >= MAX_RESTING) return rejected(req, { type: "invalid_order", reason: `at most ${MAX_RESTING} resting orders` });
-  if (!runtime.open || runtime.halted) return rejected(req, { type: "market_closed" });
+  // A resting order is admitted while its market is closed; it cannot trigger until the market trades.
   account.orders.set(orderId, { order_id: orderId, client_id: req.client_id, market: req.market, side: req.side, qty: req.qty, kind: req.kind, reduce_only: req.reduce_only ?? false });
   // A newly accepted order that is already executable fills at once, as the engine checks it on insertion.
   return [accepted, ...triggerResting(state, req.account)];
