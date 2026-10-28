@@ -16,22 +16,24 @@ matches the current action.
   `viewport` exports, the provider and shell), `page.tsx` (the one screen), `globals.css` (Tailwind
   CSS 4 `@theme` tokens shared with the website's design language, and the reduced-motion rule),
   and the icons.
-- **src/components/** — the terminal. `ConsoleProvider` creates the session and drives the clock;
-  `Shell`, `TopBar`, `AttestationBanner`, `RiskStrip` and `Toasts` frame it; `TradeWorkspace` lays out
-  `Watchlist`, `ChartPanel` (with `PriceChart`, which loads Lightweight Charts in the browser, and `MarketStatus`), `OrderTicket` (with
-  `TicketSummary`) and `BottomPanel` (positions, orders, history, activity); `FundingDrawer` holds
+- **src/components/** — the terminal. `ConsoleProvider` creates the session, connects the demo account
+  and drives the clock; `Shell`, `TopBar`, `AttestationBanner`, `RiskStrip` and `Toasts` frame it;
+  `TradeWorkspace` lays out `Watchlist`, `ChartPanel` (with `PriceChart`, which loads Lightweight
+  Charts in the browser), `OrderTicket` (order type, side, best bid and offer, size, Advanced, and
+  `MarketInfo`) and `BottomPanel` (positions, orders, history, activity); `FundingDrawer` holds
   `EligibilityCard`, `DepositForm`, `WithdrawForm`, `WithdrawalQueue` and `AccountSummary`;
-  `AccessGate` shows the geo-block; `WalletButton` and `MockControls` drive the mock.
+  `Select` is the console's accessible select; `AccessGate` shows the geo-block; `WalletButton` and
+  `MockControls` drive the mock.
 - **src/lib/** — pure TypeScript with no React or DOM. Logic modules have adjacent `*.test.ts`:
   `site.ts` holds identity and `siteUrl()`, the one environment-variable reader; `fixed.ts` is the
   engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `bars.ts` (marks into bars per timeframe) and
-  `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `pricing.ts`, `schedule.ts` and `ticket.ts` hold the quote,
+  `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
   margin and market-hours rules and the ticket preview; `models.ts` and `messages.ts` decode and
   describe engine data; `build.ts` says whether this build accepts the mock attestation.
   `engine/` holds the node's wire shapes (`types.ts`), the `EngineClient` and wallet interfaces,
   and the attestation check. `store/` holds the state, the store that follows the node's stream,
   and the user's actions. `mock/` is the in-browser node (state, orders, fills, close-out, funds and
-  the first-in first-out withdrawal queue, the clock step, and the controls the mock build exposes).
+  the first-in first-out withdrawal queue, the clock step, the demo account's backstory in `demo.ts`, and the controls the mock build exposes).
 - **next.config.ts** — the security headers on every path (a CSP without nonces, nosniff, referrer,
   frame, opener, and permissions policies), `reactStrictMode`, `poweredByHeader: false`, and
   `agentRules: false`, so `next dev` leaves this index alone.

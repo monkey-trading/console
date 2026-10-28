@@ -41,6 +41,11 @@ export class MockEngineClient implements EngineClient {
     advance(this.state, ms);
   }
 
+  /** The newest messages of the log, oldest first: what a client that has just connected backfills. */
+  recentLog(count: number): StreamMessage[] {
+    return this.state.log.slice(-count);
+  }
+
   async attestation(): Promise<Attestation> {
     const bundle = mockHex("bundle", 84);
     const reportData = mockHex("report", 64);

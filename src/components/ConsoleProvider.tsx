@@ -6,6 +6,7 @@ import { createContext, useContext, useEffect, useState, useSyncExternalStore, t
 
 import { mockHistory } from "@/lib/mock/history";
 import { createMockNode, SIM_EPOCH_MS, type MockNode } from "@/lib/mock";
+import { connectWallet } from "@/lib/store/actions";
 import { ConsoleStore } from "@/lib/store/store";
 import type { ConsoleState } from "@/lib/store/state";
 
@@ -20,13 +21,13 @@ const SessionContext = createContext<Session | null>(null);
 const TICK_MS = 1_000;
 
 function createSession(): Session {
-  const node = createMockNode(SIM_EPOCH_MS);
+  const node = createMockNode(SIM_EPOCH_MS, true);
   const store = new ConsoleStore({
     client: node.client,
     wallets: node.wallets,
     drive: (ms) => node.client.tick(ms),
     history: mockHistory,
-    initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS },
+    initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS, recent: node.client.recentLog(1000) },
   });
   return { store, node };
 }
@@ -37,6 +38,8 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
   const { store } = session;
   useEffect(() => {
     const stop = store.start(Date.now());
+    // The demo account is connected on load, so no screen starts empty.
+    void connectWallet(store, "browser", true);
     const timer = setInterval(() => store.tick(Date.now()), TICK_MS);
     return () => {
       clearInterval(timer);

@@ -3,7 +3,7 @@
 import { absFixed, bpsOf, divFixed, fixedFromWire, mulFixed, SCALE, type Fixed } from "./fixed";
 import type { Side } from "./engine/types";
 import type { AccountModel, MarketModel } from "./models";
-import { maxLeverage, notionalOf, quoteFor, tieredMargin, type Quote } from "./pricing";
+import { notionalOf, quoteFor, slicedBps, tieredMargin, type Quote } from "./pricing";
 
 /** The smallest step of a quantity: a millionth of a unit. */
 const QTY_STEP: Fixed = SCALE / 1_000_000n;
@@ -26,6 +26,10 @@ export interface TicketPreview {
   qty: Fixed;
   /** The price the order would fill at now; this is sent as the order's quoted price. */
   quote: Quote | null;
+  /** The best offer and bid for this size, and the spread between them in basis points of the index. */
+  offer: Fixed | null;
+  bid: Fixed | null;
+  spreadBps: number;
   /** The worst price the slippage bound allows. */
   worstPrice: Fixed | null;
   /** Margin the whole account needs after this order. */
@@ -34,7 +38,10 @@ export interface TicketPreview {
   marginAdded: Fixed;
   /** Margin over equity after the order, in basis points; null with no equity. */
   marginUseBps: number | null;
-  maxLeverage: number;
+  /** The margin rate this size pays, in basis points of notional (the tiers' weighted rate). */
+  marginRateBps: number;
+  /** Notional over required margin, to two places: every position gets the market's maximum leverage. */
+  impliedLeverage: number | null;
   /** The house's cap on net notional in this market. */
   houseCap: Fixed;
   /** Reasons the order cannot be placed, shown beside the ticket. */
@@ -56,18 +63,27 @@ export function previewTicket(input: TicketInput): TicketPreview {
   const mark = market.mark;
   const problems: string[] = [];
   const houseCap = bpsOf(input.houseNav, spec.house_cap_bps);
-  const base = { maxLeverage: maxLeverage(spec.margin_tiers), houseCap };
+  const rate = slicedBps(spec.margin_tiers, 0n, notional);
   if (mark === null || mark <= 0n) {
-    return { qty: 0n, quote: null, worstPrice: null, marginAfter: account?.margin ?? 0n, marginAdded: 0n, marginUseBps: null, ...base, problems: ["No price yet."] };
+    return {
+      qty: 0n, quote: null, offer: null, bid: null, spreadBps: 0, worstPrice: null, marginAfter: account?.margin ?? 0n, marginAdded: 0n,
+      marginUseBps: null, marginRateBps: rate, impliedLeverage: null, houseCap, problems: ["No price yet."],
+    };
   }
   const qty = (divFixed(notional, mark) / QTY_STEP) * QTY_STEP;
-  const delta = side === "buy" ? qty : -qty;
   const current = held(account, market.id);
+  const quoteSide = (s: Side): Quote => {
+    const delta = s === "buy" ? qty : -qty;
+    return quoteFor({
+      index: mark, side: s, baseSpreadBps: market.baseSpreadBps, spreadTiers: spec.spread_tiers, stress: market.stress,
+      heldNotional: mulFixed(current, mark), orderNotional: notionalOf(qty, mark), grows: absFixed(current + delta) > absFixed(current),
+    });
+  };
+  const offer = quoteSide("buy");
+  const bid = quoteSide("sell");
+  const quote = side === "buy" ? offer : bid;
+  const delta = side === "buy" ? qty : -qty;
   const grows = absFixed(current + delta) > absFixed(current);
-  const quote = quoteFor({
-    index: mark, side, baseSpreadBps: market.baseSpreadBps, spreadTiers: spec.spread_tiers, stress: market.stress,
-    heldNotional: mulFixed(current, mark), orderNotional: notionalOf(qty, mark), grows,
-  });
   const before = tieredMargin(spec.margin_tiers, mulFixed(current, mark));
   const after = tieredMargin(spec.margin_tiers, mulFixed(current + delta, mark));
   const marginAfter = (account?.margin ?? 0n) - before + after;
@@ -82,16 +98,8 @@ export function previewTicket(input: TicketInput): TicketPreview {
   if (grows && equity <= 0n) problems.push("Fund your account to trade.");
   if (grows && notional > houseCap) problems.push("Larger than the house will take in this market.");
   return {
-    qty, quote, worstPrice: quote.price + worst, marginAfter, marginAdded: after - before, marginUseBps: useBps, ...base, problems,
+    qty, quote, offer: offer.price, bid: bid.price, spreadBps: Number(((offer.price - bid.price) * 10_000n) / mark), worstPrice: quote.price + worst,
+    marginAfter, marginAdded: after - before, marginUseBps: useBps, marginRateBps: rate,
+    impliedLeverage: after - before > 0n ? Number((notional * 100n) / (after - before)) / 100 : null, houseCap, problems,
   };
-}
-
-/** The notional that sizes the position to `leverage` times equity. */
-export function notionalForLeverage(equity: Fixed, leverage: number): Fixed {
-  return equity > 0n ? (equity * BigInt(Math.trunc(leverage * 100))) / 100n : 0n;
-}
-
-/** The leverage `notional` is on `equity`, to two places, or null with no equity. */
-export function leverageOf(equity: Fixed, notional: Fixed): number | null {
-  return equity > 0n ? Number((notional * 100n) / equity) / 100 : null;
 }

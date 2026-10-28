@@ -1,9 +1,9 @@
 /** Plain-language text for what the engine refused or did. */
 
 import type { EngineEvent, MarketId, Reject } from "./engine/types";
-import { formatFixedPlaces, fixedFromWire } from "./fixed";
+import { fixedFromWire, formatUsd } from "./fixed";
 
-const usd = (wire: string) => `$${formatFixedPlaces(fixedFromWire(wire), 2)}`;
+const usd = (wire: string) => formatUsd(fixedFromWire(wire));
 
 /** One sentence for a typed refusal. */
 export function describeReject(reject: Reject): string {
@@ -32,6 +32,7 @@ export function describeReject(reject: Reject): string {
 /** A short line for the activity log, or null for an event the log does not show. */
 export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => string): string | null {
   switch (event.type) {
+    case "financing": return `Financing ${fixedFromWire(event.amount) < 0n ? "charged" : "credited"}: ${usd(event.amount)} on ${symbolOf(event.market)}`;
     case "market_opened": return `${symbolOf(event.market)} opened`;
     case "market_closed": return `${symbolOf(event.market)} closed`;
     case "stress_changed": return `${symbolOf(event.market)} stress level ${event.level}`;

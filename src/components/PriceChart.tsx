@@ -120,7 +120,7 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
 
   const shown = hovered ?? bars[bars.length - 1] ?? null;
   return (
-    <div className="relative h-[clamp(14rem,40vh,28rem)] w-full">
+    <div className="relative h-80 min-h-64 w-full lg:h-auto lg:flex-1">
       <div ref={host} role="img" aria-label={`${symbol} candlestick chart`} className="absolute inset-0" />
       {shown && (
         <p aria-hidden="true" className="pointer-events-none absolute top-2 left-3 z-10 flex flex-wrap gap-x-3 text-label text-fg-2">

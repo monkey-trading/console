@@ -108,3 +108,9 @@ export function formatFixedPlaces(value: Fixed, dp: number): string {
   const frac = dp === 0 ? "" : `.${(units % unit).toString().padStart(dp, "0")}`;
   return `${sign}${whole}${frac}`;
 }
+
+/** `value` as dollars with two places, the sign before the symbol: `-$3.87`. */
+export function formatUsd(value: Fixed): string {
+  const text = formatFixedPlaces(absFixed(value), 2);
+  return value < 0n && text !== "0.00" ? `-$${text}` : `$${text}`;
+}

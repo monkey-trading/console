@@ -52,6 +52,15 @@ export class MockControls {
     return events;
   }
 
+  /** Removes an account from the node: its balance, positions, orders, queue entries and history, as if it had never existed. */
+  resetAccount(address: string): void {
+    const { state } = this.client;
+    const key = address.toLowerCase();
+    state.accounts.delete(key);
+    state.history.delete(key);
+    for (let i = state.queue.length - 1; i >= 0; i--) if (state.queue[i]?.account === key) state.queue.splice(i, 1);
+  }
+
   /** Stands in for a transaction to the vault, as the real wallet sends; see `chainDeposit`. */
   deposit(address: string, amount: Fixed): void {
     chainDeposit(this.client.state, address, amount);

@@ -35,7 +35,7 @@ export function BottomPanel() {
   const id = useId();
   const counts: Partial<Record<Tab, number>> = { positions: account?.positions.length, orders: account?.orders.length };
   return (
-    <section aria-label="Account activity" className="flex min-h-56 min-w-0 flex-1 flex-col border-t border-line lg:min-h-0">
+    <section aria-label="Account activity" className="flex h-60 min-w-0 shrink-0 flex-col border-t border-line">
       <div role="tablist" aria-label="Account panels" className="flex gap-1 border-b border-line px-2">
         {TABS.map((t) => (
           <button key={t} type="button" role="tab" id={`${id}-${t}`} aria-selected={tab === t} aria-controls={`${id}-panel`} onClick={() => setTab(t)}

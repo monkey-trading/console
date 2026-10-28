@@ -72,13 +72,15 @@ export type Listener = (message: StreamMessage) => void;
 export const HOUSE_CAPITAL = fixedFromInt(20_000_000);
 /** How long a deposit is unfinalised before the node credits it, in milliseconds. */
 export const FINALITY_MS = 6_000;
-const LOG_LIMIT = 400;
+const LOG_LIMIT = 1_000;
 
 export class MockState {
   now: number;
   seq = 0;
   nextOrderId = 1;
   region: Region = "allowed";
+  /** While set, `advance` publishes no `prices` commands: the demo backstory keeps the log to what happened. */
+  quietPrices = false;
   houseCash: Fixed = HOUSE_CAPITAL;
   vaultLiquidity: Fixed = 0n;
   readonly markets = new Map<MarketId, MarketRuntime>();

@@ -11,6 +11,7 @@ import {
   fixedToNumber,
   fixedToWire,
   formatFixedPlaces,
+  formatUsd,
   moveBps,
   mulFixed,
   parseFixed,
@@ -71,5 +72,13 @@ describe("formatFixedPlaces", () => {
     expect(formatFixedPlaces(parseFixed("5") ?? 0n, 2)).toBe("5.00");
     expect(formatFixedPlaces(parseFixed("-0.004") ?? 0n, 2)).toBe("0.00");
     expect(formatFixedPlaces(parseFixed("-1500") ?? 0n, 0)).toBe("-1,500");
+  });
+});
+
+describe("formatUsd", () => {
+  it("puts the sign before the dollar sign and never shows a negative zero", () => {
+    expect(formatUsd(parseFixed("-3.876") ?? 0n)).toBe("-$3.87");
+    expect(formatUsd(parseFixed("1234.5") ?? 0n)).toBe("$1,234.50");
+    expect(formatUsd(parseFixed("-0.004") ?? 0n)).toBe("$0.00");
   });
 });

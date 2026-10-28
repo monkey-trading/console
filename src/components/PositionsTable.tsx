@@ -3,7 +3,7 @@
 /** Open positions with their profit and loss, and resting orders with a cancel. */
 
 import { formatPrice } from "@/lib/price-format";
-import { absFixed, fixedToNumber, formatFixedPlaces, mulFixed, type Fixed } from "@/lib/fixed";
+import { absFixed, fixedToNumber, formatFixedPlaces, formatUsd, mulFixed, type Fixed } from "@/lib/fixed";
 import { cancelOrder, placeOrder } from "@/lib/store/actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -36,7 +36,7 @@ export function PositionsView() {
                     <td className="px-4 py-4">{formatFixedPlaces(absFixed(p.qty), 6)}</td>
                     <td className="px-4 py-4">{formatPrice(fixedToNumber(p.entry), places)}</td>
                     <td className="px-4 py-4">{formatPrice(fixedToNumber(mark), places)}</td>
-                    <td className={`px-4 py-4 ${pnl < 0n ? "text-ember" : "text-glow"}`}>${formatFixedPlaces(pnl, 2)}</td>
+                    <td className={`px-4 py-4 ${pnl < 0n ? "text-ember" : "text-glow"}`}>{formatUsd(pnl)}</td>
                     <td className="px-4 py-4 text-right">
                       <button type="button" disabled={busy || !market?.open} className={BUTTON} aria-label={`Close ${market?.symbol ?? ""} position`}
                         onClick={() => void placeOrder(store, { market: p.market, side: p.qty > 0n ? "sell" : "buy", notional: absFixed(mulFixed(p.qty, mark)), slippageBps: 25, kind: { type: "market" }, reduceOnly: true, qty: absFixed(p.qty) })}>

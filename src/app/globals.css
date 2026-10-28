@@ -49,6 +49,27 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Everything that can be clicked shows it; a disabled control shows that it cannot be. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"],
+  [role="option"],
+  summary,
+  label[for],
+  label:has(input[type="radio"], input[type="checkbox"]),
+  a[href],
+  input[type="radio"],
+  input[type="checkbox"],
+  input[type="range"] {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

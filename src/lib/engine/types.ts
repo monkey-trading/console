@@ -172,6 +172,7 @@ export type EngineEvent =
   | { type: "withdrawal_queued"; account: Address; amount: string; requested_seq: number }
   | { type: "withdrawal_queue_updated"; account: Address; requested_seq: number; remaining: string }
   | { type: "withdrawal_rejected"; account: Address; amount: string; reason: Reject }
+  | { type: "financing"; account: Address; market: MarketId; amount: string }
   | { type: "market_opened"; market: MarketId }
   | { type: "market_closed"; market: MarketId }
   | { type: "stress_changed"; market: MarketId; level: number };

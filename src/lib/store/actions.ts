@@ -25,13 +25,13 @@ function walletOf(store: ConsoleStore): Wallet | null {
   return store.liveWallet;
 }
 
-export async function connectWallet(store: ConsoleStore, optionId: string): Promise<void> {
+export async function connectWallet(store: ConsoleStore, optionId: string, quiet = false): Promise<void> {
   try {
     const wallet = await store.deps.wallets.connect(optionId);
     store.liveWallet = wallet;
     store.patch({ wallet: { address: wallet.address, label: wallet.label } });
     await store.loadAccount(true);
-    store.toast("ok", `Connected ${wallet.label}.`);
+    if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);
   } catch (error) {
     if (!store.noteAccess(error)) store.toast("error", error instanceof Error ? error.message : "The wallet did not connect.");
     if (!store.getSnapshot().wallet) store.liveWallet = null;

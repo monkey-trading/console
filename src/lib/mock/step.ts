@@ -1,6 +1,6 @@
 /** Advances the mock node's clock: moves the indices, opens and closes markets, and settles. */
 
-import { fixedFromInt, fixedToWire, moveBps, type Fixed } from "../fixed";
+import { absFixed, bpsOf, fixedFromInt, fixedToWire, moveBps, mulFixed, type Fixed } from "../fixed";
 import type { EngineEvent, SourceQuote } from "../engine/types";
 import { closeOutUnderwater } from "./closeout";
 import { creditFinal, payQueue } from "./funds";
@@ -16,6 +16,10 @@ const MAX_STEP_MS = 5_000;
 /** How often the vault receives liquidity, and how much. */
 const LIQUIDITY_EVERY_MS = 10_000;
 const LIQUIDITY_STEP = fixedFromInt(25_000);
+/** Overnight financing, charged to every open position at 22:00 UTC, in basis points of its notional. */
+const FINANCING_BPS = 2;
+const ROLLOVER_MS = 22 * 3_600_000;
+const DAY_MS = 86_400_000;
 const VENUES = ["venue-a", "venue-b", "venue-c"] as const;
 
 /** A draw from roughly N(0, 1): the sum of four uniforms, centred and scaled. */
@@ -62,22 +66,40 @@ function venueQuotes(state: MockState, mid: Fixed): SourceQuote[] {
   return VENUES.map((source, i) => ({ source, mid: fixedToWire(mid + ((mid * BigInt(i - 1)) / 100_000n)), ts: state.now }));
 }
 
+/** Charges the day's financing to each position when the clock crosses 22:00 UTC. */
+function chargeFinancing(state: MockState, previous: number): EngineEvent[] {
+  const day = (ms: number) => Math.floor((ms - ROLLOVER_MS) / DAY_MS);
+  if (day(state.now) <= day(previous)) return [];
+  const events: EngineEvent[] = [];
+  for (const [address, account] of state.accounts) {
+    for (const [id, held] of account.positions) {
+      const market = state.markets.get(id);
+      if (!market) continue;
+      const charge = -bpsOf(absFixed(mulFixed(held.qty, market.mid)), FINANCING_BPS);
+      account.balance += charge;
+      state.houseCash -= charge;
+      events.push({ type: "financing", account: address, market: id, amount: fixedToWire(charge) });
+    }
+  }
+  return events;
+}
+
 /**
  * Advances the node to `ms`: each market moves and publishes a `prices` command; then one `tick`
  * command carries the resulting events (market hours, stress, triggered orders, close-outs,
  * credited deposits, and queue payments).
  */
-export function advance(state: MockState, ms: number): void {
+export function advance(state: MockState, ms: number, options: { liquidity?: boolean } = {}): void {
   const seconds = Math.min(Math.max(ms - state.now, 0), MAX_STEP_MS) / 1000;
   const previous = state.now;
   state.now = ms;
   const events: EngineEvent[] = [];
   for (const market of state.markets.values()) {
     events.push(...stepMarket(state, market, seconds));
-    if (market.open) state.emit({ type: "prices", market: market.listed.spec.id, quotes: venueQuotes(state, market.mid) }, []);
+    if (market.open && !state.quietPrices) state.emit({ type: "prices", market: market.listed.spec.id, quotes: venueQuotes(state, market.mid) }, []);
   }
-  events.push(...triggerResting(state), ...closeOutUnderwater(state), ...creditFinal(state));
+  events.push(...chargeFinancing(state, previous), ...triggerResting(state), ...closeOutUnderwater(state), ...creditFinal(state));
   const bucket = (t: number) => Math.floor(t / LIQUIDITY_EVERY_MS);
-  events.push(...payQueue(state, bucket(ms) > bucket(previous) ? LIQUIDITY_STEP : 0n));
+  events.push(...payQueue(state, options.liquidity !== false && bucket(ms) > bucket(previous) ? LIQUIDITY_STEP : 0n));
   state.emit({ type: "tick" }, events);
 }

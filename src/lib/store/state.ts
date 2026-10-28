@@ -6,7 +6,6 @@ import type { HistoryPage, MarketId, MarketView, HouseView, QueuedWithdrawal } f
 import { fixedToNumber } from "../fixed";
 import { decodeHouse, decodeMarket, type AccountModel, type Eligibility, type HouseModel, type MarketModel } from "../models";
 
-export type ChartMode = "reference" | "execution" | "risk";
 export type BlockReason = "united_states" | "sanctioned_jurisdiction";
 
 export interface ToastMessage {
@@ -34,7 +33,6 @@ export interface ConsoleState {
   bars: Record<MarketId, Record<TimeframeId, Bar[]>>;
   timeframe: TimeframeId;
   selected: MarketId;
-  mode: ChartMode;
   house: HouseModel;
   wallet: { address: string; label: string } | null;
   eligibility: Eligibility;
@@ -75,7 +73,6 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     bars: seedAllBars(models, startMs, history),
     timeframe: DEFAULT_TIMEFRAME,
     selected: models[0]?.id ?? 1,
-    mode: "reference",
     house: decodeHouse(house),
     wallet: null,
     eligibility: null,

@@ -6,7 +6,9 @@ terminal with a watchlist, a chart with Reference, Execution and Risk views, an 
 sends the quote you saw with your slippage bound, positions, orders, history, and a funding drawer.
 
 This build runs against a simulated node inside the browser, behind an interface a live client
-replaces. Prices, fills and funds are simulated, and the app says so on screen.
+replaces. Prices, fills and funds are simulated, and the app says so on screen. It opens on a demo
+account with positions, resting orders, history and a withdrawal in the queue; Mock controls can reset
+it to an empty account.
 
 ## Run it
 

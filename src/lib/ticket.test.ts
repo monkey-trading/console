@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { fixedFromInt } from "./fixed";
 import { decodeMarket, type AccountModel } from "./models";
 import { createMockNode } from "./mock";
-import { leverageOf, notionalForLeverage, previewTicket } from "./ticket";
+import { previewTicket } from "./ticket";
 
 const START = Date.UTC(2026, 9, 28, 15, 0, 0);
 
@@ -42,9 +42,22 @@ describe("previewTicket", () => {
     expect(previewTicket({ market: { ...market, open: false }, side: "buy", notional: fixedFromInt(1_000), slippageBps: 10, account: account(1_000), houseNav }).problems).toContain("This market is closed.");
   });
 
-  it("converts between leverage and size", () => {
-    expect(notionalForLeverage(fixedFromInt(1_000), 5)).toBe(fixedFromInt(5_000));
-    expect(leverageOf(fixedFromInt(1_000), fixedFromInt(2_500))).toBe(2.5);
-    expect(leverageOf(0n, fixedFromInt(1))).toBeNull();
+  it("shows the best bid and offer for the size, and the spread widens as the size grows", async () => {
+    const market = await btc();
+    const houseNav = fixedFromInt(20_000_000);
+    const small = previewTicket({ market, side: "buy", notional: fixedFromInt(10_000), slippageBps: 10, account: account(1_000_000), houseNav });
+    const large = previewTicket({ market, side: "buy", notional: fixedFromInt(900_000), slippageBps: 10, account: account(1_000_000), houseNav });
+    expect(small.bid).toBeLessThan(market.mark ?? 0n);
+    expect(small.offer).toBeGreaterThan(market.mark ?? 0n);
+    expect(large.spreadBps).toBeGreaterThan(small.spreadBps);
+    expect(small.quote?.price).toBe(small.offer);
+  });
+
+  it("charges the market's margin rate and reports the leverage it implies", async () => {
+    const market = await btc();
+    const preview = previewTicket({ market, side: "buy", notional: fixedFromInt(50_000), slippageBps: 10, account: account(10_000), houseNav: fixedFromInt(20_000_000) });
+    expect(preview.marginRateBps).toBe(200);
+    expect(preview.impliedLeverage).toBeGreaterThanOrEqual(49.9);
+    expect(preview.impliedLeverage).toBeLessThanOrEqual(50.1);
   });
 });

@@ -11,7 +11,7 @@ import { useConsole } from "./ConsoleProvider";
 const KIND: Partial<Record<EngineEvent["type"], string>> = {
   fill: "Fill", close_out: "Close-out", deposited: "Deposit", withdrawal_approved: "Withdrawal", withdrawal_queued: "Withdrawal",
   withdrawal_queue_updated: "Withdrawal", withdrawal_rejected: "Withdrawal", order_rejected: "Order", order_cancelled: "Order",
-  eligibility_attested: "Eligibility",
+  eligibility_attested: "Eligibility", financing: "Financing",
 };
 
 export function HistoryList() {

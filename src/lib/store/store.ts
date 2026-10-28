@@ -8,18 +8,18 @@ import type { Wallet, WalletConnector } from "../engine/wallet";
 import { fixedToNumber } from "../fixed";
 import { describeEvent } from "../messages";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
-import { initialState, seedAllBars, type BlockReason, type ChartMode, type ConsoleState, type HistorySource, type ToastMessage } from "./state";
+import { initialState, seedAllBars, type BlockReason, type ConsoleState, type FeedLine, type HistorySource, type ToastMessage } from "./state";
 
 /** The address the access probe reads, since the node screens the caller, not the account. */
 const PROBE_ADDRESS = "0x0000000000000000000000000000000000000000";
-const FEED_LIMIT = 40;
+const FEED_LIMIT = 150;
 
 export interface StoreDeps {
   client: EngineClient;
   wallets: WalletConnector;
   /** Advances a node that runs in this page; absent for a live node. */
   drive?: (ms: number) => void;
-  initial: { markets: MarketView[]; house: HouseView; startMs: number };
+  initial: { markets: MarketView[]; house: HouseView; startMs: number; recent?: StreamMessage[] };
   /** Price history for the chart, ending at the current mark. */
   history: HistorySource;
 }
@@ -38,7 +38,20 @@ export class ConsoleStore {
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
-    this.snapshot = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs, deps.history);
+    const state = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs, deps.history);
+    this.snapshot = { ...state, feed: this.feedFrom(deps.initial.recent ?? [], state.markets) };
+  }
+
+  /** Activity lines for a batch of messages, newest first, as the stream handler adds them. */
+  private feedFrom(messages: readonly StreamMessage[], markets: readonly { id: MarketId; symbol: string }[]): FeedLine[] {
+    const symbolOf = (id: MarketId) => markets.find((m) => m.id === id)?.symbol ?? `market ${id}`;
+    const lines = messages.flatMap((message) =>
+      message.events.flatMap((event) => {
+        const text = describeEvent(event, symbolOf);
+        return text === null ? [] : [{ id: this.id(), ts: message.ts, text }];
+      }),
+    );
+    return lines.reverse().slice(0, FEED_LIMIT);
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -81,10 +94,6 @@ export class ConsoleStore {
 
   setFundingOpen(open: boolean): void {
     this.patch({ fundingOpen: open });
-  }
-
-  setMode(mode: ChartMode): void {
-    this.patch({ mode });
   }
 
   /** Marks the caller as refused when `error` is an access refusal; true if it was. */

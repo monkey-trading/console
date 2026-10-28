@@ -9,17 +9,32 @@ import type { Region } from "@/lib/mock/state";
 import { MAX_STRESS } from "@/lib/pricing";
 
 import { useConsole, useSession } from "./ConsoleProvider";
+import { Select } from "./Select";
 
+const REGIONS = [
+  { value: "allowed", label: "Allowed region" },
+  { value: "united_states", label: "United States" },
+  { value: "sanctioned_jurisdiction", label: "Sanctioned jurisdiction" },
+] as const;
+const ATTESTATIONS = [
+  { value: "mock", label: "Mock quote (accepted in this build)" },
+  { value: "unverifiable", label: "Hardware quote (cannot be verified)" },
+] as const;
 const BUTTON = "rounded border border-line-2 px-2 py-1.5 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
 
 export function MockControls() {
   const { node, store } = useSession();
-  const { markets, selected, attestation } = useConsole();
+  const { markets, selected, attestation, wallet } = useConsole();
   const [open, setOpen] = useState(false);
   const [region, setRegion] = useState<Region>("allowed");
   const id = useId();
   const market = markets.find((m) => m.id === selected);
   const { controls } = node;
+  const resetDemoAccount = () => {
+    if (!wallet) return;
+    controls.resetAccount(wallet.address);
+    void store.refresh(true);
+  };
   const changeRegion = (value: Region) => {
     setRegion(value);
     controls.setRegion(value);
@@ -33,29 +48,11 @@ export function MockControls() {
       {open && (
         <div id={id} className="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] space-y-4 rounded border border-line-2 bg-ink-2 p-4 text-caption shadow-platform">
           <p className="text-label leading-relaxed text-fg-3">Simulated node only. These change the node in your browser to show how the screens behave.</p>
-          <label className="block text-fg-2">
-            Where the node sees you
-            <select value={region} onChange={(event) => changeRegion(event.target.value as Region)} className="mt-1 w-full rounded border border-line-2 bg-ink px-2 py-1.5 text-fg">
-              <option value="allowed">Allowed region</option>
-              <option value="united_states">United States</option>
-              <option value="sanctioned_jurisdiction">Sanctioned jurisdiction</option>
-            </select>
-          </label>
-          <label className="block text-fg-2">
-            Node attestation
-            <select
-              value={controls.attestationMode}
-              onChange={(event) => {
-                controls.setAttestationMode(event.target.value === "mock" ? "mock" : "unverifiable");
-                void store.checkNode();
-              }}
-              className="mt-1 w-full rounded border border-line-2 bg-ink px-2 py-1.5 text-fg"
-            >
-              <option value="mock">Mock quote (accepted in this build)</option>
-              <option value="unverifiable">Hardware quote (cannot be verified)</option>
-            </select>
-            <span className="mt-1 block text-label text-fg-3">Now: {attestation.kind}</span>
-          </label>
+          <Select label="Where the node sees you" value={region} options={REGIONS} onChange={changeRegion} />
+          <div>
+            <Select label="Node attestation" value={controls.attestationMode} options={ATTESTATIONS} onChange={(mode) => { controls.setAttestationMode(mode); void store.checkNode(); }} />
+            <p className="mt-1 text-label text-fg-3">Now: {attestation.kind}</p>
+          </div>
           {market && (
             <fieldset className="space-y-2">
               <legend className="text-fg-2">{market.symbol}</legend>
@@ -73,6 +70,10 @@ export function MockControls() {
             </fieldset>
           )}
           <button type="button" className={BUTTON} onClick={() => controls.addLiquidity(fixedFromInt(100_000))}>Add $100,000 vault liquidity</button>
+          <div>
+            <button type="button" className={BUTTON} onClick={() => resetDemoAccount()}>Reset to an empty account</button>
+            <p className="mt-1 text-label leading-relaxed text-fg-3">Clears the demo account's balance, positions, orders and history so the empty states show. Reload the page to restore it.</p>
+          </div>
         </div>
       )}
     </div>
