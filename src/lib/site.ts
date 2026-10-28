@@ -2,7 +2,7 @@
 
 export const SITE_NAME = "Monkey Trading Console";
 export const SITE_TITLE = "Monkey Trading Console";
-export const SITE_DESCRIPTION = "The trading app for the Monkey Trading CFD engine.";
+export const SITE_DESCRIPTION = "The trading app for the Monkey Trading CFD engine, in build; nothing is live yet.";
 
 /**
  * The canonical origin for metadata: `SITE_URL` when set, else the Vercel

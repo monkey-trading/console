@@ -200,15 +200,16 @@ in a test file: a test cannot reset it, and a second instance of a component can
   `object-src 'none'`; `base-uri 'self'`;
   `form-action 'self'`; `frame-ancestors 'none'`. A statically rendered page is built once for
   every visitor, so its inline bootstrap scripts cannot carry a per-request nonce;
-  `'unsafe-inline'` covers them, and the policy allows nothing from another origin.
+  `'unsafe-inline'` covers them, and the policy allows nothing from another origin but the approved engine node's.
 - `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
   `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, and a `Permissions-Policy`
   that turns off `camera`, `microphone`, `geolocation`, `payment`, `usb`, and `browsing-topics`.
   Add a feature to that list only once browsers recognise it, since an unknown one logs a console
   error.
 - `poweredByHeader: false`.
-- Never widen the CSP with a wildcard, a scheme source such as `https:`, or another origin. A new
-  origin is a privacy change and needs the owner's approval first ([Privacy](#privacy)).
+- Never widen the CSP with a wildcard, a scheme source such as `https:`, or another origin
+  without the owner's approval; the engine node's origin is the one expected. A new origin is a
+  privacy change and needs that approval first ([Privacy](#privacy)).
 - Read the headers from the production build, not only the config: `npm run build`, then
   `npm start -- --port <port>` on a free port (`next start` exits rather than move when the port
   is taken), then `curl -sI http://localhost:<port>/` once its log says it listens there. On a
@@ -422,7 +423,7 @@ Import groups appear in this order, separated by a blank line.
 - Import only what you use, by name.
 - `src/components/` holds one exported component per file, named like the file in PascalCase
   (`IndexPanel.tsx` exports `IndexPanel`). A small component used only by that file may sit below
-  its export, as `page.tsx` keeps `Hero` and `Section`. Hooks shared across components live in a
+  its export, such as a `Section` helper in `page.tsx`. Hooks shared across components live in a
   lowercase module, which may also export the control those hooks drive, as `motion.tsx` does with
   `MotionToggle`.
 - `src/lib` modules are kebab-case (`price-index.ts`, `replay-log.ts`), with tests beside them as

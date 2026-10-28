@@ -37,7 +37,8 @@ current action.
   check branch rules require: it passes only when every other job succeeded, so each new job must
   be added to its `needs`. The first job to fail cancels the whole run: every job ends with an
   `if: failure()` step running `gh run cancel` with the workflow token, so each job holds
-  `actions: write`, and `ci-passed` sees a cancelled result and never passes. Any matrix sets
+  `actions: write`, and `ci-passed` sees a cancelled result and never passes. A pull request from a fork has a
+  read-only token, so its run is not cancelled and `ci-passed` alone gates it. Any matrix sets
   `fail-fast: true`, and each new job gets the same last step.
 - **.nvmrc** — the Node.js version (24) for local runs and CI.
 - **.npmrc** — `save-exact=true`, so every dependency is pinned exactly.

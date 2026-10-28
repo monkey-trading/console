@@ -573,6 +573,14 @@ class CheckDocsTest(unittest.TestCase):
             (0, "Checked 0 relative links in 0 Markdown files.\n", ""),
         )
 
+    def test_a_heading_ends_a_list_and_its_lazy_lines(self):
+        page = "- item\n# Heading\n```\n[rule](rules/none.md)\n```\n"
+        result = run_check({"agents/AGENTS.md": page}, {})
+        self.assertEqual(
+            (result.returncode, result.stdout, result.stderr),
+            (0, "Checked 0 relative links in 1 Markdown files.\n", ""),
+        )
+
     def test_checks_every_relative_link_outside_code(self):
         result = run_check(VALID, VALID_SYMLINKS)
         self.assertEqual(

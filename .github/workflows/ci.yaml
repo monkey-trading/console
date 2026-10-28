@@ -15,7 +15,8 @@ permissions:
 
 # The first job to fail cancels the whole run in its last step, so the other jobs stop spending
 # minutes. Each job therefore holds `actions: write`; `ci-passed` needs no cancel step. Any matrix
-# must set `fail-fast: true`.
+# must set `fail-fast: true`. A pull request from a fork gets a read-only token, so its run is not
+# cancelled; `ci-passed` still fails.
 jobs:
   # Lints the workflows with actionlint, which also runs the runner's shellcheck over each `run:`
   # script. The release archive is pinned by the SHA-256 in its release's checksums file.
@@ -43,7 +44,7 @@ jobs:
         run: |
           "$RUNNER_TEMP/actionlint"
       - name: Cancel the run
-        if: failure()
+        if: failure() && !github.event.pull_request.head.repo.fork
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
@@ -67,7 +68,7 @@ jobs:
       - name: Check docs
         run: python3 scripts/check-docs.py
       - name: Cancel the run
-        if: failure()
+        if: failure() && !github.event.pull_request.head.repo.fork
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
@@ -92,7 +93,7 @@ jobs:
       - name: Lint
         run: npm run lint
       - name: Cancel the run
-        if: failure()
+        if: failure() && !github.event.pull_request.head.repo.fork
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
@@ -117,7 +118,7 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Cancel the run
-        if: failure()
+        if: failure() && !github.event.pull_request.head.repo.fork
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
@@ -142,7 +143,7 @@ jobs:
       - name: Unit tests
         run: npm test
       - name: Cancel the run
-        if: failure()
+        if: failure() && !github.event.pull_request.head.repo.fork
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
@@ -167,7 +168,7 @@ jobs:
       - name: Build
         run: npm run build
       - name: Cancel the run
-        if: failure()
+        if: failure() && !github.event.pull_request.head.repo.fork
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
@@ -190,7 +191,7 @@ jobs:
       - name: Audit dependencies
         run: npm audit --audit-level=high
       - name: Cancel the run
-        if: failure()
+        if: failure() && !github.event.pull_request.head.repo.fork
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}

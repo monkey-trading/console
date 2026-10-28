@@ -38,6 +38,7 @@ SCHEMES = ("http", "https", "mailto")
 QUOTE_MARKER = re.compile(r" {0,3}>[ \t]?")
 LIST_ITEM = re.compile(r" {0,3}(?:[-+*]|\d{1,9}[.)])(?:[ \t]+|$)")
 BREAK = re.compile(r" {0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$")
+HEADING = re.compile(r" {0,3}#{1,6}(?:[ \t]|$)")
 FENCE = re.compile(r" {0,3}(`{3,}(?!.*`)|~{3,})")
 # Markdown lets a backslash escape any ASCII punctuation.
 PUNCTUATION = frozenset(string.punctuation)
@@ -128,7 +129,7 @@ def prose(text):
                 kept.append("")
                 continue
             fence = None  # one of its containers ended
-        blocks = (QUOTE_MARKER, LIST_ITEM, FENCE, BREAK)
+        blocks = (QUOTE_MARKER, LIST_ITEM, FENCE, BREAK, HEADING)
         starts = any(block.match(rest) for block in blocks)
         if paragraph and matched < len(containers) and rest.strip() and not starts:
             kept.append(rest)  # a lazy line continues the open paragraph and its containers
