@@ -2,7 +2,7 @@
 
 ## Description
 
-The Monkey Trading web app, hosted at console.monkey.trading: the client for the open-source CFD
+The Monkey Trading web app, to be served at console.monkey.trading: the client for the open-source CFD
 engine in `monkey-trading/engine`, whose deterministic core runs inside a TEE. It will let a user
 connect a wallet, fund an account, trade, and withdraw, against the engine node's REST API and
 WebSocket stream. For now it is a Next.js, Tailwind CSS, and TypeScript scaffold with the tooling
@@ -35,7 +35,10 @@ current action.
   `typecheck`, `test`, and `build` jobs run the app's checks after `npm ci`, and `audit` runs
   `npm audit` against the lockfile. Actions are pinned by commit SHA. `ci-passed` is the one CI
   check branch rules require: it passes only when every other job succeeded, so each new job must
-  be added to its `needs`.
+  be added to its `needs`. The first job to fail cancels the whole run: every job ends with an
+  `if: failure()` step running `gh run cancel` with the workflow token, so each job holds
+  `actions: write`, and `ci-passed` sees a cancelled result and never passes. Any matrix sets
+  `fail-fast: true`, and each new job gets the same last step.
 - **.nvmrc** — the Node.js version (24) for local runs and CI.
 - **.npmrc** — `save-exact=true`, so every dependency is pinned exactly.
 - **package.json** / **package-lock.json** — scripts and exact-pinned dependencies; the lockfile is
@@ -88,7 +91,7 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   requests, or embeds without the owner's approval; fonts are bundled at build time. The engine
   node's origin is the one cross-origin destination the app exists for: the feature that first
   calls it asks for the owner's approval and adds that origin, and no other, to the CSP
-  `connect-src`.
+  `connect-src` with its `https:` and `wss:` schemes.
 - **Next.js 16.** Its APIs differ from older versions. The version-matched docs in
   `node_modules/next/dist/docs/` are the reference
   ([web-implementation](skills/web-implementation/SKILL.md#framework-reference)).

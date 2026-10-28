@@ -247,10 +247,11 @@ README.
 - Does it say nothing about internal build management: waves, milestones, the PR or review
   process, or AI agents and agent tooling?
 - Is it sober: no price, return, yield, or investment claim about the protocol or any token, no
-  promise of safety or profit, never an invitation to buy? Does the footer's risk notice still say
-  that CFDs are complex and leveraged and losses can be rapid, that the software is pre-launch and
-  nothing on the site is an offer, and where it is not available — with its substance changed only
-  on the owner's instruction?
+  promise of safety or profit, never an invitation to buy? Does every page that shows prices or takes
+  an order carry a risk notice, in the root layout, saying that CFDs are complex and leveraged and
+  losses can be rapid, that the software is pre-launch and nothing on the site is an offer, and
+  where it is not available — with its substance changed only on the owner's instruction? (The
+  placeholder page shows neither, so it carries none.)
 - Are the only people, accounts, and contacts named those in `src/lib/site.ts` and the William
   Jevons persona, with no other person, account, or machine path?
 - Is public prose written as prose, following [writing-style](writing-style.md)?

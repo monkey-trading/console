@@ -1,6 +1,6 @@
 # console
 
-The Monkey Trading web app, hosted at console.monkey.trading: the client for the open-source CFD
+The Monkey Trading web app, to be served at console.monkey.trading: the client for the open-source CFD
 engine in [monkey-trading/engine](https://github.com/monkey-trading/engine). The trading screens are
 not built yet; this repository holds the Next.js, Tailwind CSS, and TypeScript scaffold they will
 be built on, with its CI.

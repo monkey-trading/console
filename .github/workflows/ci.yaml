@@ -13,12 +13,18 @@ concurrency:
 permissions:
   contents: read
 
+# The first job to fail cancels the whole run in its last step, so the other jobs stop spending
+# minutes. Each job therefore holds `actions: write`; `ci-passed` needs no cancel step. Any matrix
+# must set `fail-fast: true`.
 jobs:
   # Lints the workflows with actionlint, which also runs the runner's shellcheck over each `run:`
   # script. The release archive is pinned by the SHA-256 in its release's checksums file.
   workflows:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
     env:
       ACTIONLINT_VERSION: 1.7.12
       ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
@@ -36,13 +42,36 @@ jobs:
       - name: Lint workflows
         run: |
           "$RUNNER_TEMP/actionlint"
+      - name: Cancel the run
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh run cancel "$RUN_ID"
 
   # Checks that every relative Markdown link under agents/ and in the root *.md files resolves to
+      - name: Cancel the run
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh run cancel "$RUN_ID"
+
   # a file or directory in the repository, and that AGENTS.md and CLAUDE.md, when present, are
+      - name: Cancel the run
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh run cancel "$RUN_ID"
+
   # symlinks to agents/AGENTS.md.
   docs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -51,11 +80,20 @@ jobs:
         run: python3 scripts/check-docs.test.py
       - name: Check docs
         run: python3 scripts/check-docs.py
+      - name: Cancel the run
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh run cancel "$RUN_ID"
 
   # ESLint, including jsx-a11y strict and the 300-line cap per source file.
   lint:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -67,11 +105,20 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Cancel the run
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh run cancel "$RUN_ID"
 
   # Generates the route types, then runs tsc over the whole project.
   typecheck:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -83,11 +130,20 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npm run typecheck
+      - name: Cancel the run
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh run cancel "$RUN_ID"
 
   # The vitest unit tests under src/.
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -99,11 +155,20 @@ jobs:
       - run: npm ci
       - name: Unit tests
         run: npm test
+      - name: Cancel the run
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh run cancel "$RUN_ID"
 
   # The production build, which also prerenders every route.
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -115,11 +180,20 @@ jobs:
       - run: npm ci
       - name: Build
         run: npm run build
+      - name: Cancel the run
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh run cancel "$RUN_ID"
 
   # Fails on any high or critical advisory in the dependency tree the lockfile pins.
   audit:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -129,9 +203,15 @@ jobs:
           node-version-file: .nvmrc
       - name: Audit dependencies
         run: npm audit --audit-level=high
+      - name: Cancel the run
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh run cancel "$RUN_ID"
 
-  # The one CI check branch rules require: it passes only when every job above succeeded, so each
-  # new job must be added to `needs`.
+  # The one CI check branch rules require: it passes only when every job above succeeded, so a
+  # cancelled run never passes it; each new job must be added to `needs`.
   ci-passed:
     if: always()
     needs: [workflows, docs, lint, typecheck, test, build, audit]

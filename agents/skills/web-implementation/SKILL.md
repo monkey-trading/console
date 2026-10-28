@@ -196,7 +196,8 @@ in a test file: a test cannot reset it, and a second instance of a component can
 
 - `Content-Security-Policy`: `default-src 'self'`; `script-src 'self' 'unsafe-inline'`, plus
   `'unsafe-eval'` in development only; `style-src 'self' 'unsafe-inline'`; `img-src 'self' data:`;
-  `font-src 'self'`; `connect-src 'self'`; `object-src 'none'`; `base-uri 'self'`;
+  `font-src 'self'`; `connect-src 'self'`, plus the approved engine node's `https:` and `wss:` host once there is one;
+  `object-src 'none'`; `base-uri 'self'`;
   `form-action 'self'`; `frame-ancestors 'none'`. A statically rendered page is built once for
   every visitor, so its inline bootstrap scripts cannot carry a per-request nonce;
   `'unsafe-inline'` covers them, and the policy allows nothing from another origin.
@@ -333,7 +334,8 @@ The bar is WCAG 2.2 AA; the [development checklist](../../rules/development-chec
   iframes, or embeds without the owner's explicit approval. A visitor's choices, such as the pause
   switch, live in memory and end with the tab.
 - Every request the page makes is same-origin, but for the engine node's origin once the owner has
-  approved it: the site serves its own fonts, images, and scripts. Check the production build's network panel after any change to what the page loads.
+  approved it: the site serves its own fonts, images, and scripts. Check the production build's
+  network panel after any change to what the page loads.
 - Links to other sites are plain links; nothing is fetched from them.
 - Nothing a visitor types leaves the browser, but for what the app sends to the engine node: the
   mock engine and any local demo run in the browser.
