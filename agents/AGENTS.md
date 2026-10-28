@@ -17,7 +17,7 @@ matches the current action.
   CSS 4 `@theme` tokens shared with the website's design language, and the reduced-motion rule),
   and the icons.
 - **src/components/** — the terminal. `ConsoleProvider` creates the session, connects the demo account
-  and drives the clock; `Shell`, `TopBar`, `AttestationBanner`, `RiskStrip` and `Toasts` frame it;
+  and drives the clock; `Shell`, `TopBar`, `AttestationBanner`, `RiskStrip`, `Toasts` and `ToastList` frame it;
   `TradeWorkspace` lays out `Watchlist`, `ChartPanel` (with `PriceChart`, which loads Lightweight
   Charts in the browser), `OrderTicket` (which remounts `DealTicket` per market: order type, side, best bid and offer, size,
   Advanced, and `MarketInfo`) and `BottomPanel` (`PositionsView`, `OrdersView`, `HistoryList`, activity); `FundingDrawer` holds

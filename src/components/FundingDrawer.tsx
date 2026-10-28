@@ -8,6 +8,7 @@ import { AccountSummary } from "./AccountSummary";
 import { useConsole, useSession } from "./ConsoleProvider";
 import { EligibilityCard } from "./EligibilityCard";
 import { DepositForm } from "./DepositForm";
+import { ToastList } from "./ToastList";
 import { WalletButton } from "./WalletButton";
 import { WithdrawForm } from "./WithdrawForm";
 import { WithdrawalQueue } from "./WithdrawalQueue";
@@ -55,6 +56,7 @@ export function FundingDrawer() {
       {/* The page behind a modal is inert, so the drawer announces results itself. */}
       <p role="status" aria-live="polite" className="sr-only">{toasts[toasts.length - 1]?.text ?? ""}</p>
       <div className="space-y-5 p-5">
+        <ToastList focusId="funding-title" />
         <AccountSummary />
         {!wallet && (
           <div className="flex items-center justify-between gap-3 rounded-xl border border-line-2 p-4">

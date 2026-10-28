@@ -1,11 +1,14 @@
 /** The signed order, cancel and eligibility actions, as the node sequences them. */
 
 import { EngineError, type ActionResult } from "../engine/client";
-import type { CancelRequest, EligibilityRequest, EngineEvent, OrderRequest, RequestAuth, Reject } from "../engine/types";
-import { fixedFromWire, parseFixed } from "../fixed";
+import type { CancelRequest, EligibilityRequest, EngineEvent, OrderRequest, RequestAuth, Reject, RestingOrder } from "../engine/types";
+import { fixedFromInt, fixedFromWire, parseFixed } from "../fixed";
 import { growthOf, notionalOf } from "../pricing";
 import { fillEvents, fillOrder, liveQuote } from "./execute";
 import type { AccountState, MockState } from "./state";
+
+/** The largest quantity or price the engine accepts as input. */
+const MAX_INPUT = fixedFromInt(1_000_000_000);
 
 /** Most limit and stop orders an account may rest. */
 export const MAX_RESTING = 10;
@@ -51,7 +54,7 @@ export function placeOrder(state: MockState, req: OrderRequest): ActionResult {
 
 function orderEvents(state: MockState, req: OrderRequest, account: AccountState): EngineEvent[] {
   const qty = parseFixed(req.qty);
-  if (qty === null || qty <= 0n) return rejected(req, { kind: "invalid_amount" });
+  if (qty === null || qty <= 0n || qty > MAX_INPUT) return rejected(req, { kind: "invalid_amount" });
   const runtime = state.markets.get(req.market);
   if (!runtime) return rejected(req, { kind: "unknown_market" });
   const orderId = state.nextOrderId++;
@@ -66,7 +69,7 @@ function orderEvents(state: MockState, req: OrderRequest, account: AccountState)
     return outcome.ok ? [accepted, ...fillEvents(outcome.fill, outcome.badDebt)] : rejected(req, outcome.reject);
   }
   const price = parseFixed(req.kind.price);
-  if (price === null || price <= 0n) return rejected(req, { kind: "invalid_order", reason: "trigger price" });
+  if (price === null || price <= 0n || price > MAX_INPUT) return rejected(req, { kind: "invalid_order", reason: "trigger price" });
   const growsHere = growthOf(runtime ? account.positions.get(req.market)?.qty ?? 0n : 0n, req.side === "buy" ? qty : -qty).grows;
   if (growsHere && notionalOf(qty, price) < fixedFromWire(runtime.listed.spec.min_order_notional)) {
     return rejected(req, { kind: "invalid_order", reason: `below the minimum order of ${runtime.listed.spec.min_order_notional} USD at the trigger price` });
@@ -107,24 +110,28 @@ export function attestEligibility(state: MockState, req: EligibilityRequest): Ac
  */
 export function triggerResting(state: MockState, only?: string): EngineEvent[] {
   const events: EngineEvent[] = [];
+  const queued: { address: string; account: AccountState; order: RestingOrder }[] = [];
   for (const [address, account] of state.accounts) {
     if (only !== undefined && address !== only.toLowerCase()) continue;
-    for (const order of [...account.orders.values()]) {
-      const runtime = state.markets.get(order.market);
-      const qty = parseFixed(order.qty);
-      const level = order.kind.kind === "market" ? null : parseFixed(order.kind.price);
-      if (!runtime || !runtime.open || runtime.halted || qty === null || level === null) continue;
-      const quote = liveQuote(state, address, order.market, order.side, qty);
-      if (!quote) continue;
-      const buy = order.side === "buy";
-      const hit =
-        order.kind.kind === "limit" ? (buy ? quote.price <= level : quote.price >= level) : buy ? runtime.mid >= level : runtime.mid <= level;
-      if (!hit) continue;
-      account.orders.delete(order.order_id);
-      const outcome = fillOrder(state, { address, market: order.market, side: order.side, qty, reduceOnly: order.reduce_only, orderId: order.order_id });
-      if (outcome.ok) events.push(...fillEvents(outcome.fill, outcome.badDebt));
-      else events.push({ type: "order_cancelled", account: address, order_id: order.order_id, reason: "unfillable" });
-    }
+    for (const order of account.orders.values()) queued.push({ address, account, order });
+  }
+  // The engine works through triggered orders by global order id, oldest first, whoever placed them.
+  queued.sort((a, b) => a.order.order_id - b.order.order_id);
+  for (const { address, account, order } of queued) {
+    const runtime = state.markets.get(order.market);
+    const qty = parseFixed(order.qty);
+    const level = order.kind.kind === "market" ? null : parseFixed(order.kind.price);
+    if (!runtime || !runtime.open || runtime.halted || qty === null || level === null) continue;
+    const quote = liveQuote(state, address, order.market, order.side, qty);
+    if (!quote) continue;
+    const buy = order.side === "buy";
+    const hit =
+      order.kind.kind === "limit" ? (buy ? quote.price <= level : quote.price >= level) : buy ? runtime.mid >= level : runtime.mid <= level;
+    if (!hit) continue;
+    account.orders.delete(order.order_id);
+    const outcome = fillOrder(state, { address, market: order.market, side: order.side, qty, reduceOnly: order.reduce_only, orderId: order.order_id });
+    if (outcome.ok) events.push(...fillEvents(outcome.fill, outcome.badDebt));
+    else events.push({ type: "order_cancelled", account: address, order_id: order.order_id, reason: "unfillable" });
   }
   return events;
 }

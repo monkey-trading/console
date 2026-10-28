@@ -34,6 +34,7 @@ export function WithdrawForm() {
         <input id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} className={INPUT} />
         <p className="mt-1 text-label leading-relaxed text-fg-3">The amount leaves your balance when you ask. The vault pays requests in order as it has liquidity, to six decimal places; the rest waits in the queue below.</p>
         <button type="submit" aria-disabled={!wallet || !valid || busy || !maySign(attestation)} className={SUBMIT}>Request withdrawal</button>
+        {amount.trim() !== "" && value === null && <p className="mt-2 text-label text-ember">Enter the amount in digits with a decimal point if needed, such as 1250.50.</p>}
         {value !== null && value > max && <p className="mt-2 text-label text-ember">You can withdraw up to ${formatFixedPlaces(max, 2)} while your positions use margin.</p>}
       </form>
     </section>

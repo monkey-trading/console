@@ -50,7 +50,7 @@ export interface AccountState {
   positions: Map<MarketId, Holding>;
   orders: Map<OrderId, RestingOrder>;
   nextNonce: number;
-  /** The next withdrawal approval nonce: one counter per account, never reused. */
+  /** The last withdrawal approval nonce issued: one counter per account, starting at 1, never reused. */
   approvalNonce: number;
   eligibility: EligibilityClass | null;
 }

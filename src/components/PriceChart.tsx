@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Bar } from "@/lib/bars";
 import { formatPrice } from "@/lib/price-format";
+import { formatStamp } from "@/lib/time";
 
 /** The theme token that colours a marker. */
 export type MarkerTone = "glow" | "ember" | "amber";
@@ -44,6 +45,8 @@ interface Live {
 }
 
 const VISIBLE_BARS = 100;
+/** Bars listed in the keyboard-reachable table. */
+const TABLE_BARS = 30;
 
 /** A theme token's value, read from the document. */
 function token(name: string): string {
@@ -144,6 +147,19 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
         {symbol} candlestick chart. {shown ? `Latest bar: open ${formatPrice(shown.open, places)}, high ${formatPrice(shown.high, places)}, low ${formatPrice(shown.low, places)}, close ${formatPrice(shown.close, places)}.` : "No bars yet."}
         {markers.map((m) => ` ${m.title} at ${formatPrice(m.price, places)}.`).join("")}
       </p>
+      {/* The chart's pointer-only history, as a table the keyboard and screen readers can reach: hidden until it takes focus. */}
+      <details className="sr-only focus-within:not-sr-only focus-within:absolute focus-within:top-8 focus-within:left-3 focus-within:z-20 focus-within:max-h-56 focus-within:overflow-auto focus-within:rounded focus-within:border focus-within:border-line-2 focus-within:bg-ink-2 focus-within:p-2 focus-within:text-label">
+        <summary className="text-fg-2">Recent bars as a table</summary>
+        <table>
+          <caption className="sr-only">The latest {Math.min(bars.length, TABLE_BARS)} bars of {symbol}, newest first</caption>
+          <thead><tr><th scope="col">Time (UTC)</th><th scope="col">Open</th><th scope="col">High</th><th scope="col">Low</th><th scope="col">Close</th></tr></thead>
+          <tbody>
+            {bars.slice(-TABLE_BARS).reverse().map((bar) => (
+              <tr key={bar.time}><th scope="row">{formatStamp(bar.time * 1000)}</th><td>{formatPrice(bar.open, places)}</td><td>{formatPrice(bar.high, places)}</td><td>{formatPrice(bar.low, places)}</td><td>{formatPrice(bar.close, places)}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
       {shown && (
         <p aria-hidden="true" className="pointer-events-none absolute top-2 left-3 z-10 flex flex-wrap gap-x-3 text-label text-fg-2">
           <span>O <span className="text-fg">{formatPrice(shown.open, places)}</span></span>

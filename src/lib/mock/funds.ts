@@ -72,7 +72,7 @@ export function withdraw(state: MockState, req: WithdrawalRequest): ActionResult
     const approved = state.queue.some((entry) => entry.remaining > 0n) ? 0n : wholeUsdc(minFixed(amount, state.vaultLiquidity));
     if (approved > 0n) {
       state.vaultLiquidity -= approved;
-      events.push({ type: "withdrawal_approved", account: req.account, amount: fixedToWire(approved), nonce: account.approvalNonce++ });
+      events.push({ type: "withdrawal_approved", account: req.account, amount: fixedToWire(approved), nonce: ++account.approvalNonce });
     }
     if (approved < amount) {
       state.queue.push({ account: req.account.toLowerCase(), amount, remaining: amount - approved, requestedSeq: state.seq + 1 });
@@ -92,7 +92,7 @@ export function payQueue(state: MockState, added: Fixed): EngineEvent[] {
     if (pay <= 0n) break; // first in, first out: a later request never jumps the head
     state.vaultLiquidity -= pay;
     entry.remaining -= pay;
-    events.push({ type: "withdrawal_approved", account: entry.account, amount: fixedToWire(pay), nonce: state.account(entry.account).approvalNonce++ });
+    events.push({ type: "withdrawal_approved", account: entry.account, amount: fixedToWire(pay), nonce: ++state.account(entry.account).approvalNonce });
     events.push({ type: "withdrawal_queue_updated", account: entry.account, requested_seq: entry.requestedSeq, remaining: fixedToWire(entry.remaining) });
   }
   for (let i = state.queue.length - 1; i >= 0; i--) if ((state.queue[i]?.remaining ?? 0n) <= 0n) state.queue.splice(i, 1);

@@ -123,11 +123,11 @@ describe("finalized deposits", () => {
     node.client.tick(START + 7_000);
     const approved = seen.filter((e) => e.type === "withdrawal_approved");
     expect(approved[0]).toMatchObject({ account: "0x1111111111111111111111111111111111111111", amount: "40000" });
-    // An account's approval nonces count up and are never reused: its second approval gets the next one.
+    // An account's approval nonces count up from one and are never reused: its second approval gets the next one.
     const second = node.controls.addLiquidity(fixedFromInt(100_000));
     const forSecond = (events: EngineEvent[]) => events.flatMap((e) => (e.type === "withdrawal_approved" && e.account.startsWith("0x2222") ? [e.nonce] : []));
-    expect(forSecond(approved)).toEqual([0]);
-    expect(forSecond(second)).toEqual([1]);
+    expect(forSecond(approved)).toEqual([1]);
+    expect(forSecond(second)).toEqual([2]);
   });
 });
 

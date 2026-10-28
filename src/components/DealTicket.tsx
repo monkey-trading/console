@@ -44,7 +44,8 @@ export function DealTicket() {
   const triggerPrice = parseFixed(price);
   const preview = previewTicket({ market, side, notional, slippageBps: slippage, resting: kind !== "market", triggerPrice, account: state.account, houseNav: state.house.nav });
   const problems = [...preview.problems];
-  if (kind !== "market" && triggerPrice === null) problems.push("Enter a trigger price.");
+  if (size.trim() !== "" && parseFixed(size) === null) problems.push("Enter the size in digits, such as 10000 or 2500.50.");
+  if (kind !== "market" && triggerPrice === null) problems.push(price.trim() === "" ? "Enter a trigger price." : "Enter the trigger price in digits, such as 61250.50.");
   const gate = !state.wallet ? "Connect a wallet to trade." : state.eligibility === null ? "Attest your eligibility before trading." : !maySign(state.attestation) ? "The node's attestation is not verified." : null;
   const canPlace = gate === null && problems.length === 0 && !state.busy;
   const places = market.places;
