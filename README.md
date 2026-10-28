@@ -1,9 +1,12 @@
 # console
 
 The Monkey Trading web app, to be served at console.monkey.trading: the client for the open-source CFD
-engine in [monkey-trading/engine](https://github.com/monkey-trading/engine). The trading screens are
-not built yet; this repository holds the Next.js, Tailwind CSS, and TypeScript scaffold they will
-be built on, with its CI.
+engine in [monkey-trading/engine](https://github.com/monkey-trading/engine). One full-view trading
+terminal with a watchlist, a chart with Reference, Execution and Risk views, an order ticket that
+sends the quote you saw with your slippage bound, positions, orders, history, and a funding drawer.
+
+This build runs against a simulated node inside the browser, behind an interface a live client
+replaces. Prices, fills and funds are simulated, and the app says so on screen.
 
 ## Run it
 
@@ -14,7 +17,9 @@ npm ci
 npm run dev
 ```
 
-The app is served at `http://localhost:3000`. Before sending a change, run `npm run lint`,
+The app is served at `http://localhost:3000`. The Mock controls button in the top strip changes the
+simulated node: the region it sees you in (to show the geo-block), its attestation, price shocks that
+trigger a close-out, market halts, stress levels, and vault liquidity for the withdrawal queue. Before sending a change, run `npm run lint`,
 `npm run typecheck`, `npm test`, `npm run build`, and `npm audit --audit-level=high`; CI runs these
 and the docs and workflow checks.
 
