@@ -92,6 +92,11 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   node's origin is the one cross-origin destination the app exists for: the feature that first
   calls it asks for the owner's approval and adds that origin, and no other, to the CSP
   `connect-src` with its `https:` and `wss:` schemes.
+- **The rules come from the website.** The checklist and the implementation skill were ported from
+  the website repository. A module they name that this repository lacks (`content.ts`, `prng.ts`,
+  `format.ts`, `components/motion.tsx`, `replay.ts`) is the path its convention takes once the
+  first feature needs it, and their simulation, shell, and replay-demo items apply to the mock
+  engine and any demo the console builds.
 - **Next.js 16.** Its APIs differ from older versions. The version-matched docs in
   `node_modules/next/dist/docs/` are the reference
   ([web-implementation](skills/web-implementation/SKILL.md#framework-reference)).

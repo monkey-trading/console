@@ -95,8 +95,9 @@ checklist, no restatement of the diff.
 - Open every PR as a **Draft**, and mark it ready (`gh pr ready`) only once
   [Before a PR is ready for review](#before-a-pr-is-ready-for-review) holds. A reference PR that
   needs no review stays a draft and says so in its overview; the title stays clean.
-- Watch the checks afterwards. A red PR is not ready yet: read every failed job — the CI jobs run
-  independently, so none is a cancellation of another — fix, push, and re-check. Once Vercel is
+- Watch the checks afterwards. A red PR is not ready yet: read every failed job — the first
+  failing job cancels the run, so a cancelled job is unverified, not passed: run its check locally
+  or wait for the re-run before calling it green — fix, push, and re-check. Once Vercel is
   connected, a failed preview deployment of the head commit is a red PR too. Ask for review once
   `ci-passed` succeeds, naming the PR's head commit.
 

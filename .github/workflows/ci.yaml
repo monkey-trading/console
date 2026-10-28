@@ -50,21 +50,7 @@ jobs:
         run: gh run cancel "$RUN_ID"
 
   # Checks that every relative Markdown link under agents/ and in the root *.md files resolves to
-      - name: Cancel the run
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.run_id }}
-        run: gh run cancel "$RUN_ID"
-
   # a file or directory in the repository, and that AGENTS.md and CLAUDE.md, when present, are
-      - name: Cancel the run
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.run_id }}
-        run: gh run cancel "$RUN_ID"
-
   # symlinks to agents/AGENTS.md.
   docs:
     runs-on: ubuntu-24.04

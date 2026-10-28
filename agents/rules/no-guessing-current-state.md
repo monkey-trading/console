@@ -14,8 +14,8 @@ Load on request when a task depends on state that may have changed since the las
 **A green check is not the same as "everything ran".** Before reporting CI green, know which jobs
 actually ran on that commit:
 
-- A **cancelled** job is not a passed job. `fail-fast` cancels sibling matrix lanes as soon as one
-  fails, so "only lane X failed" usually means the others never finished — check every lane's
+- A **cancelled** job is not a passed job. The first failing job cancels the whole run, and
+  `fail-fast` cancels sibling matrix lanes as soon as one fails, so "only lane X failed" usually means the others never finished — check every lane's
   conclusion, not just the failures.
 - Verify a push produced a new run: `git push` on an unchanged branch succeeds silently and
   triggers nothing, which looks identical to a real push. Match the run's `headSha` to the branch
