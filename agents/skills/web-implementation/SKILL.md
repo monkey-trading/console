@@ -376,7 +376,8 @@ rules; these are the conventions that keep copy checkable.
 - Hashing comes from `@noble/hashes`; never another hashing package, never home-rolled.
 - Tools outside the build — Playwright, Lighthouse — are not dependencies of this repository: run
   them from a scratch directory outside it, at an exact version of the official package.
-- In use (non-exhaustive): `next`, `react`, and `react-dom` at runtime;
+- In use (non-exhaustive): `next`, `react`, `react-dom`, and `lightweight-charts` (TradingView, Apache-2.0,
+  the owner-approved charting library; its `fancy-canvas` dependency is MIT) at runtime;
   `typescript`, `@types/*`, `eslint`, `@eslint/js`, `typescript-eslint`,
   `eslint-plugin-react-hooks`, `eslint-plugin-jsx-a11y`, `tailwindcss`, `@tailwindcss/postcss`,
   `vitest`, and `vite` in development.

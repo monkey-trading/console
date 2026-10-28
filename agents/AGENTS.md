@@ -18,14 +18,14 @@ matches the current action.
   and the icons.
 - **src/components/** — the terminal. `ConsoleProvider` creates the session and drives the clock;
   `Shell`, `TopBar`, `AttestationBanner`, `RiskStrip` and `Toasts` frame it; `TradeWorkspace` lays out
-  `Watchlist`, `ChartPanel` (with `CandleChart` and `MarketStatus`), `OrderTicket` (with
+  `Watchlist`, `ChartPanel` (with `PriceChart`, which loads Lightweight Charts in the browser, and `MarketStatus`), `OrderTicket` (with
   `TicketSummary`) and `BottomPanel` (positions, orders, history, activity); `FundingDrawer` holds
   `EligibilityCard`, `DepositForm`, `WithdrawForm`, `WithdrawalQueue` and `AccountSummary`;
   `AccessGate` shows the geo-block; `WalletButton` and `MockControls` drive the mock.
 - **src/lib/** — pure TypeScript with no React or DOM. Logic modules have adjacent `*.test.ts`:
   `site.ts` holds identity and `siteUrl()`, the one environment-variable reader; `fixed.ts` is the
-  engine's nine-place fixed point as bigints; `format.ts`, `time.ts`, `chart.ts`, `candles.ts` and
-  `prng.ts` format, draw and seed; `pricing.ts`, `schedule.ts` and `ticket.ts` hold the quote,
+  engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `bars.ts` (marks into bars per timeframe) and
+  `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `pricing.ts`, `schedule.ts` and `ticket.ts` hold the quote,
   margin and market-hours rules and the ticket preview; `models.ts` and `messages.ts` decode and
   describe engine data; `build.ts` says whether this build accepts the mock attestation.
   `engine/` holds the node's wire shapes (`types.ts`), the `EngineClient` and wallet interfaces,

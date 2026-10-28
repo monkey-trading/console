@@ -4,6 +4,7 @@
 
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
+import { mockHistory } from "@/lib/mock/history";
 import { createMockNode, SIM_EPOCH_MS, type MockNode } from "@/lib/mock";
 import { ConsoleStore } from "@/lib/store/store";
 import type { ConsoleState } from "@/lib/store/state";
@@ -24,6 +25,7 @@ function createSession(): Session {
     client: node.client,
     wallets: node.wallets,
     drive: (ms) => node.client.tick(ms),
+    history: mockHistory,
     initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS },
   });
   return { store, node };

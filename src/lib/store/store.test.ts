@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixedFromInt, parseFixed } from "../fixed";
 import { createMockNode, SIM_EPOCH_MS } from "../mock";
+import { mockHistory } from "../mock/history";
 import { attestEligibility, cancelOrder, connectWallet, deposit, placeOrder, withdraw } from "./actions";
 import { ConsoleStore } from "./store";
 
@@ -13,7 +14,7 @@ const START = Date.UTC(2026, 9, 28, 15, 0, 0);
 function setup() {
   const node = createMockNode(SIM_EPOCH_MS);
   const store = new ConsoleStore({
-    client: node.client, wallets: node.wallets, drive: (ms) => node.client.tick(ms),
+    client: node.client, wallets: node.wallets, drive: (ms) => node.client.tick(ms), history: mockHistory,
     initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS },
   });
   store.start(START);

@@ -1,6 +1,6 @@
 /** What the order will do before it is placed: the quote, the margin it uses, and the house's room. */
 
-import { formatPrice } from "@/lib/chart";
+import { formatPrice } from "@/lib/price-format";
 import { fixedToNumber, formatFixedPlaces, type Fixed } from "@/lib/fixed";
 import { formatMovePercent } from "@/lib/format";
 import type { MarketModel } from "@/lib/models";

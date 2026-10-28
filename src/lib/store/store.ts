@@ -1,6 +1,6 @@
 /** The console's store: reads the node, follows its stream, and notifies the screens. */
 
-import { pushMark } from "../candles";
+import { pushTick, TIMEFRAMES, type TimeframeId } from "../bars";
 import { checkAttestation } from "../engine/attestation";
 import { EngineError, type EngineClient } from "../engine/client";
 import type { HouseView, MarketId, MarketView, StreamMessage } from "../engine/types";
@@ -8,7 +8,7 @@ import type { Wallet, WalletConnector } from "../engine/wallet";
 import { fixedToNumber } from "../fixed";
 import { describeEvent } from "../messages";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
-import { initialState, seedAllCandles, type BlockReason, type ChartMode, type ConsoleState, type ToastMessage } from "./state";
+import { initialState, seedAllBars, type BlockReason, type ChartMode, type ConsoleState, type HistorySource, type ToastMessage } from "./state";
 
 /** The address the access probe reads, since the node screens the caller, not the account. */
 const PROBE_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -20,6 +20,8 @@ export interface StoreDeps {
   /** Advances a node that runs in this page; absent for a live node. */
   drive?: (ms: number) => void;
   initial: { markets: MarketView[]; house: HouseView; startMs: number };
+  /** Price history for the chart, ending at the current mark. */
+  history: HistorySource;
 }
 
 export class ConsoleStore {
@@ -36,7 +38,7 @@ export class ConsoleStore {
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
-    this.snapshot = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs);
+    this.snapshot = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs, deps.history);
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -73,6 +75,10 @@ export class ConsoleStore {
     this.patch({ selected: id });
   }
 
+  setTimeframe(timeframe: TimeframeId): void {
+    this.patch({ timeframe });
+  }
+
   setFundingOpen(open: boolean): void {
     this.patch({ fundingOpen: open });
   }
@@ -99,7 +105,7 @@ export class ConsoleStore {
    */
   start(nowMs: number): () => void {
     this.deps.drive?.(nowMs);
-    this.patch({ now: nowMs, candles: seedAllCandles(this.snapshot.markets, nowMs) });
+    this.patch({ now: nowMs, bars: seedAllBars(this.snapshot.markets, nowMs, this.deps.history) });
     this.unsubscribe = this.deps.client.subscribe((message) => this.onMessage(message));
     void this.checkNode();
     return () => {
@@ -158,9 +164,14 @@ export class ConsoleStore {
     try {
       const [views, house] = await Promise.all([this.deps.client.markets(), this.deps.client.house()]);
       const markets = views.map((view) => decodeMarket(view, this.snapshot.markets.find((m) => m.id === view.id)));
-      const candles = { ...this.snapshot.candles };
-      for (const m of markets) if (m.mark !== null && m.open) candles[m.id] = pushMark(candles[m.id] ?? [], this.snapshot.now, fixedToNumber(m.mark));
-      this.patch({ markets, candles, house: decodeHouse(house) });
+      const bars = { ...this.snapshot.bars };
+      for (const m of markets) {
+        const frames = bars[m.id];
+        if (m.mark === null || !m.open || !frames) continue;
+        const price = fixedToNumber(m.mark);
+        bars[m.id] = Object.fromEntries(TIMEFRAMES.map((tf) => [tf.id, pushTick(frames[tf.id], this.snapshot.now, price, tf.seconds)])) as typeof frames;
+      }
+      this.patch({ markets, bars, house: decodeHouse(house) });
       if (this.snapshot.wallet) await this.loadAccount(accountChanged);
     } catch (error) {
       if (!this.noteAccess(error)) this.toast("error", error instanceof Error ? error.message : "The node did not answer.");

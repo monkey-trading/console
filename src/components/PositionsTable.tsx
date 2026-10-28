@@ -2,7 +2,7 @@
 
 /** Open positions with their profit and loss, and resting orders with a cancel. */
 
-import { formatPrice } from "@/lib/chart";
+import { formatPrice } from "@/lib/price-format";
 import { absFixed, fixedToNumber, formatFixedPlaces, mulFixed, type Fixed } from "@/lib/fixed";
 import { cancelOrder, placeOrder } from "@/lib/store/actions";
 

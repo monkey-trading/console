@@ -2,7 +2,7 @@
 
 /** The left pane: every listed market with its mark, move, and whether it is open. */
 
-import { formatPrice } from "@/lib/chart";
+import { formatPrice } from "@/lib/price-format";
 import { formatMovePercent } from "@/lib/format";
 import { fixedToNumber, moveBps } from "@/lib/fixed";
 

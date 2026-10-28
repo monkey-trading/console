@@ -1,0 +1,73 @@
+/** Price bars built from a stream of marks, for the chart only; floats here never mirror engine state. */
+
+import { mulberry32 } from "./prng";
+
+export const TIMEFRAMES = [
+  { id: "1m", seconds: 60 },
+  { id: "5m", seconds: 300 },
+  { id: "15m", seconds: 900 },
+  { id: "1h", seconds: 3_600 },
+  { id: "1D", seconds: 86_400 },
+] as const;
+
+export type TimeframeId = (typeof TIMEFRAMES)[number]["id"];
+
+export const DEFAULT_TIMEFRAME: TimeframeId = "1m";
+
+/** One bar: `time` is the start of its bucket in UTC seconds. */
+export interface Bar {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+/** The most bars kept per series. */
+export const MAX_BARS = 500;
+
+/** The seconds in a timeframe. */
+export function secondsOf(id: TimeframeId): number {
+  const found = TIMEFRAMES.find((t) => t.id === id);
+  if (!found) throw new Error(`unknown timeframe: ${id}`);
+  return found.seconds;
+}
+
+/**
+ * Adds a mark to a series. It extends the bar its time falls in, or opens the next bar at the
+ * previous close. A mark older than the last bar's start is ignored, so out-of-order delivery
+ * never rewrites history.
+ */
+export function pushTick(series: readonly Bar[], tMs: number, price: number, seconds: number): Bar[] {
+  const time = Math.floor(tMs / 1000 / seconds) * seconds;
+  const last = series[series.length - 1];
+  if (last && time < last.time) return series.slice();
+  if (last && time === last.time) {
+    const next = { ...last, high: Math.max(last.high, price), low: Math.min(last.low, price), close: price };
+    return [...series.slice(0, -1), next];
+  }
+  const open = last ? last.close : price;
+  const bar = { time, open, high: Math.max(open, price), low: Math.min(open, price), close: price };
+  return [...series, bar].slice(-MAX_BARS);
+}
+
+/**
+ * A plausible history of `count` bars ending with a bar that closes at `endPrice` in the bucket
+ * `endMs` falls in. Seeded, so the server and the browser draw the same bars. `volBpsPerSecond` is
+ * the typical move per second.
+ */
+export function seedBars(seed: number, endMs: number, endPrice: number, seconds: number, volBpsPerSecond: number, count = 240): Bar[] {
+  const rand = mulberry32(seed);
+  const sigma = (volBpsPerSecond / 10_000) * Math.sqrt(seconds);
+  const closes: number[] = [endPrice];
+  for (let i = 1; i < count; i++) {
+    const step = (rand() + rand() + rand() + rand() - 2) * Math.sqrt(3) * sigma;
+    closes.unshift((closes[0] ?? endPrice) / (1 + step));
+  }
+  const end = Math.floor(endMs / 1000 / seconds) * seconds;
+  return closes.map((close, i) => {
+    const open = closes[i - 1] ?? close;
+    const wick = close * sigma * 0.6 * rand();
+    return { time: end - (closes.length - 1 - i) * seconds, open, close, high: Math.max(open, close) + wick, low: Math.min(open, close) - wick };
+  });
+}
