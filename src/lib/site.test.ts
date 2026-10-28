@@ -48,6 +48,11 @@ describe("siteUrl", () => {
   it("fails the build on a value that is not a URL, from either variable", () => {
     env("monkey.example", undefined);
     expect(() => siteUrl()).toThrow("SITE_URL is not a URL: monkey.example");
+    env(undefined, "monkey vercel.app");
+    expect(() => siteUrl()).toThrow("VERCEL_PROJECT_PRODUCTION_URL is not a URL: https://monkey vercel.app");
+  });
+
+  it("fails the build on a Vercel domain that carries a path", () => {
     env(undefined, "monkey.vercel.app/preview");
     expect(() => siteUrl()).toThrow("VERCEL_PROJECT_PRODUCTION_URL must be a bare http(s) origin");
   });

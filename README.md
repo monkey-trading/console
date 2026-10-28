@@ -17,6 +17,14 @@ npm run dev
 The app is served at `http://localhost:3000`. Before sending a change, run `npm run lint`,
 `npm run typecheck`, `npm test`, and `npm run build`; CI runs the same checks.
 
+## Deploy
+
+`npm run build` prerenders every route; `npm start` serves the build. The build reads two optional
+environment variables for the canonical origin in the document metadata: `SITE_URL`, a bare
+http(s) origin such as `https://console.monkey.trading` that takes precedence, and
+`VERCEL_PROJECT_PRODUCTION_URL`, a bare host that Vercel sets once the repository is connected to
+it. With neither, the origin is `http://localhost:3000`.
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).

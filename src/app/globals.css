@@ -36,7 +36,6 @@
 html {
   background: var(--color-ink);
   scroll-behavior: smooth;
-  scroll-padding-top: 9rem;
 }
 
 body {

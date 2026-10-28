@@ -5,7 +5,7 @@ export const SITE_TITLE = "Monkey Trading Console";
 export const SITE_DESCRIPTION = "The trading app for the Monkey Trading CFD engine.";
 
 /**
- * The canonical origin for metadata, the sitemap, and robots: `SITE_URL` when set, else the Vercel
+ * The canonical origin for metadata: `SITE_URL` when set, else the Vercel
  * project's production domain, else local development. Read on the server only.
  * Error cases:
  * - `SITE_URL`, or the Vercel domain, is not a bare http(s) origin, so a bad value fails the build

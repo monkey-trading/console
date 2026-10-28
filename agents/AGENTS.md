@@ -27,12 +27,13 @@ current action.
 - **postcss.config.mjs** — Tailwind CSS 4 through `@tailwindcss/postcss`.
 - **scripts/** — `check-docs.py`, run by CI's `docs` job: every relative Markdown link under
   `agents/` and in the root `*.md` files resolves to a file or directory in the repository, and the
-  root `AGENTS.md` and `CLAUDE.md` are symlinks to `agents/AGENTS.md`; its test is
+  root `AGENTS.md` and `CLAUDE.md`, when present, are symlinks to `agents/AGENTS.md`; its test is
   `check-docs.test.py`.
 - **.github/workflows/** — `ci.yaml`, on every push to `main` and every PR: the `workflows` job
   lints the workflows with actionlint, which also runs shellcheck over each `run:` script; the
   `docs` job runs `scripts/check-docs.test.py`, then `scripts/check-docs.py`; and the `lint`,
-  `typecheck`, `test`, `build`, and `audit` jobs run the app's checks after `npm ci`. Actions are
+  `typecheck`, `test`, and `build` jobs run the app's checks after `npm ci`, and `audit` runs
+  `npm audit` against the lockfile. Actions are
   pinned by commit SHA. `ci-passed` is the one CI check branch rules require: it passes only when
   every other job succeeded, so each new job must be added to its `needs`.
 - **.nvmrc** — the Node.js version (24) for local runs and CI.
@@ -84,7 +85,10 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
 - **The engine is the source of truth.** Every number, rule, and message the app shows about the
   engine matches the engine's README and its decision issues.
 - **Private by construction.** No analytics, cookies, browser storage, trackers, third-party
-  requests, or embeds without the owner's approval; fonts are bundled at build time.
+  requests, or embeds without the owner's approval; fonts are bundled at build time. The engine
+  node's origin is the one cross-origin destination the app exists for: the feature that first
+  calls it asks for the owner's approval and adds that origin, and no other, to the CSP
+  `connect-src`.
 - **Next.js 16.** Its APIs differ from older versions. The version-matched docs in
   `node_modules/next/dist/docs/` are the reference
   ([web-implementation](skills/web-implementation/SKILL.md#framework-reference)).
