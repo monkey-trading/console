@@ -19,6 +19,8 @@ export interface TicketInput {
   slippageBps: number;
   /** A limit or stop order, admitted without the margin and capacity checks that run when it triggers. */
   resting?: boolean;
+  /** The price a resting order waits for; its minimum size is checked there. */
+  triggerPrice?: Fixed | null;
   account: AccountModel | null;
   houseNav: Fixed;
 }
@@ -90,7 +92,7 @@ export function previewTicket(input: TicketInput): TicketPreview {
   if (!market.open && !input.resting) problems.push("This market is closed.");
   if (market.reduceOnly && grows) problems.push("This market only accepts orders that reduce a position.");
   if (qty <= 0n) problems.push("Enter a size.");
-  else if (grows && notionalOf(qty, mark) < fixedFromWire(spec.min_order_notional)) problems.push(`Minimum order is ${spec.min_order_notional} USD.`);
+  else if (grows && notionalOf(qty, input.resting && input.triggerPrice ? input.triggerPrice : mark) < fixedFromWire(spec.min_order_notional)) problems.push(`Minimum order is ${spec.min_order_notional} USD.`);
   if (grows && !input.resting) {
     if (useBps !== null && useBps > 10_000) problems.push("Not enough equity for the margin this needs.");
     if (equity <= 0n) problems.push("Fund your account to trade.");

@@ -1,6 +1,6 @@
 /** The ticket's "Market info" section: hours, stress, margin, price terms and the house's room. */
 
-import { fixedToNumber, formatFixedPlaces, type Fixed } from "@/lib/fixed";
+import { fixedToNumber, formatUsd, type Fixed } from "@/lib/fixed";
 import { formatMovePercent } from "@/lib/format";
 import type { MarketModel } from "@/lib/models";
 import { formatPrice } from "@/lib/price-format";
@@ -10,7 +10,7 @@ import { STRESS_NAMES, STRESS_TONE } from "@/lib/stress";
 import type { TicketPreview } from "@/lib/ticket";
 
 
-const usd = (value: Fixed) => `$${formatFixedPlaces(value, 2)}`;
+const usd = formatUsd;
 const ROW = "flex justify-between gap-3";
 
 /** A bar filled to `bps` of its width, from 0 to 10,000. */
@@ -48,11 +48,11 @@ export function MarketInfo({ market, preview, notional }: { market: MarketModel;
           <UseBar bps={useBps ?? 0} />
         </div>
         <div>
-          <p className="flex justify-between text-label"><span className="text-fg-3">House capacity</span><span className={over ? "text-ember" : "text-glow"}>{over ? "Over the cap" : "Risk checked"}</span></p>
+          <p className="flex justify-between text-label"><span className="text-fg-3">House capacity</span><span className={over ? "text-ember" : "text-glow"}>{over ? "Above the cap" : "Within the cap"}</span></p>
           <div aria-hidden="true" className="mt-2 flex h-1.5 gap-1">
             {Array.from({ length: 8 }, (_, segment) => <span key={segment} className={`flex-1 rounded-sm ${segment < filled ? (over ? "bg-ember/70" : "bg-glow/70") : "bg-line-2"}`} />)}
           </div>
-          <p className="mt-2 text-label leading-relaxed text-fg-3">The house takes at most {usd(preview.houseCap)} net in {market.symbol}. This order is {usd(notional)}.</p>
+          <p className="mt-2 text-label leading-relaxed text-fg-3">The house takes at most {usd(preview.houseCap)} net in {market.symbol}. The node checks the house's net exposure after your order.</p>
         </div>
         <dl className="space-y-3 border-t border-line pt-4 text-label leading-relaxed text-fg-3">
           <div><dt className="text-fg-2">Reference</dt><dd>The multi-venue median of the node's price feeds.</dd></div>

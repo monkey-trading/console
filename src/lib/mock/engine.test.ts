@@ -2,9 +2,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { EngineError } from "../engine/client";
 import type { EngineEvent, OrderRequest } from "../engine/types";
 import { fixedFromInt, fixedToWire, parseFixed } from "../fixed";
+import { fillEvents, fillOrder } from "./execute";
 import { createMockNode, type MockNode } from "./index";
 
 const ME = "0xabc0000000000000000000000000000000000001";
@@ -45,7 +45,8 @@ describe("access", () => {
       status: 403, reject: { type: "access", reason: "united_states" },
     });
     node.controls.setRegion("sanctioned_jurisdiction");
-    expect(() => node.controls.deposit(ME, fixedFromInt(100))).toThrow(EngineError);
+    // A deposit goes to the vault, which screens the paying address, not the connection.
+    expect(() => node.controls.deposit(ME, fixedFromInt(100))).toThrow("eligibility attestation required");
   });
 
   it("requires an eligibility attestation before the first deposit and before an order", async () => {
@@ -78,23 +79,27 @@ describe("signed requests", () => {
 });
 
 describe("deposits", () => {
-  it("holds a deposit unfinalised, then credits it once", async () => {
+  it("counts a deposit as collateral at once, locked from withdrawal until it is final", async () => {
     const node = createMockNode(START);
     await node.client.attestEligibility({ account: ME, class: "professional", auth: auth(node) });
     node.controls.deposit(ME, fixedFromInt(5_000));
-    expect((await node.client.account(ME)).unfinalised_deposits).toBe("5000");
+    const early = await node.client.account(ME);
+    expect(early.balance).toBe("5000");
+    expect(early.unfinalised_deposits).toBe("5000");
+    const locked = await node.client.withdraw({ account: ME, amount: "100", auth: auth(node) });
+    expect(locked.events[0]).toMatchObject({ type: "withdrawal_rejected", reason: { type: "insufficient_funds", available: "0" } });
     node.client.tick(START + 7_000);
     const view = await node.client.account(ME);
     expect(view.balance).toBe("5000");
     expect(view.unfinalised_deposits).toBeUndefined();
-    node.client.tick(START + 8_000);
-    expect((await node.client.account(ME)).balance).toBe("5000");
+    expect((await node.client.withdraw({ account: ME, amount: "100", auth: auth(node) })).events[0]?.type).not.toBe("withdrawal_rejected");
   });
 
   it("keeps the vault's bounds", async () => {
     const node = createMockNode(START);
     await node.client.attestEligibility({ account: ME, class: "professional", auth: auth(node) });
     expect(() => node.controls.deposit(ME, fixedFromInt(9))).toThrow("10 to 1,000,000,000");
+    expect(() => node.controls.deposit(ME, parseFixed("10.0000001") ?? 0n)).toThrow("six decimal places");
   });
 });
 
@@ -128,12 +133,23 @@ describe("market orders", () => {
     expect((await order(rich, "20", "buy")).events[0]).toMatchObject({ reason: { type: "house_capacity" } });
   });
 
-  it("rests a limit order until the quote reaches it, and cancels on request", async () => {
+  it("rests a limit order until the quote reaches it, then fills it; an unreached one cancels on request", async () => {
     const node = await funded(100_000);
-    const resting = await order(node, "0.1", "buy", { kind: { type: "limit", price: "1000" } });
+    const mark = parseFixed((await node.client.markets())[0]?.mark ?? "0") ?? 0n;
+    const near = fixedToWire(mark - mark / 100n); // 1% below the index
+    const resting = await order(node, "0.1", "buy", { kind: { type: "limit", price: near } });
     expect(types(resting.events)).toEqual(["order_accepted"]);
-    const id = (await node.client.account(ME)).orders;
-    const orderId = Number(Object.keys(id)[0]);
+    const seen: EngineEvent[] = [];
+    node.client.subscribe((m) => seen.push(...m.events));
+    node.client.tick(START + 8_000);
+    expect(types(seen)).not.toContain("fill");
+    node.controls.shock(1, -300);
+    node.client.tick(START + 9_000);
+    expect(seen.find((e) => e.type === "fill")).toMatchObject({ type: "fill", side: "buy" });
+    expect(Object.keys((await node.client.account(ME)).orders)).toEqual([]);
+    const far = await order(node, "0.1", "buy", { kind: { type: "limit", price: "1000" } });
+    expect(types(far.events)).toEqual(["order_accepted"]);
+    const orderId = Number(Object.keys((await node.client.account(ME)).orders)[0]);
     const cancelled = await node.client.cancelOrder({ account: ME, order_id: orderId, auth: auth(node) });
     expect(cancelled.events[0]).toMatchObject({ type: "order_cancelled", reason: "client" });
   });
@@ -235,16 +251,23 @@ describe("engine rules the mock follows", () => {
   });
 
   it("writes a loss beyond the balance off against the house only once the account is flat", async () => {
-    const node = await funded(2_000);
-    await order(node, "0.5", "buy");
-    await order(node, "1000", "sell", {}, 3);
-    node.controls.shock(1, -3_000);
-    const seen: EngineEvent[] = [];
-    node.client.subscribe((m) => seen.push(...m.events));
-    node.client.tick(START + 9_000);
-    expect(types(seen)).toContain("close_out");
-    const view = await node.client.account(ME);
-    expect(parseFixed(view.balance) ?? -1n).toBeGreaterThanOrEqual(0n);
+    const node = await funded(1_000);
+    const { state } = node.client;
+    const account = state.account(ME);
+    // A large loser in BTC and a flat position in ETH; the balance cannot cover the loss.
+    account.balance = fixedFromInt(10);
+    account.positions.set(1, { qty: fixedFromInt(1), entry: fixedFromInt(70_000) });
+    account.positions.set(2, { qty: fixedFromInt(1), entry: state.markets.get(2)?.mid ?? 0n });
+    const houseBefore = state.houseCash;
+    const first = fillOrder(state, { address: ME, market: 1, side: "sell", qty: fixedFromInt(1), reduceOnly: true, orderId: 0, liquidation: true });
+    expect(first).toMatchObject({ ok: true, badDebt: 0n });
+    expect(account.balance).toBeLessThan(0n); // the debt stays while ETH is still open
+    expect(state.houseCash).toBeGreaterThan(houseBefore); // the house holds the loss's counterpart, not a write-off
+    const second = fillOrder(state, { address: ME, market: 2, side: "sell", qty: fixedFromInt(1), reduceOnly: true, orderId: 0, liquidation: true });
+    if (!second.ok) throw new Error("the second close fills");
+    expect(second.badDebt).toBeGreaterThan(0n);
+    expect(account.balance).toBe(0n);
+    expect(types(fillEvents(second.fill, second.badDebt))).toEqual(["fill", "bad_debt"]);
   });
 
   it("treats a flip to the other side as added risk, so a reduce-only order cannot flip", async () => {

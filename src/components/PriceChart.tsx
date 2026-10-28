@@ -89,6 +89,8 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
         const point = param.seriesData.get(series);
         setHovered(point && "open" in point ? { time: Number(point.time), open: point.open, high: point.high, low: point.low, close: point.close } : null);
       });
+      // The attribution link opens another site in a new tab; it gets the same rel as every other such link.
+      for (const link of el.querySelectorAll("a")) link.rel = "noopener noreferrer";
       live.current = { chart, series, lineStyle: LineStyle, lines: [], key: "", count: 0, first: 0 };
       dispose = () => chart.remove();
       setReady((n) => n + 1);
@@ -132,6 +134,10 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
     <div className="relative h-80 min-h-64 w-full lg:h-auto lg:flex-1">
       <div ref={host} role="group" aria-label={`${symbol} candlestick chart`} className="absolute inset-0" />
       {failed && <p role="alert" className="absolute inset-0 z-10 flex items-center justify-center text-caption text-ember">The chart could not load. Reload the page to try again.</p>}
+      <p className="sr-only">
+        {symbol} candlestick chart. {shown ? `Latest bar: open ${formatPrice(shown.open, places)}, high ${formatPrice(shown.high, places)}, low ${formatPrice(shown.low, places)}, close ${formatPrice(shown.close, places)}.` : "No bars yet."}
+        {markers.map((m) => ` ${m.title} at ${formatPrice(m.price, places)}.`).join("")}
+      </p>
       {shown && (
         <p aria-hidden="true" className="pointer-events-none absolute top-2 left-3 z-10 flex flex-wrap gap-x-3 text-label text-fg-2">
           <span>O <span className="text-fg">{formatPrice(shown.open, places)}</span></span>

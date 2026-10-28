@@ -5,6 +5,7 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { DEMO_ADDRESS } from "@/lib/mock/demo";
+import { queuePage } from "@/lib/mock/funds";
 import { mockHistory } from "@/lib/mock/history";
 import { createMockNode, SIM_EPOCH_MS, type MockNode } from "@/lib/mock";
 import { connectWallet } from "@/lib/store/actions";
@@ -28,7 +29,15 @@ function createSession(): Session {
     wallets: node.wallets,
     drive: (ms) => node.client.tick(ms),
     history: mockHistory,
-    initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS, recent: node.client.recentLog(1000), viewer: DEMO_ADDRESS },
+    initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS, recent: node.client.recentLog(1000), viewer: DEMO_ADDRESS,
+      session: {
+        wallet: { address: DEMO_ADDRESS, label: "Browser wallet" },
+        account: node.client.accountView(DEMO_ADDRESS),
+        eligibility: node.client.eligibilityClass(DEMO_ADDRESS),
+        queue: queuePage(node.client.state, DEMO_ADDRESS).queue,
+        history: node.client.historyPage(DEMO_ADDRESS, { limit: 100 }).events,
+      },
+    },
   });
   return { store, node };
 }
@@ -52,16 +61,31 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) store.setPaused(true);
     let simulated = SIM_EPOCH_MS;
     let last = Date.now();
-    const timer = setInterval(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const running = () => !store.getSnapshot().paused && document.visibilityState !== "hidden";
+    const step = () => {
       const now = Date.now();
-      const elapsed = Math.min(now - last, MAX_TICK_MS);
+      simulated += Math.min(now - last, MAX_TICK_MS);
       last = now;
-      if (store.getSnapshot().paused || document.visibilityState === "hidden") return;
-      simulated += elapsed;
       store.tick(simulated);
-    }, TICK_MS);
+    };
+    // The timer exists only while the simulation runs, so nothing ticks when paused or hidden.
+    const sync = () => {
+      if (running() && timer === null) {
+        last = Date.now();
+        timer = setInterval(step, TICK_MS);
+      } else if (!running() && timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    const unsubscribe = store.subscribe(sync);
     return () => {
-      clearInterval(timer);
+      if (timer !== null) clearInterval(timer);
+      document.removeEventListener("visibilitychange", sync);
+      unsubscribe();
       stop();
     };
   }, [store]);

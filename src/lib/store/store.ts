@@ -3,7 +3,7 @@
 import { pushTick, TIMEFRAMES, type TimeframeId } from "../bars";
 import { checkAttestation } from "../engine/attestation";
 import { EngineError, type EngineClient } from "../engine/client";
-import type { EngineEvent, HouseView, MarketId, MarketView, StreamMessage } from "../engine/types";
+import type { AccountView, EligibilityClass, EngineEvent, HistoryEvent, HouseView, MarketId, MarketView, QueuedWithdrawal, StreamMessage } from "../engine/types";
 import type { Wallet, WalletConnector } from "../engine/wallet";
 import { fixedToNumber } from "../fixed";
 import { describeEvent } from "../messages";
@@ -17,7 +17,10 @@ export interface StoreDeps {
   wallets: WalletConnector;
   /** Advances a node that runs in this page; absent for a live node. */
   drive?: (ms: number) => void;
-  initial: { markets: MarketView[]; house: HouseView; startMs: number; recent?: StreamMessage[]; /** The account whose events the activity log shows before a wallet connects. */ viewer?: string };
+  initial: { markets: MarketView[]; house: HouseView; startMs: number; recent?: StreamMessage[]; /** The account whose events the activity log shows before a wallet connects. */ viewer?: string;
+    /** A wallet already connected when the page loads, with what the node holds for it. */
+    session?: { wallet: { address: string; label: string }; account: AccountView | null; eligibility: EligibilityClass | null; queue: QueuedWithdrawal[]; history: HistoryEvent[] };
+  };
   /** Price history for the chart, ending at the current mark. */
   history: HistorySource;
 }
@@ -40,7 +43,14 @@ export class ConsoleStore {
     this.deps = deps;
     this.viewer = deps.initial.viewer;
     const state = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs, deps.history);
-    this.snapshot = { ...state, feed: this.feedFrom(deps.initial.recent ?? [], state.markets) };
+    const session = deps.initial.session;
+    this.snapshot = {
+      ...state,
+      feed: this.feedFrom(deps.initial.recent ?? [], state.markets),
+      ...(session
+        ? { wallet: session.wallet, account: session.account ? decodeAccount(session.account) : null, eligibility: session.eligibility, queue: session.queue, history: session.history }
+        : {}),
+    };
   }
 
   /** Whether an event belongs in this user's activity: market events, and events of their own account. */
@@ -121,7 +131,7 @@ export class ConsoleStore {
     if (error instanceof EngineError && error.reject?.type === "access") {
       const reason = error.reject.reason;
       if (reason === "united_states" || reason === "sanctioned_jurisdiction") {
-        this.patch({ blocked: reason satisfies BlockReason });
+        this.patch({ blocked: reason satisfies BlockReason, fundingOpen: false });
         return true;
       }
     }

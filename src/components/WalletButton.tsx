@@ -9,6 +9,8 @@ import { connectWallet, disconnectWallet } from "@/lib/store/actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 
+/** Where focus goes when the button the user used is gone and has no successor, as in the funding drawer. */
+const FALLBACK_FOCUS = "funding-title";
 const BUTTON = "rounded border border-edge px-3 py-2 text-caption text-fg hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
 
 export function WalletButton() {
@@ -20,12 +22,16 @@ export function WalletButton() {
   const moved = useRef(false);
   useEffect(() => {
     // The button the user used has been replaced; keep their place by focusing its successor.
-    if (moved.current) primary.current?.focus();
+    if (moved.current) (primary.current ?? document.getElementById(FALLBACK_FOCUS))?.focus();
     moved.current = false;
   }, [wallet]);
   useEffect(() => {
     if (!open) return;
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      primary.current?.focus();
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);

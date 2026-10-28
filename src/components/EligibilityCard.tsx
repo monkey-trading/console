@@ -2,7 +2,7 @@
 
 /** The eligibility declaration every account signs before its first deposit. */
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import type { EligibilityClass } from "@/lib/engine/types";
 import { attestEligibility, STATEMENTS } from "@/lib/store/actions";
@@ -16,13 +16,14 @@ export function EligibilityCard() {
   const { store } = useSession();
   const [choice, setChoice] = useState<EligibilityClass>("professional");
   const name = useId();
+  const heading = useRef<HTMLHeadingElement>(null);
   return (
     <section aria-labelledby="eligibility-title" className="rounded-xl border border-line-2 bg-ink-1 p-5">
-      <h2 id="eligibility-title" className="text-label tracking-caps text-fg-3 uppercase">1 · Eligibility</h2>
+      <h2 ref={heading} id="eligibility-title" tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">1 · Eligibility</h2>
       {eligibility ? (
         <p className="mt-4 text-caption text-glow">Recorded: {STATEMENTS[eligibility]} You can deposit.</p>
       ) : (
-        <form className="mt-4" onSubmit={(event) => { event.preventDefault(); void attestEligibility(store, choice); }}>
+        <form className="mt-4" onSubmit={(event) => { event.preventDefault(); void attestEligibility(store, choice).then(() => heading.current?.focus()); }}>
           <p className="text-caption leading-relaxed text-fg-2">Before your first deposit you declare, with your wallet, that you are a professional or eligible client. The declaration is recorded in the public log against your account.</p>
           <fieldset className="mt-4 space-y-2">
             <legend className="sr-only">Client class</legend>

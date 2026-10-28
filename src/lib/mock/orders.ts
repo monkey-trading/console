@@ -2,7 +2,8 @@
 
 import { EngineError, type ActionResult } from "../engine/client";
 import type { CancelRequest, EligibilityRequest, EngineEvent, OrderRequest, RequestAuth, Reject } from "../engine/types";
-import { parseFixed } from "../fixed";
+import { fixedFromWire, parseFixed } from "../fixed";
+import { growthOf, notionalOf } from "../pricing";
 import { fillEvents, fillOrder, liveQuote } from "./execute";
 import type { AccountState, MockState } from "./state";
 
@@ -66,6 +67,10 @@ function orderEvents(state: MockState, req: OrderRequest, account: AccountState)
   }
   const price = parseFixed(req.kind.price);
   if (price === null || price <= 0n) return rejected(req, { type: "invalid_order", reason: "trigger price" });
+  const growsHere = growthOf(runtime ? account.positions.get(req.market)?.qty ?? 0n : 0n, req.side === "buy" ? qty : -qty).grows;
+  if (growsHere && notionalOf(qty, price) < fixedFromWire(runtime.listed.spec.min_order_notional)) {
+    return rejected(req, { type: "invalid_order", reason: `below the minimum order of ${runtime.listed.spec.min_order_notional} USD at the trigger price` });
+  }
   if (account.orders.size >= MAX_RESTING) return rejected(req, { type: "invalid_order", reason: `at most ${MAX_RESTING} resting orders` });
   // A resting order is admitted while its market is closed; it cannot trigger until the market trades.
   account.orders.set(orderId, { order_id: orderId, client_id: req.client_id, market: req.market, side: req.side, qty: req.qty, kind: req.kind, reduce_only: req.reduce_only ?? false });

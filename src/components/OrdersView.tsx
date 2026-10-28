@@ -2,6 +2,7 @@
 
 /** Resting orders with a Cancel button. */
 
+import { fixedFromWire, formatFixedPlaces } from "@/lib/fixed";
 import { cancelOrder } from "@/lib/store/actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -29,8 +30,8 @@ export function OrdersView() {
                   <td className="px-4 py-4 text-fg">{symbolOf(o.market)?.symbol ?? o.market}</td>
                   <td className={`px-4 py-4 ${o.side === "buy" ? "text-glow" : "text-ember"}`}>{o.side === "buy" ? "Buy" : "Sell"}</td>
                   <td className="px-4 py-4 capitalize">{o.kind.type}</td>
-                  <td className="px-4 py-4">{o.qty}</td>
-                  <td className="px-4 py-4">{o.kind.type === "market" ? "—" : o.kind.price}</td>
+                  <td className="px-4 py-4">{formatFixedPlaces(fixedFromWire(o.qty), 6)}</td>
+                  <td className="px-4 py-4">{o.kind.type === "market" ? "—" : formatFixedPlaces(fixedFromWire(o.kind.price), symbolOf(o.market)?.places ?? 2)}</td>
                   <td className="px-4 py-4 text-right">
                     <button type="button" disabled={busy} className={BUTTON} aria-label={`Cancel order ${o.order_id}`} onClick={(event) => { keepFocus(event.currentTarget); void cancelOrder(store, o.order_id); }}>Cancel</button>
                   </td>

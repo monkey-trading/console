@@ -17,20 +17,3 @@ export function mulberry32(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-
-/** An integer in `[min, max]` drawn from `rand`. */
-export function randInt(rand: () => number, min: number, max: number): number {
-  return min + Math.floor(rand() * (max - min + 1));
-}
-
-/**
- * One of `items`, drawn from `rand`.
- * Error cases:
- * - `items` is empty
- */
-export function pick<T>(rand: () => number, items: readonly T[]): T {
-  const item = items[randInt(rand, 0, items.length - 1)];
-  // Only an empty list leaves nothing to pick; callers pass fixed, non-empty tables.
-  if (item === undefined) throw new Error("pick: no items to choose from");
-  return item;
-}

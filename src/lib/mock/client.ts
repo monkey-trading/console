@@ -2,6 +2,7 @@
 
 import { EngineError, type ActionResult, type EngineClient, type Unsubscribe } from "../engine/client";
 import type {
+  EligibilityClass,
   AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView,
   MarketView, OrderRequest, StreamMessage, WithdrawalPage, WithdrawalRequest,
 } from "../engine/types";
@@ -85,8 +86,15 @@ export class MockEngineClient implements EngineClient {
   }
 
   async account(address: Address): Promise<AccountView> {
+    const view = this.accountView(address);
+    if (!view) throw new EngineError(404, "not found");
+    return view;
+  }
+
+  /** `GET /v1/accounts/{address}` now, without waiting; null for an account the node has never credited. */
+  accountView(address: Address): AccountView | null {
     const account = this.state.accounts.get(address.toLowerCase());
-    if (!account) throw new EngineError(404, "not found");
+    if (!account) return null;
     const positions: AccountView["positions"] = {};
     for (const [id, held] of account.positions) positions[id] = { qty: fixedToWire(held.qty), entry: fixedToWire(held.entry) };
     const orders: AccountView["orders"] = {};
@@ -109,11 +117,11 @@ export class MockEngineClient implements EngineClient {
   }
 
   async nonce(address: Address): Promise<{ next_nonce: number }> {
-    return { next_nonce: this.state.account(address).nextNonce };
+    return { next_nonce: this.state.accounts.get(address.toLowerCase())?.nextNonce ?? 0 };
   }
 
   async eligibility(address: Address): Promise<EligibilityView> {
-    const given = this.state.account(address).eligibility;
+    const given = this.state.accounts.get(address.toLowerCase())?.eligibility ?? null;
     const statement = given === "professional" ? "I attest that I am a professional client." : "I attest that I am an eligible client.";
     return { class: given, statement: given ? statement : null };
   }
@@ -138,7 +146,17 @@ export class MockEngineClient implements EngineClient {
     return queuePage(this.state, address);
   }
 
+  /** The account's recorded eligibility class now, without waiting. */
+  eligibilityClass(address: Address): EligibilityClass | null {
+    return this.state.accounts.get(address.toLowerCase())?.eligibility ?? null;
+  }
+
   async history(address: Address, params: { limit?: number; before?: string }): Promise<HistoryPage> {
+    return this.historyPage(address, params);
+  }
+
+  /** `GET /v1/accounts/{address}/history` now, without waiting. */
+  historyPage(address: Address, params: { limit?: number; before?: string }): HistoryPage {
     const items = this.state.history.get(address.toLowerCase()) ?? [];
     const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
     const [beforeSeq = Number.POSITIVE_INFINITY, beforeIndex = 0] = params.before ? params.before.split(":").map(Number) : [];

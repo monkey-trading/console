@@ -14,11 +14,9 @@ interface Props<T extends string> {
   value: T;
   options: readonly SelectOption<T>[];
   onChange: (value: T) => void;
-  /** Hides the label visually while keeping it for assistive technology. */
-  hideLabel?: boolean;
 }
 
-export function Select<T extends string>({ label, value, options, onChange, hideLabel = false }: Props<T>) {
+export function Select<T extends string>({ label, value, options, onChange }: Props<T>) {
   const id = useId();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -61,7 +59,7 @@ export function Select<T extends string>({ label, value, options, onChange, hide
 
   return (
     <div ref={root} className="relative">
-      <span id={`${id}-label`} className={hideLabel ? "sr-only" : "block text-caption text-fg-2"}>{label}</span>
+      <span id={`${id}-label`} className="block text-caption text-fg-2">{label}</span>
       <button
         type="button"
         aria-haspopup="listbox"
@@ -72,7 +70,7 @@ export function Select<T extends string>({ label, value, options, onChange, hide
           setActive(Math.max(selected, 0));
           setOpen(!open);
         }}
-        className={`${hideLabel ? "" : "mt-1"} flex w-full items-center justify-between gap-2 rounded border border-edge bg-ink px-2 py-2 text-left text-data text-fg hover:border-glow focus-visible:outline-2 focus-visible:outline-glow`}
+        className={`mt-1 flex w-full items-center justify-between gap-2 rounded border border-edge bg-ink px-2 py-2 text-left text-data text-fg hover:border-glow focus-visible:outline-2 focus-visible:outline-glow`}
       >
         <span className="truncate">{options[selected]?.label ?? ""}</span>
         <span aria-hidden="true" className="text-fg-3">▾</span>

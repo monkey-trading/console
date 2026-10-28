@@ -6,6 +6,10 @@ import { useConsole } from "./ConsoleProvider";
 
 export function AttestationBanner() {
   const { attestation } = useConsole();
+  return <section aria-label="Node attestation"><Status attestation={attestation} /></section>;
+}
+
+function Status({ attestation }: { attestation: ReturnType<typeof useConsole>["attestation"] }) {
   if (attestation.kind === "checking") {
     return <div role="status" className="border-b border-line px-4 py-1 text-center text-label text-fg-3">Checking the node's attestation…</div>;
   }

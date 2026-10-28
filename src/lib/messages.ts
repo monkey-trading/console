@@ -33,8 +33,8 @@ export function describeReject(reject: Reject): string {
     case "invalid_nonce": return "The request was out of order. Try again.";
     case "payout_unavailable": return "The node cannot pay withdrawals yet.";
   }
-  // The engine has refusals this build does not name; the user still sees that one happened.
-  return "The node refused the request.";
+  // A refusal the engine adds later must get a case above; until then the user still sees that one happened.
+  return unnamed(reject);
 }
 
 /** A short line for the activity log, or null for an event the log does not show. */
@@ -60,6 +60,18 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
     case "withdrawal_rejected": return `Withdrawal refused: ${describeReject(event.reason)}`;
     case "order_accepted": return null;
   }
-  // Events this build does not show, such as deposit screening, stay out of the log.
+  // Events the engine adds later stay out of the log until they get a case above.
+  return unnamedEvent(event);
+}
+
+/** The text for a refusal the switch above does not name. `never` makes a new member of `Reject` a type error there. */
+function unnamed(reject: never): string {
+  void reject;
+  return "The node refused the request.";
+}
+
+/** The log line for an event the switch above does not name; see `unnamed`. */
+function unnamedEvent(event: never): null {
+  void event;
   return null;
 }

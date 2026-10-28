@@ -16,7 +16,7 @@ export function AccountSummary() {
     ["Equity", account ? usd(account.equity) : "—"],
     ["Margin used", account ? usd(account.margin) : "—"],
     ["Free margin", account ? usd(free < 0n ? 0n : free) : "—"],
-    ["Awaiting finality", account ? usd(account.unfinalised) : "—"],
+    ["Locked until final", account ? usd(account.unfinalised) : "—"],
   ];
   return (
     <section aria-label="Account summary" className="rounded-xl border border-line-2 bg-ink-1">

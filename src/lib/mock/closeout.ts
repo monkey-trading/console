@@ -31,6 +31,7 @@ export function closeOutUnderwater(state: MockState): EngineEvent[] {
   for (const [address, account] of state.accounts) {
     // The close-out is announced with its first fill, so an account whose positions cannot trade says nothing until they can.
     let announced = false;
+    const triggering = { equity: equityOf(state, account), margin: marginOf(state, account) };
     while (underwater(state, account)) {
       const id = worstTradable(state, account);
       const held = id === null ? undefined : account.positions.get(id);
@@ -41,7 +42,7 @@ export function closeOutUnderwater(state: MockState): EngineEvent[] {
       if (!outcome.ok) break;
       if (!announced) {
         announced = true;
-        events.push({ type: "close_out", account: address, equity: fixedToWire(equityOf(state, account)), margin: fixedToWire(marginOf(state, account)) });
+        events.push({ type: "close_out", account: address, equity: fixedToWire(triggering.equity), margin: fixedToWire(triggering.margin) });
       }
       events.push(...fillEvents(outcome.fill, outcome.badDebt));
     }

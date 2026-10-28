@@ -41,7 +41,7 @@ export function OrderTicket() {
   if (!market) return null;
   const notional = parseFixed(size.replace(/,/g, "")) ?? 0n;
   const triggerPrice = parseFixed(price);
-  const preview = previewTicket({ market, side, notional, slippageBps: slippage, resting: kind !== "market", account: state.account, houseNav: state.house.nav });
+  const preview = previewTicket({ market, side, notional, slippageBps: slippage, resting: kind !== "market", triggerPrice, account: state.account, houseNav: state.house.nav });
   const problems = [...preview.problems];
   if (kind !== "market" && triggerPrice === null) problems.push("Enter a trigger price.");
   const gate = !state.wallet ? "Connect a wallet to trade." : state.eligibility === null ? "Attest your eligibility before trading." : !maySign(state.attestation) ? "The node's attestation is not verified." : null;
@@ -62,7 +62,7 @@ export function OrderTicket() {
         </div>
         {kind !== "market" && (
           <label className="mt-4 block text-caption text-fg-2">Trigger price
-            <input value={price} inputMode="decimal" onChange={(event) => setPrice(event.target.value)} className={INPUT} />
+            <input value={price} inputMode="decimal" maxLength={24} onChange={(event) => setPrice(event.target.value)} className={INPUT} />
           </label>
         )}
         <fieldset className="mt-4 grid grid-cols-2 gap-2">
@@ -77,7 +77,7 @@ export function OrderTicket() {
         </div>
         <div className="mt-4">
           <label htmlFor={`${id}-size`} className="block text-caption text-fg-2">Position size (USD)</label>
-          <input id={`${id}-size`} value={size} inputMode="decimal" onChange={(event) => setSize(event.target.value)} className={INPUT} />
+          <input id={`${id}-size`} value={size} inputMode="decimal" maxLength={24} onChange={(event) => setSize(event.target.value)} className={INPUT} />
           <p className="mt-1 text-label text-fg-3">≈ {formatFixedPlaces(preview.qty, 6)} {market.symbol.split("-")[0]} · ${formatFixedPlaces(notional, 2)}</p>
         </div>
         <details className="mt-4 rounded border border-line-2">

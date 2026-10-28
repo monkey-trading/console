@@ -11,10 +11,6 @@ import type { Region } from "./state";
 export class MockControls {
   constructor(private readonly client: MockEngineClient) {}
 
-  get region(): Region {
-    return this.client.state.region;
-  }
-
   setRegion(region: Region): void {
     this.client.state.region = region;
   }

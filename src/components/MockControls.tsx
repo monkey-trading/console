@@ -24,7 +24,7 @@ const BUTTON = "rounded border border-line-2 px-2 py-1.5 text-caption text-fg-2 
 
 export function MockControls() {
   const { node, store } = useSession();
-  const { markets, selected, attestation, wallet } = useConsole();
+  const { markets, selected, attestation, wallet, paused } = useConsole();
   const [open, setOpen] = useState(false);
   const [region, setRegion] = useState<Region>("allowed");
   const id = useId();
@@ -47,8 +47,8 @@ export function MockControls() {
         Mock controls
       </button>
       {open && (
-        <div id={id} className="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] space-y-4 rounded border border-line-2 bg-ink-2 p-4 text-caption shadow-platform">
-          <p className="text-label leading-relaxed text-fg-3">Simulated node only. These change the node in your browser to show how the screens behave.</p>
+        <div id={id} className="fixed inset-x-4 top-24 z-50 max-h-[calc(100dvh-7rem)] space-y-4 overflow-y-auto sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-80 rounded border border-line-2 bg-ink-2 p-4 text-caption shadow-platform">
+          <p className="text-label leading-relaxed text-fg-3">Simulated node only. These change the node in your browser to show how the screens behave.{paused && <span className="text-amber"> The simulation is paused, so price shocks and stress changes apply when you press Play.</span>}</p>
           <Select label="Where the node sees you" value={region} options={REGIONS} onChange={changeRegion} />
           <div>
             <Select label="Node attestation" value={controls.attestationMode} options={ATTESTATIONS} onChange={(mode) => { controls.setAttestationMode(mode); void store.checkNode(); }} />

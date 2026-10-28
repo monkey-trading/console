@@ -5,7 +5,7 @@
 import { useId, useState } from "react";
 
 import { deposit, parseAmount } from "@/lib/store/actions";
-import { MAX_DEPOSIT, MIN_DEPOSIT } from "@/lib/mock/funds";
+import { isWholeUsdc, MAX_DEPOSIT, MIN_DEPOSIT } from "@/lib/vault";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 
@@ -19,18 +19,18 @@ export function DepositForm() {
   const [amount, setAmount] = useState("1000");
   const id = useId();
   const value = parseAmount(amount);
-  const valid = value !== null && value >= MIN_DEPOSIT && value <= MAX_DEPOSIT;
+  const valid = value !== null && value >= MIN_DEPOSIT && value <= MAX_DEPOSIT && isWholeUsdc(value);
   return (
     <section aria-labelledby="deposit-title" className="rounded-xl border border-line-2 bg-ink-1 p-5">
       <h2 id="deposit-title" className="text-label tracking-caps text-fg-3 uppercase">2 · Deposit USDC</h2>
       <form onSubmit={(event) => { event.preventDefault(); if (valid && value) void deposit(store, value); }}>
         <label htmlFor={id} className="mt-4 block text-caption text-fg-2">Amount (USDC)</label>
-        <input id={id} value={amount} inputMode="decimal" onChange={(event) => setAmount(event.target.value)} aria-describedby={`${id}-hint`} className={INPUT} />
-        <p id={`${id}-hint`} className="mt-1 text-label leading-relaxed text-fg-3">10 to 1,000,000,000 USDC. The vault records your wallet as the payer and the node credits your account once the deposit is final.</p>
+        <input id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} aria-describedby={`${id}-hint`} className={INPUT} />
+        <p id={`${id}-hint`} className="mt-1 text-label leading-relaxed text-fg-3">10 to 1,000,000,000 USDC. The node counts a deposit as collateral at once and releases it for withdrawal when it is final.</p>
         <button type="submit" disabled={!wallet || eligibility === null || !valid || busy} className={SUBMIT}>Deposit</button>
         {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet first.</p>}
         {wallet && eligibility === null && <p className="mt-2 text-label text-fg-3">Sign the eligibility declaration first.</p>}
-        {wallet && amount.trim() !== "" && !valid && <p className="mt-2 text-label text-ember">Enter an amount from 10 to 1,000,000,000.</p>}
+        {wallet && amount.trim() !== "" && !valid && <p className="mt-2 text-label text-ember">Enter an amount from 10 to 1,000,000,000 USDC, to at most six decimal places.</p>}
       </form>
     </section>
   );

@@ -101,12 +101,15 @@ export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void>
     store.toast("error", "The node's attestation is not verified, so the console will not send a deposit for it.");
     return;
   }
+  store.patch({ busy: true });
   try {
     await wallet.deposit(amount);
     store.toast("info", `Deposit of $${formatFixedPlaces(amount, 2)} sent. It is credited when the vault's transaction is final.`);
     await store.refresh(true);
   } catch (error) {
     if (!store.noteAccess(error)) store.toast("error", errorText(error));
+  } finally {
+    store.patch({ busy: false });
   }
 }
 

@@ -54,12 +54,6 @@ export function growthOf(held: Fixed, delta: Fixed): { grows: boolean; fromQty: 
   return { grows, fromQty: absFixed(held), toQty: absFixed(next) };
 }
 
-/** The most leverage the first margin band allows, such as 50 for a two percent band. */
-export function maxLeverage(tiers: readonly Tier[]): number {
-  const first = tiers[0];
-  return first && first.bps > 0 ? Math.floor(10_000 / first.bps) : 1;
-}
-
 export interface Quote {
   /** The price the order fills at, in dollars. */
   price: Fixed;

@@ -2,52 +2,43 @@
 
 import { EngineError, type ActionResult } from "../engine/client";
 import type { EngineEvent, QueuedWithdrawal, WithdrawalPage, WithdrawalRequest } from "../engine/types";
-import { fixedFromInt, fixedToWire, maxFixed, minFixed, parseFixed, type Fixed } from "../fixed";
+import { fixedToWire, minFixed, parseFixed, type Fixed } from "../fixed";
 import { equityOf, marginOf } from "./accounts";
+import { MAX_DEPOSIT, MIN_DEPOSIT, USDC_UNIT, withdrawableNow } from "../vault";
 import { checkAccess, checkAuth } from "./orders";
 import { FINALITY_MS, type MockState } from "./state";
-
-/** The vault accepts deposits of 10 to 1e9 USDC, as the contract does. */
-export const MIN_DEPOSIT = fixedFromInt(10);
-export const MAX_DEPOSIT = fixedFromInt(1_000_000_000);
-
-/** One USDC base unit (six decimals) in the nine-decimal representation. */
-const USDC_UNIT: Fixed = 1_000n;
 
 /** Rounds toward zero to whole USDC base units, as the engine does; the dust stays in account cash. */
 const wholeUsdc = (value: Fixed): Fixed => (value / USDC_UNIT) * USDC_UNIT;
 
 /**
- * A deposit the wallet sent to the vault: unfinalised until the node sees it final, then credited.
+ * A deposit the wallet sent to the vault. As the node does, it counts as collateral at once, with
+ * a withdrawal lock until it is final.
  * Error cases:
- * - the caller's region is refused (403), the account has not attested eligibility (403), or the amount is outside the vault's bounds (400)
+ * - the account has not attested eligibility (403), or the amount is outside the vault's bounds or finer than a USDC base unit (400)
+ * The caller's region is not checked: the vault screens the paying address, not the connection.
  */
 export function chainDeposit(state: MockState, address: string, amount: Fixed): void {
-  checkAccess(state);
   const account = state.account(address);
   if (account.eligibility === null) throw new EngineError(403, "eligibility attestation required", { type: "access", reason: "eligibility_required" });
   if (amount < MIN_DEPOSIT || amount > MAX_DEPOSIT) throw new EngineError(400, "deposits are 10 to 1,000,000,000 USDC");
+  if (amount !== wholeUsdc(amount)) throw new EngineError(400, "USDC has six decimal places");
   account.pending.push({ amount, readyAt: state.now + FINALITY_MS });
+  account.balance += amount;
+  state.emit({ type: "deposit" }, [{ type: "deposited", account: address, amount: fixedToWire(amount) }]);
 }
 
-/** Credits every deposit whose finality time has passed. */
+/** Releases the withdrawal lock on every deposit whose finality time has passed; the balance already holds it. */
 export function creditFinal(state: MockState): EngineEvent[] {
-  const events: EngineEvent[] = [];
-  for (const [address, account] of state.accounts) {
-    const ready = account.pending.filter((deposit) => deposit.readyAt <= state.now);
-    account.pending = account.pending.filter((deposit) => deposit.readyAt > state.now);
-    for (const deposit of ready) {
-      account.balance += deposit.amount;
-      events.push({ type: "deposited", account: address, amount: fixedToWire(deposit.amount) });
-    }
-  }
-  return events;
+  for (const account of state.accounts.values()) account.pending = account.pending.filter((deposit) => deposit.readyAt > state.now);
+  return [];
 }
 
-/** What an account may withdraw now: equity above margin, never more than its cash. */
+/** What an account may withdraw now; see `withdrawableNow`. */
 export function withdrawable(state: MockState, address: string): Fixed {
   const account = state.account(address);
-  return maxFixed(0n, minFixed(account.balance, equityOf(state, account) - marginOf(state, account)));
+  const locked = account.pending.reduce((sum, deposit) => sum + deposit.amount, 0n);
+  return withdrawableNow(account.balance, equityOf(state, account), marginOf(state, account), locked);
 }
 
 /**

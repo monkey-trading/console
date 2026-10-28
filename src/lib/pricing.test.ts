@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
 import type { Tier } from "./engine/types";
-import { adverseBps, exceedsSlippage, growthOf, maxLeverage, quoteFor, slicedBps, tierCost, tieredMargin } from "./pricing";
+import { adverseBps, exceedsSlippage, growthOf, quoteFor, slicedBps, tierCost, tieredMargin } from "./pricing";
 
 const SPREAD: Tier[] = [
   { up_to: "250000", bps: 0 },
@@ -33,9 +33,6 @@ describe("tieredMargin", () => {
     expect(tieredMargin(MARGIN, fixedFromInt(-200_000))).toBe(fixedFromInt(7_000));
   });
 
-  it("derives the leverage cap from the first band", () => {
-    expect(maxLeverage(MARGIN)).toBe(50);
-  });
 });
 
 describe("quoteFor", () => {

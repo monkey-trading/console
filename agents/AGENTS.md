@@ -22,7 +22,7 @@ matches the current action.
   Charts in the browser), `OrderTicket` (order type, side, best bid and offer, size, Advanced, and
   `MarketInfo`) and `BottomPanel` (`PositionsView`, `OrdersView`, `HistoryList`, activity); `FundingDrawer` holds
   `EligibilityCard`, `DepositForm`, `WithdrawForm`, `WithdrawalQueue` and `AccountSummary`;
-  `Select` is the console's accessible select; `AccessGate` shows the geo-block; `WalletButton` and
+  `Select` is the console's accessible select; `keep-focus.ts` keeps focus on the tab panel when an action removes a button; `AccessGate` shows the geo-block; `WalletButton` and
   `MockControls` drive the mock.
 - **public/** — the supplied logo bitmap, served from the app's own origin; `Logo.tsx` frames it.
 - **src/lib/** — pure TypeScript with no React or DOM. Logic modules have adjacent `*.test.ts`:
