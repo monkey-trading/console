@@ -50,6 +50,8 @@ export interface AccountState {
   positions: Map<MarketId, Holding>;
   orders: Map<OrderId, RestingOrder>;
   nextNonce: number;
+  /** The next withdrawal approval nonce: one counter per account, never reused. */
+  approvalNonce: number;
   eligibility: EligibilityClass | null;
 }
 
@@ -117,7 +119,7 @@ export class MockState {
     const key = address.toLowerCase();
     let state = this.accounts.get(key);
     if (!state) {
-      state = { balance: 0n, pending: [], positions: new Map(), orders: new Map(), nextNonce: 0, eligibility: null };
+      state = { balance: 0n, pending: [], positions: new Map(), orders: new Map(), nextNonce: 0, approvalNonce: 0, eligibility: null };
       this.accounts.set(key, state);
     }
     return state;

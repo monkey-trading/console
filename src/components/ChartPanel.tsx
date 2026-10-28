@@ -7,7 +7,7 @@ import { fixedToNumber, moveBps } from "@/lib/fixed";
 import { formatMovePercent } from "@/lib/format";
 import { liquidationPrice } from "@/lib/liquidation";
 import type { MarketModel } from "@/lib/models";
-import { formatPrice, splitDecimals } from "@/lib/price-format";
+import { formatMark, splitDecimals } from "@/lib/price-format";
 import type { ConsoleState } from "@/lib/store/state";
 
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -34,9 +34,9 @@ export function ChartPanel() {
   const market = state.markets.find((m) => m.id === state.selected);
   if (!market) return null;
   const bars = state.bars[market.id]?.[state.timeframe] ?? [];
-  const mark = market.mark === null ? null : fixedToNumber(market.mark);
   const change = market.mark !== null && market.reference !== null ? moveBps(market.reference, market.mark) : 0;
-  const [whole, decimals] = splitDecimals(mark === null ? "—" : formatPrice(mark, market.places));
+  const shown = market.mark === null ? "—" : formatMark(market.mark, market.places);
+  const [whole, decimals] = splitDecimals(shown);
   return (
     <div className="flex min-h-[26rem] min-w-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
@@ -45,7 +45,7 @@ export function ChartPanel() {
           <p className="mt-2 text-2xl tracking-tight">
             <span aria-hidden="true">{whole}<span className="text-fg-3">{decimals}</span></span>{" "}
             <span aria-hidden="true" className={`text-caption ${change < 0 ? "text-ember" : "text-glow"}`}>{formatMovePercent(change)}</span>
-            <span className="sr-only">{market.symbol} index price {mark === null ? "unavailable" : formatPrice(mark, market.places)}</span>
+            <span className="sr-only">{market.symbol} index price {shown === "—" ? "unavailable" : shown}</span>
           </p>
         </div>
         <div role="group" aria-label="Timeframe" className="flex gap-1">

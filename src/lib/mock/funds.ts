@@ -28,10 +28,17 @@ export function chainDeposit(state: MockState, address: string, amount: Fixed): 
   state.emit({ type: "deposit" }, [{ type: "deposited", account: address, amount: fixedToWire(amount) }]);
 }
 
-/** Releases the withdrawal lock on every deposit whose finality time has passed; the balance already holds it. */
+/**
+ * Releases the withdrawal lock on every deposit whose finality time has passed. The balance already
+ * holds it; the finalized USDC is now in the vault and can pay the queue.
+ */
 export function creditFinal(state: MockState): EngineEvent[] {
-  for (const account of state.accounts.values()) account.pending = account.pending.filter((deposit) => deposit.readyAt > state.now);
-  return [];
+  let released = 0n;
+  for (const account of state.accounts.values()) {
+    for (const deposit of account.pending) if (deposit.readyAt <= state.now) released += deposit.amount;
+    account.pending = account.pending.filter((deposit) => deposit.readyAt > state.now);
+  }
+  return released > 0n ? payQueue(state, released) : [];
 }
 
 /** What an account may withdraw now; see `withdrawableNow`. */
@@ -65,7 +72,7 @@ export function withdraw(state: MockState, req: WithdrawalRequest): ActionResult
     const approved = state.queue.some((entry) => entry.remaining > 0n) ? 0n : wholeUsdc(minFixed(amount, state.vaultLiquidity));
     if (approved > 0n) {
       state.vaultLiquidity -= approved;
-      events.push({ type: "withdrawal_approved", account: req.account, amount: fixedToWire(approved), nonce: state.seq + 1 });
+      events.push({ type: "withdrawal_approved", account: req.account, amount: fixedToWire(approved), nonce: account.approvalNonce++ });
     }
     if (approved < amount) {
       state.queue.push({ account: req.account.toLowerCase(), amount, remaining: amount - approved, requestedSeq: state.seq + 1 });
@@ -85,7 +92,7 @@ export function payQueue(state: MockState, added: Fixed): EngineEvent[] {
     if (pay <= 0n) break; // first in, first out: a later request never jumps the head
     state.vaultLiquidity -= pay;
     entry.remaining -= pay;
-    events.push({ type: "withdrawal_approved", account: entry.account, amount: fixedToWire(pay), nonce: state.seq + 1 + events.length });
+    events.push({ type: "withdrawal_approved", account: entry.account, amount: fixedToWire(pay), nonce: state.account(entry.account).approvalNonce++ });
     events.push({ type: "withdrawal_queue_updated", account: entry.account, requested_seq: entry.requestedSeq, remaining: fixedToWire(entry.remaining) });
   }
   for (let i = state.queue.length - 1; i >= 0; i--) if ((state.queue[i]?.remaining ?? 0n) <= 0n) state.queue.splice(i, 1);

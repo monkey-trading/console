@@ -44,7 +44,7 @@ export interface TicketPreview {
   marginUseBps: number | null;
   /** The margin rate this size pays, in basis points of notional (the tiers' weighted rate). */
   marginRateBps: number;
-  /** Notional over required margin, to two places: every position gets the market's maximum leverage. */
+  /** The resulting position's notional over its margin, to two places: every position gets its market's margin rate. */
   impliedLeverage: number | null;
   /** The house's cap on net notional in this market. */
   houseCap: Fixed;
@@ -101,12 +101,12 @@ export function previewTicket(input: TicketInput): TicketPreview {
   if (qty <= 0n) problems.push("Enter a size.");
   else if (grows && notionalOf(qty, input.resting && input.triggerPrice ? input.triggerPrice : mark) < fixedFromWire(spec.min_order_notional)) problems.push(`Minimum order is ${spec.min_order_notional} USD.`);
   if (grows && !input.resting) {
-    if (marginAfter > afterCost && afterCost > 0n) problems.push("Not enough equity for the margin this needs.");
     if (equity <= 0n) problems.push("Fund your account to trade.");
+    else if (marginAfter > afterCost) problems.push("Not enough equity for the margin this needs.");
   }
   return {
     qty, quote, offer: offer.price, bid: bid.price, spreadBps: Number(((offer.price - bid.price) * 10_000n) / mark), worstPrice: quote.price + worst,
     marginAfter, marginAdded: after - before, marginUseBps: useBps, marginRateBps: positionRate,
-    impliedLeverage: after - before > 0n ? Number((notional * 100n) / (after - before)) / 100 : null, houseCap, problems,
+    impliedLeverage: after > 0n ? Number((resulting * 100n) / after) / 100 : null, houseCap, problems,
   };
 }

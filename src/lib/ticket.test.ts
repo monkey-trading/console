@@ -45,6 +45,12 @@ describe("previewTicket", () => {
     expect(previewTicket({ ...closed, resting: true }).problems).toEqual([]);
   });
 
+  it("lists a refusal when the spread alone exhausts a positive equity", async () => {
+    const market = await btc();
+    const tiny = previewTicket({ market, side: "buy", notional: fixedFromInt(50_000), slippageBps: 10, account: account(1), houseNav: fixedFromInt(20_000_000) });
+    expect(tiny.problems).toContain("Not enough equity for the margin this needs.");
+  });
+
   it("shows the best bid and offer for the size, and the spread widens as the size grows", async () => {
     const market = await btc();
     const houseNav = fixedFromInt(20_000_000);

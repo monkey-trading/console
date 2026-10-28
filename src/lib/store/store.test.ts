@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { fixedFromInt, parseFixed } from "../fixed";
 import { createMockNode, SIM_EPOCH_MS } from "../mock";
+import { resetVault } from "../mock/test-helpers";
 import { mockHistory } from "../mock/history";
 import { attestEligibility, cancelOrder, connectWallet, deposit, placeOrder, withdraw } from "./actions";
 import { ConsoleStore } from "./store";
@@ -29,6 +30,7 @@ async function funded() {
   await deposit(ctx.store, fixedFromInt(50_000));
   ctx.store.tick(START + 1_000);
   ctx.store.tick(START + 8_000);
+  resetVault(ctx.node);
   await ctx.store.refresh(true);
   return ctx;
 }

@@ -55,7 +55,7 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
     case "withdrawal_queued": return `Withdrawal queued: ${usd(event.amount)}`;
     case "withdrawal_queue_updated": return `Queue updated, ${usd(event.remaining)} remaining`;
     case "eligibility_attested": return `Eligibility attested (${event.class.replace("_", " ")})`;
-    case "order_cancelled": return `Order ${event.order_id} cancelled`;
+    case "order_cancelled": return event.reason === "client" ? `Order ${event.order_id} cancelled` : `Order ${event.order_id} could not fill and was cancelled`;
     case "order_rejected": return `Order refused: ${describeReject(event.reason)}`;
     case "withdrawal_rejected": return `Withdrawal refused: ${describeReject(event.reason)}`;
     case "order_accepted": return null;

@@ -110,9 +110,15 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
     const last = bars[bars.length - 1];
     if (!c || !last) return;
     c.series.applyOptions({ priceFormat: { type: "price", precision: places, minMove: 1 / 10 ** places } });
-    if (c.key !== seriesKey || bars.length < c.count || bars.length - c.count > 1 || bars[0]?.time !== c.first) {
+    const reload = c.key !== seriesKey || bars.length < c.count || bars.length - c.count > 1;
+    if (reload) {
       c.series.setData(bars.map(toData));
       c.chart.timeScale().setVisibleLogicalRange({ from: bars.length - VISIBLE_BARS, to: bars.length + 4 });
+    } else if (bars[0]?.time !== c.first) {
+      // The oldest retained bar rolled off: reload the data but keep the user's pan and zoom.
+      const view = c.chart.timeScale().getVisibleRange();
+      c.series.setData(bars.map(toData));
+      if (view) c.chart.timeScale().setVisibleRange(view);
     } else {
       c.series.update(toData(last));
     }

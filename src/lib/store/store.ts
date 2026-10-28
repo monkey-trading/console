@@ -175,6 +175,12 @@ export class ConsoleStore {
   }
 
   private onMessage(message: StreamMessage): void {
+    for (const event of message.events) {
+      // A resting order the node cancels later, on a tick, is something the user must be told.
+      if (event.type === "order_cancelled" && event.reason !== "client" && this.isMine(event)) {
+        this.toast("error", `Order ${event.order_id} could not be filled and was cancelled.`);
+      }
+    }
     const lines = message.events.flatMap((event) => {
       if (!this.isMine(event)) return [];
       const text = describeEvent(event, (id) => this.snapshot.markets.find((m) => m.id === id)?.symbol ?? `market ${id}`);

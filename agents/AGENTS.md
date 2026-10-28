@@ -19,8 +19,8 @@ matches the current action.
 - **src/components/** — the terminal. `ConsoleProvider` creates the session, connects the demo account
   and drives the clock; `Shell`, `TopBar`, `AttestationBanner`, `RiskStrip` and `Toasts` frame it;
   `TradeWorkspace` lays out `Watchlist`, `ChartPanel` (with `PriceChart`, which loads Lightweight
-  Charts in the browser), `OrderTicket` (order type, side, best bid and offer, size, Advanced, and
-  `MarketInfo`) and `BottomPanel` (`PositionsView`, `OrdersView`, `HistoryList`, activity); `FundingDrawer` holds
+  Charts in the browser), `OrderTicket` (which remounts `DealTicket` per market: order type, side, best bid and offer, size,
+  Advanced, and `MarketInfo`) and `BottomPanel` (`PositionsView`, `OrdersView`, `HistoryList`, activity); `FundingDrawer` holds
   `EligibilityCard`, `DepositForm`, `WithdrawForm`, `WithdrawalQueue` and `AccountSummary`;
   `Select` is the console's accessible select; `keep-focus.ts` keeps focus on the tab panel when an action removes a button; `AccessGate` shows the geo-block; `WalletButton` and
   `MockControls` drive the mock.

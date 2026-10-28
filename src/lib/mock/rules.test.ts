@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import type { EngineEvent } from "../engine/types";
 import { fixedFromInt, fixedToWire, parseFixed } from "../fixed";
 import { fillEvents, fillOrder } from "./execute";
-import { funded, ME, order, START, types } from "./test-helpers";
+import { createMockNode } from "./index";
+import { auth, funded, ME, order, START, types } from "./test-helpers";
 
 describe("close-out of several positions", () => {
   async function setup(btcLoss: number) {
@@ -109,6 +110,24 @@ describe("resting orders that cannot fill", () => {
     const result = await order(node, "5", "buy", { kind: { kind: "limit", price: "1000000" } });
     expect(types(result.events)).toEqual(["order_accepted", "order_cancelled"]);
     expect(result.events[1]).toMatchObject({ reason: "unfillable" });
+  });
+});
+
+describe("finalized deposits", () => {
+  it("add to the vault's liquidity, which pays the queue from its head", async () => {
+    const node = createMockNode(START);
+    await node.client.attestEligibility({ account: ME, class: "professional", auth: auth(node) });
+    node.controls.deposit(ME, fixedFromInt(100_000));
+    const seen: EngineEvent[] = [];
+    node.client.subscribe((m) => seen.push(...m.events));
+    node.client.tick(START + 7_000);
+    const approved = seen.filter((e) => e.type === "withdrawal_approved");
+    expect(approved[0]).toMatchObject({ account: "0x1111111111111111111111111111111111111111", amount: "40000" });
+    // An account's approval nonces count up and are never reused: its second approval gets the next one.
+    const second = node.controls.addLiquidity(fixedFromInt(100_000));
+    const forSecond = (events: EngineEvent[]) => events.flatMap((e) => (e.type === "withdrawal_approved" && e.account.startsWith("0x2222") ? [e.nonce] : []));
+    expect(forSecond(approved)).toEqual([0]);
+    expect(forSecond(second)).toEqual([1]);
   });
 });
 
