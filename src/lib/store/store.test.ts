@@ -144,4 +144,17 @@ describe("what the store refuses or hides", () => {
     await Promise.all([first, second]);
     expect(store.getSnapshot().account?.balance).toBe((parseFixed(stale.balance) ?? 0n) + fixedFromInt(5));
   });
+
+  it("tells the user when their account is closed out, and when a resting order is cancelled later", async () => {
+    const { node, store } = await funded();
+    const me = store.getSnapshot().wallet?.address ?? "";
+    node.client.state.emit({ type: "tick" }, [{ type: "order_cancelled", account: me, order_id: 7, reason: "unfillable" }]);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("could not be filled and was cancelled");
+    node.client.state.emit({ type: "tick" }, [{ type: "close_out", account: me, equity: "1", margin: "10" }]);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("closed out");
+    // Another account's close-out is not the user's news.
+    const before = store.getSnapshot().toasts.length;
+    node.client.state.emit({ type: "tick" }, [{ type: "close_out", account: "0x2222222222222222222222222222222222222222", equity: "1", margin: "10" }]);
+    expect(store.getSnapshot().toasts).toHaveLength(before);
+  });
 });

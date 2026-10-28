@@ -119,9 +119,15 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
       c.chart.timeScale().setVisibleLogicalRange({ from: bars.length - VISIBLE_BARS, to: bars.length + 4 });
     } else if (bars[0]?.time !== c.first) {
       // The oldest retained bar rolled off: reload the data but keep the user's pan and zoom.
-      const view = c.chart.timeScale().getVisibleRange();
+      const scale = c.chart.timeScale();
+      const logical = scale.getVisibleLogicalRange();
+      const view = scale.getVisibleRange();
       c.series.setData(bars.map(toData));
-      if (view) c.chart.timeScale().setVisibleRange(view);
+      if (logical && logical.to >= c.count - 1) {
+        // The user was at the live edge: keep following it at the same zoom.
+        const width = logical.to - logical.from;
+        scale.setVisibleLogicalRange({ from: bars.length + 4 - width, to: bars.length + 4 });
+      } else if (view) scale.setVisibleRange(view);
     } else {
       c.series.update(toData(last));
     }

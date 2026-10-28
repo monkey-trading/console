@@ -27,11 +27,11 @@ export function Toasts() {
     if (latest === 0) return;
     const timer = setTimeout(() => {
       // A message that expires under the keyboard's focus would drop it; move it somewhere deliberate first.
-      if (popover.current?.contains(document.activeElement)) document.getElementById("main")?.focus();
+      if (document.activeElement?.closest("[data-toast]")) document.getElementById(fundingOpen ? "funding-title" : "main")?.focus();
       store.clearToasts();
     }, TOAST_MS);
     return () => clearTimeout(timer);
-  }, [latest, store]);
+  }, [latest, store, fundingOpen]);
   return (
     <>
       <div role="log" aria-live="polite" aria-label="Notifications" className="sr-only">

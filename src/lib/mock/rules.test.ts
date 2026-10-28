@@ -88,10 +88,13 @@ describe("engine rules the mock follows", () => {
     expect(first).toMatchObject({ ok: true, badDebt: 0n });
     expect(account.balance).toBeLessThan(0n); // the debt stays while ETH is still open
     expect(state.houseCash).toBeGreaterThan(houseBefore); // the house holds the loss's counterpart, not a write-off
+    const houseAfterFirst = state.houseCash;
     const second = fillOrder(state, { address: ME, market: 2, side: "sell", qty: fixedFromInt(1), reduceOnly: true, orderId: 0, liquidation: true });
     if (!second.ok) throw new Error("the second close fills");
     expect(second.badDebt).toBeGreaterThan(0n);
     expect(account.balance).toBe(0n);
+    // The write-off comes out of the house's cash: it ends below what it held before the debt.
+    expect(state.houseCash).toBeLessThan(houseAfterFirst);
     expect(types(fillEvents(second.fill, second.badDebt))).toEqual(["fill", "bad_debt"]);
   });
 
@@ -118,6 +121,19 @@ describe("resting orders that cannot fill", () => {
     const result = await order(node, "5", "buy", { kind: { kind: "limit", price: "1000000" } });
     expect(types(result.events)).toEqual(["order_accepted", "order_cancelled"]);
     expect(result.events[1]).toMatchObject({ reason: "unfillable" });
+  });
+});
+
+describe("resting-order limits and cancels", () => {
+  it("refuses an eleventh resting order, and lets a blocked region cancel what it already has", async () => {
+    const node = await funded(100_000);
+    for (let i = 0; i < 10; i++) await order(node, "0.01", "buy", { kind: { kind: "limit", price: "50000" } });
+    const eleventh = await order(node, "0.01", "buy", { kind: { kind: "limit", price: "50000" } });
+    expect(eleventh.events[0]).toMatchObject({ type: "order_rejected", reason: { kind: "invalid_order", reason: "at most 10 resting orders" } });
+    node.controls.setRegion("united_states");
+    const id = Number(Object.keys((await node.client.account(ME)).orders)[0]);
+    const cancelled = await node.client.cancelOrder({ account: ME, order_id: id, auth: auth(node) });
+    expect(cancelled.events[0]).toMatchObject({ type: "order_cancelled", reason: "client" });
   });
 });
 

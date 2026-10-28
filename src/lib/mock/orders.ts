@@ -83,7 +83,7 @@ function orderEvents(state: MockState, req: OrderRequest, account: AccountState)
 
 /** Sequences the cancel of a resting order. */
 export function cancelOrder(state: MockState, req: CancelRequest): ActionResult {
-  checkAccess(state);
+  // The engine authenticates a cancel but does not screen the caller's region, so neither does the mock.
   const account = state.account(req.account);
   checkAuth(state, account, req.auth);
   const events: EngineEvent[] = [];

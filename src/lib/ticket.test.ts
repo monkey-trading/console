@@ -63,6 +63,14 @@ describe("previewTicket", () => {
     expect(previewTicket({ ...base, notional: fixedFromInt(1_000) }).worstPrice).not.toBeNull();
   });
 
+  it("says so with no price, no size, or a reduce-only market", async () => {
+    const market = await btc();
+    const base = { side: "buy" as const, slippageBps: 10, account: account(10_000), houseNav: fixedFromInt(20_000_000) };
+    expect(previewTicket({ ...base, market: { ...market, mark: null }, notional: fixedFromInt(1_000) }).problems).toEqual(["No price yet."]);
+    expect(previewTicket({ ...base, market, notional: 0n }).problems).toContain("Enter a size.");
+    expect(previewTicket({ ...base, market: { ...market, reduceOnly: true }, notional: fixedFromInt(1_000) }).problems).toContain("This market only accepts orders that reduce a position.");
+  });
+
   it("shows the best bid and offer for the size, and the spread widens as the size grows", async () => {
     const market = await btc();
     const houseNav = fixedFromInt(20_000_000);
