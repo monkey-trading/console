@@ -32,11 +32,11 @@ export function PositionsView() {
                 return (
                   <tr key={p.market} className="border-b border-line last:border-b-0">
                     <td className="px-4 py-4 text-fg">{market?.symbol ?? p.market}</td>
-                    <td className={`px-4 py-4 ${p.qty > 0n ? "text-glow" : "text-alarm"}`}>{p.qty > 0n ? "Long" : "Short"}</td>
+                    <td className={`px-4 py-4 ${p.qty > 0n ? "text-glow" : "text-ember"}`}>{p.qty > 0n ? "Long" : "Short"}</td>
                     <td className="px-4 py-4">{formatFixedPlaces(absFixed(p.qty), 6)}</td>
                     <td className="px-4 py-4">{formatPrice(fixedToNumber(p.entry), places)}</td>
                     <td className="px-4 py-4">{formatPrice(fixedToNumber(mark), places)}</td>
-                    <td className={`px-4 py-4 ${pnl < 0n ? "text-alarm" : "text-glow"}`}>${formatFixedPlaces(pnl, 2)}</td>
+                    <td className={`px-4 py-4 ${pnl < 0n ? "text-ember" : "text-glow"}`}>${formatFixedPlaces(pnl, 2)}</td>
                     <td className="px-4 py-4 text-right">
                       <button type="button" disabled={busy || !market?.open} className={BUTTON} aria-label={`Close ${market?.symbol ?? ""} position`}
                         onClick={() => void placeOrder(store, { market: p.market, side: p.qty > 0n ? "sell" : "buy", notional: absFixed(mulFixed(p.qty, mark)), slippageBps: 25, kind: { type: "market" }, reduceOnly: true, qty: absFixed(p.qty) })}>
@@ -70,7 +70,7 @@ export function OrdersView() {
                 <tr key={o.order_id} className="border-b border-line last:border-b-0">
                   <td className="px-4 py-4 text-fg-3">{o.order_id}</td>
                   <td className="px-4 py-4 text-fg">{symbolOf(o.market)?.symbol ?? o.market}</td>
-                  <td className={`px-4 py-4 ${o.side === "buy" ? "text-glow" : "text-alarm"}`}>{o.side === "buy" ? "Buy" : "Sell"}</td>
+                  <td className={`px-4 py-4 ${o.side === "buy" ? "text-glow" : "text-ember"}`}>{o.side === "buy" ? "Buy" : "Sell"}</td>
                   <td className="px-4 py-4 capitalize">{o.kind.type}</td>
                   <td className="px-4 py-4">{o.qty}</td>
                   <td className="px-4 py-4">{o.kind.type === "market" ? "—" : o.kind.price}</td>

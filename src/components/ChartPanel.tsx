@@ -28,13 +28,13 @@ function markersFor(state: ConsoleState, market: MarketModel, levels: { ask: num
   if (state.account && position) {
     out.push({ price: fixedToNumber(position.entry), tone: "glow", style: "dotted", title: `${position.qty > 0n ? "Long" : "Short"} entry` });
     const liq = liquidationPrice(state.account, market, state.markets);
-    if (liq !== null) out.push({ price: fixedToNumber(liq), tone: "alarm", style: "dashed", title: "Close-out (est.)" });
+    if (liq !== null) out.push({ price: fixedToNumber(liq), tone: "ember", style: "dashed", title: "Close-out (est.)" });
   }
   for (const order of state.account?.orders ?? []) {
     if (order.market === market.id && order.kind.type !== "market") out.push({ price: Number(order.kind.price), tone: "amber", style: "dotted", title: `${order.kind.type} ${order.side}` });
   }
   if (state.mode === "execution" && levels) {
-    out.push({ price: levels.ask, tone: "glow", style: "solid", title: "Buy" }, { price: levels.bid, tone: "fg-2", style: "solid", title: "Sell" });
+    out.push({ price: levels.ask, tone: "glow", style: "solid", title: "Buy" }, { price: levels.bid, tone: "ember", style: "solid", title: "Sell" });
   }
   return out;
 }
@@ -60,7 +60,7 @@ export function ChartPanel() {
           <h2 className="text-sm font-medium">{market.symbol.replace("-", " / ")} <span className="ml-2 text-caption font-normal text-fg-3">{market.name}</span></h2>
           <p className="mt-2 text-2xl tracking-tight">
             <span aria-hidden="true">{whole}<span className="text-fg-3">{decimals}</span></span>{" "}
-            <span aria-hidden="true" className={`text-caption ${change < 0 ? "text-alarm" : "text-glow"}`}>{formatMovePercent(change)}</span>
+            <span aria-hidden="true" className={`text-caption ${change < 0 ? "text-ember" : "text-glow"}`}>{formatMovePercent(change)}</span>
             <span className="sr-only">{market.symbol} index price {mark === null ? "unavailable" : formatPrice(mark, market.places)}</span>
           </p>
         </div>
@@ -76,7 +76,7 @@ export function ChartPanel() {
           <MarketStatus market={market} />
         </div>
       </div>
-      <PriceChart symbol={market.symbol} places={market.places} bars={bars} seriesKey={`${market.id}-${state.timeframe}`} markers={markers} />
+      <PriceChart symbol={market.symbol} places={market.places} bars={bars} seriesKey={`${market.id}-${state.timeframe}`} markers={markers} downTone={state.downCandles} />
       {state.mode === "risk" && <p className="border-t border-line px-4 py-2 text-label text-fg-3">Stress level {market.stress} ({STRESS_NAMES[market.stress]}): spreads widen by up to {STRESS_SPREAD_BPS[market.stress]} bps. The dashed red line is where your position would be closed out, estimated from today's margin.</p>}
       <div role="group" aria-label="Chart mode" className="grid grid-cols-3 divide-x divide-line border-t border-line px-2 py-1 text-center">
         {MODES.map(({ mode, label, detail }) => (

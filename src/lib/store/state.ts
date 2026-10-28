@@ -7,6 +7,9 @@ import { fixedToNumber } from "../fixed";
 import { decodeHouse, decodeMarket, type AccountModel, type Eligibility, type HouseModel, type MarketModel } from "../models";
 
 export type ChartMode = "reference" | "execution" | "risk";
+
+/** TEMPORARY design aid: the outline of down candles, grey as the website preview draws it or the red token. Remove the losing option once the owner chooses. */
+export type DownCandleTone = "fg-2" | "ember";
 export type BlockReason = "united_states" | "sanctioned_jurisdiction";
 
 export interface ToastMessage {
@@ -33,6 +36,8 @@ export interface ConsoleState {
   /** Bars per market and timeframe, built from the node's marks. */
   bars: Record<MarketId, Record<TimeframeId, Bar[]>>;
   timeframe: TimeframeId;
+  /** TEMPORARY design aid; see `DownCandleTone`. */
+  downCandles: DownCandleTone;
   selected: MarketId;
   mode: ChartMode;
   house: HouseModel;
@@ -74,6 +79,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     markets: models,
     bars: seedAllBars(models, startMs, history),
     timeframe: DEFAULT_TIMEFRAME,
+    downCandles: "fg-2",
     selected: models[0]?.id ?? 1,
     mode: "reference",
     house: decodeHouse(house),

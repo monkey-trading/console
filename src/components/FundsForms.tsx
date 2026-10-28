@@ -32,7 +32,7 @@ export function DepositForm() {
         <button type="submit" disabled={!wallet || eligibility === null || !valid || busy} className={SUBMIT}>Deposit</button>
         {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet first.</p>}
         {wallet && eligibility === null && <p className="mt-2 text-label text-fg-3">Sign the eligibility declaration first.</p>}
-        {wallet && amount.trim() !== "" && !valid && <p className="mt-2 text-label text-alarm">Enter an amount from 10 to 1,000,000,000.</p>}
+        {wallet && amount.trim() !== "" && !valid && <p className="mt-2 text-label text-ember">Enter an amount from 10 to 1,000,000,000.</p>}
       </form>
     </section>
   );
@@ -62,7 +62,7 @@ export function WithdrawForm() {
         <input id={id} value={amount} inputMode="decimal" onChange={(event) => setAmount(event.target.value)} className={INPUT} />
         <p className="mt-1 text-label leading-relaxed text-fg-3">The amount leaves your balance when you ask. The vault pays requests in order, in whole USDC, as it has liquidity; the rest waits in the queue below.</p>
         <button type="submit" disabled={!wallet || !valid || busy || !maySign(attestation)} className={SUBMIT}>Request withdrawal</button>
-        {value !== null && value > max && <p className="mt-2 text-label text-alarm">You can withdraw up to ${formatFixedPlaces(max, 2)} while your positions use margin.</p>}
+        {value !== null && value > max && <p className="mt-2 text-label text-ember">You can withdraw up to ${formatFixedPlaces(max, 2)} while your positions use margin.</p>}
       </form>
     </section>
   );

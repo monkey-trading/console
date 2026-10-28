@@ -14,7 +14,7 @@ const BUTTON = "rounded border border-line-2 px-2 py-1.5 text-caption text-fg-2 
 
 export function MockControls() {
   const { node, store } = useSession();
-  const { markets, selected, attestation } = useConsole();
+  const { markets, selected, attestation, downCandles } = useConsole();
   const [open, setOpen] = useState(false);
   const [region, setRegion] = useState<Region>("allowed");
   const id = useId();
@@ -55,6 +55,13 @@ export function MockControls() {
               <option value="unverifiable">Hardware quote (cannot be verified)</option>
             </select>
             <span className="mt-1 block text-label text-fg-3">Now: {attestation.kind}</span>
+          </label>
+          <label className="block text-fg-2">
+            Down candles <span className="text-label text-amber">(temporary design aid)</span>
+            <select value={downCandles} onChange={(event) => store.setDownCandles(event.target.value === "ember" ? "ember" : "fg-2")} className="mt-1 w-full rounded border border-line-2 bg-ink px-2 py-1.5 text-fg">
+              <option value="fg-2">Hollow, grey outline</option>
+              <option value="ember">Hollow, red outline</option>
+            </select>
           </label>
           {market && (
             <fieldset className="space-y-2">

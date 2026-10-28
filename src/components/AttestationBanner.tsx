@@ -17,7 +17,7 @@ export function AttestationBanner() {
     );
   }
   return (
-    <div role="alert" className="border-b border-alarm/50 bg-alarm/10 px-4 py-1 text-center text-label text-alarm">
+    <div role="alert" className="border-b border-ember/50 bg-ember/10 px-4 py-1 text-center text-label text-ember">
       <strong className="font-medium">Attestation not verified: the console will not sign.</strong> {attestation.reason}
     </div>
   );

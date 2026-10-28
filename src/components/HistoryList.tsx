@@ -31,7 +31,7 @@ export function HistoryList() {
             <li key={`${entry.offset}-${entry.event.type}-${text}`} className="grid grid-cols-[7.5rem_6.5rem_1fr] gap-3 border-b border-line px-4 py-3 text-caption last:border-b-0">
               <time className="text-fg-3">{formatStamp(entry.ts)}</time>
               <span className="text-fg-2">{KIND[entry.event.type] ?? "Event"}</span>
-              <span className={entry.event.type === "close_out" || entry.event.type.endsWith("rejected") ? "text-alarm" : "text-fg"}>{text}</span>
+              <span className={entry.event.type === "close_out" || entry.event.type.endsWith("rejected") ? "text-ember" : "text-fg"}>{text}</span>
             </li>
           ))}
         </ol>

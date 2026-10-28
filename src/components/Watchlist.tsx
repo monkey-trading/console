@@ -29,14 +29,14 @@ export function Watchlist() {
               >
                 <span aria-hidden="true" className="flex flex-wrap justify-between gap-1 text-caption">
                   <span className="text-fg">{m.symbol.replace("-", " / ")}</span>
-                  <span className={change < 0 ? "text-alarm" : "text-glow"}>{formatMovePercent(change)}</span>
+                  <span className={change < 0 ? "text-ember" : "text-glow"}>{formatMovePercent(change)}</span>
                 </span>
                 <span aria-hidden="true" className="mt-2 flex flex-wrap justify-between gap-1 text-caption text-fg-3">
                   <span>{m.name}</span>
                   <span className="text-fg-2">{m.mark === null ? "—" : formatPrice(fixedToNumber(m.mark), m.places)}</span>
                 </span>
                 <span aria-hidden="true" className="mt-2 flex items-center gap-1.5 text-label text-fg-3">
-                  <span className={`size-1.5 rounded-full ${m.open ? "bg-glow" : "bg-alarm"}`} />
+                  <span className={`size-1.5 rounded-full ${m.open ? "bg-glow" : "bg-ember"}`} />
                   {m.open ? "Open" : "Closed"}{m.stress > 0 ? ` · stress ${m.stress}` : ""}
                 </span>
               </button>

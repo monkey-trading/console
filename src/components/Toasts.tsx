@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 
-const TONE = { ok: "border-glow/50 text-glow", error: "border-alarm/60 text-alarm", info: "border-line-2 text-fg" } as const;
+const TONE = { ok: "border-glow/50 text-glow", error: "border-ember/60 text-ember", info: "border-line-2 text-fg" } as const;
 
 /** How long a message stays, in milliseconds. */
 const TOAST_MS = 7_000;

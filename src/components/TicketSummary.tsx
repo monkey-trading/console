@@ -11,7 +11,7 @@ const usd = (value: Fixed) => `$${formatFixedPlaces(value, 2)}`;
 /** The bar fills to `bps` of its width, from 0 to 10,000. */
 function UseBar({ bps }: { bps: number }) {
   const width = Math.min(Math.max(bps, 0), 10_000) / 100;
-  const tone = bps > 9_000 ? "bg-alarm" : bps > 6_000 ? "bg-amber" : "bg-glow";
+  const tone = bps > 9_000 ? "bg-ember" : bps > 6_000 ? "bg-amber" : "bg-glow";
   return (
     <div aria-hidden="true" className="mt-2 h-1.5 rounded-sm bg-line-2">
       <div className={`h-full rounded-sm ${tone}`} style={{ width: `${width}%` }} />
@@ -50,15 +50,15 @@ export function TicketSummary({ market, preview, notional }: { market: MarketMod
       </dl>
       <div className="mt-4 flex items-center justify-between text-label">
         <span className="text-fg-3">Margin use after order</span>
-        <span className={useBps !== null && useBps > 9_000 ? "text-alarm" : "text-glow"}>{useBps === null ? "—" : `${formatMovePercent(useBps).replace("+", "")}`}</span>
+        <span className={useBps !== null && useBps > 9_000 ? "text-ember" : "text-glow"}>{useBps === null ? "—" : `${formatMovePercent(useBps).replace("+", "")}`}</span>
       </div>
       <UseBar bps={useBps ?? 0} />
       <div className="mt-4 flex items-center justify-between text-label">
         <span className="text-fg-3">House capacity</span>
-        <span className={over ? "text-alarm" : "text-glow"}>{over ? "Over the cap" : "Risk checked"}</span>
+        <span className={over ? "text-ember" : "text-glow"}>{over ? "Over the cap" : "Risk checked"}</span>
       </div>
       <div aria-hidden="true" className="mt-2 flex h-1.5 gap-1">
-        {Array.from({ length: 8 }, (_, segment) => <span key={segment} className={`flex-1 rounded-sm ${segment < filled ? (over ? "bg-alarm/70" : "bg-glow/70") : "bg-line-2"}`} />)}
+        {Array.from({ length: 8 }, (_, segment) => <span key={segment} className={`flex-1 rounded-sm ${segment < filled ? (over ? "bg-ember/70" : "bg-glow/70") : "bg-line-2"}`} />)}
       </div>
       <p className="mt-2 text-label leading-relaxed text-fg-3">The house takes at most {usd(preview.houseCap)} net in {market.symbol}. This order is {usd(notional)}.</p>
     </>

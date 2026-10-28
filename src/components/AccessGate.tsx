@@ -15,8 +15,8 @@ export function AccessGate({ children }: { children: ReactNode }) {
   const { blocked } = useConsole();
   if (blocked === null) return children;
   return (
-    <section aria-labelledby="blocked-title" className="mx-auto max-w-xl rounded-xl border border-alarm/50 bg-ink-1 p-8 text-center">
-      <p className="text-label tracking-caps text-alarm uppercase">Not available</p>
+    <section aria-labelledby="blocked-title" className="mx-auto max-w-xl rounded-xl border border-ember/50 bg-ink-1 p-8 text-center">
+      <p className="text-label tracking-caps text-ember uppercase">Not available</p>
       <h1 id="blocked-title" className="mt-3 text-lg tracking-tight">This service is not offered where you are</h1>
       <p className="mt-4 text-data leading-relaxed text-fg-2">{REASON[blocked]}</p>
       <p className="mt-4 text-caption leading-relaxed text-fg-3">

@@ -8,7 +8,7 @@ import type { Wallet, WalletConnector } from "../engine/wallet";
 import { fixedToNumber } from "../fixed";
 import { describeEvent } from "../messages";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
-import { initialState, seedAllBars, type BlockReason, type ChartMode, type ConsoleState, type HistorySource, type ToastMessage } from "./state";
+import { initialState, seedAllBars, type BlockReason, type ChartMode, type ConsoleState, type DownCandleTone, type HistorySource, type ToastMessage } from "./state";
 
 /** The address the access probe reads, since the node screens the caller, not the account. */
 const PROBE_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -73,6 +73,11 @@ export class ConsoleStore {
 
   select(id: MarketId): void {
     this.patch({ selected: id });
+  }
+
+  /** TEMPORARY design aid; see `DownCandleTone`. */
+  setDownCandles(downCandles: DownCandleTone): void {
+    this.patch({ downCandles });
   }
 
   setTimeframe(timeframe: TimeframeId): void {

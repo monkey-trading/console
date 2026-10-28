@@ -55,7 +55,7 @@ export function OrderTicket() {
       <fieldset className="mt-5 grid grid-cols-2 gap-2">
         <legend className="sr-only">Position direction</legend>
         {(["buy", "sell"] as const).map((direction) => (
-          <button key={direction} type="button" aria-pressed={side === direction} onClick={() => setSide(direction)} className={`rounded border py-2.5 text-caption focus-visible:outline-2 focus-visible:outline-glow ${side === direction ? "border-glow bg-glow/10 text-glow" : "border-line-2 text-fg-2"}`}>
+          <button key={direction} type="button" aria-pressed={side === direction} onClick={() => setSide(direction)} className={`rounded border py-2.5 text-caption focus-visible:outline-2 focus-visible:outline-glow ${side !== direction ? "border-line-2 text-fg-2" : direction === "buy" ? "border-glow bg-glow/10 text-glow" : "border-ember bg-ember/10 text-ember"}`}>
             {direction === "buy" ? "Long" : "Short"}
           </button>
         ))}
@@ -97,7 +97,7 @@ export function OrderTicket() {
       <button type="submit" disabled={!canPlace} className="mt-5 w-full rounded border border-glow bg-glow/10 py-3 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow disabled:cursor-not-allowed disabled:border-line-2 disabled:bg-transparent disabled:text-fg-3">
         {state.busy ? "Signing…" : `${side === "buy" ? "Buy" : "Sell"} ${market.symbol}`}
       </button>
-      <div aria-live="polite" className="mt-3 space-y-1 text-label leading-relaxed text-alarm">
+      <div aria-live="polite" className="mt-3 space-y-1 text-label leading-relaxed text-ember">
         {gate && <p className="text-fg-2">{gate} {state.wallet && state.eligibility === null && <FundingLink />}</p>}
         {!gate && problems.map((p) => <p key={p}>{p}{p === "Fund your account to trade." && <> <FundingLink /></>}</p>)}
       </div>

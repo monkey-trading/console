@@ -14,8 +14,11 @@
   --color-fg-3: #7f9189;
   --color-glow: #30efaa;
   --color-glow-hover: #78ffd0;
+  /* The red that pairs with glow: glow's chroma (0.175) at hue 20 in OKLCH, with lightness lowered to 0.715, the
+     most the sRGB gamut holds at that chroma. 7.1:1 on ink-1. Hover is lighter, as glow-hover is, clipped to the gamut. */
+  --color-ember: #fd6e74;
+  --color-ember-hover: #ff9193;
   --color-amber: #ffbe5c;
-  --color-alarm: #ff6b62;
 
   --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --font-serif: "Iowan Old Style", Georgia, serif;

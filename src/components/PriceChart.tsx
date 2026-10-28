@@ -13,7 +13,7 @@ import type { Bar } from "@/lib/bars";
 import { formatPrice } from "@/lib/price-format";
 
 /** The theme token that colours a marker. */
-export type MarkerTone = "glow" | "alarm" | "amber" | "fg-2";
+export type MarkerTone = "glow" | "ember" | "amber";
 
 /** A horizontal line across the chart, such as a position's entry. */
 export interface PriceMarker {
@@ -30,6 +30,8 @@ interface Props {
   /** Changes when the market or timeframe does, so the chart reloads its data instead of appending. */
   seriesKey: string;
   markers: readonly PriceMarker[];
+  /** TEMPORARY design aid: the outline of down candles, which are hollow either way. */
+  downTone: "fg-2" | "ember";
 }
 
 interface Live {
@@ -50,7 +52,7 @@ function token(name: string): string {
 
 const toData = (bar: Bar) => ({ ...bar, time: bar.time as import("lightweight-charts").UTCTimestamp });
 
-export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) {
+export function PriceChart({ symbol, places, bars, seriesKey, markers, downTone }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const [ready, setReady] = useState(0);
@@ -78,7 +80,7 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
       });
       const series = chart.addSeries(CandlestickSeries, {
         upColor: token("glow"), borderUpColor: token("glow"), wickUpColor: token("glow"),
-        downColor: token("alarm"), borderDownColor: token("alarm"), wickDownColor: token("alarm"),
+        downColor: "transparent",
       });
       chart.subscribeCrosshairMove((param) => {
         const point = param.seriesData.get(series);
@@ -94,6 +96,11 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
       live.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    // Down candles are hollow: no fill, and the outline and wick take the chosen tone.
+    live.current?.series.applyOptions({ downColor: "transparent", borderDownColor: token(downTone), wickDownColor: token(downTone) });
+  }, [ready, downTone]);
 
   useEffect(() => {
     const c = live.current;
@@ -127,7 +134,7 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
           <span>O <span className="text-fg">{formatPrice(shown.open, places)}</span></span>
           <span>H <span className="text-fg">{formatPrice(shown.high, places)}</span></span>
           <span>L <span className="text-fg">{formatPrice(shown.low, places)}</span></span>
-          <span>C <span className={shown.close >= shown.open ? "text-glow" : "text-alarm"}>{formatPrice(shown.close, places)}</span></span>
+          <span>C <span className={shown.close >= shown.open ? "text-glow" : "text-ember"}>{formatPrice(shown.close, places)}</span></span>
         </p>
       )}
     </div>
