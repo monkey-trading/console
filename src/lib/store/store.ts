@@ -1,5 +1,6 @@
 /** The console's store: reads the node, follows its stream, and notifies the screens. */
 
+import type { EmberId } from "../ember";
 import { pushTick, TIMEFRAMES, type TimeframeId } from "../bars";
 import { checkAttestation } from "../engine/attestation";
 import { EngineError, type EngineClient } from "../engine/client";
@@ -73,6 +74,11 @@ export class ConsoleStore {
 
   select(id: MarketId): void {
     this.patch({ selected: id });
+  }
+
+  /** TEMPORARY design aid: records which candidate pink is live; the caller sets the CSS variables first. */
+  setEmber(ember: EmberId): void {
+    this.patch({ ember });
   }
 
   /** TEMPORARY design aid; see `DownCandleTone`. */

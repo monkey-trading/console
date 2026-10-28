@@ -1,5 +1,6 @@
 /** The console's state: what the screens read, replaced whole on every change. */
 
+import { DEFAULT_EMBER, type EmberId } from "../ember";
 import { DEFAULT_TIMEFRAME, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
 import type { AttestationStatus } from "../engine/attestation";
 import type { HistoryPage, MarketId, MarketView, HouseView, QueuedWithdrawal } from "../engine/types";
@@ -38,6 +39,8 @@ export interface ConsoleState {
   timeframe: TimeframeId;
   /** TEMPORARY design aid; see `DownCandleTone`. */
   downCandles: DownCandleTone;
+  /** TEMPORARY design aid: which candidate pink the `ember` token holds. */
+  ember: EmberId;
   selected: MarketId;
   mode: ChartMode;
   house: HouseModel;
@@ -80,6 +83,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     bars: seedAllBars(models, startMs, history),
     timeframe: DEFAULT_TIMEFRAME,
     downCandles: "fg-2",
+    ember: DEFAULT_EMBER,
     selected: models[0]?.id ?? 1,
     mode: "reference",
     house: decodeHouse(house),

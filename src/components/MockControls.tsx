@@ -4,6 +4,7 @@
 
 import { useId, useState } from "react";
 
+import { EMBER_CANDIDATES, emberFor } from "@/lib/ember";
 import { fixedFromInt } from "@/lib/fixed";
 import type { Region } from "@/lib/mock/state";
 import { MAX_STRESS } from "@/lib/pricing";
@@ -14,7 +15,7 @@ const BUTTON = "rounded border border-line-2 px-2 py-1.5 text-caption text-fg-2 
 
 export function MockControls() {
   const { node, store } = useSession();
-  const { markets, selected, attestation, downCandles } = useConsole();
+  const { markets, selected, attestation, downCandles, ember } = useConsole();
   const [open, setOpen] = useState(false);
   const [region, setRegion] = useState<Region>("allowed");
   const id = useId();
@@ -61,6 +62,21 @@ export function MockControls() {
             <select value={downCandles} onChange={(event) => store.setDownCandles(event.target.value === "ember" ? "ember" : "fg-2")} className="mt-1 w-full rounded border border-line-2 bg-ink px-2 py-1.5 text-fg">
               <option value="fg-2">Hollow, grey outline</option>
               <option value="ember">Hollow, red outline</option>
+            </select>
+          </label>
+          <label className="block text-fg-2">
+            Ember colour <span className="text-label text-amber">(temporary design aid)</span>
+            <select
+              value={ember}
+              onChange={(event) => {
+                const next = emberFor(event.target.value);
+                document.documentElement.style.setProperty("--color-ember", next.base);
+                document.documentElement.style.setProperty("--color-ember-hover", next.hover);
+                store.setEmber(next.id);
+              }}
+              className="mt-1 w-full rounded border border-line-2 bg-ink px-2 py-1.5 text-fg"
+            >
+              {EMBER_CANDIDATES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
           </label>
           {market && (

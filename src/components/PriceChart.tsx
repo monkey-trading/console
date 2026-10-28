@@ -32,6 +32,8 @@ interface Props {
   markers: readonly PriceMarker[];
   /** TEMPORARY design aid: the outline of down candles, which are hollow either way. */
   downTone: "fg-2" | "ember";
+  /** TEMPORARY design aid: the live ember candidate, so tokens are read again when it changes. */
+  emberKey: string;
 }
 
 interface Live {
@@ -52,7 +54,7 @@ function token(name: string): string {
 
 const toData = (bar: Bar) => ({ ...bar, time: bar.time as import("lightweight-charts").UTCTimestamp });
 
-export function PriceChart({ symbol, places, bars, seriesKey, markers, downTone }: Props) {
+export function PriceChart({ symbol, places, bars, seriesKey, markers, downTone, emberKey }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const [ready, setReady] = useState(0);
@@ -100,7 +102,7 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers, downTone 
   useEffect(() => {
     // Down candles are hollow: no fill, and the outline and wick take the chosen tone.
     live.current?.series.applyOptions({ downColor: "transparent", borderDownColor: token(downTone), wickDownColor: token(downTone) });
-  }, [ready, downTone]);
+  }, [ready, downTone, emberKey]);
 
   useEffect(() => {
     const c = live.current;
@@ -123,7 +125,7 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers, downTone 
     for (const line of c.lines) c.series.removePriceLine(line);
     const styles = { solid: c.lineStyle.Solid, dashed: c.lineStyle.Dashed, dotted: c.lineStyle.Dotted };
     c.lines = stable.map((m) => c.series.createPriceLine({ price: m.price, color: token(m.tone), lineWidth: 1, lineStyle: styles[m.style], axisLabelVisible: true, title: m.title }));
-  }, [ready, stable]);
+  }, [ready, stable, emberKey]);
 
   const shown = hovered ?? bars[bars.length - 1] ?? null;
   return (

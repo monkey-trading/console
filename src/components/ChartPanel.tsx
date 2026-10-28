@@ -76,7 +76,7 @@ export function ChartPanel() {
           <MarketStatus market={market} />
         </div>
       </div>
-      <PriceChart symbol={market.symbol} places={market.places} bars={bars} seriesKey={`${market.id}-${state.timeframe}`} markers={markers} downTone={state.downCandles} />
+      <PriceChart symbol={market.symbol} places={market.places} bars={bars} seriesKey={`${market.id}-${state.timeframe}`} markers={markers} downTone={state.downCandles} emberKey={state.ember} />
       {state.mode === "risk" && <p className="border-t border-line px-4 py-2 text-label text-fg-3">Stress level {market.stress} ({STRESS_NAMES[market.stress]}): spreads widen by up to {STRESS_SPREAD_BPS[market.stress]} bps. The dashed red line is where your position would be closed out, estimated from today's margin.</p>}
       <div role="group" aria-label="Chart mode" className="grid grid-cols-3 divide-x divide-line border-t border-line px-2 py-1 text-center">
         {MODES.map(({ mode, label, detail }) => (
