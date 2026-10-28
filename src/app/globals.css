@@ -1,0 +1,59 @@
+/* Theme tokens, base element styles, and the reduced-motion rule. */
+/* Class detection is limited to src/, so text elsewhere in the repository adds no rules. */
+@import "tailwindcss" source("..");
+
+@theme {
+  --color-ink: #050607;
+  --color-ink-1: #0a0e0f;
+  --color-ink-2: #0f1517;
+  --color-line: #172024;
+  --color-line-2: #24323a;
+  --color-edge: #5b6f69;
+  --color-fg: #e8f0ec;
+  --color-fg-2: #a9bab2;
+  --color-fg-3: #7f9189;
+  --color-glow: #30efaa;
+  --color-glow-hover: #78ffd0;
+  --color-amber: #ffbe5c;
+  --color-alarm: #ff6b62;
+
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-serif: "Iowan Old Style", Georgia, serif;
+
+  --text-label: 0.625rem;
+  --text-caption: 0.6875rem;
+  --text-data: 0.8125rem;
+  --text-lead: 0.9375rem;
+
+  --tracking-caps: 0.14em;
+  --tracking-label: 0.16em;
+
+  --shadow-platform: 0 24px 100px -40px color-mix(in oklab, var(--color-glow) 20%, transparent);
+
+  --shadow-glow: 0 0 1.75rem -0.375rem var(--color-glow);
+}
+
+html {
+  background: var(--color-ink);
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-fg);
+  font-family: var(--font-mono);
+  font-feature-settings: "zero" 1, "ss01" 1;
+  text-rendering: optimizeLegibility;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
