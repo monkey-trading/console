@@ -1,3 +1,5 @@
+/** Vitest configuration: unit tests under src/ run in Node. */
+
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 

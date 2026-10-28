@@ -15,7 +15,8 @@ npm run dev
 ```
 
 The app is served at `http://localhost:3000`. Before sending a change, run `npm run lint`,
-`npm run typecheck`, `npm test`, and `npm run build`; CI runs the same checks.
+`npm run typecheck`, `npm test`, `npm run build`, and `npm audit --audit-level=high`; CI runs these
+and the docs and workflow checks.
 
 ## Deploy
 
@@ -27,4 +28,4 @@ it. With neither, the origin is `http://localhost:3000`.
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Licensed under the Apache License, Version 2.0; see [LICENSE](LICENSE).

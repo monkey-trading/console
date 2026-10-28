@@ -1,3 +1,5 @@
+/** Next.js configuration: security headers and static-rendering options. */
+
 import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV === "development";

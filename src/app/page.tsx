@@ -2,6 +2,7 @@
 
 import { SITE_NAME } from "@/lib/site";
 
+/** The home page. */
 export default function Page() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-3xl flex-col justify-center gap-3 px-6">

@@ -54,7 +54,7 @@ needed lines:
   in a run directory under the gitignored `agents/.processes/` or outside the repository, never
   elsewhere in the tree, where `git add` could pick it up.
 - For `npm test`, pass the test files that cover the change while iterating
-  (`npm test -- src/lib/replay.test.ts`), and run the whole suite before a push, as
+  (`npm test -- src/lib/site.test.ts`), and run the whole suite before a push, as
   [git-workflow](git-workflow.md) requires. Report the summary lines and any failure, not the
   full run. For `next build`, report the route table's static and dynamic marks and any error, not
   the full output.

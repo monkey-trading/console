@@ -63,7 +63,7 @@ CI on the PR.
   `python3 scripts/check-docs.test.py` and `python3 scripts/check-docs.py`, run for every change,
   since moving or renaming a file can break a link as surely as editing a page; and, for a change
   under `.github/workflows/`, the `workflows` job's actionlint, at the version `ci.yaml` pins.
-- Once `ci.yaml` runs the site's checks — `npm ci`, then `npm run lint`, `npm run typecheck`,
+- `ci.yaml` runs the app's checks — `npm ci`, then `npm run lint`, `npm run typecheck`,
   `npm test`, `npm run build`, and `npm audit --audit-level=high` — each covers the whole project,
   so any change outside Markdown and `agents/` runs all six, `npm ci` first so the checks use the
   lockfile as CI installs it.

@@ -1,3 +1,5 @@
+// ESLint flat configuration: strict TypeScript, React hooks, and accessibility rules.
+
 import js from "@eslint/js";
 import { defineConfig, globalIgnores } from "eslint/config";
 import jsxA11y from "eslint-plugin-jsx-a11y";

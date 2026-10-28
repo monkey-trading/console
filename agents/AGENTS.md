@@ -33,9 +33,9 @@ current action.
   lints the workflows with actionlint, which also runs shellcheck over each `run:` script; the
   `docs` job runs `scripts/check-docs.test.py`, then `scripts/check-docs.py`; and the `lint`,
   `typecheck`, `test`, and `build` jobs run the app's checks after `npm ci`, and `audit` runs
-  `npm audit` against the lockfile. Actions are
-  pinned by commit SHA. `ci-passed` is the one CI check branch rules require: it passes only when
-  every other job succeeded, so each new job must be added to its `needs`.
+  `npm audit` against the lockfile. Actions are pinned by commit SHA. `ci-passed` is the one CI
+  check branch rules require: it passes only when every other job succeeded, so each new job must
+  be added to its `needs`.
 - **.nvmrc** — the Node.js version (24) for local runs and CI.
 - **.npmrc** — `save-exact=true`, so every dependency is pinned exactly.
 - **package.json** / **package-lock.json** — scripts and exact-pinned dependencies; the lockfile is
@@ -79,9 +79,9 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   change Vercel settings, environment variables, domains, or DNS, and never trigger a deploy,
   without the owner's explicit approval for that action ([no-deploy](rules/no-deploy.md)).
 - **Statically rendered, with no backend of its own.** Every route prerenders at build time; nothing
-  may make a route dynamic or add a route handler (`route.ts`), server action, or proxy (`proxy.ts`, or the deprecated
-  `middleware.ts`) without the owner's approval. The app talks to the engine node from the
-  browser only.
+  may make a route dynamic or add a route handler (`route.ts`), server action, or proxy
+  (`proxy.ts`, or the deprecated `middleware.ts`) without the owner's approval. The app talks to
+  the engine node from the browser only.
 - **The engine is the source of truth.** Every number, rule, and message the app shows about the
   engine matches the engine's README and its decision issues.
 - **Private by construction.** No analytics, cookies, browser storage, trackers, third-party
@@ -123,7 +123,7 @@ alt text, the README — load [writing-style](rules/writing-style.md) and the Pu
 - [rules/code-comments.md](rules/code-comments.md) — terse, self-documenting comments; load before writing comments / docs.
 - [rules/keep-agents-index-in-sync.md](rules/keep-agents-index-in-sync.md) — keep the nearest `AGENTS.md` in sync (structure, commands, conventions) with any change in a dir it documents, and keep `next dev`'s managed block out of it; load before changing such a dir.
 - [rules/no-deploy.md](rules/no-deploy.md) — a merge to `main` is a production deploy; never merge, trigger a deploy, or change Vercel settings, environment variables, domains, DNS, or repository settings without explicit per-action approval; load before any merge, deploy, Vercel or DNS change, or secret write.
-- [rules/git-workflow.md](rules/git-workflow.md) — branch naming (`0xjevons/<slug>[-gh<issue>]`) and worktrees under the sibling `console-worktrees/`, a new branch starting with no fix notes, commit approval and `[scopes] Subject` format (`app`, `workspace`, `agents`), no AI signatures, local checks (the docs check on every change, actionlint on a workflow change, and `npm ci`, lint, typecheck, unit tests, build, and `npm audit` once CI runs them; full CI runs on the PR, never publishing steps), force-push with lease; load before creating a branch, committing, pushing, or opening a PR.
+- [rules/git-workflow.md](rules/git-workflow.md) — branch naming (`0xjevons/<slug>[-gh<issue>]`) and worktrees under the sibling `console-worktrees/`, a new branch starting with no fix notes, commit approval and `[scopes] Subject` format (`app`, `workspace`, `agents`), no AI signatures, local checks (the docs check on every change, actionlint on a workflow change, and `npm ci`, lint, typecheck, unit tests, build, and `npm audit`; full CI runs on the PR, never publishing steps), force-push with lease; load before creating a branch, committing, pushing, or opening a PR.
 
 ### Skills
 

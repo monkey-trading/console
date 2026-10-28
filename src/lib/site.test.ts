@@ -38,7 +38,9 @@ describe("siteUrl", () => {
     ["a query", "https://monkey.example/?campaign=x"],
     ["an empty query", "https://monkey.example/?"],
     ["a fragment", "https://monkey.example/#top"],
+    ["an empty fragment", "https://monkey.example/#"],
     ["credentials", "https://user:pass@monkey.example"],
+    ["a password only", "https://:pass@monkey.example"],
     ["another scheme", "ftp://monkey.example"],
   ])("fails the build on a SITE_URL with %s", (_, value) => {
     env(value, undefined);

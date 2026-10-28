@@ -332,10 +332,11 @@ The bar is WCAG 2.2 AA; the [development checklist](../../rules/development-chec
   `sessionStorage`, IndexedDB, trackers, fingerprinting, third-party scripts, fonts, images,
   iframes, or embeds without the owner's explicit approval. A visitor's choices, such as the pause
   switch, live in memory and end with the tab.
-- Every request the page makes is same-origin: the site serves its own fonts, images, and scripts.
-  Check the production build's network panel after any change to what the page loads.
+- Every request the page makes is same-origin, but for the engine node's origin once the owner has
+  approved it: the site serves its own fonts, images, and scripts. Check the production build's network panel after any change to what the page loads.
 - Links to other sites are plain links; nothing is fetched from them.
-- Nothing a visitor types leaves the browser: the shell and the replay demo run locally.
+- Nothing a visitor types leaves the browser, but for what the app sends to the engine node: the
+  mock engine and any local demo run in the browser.
 
 ## Public copy
 
@@ -372,7 +373,7 @@ rules; these are the conventions that keep copy checkable.
 - Hashing comes from `@noble/hashes`; never another hashing package, never home-rolled.
 - Tools outside the build — Playwright, Lighthouse — are not dependencies of this repository: run
   them from a scratch directory outside it, at an exact version of the official package.
-- In use (non-exhaustive): `next`, `react`, `react-dom`, and `@noble/hashes` at runtime;
+- In use (non-exhaustive): `next`, `react`, and `react-dom` at runtime;
   `typescript`, `@types/*`, `eslint`, `@eslint/js`, `typescript-eslint`,
   `eslint-plugin-react-hooks`, `eslint-plugin-jsx-a11y`, `tailwindcss`, `@tailwindcss/postcss`,
   `vitest`, and `vite` in development.
