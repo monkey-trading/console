@@ -43,7 +43,6 @@ body {
   color: var(--color-fg);
   font-family: var(--font-mono);
   font-feature-settings: "zero" 1, "ss01" 1;
-  -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 

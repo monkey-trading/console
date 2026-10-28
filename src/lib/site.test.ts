@@ -24,6 +24,13 @@ describe("siteUrl", () => {
     expect(siteUrl()).toBe("http://localhost:3000");
   });
 
+  it("treats an empty variable as unset", () => {
+    env("", "monkey.vercel.app");
+    expect(siteUrl()).toBe("https://monkey.vercel.app");
+    env("", "");
+    expect(siteUrl()).toBe("http://localhost:3000");
+  });
+
   it("returns the origin without a trailing slash or a default port", () => {
     env("https://monkey.example/", undefined);
     expect(siteUrl()).toBe("https://monkey.example");

@@ -146,7 +146,7 @@ def prose(text):
         if match := FENCE.match(rest):
             fence = (match.group(1), len(containers), number)
             rest = ""
-        paragraph = bool(rest.strip()) and not BREAK.match(rest)
+        paragraph = bool(rest.strip()) and not BREAK.match(rest) and not HEADING.match(rest)
         kept.append(rest)
     return "\n".join(kept), fence[2] if fence else None
 

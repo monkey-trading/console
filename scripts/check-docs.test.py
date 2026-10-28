@@ -160,6 +160,13 @@ ___
 [fence after an item's break](missing.md)
   ```
 
+- A heading leaves no paragraph open.
+  # Heading
+[after a heading in an item](rules/a.md)
+  ```
+[fence after an item's heading](missing.md)
+  ```
+
 > - A blank line ends a block quote and its list item.
 
 > text
@@ -175,7 +182,7 @@ ___
   ```
 """
 
-# Thirty-seven relative links in six pages: the index's thirty-five, the README's, and one in a
+# Thirty-eight relative links in six pages: the index's thirty-six, the README's, and one in a
 # page read through its symlink. The ignored and the out-of-scope pages are not read.
 VALID = {
     ".gitignore": "/agents/.processes/\n",
@@ -191,7 +198,7 @@ VALID = {
     "docs/shared.md": "[rule](../agents/rules/a.md)\n",
 }
 VALID_SYMLINKS = {**INDEX_LINKS, "agents/shared.md": "../docs/shared.md"}
-VALID_OUTPUT = "Checked 37 relative links in 6 Markdown files.\n"
+VALID_OUTPUT = "Checked 38 relative links in 6 Markdown files.\n"
 
 
 def broken(where, dest):

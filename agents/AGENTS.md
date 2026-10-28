@@ -35,7 +35,7 @@ current action.
   `typecheck`, `test`, and `build` jobs run the app's checks after `npm ci`, and `audit` runs
   `npm audit` against the lockfile. Actions are pinned by commit SHA. `ci-passed` is the one CI
   check branch rules require: it passes only when every other job succeeded, so each new job must
-  be added to its `needs`. The first job to fail cancels the whole run: every job ends with an
+  be added to its `needs`. The first job to fail cancels the whole run: every job but `ci-passed` ends with an
   `if: failure()` step running `gh run cancel` with the workflow token, so each job holds
   `actions: write`, and `ci-passed` sees a cancelled result and never passes. A pull request from a fork has a
   read-only token, so its run is not cancelled and `ci-passed` alone gates it. Any matrix sets
