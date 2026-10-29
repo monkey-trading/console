@@ -50,7 +50,7 @@ class Attempt {
   }
 }
 
-
+/** A wallet app paired over WalletConnect, as the "WalletConnect" option, with its pairing state for the dialog. */
 export class WalletConnectConnector implements WalletConnector {
   readonly options = [{ id: "walletconnect", label: "WalletConnect", detail: "A wallet app on your phone or computer, by QR code or link", icon: WALLETCONNECT_ICON }] as const;
   private state: PairingState = IDLE;
@@ -162,7 +162,8 @@ export class WalletConnectConnector implements WalletConnector {
       throw new Error(refused);
     }
     this.live = session.topic;
-    return new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, session.topic), this.chain, this.deps);
+    const topic = session.topic;
+    return new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, topic) });
   }
 
   /** The SDK's provider, loaded and started once; a failed start is tried again on the next connect. */
@@ -194,6 +195,17 @@ export class WalletConnectConnector implements WalletConnector {
     });
     this.started = provider;
     return provider;
+  }
+
+  /**
+   * Ends session `topic` when the user disconnects in the console, so the wallet app drops it, and
+   * closes the relay socket, so the relay sees nothing more from this page until the next connect.
+   */
+  private async end(provider: WcProvider, topic: string): Promise<void> {
+    if (this.live !== topic) return;
+    this.live = null;
+    if (provider.session?.topic === topic) await provider.disconnect();
+    await provider.client.core.relayer.transportClose();
   }
 
   /** Drops the unanswered pairing and closes the relay socket; the next connect opens it again. */

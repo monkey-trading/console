@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { MarketQuote } from "./engine/types";
 import { fixedFromWire } from "./fixed";
-import { closingPrice, executablePrice, MAX_QUOTED_MARKETS, quoteMarkets, ticketPrices } from "./quotes";
+import { closingPrice, executablePrice, MAX_QUOTED_MARKETS, quoteMarkets, ticketPrices, UNCREDITED } from "./quotes";
 import type { TicketPreview } from "./ticket";
 
 const QUOTE: MarketQuote = {
@@ -59,7 +59,8 @@ describe("ticketPrices", () => {
 
   it("says why a live order has no price: no quote yet, an account not yet credited, no market price, too large, or declined", () => {
     expect(live("1", "buy", null)).toEqual({ bid: null, offer: null, price: null, spreadBps: null, problem: "Waiting for the node's executable quote." });
-    expect(live("1", "buy", null, "account has never been credited").problem).toBe("The node quotes an account once it has credited it: deposit and declare your eligibility first.");
+    expect(live("1", "buy", null, UNCREDITED).problem).toBe("The node quotes an account once it has credited it: deposit and declare your eligibility first.");
+    expect(live("1", "buy", null, "unknown market 9").problem).toBe("The node will not quote this market: unknown market 9.");
     expect(live("1", "buy", { ...QUOTE, unavailable: { kind: "market_closed" }, ask: [], bid: [] })).toMatchObject({ price: null, problem: "The market is closed." });
     expect(live("6", "sell")).toMatchObject({ price: null, offer: f("100.5"), problem: "The node would not open an order this large. Try a smaller size." });
     expect(live("6", "buy")).toMatchObject({ price: f("100.5"), problem: "Not enough equity: you have $10.00 and the account needs $40.00 of margin." });

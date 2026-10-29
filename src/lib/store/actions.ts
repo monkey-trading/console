@@ -18,11 +18,18 @@ export const REQUEST_TTL_MS = 120_000;
 type Outcome = { ok: true; result: ActionResult } | { ok: false };
 
 /** The state a wallet change clears: everything read or streamed for the account before. */
-const NO_ACCOUNT = { account: null, eligibility: null, queue: [], history: [], quotes: {}, quoteError: null, authorizations: [], paid: [] };
+const NO_ACCOUNT = { account: null, eligibility: null, queue: [], history: [], quotes: {}, quoteError: null, quoted: [], authorizations: [], approvals: [], paid: [] };
+
+/** Ends a wallet's connection in the background, telling the user if that fails. */
+function release(store: ConsoleStore, wallet: Wallet | null): void {
+  wallet?.disconnect?.().catch((error: unknown) => store.toast("error", `The wallet's session did not close: ${errorText(error)}`));
+}
 
 export async function connectWallet(store: ConsoleStore, optionId: string, quiet = false): Promise<void> {
   try {
     const wallet = await store.deps.wallets.connect(optionId);
+    // The wallet this one replaces keeps no session open.
+    if (store.liveWallet !== wallet) release(store, store.liveWallet);
     store.liveWallet = wallet;
     store.patch(NO_ACCOUNT);
     store.setWallet({ address: wallet.address, label: wallet.label });
@@ -35,6 +42,7 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
 }
 
 export function disconnectWallet(store: ConsoleStore): void {
+  release(store, store.liveWallet);
   store.liveWallet = null;
   store.setWallet(null);
   store.patch(NO_ACCOUNT);
@@ -67,16 +75,25 @@ export async function prompting<T>(store: ConsoleStore, prompt: string, step: ()
 }
 
 /**
+ * How a request answered 409 (its nonce already used) is handled. A cancel or a declaration is signed
+ * once more with the nonce the node names, since running it twice does nothing more; an order or a
+ * withdrawal is not, since a copy of it may have run first (the node's own README warns a man in the
+ * middle can send a copy first and deliver the refusal of the second).
+ */
+type OnNonceTaken = "sign-again" | "report";
+
+/**
  * Signs and sends one request for a node whose attestation the console accepts. The nonce comes
- * from the node's signed answer, and the expiry from that answer's signed time. When another
- * request took the nonce first, the node names the next one (HTTP 409), and the user is asked to
- * sign once more with it. Every refusal becomes a message for the user.
+ * from the node's signed answer, and the expiry from that answer's signed time. A refusal is shown
+ * only after the account is read again under fresh challenges, so the screen holds what the node
+ * holds when the user reads why, as the engine asks of a client.
  */
 async function signed(
   store: ConsoleStore,
   summary: string,
   build: (terms: Terms, account: string) => TypedRequest,
   send: (auth: RequestAuth, wallet: Wallet) => Promise<ActionResult>,
+  onNonceTaken: OnNonceTaken,
 ): Promise<Outcome> {
   const wallet = usableWallet(store, "sign");
   if (!wallet) return { ok: false };
@@ -93,10 +110,14 @@ async function signed(
       return { ok: true, result: await attempt(next_nonce) };
     } catch (error) {
       if (!(error instanceof EngineError) || error.reject?.kind !== "invalid_nonce") throw error;
+      if (onNonceTaken === "report") throw new EngineError(error.status, `The node had already used nonce ${next_nonce} for this account, so it did not take this request as sent. If it was sent twice it may have run: check your positions, orders, withdrawals and history before trying again.`);
       return { ok: true, result: await attempt(error.reject.expected) };
     }
   } catch (error) {
-    if (!store.noteAccess(error)) store.toast("error", errorText(error));
+    if (store.noteAccess(error)) return { ok: false };
+    // A request the node refused, or that went unanswered, may still have run from a copy: read the account first.
+    if (error instanceof EngineError) await store.refresh(true);
+    store.toast("error", errorText(error));
     return { ok: false };
   } finally {
     store.patch({ busy: false });
@@ -113,7 +134,7 @@ export const domainOf = (store: ConsoleStore) => requestDomain(store.deps.client
 
 export async function attestEligibility(store: ConsoleStore, cls: EligibilityClass): Promise<void> {
   const out = await signed(store, `declare "${STATEMENTS[cls]}"`, (t, account) => eligibilityTypedData(domainOf(store), account, cls, t), (auth, wallet) =>
-    store.deps.client.attestEligibility({ account: wallet.address, class: cls, auth }),
+    store.deps.client.attestEligibility({ account: wallet.address, class: cls, auth }), "sign-again",
   );
   if (!out.ok) return;
   const refused = out.result.events.find((e) => e.type === "eligibility_rejected");
@@ -126,11 +147,13 @@ export async function attestEligibility(store: ConsoleStore, cls: EligibilityCla
 export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void> {
   const wallet = usableWallet(store, "send a deposit");
   if (!wallet) return;
-  const shown = `$${formatFixedPlaces(amount, 2)}`;
+  const shown = `${formatFixedPlaces(amount, 2)} USDC`;
   store.patch({ busy: true });
   try {
-    await prompting(store, `Confirm in your wallet: deposit ${shown} USDC to the vault (an approval first, if the vault needs one).`, () => wallet.deposit(amount));
-    store.toast("info", `Deposit of ${shown} sent. The node sees it a few blocks after it is mined and credits it once your eligibility is recorded; it can be withdrawn once the vault's transaction is final.`);
+    await prompting(store, `Confirm in your wallet: deposit ${shown} to the vault (an approval first, if the vault needs one).`, () => wallet.deposit(amount));
+    store.toast("info", store.deps.client.signatures === "none"
+      ? `Deposit of ${shown} sent. It counts as collateral now and can be withdrawn once the vault's transaction is final.`
+      : `Deposit of ${shown} sent. The node sees it a few blocks after it is mined and credits it once your eligibility is recorded; it can be withdrawn once the vault's transaction is final.`);
     await store.refresh(true);
   } catch (error) {
     if (!store.noteAccess(error)) store.toast("error", errorText(error));
@@ -161,7 +184,7 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams): Prom
   const at = params.kind.kind === "market" ? `at ${formatFixedPlaces(params.kind.quoted, market.places)}, up to ${params.kind.slippageBps} bps worse` : `${params.kind.kind} at ${formatFixedPlaces(params.kind.price, market.places)}`;
   const summary = `${params.side} ${qty} ${market.symbol} ${at}${params.reduceOnly ? ", reduce only" : ""}`;
   const out = await signed(store, summary, (t, account) => orderTypedData(domainOf(store), { ...order, account }, t), (auth, wallet) =>
-    store.deps.client.placeOrder({ ...order, account: wallet.address, auth }),
+    store.deps.client.placeOrder({ ...order, account: wallet.address, auth }), "report",
   );
   if (!out.ok) return;
   const rejected = out.result.events.find((e) => e.type === "order_rejected");
@@ -174,7 +197,7 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams): Prom
 
 export async function cancelOrder(store: ConsoleStore, orderId: number): Promise<void> {
   const out = await signed(store, `cancel order ${orderId}`, (t, account) => cancelTypedData(domainOf(store), { account, order_id: orderId }, t), (auth, wallet) =>
-    store.deps.client.cancelOrder({ account: wallet.address, order_id: orderId, auth }),
+    store.deps.client.cancelOrder({ account: wallet.address, order_id: orderId, auth }), "sign-again",
   );
   if (!out.ok) return;
   const refused = out.result.events.find((e) => e.type === "order_rejected");
@@ -187,7 +210,7 @@ export async function cancelOrder(store: ConsoleStore, orderId: number): Promise
 export async function withdraw(store: ConsoleStore, amount: Fixed): Promise<boolean> {
   const wire = fixedToWire(amount);
   const out = await signed(store, `withdraw ${wire} USDC`, (t, account) => withdrawalTypedData(domainOf(store), account, wire, t), (auth, wallet) =>
-    store.deps.client.withdraw({ account: wallet.address, amount: wire, auth }),
+    store.deps.client.withdraw({ account: wallet.address, amount: wire, auth }), "report",
   );
   if (!out.ok) return false;
   const refused = out.result.events.find((e) => e.type === "withdrawal_rejected");

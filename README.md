@@ -39,7 +39,7 @@ the geo-block check (`scripts/check-geo-block.sh`, after the build), and the doc
 and a mock USDC, the house's capital in the vault, mock USDC in a dev wallet, an engine node on that chain's
 custody that prices BTC-USD and ETH-USD from live crypto venues (the other markets need market-data vendor
 keys and stay unpriced) and posts checkpoints so withdrawals can be claimed, and the console in development
-mode against it. It needs Anvil, Forge and Cast, Cargo, Node.js, `jq`, Python 3.11 or later, and the engine's
+mode against it. It needs Anvil, Forge and Cast, Cargo, Node.js and npm, curl, `jq`, Python 3.11 or later, and the engine's
 repository beside this one (or at `ENGINE_DIR`) with its contract dependencies installed (`forge soldeer
 install` in its `contracts/`):
 
@@ -85,7 +85,7 @@ A live build is configured by environment variables at build time, all pinned in
 | `NEXT_PUBLIC_ENGINE_CHAIN_ID`, `NEXT_PUBLIC_ENGINE_VAULT` | The deployment every signature must name |
 | `NEXT_PUBLIC_ENGINE_USDC` | The USDC the vault takes; without it the build cannot deposit |
 | `NEXT_PUBLIC_ENGINE_RPC_URL` | Optional RPC URL a wallet that does not know the chain is offered, such as a local Anvil chain's |
-| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional WalletConnect project id (32 hex characters); without it the build offers no WalletConnect |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional WalletConnect project id (32 lowercase hex characters); without it the build offers no WalletConnect |
 | `NEXT_PUBLIC_ENGINE_HEARTBEAT_MS` | The node's `[api] heartbeat_interval`, in milliseconds (default 5000) |
 | `NEXT_PUBLIC_ENGINE_DEV_ORIGINS` | Comma-separated node origins a `live-dev` build may accept a mock attestation from |
 

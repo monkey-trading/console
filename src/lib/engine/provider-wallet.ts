@@ -31,6 +31,8 @@ export interface WalletChain {
 export interface ProviderWalletDeps {
   /** Resolves after `ms` milliseconds; the wallet polls for receipts with it. */
   wait(ms: number): Promise<void>;
+  /** Ends the wallet's connection, such as a WalletConnect session; absent when there is nothing to end. */
+  disconnect?: () => Promise<void>;
 }
 
 const ERC20 = parseAbi([
@@ -48,9 +50,10 @@ const VAULT = parseAbi([
 /** EIP-1193's code for a request the user rejected, and EIP-3085's for a chain the wallet does not know. */
 const USER_REJECTED = 4001;
 const UNKNOWN_CHAIN = 4902;
-/** How often, and for how long, the wallet polls for a transaction's receipt. */
+/** How often, and how many times, the wallet polls for a transaction's receipt. */
 const RECEIPT_POLL_MS = 1_000;
-const RECEIPT_TIMEOUT_MS = 180_000;
+const RECEIPT_POLLS = 180;
+const NO_TRANSACTION = `0x${"0".repeat(64)}`;
 
 const hex = (n: number) => `0x${n.toString(16)}`;
 const errorCode = (error: unknown) => (typeof error === "object" && error !== null && "code" in error ? (error as { code: unknown }).code : undefined);
@@ -176,8 +179,20 @@ export class ProviderWallet implements Wallet {
     return this.send(this.chain.vault, data, "claim the withdrawal");
   }
 
-  /** Whether the vault has paid this account's payout `nonce`. */
+  /** Ends the wallet's connection where it has one to end. */
+  async disconnect(): Promise<void> {
+    await this.deps.disconnect?.();
+  }
+
+  /**
+   * Whether the vault has paid this account's payout `nonce`. A read in the background, so a wallet
+   * on another chain is not asked to switch; the read is refused instead.
+   * Error cases:
+   * - the wallet is on another chain than the deployment's
+   */
   async claimed(nonce: number): Promise<boolean> {
+    const current = Number(await this.provider.request({ method: "eth_chainId" }));
+    if (current !== this.chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chain.chainId}`);
     const data = encodeFunctionData({ abi: VAULT, functionName: "usedNonces", args: [this.address as Hex, BigInt(nonce)] });
     const result = (await this.provider.request({ method: "eth_call", params: [{ to: this.chain.vault, data }, "latest"] })) as Hex;
     return decodeFunctionResult({ abi: VAULT, functionName: "usedNonces", data: result });
@@ -188,23 +203,38 @@ export class ProviderWallet implements Wallet {
     return decodeFunctionResult({ abi: ERC20, functionName, data: result });
   }
 
-  /** Sends a transaction from this account and waits for it to be mined successfully. */
+  /**
+   * Sends a transaction from this account and waits for it to be mined successfully. A wallet that
+   * cannot return receipts is refused before anything is sent, so the console never leaves a sent
+   * transaction unconfirmed for want of the read.
+   */
   private async send(to: string, data: Hex, action: string): Promise<string> {
+    try {
+      await this.provider.request({ method: "eth_getTransactionReceipt", params: [NO_TRANSACTION] });
+    } catch (error) {
+      throw walletError(error, `read transaction receipts, so the console did not ask it to ${action}`);
+    }
     let hash: string;
     try {
       hash = String(await this.provider.request({ method: "eth_sendTransaction", params: [{ from: this.address, to, data }] }));
     } catch (error) {
       throw walletError(error, action);
     }
-    for (let waited = 0; waited <= RECEIPT_TIMEOUT_MS; waited += RECEIPT_POLL_MS) {
-      const receipt = (await this.provider.request({ method: "eth_getTransactionReceipt", params: [hash] })) as { status?: string } | null;
+    const unconfirmed = (why: string) => new Error(`The transaction to ${action} was sent (${hash}) but ${why}. Check it in your wallet before trying again.`);
+    for (let poll = 0; poll < RECEIPT_POLLS; poll++) {
+      let receipt: { status?: string } | null;
+      try {
+        receipt = (await this.provider.request({ method: "eth_getTransactionReceipt", params: [hash] })) as { status?: string } | null;
+      } catch (error) {
+        throw unconfirmed(`its receipt could not be read: ${error instanceof Error ? error.message : String(error)}`);
+      }
       if (receipt !== null && receipt.status !== undefined) {
         if (Number(receipt.status) !== 1) throw new Error(`The transaction to ${action} failed on chain (${hash}).`);
         return hash;
       }
       await this.deps.wait(RECEIPT_POLL_MS);
     }
-    throw new Error(`The transaction to ${action} was not mined within three minutes (${hash}).`);
+    throw unconfirmed("is not confirmed yet");
   }
 }
 

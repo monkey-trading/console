@@ -107,7 +107,8 @@ export interface EngineClient {
   /** Asks for the account's executable quotes in up to four markets, or for none; they arrive through `watch`. */
   quotes(request: QuoteRequest | null): void;
   withdrawalQueue(address: Address): Promise<WithdrawalPage>;
-  history(address: Address, params: { limit?: number; before?: string }): Promise<HistoryPage>;
+  /** `kind` keeps only events of that `type`, as the node's `kind` query does. */
+  history(address: Address, params: { limit?: number; before?: string; kind?: string }): Promise<HistoryPage>;
   /** Starts at the live end of the log and delivers each message once. */
   subscribe(onMessage: (message: StreamMessage) => void): Unsubscribe;
 }

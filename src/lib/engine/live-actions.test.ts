@@ -135,6 +135,25 @@ describe("quotes and authorizations on the stream", () => {
   });
 });
 
+describe("quotes across a reconnect", () => {
+  it("asks a reconnected socket for the same quotes again once it opens", async () => {
+    const sockets: FakeSocket[] = [];
+    const { client, scheduler } = accepting(sockets);
+    client.quotes({ account: ACCOUNT, markets: [1] });
+    client.subscribe(() => {});
+    await settle();
+    sockets[0]?.open();
+    sockets[0]?.drop("close");
+    scheduler.advance(1_000);
+    await settle();
+    const next = sockets[1];
+    if (!next) throw new Error("no second socket");
+    expect(next.sent).toEqual([]);
+    next.open();
+    expect(next.sent).toEqual([JSON.stringify({ op: "quotes", account: ACCOUNT, markets: [1] })]);
+  });
+});
+
 describe("finding an authorization in the log", () => {
   const frame = (n: number, msg: object) => JSON.stringify({ v: 1, n, time: 1_000, msg: JSON.stringify(msg), sig: "0x00" });
   const signed = (nonce: number, expires: number) => ({ type: "withdrawal", offset: `${40 + nonce}:0`, account: ACCOUNT, amount: "10", nonce, chain_id: 31337, vault: conflict.vault, signature: "0x22", approved_seq: 40, authorization: { expires_at: expires } });

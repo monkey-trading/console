@@ -114,6 +114,19 @@ describe("deposits", () => {
     expect(provider.sent).toEqual([]);
   });
 
+  it("sends nothing to a wallet that cannot return receipts, and says a sent transaction is unconfirmed when its receipt cannot be read", async () => {
+    const noReceipts = wallet({ balance: 5_000_000_000n, allowance: 5_000_000_000n, fail: { eth_getTransactionReceipt: { code: -32601, message: "method not allowed" } } });
+    await expect(noReceipts.wallet.deposit(fixedFromInt(10))).rejects.toThrow("Your wallet could not read transaction receipts, so the console did not ask it to deposit: method not allowed");
+    expect(noReceipts.provider.sent).toEqual([]);
+    const { provider, wallet: w } = wallet({ balance: 5_000_000_000n, allowance: 5_000_000_000n });
+    const request = provider.request.bind(provider);
+    provider.request = async (args) => {
+      if (args.method === "eth_getTransactionReceipt" && provider.sent.length > 0) throw new Error("relay closed");
+      return request(args);
+    };
+    await expect(w.deposit(fixedFromInt(10))).rejects.toThrow(/^The transaction to deposit was sent \(0x0+1\) but its receipt could not be read: relay closed\. Check it in your wallet before trying again\.$/);
+  });
+
   it("fails a deposit whose transaction reverts", async () => {
     const { wallet: w } = wallet({ balance: 5_000_000_000n, allowance: 5_000_000_000n, receiptStatus: "0x0" });
     await expect(w.deposit(fixedFromInt(10))).rejects.toThrow("The transaction to deposit failed on chain");
@@ -148,9 +161,20 @@ describe("claims", () => {
     expect(provider.sent).toEqual([]);
   });
 
-  it("reads whether the vault has paid a payout nonce", async () => {
+  it("reads whether the vault has paid a payout nonce, only on the deployment's chain and without asking to switch", async () => {
     expect(await wallet({ paid: true }).wallet.claimed(3)).toBe(true);
     expect(await wallet({ paid: false }).wallet.claimed(3)).toBe(false);
+    const elsewhere = wallet({ paid: true, chainId: 1 });
+    await expect(elsewhere.wallet.claimed(3)).rejects.toThrow("your wallet is on chain 1, not chain 31337");
+    expect(elsewhere.provider.calls.map((c) => c.method)).toEqual(["eth_chainId"]);
+  });
+
+  it("ends the connection it was given on disconnect, and does nothing without one", async () => {
+    let ended = 0;
+    const w = new ProviderWallet(ACCOUNT, "Test wallet", new StubProvider(), CHAIN, { wait: async () => {}, disconnect: async () => void (ended += 1) });
+    await w.disconnect();
+    expect(ended).toBe(1);
+    await expect(wallet().wallet.disconnect()).resolves.toBeUndefined();
   });
 });
 

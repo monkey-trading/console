@@ -30,6 +30,8 @@ export interface Wallet {
   claim(withdrawal: SignedWithdrawal): Promise<string>;
   /** Whether the vault has paid this account's payout `nonce`. */
   claimed(nonce: number): Promise<boolean>;
+  /** Ends the wallet's connection, such as a WalletConnect session, when the user disconnects; absent when there is nothing to end. */
+  disconnect?(): Promise<void>;
 }
 
 export interface WalletConnector {

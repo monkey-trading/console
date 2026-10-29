@@ -1,0 +1,105 @@
+/** Tests for the payout actions: reading approvals and paid nonces, claiming, finding an authorization and asking for a fresh one. */
+
+import { describe, expect, it } from "vitest";
+
+import vectors from "../engine/eip712-vectors.json";
+import { reissueTypedData, requestDomain } from "../engine/eip712";
+import type { HistoryEvent, SignedWithdrawal } from "../engine/types";
+import { ACCOUNT } from "../engine/wallet-kit";
+import { checkPaid, claim, findAuthorization, loadApprovals, payoutsOf, reissue } from "./payouts";
+import { connected, signerOf, VAULT } from "./live-kit";
+
+const OTHER = "0x00000000000000000000000000000000000000aa";
+const approved = (nonce: number, seq: number): HistoryEvent => ({ type: "withdrawal_approved", account: ACCOUNT, amount: "10", nonce, cursor: `${seq}:0`, ts: 0 });
+const signed = (nonce: number, expiresAt: number): SignedWithdrawal => ({
+  account: ACCOUNT, amount: "10", nonce, chain_id: vectors.chain_id, vault: VAULT, signature: `0x${"22".repeat(65)}`, approved_seq: 40,
+  authorization: { signer: OTHER, signer_epoch: 1, issued_at: expiresAt - 86_400, expires_at: expiresAt, checkpoint_seq: 64, checkpoint_root: `0x${"33".repeat(32)}`, siblings: [] },
+});
+
+describe("approvals and paid payouts", () => {
+  it("reads every approval by kind, apart from the recent history, and keeps it only for the account that asked", async () => {
+    const { client, store } = await connected();
+    client.historyPage = { events: [approved(2, 50), approved(1, 40)], next: null };
+    await loadApprovals(store);
+    expect(client.historyReads.at(-1)).toEqual({ kind: "withdrawal_approved" });
+    expect(store.getSnapshot().approvals.map((e) => e.type === "withdrawal_approved" && e.nonce)).toEqual([2, 1]);
+    const reading = loadApprovals(store);
+    store.setWallet({ address: OTHER, label: "Other" });
+    store.patch({ approvals: [] });
+    await reading;
+    expect(store.getSnapshot().approvals).toEqual([]);
+  });
+
+  it("lists every unpaid payout and at most five paid ones", async () => {
+    const { store } = await connected();
+    store.patch({ approvals: Array.from({ length: 12 }, (_, i) => approved(12 - i, 100 - i)), paid: [12, 11, 10, 9, 8, 7, 6] });
+    expect(payoutsOf(store.getSnapshot()).map((p) => [p.nonce, p.status.kind])).toEqual([
+      [5, "waiting"], [4, "waiting"], [3, "waiting"], [2, "waiting"], [1, "waiting"],
+      [12, "paid"], [11, "paid"], [10, "paid"], [9, "paid"], [8, "paid"],
+    ]);
+  });
+
+  it("marks the payouts the vault has paid, and says when the wallet is on another chain", async () => {
+    const paid = await connected({ paid: true });
+    paid.store.patch({ approvals: [approved(1, 40)] });
+    await checkPaid(paid.store);
+    expect(paid.store.getSnapshot().paid).toEqual([1]);
+    const elsewhere = await connected({ paid: true, chainId: 1 });
+    elsewhere.store.patch({ approvals: [approved(1, 40)] });
+    await checkPaid(elsewhere.store);
+    expect(elsewhere.store.getSnapshot().paid).toEqual([]);
+    expect(elsewhere.store.getSnapshot().toasts.at(-1)?.text).toBe("The vault's payouts could not be read: your wallet is on chain 1, not chain 31337");
+  });
+});
+
+describe("claims", () => {
+  it("claims with the authorization and marks it paid, even while the node's feed is stale", async () => {
+    const { provider, store } = await connected();
+    store.patch({ approvals: [approved(1, 40)], authorizations: [signed(1, 2_000_000_000)], stream: "stale" });
+    await claim(store, 1);
+    expect(provider.sent).toHaveLength(1);
+    expect(store.getSnapshot()).toMatchObject({ paid: [1], busy: false, prompt: null });
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The vault paid 10.00 USDC to your wallet.");
+  });
+
+  it("leaves a payout unpaid when its claim reverts", async () => {
+    const { store } = await connected({ receiptStatus: "0x0" });
+    store.patch({ approvals: [approved(1, 40)], authorizations: [signed(1, 2_000_000_000)] });
+    await claim(store, 1);
+    expect(store.getSnapshot().paid).toEqual([]);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("failed on chain");
+  });
+
+  it("does not mark another account's payout paid when the wallet changed during the claim", async () => {
+    const { store } = await connected();
+    store.patch({ approvals: [approved(1, 40)], authorizations: [signed(1, 2_000_000_000)] });
+    const claiming = claim(store, 1);
+    store.setWallet({ address: OTHER, label: "Other" });
+    store.patch({ paid: [] });
+    await claiming;
+    expect(store.getSnapshot().paid).toEqual([]);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe(`The vault paid 10.00 USDC to ${ACCOUNT}.`);
+  });
+});
+
+describe("authorizations", () => {
+  it("keeps an authorization the log search finds, and says when the log holds none yet", async () => {
+    const { client, store } = await connected();
+    await findAuthorization(store, 1, 40);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("The log holds no authorization for this withdrawal yet.");
+    client.found = signed(1, 2_000_000_000);
+    await findAuthorization(store, 1, 40);
+    expect(store.getSnapshot().authorizations).toEqual([signed(1, 2_000_000_000)]);
+  });
+
+  it("asks for a fresh authorization with a ReissueRequest the account signs over the expired one's expiry", async () => {
+    const { client, store } = await connected();
+    await reissue(store, 3, 1_700_000_000);
+    const posted = client.posted[0];
+    expect(posted?.route).toBe("reissue 3");
+    const body = posted?.body as { replaces_expires_at: number; signature: string };
+    expect(body.replaces_expires_at).toBe(1_700_000_000);
+    expect(await signerOf(reissueTypedData(requestDomain(vectors.chain_id, VAULT), ACCOUNT, 3, 1_700_000_000), body.signature)).toBe(ACCOUNT);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("Requested. The new authorization arrives here once the node signs it.");
+  });
+});

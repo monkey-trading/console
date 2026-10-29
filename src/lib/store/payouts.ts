@@ -12,6 +12,11 @@ import { authorizationFor } from "./funds";
 import type { ConsoleState } from "./state";
 import type { ConsoleStore } from "./store";
 
+/** The most approvals one read of the account's history returns: the node's page limit. */
+const APPROVALS_LIMIT = 200;
+/** Paid payouts shown beside the unpaid ones, newest first. */
+const PAID_SHOWN = 5;
+
 /** Where one approved payout stands. */
 export type PayoutStatus =
   | { kind: "paid" }
@@ -30,10 +35,10 @@ export interface Payout {
   status: PayoutStatus;
 }
 
-/** The account's approved payouts in its history, newest first, with where each stands at node time `nowMs`. */
+/** Every unpaid payout of the account's approvals, newest first, then its newest paid ones, with where each stands at node time. */
 export function payoutsOf(state: ConsoleState): Payout[] {
   const nowSeconds = Math.floor(state.now / 1000);
-  return state.history.flatMap((event) => {
+  const all = state.approvals.flatMap((event) => {
     if (event.type !== "withdrawal_approved") return [];
     const approvedSeq = Number(event.cursor.split(":")[0]);
     const signed = authorizationFor(state, event.nonce);
@@ -45,6 +50,19 @@ export function payoutsOf(state: ConsoleState): Payout[] {
         : { kind: "waiting" };
     return [{ nonce: event.nonce, amount: fixedFromWire(event.amount), approvedSeq, status }];
   });
+  return [...all.filter((p) => p.status.kind !== "paid"), ...all.filter((p) => p.status.kind === "paid").slice(0, PAID_SHOWN)];
+}
+
+/** Reads the connected account's approved withdrawals from its history, apart from the recent events, so an old unpaid one stays in reach. */
+export async function loadApprovals(store: ConsoleStore): Promise<void> {
+  const address = store.getSnapshot().wallet?.address;
+  if (address === undefined) return;
+  try {
+    const { events } = await store.deps.client.history(address, { kind: "withdrawal_approved", limit: APPROVALS_LIMIT });
+    if (store.getSnapshot().wallet?.address === address) store.patch({ approvals: events });
+  } catch (error) {
+    store.toast("error", `Your approved withdrawals could not be read: ${errorText(error)}`);
+  }
 }
 
 /** Reads, through the wallet's chain provider, which of the account's unpaid payouts the vault has paid since. */
@@ -62,17 +80,23 @@ export async function checkPaid(store: ConsoleStore): Promise<void> {
   }
 }
 
-/** Claims payout `nonce` on the vault with its authorization. */
+/**
+ * Claims payout `nonce` on the vault with its authorization. A claim signs nothing for the node, so it
+ * needs only the wallet, not a live feed: the authorization was verified when the stream carried it.
+ */
 export async function claim(store: ConsoleStore, nonce: number): Promise<void> {
   const signed = authorizationFor(store.getSnapshot(), nonce);
-  const wallet = usableWallet(store, "claim");
-  if (!wallet || signed === null) return;
-  const amount = `$${formatFixedPlaces(fixedFromWire(signed.amount), 2)}`;
+  const wallet = store.liveWallet;
+  if (!wallet) return store.toast("error", "Connect a wallet first.");
+  if (signed === null) return;
+  const amount = `${formatFixedPlaces(fixedFromWire(signed.amount), 2)} USDC`;
   store.patch({ busy: true });
   try {
-    await prompting(store, `Confirm in your wallet: claim ${amount} USDC from the vault.`, () => wallet.claim(signed));
-    store.patch({ paid: [...store.getSnapshot().paid, nonce] });
-    store.toast("ok", `The vault paid ${amount} to your wallet.`);
+    await prompting(store, `Confirm in your wallet: claim ${amount} from the vault.`, () => wallet.claim(signed));
+    // The payout belongs to the account that claimed it, which may no longer be the one connected.
+    const state = store.getSnapshot();
+    if (state.wallet?.address === wallet.address) store.patch({ paid: [...new Set([...state.paid, nonce])] });
+    store.toast("ok", `The vault paid ${amount} to ${wallet.address === state.wallet?.address ? "your wallet" : wallet.address}.`);
   } catch (error) {
     store.toast("error", errorText(error));
   } finally {

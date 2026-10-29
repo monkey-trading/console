@@ -1,71 +1,17 @@
 /** Tests for the user's signed actions against a live client, with a test wallet over a fixed key. */
 
-import { recoverTypedDataAddress, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 
-import { EngineError, type ActionResult, type ClientEvent, type EngineClient } from "../engine/client";
+import { EngineError } from "../engine/client";
 import vectors from "../engine/eip712-vectors.json";
 import { cancelTypedData, eligibilityTypedData, orderTypedData, requestDomain, withdrawalTypedData } from "../engine/eip712";
-import { ProviderWallet } from "../engine/provider-wallet";
-import { settle } from "../engine/test-kit";
-import type { CancelRequest, EligibilityRequest, MarketView, OrderRequest, RequestAuth, WithdrawalRequest } from "../engine/types";
-import { ACCOUNT, StubProvider, type StubOptions } from "../engine/wallet-kit";
-import type { Wallet } from "../engine/wallet";
+import type { CancelRequest, EligibilityRequest, OrderRequest, WithdrawalRequest } from "../engine/types";
+import { ACCOUNT } from "../engine/wallet-kit";
 import { fixedFromInt, fixedFromWire } from "../fixed";
 import { attestEligibility, cancelOrder, deposit, placeOrder, REQUEST_TTL_MS, withdraw } from "./actions";
-import { ConsoleStore } from "./store";
+import { connected, NODE_TIME, signerOf, VAULT } from "./live-kit";
 
-const VAULT = vectors.vault;
 const DOMAIN = requestDomain(vectors.chain_id, VAULT);
-const BTC = { id: 1, symbol: "BTC-USD", open: true, reduce_only: false, mark: "100000", stress_level: 0, max_slippage_bps: 25, min_order_notional: "10", margin_tiers: [], spread_tiers: [], house_cap_bps: 0, schedule: { kind: "always_open" }, asset_class: "crypto" } as unknown as MarketView;
-const NODE_TIME = 1_792_540_800_000;
-
-type Posted = { route: string; body: OrderRequest | CancelRequest | WithdrawalRequest | EligibilityRequest };
-
-/** A live client whose actions record what they were sent and answer as the test says. */
-class ActionClient implements EngineClient {
-  signatures = "checked" as const;
-  deployment = { chainId: vectors.chain_id, vault: VAULT };
-  posted: Posted[] = [];
-  nonceReads = 0;
-  answer: (posted: Posted) => ActionResult = () => ({ seq: 1, events: [] });
-  async attestation(): Promise<never> { throw new Error("unused"); }
-  async verify() { return { kind: "mock" } as const; }
-  watch(listener: (event: ClientEvent) => void) { listener({ type: "feed", status: "live" }); return () => {}; }
-  async markets() { return [BTC]; }
-  async house() { return { cash: "0", nav: "0", gross_exposure: "0" }; }
-  async account(): Promise<never> { throw new EngineError(404, "not found"); }
-  async accessProbe() {}
-  async nonce() { this.nonceReads++; return { next_nonce: 4, time_ms: NODE_TIME }; }
-  async eligibility() { return { class: null, statement: null }; }
-  private act(route: string, body: Posted["body"]) { const posted = { route, body }; this.posted.push(posted); return Promise.resolve().then(() => this.answer(posted)); }
-  attestEligibility(body: EligibilityRequest) { return this.act("eligibility", body); }
-  placeOrder(body: OrderRequest) { return this.act("order", body); }
-  cancelOrder(body: CancelRequest) { return this.act("cancel", body); }
-  withdraw(body: WithdrawalRequest) { return this.act("withdraw", body); }
-  async reissue() {}
-  async findWithdrawal() { return null; }
-  quotes() {}
-  async withdrawalQueue() { return { seq: 1, queue: [], next: null }; }
-  async history() { return { events: [], next: null }; }
-  subscribe() { return () => {}; }
-}
-
-async function connected(options: StubOptions = {}) {
-  const client = new ActionClient();
-  const provider = new StubProvider(options);
-  const wallet: Wallet = new ProviderWallet(ACCOUNT, "Test wallet", provider, { chainId: vectors.chain_id, vault: VAULT, usdc: "0x00000000000000000000000000000000000000cc", add: null }, { wait: async () => {} });
-  const store = new ConsoleStore({ client, wallets: { options: [], connect: async () => wallet }, history: () => [], initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
-  store.start(0);
-  await settle();
-  store.liveWallet = wallet;
-  store.setWallet({ address: ACCOUNT, label: "Test wallet" });
-  return { client, provider, store };
-}
-
-/** The account that signed `auth` over `typed`. */
-const signerOf = (typed: ReturnType<typeof orderTypedData>, auth: RequestAuth | undefined) =>
-  recoverTypedDataAddress({ ...(typed as unknown as Parameters<typeof recoverTypedDataAddress>[0]), signature: (auth?.signature ?? "0x") as Hex }).then((a) => a.toLowerCase());
 
 describe("signed actions with a fixed-key wallet", () => {
   it("signs an order with the node's nonce and an expiry two minutes past its signed time, carrying the price shown and the bound", async () => {
@@ -77,7 +23,7 @@ describe("signed actions with a fixed-key wallet", () => {
     expect(order).toMatchObject({ account: ACCOUNT, market: 1, side: "buy", qty: "0.5", kind: { kind: "market", quoted: "100000", max_slippage_bps: 10 }, reduce_only: false, auth: { nonce: 4, expires_at: NODE_TIME + REQUEST_TTL_MS } });
     expect(REQUEST_TTL_MS).toBeLessThanOrEqual(5 * 60_000);
     const typed = orderTypedData(DOMAIN, order, { nonce: 4, expiresAt: NODE_TIME + REQUEST_TTL_MS });
-    expect(await signerOf(typed, order.auth)).toBe(ACCOUNT);
+    expect(await signerOf(typed, order.auth?.signature)).toBe(ACCOUNT);
   });
 
   it("signs a cancel, a withdrawal and a declaration over exactly the body it posts", async () => {
@@ -86,21 +32,47 @@ describe("signed actions with a fixed-key wallet", () => {
     await withdraw(store, fixedFromInt(10));
     await attestEligibility(store, "eligible_client");
     const terms = { nonce: 4, expiresAt: NODE_TIME + REQUEST_TTL_MS };
-    const [cancel, withdrawal, declaration] = client.posted.map((p) => p.body);
-    expect(await signerOf(cancelTypedData(DOMAIN, cancel as CancelRequest, terms), cancel?.auth)).toBe(ACCOUNT);
-    expect(await signerOf(withdrawalTypedData(DOMAIN, ACCOUNT, (withdrawal as WithdrawalRequest).amount, terms), withdrawal?.auth)).toBe(ACCOUNT);
+    // The three actions post these request types, in this order.
+    const [cancel, withdrawal, declaration] = client.posted.map((p) => p.body) as [CancelRequest, WithdrawalRequest, EligibilityRequest];
+    expect(await signerOf(cancelTypedData(DOMAIN, cancel, terms), cancel.auth?.signature)).toBe(ACCOUNT);
+    expect(await signerOf(withdrawalTypedData(DOMAIN, ACCOUNT, withdrawal.amount, terms), withdrawal.auth?.signature)).toBe(ACCOUNT);
     expect(declaration).toMatchObject({ account: ACCOUNT, class: "eligible_client" });
-    expect(await signerOf(eligibilityTypedData(DOMAIN, ACCOUNT, "eligible_client", terms), declaration?.auth)).toBe(ACCOUNT);
+    expect(await signerOf(eligibilityTypedData(DOMAIN, ACCOUNT, "eligible_client", terms), declaration.auth.signature)).toBe(ACCOUNT);
   });
 
-  it("signs once more with the nonce a 409 names, and only once", async () => {
+  it("signs a cancel once more with the nonce a 409 names, and only once", async () => {
     const { client, provider, store } = await connected();
     client.answer = () => { throw new EngineError(409, "invalid nonce", { kind: "invalid_nonce", expected: 9 }); };
     await cancelOrder(store, 42);
-    expect(client.posted.map((p) => p.body.auth?.nonce)).toEqual([4, 9]);
+    expect(client.posted.map((p) => ("auth" in p.body ? p.body.auth?.nonce : undefined))).toEqual([4, 9]);
     expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2);
     expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "error", text: "The request was out of order. Try again." });
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
+  });
+
+  it("does not sign an order or a withdrawal again after a 409, since a copy may have run, and reads the account before saying so", async () => {
+    for (const run of [
+      (store: Parameters<typeof withdraw>[0]) => withdraw(store, fixedFromInt(10)),
+      (store: Parameters<typeof withdraw>[0]) => placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false }),
+    ]) {
+      const { client, provider, store } = await connected();
+      client.answer = () => { throw new EngineError(409, "invalid nonce", { kind: "invalid_nonce", expected: 9 }); };
+      const reads = client.marketReads;
+      await run(store);
+      expect(client.posted.map((p) => ("auth" in p.body ? p.body.auth?.nonce : undefined))).toEqual([4]);
+      expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(1);
+      expect(client.marketReads).toBeGreaterThan(reads);
+      expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node had already used nonce 4 for this account, so it did not take this request as sent. If it was sent twice it may have run: check your positions, orders, withdrawals and history before trying again.");
+    }
+  });
+
+  it("reads the account again before showing any refusal of a request, which may have run from a copy", async () => {
+    const { client, store } = await connected();
+    client.answer = () => { throw new EngineError(0, "The node did not answer."); };
+    const reads = client.marketReads;
+    await cancelOrder(store, 42);
+    expect(client.marketReads).toBeGreaterThan(reads);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node did not answer.");
   });
 
   it("shows what the wallet is asked to sign while it waits, and clears it after", async () => {

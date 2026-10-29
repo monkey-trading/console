@@ -98,7 +98,7 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
 - Install: `npm ci`
 - Dev server: `npm run dev` (`http://localhost:3000`); against a local engine dev node,
   `npm run dev:live` (see the README)
-- Local trading stack: `./scripts/dev-local-stack.sh` (Anvil, Forge, Cargo, Node, `jq`, Python 3.11+; the engine
+- Local trading stack: `./scripts/dev-local-stack.sh` (Anvil, Forge, Cast, Cargo, Node and npm, `curl`, `jq`, Python 3.11+; the engine
   checkout from `ENGINE_DIR`, default the `engine` beside the main checkout, with `forge soldeer install` run in its
   `contracts/`; prints the wallet setup and runs until Ctrl-C; ports, the funded wallet and `CONSOLE_BUILD=production`
   are set by the variables its header lists)

@@ -52,8 +52,12 @@ export interface ConsoleState {
   quotes: Record<MarketId, MarketQuote>;
   /** Why the node will not quote the connected account, such as an account it has not credited yet. */
   quoteError: string | null;
+  /** The markets the console asks the node to quote now; a quote for any other is not current. */
+  quoted: MarketId[];
   /** Signed withdrawal authorizations for the connected account, the latest per payout nonce. */
   authorizations: SignedWithdrawal[];
+  /** The connected account's approved withdrawals, newest first, read apart from its recent history so none drops out of reach. */
+  approvals: HistoryEvent[];
   /** The connected account's payout nonces the vault has paid, as its wallet's chain reads them. */
   paid: number[];
   /** What the wallet is asked to sign or send now, shown while it waits for the user. */
@@ -105,7 +109,9 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     toasts: [],
     quotes: {},
     quoteError: null,
+    quoted: [],
     authorizations: [],
+    approvals: [],
     paid: [],
     prompt: null,
     busy: false,

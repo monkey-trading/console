@@ -5,6 +5,7 @@ import type { Wallet, WalletConnector } from "./wallet";
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
+/** The page's injected provider as the "Browser wallet" option. */
 export class InjectedConnector implements WalletConnector {
   readonly options = [{ id: "injected", label: "Browser wallet", detail: "An extension such as MetaMask or Rabby" }] as const;
 

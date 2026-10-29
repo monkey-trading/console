@@ -10,7 +10,8 @@ import type { ConsoleStore } from "./store";
 export function applyFeedEvent(state: ConsoleState, event: ClientEvent): Partial<ConsoleState> | null {
   const mine = state.wallet?.address.toLowerCase();
   if (event.type === "quote") {
-    if (event.quote.account.toLowerCase() !== mine) return null;
+    // A quote for a market the console no longer asks about may be stale, so it is not kept.
+    if (event.quote.account.toLowerCase() !== mine || !state.quoted.includes(event.quote.market)) return null;
     return { quotes: { ...state.quotes, [event.quote.market]: event.quote }, quoteError: null };
   }
   if (event.type === "quote_error") return mine === undefined ? null : { quotes: {}, quoteError: event.error };
@@ -30,11 +31,16 @@ export function followAccountFeeds(store: ConsoleStore): () => void {
   });
 }
 
-/** Asks the node for the connected account's quotes in the selected market and those it holds, or for none without a wallet. */
+/**
+ * Asks the node for the connected account's quotes in the selected market and those it holds, or for
+ * none without a wallet, and drops the quotes of markets it no longer asks about, which stop updating.
+ */
 export function syncQuotes(store: ConsoleStore): void {
-  const { wallet, selected, account } = store.getSnapshot();
-  const held = account?.positions.map((p) => p.market) ?? [];
-  store.deps.client.quotes(wallet === null ? null : { account: wallet.address, markets: quoteMarkets(selected, held) });
+  const { wallet, selected, account, quotes } = store.getSnapshot();
+  const markets = wallet === null ? [] : quoteMarkets(selected, account?.positions.map((p) => p.market) ?? []);
+  const kept = Object.fromEntries(Object.entries(quotes).filter(([market]) => markets.includes(Number(market))));
+  store.patch({ quoted: markets, quotes: kept });
+  store.deps.client.quotes(wallet === null ? null : { account: wallet.address, markets });
 }
 
 /** The quote for `market`, when the node has sent one for the connected account. */

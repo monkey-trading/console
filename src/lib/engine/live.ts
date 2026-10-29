@@ -168,8 +168,9 @@ export class LiveEngineClient implements EngineClient {
     return (await this.transport.get(`/v1/accounts/${address}/withdrawals`)) as WithdrawalPage;
   }
 
-  async history(address: Address, params: { limit?: number; before?: string }): Promise<HistoryPage> {
+  async history(address: Address, params: { limit?: number; before?: string; kind?: string }): Promise<HistoryPage> {
     const query = new URLSearchParams();
+    if (params.kind !== undefined) query.set("kind", params.kind);
     if (params.limit !== undefined) query.set("limit", String(params.limit));
     if (params.before !== undefined) query.set("before", params.before);
     const suffix = query.size > 0 ? `?${query}` : "";

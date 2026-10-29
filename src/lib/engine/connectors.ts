@@ -2,6 +2,7 @@
 
 import type { Wallet, WalletConnector, WalletOption } from "./wallet";
 
+/** The options of `connectors`, in order, each connecting through the connector that offers it. */
 export class MultiConnector implements WalletConnector {
   readonly options: readonly WalletOption[];
 

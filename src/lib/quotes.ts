@@ -10,6 +10,8 @@ import type { TicketPreview } from "./ticket";
 
 /** The most markets one connection may ask quotes for: the node's `api.quote_max_markets` default. */
 export const MAX_QUOTED_MARKETS = 4;
+/** The node's refusal of quotes for an account it has never credited (`quotes/mod.rs`). */
+export const UNCREDITED = "the account has never been credited";
 
 /** The price an order takes from a quote, and why the node would decline it, if it would. */
 export interface ExecutablePrice {
@@ -66,7 +68,10 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
   }
   const none = (problem: string): TicketPrices => ({ bid: null, offer: null, price: null, spreadBps: null, problem });
   const { quote } = input;
-  if (quote === null) return none(input.quoteError === null ? "Waiting for the node's executable quote." : "The node quotes an account once it has credited it: deposit and declare your eligibility first.");
+  if (quote === null) {
+    if (input.quoteError === null) return none("Waiting for the node's executable quote.");
+    return none(input.quoteError === UNCREDITED ? "The node quotes an account once it has credited it: deposit and declare your eligibility first." : `The node will not quote this market: ${input.quoteError}.`);
+  }
   if (quote.unavailable !== undefined) return none(describeReject(quote.unavailable));
   const ask = executablePrice(quote, "buy", preview.qty);
   const bid = executablePrice(quote, "sell", preview.qty);

@@ -9,7 +9,7 @@ import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { formatMark } from "@/lib/price-format";
 import { ticketPrices } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
-import { previewTicket, SLIPPAGE_CHOICES } from "@/lib/ticket";
+import { MARGIN_SHORT, previewTicket, SLIPPAGE_CHOICES } from "@/lib/ticket";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { MarketInfo } from "./MarketInfo";
@@ -48,7 +48,7 @@ export function DealTicket() {
   const live = state.signatures === "checked";
   const prices = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview, side, mark: market.mark });
   // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
-  const problems = preview.problems.filter((p) => !live || p !== "Not enough equity for the margin this needs.");
+  const problems = preview.problems.filter((p) => !live || p !== MARGIN_SHORT);
   if (kind === "market" && prices.problem !== null) problems.push(prices.problem);
   if (size.trim() !== "" && parseFixed(size) === null) problems.push("Enter the size in digits, such as 10000 or 2500.50.");
   if (kind !== "market" && triggerPrice === null) problems.push(price.trim() === "" ? "Enter a trigger price." : "Enter the trigger price in digits, such as 61250.50.");

@@ -246,14 +246,22 @@ describe("the WalletConnect wallet", () => {
     const { wallet, fake } = await connected(session("topic-1", ["eth_signTypedData_v4", "eth_call"]));
     fake.answers = [`0x${"0".repeat(63)}1`];
     expect(await wallet.claimed(3)).toBe(true);
-    // A balance, an allowance of nothing, then an approval the session does not allow.
+    // A balance and an allowance of nothing; the approval is not sent, since the session cannot return its receipt.
     fake.answers = [`0x${"f".repeat(64)}`, `0x${"0".repeat(64)}`];
-    await expect(wallet.deposit(10_000_000_000n)).rejects.toThrow("Your wallet does not allow eth_sendTransaction over WalletConnect");
+    await expect(wallet.deposit(10_000_000_000n)).rejects.toThrow("could not read transaction receipts, so the console did not ask it to approve the vault: Your wallet does not allow eth_getTransactionReceipt over WalletConnect");
     expect(fake.requests.map((r) => [r.method, r.chain])).toEqual([
       ["eth_call", "eip155:31337"],
       ["eth_call", "eip155:31337"],
       ["eth_call", "eip155:31337"],
     ]);
+  });
+
+  it("ends the session and closes the relay socket when the user disconnects, once", async () => {
+    const { wallet, fake } = await connected();
+    await wallet.disconnect?.();
+    await wallet.disconnect?.();
+    expect([fake.disconnects, fake.closes]).toEqual([1, 1]);
+    await expect(wallet.sign({ summary: "", typed: TYPED })).rejects.toThrow("Your wallet ended the WalletConnect session");
   });
 
   it("fails its next request once the wallet ends the session", async () => {

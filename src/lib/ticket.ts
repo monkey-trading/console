@@ -8,6 +8,9 @@ import { executionCost, growthOf, notionalOf, quoteOrder, slicedBps, tieredMargi
 /** The smallest step of a quantity: a millionth of a unit. */
 const QTY_STEP: Fixed = SCALE / 1_000_000n;
 
+/** The ticket's own margin refusal, which a live build leaves to the node's executable quote. */
+export const MARGIN_SHORT = "Not enough equity for the margin this needs.";
+
 /** The slippage bounds offered, in basis points. */
 export const SLIPPAGE_CHOICES = [5, 10, 25, 50] as const;
 
@@ -102,7 +105,7 @@ export function previewTicket(input: TicketInput): TicketPreview {
   else if (grows && notionalOf(qty, input.resting && input.triggerPrice ? input.triggerPrice : mark) < fixedFromWire(spec.min_order_notional)) problems.push(`Minimum order is ${spec.min_order_notional} USD.`);
   if (grows && !input.resting) {
     if (equity <= 0n) problems.push("Fund your account to trade.");
-    else if (marginAfter > afterCost) problems.push("Not enough equity for the margin this needs.");
+    else if (marginAfter > afterCost) problems.push(MARGIN_SHORT);
   }
   return {
     qty, quote, offer: offer.price, bid: bid.price, spreadBps: Number(((offer.price - bid.price) * 10_000n) / mark), worstPrice: input.resting ? null : quote.price + worst,

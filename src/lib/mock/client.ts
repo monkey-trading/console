@@ -181,13 +181,13 @@ export class MockEngineClient implements EngineClient {
     return this.state.accounts.get(address.toLowerCase())?.eligibility ?? null;
   }
 
-  async history(address: Address, params: { limit?: number; before?: string }): Promise<HistoryPage> {
+  async history(address: Address, params: { limit?: number; before?: string; kind?: string }): Promise<HistoryPage> {
     return this.historyPage(address, params);
   }
 
   /** `GET /v1/accounts/{address}/history` now, without waiting. */
-  historyPage(address: Address, params: { limit?: number; before?: string }): HistoryPage {
-    const items = this.state.history.get(address.toLowerCase()) ?? [];
+  historyPage(address: Address, params: { limit?: number; before?: string; kind?: string }): HistoryPage {
+    const items = (this.state.history.get(address.toLowerCase()) ?? []).filter((item) => params.kind === undefined || item.event.type === params.kind);
     const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
     const [beforeSeq = Number.POSITIVE_INFINITY, beforeIndex = 0] = params.before ? params.before.split(":").map(Number) : [];
     // Strictly older than the cursor, which names one event, not the whole command.
