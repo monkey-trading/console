@@ -9,6 +9,7 @@ import { parseDeploy, rawDeploy, type Deploy } from "@/lib/engine/deploy";
 import { InjectedConnector } from "@/lib/engine/injected";
 import { createLiveClient, GLUE_PATH } from "@/lib/engine/live-session";
 import type { Eip1193Provider } from "@/lib/engine/provider-wallet";
+import { WalletConnectConnector } from "@/lib/engine/walletconnect";
 import type { VerifierModule } from "@/lib/engine/wasm-verifier";
 import { WatchConnector } from "@/lib/engine/watch-wallet";
 import { DEMO_ADDRESS } from "@/lib/mock/demo";
@@ -24,6 +25,8 @@ interface Session {
   store: ConsoleStore;
   /** The in-browser node; null when the console talks to a live one. */
   node: MockNode | null;
+  /** The WalletConnect connector, whose pairing link the pairing dialog shows; null when the build has none. */
+  walletConnect: WalletConnectConnector | null;
 }
 
 const SessionContext = createContext<Session | null>(null);
@@ -51,9 +54,13 @@ function createLiveSession(deploy: Deploy): Session {
   if (deploy.chainId === null || deploy.vault === null) throw new Error("A live session needs the deployment's chain id and vault.");
   const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, add: deploy.rpcUrl === null ? null : { name: `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-  const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, { wait }), new WatchConnector(() => window.location.search)]);
+  // The SDK is a separate chunk, loaded when the user picks WalletConnect.
+  const walletConnect = deploy.walletConnectProjectId === null ? null : new WalletConnectConnector(
+    { projectId: deploy.walletConnectProjectId, url: () => window.location.origin }, chain, { wait }, () => import("@walletconnect/universal-provider"),
+  );
+  const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, { wait }), ...(walletConnect === null ? [] : [walletConnect]), new WatchConnector(() => window.location.search)]);
   const store = new ConsoleStore({ client, wallets, history: () => [], initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
-  return { store, node: null };
+  return { store, node: null, walletConnect };
 }
 
 function createSession(): Session {
@@ -75,7 +82,7 @@ function createSession(): Session {
       },
     },
   });
-  return { store, node };
+  return { store, node, walletConnect: null };
 }
 
 /** The most simulated time one tick may add, so a stalled timer does not jump the prices. */

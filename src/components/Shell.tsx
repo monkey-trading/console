@@ -8,6 +8,7 @@ import { FundingDrawer } from "./FundingDrawer";
 import { RiskStrip } from "./RiskStrip";
 import { Toasts } from "./Toasts";
 import { TopBar } from "./TopBar";
+import { WalletConnectPairing } from "./WalletConnectPairing";
 import { WalletPrompt } from "./WalletPrompt";
 
 /** Fills the viewport on large screens and scrolls as one page on small ones. */
@@ -24,6 +25,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </main>
       <RiskStrip />
       <FundingDrawer />
+      <WalletConnectPairing />
       <Toasts />
       <WalletPrompt inDrawer={false} />
     </div>
