@@ -28,6 +28,7 @@ export class WatchConnector implements WalletConnector {
     return {
       address,
       label: "Read-only",
+      readOnly: true,
       sign: async () => {
         throw new Error("This account is read-only: nothing can be signed for it.");
       },

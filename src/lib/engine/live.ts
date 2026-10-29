@@ -226,7 +226,7 @@ export class LiveEngineClient implements EngineClient {
         onQuote: (quote) => this.emit({ type: "quote", quote }),
         onQuoteError: (error) => this.emit({ type: "quote_error", error }),
         onWithdrawal: (withdrawal) => this.emit({ type: "withdrawal", withdrawal }),
-        onFeed: (status: FeedStatus) => this.emit({ type: "feed", status }),
+        onFeed: (status: FeedStatus, time?: number) => this.emit(time === undefined ? { type: "feed", status } : { type: "feed", status, time }),
         onProblem: (reason) => this.emit({ type: "problem", reason }),
       });
       this.stream = stream;

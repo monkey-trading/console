@@ -18,6 +18,14 @@ export function describeMockAttestation(signatures: "checked" | "none"): { lead:
     : { lead: "Mock attestation accepted.", rest: "A development node whose attestation proves no enclave, read through the verifier's dev-only mock entry point: prices, fills and funds are not real." };
 }
 
+/** What the banner says while the node is verified again: only what the client does. */
+export function describeReverifying(): { lead: string; rest: string } {
+  return {
+    lead: "Re-verifying the node.",
+    rest: "The enclave changed or an answer failed its check. Reads wait and signing is paused until it passes; the stream keeps showing the frames it has already verified.",
+  };
+}
+
 /** One sentence for a typed refusal. */
 export function describeReject(reject: Reject): string {
   switch (reject.kind) {

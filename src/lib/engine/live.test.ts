@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { LiveEngineClient } from "./live";
 import { dev, markets, replyOf, setup, production } from "./live-setup";
-import { acceptAll, FakeNode, FakeScheduler, mockAttestation } from "./test-kit";
+import { acceptAll, FakeNode, FakeScheduler, FakeSocket, mockAttestation, settle } from "./test-kit";
 import { VECTORS, vectorResponse } from "./test-vectors";
 import { SignatureError, UntrustedError } from "./trust";
 
@@ -134,4 +134,23 @@ describe("the other reads", () => {
     await expect(client.history("0xabc", { limit: 100, before: "5:0" })).resolves.toEqual({ events: [], next: null });
   });
 
+});
+
+describe("a stream replaced while the node is being verified", () => {
+  it("leaves exactly one live socket when a subscriber leaves and another arrives", async () => {
+    const node = new FakeNode();
+    node.attestation(() => VECTORS.signer);
+    const sockets: FakeSocket[] = [];
+    const client = new LiveEngineClient({
+      origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000, loadVerifier: async () => acceptAll,
+      manifests: [], acceptsMock: true, fetch: node.fetch, openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
+      scheduler: new FakeScheduler(), nowMs: () => markets.time_ms,
+    });
+    // React's setup, cleanup, setup: the first stream is stopped while its open still waits on the verifier.
+    client.subscribe(() => {})();
+    client.subscribe(() => {});
+    await settle();
+    expect(sockets.filter((socket) => !socket.closed)).toHaveLength(1);
+    expect(sockets).toHaveLength(1);
+  });
 });

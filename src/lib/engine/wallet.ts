@@ -22,6 +22,8 @@ export interface SignRequest {
 export interface Wallet {
   address: Address;
   label: string;
+  /** Set for an account that is only watched: it cannot sign or deposit, so no control offers to. */
+  readOnly?: boolean;
   /** Resolves with a 65-byte signature as `0x` hex, `v` 27 or 28. Rejects when the user declines. */
   sign(request: SignRequest): Promise<string>;
   /**

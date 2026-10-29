@@ -31,6 +31,8 @@ export interface TicketInput {
   triggerPrice?: Fixed | null;
   account: AccountModel | null;
   houseNav: Fixed;
+  /** False for a live node, whose executable quote the console cannot know: the margin use, which depends on it, is then null. */
+  estimates?: boolean;
 }
 
 export interface TicketPreview {
@@ -114,7 +116,7 @@ export function previewTicket(input: TicketInput): TicketPreview {
   }
   return {
     qty, quote, offer: offer.price, bid: bid.price, spreadBps: Number(((offer.price - bid.price) * 10_000n) / mark), worstPrice: input.resting ? null : quote.price + worst,
-    marginAfter, marginAdded: after - before, marginUseBps: useBps, marginRateBps: positionRate,
+    marginAfter, marginAdded: after - before, marginUseBps: input.estimates === false ? null : useBps, marginRateBps: positionRate,
     impliedLeverage: after > 0n ? Number((resulting * 100n) / after) / 100 : null, houseCap, problems,
   };
 }

@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { describeEvent, describeMockAttestation, describeReject } from "./messages";
+import { describeEvent, describeMockAttestation, describeReject, describeReverifying } from "./messages";
 
 describe("describeReject", () => {
   it("names the numbers a slippage and a margin refusal carry", () => {
@@ -34,5 +34,15 @@ describe("describeMockAttestation", () => {
     expect(mock.rest).not.toContain("verifier");
     expect(live.rest).toContain("dev-only mock entry point");
     expect(live.rest).not.toContain("in your browser");
+  });
+});
+
+describe("describeReverifying", () => {
+  it("says what holds while the node is verified again: reads wait, signing is paused, and the stream's verified frames still arrive", () => {
+    const { lead, rest } = describeReverifying();
+    expect(lead).toBe("Re-verifying the node.");
+    expect(rest).toContain("Reads wait and signing is paused");
+    expect(rest).toContain("already verified");
+    expect(rest).not.toContain("nothing is shown as trusted");
   });
 });

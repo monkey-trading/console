@@ -50,7 +50,8 @@ export type Unsubscribe = () => void;
 /** What a client reports about its trust in the node, whether its feed is arriving, and why it dropped the stream. */
 export type ClientEvent =
   | { type: "attestation"; status: AttestationStatus }
-  | { type: "feed"; status: FeedStatus }
+  /** `time` is the signed time of the frame that made the feed live, so the store can advance the node clock before it reads. */
+  | { type: "feed"; status: FeedStatus; time?: number }
   /** The node's answers now come from another enclave address than before. */
   | { type: "enclave" }
   /** Why the stream was dropped, written for the user. */

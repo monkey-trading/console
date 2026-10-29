@@ -2,11 +2,14 @@
 
 /** Resting orders with a Cancel button: a table from 1024 px, cards below. */
 
+import { useId } from "react";
+
 import { fixedFromWire, formatFixedPlaces } from "@/lib/fixed";
 import { cancelOrder } from "@/lib/store/actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
+import { useReadOnlyNote } from "./SignGate";
 
 const TH = "px-4 py-3 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
 const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
@@ -14,6 +17,7 @@ const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption tex
 export function OrdersView() {
   const { account, markets, busy } = useConsole();
   const { store } = useSession();
+  const readOnly = useReadOnlyNote(useId(), "Cancel");
   if ((account?.orders.length ?? 0) === 0) return <p className="px-4 py-6 text-caption text-fg-3">No resting orders.</p>;
   const rows = (account?.orders ?? []).map((o) => {
     const market = markets.find((m) => m.id === o.market);
@@ -29,6 +33,7 @@ export function OrdersView() {
   });
   return (
     <>
+      {readOnly.note}
       <ul className="lg:hidden">
         {rows.map((r) => (
           <li key={r.id} className="border-b border-line px-4 py-3 text-caption last:border-b-0">
@@ -40,7 +45,7 @@ export function OrdersView() {
               <div><dt className="text-label text-fg-3">Size</dt><dd>{r.size}</dd></div>
               <div><dt className="text-label text-fg-3">Trigger</dt><dd>{r.trigger}</dd></div>
             </dl>
-            <button type="button" disabled={busy} className={`${BUTTON} mt-3 w-full`} aria-label={`Cancel order ${r.id}`} onClick={r.cancel}>Cancel</button>
+            <button type="button" disabled={busy || readOnly.readOnly} className={`${BUTTON} mt-3 w-full`} aria-label={`Cancel order ${r.id}`} aria-describedby={readOnly.describedBy} onClick={r.cancel}>Cancel</button>
           </li>
         ))}
       </ul>
@@ -57,7 +62,7 @@ export function OrdersView() {
                 <td className="px-4 py-4">{r.size}</td>
                 <td className="px-4 py-4">{r.trigger}</td>
                 <td className="px-4 py-4 text-right">
-                  <button type="button" disabled={busy} className={BUTTON} aria-label={`Cancel order ${r.id}`} onClick={r.cancel}>Cancel</button>
+                  <button type="button" disabled={busy || readOnly.readOnly} className={BUTTON} aria-label={`Cancel order ${r.id}`} aria-describedby={readOnly.describedBy} onClick={r.cancel}>Cancel</button>
                 </td>
               </tr>
             ))}

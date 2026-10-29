@@ -89,6 +89,14 @@ describe("previewTicket", () => {
     expect(preview.impliedLeverage).toBeGreaterThanOrEqual(49.9);
     expect(preview.impliedLeverage).toBeLessThanOrEqual(50.1);
   });
+
+  it("shows no margin use for a live node, whose quote it cannot know, and still sizes the margin", async () => {
+    const market = await btc();
+    const input = { market, side: "buy", notional: fixedFromInt(50_000), slippageBps: 10, account: account(10_000), houseNav: fixedFromInt(20_000_000) } as const;
+    const live = previewTicket({ ...input, estimates: false });
+    expect(live.marginUseBps).toBeNull();
+    expect(live.marginAdded).toBe(previewTicket(input).marginAdded);
+  });
 });
 
 describe("slippageBound", () => {

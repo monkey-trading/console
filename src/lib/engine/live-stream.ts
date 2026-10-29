@@ -46,7 +46,8 @@ export interface StreamDeps {
   onQuoteError(error: string): void;
   /** A signed withdrawal authorization, for any account. */
   onWithdrawal(withdrawal: SignedWithdrawal): void;
-  onFeed(status: FeedStatus): void;
+  /** `time` is the signed time of the frame that made the feed live. */
+  onFeed(status: FeedStatus, time?: number): void;
   /** Why a connection was dropped, for the log of what the user is told. */
   onProblem(reason: string): void;
 }
@@ -118,10 +119,10 @@ export class LiveStream {
     this.watchdog = this.retry = null;
   }
 
-  private setFeed(status: FeedStatus): void {
+  private setFeed(status: FeedStatus, time?: number): void {
     if (status === this.feed) return;
     this.feed = status;
-    this.deps.onFeed(status);
+    this.deps.onFeed(status, time);
   }
 
   private async open(): Promise<void> {
@@ -169,7 +170,7 @@ export class LiveStream {
       this.backoff = RECONNECT_MIN_MS;
       this.reported = false;
       this.deps.trust.clockRight();
-      this.setFeed("live");
+      this.setFeed("live", frame.time);
       this.armWatchdog(generation);
       if (message.type === "command") this.deps.onMessage(message);
       else if (message.type === "quote") this.deps.onQuote(message);

@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
-import { liquidationPrice } from "./liquidation";
+import { closeOutMarker, liquidationPrice } from "./liquidation";
 import { decodeMarket, type AccountModel } from "./models";
 import { createMockNode } from "./mock";
 
@@ -46,5 +46,16 @@ describe("liquidationPrice", () => {
     // ETH is 100 under its entry, so BTC has 100 less to lose before the threshold.
     expect(liquidationPrice(withOther, btc, all)).toBe(fixedFromInt(59_300));
     expect(liquidationPrice(account(1_000_000, 400, fixedFromInt(1), 1_000), btc, all)).toBeNull();
+  });
+});
+
+describe("closeOutMarker", () => {
+  it("draws the estimate for the in-browser node and none for a live one", async () => {
+    const all = await markets();
+    const btc = all.find((m) => m.id === 1);
+    if (!btc) throw new Error("BTC-USD is listed");
+    const held = account(1_000, 400, fixedFromInt(1), 60_000);
+    expect(closeOutMarker("none", held, btc, all)).toBe(fixedFromInt(59_200));
+    expect(closeOutMarker("checked", held, btc, all)).toBeNull();
   });
 });

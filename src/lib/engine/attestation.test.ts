@@ -51,4 +51,10 @@ describe("maySign", () => {
     expect(signBlock({ kind: "checking" }, "live")).toContain("attestation");
     expect(signBlock({ kind: "mock" }, "live")).toBeNull();
   });
+
+  it("names a read-only account first, whatever else blocks", () => {
+    expect(signBlock({ kind: "mock" }, "live", true)).toContain("read-only");
+    expect(signBlock({ kind: "checking" }, "stale", true)).toContain("read-only");
+    expect(maySign({ kind: "mock" }, "live")).toBe(true);
+  });
 });
