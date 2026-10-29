@@ -51,6 +51,8 @@ export function WalletButton() {
                 type="button"
                 onClick={() => {
                   setOpen(false);
+                  // The menu closes; keep focus on the button, so a pairing dialog that closes returns it there.
+                  primary.current?.focus();
                   moved.current = true;
                   void connectWallet(store, option.id);
                 }}

@@ -41,6 +41,9 @@ export interface RawDeploy {
 
 const DEFAULT_HEARTBEAT_MS = 5_000;
 
+/** WalletConnect's relay: the one origin besides the node's that a build with a project id talks to. The connector pins the SDK to it and the CSP names it. */
+export const WALLETCONNECT_RELAY = "wss://relay.walletconnect.org";
+
 /** The raw values from the build environment; Next.js inlines only literal `process.env.NEXT_PUBLIC_*` reads. */
 export function rawDeploy(): RawDeploy {
   return {
