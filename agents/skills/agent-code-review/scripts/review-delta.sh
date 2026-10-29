@@ -17,7 +17,7 @@
 set -Eeuo pipefail
 trap 'exit 3' ERR
 export LC_ALL=C
-[ $# -eq 4 ] || { sed -n '2,17p' "$0"; exit 2; }
+[ $# -eq 4 ] || { sed -n '2,16p' "$0" >&2; exit 2; }
 rb=$1 rh=$2 nb=$3 nh=$4
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 

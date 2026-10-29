@@ -54,7 +54,7 @@ Git mutations, tests, fixes, delegation, and output other than the requested
 report.
 
 In a delta round ([Scope](../SKILL.md#scope)) the captured diffs are `.residual.diff`,
-`.change.diff`, and `.reviewed.diff`, and `.reviewed.diff` is context only. Every instruction in this section
+`.change.diff`, and `.reviewed.diff`, the last for context only. Every instruction in this section
 that names the captured diff means all three, with the surrounding source read at the new head;
 the prompt says which one is the residual and which is context.
 

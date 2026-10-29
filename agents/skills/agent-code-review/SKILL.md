@@ -48,9 +48,14 @@ selects multi-agent mode. A severity filter alone does not select a review level
   next re-check starts from its new base and head. Save them with:
 
   ```bash
-  review-delta.sh <reviewed-base> <reviewed-head> <new-base> <new-head> > <run-dir>/.residual.diff
-  echo $? >> <run-dir>/.residual.status   # 0 and empty, or 1 and the residual; else fix and rerun
-  git diff <new-base>...<new-head> > <run-dir>/.change.diff   # or the new diff of each conflicted file
+  delta=agents/skills/agent-code-review/scripts/review-delta.sh
+  status=0
+  "$delta" <reviewed-base> <reviewed-head> <new-base> <new-head> \
+    > <run-dir>/.residual.diff || status=$?
+  echo "$status" > <run-dir>/.residual.status   # 0 and empty, or 1 and the residual; else fix and rerun
+  # The change: the commits added since the reviewed head. After a rebase that resolved
+  # conflicts, save instead the new diff of each conflicted file, git diff <new-base>...<new-head> -- <file>.
+  git diff <reviewed-head> <new-head> > <run-dir>/.change.diff
   git diff <reviewed-base>...<reviewed-head> > <run-dir>/.reviewed.diff
   ```
 
@@ -208,13 +213,14 @@ finding is fixed by class before the next round.
   Mediums from this check are fixed in the PR too), and records one round-log row naming the
   single-agent check, its findings, and its fixes. A later change is still re-checked by its delta
   below, as a single-agent check by the owning agent over the same residual and change (the full
-  diff when behaviour changes), numbered in the round log, with its Mediums fixed in the PR too. The PR is marked ready once `ci-passed` is green on the head, as after a clean round.
+  diff when behaviour changes), numbered in the round log, with its Mediums fixed in the PR too.
+  The fixes for a check that accepted a Critical or High finding get another such check, until one
+  accepts none. The PR is marked ready once `ci-passed` is green on the head, as after a clean round.
   Feature PRs always run the full loop.
 - **The round log is the count.** The branch's fix notes
   ([Fixing an accepted finding](#fixing-an-accepted-finding)) open with a round log: one line per
   round with its number, the commit it reviewed, and its accepted counts by severity. A session
-  reads it before anything else on the branch, numbers the next round from it, and counts the
-  Medium cap from it.
+  reads it before anything else on the branch, numbers the next round from it, and tells from it when the round-3 Medium rule applies.
 - **A clean round ends the loop.** A round that accepts no Critical, High, or Medium finding ends
   it. After it, change no code, fix no Lows or Nits, and run no further rounds. Mark the PR ready
   on exactly the commit that round reviewed, or on a later one that needs no round under the

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Checks review-delta.sh on a scratch repository: a rebase onto a main that moved (also under an
 # inherited diff.interHunkContext), a change that differs, a line moved between functions, a rename,
-# binary fixtures (also under a text conversion or an external diff), a caller in a subdirectory
+# binary fixtures (also under a text conversion), an external diff driver, a caller in a subdirectory
 # under an inherited diff.relative, bad arguments, and failures. Prints one line
 # per case and exits 1 if any case fails.
 set -euo pipefail
@@ -75,8 +75,8 @@ check line-moved-between-functions 1 "$base" "$reviewed" "$base" "$moved"
 has line-moved-between-functions "^-@@ export function first" "the old function"
 has line-moved-between-functions "^+@@ export function second" "the new function"
 check binary-changed 1 "$base" "$blob_a" "$base" "$blob_b"
-has binary-changed '^-.' "the old payload"
-has binary-changed '^+.' "the new payload"
+has binary-changed '^-[A-Za-z0-9]' "the old payload"
+has binary-changed '^+[A-Za-z0-9]' "the new payload"
 has binary-changed 'blob.bin' "the file"
 check binary-same 0 "$base" "$blob_a" "$main" "$blob_a_on_main"
 empty binary-same

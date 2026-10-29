@@ -4,7 +4,7 @@ description: >
   Use when opening a pull request — "create a PR", "open a PR for this branch", "raise a PR for
   this work" — or when the owner says a PR may merge. Covers opening every PR as a draft, the
   preconditions for marking it ready (including a multi-agent agent-code-review at medium or
-  higher), the issue blocker check, the `[scopes] Title` and the body in squashed-commit format
+  higher, or a single-agent check for a PR that closes only `bug` issues), the issue blocker check, the `[scopes] Title` and the body in squashed-commit format
   ending with `Closes #12` or `Part of #12`, watching the checks after it opens, and, on the
   owner's go-ahead in chat, posting `merge-approved` and merging the PR. Every feature PR ends
   `Closes #12`; `Part of #12` is only for a supporting PR that does not finish its issue. Does not
