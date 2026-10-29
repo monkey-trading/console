@@ -53,6 +53,11 @@ diff, and necessary surrounding source at the recorded head SHA; prohibit edits,
 Git mutations, tests, fixes, delegation, and output other than the requested
 report.
 
+In a delta round ([Scope](../SKILL.md#scope)) the captured diffs are `.residual.diff`,
+`.change.diff`, and `.reviewed.diff`, the last for context only. Every instruction in this section
+that names the captured diff means all three, with the surrounding source read at the new head;
+the prompt says which one is the residual and which is context.
+
 Launch every reviewer in a **fresh** [ask-agent](../../ask-agent/SKILL.md)
 session concurrently after saving `.branch.diff` or `.pr.diff`. Give each
 reviewer only that captured diff. Do not provide a session ID,

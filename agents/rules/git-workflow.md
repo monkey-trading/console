@@ -61,8 +61,10 @@ CI on the PR.
 - Take the validation commands of the `.github/workflows/` jobs the change can affect and run
   them, each exiting zero. In `.github/workflows/ci.yaml` those are the `docs` job's
   `python3 scripts/check-docs.test.py` and `python3 scripts/check-docs.py`, run for every change,
-  since moving or renaming a file can break a link as surely as editing a page; and, for a change
-  under `.github/workflows/`, the `workflows` job's actionlint, at the version `ci.yaml` pins.
+  since moving or renaming a file can break a link as surely as editing a page; for a change under
+  `agents/skills/agent-code-review/scripts/`, the `review-delta` job's
+  `agents/skills/agent-code-review/scripts/review-delta-test.sh`; and, for a change under
+  `.github/workflows/`, the `workflows` job's actionlint, at the version `ci.yaml` pins.
 - `ci.yaml` runs the app's checks — `npm ci`, then `npm run lint`, `npm run typecheck`,
   `npm test`, `npm run build`, and `npm audit --audit-level=high` — each covers the whole project,
   so any change outside Markdown and `agents/` runs all six, `npm ci` first so the checks use the

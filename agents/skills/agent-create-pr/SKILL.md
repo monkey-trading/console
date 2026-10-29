@@ -4,7 +4,7 @@ description: >
   Use when opening a pull request — "create a PR", "open a PR for this branch", "raise a PR for
   this work" — or when the owner says a PR may merge. Covers opening every PR as a draft, the
   preconditions for marking it ready (including a multi-agent agent-code-review at medium or
-  higher), the issue blocker check, the `[scopes] Title` and the body in squashed-commit format
+  higher, or a single-agent check for a PR that closes only `bug` issues), the issue blocker check, the `[scopes] Title` and the body in squashed-commit format
   ending with `Closes #12` or `Part of #12`, watching the checks after it opens, and, on the
   owner's go-ahead in chat, posting `merge-approved` and merging the PR. Every feature PR ends
   `Closes #12`; `Part of #12` is only for a supporting PR that does not finish its issue. Does not
@@ -56,9 +56,13 @@ marked ready, may not.
   mode at level `medium` or higher on the final diff, so Claude and Codex reviewers cross-validated
   each other. Fix every accepted Critical, High, and Medium finding by class and run it again;
   [The review loop](../agent-code-review/SKILL.md#the-review-loop) says when the rounds end — a
-  clean round, or the owner's consent to downgrade Mediums from round 3 on — and on which commit
-  the PR is marked ready. Low and Nit findings remain unfixed after the last round, and a
-  mechanical rebase onto `main` after it needs no new round.
+  clean round, or a round from 3 on that accepts Mediums but no Critical or High, whose Mediums
+  are filed as `bug` issues — and on which commit the PR is marked ready. Low and Nit findings,
+  and Mediums filed as issues, remain unfixed after the last round. A change after it is
+  re-checked by its delta, as the review loop says: a mechanical rebase onto `main` needs no new
+  round, and any other change gets one round on the residual and the change itself, or on the full
+  diff when either changes behaviour beyond resolving a conflict. A PR whose `Closes` lines name
+  only `bug` issues gets the review loop's single-agent check instead of the multi-agent loop.
 - **Local checks** the change affects passed, per git-workflow; the full CI runs on the PR.
 
 ## Title
@@ -161,8 +165,10 @@ If GitHub or git refuses any step, the session reports why and stops.
 - Never open from an unpushed or stale branch.
 - Never open a PR whose issue has an open blocker without the user's explicit yes.
 - Issues are read-only here: never create, edit, or close an issue without the user's explicit
-  approval. The one exception is GitHub closing, on merge, each issue the body ends with
-  `Closes #<n>`.
+  approval. The exceptions are GitHub closing, on merge, each issue the body ends with
+  `Closes #<n>`, and the `bug` issues
+  [the review loop](../agent-code-review/SKILL.md#the-review-loop) files for Mediums from round 3
+  on.
 - No AI signatures anywhere — title, body, or commits.
 - Never approve or dismiss reviews. Post `merge-approved` and merge only as
   [Merging](#merging) describes.
