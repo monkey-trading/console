@@ -34,8 +34,10 @@ export default function Page() {
           If you connect a wallet app with WalletConnect, the pairing and every request between this page and your
           wallet pass through WalletConnect&apos;s relay, run by Reown. The messages are encrypted between the page
           and your wallet, so the relay cannot read them, but it sees your IP address, this page&apos;s address, your
-          browser and operating system family, and an identifier for the session. A browser wallet does not use the
-          relay.
+          browser and operating system family, and an identifier for the session. Each pairing and request also loads
+          a hidden page from WalletConnect&apos;s Verify service (<code>verify.walletconnect.org</code>), run by Reown,
+          which tells your wallet that it comes from this page&apos;s domain; it sees your IP address, this page&apos;s
+          address, your browser, and an identifier for the request. A browser wallet uses neither.
         </p>
       </section>
       <section aria-labelledby="software" className="space-y-3">

@@ -102,12 +102,8 @@ export interface EngineClient {
   placeOrder(request: OrderRequest): Promise<ActionResult>;
   cancelOrder(request: CancelRequest): Promise<ActionResult>;
   withdraw(request: WithdrawalRequest): Promise<ActionResult>;
-  /**
-   * Asks for a fresh authorization of payout `nonce`, whose last one expired at `replacesExpiresAt`
-   * (0 if none); it arrives on the stream. Resolves with the log head the node answered at, past which
-   * the new authorization lands.
-   */
-  reissue(account: Address, nonce: number, body: { replaces_expires_at: number; signature: string }): Promise<{ seq: number | null }>;
+  /** Asks for a fresh authorization of payout `nonce`, whose last one expired at `replacesExpiresAt` (0 if none); it arrives on the stream. */
+  reissue(account: Address, nonce: number, body: { replaces_expires_at: number; signature: string }): Promise<void>;
   /** Payout `nonce`'s latest authorization in the log after seq `fromSeq`, and whether the read reached the head. */
   findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<ScanResult>;
   /** Asks for the account's executable quotes in up to four markets, or for none; they arrive through `watch`. */

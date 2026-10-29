@@ -148,7 +148,7 @@ export class ProviderWallet implements Wallet {
   /**
    * Error cases:
    * - the build names no USDC token, or the amount is not a positive whole number of USDC base units, or exceeds the wallet's USDC
-   * - the user declines a transaction, or one reverts or is not mined within three minutes
+   * - the user declines a transaction, or one reverts or is not confirmed after 180 receipt polls a second apart
    */
   async deposit(amount: Fixed, progress: Progress = () => undefined): Promise<string> {
     const units = usdcUnits(amount);
@@ -167,7 +167,7 @@ export class ProviderWallet implements Wallet {
   /**
    * Error cases:
    * - the authorization is for another account or deployment, or has no typed authorization
-   * - the user declines, or the transaction reverts or is not mined within three minutes
+   * - the user declines, or the transaction reverts or is not confirmed after 180 receipt polls a second apart
    */
   async claim(withdrawal: SignedWithdrawal, progress: Progress = () => undefined): Promise<string> {
     const auth = withdrawal.authorization;

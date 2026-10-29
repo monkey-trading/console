@@ -203,7 +203,9 @@ in a test file: a test cannot reset it, and a second instance of a component can
   every visitor, so its inline bootstrap scripts cannot carry a per-request nonce;
   `'unsafe-inline'` covers them, and the policy allows nothing from another origin but the approved engine node's
   and, in a build with a WalletConnect project id, WalletConnect's relay (`wss://relay.walletconnect.org`,
-  approved in monkey-trading/console#7) in `connect-src`.
+  approved in monkey-trading/console#7) in `connect-src` and its Verify service
+  (`https://verify.walletconnect.org`, approved by the owner as monkey-trading/console#27 records) in
+  `frame-src 'self' https://verify.walletconnect.org`.
 - `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
   `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, and a `Permissions-Policy`
   that turns off `camera`, `microphone`, `geolocation`, `payment`, `usb`, and `browsing-topics`.
@@ -339,8 +341,8 @@ The bar is WCAG 2.2 AA; the [development checklist](../../rules/development-chec
   iframes, or embeds without the owner's explicit approval. A visitor's choices, such as the pause
   switch, live in memory and end with the tab.
 - Every request the page makes is same-origin, but for the engine node's origin once the owner has
-  approved it, and WalletConnect's relay while a user pairs or uses a wallet app over it (approved in
-  monkey-trading/console#7): the site serves its own fonts, images, and scripts. Check the production build's
+  approved it, and WalletConnect's relay and its Verify frame while a user pairs or uses a wallet app over
+  it (approved in monkey-trading/console#7 and #27): the site serves its own fonts, images, and scripts. Check the production build's
   network panel after any change to what the page loads.
 - Links to other sites are plain links; nothing is fetched from them.
 - Nothing a visitor types leaves the browser, but for what the app sends to the engine node: the

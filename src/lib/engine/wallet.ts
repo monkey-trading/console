@@ -33,8 +33,8 @@ export interface Wallet {
   deposit(amount: Fixed, progress?: Progress): Promise<string>;
   /** Claims a signed withdrawal authorization on the vault and resolves with the transaction hash; `progress` as for `deposit`. */
   claim(withdrawal: SignedWithdrawal, progress?: Progress): Promise<string>;
-  /** Whether the vault has paid this account's payout `nonce`. */
-  claimed(nonce: number): Promise<boolean>;
+  /** Whether the vault has paid this account's payout `nonce`; absent from a wallet that reads no chain, such as a watched account's. */
+  claimed?(nonce: number): Promise<boolean>;
   /** Ends the wallet's connection, such as a WalletConnect session, when the user disconnects; absent when there is nothing to end. */
   disconnect?(): Promise<void>;
 }

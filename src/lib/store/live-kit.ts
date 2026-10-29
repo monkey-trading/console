@@ -47,13 +47,15 @@ export class ActionClient implements EngineClient {
   placeOrder(body: OrderRequest) { return this.act("order", body); }
   cancelOrder(body: CancelRequest) { return this.act("cancel", body); }
   withdraw(body: WithdrawalRequest) { return this.act("withdraw", body); }
-  async reissue(_account: string, nonce: number, body: { replaces_expires_at: number; signature: string }) { await this.act(`reissue ${nonce}`, body); return { seq: 77 }; }
+  /** The log head signed reads answer at; a reissue the node takes moves it on, as the node logs the new authorization and more before it answers. */
+  head = 77;
+  async reissue(_account: string, nonce: number, body: { replaces_expires_at: number; signature: string }) { await this.act(`reissue ${nonce}`, body); this.head += 2; }
   searches: number[] = [];
   async findWithdrawal(_account: string, _nonce: number, fromSeq: number) { this.searches.push(fromSeq); return { withdrawal: this.found, complete: this.complete, reached: this.complete ? null : this.reached }; }
   complete = true;
   reached: number | null = null;
   quotes(request: QuoteRequest | null) { this.quoteRequests.push(request); }
-  async withdrawalQueue() { return { seq: 1, queue: [], next: null }; }
+  async withdrawalQueue() { return { seq: this.head, queue: [], next: null }; }
   async history(_address: string, params: { kind?: string; before?: string }) {
     this.historyReads.push({ kind: params.kind });
     return this.historyPages?.[params.before ?? ""] ?? this.historyPage;

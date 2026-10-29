@@ -67,7 +67,7 @@ function PairingDialog({ connector }: { connector: WalletConnectConnector }) {
           </>
         )}
         <p className="text-label leading-relaxed text-fg-3">
-          The pairing runs through WalletConnect&apos;s relay, a third party that passes encrypted messages between this page and your wallet and sees your IP address.{" "}
+          The pairing runs through WalletConnect&apos;s relay and Verify service, a third party that passes encrypted messages between this page and your wallet, tells your wallet this page&apos;s domain, and sees your IP address.{" "}
           <a href="/notices" target="_blank" rel="noopener noreferrer" className="text-fg-2 underline focus-visible:outline-2 focus-visible:outline-glow">Privacy and notices<span className="sr-only"> (opens in a new tab)</span></a>
         </p>
       </div>

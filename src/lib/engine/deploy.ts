@@ -44,6 +44,9 @@ const DEFAULT_HEARTBEAT_MS = 5_000;
 /** WalletConnect's relay: the one origin besides the node's that a build with a project id talks to. The connector pins the SDK to it and the CSP names it. */
 export const WALLETCONNECT_RELAY = "wss://relay.walletconnect.org";
 
+/** WalletConnect's Verify service, whose hidden frame tells the wallet which domain a pairing or request comes from; the CSP allows only its frame. */
+export const WALLETCONNECT_VERIFY = "https://verify.walletconnect.org";
+
 /** The raw values from the build environment; Next.js inlines only literal `process.env.NEXT_PUBLIC_*` reads. */
 export function rawDeploy(): RawDeploy {
   return {
