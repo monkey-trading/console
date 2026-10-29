@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import type { FeedStatus } from "./attestation";
 import { LiveStream, STALE_AFTER_INTERVALS } from "./live-stream";
-import { FakeScheduler, FakeSocket, mockAttestation, settle } from "./test-kit";
+import { acceptAll, FakeScheduler, FakeSocket, mockAttestation, settle } from "./test-kit";
 import { NodeTrust } from "./trust";
 import type { StreamMessage } from "./types";
 import type { FrameConnection, Verifier } from "./verifier";
@@ -18,7 +18,7 @@ beforeAll(async () => {
 });
 const OTHER = "0x00000000000000000000000000000000000000aa";
 
-function setup(options: { address?: () => string; clockMs?: number } = {}) {
+function setup(options: { address?: () => string; clockMs?: number; accept?: boolean } = {}) {
   const scheduler = new FakeScheduler();
   const sockets: FakeSocket[] = [];
   const messages: StreamMessage[] = [];
@@ -26,7 +26,9 @@ function setup(options: { address?: () => string; clockMs?: number } = {}) {
   const problems: string[] = [];
   const opened: FrameConnection[] = [];
   // The vectors were opened with `after` first in the query; the client's own path is checked below, and the real verifier checks the vector's.
-  const verifier: Verifier = { ...real, openFrames: (c) => { opened.push(c); return real.openFrames({ ...c, pathAndQuery: connection.path_and_query }); } };
+  const verifier: Verifier = options.accept
+    ? acceptAll
+    : { ...real, openFrames: (c) => { opened.push(c); return real.openFrames({ ...c, pathAndQuery: connection.path_and_query }); } };
   const address = options.address ?? (() => VECTORS.signer);
   const trust = new NodeTrust({
     attestation: async () => mockAttestation(address()), collateral: async () => null, verifier: async () => verifier, manifests: [], acceptsMock: true, nowMs: () => 0, onStatus: () => {}, onEnclaveChanged: () => {},
@@ -140,13 +142,18 @@ describe("a stale feed", () => {
     expect(t.feeds).toEqual(["live", "stale", "live"]);
   });
 
-  it("counts a heartbeat as life, so a quiet market is not a stale feed", async () => {
-    const t = await started();
-    send(t.sockets[0], 0);
-    t.scheduler.advance(HEARTBEAT_MS * 2);
-    send(t.sockets[0], 1);
-    t.scheduler.advance(HEARTBEAT_MS * 2);
-    expect(t.feeds.at(-1)).toBe("live");
+  it("counts a heartbeat as life, so a quiet market is not a stale feed, and goes stale when the heartbeats stop", async () => {
+    const t = await started({ accept: true, clockMs: 1 });
+    const heartbeat = (n: number) => t.sockets[0]?.receive(JSON.stringify({ v: 1, n, time: 1, msg: '{"type":"heartbeat","head":null}', sig: "0x" }));
+    // Heartbeats alone, across more than three intervals, keep the feed live (the verifier here accepts any signature).
+    for (let n = 0; n < 6; n++) {
+      heartbeat(n);
+      t.scheduler.advance(HEARTBEAT_MS * 2);
+    }
+    expect(t.feeds).toEqual(["live"]);
+    expect(t.messages).toEqual([]);
+    t.scheduler.advance(HEARTBEAT_MS * STALE_AFTER_INTERVALS);
+    expect(t.feeds.at(-1)).toBe("stale");
   });
 
   it("reopens at the live end, never replaying from an old offset, with a delay that doubles while it keeps failing", async () => {

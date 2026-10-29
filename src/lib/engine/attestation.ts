@@ -18,6 +18,8 @@ export type AttestationStatus =
 /** Whether the node's feed is arriving: `stale` from the moment the stream fails a check, closes, or goes three heartbeat intervals without a valid frame, until the next valid frame. */
 export type FeedStatus = "connecting" | "live" | "stale";
 
+/** What the console says when a build that refuses mock attestations meets one. */
+export const MOCK_REFUSED = "The node presents a mock attestation, which this build refuses.";
 const MOCK_QUOTE_PREFIX = "MOCK-ATTESTATION-NOT-A-TEE:";
 
 function hexToText(hex: string): string | null {
@@ -38,7 +40,7 @@ export function checkAttestation(attestation: Attestation, acceptsMock: boolean)
   const isMockQuote = quote !== null && quote.startsWith(MOCK_QUOTE_PREFIX);
   if (attestation.provider === "mock") {
     if (!isMockQuote) return { kind: "unverified", reason: "The node claims a mock provider but its quote is not the mock marker." };
-    if (!acceptsMock) return { kind: "unverified", reason: "The node presents a mock attestation, which this build refuses." };
+    if (!acceptsMock) return { kind: "unverified", reason: MOCK_REFUSED };
     return { kind: "mock" };
   }
   if (isMockQuote) return { kind: "unverified", reason: "The node's quote is the mock marker under a hardware provider name." };

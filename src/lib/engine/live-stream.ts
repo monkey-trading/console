@@ -86,7 +86,7 @@ export class LiveStream {
     try {
       signer = await this.deps.trust.signer();
     } catch (error) {
-      if (generation === this.generation) this.fail(error instanceof Error ? error.message : "The node is not verified.", false);
+      if (generation === this.generation) this.fail(error instanceof Error ? error.message : "The node is not verified.");
       return;
     }
     if (generation !== this.generation || this.stopped) return;
@@ -102,17 +102,17 @@ export class LiveStream {
       if (generation !== this.generation) return;
       const text = typeof event.data === "string" ? event.data : null;
       const frame = text === null ? null : parseSignedFrame(text);
-      if (text === null || frame === null) return this.fail("The node sent a stream frame that is not a signed envelope.", true);
-      if (frame.n !== expected) return this.fail(`The stream skipped: expected frame ${expected} but received ${frame.n}, so a frame was dropped, repeated or reordered.`, true);
+      if (text === null || frame === null) return this.fail("The node sent a stream frame that is not a signed envelope.");
+      if (frame.n !== expected) return this.fail(`The stream skipped: expected frame ${expected} but received ${frame.n}, so a frame was dropped, repeated or reordered.`);
       const checked = frames.verify(text);
-      if (!checked.ok) return this.fail(`A stream frame did not verify: ${checked.reason}.`, true, signer);
+      if (!checked.ok) return this.fail(`A stream frame did not verify: ${checked.reason}.`, signer);
       const skewMs = frame.time - this.deps.nowMs();
       if (Math.abs(skewMs) > CLOCK_TOLERANCE_MS) {
         this.deps.trust.clockWrong(skewMs);
-        return this.fail("Your device clock differs from the node's signed time, so the stream was dropped.", false);
+        return this.fail("Your device clock differs from the node's signed time, so the stream was dropped.");
       }
       const message = parseFrameMessage(checked.msg);
-      if (message === null) return this.fail("A signed stream frame carried a message the console does not know.", true);
+      if (message === null) return this.fail("A signed stream frame carried a message the console does not know.");
       expected++;
       this.backoff = RECONNECT_MIN_MS;
       this.reported = false;
@@ -122,10 +122,10 @@ export class LiveStream {
       if (message.type === "command") this.deps.onMessage(message);
     };
     socket.onclose = () => {
-      if (generation === this.generation) this.fail("The connection to the node closed.", false);
+      if (generation === this.generation) this.fail("The connection to the node closed.");
     };
     socket.onerror = () => {
-      if (generation === this.generation) this.fail("The connection to the node failed.", false);
+      if (generation === this.generation) this.fail("The connection to the node failed.");
     };
   }
 
@@ -133,7 +133,7 @@ export class LiveStream {
   private armWatchdog(generation: number): void {
     if (this.watchdog !== null) this.deps.scheduler.clearTimeout(this.watchdog);
     this.watchdog = this.deps.scheduler.setTimeout(() => {
-      if (generation === this.generation) this.fail("No data from the node for three heartbeat intervals.", false);
+      if (generation === this.generation) this.fail("No data from the node for three heartbeat intervals.");
     }, this.deps.heartbeatMs * STALE_AFTER_INTERVALS);
   }
 
@@ -142,7 +142,7 @@ export class LiveStream {
    * is checked again, since an enclave restart changes the signing key; then the stream reopens at
    * the live end, after a delay that doubles to 15 s while it keeps failing.
    */
-  private fail(reason: string, checkNode: boolean, signer?: string): void {
+  private fail(reason: string, signer?: string): void {
     if (this.stopped) return;
     this.generation++;
     this.socket?.close();
@@ -158,7 +158,7 @@ export class LiveStream {
       if (this.stopped) return;
       this.retry = this.deps.scheduler.setTimeout(() => void this.open(), delay);
     };
-    if (checkNode && signer !== undefined) void this.deps.trust.recheck(signer).then(reopen, reopen);
+    if (signer !== undefined) void this.deps.trust.recheck(signer).then(reopen, reopen);
     else reopen();
   }
 }

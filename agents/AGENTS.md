@@ -47,7 +47,7 @@ matches the current action.
   `deploy.ts` parses the `NEXT_PUBLIC_ENGINE_*` values a build pins (the node's origin, chain, vault and
   mode) and decides whether a mock attestation is accepted; `manifests.ts` holds the pinned release
   manifests; `watch-wallet.ts` is the read-only account for `?account=`. `wire.ts`, `test-vectors.ts`,
-  `test-kit.ts` and `wire-vectors.json` (the engine's known-answer vectors, replayed through the real
+  `test-kit.ts`, `live-setup.ts` and `wire-vectors.json` (the engine's known-answer vectors, replayed through the real
   verifier) pin and test the wire formats. `store/` holds the state, the store that follows the node's stream,
   and the user's actions. `mock/` is the in-browser node (state, orders, fills, close-out, funds and
   the first-in first-out withdrawal queue, the clock step, the demo account's backstory in `demo.ts`, and the controls the mock build exposes).

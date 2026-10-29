@@ -108,7 +108,7 @@ export function DealTicket() {
           {!gate && problems.map((p) => <p key={p}>{p}{p === "Fund your account to trade." && <> <FundingLink /></>}</p>)}
         </div>
       </form>
-      <MarketInfo market={market} preview={preview} notional={notional} />
+      <MarketInfo market={market} preview={preview} notional={notional} quoted={quoted} />
     </>
   );
 }

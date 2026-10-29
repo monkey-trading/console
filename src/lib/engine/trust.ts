@@ -1,6 +1,6 @@
 /** Which enclave address the console trusts the node's answers to come from, and how it got it. */
 
-import type { AttestationStatus } from "./attestation";
+import { MOCK_REFUSED, type AttestationStatus } from "./attestation";
 import type { Verifier } from "./verifier";
 
 /** Something the node sent cannot be trusted; the reason is written for the user. */
@@ -19,7 +19,8 @@ export class SignatureError extends UntrustedError {
   }
 }
 
-const MOCK_REFUSED = "The node presents a mock attestation, which this build refuses.";
+/** How long a failure under an address that re-verified unchanged goes without another re-verification, in milliseconds. */
+const RECHECK_COOLDOWN_MS = 30_000;
 /** The messages the verifier gives when a certificate or list is outside its dates, which a wrong device clock also causes. */
 const DATE_FAILURE = /validity period|not yet valid|is expired/;
 
@@ -53,6 +54,8 @@ export class NodeTrust {
   private verifiedStatus: AttestationStatus | null = null;
   /** The last address that was trusted, which a re-verification compares the next one with. */
   private lastSigner: string | null = null;
+  /** The address whose last failed answer a re-verification did not explain, and when: it is not re-verified again for a while. */
+  private suspect: { signer: string; at: number } | null = null;
 
   constructor(private readonly deps: TrustDeps) {}
 
@@ -89,9 +92,14 @@ export class NodeTrust {
    * whether it now names another address; the caller may then retry once.
    */
   async recheck(failed: string): Promise<boolean> {
+    const now = this.deps.nowMs();
+    // A node that keeps failing under the same address is not asked for its attestation on every failure.
+    if (this.suspect?.signer === failed && now - this.suspect.at < RECHECK_COOLDOWN_MS) return false;
     this.signerAddress = null;
     await this.verify();
-    return this.signerAddress !== null && this.signerAddress !== failed;
+    const changed = this.signerAddress !== null && this.signerAddress !== failed;
+    this.suspect = changed ? null : { signer: failed, at: now };
+    return changed;
   }
 
   /** The device clock disagrees with the node's signed time by `skewMs`; nothing the node says can be judged. */
@@ -126,7 +134,8 @@ export class NodeTrust {
     try {
       const verifier = await this.deps.verifier();
       const text = await this.deps.attestation();
-      const { provider } = JSON.parse(text) as { provider?: unknown };
+      // The node's own JSON: a body that is not an object has no provider, and the verifier then rejects it.
+      const { provider } = (JSON.parse(text) ?? {}) as { provider?: unknown };
       if (provider === "mock") {
         // Only the dev-only entry point reads a mock quote, and a build that refuses one never has it.
         if (!this.deps.acceptsMock || !verifier.verifyMockAttestation) return this.setStatus({ kind: "unverified", reason: MOCK_REFUSED });
@@ -139,7 +148,7 @@ export class NodeTrust {
       if (collateral === null) return this.setStatus({ kind: "unverified", reason: "The node serves no collateral for its attestation, so it cannot be verified." });
       const verdict = verifier.verifyAttestation({ attestation: text, manifests: this.deps.manifests, collateral, nowMs: this.deps.nowMs() });
       if (!verdict.ok) {
-        const hint = DATE_FAILURE.test(verdict.reason) ? " If the device clock is wrong, correct it and reload." : "";
+        const hint = DATE_FAILURE.test(verdict.reason) ? ". If the device clock is wrong, correct it and reload." : "";
         return this.setStatus({ kind: "unverified", reason: verdict.reason + hint });
       }
       const { address, release, config } = verdict.enclave;

@@ -156,6 +156,52 @@ describe("a live client's trust and feed", () => {
     expect(histories).toBe(base + 1);
   });
 
+  it("reads once, not twice, when a new enclave is trusted after trust was lost, or a wrong clock is corrected while the feed is stale", async () => {
+    const { client, store } = setup();
+    store.start(0);
+    await settle();
+    client.listener?.({ type: "attestation", status: { kind: "unverified", reason: "x" } });
+    client.listener?.({ type: "enclave" });
+    client.listener?.({ type: "attestation", status: { kind: "mock" } });
+    await settle();
+    expect(client.marketReads).toBe(2);
+    client.listener?.({ type: "feed", status: "stale" });
+    client.listener?.({ type: "attestation", status: { kind: "clock", skewMs: 60_000 } });
+    client.listener?.({ type: "attestation", status: { kind: "mock" } });
+    client.listener?.({ type: "feed", status: "live" });
+    await settle();
+    expect(client.marketReads).toBe(3);
+  });
+
+  it("shows a read failure that repeats on every tick once, and again after a read succeeds", async () => {
+    const { client, store } = setup();
+    store.start(0);
+    await settle();
+    const markets = client.markets.bind(client);
+    client.markets = async () => { throw new Error("The node's answer did not verify: x."); };
+    for (let i = 0; i < 3; i++) await store.refresh(false);
+    expect(store.getSnapshot().toasts.filter((t) => t.text.includes("did not verify"))).toHaveLength(1);
+    client.markets = markets;
+    await store.refresh(false);
+    client.markets = async () => { throw new Error("The node's answer did not verify: x."); };
+    await store.refresh(false);
+    expect(store.getSnapshot().toasts.filter((t) => t.text.includes("did not verify"))).toHaveLength(2);
+  });
+
+  it("selects the first listed market when the selected one is not listed, and builds bars for a market first seen after the node's clock is known", async () => {
+    const { client, store } = setup();
+    client.markets = async () => [{ ...BTC, id: 2, symbol: "ETH-USD" }];
+    store.start(0);
+    await settle();
+    expect(store.getSnapshot().selected).toBe(2);
+    expect(store.getSnapshot().bars[2]?.["1m"]).toEqual([]);
+    client.onMessage?.({ offset: "1:0", type: "command", seq: 1, ts: 1_800_000_000_000, cmd: { type: "tick" }, events: [] });
+    client.markets = async () => [{ ...BTC, id: 2, symbol: "ETH-USD" }, { ...BTC, id: 3, symbol: "SOL-USD", mark: "200" }];
+    await store.refresh(false);
+    expect(store.getSnapshot().bars[3]?.["1m"]).toHaveLength(1);
+    expect(store.getSnapshot().bars[3]?.["1m"]?.[0]?.close).toBe(200);
+  });
+
   it("tells the user why the stream was dropped", async () => {
     const { client, store } = setup();
     store.start(0);
@@ -172,7 +218,7 @@ describe("a live client's trust and feed", () => {
     expect(store.getSnapshot().toasts.at(-1)?.text).toContain("did not verify");
   });
 
-  it("says why it will not sign an action while the feed is stale, whatever the attestation", async () => {
+  it("says why it will not sign an action while the feed is stale", async () => {
     const { client, store } = setup();
     store.start(0);
     await settle();
@@ -182,7 +228,7 @@ describe("a live client's trust and feed", () => {
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not sign: the node's feed is stale.");
   });
 
-  it("says why it will not send a deposit while the feed is stale, whatever the attestation", async () => {
+  it("says why it will not send a deposit while the feed is stale", async () => {
     const { client, store } = setup();
     store.start(0);
     await settle();
@@ -223,9 +269,10 @@ describe("a live node that is down at first", () => {
     node.signed("/v1/markets", () => signed([BTC]));
     node.signed("/v1/house", () => signed({ cash: "1", nav: "1", gross_exposure: "0" }));
     const scheduler = new FakeScheduler();
+    const sockets: FakeSocket[] = [];
     const live = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: ACCOUNT, heartbeatMs: 5_000, loadVerifier: async () => acceptAll,
-      manifests: [], acceptsMock: true, fetch: node.fetch, openSocket: () => new FakeSocket("wss://node.test"), scheduler, nowMs: () => 1,
+      manifests: [], acceptsMock: true, fetch: node.fetch, openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; }, scheduler, nowMs: () => 1,
     });
     const store = new ConsoleStore({ client: live, wallets: new WatchConnector(() => ""), history: () => [], initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
     store.start(0);
@@ -236,6 +283,9 @@ describe("a live node that is down at first", () => {
     scheduler.advance(1_000);
     for (let i = 0; i < 20; i++) await settle();
     expect(store.getSnapshot().attestation.kind).toBe("mock");
+    // The stream's first frame returns the feed from stale, which reads everything once.
+    sockets.at(-1)?.receive(JSON.stringify({ v: 1, n: 0, time: 1, msg: '{"type":"heartbeat","head":null}', sig: "0x" }));
+    for (let i = 0; i < 20; i++) await settle();
     expect(store.getSnapshot().markets.map((m) => m.symbol)).toEqual(["BTC-USD"]);
   });
 });

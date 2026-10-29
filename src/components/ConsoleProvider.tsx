@@ -32,7 +32,8 @@ function createLiveSession(deploy: Deploy): Session {
   const client = createLiveClient(deploy, {
     fetch: (input, init) => fetch(input, init),
     openSocket: (url) => new WebSocket(url),
-    scheduler: { setTimeout: (run, ms) => setTimeout(run, ms), clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
+    scheduler: { setTimeout: (run, ms) => setTimeout(run, ms), // The handle is the one this scheduler's own setTimeout returned.
+      clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
     nowMs: () => Date.now(),
     // The glue is a static file of the app, loaded as it is rather than bundled; the bundler would otherwise look for the .wasm beside it.
     loadGlue: () => import(/* webpackIgnore: true */ /* turbopackIgnore: true */ GLUE_PATH) as Promise<VerifierModule>,

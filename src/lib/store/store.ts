@@ -41,6 +41,8 @@ export class ConsoleStore {
   private unwatch: (() => void) | null = null;
   /** Whether trust in the node was lost (a failed check or a wrong clock) and not yet regained. */
   private trustLost = false;
+  /** The last read failure shown, so a failure that repeats on every tick is shown once. */
+  private lastReadError: string | null = null;
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
@@ -54,11 +56,6 @@ export class ConsoleStore {
         ? { wallet: session.wallet, account: session.account ? decodeAccount(session.account) : null, eligibility: session.eligibility, queue: session.queue, history: session.history }
         : {}),
     };
-  }
-
-  /** Whether the node is the in-browser mock, whose quotes are simulated. */
-  private get simulated(): boolean {
-    return this.deps.client.signatures === "none";
   }
 
   /** Whether an event belongs in this user's activity: market events, and events of their own account. */
@@ -178,14 +175,18 @@ export class ConsoleStore {
     } else if (event.type === "problem") this.toast("error", event.reason);
     // Data read under the old enclave is read again once the new one is trusted; a check that ends
     // at the same address changes nothing, so a read that keeps failing is not repeated by it.
-    else if (event.type === "enclave") void this.refresh(true);
+    else if (event.type === "enclave") {
+      this.trustLost = false; // this read is the one trust regained would ask for
+      void this.refresh(true);
+    }
     else {
       this.patch({ attestation: event.status });
       const trusted = event.status.kind === "mock" || event.status.kind === "verified";
       if (event.status.kind === "clock" || event.status.kind === "unverified") this.trustLost = true;
       else if (trusted && this.trustLost) {
         this.trustLost = false;
-        void this.refresh(true);
+        // A stale feed's return reads everything again, so trust regained under it does not.
+        if (this.snapshot.stream !== "stale") void this.refresh(true);
       }
     }
   }
@@ -217,14 +218,10 @@ export class ConsoleStore {
         this.toast("error", `Order ${event.order_id} could not be filled and was cancelled.`);
       }
     }
-    const lines = message.events.flatMap((event) => {
-      if (!this.isMine(event)) return [];
-      const text = describeEvent(event, (id) => this.snapshot.markets.find((m) => m.id === id)?.symbol ?? `market ${id}`);
-      return text === null ? [] : [{ id: this.id(), ts: message.ts, text, ...("account" in event ? { account: event.account.toLowerCase() } : {}) }];
-    });
+    const lines = this.feedFrom([message], this.snapshot.markets);
     // Price updates change nothing on screen by themselves; only the node's tick moves the clock and the log.
     if (message.cmd.type === "prices" && lines.length === 0) return;
-    this.patch({ now: message.ts, feed: [...lines.reverse(), ...this.snapshot.feed].slice(0, FEED_LIMIT) });
+    this.patch({ now: message.ts, feed: [...lines, ...this.snapshot.feed].slice(0, FEED_LIMIT) });
     // An event for the connected account, from any command, may have changed its history too.
     const mine = this.snapshot.wallet?.address.toLowerCase();
     const own = mine !== undefined && message.events.some((e) => "account" in e && e.account.toLowerCase() === mine);
@@ -251,7 +248,7 @@ export class ConsoleStore {
   private async readAll(accountChanged: boolean): Promise<void> {
     try {
       const [views, house] = await Promise.all([this.deps.client.markets(), this.deps.client.house()]);
-      const markets = views.map((view) => decodeMarket(view, this.snapshot.markets.find((m) => m.id === view.id), this.simulated));
+      const markets = views.map((view) => decodeMarket(view, this.snapshot.markets.find((m) => m.id === view.id), this.deps.client.signatures === "none"));
       const bars = { ...this.snapshot.bars };
       for (const m of markets) {
         if (m.mark === null || !m.open) continue;
@@ -265,8 +262,11 @@ export class ConsoleStore {
       const selected = markets.some((m) => m.id === this.snapshot.selected) ? this.snapshot.selected : (markets[0]?.id ?? this.snapshot.selected);
       this.patch({ markets, bars, selected, house: decodeHouse(house) });
       if (this.snapshot.wallet) await this.loadAccount(accountChanged);
+      this.lastReadError = null;
     } catch (error) {
-      if (!this.noteAccess(error)) this.toast("error", error instanceof Error ? error.message : "The node did not answer.");
+      const message = error instanceof Error ? error.message : "The node did not answer.";
+      if (!this.noteAccess(error) && message !== this.lastReadError) this.toast("error", message);
+      this.lastReadError = message;
     }
     const again = this.rerun;
     this.rerun = null;

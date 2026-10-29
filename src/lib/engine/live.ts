@@ -34,6 +34,8 @@ export interface LiveDeps {
 
 /** How long a read of the node may take, in milliseconds. */
 const READ_TIMEOUT_MS = 10_000;
+/** How long loading the verifier may take, in milliseconds. */
+const VERIFIER_LOAD_TIMEOUT_MS = 20_000;
 const NOT_WIRED = "Signing is not available in this build yet.";
 
 export class LiveEngineClient implements EngineClient {
@@ -73,13 +75,23 @@ export class LiveEngineClient implements EngineClient {
 
   /** The verifier, loading it the first time. */
   private verifier(): Promise<Verifier> {
-    this.verifierReady ??= this.deps.loadVerifier().then(
-      (verifier) => (this.loaded = verifier),
-      (error: unknown) => {
-        this.verifierReady = null; // a failed load is tried again on the next check
-        throw error;
-      },
-    );
+    if (this.verifierReady === null) {
+      const timer = { handle: null as unknown };
+      const deadline = new Promise<never>((_, reject) => {
+        timer.handle = this.deps.scheduler.setTimeout(() => reject(new Error("The verifier took too long to load.")), VERIFIER_LOAD_TIMEOUT_MS);
+      });
+      this.verifierReady = Promise.race([this.deps.loadVerifier(), deadline]).then(
+        (verifier) => {
+          this.deps.scheduler.clearTimeout(timer.handle);
+          return (this.loaded = verifier);
+        },
+        (error: unknown) => {
+          this.deps.scheduler.clearTimeout(timer.handle);
+          this.verifierReady = null; // a failed or stalled load is tried again on the next check
+          throw error;
+        },
+      );
+    }
     return this.verifierReady;
   }
 

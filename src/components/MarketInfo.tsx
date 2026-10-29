@@ -23,7 +23,8 @@ function UseBar({ bps }: { bps: number }) {
   );
 }
 
-export function MarketInfo({ market, preview, notional }: { market: MarketModel; preview: TicketPreview; notional: Fixed }) {
+/** `quoted` is false for a live node, whose executable quote this build does not know, so no price or bound is shown. */
+export function MarketInfo({ market, preview, notional, quoted }: { market: MarketModel; preview: TicketPreview; notional: Fixed; quoted: boolean }) {
   const useBps = preview.marginUseBps;
   const filled = preview.houseCap > 0n ? Math.min(8, Math.ceil(Number((notional * 8n) / preview.houseCap) || 0)) : 0;
   const capShare = preview.houseCap > 0n ? Number((notional * 100n) / preview.houseCap) : 0;
@@ -40,8 +41,8 @@ export function MarketInfo({ market, preview, notional }: { market: MarketModel;
           <div className={ROW}><dt className="text-fg-3">Margin rate</dt><dd>{formatMovePercent(preview.marginRateBps).replace("+", "")} of the resulting position</dd></div>
           <div className={ROW}><dt className="text-fg-3">Required margin</dt><dd>{usd(preview.marginAdded)}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Implied leverage</dt><dd>{preview.impliedLeverage === null ? "—" : `${preview.impliedLeverage}×`}</dd></div>
-          <div className={ROW}><dt className="text-fg-3">Quoted price</dt><dd>{preview.quote ? formatMark(preview.quote.price, market.places) : "—"}</dd></div>
-          {preview.worstPrice !== null && <div className={ROW}><dt className="text-fg-3">Worst price allowed</dt><dd>{preview.worstPrice ? formatMark(preview.worstPrice, market.places) : "—"}</dd></div>}
+          <div className={ROW}><dt className="text-fg-3">Quoted price</dt><dd>{quoted && preview.quote ? formatMark(preview.quote.price, market.places) : "—"}</dd></div>
+          {preview.worstPrice !== null && <div className={ROW}><dt className="text-fg-3">Worst price allowed</dt><dd>{quoted && preview.worstPrice ? formatMark(preview.worstPrice, market.places) : "—"}</dd></div>}
         </dl>
         <div>
           <p className="flex justify-between text-label"><span className="text-fg-3">Margin use after order</span><span className={useBps !== null && useBps > 9_000 ? "text-ember" : "text-glow"}>{useBps === null ? "—" : formatMovePercent(useBps).replace("+", "")}</span></p>

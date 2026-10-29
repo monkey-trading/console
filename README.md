@@ -68,10 +68,12 @@ The node's origin is added to the Content Security Policy's `connect-src` (with 
 not expose the mock entry point there (the served package still exports it); with no release manifests pinned yet
 (`src/lib/engine/manifests.ts`), it trusts no hardware node either.
 
-`npm run dev:live` against a running node is checked by `scripts/dev-live-client.sh` (Node, `curl`,
-and `ENGINE_DIR`, the engine checkout, with `ENGINE_BIN` or Cargo): it runs the live client against
-the node through a tampering proxy and checks that a flipped byte, a replayed response, a dropped
-stream frame and a mock attestation in a production build are each refused.
+`scripts/dev-live-client.sh` (Node, `curl`, and `ENGINE_DIR`, the engine checkout, with `ENGINE_BIN`
+or Cargo) starts a dev node and runs the live client in Node against it through a tampering proxy,
+checking that a flipped byte, a replayed response, a dropped stream frame and a mock attestation in
+a production build are each refused. It does not exercise the browser build: how the page loads the
+verifier, and its Content Security Policy, are checked by running `npm run dev:live`, or a
+production build with the same variables, against a node.
 
 ### Updating the verifier
 
@@ -87,7 +89,9 @@ package replaces it, with its hashes, before the console is promoted.
 environment variables for the canonical origin in the document metadata: `SITE_URL`, a bare
 http(s) origin such as `https://console.monkey.trading` that takes precedence, and
 `VERCEL_PROJECT_PRODUCTION_URL`, a bare host that Vercel sets once the repository is connected to
-it. With neither, the origin is `http://localhost:3000`.
+it. With neither, the origin is `http://localhost:3000`. A build that talks to a live node also reads the
+`NEXT_PUBLIC_ENGINE_*` variables in the table under "Run it against a local engine node", which the
+owner sets in the hosting settings.
 
 ## Restricted regions
 
