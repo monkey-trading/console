@@ -17,7 +17,7 @@ const ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 
 /** A client with canned reads and a handle to push its events and stream messages. */
 class FakeClient implements EngineClient {
-  signatures = "unchecked" as const;
+  signatures = "checked" as const;
   listener: ((event: ClientEvent) => void) | null = null;
   onMessage: ((message: StreamMessage) => void) | null = null;
   marketReads = 0;
@@ -53,7 +53,7 @@ function setup() {
 describe("a live client's trust and feed", () => {
   it("loads markets once the node is trusted, and starts with nothing on screen and the feed connecting", async () => {
     const { client, store } = setup();
-    expect(store.getSnapshot()).toMatchObject({ markets: [], stream: "connecting", signatures: "unchecked" });
+    expect(store.getSnapshot()).toMatchObject({ markets: [], stream: "connecting", signatures: "checked" });
     store.start(0);
     await settle();
     const state = store.getSnapshot();

@@ -26,7 +26,8 @@ export interface StreamDeps {
   chainId: number;
   vault: string;
   heartbeatMs: number;
-  verifier: Verifier;
+  /** The verifier, loaded by the time a connection opens. */
+  verifier(): Verifier;
   trust: NodeTrust;
   openSocket(url: string): Socket;
   scheduler: Scheduler;
@@ -91,24 +92,25 @@ export class LiveStream {
     const challenge = this.deps.challenge();
     const after = this.lastOffset === null ? "" : `&after=${this.lastOffset}`;
     const path = `/v1/stream?signed=1&challenge=${challenge}${after}`;
-    const frames = this.deps.verifier.openFrames({ signer, chainId: this.deps.chainId, vault: this.deps.vault, challenge, pathAndQuery: path });
+    const frames = this.deps.verifier().openFrames({ signer, chainId: this.deps.chainId, vault: this.deps.vault, challenge, pathAndQuery: path });
     let expected = 0;
     const socket = this.deps.openSocket(this.deps.origin + path);
     this.socket = socket;
     this.armWatchdog(generation);
     socket.onmessage = (event) => {
       if (generation !== this.generation) return;
-      const frame = typeof event.data === "string" ? parseSignedFrame(event.data) : null;
-      if (frame === null) return this.fail("The node sent a stream frame that is not a signed envelope.", true);
+      const text = typeof event.data === "string" ? event.data : null;
+      const frame = text === null ? null : parseSignedFrame(text);
+      if (text === null || frame === null) return this.fail("The node sent a stream frame that is not a signed envelope.", true);
       if (frame.n !== expected) return this.fail(`The stream skipped from frame ${expected - 1} to ${frame.n}: a frame was dropped, repeated or reordered.`, true);
-      const checked = frames.verify(frame);
+      const checked = frames.verify(text);
       if (!checked.ok) return this.fail(`A stream frame did not verify: ${checked.reason}.`, true, signer);
       const skewMs = frame.time - this.deps.nowMs();
       if (Math.abs(skewMs) > CLOCK_TOLERANCE_MS) {
         this.deps.trust.clockWrong(skewMs);
         return this.fail("Your device clock differs from the node's signed time, so the stream was dropped.", false);
       }
-      const message = parseFrameMessage(frame.msg);
+      const message = parseFrameMessage(checked.msg);
       if (message === null) return this.fail("A signed stream frame carried a message the console does not know.", true);
       expected++;
       this.backoff = RECONNECT_MIN_MS;

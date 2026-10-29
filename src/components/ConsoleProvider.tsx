@@ -5,7 +5,8 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { parseDeploy, rawDeploy } from "@/lib/engine/deploy";
-import { createLiveClient } from "@/lib/engine/live-session";
+import { createLiveClient, GLUE_PATH } from "@/lib/engine/live-session";
+import type { VerifierModule } from "@/lib/engine/wasm-verifier";
 import { WatchConnector } from "@/lib/engine/watch-wallet";
 import { DEMO_ADDRESS } from "@/lib/mock/demo";
 import { queuePage } from "@/lib/mock/funds";
@@ -34,6 +35,8 @@ function createLiveSession(): Session {
     openSocket: (url) => new WebSocket(url),
     scheduler: { setTimeout: (run, ms) => setTimeout(run, ms), clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
     nowMs: () => Date.now(),
+    // The glue is a static file of the app, loaded as it is rather than bundled; the bundler would otherwise look for the .wasm beside it.
+    loadGlue: () => import(/* webpackIgnore: true */ /* turbopackIgnore: true */ GLUE_PATH) as Promise<VerifierModule>,
   });
   const wallets = new WatchConnector(() => window.location.search);
   const store = new ConsoleStore({ client, wallets, history: () => [], initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });

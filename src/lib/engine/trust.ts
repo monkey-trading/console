@@ -1,8 +1,7 @@
 /** Which enclave address the console trusts the node's answers to come from, and how it got it. */
 
-import { checkAttestation, type AttestationStatus } from "./attestation";
-import type { Attestation } from "./types";
-import type { Collateral, Verifier } from "./verifier";
+import type { AttestationStatus } from "./attestation";
+import type { Verifier } from "./verifier";
 
 /** Something the node sent cannot be trusted; the reason is written for the user. */
 export class UntrustedError extends Error {
@@ -20,12 +19,17 @@ export class SignatureError extends UntrustedError {
   }
 }
 
+const MOCK_REFUSED = "The node presents a mock attestation, which this build refuses.";
+/** The messages the verifier gives when a certificate or list is outside its dates, which a wrong device clock also causes. */
+const DATE_FAILURE = /validity period|not yet valid|is expired/;
+
 export interface TrustDeps {
-  /** `GET /v1/attestation`. */
-  attestation(): Promise<Attestation>;
-  /** `GET /v1/attestation/collateral`; null when the node has none (a mock quote). */
-  collateral(): Promise<Collateral | null>;
-  verifier: Verifier;
+  /** `GET /v1/attestation`, as text. */
+  attestation(): Promise<string>;
+  /** `GET /v1/attestation/collateral`, as text; null when the node has none (a mock quote). */
+  collateral(): Promise<string | null>;
+  /** The verifier, loaded on first use. */
+  verifier(): Promise<Verifier>;
   /** The release manifests this build pins. */
   manifests: readonly string[];
   acceptsMock: boolean;
@@ -108,22 +112,27 @@ export class NodeTrust {
     this.signerAddress = null;
     this.verifiedStatus = null;
     try {
-      const attestation = await this.deps.attestation();
-      const decided = checkAttestation(attestation, this.deps.acceptsMock);
-      if (decided !== null) {
-        if (decided.kind === "mock") this.signerAddress = attestation.enclave_address.toLowerCase();
-        this.setStatus(decided);
-        return;
+      const verifier = await this.deps.verifier();
+      const text = await this.deps.attestation();
+      const { provider } = JSON.parse(text) as { provider?: unknown };
+      if (provider === "mock") {
+        // Only the dev-only entry point reads a mock quote, and a build that refuses one never has it.
+        if (!this.deps.acceptsMock || !verifier.verifyMockAttestation) return this.setStatus({ kind: "unverified", reason: MOCK_REFUSED });
+        const mock = verifier.verifyMockAttestation(text);
+        if (!mock.ok) return this.setStatus({ kind: "unverified", reason: mock.reason });
+        this.signerAddress = mock.enclave.address.toLowerCase();
+        return this.setStatus({ kind: "mock" });
       }
       const collateral = await this.deps.collateral();
-      const verdict = await this.deps.verifier.verifyAttestation({ attestation, collateral, manifests: this.deps.manifests, nowMs: this.deps.nowMs() });
+      if (collateral === null) return this.setStatus({ kind: "unverified", reason: "The node serves no collateral for its attestation, so it cannot be verified." });
+      const verdict = verifier.verifyAttestation({ attestation: text, manifests: this.deps.manifests, collateral, nowMs: this.deps.nowMs() });
       if (!verdict.ok) {
-        this.setStatus({ kind: "unverified", reason: verdict.reason });
-        return;
+        const hint = DATE_FAILURE.test(verdict.reason) ? " If the device clock is wrong, correct it and reload." : "";
+        return this.setStatus({ kind: "unverified", reason: verdict.reason + hint });
       }
-      const { address, release, config } = verdict.attested;
+      const { address, release, config } = verdict.enclave;
       this.signerAddress = address.toLowerCase();
-      this.setStatus({ kind: "verified", release, config, address: this.signerAddress });
+      this.setStatus({ kind: "verified", release: release ?? "", config: config ?? "", address: this.signerAddress });
     } catch (error) {
       this.setStatus({ kind: "unverified", reason: error instanceof Error ? error.message : "The attestation could not be read." });
     }

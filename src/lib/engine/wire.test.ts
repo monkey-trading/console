@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { isChallenge, newChallenge, parseFrameMessage, parseSignedFrame, CHALLENGE_HEADER, SEQ_HEADER, SIGNATURE_HEADER, TIME_HEADER } from "./wire";
-import { VECTORS, vectorConnection, vectorResponse } from "./vector-verifier";
+import { VECTORS, vectorConnection, vectorResponse } from "./test-vectors";
 
 describe("the header and challenge formats", () => {
   it("names the four headers the node sets and exposes", () => {

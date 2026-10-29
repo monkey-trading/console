@@ -51,11 +51,10 @@ export type ClientEvent =
   | { type: "problem"; reason: string };
 
 /**
- * What a client does about the signatures the node puts on its answers: `checked` when a verifier
- * judges each one, `unchecked` when a development stand-in accepts them all, `none` for the mock,
- * which has none.
+ * Whether a client checks the signatures on the node's answers: `checked` for a live client, `none`
+ * for the mock, which has none.
  */
-export type SignatureChecks = "checked" | "unchecked" | "none";
+export type SignatureChecks = "checked" | "none";
 
 /**
  * The engine node's client API. Reads mirror `GET /v1/…`, actions mirror the signed `POST /v1/…`

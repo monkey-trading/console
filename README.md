@@ -11,9 +11,9 @@ history and a withdrawal in the queue; Mock controls can reset it to an empty ac
 
 A build can instead read a real engine node: it checks the node's attestation, shows only answers the
 attested enclave signed for the request, and follows the node's signed stream, marking the feed stale
-(and disabling order entry) when it stops. Signing orders and funds is not wired yet. Until the
-engine's browser verifier is built in, only a development build against a development node works, and
-it says on screen that signatures are not verified.
+(and disabling order entry) when it stops. Signing orders and funds is not wired yet. The checks run
+in the engine's own verifier, built for the browser (`public/engine-verify/`, pinned by SHA-256 in
+`src/lib/engine/wasm-pin.json`, which `npm run build` checks).
 
 ## Run it
 
@@ -48,7 +48,8 @@ npm run dev:live
 ```
 
 Open `http://localhost:3000` (not `127.0.0.1`: the node allows that origin only). Markets and prices
-stream in under a banner saying the mock attestation was accepted and signatures are not verified. To
+stream in under a banner saying the mock attestation was accepted, which only a development build
+for a listed dev origin does. To
 read an account, add `?account=<address>` to the page address; it is read-only.
 
 A live build is configured by environment variables at build time, all pinned into the bundle:
@@ -63,8 +64,22 @@ A live build is configured by environment variables at build time, all pinned in
 | `NEXT_PUBLIC_ENGINE_DEV_ORIGINS` | Comma-separated node origins a `live-dev` build may accept a mock attestation from |
 
 The node's origin is added to the Content Security Policy's `connect-src` (with its `wss:` form), and
-`'wasm-unsafe-eval'` to `script-src`. A `live` build refuses a mock attestation and has no verifier
-yet, so it trusts no node.
+`'wasm-unsafe-eval'` to `script-src`. A `live` build refuses a mock attestation, and its verifier does
+not have the mock entry point at all; with no release manifests pinned yet
+(`src/lib/engine/manifests.ts`), it trusts no hardware node either.
+
+`npm run dev:live` against a running node is checked by `scripts/dev-live-client.sh` (Node, `curl`,
+and `ENGINE_DIR`, the engine checkout, with `ENGINE_BIN` or Cargo): it runs the live client against
+the node through a tampering proxy and checks that a flipped byte, a replayed response, a dropped
+stream frame and a mock attestation in a production build are each refused.
+
+### Updating the verifier
+
+`public/engine-verify/` is the package `scripts/build-wasm-verifier.sh` writes in the engine
+repository (`engine_verify_bg.wasm`, its glue and types, and `SHA256SUMS`), copied unchanged; the
+`.wasm` and glue hashes are in `src/lib/engine/wasm-pin.json`. A `file:` dependency would break the
+exact-version rule, and no release publishes the package yet, so the copy is checked in. A release's
+package replaces it, with its hashes, before the console is promoted.
 
 ## Deploy
 

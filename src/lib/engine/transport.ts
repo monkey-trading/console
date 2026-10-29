@@ -12,14 +12,14 @@ export interface TransportDeps {
   origin: string;
   chainId: number;
   vault: string;
-  verifier: Verifier;
+  /** The verifier, which `trust.signer()` has loaded by the time a response is checked. */
+  verifier(): Verifier;
   trust: NodeTrust;
   fetch: typeof fetch;
   nowMs(): number;
   challenge(): string;
 }
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 function unsigned(status: number): UntrustedError {
@@ -74,18 +74,14 @@ export class SignedTransport {
     } catch (cause) {
       throw new EngineError(0, "The node did not answer.", null, { cause });
     }
-    const signature = response.headers.get(SIGNATURE_HEADER);
-    const time = Number(response.headers.get(TIME_HEADER));
-    const seq = Number(response.headers.get(SEQ_HEADER));
-    if (signature === null || !Number.isSafeInteger(time) || !Number.isSafeInteger(seq) || response.headers.get(TIME_HEADER) === null || response.headers.get(SEQ_HEADER) === null) {
-      throw unsigned(response.status);
-    }
-    const checked = this.deps.verifier.verifyResponse({
-      signer, chainId: this.deps.chainId, vault: this.deps.vault, challenge, method: "GET", pathAndQuery: path,
-      requestBody: encoder.encode(""), status: response.status, timeMs: time, seq, body: bytes, signature,
+    const header = (name: string) => response.headers.get(name);
+    if (header(SIGNATURE_HEADER) === null) throw unsigned(response.status);
+    const checked = this.deps.verifier().verifyResponse({
+      signer, chainId: this.deps.chainId, vault: this.deps.vault, challenge, method: "GET", pathAndQuery: path, requestBody: new Uint8Array(),
+      status: response.status, signature: header(SIGNATURE_HEADER), time: header(TIME_HEADER), seq: header(SEQ_HEADER), echoedChallenge: header(CHALLENGE_HEADER), body: bytes,
     });
     if (!checked.ok) throw new SignatureError(`The node's answer did not verify: ${checked.reason}.`);
-    const skewMs = time - this.deps.nowMs();
+    const skewMs = checked.response.timeMs - this.deps.nowMs();
     if (Math.abs(skewMs) > CLOCK_TOLERANCE_MS) {
       this.deps.trust.clockWrong(skewMs);
       throw new UntrustedError(`Your device clock differs from the node's signed time by ${Math.round(Math.abs(skewMs) / 1000)} s, so the answer was discarded. Correct the clock and reload.`);

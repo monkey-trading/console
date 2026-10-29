@@ -8,7 +8,7 @@ import { NodeTrust } from "./trust";
 import type {
   AccountView, Address, Attestation, EligibilityView, HistoryPage, HouseView, MarketView, StreamMessage, WithdrawalPage,
 } from "./types";
-import type { Collateral, Verifier } from "./verifier";
+import type { Verifier } from "./verifier";
 import { newChallenge } from "./wire";
 
 export interface LiveDeps {
@@ -19,7 +19,8 @@ export interface LiveDeps {
   chainId: number;
   vault: string;
   heartbeatMs: number;
-  verifier: Verifier;
+  /** Loads the verifier; called once, when the node is first trusted. */
+  loadVerifier(): Promise<Verifier>;
   manifests: readonly string[];
   acceptsMock: boolean;
   fetch: typeof fetch;
@@ -32,7 +33,9 @@ export interface LiveDeps {
 const NOT_WIRED = "Signing is not available in this build yet.";
 
 export class LiveEngineClient implements EngineClient {
-  readonly signatures: SignatureChecks;
+  readonly signatures: SignatureChecks = "checked";
+  private verifierReady: Promise<Verifier> | null = null;
+  private loaded: Verifier | null = null;
   private readonly trust: NodeTrust;
   private readonly transport: SignedTransport;
   private readonly listeners = new Set<(event: ClientEvent) => void>();
@@ -40,15 +43,14 @@ export class LiveEngineClient implements EngineClient {
   private stream: LiveStream | null = null;
 
   constructor(private readonly deps: LiveDeps) {
-    this.signatures = deps.verifier.checksSignatures ? "checked" : "unchecked";
     const challenge = deps.challenge ?? (() => newChallenge());
     this.trust = new NodeTrust({
-      attestation: () => this.attestation(),
+      attestation: () => this.plainText("/v1/attestation"),
       collateral: () => this.collateral(),
-      verifier: deps.verifier, manifests: deps.manifests, acceptsMock: deps.acceptsMock, nowMs: deps.nowMs,
+      verifier: () => this.verifier(), manifests: deps.manifests, acceptsMock: deps.acceptsMock, nowMs: deps.nowMs,
       onStatus: (status) => this.emit({ type: "attestation", status }),
     });
-    this.transport = new SignedTransport({ ...deps, trust: this.trust, challenge });
+    this.transport = new SignedTransport({ ...deps, verifier: () => this.requireVerifier(), trust: this.trust, challenge });
   }
 
   private emit(event: ClientEvent): void {
@@ -62,30 +64,50 @@ export class LiveEngineClient implements EngineClient {
     };
   }
 
-  /** An unsigned read of a route the attestation itself authenticates. */
-  private async plain(path: string): Promise<{ status: number; body: unknown }> {
-    let response: Response;
+  /** The verifier, loading it the first time. */
+  private verifier(): Promise<Verifier> {
+    this.verifierReady ??= this.deps.loadVerifier().then(
+      (verifier) => (this.loaded = verifier),
+      (error: unknown) => {
+        this.verifierReady = null; // a failed load is tried again on the next check
+        throw error;
+      },
+    );
+    return this.verifierReady;
+  }
+
+  /** The loaded verifier; the trust check that precedes every use has loaded it. */
+  private requireVerifier(): Verifier {
+    if (this.loaded === null) throw new Error("The verifier was used before it loaded.");
+    return this.loaded;
+  }
+
+  /** An unsigned read of a route the attestation itself authenticates: its status, and its body as text when 200. */
+  private async plain(path: string): Promise<{ status: number; text: string }> {
     try {
-      response = await this.deps.fetch(this.deps.origin + path, { cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer" });
-      return { status: response.status, body: response.status === 200 ? await response.json() : null };
+      const response = await this.deps.fetch(this.deps.origin + path, { cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer" });
+      return { status: response.status, text: response.status === 200 ? await response.text() : "" };
     } catch (cause) {
       throw new EngineError(0, "The node did not answer.", null, { cause });
     }
   }
 
-  async attestation(): Promise<Attestation> {
-    const { status, body } = await this.plain("/v1/attestation");
-    if (status !== 200) throw new EngineError(status, `The node did not serve its attestation (HTTP ${status}).`);
-    // The quote binds these fields and the verifier checks them; a wrong shape fails there.
-    return body as Attestation;
+  private async plainText(path: string): Promise<string> {
+    const { status, text } = await this.plain(path);
+    if (status !== 200) throw new EngineError(status, `The node did not serve ${path} (HTTP ${status}).`);
+    return text;
   }
 
-  private async collateral(): Promise<Collateral | null> {
-    const { status, body } = await this.plain("/v1/attestation/collateral");
+  async attestation(): Promise<Attestation> {
+    // The quote binds these fields and the verifier checks them; a wrong shape fails there.
+    return JSON.parse(await this.plainText("/v1/attestation")) as Attestation;
+  }
+
+  private async collateral(): Promise<string | null> {
+    const { status, text } = await this.plain("/v1/attestation/collateral");
     if (status === 404) return null;
     if (status !== 200) throw new EngineError(status, `The node did not serve the attestation's collateral (HTTP ${status}).`);
-    // The verifier checks the chain to a pinned root; a wrong shape fails there.
-    return body as Collateral;
+    return text;
   }
 
   async verify(): Promise<AttestationStatus> {
@@ -149,7 +171,7 @@ export class LiveEngineClient implements EngineClient {
     this.subscribers.add(onMessage);
     if (this.stream === null) {
       const stream = new LiveStream({
-        ...this.deps, origin: this.deps.streamOrigin, trust: this.trust, challenge: this.deps.challenge ?? (() => newChallenge()),
+        ...this.deps, verifier: () => this.requireVerifier(), origin: this.deps.streamOrigin, trust: this.trust, challenge: this.deps.challenge ?? (() => newChallenge()),
         onMessage: (message) => { for (const subscriber of this.subscribers) subscriber(message); },
         onFeed: (status: FeedStatus) => this.emit({ type: "feed", status }),
         onProblem: (reason) => this.emit({ type: "problem", reason }),

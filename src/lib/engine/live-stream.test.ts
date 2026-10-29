@@ -1,6 +1,6 @@
 /** Tests for the signed stream: ordering, tampering, staleness, resumption and a changed enclave. */
 
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import type { FeedStatus } from "./attestation";
 import { LiveStream, STALE_AFTER_INTERVALS } from "./live-stream";
@@ -8,10 +8,14 @@ import { FakeScheduler, FakeSocket, mockAttestation, settle } from "./test-kit";
 import { NodeTrust } from "./trust";
 import type { StreamMessage } from "./types";
 import type { FrameConnection, Verifier } from "./verifier";
-import { VECTORS, vectorConnection, vectorVerifier } from "./vector-verifier";
+import { realVerifier, VECTORS, vectorConnection } from "./test-vectors";
 
 const connection = vectorConnection("three frames");
 const HEARTBEAT_MS = 5_000;
+let real: Verifier;
+beforeAll(async () => {
+  real = await realVerifier();
+});
 const OTHER = "0x00000000000000000000000000000000000000aa";
 
 function setup(options: { address?: () => string; clockMs?: number } = {}) {
@@ -21,14 +25,14 @@ function setup(options: { address?: () => string; clockMs?: number } = {}) {
   const feeds: FeedStatus[] = [];
   const problems: string[] = [];
   const opened: FrameConnection[] = [];
-  const vectors = vectorVerifier({ anyPath: true });
-  const verifier: Verifier = { ...vectors, openFrames: (c) => { opened.push(c); return vectors.openFrames(c); } };
+  // The vectors were opened with `after` first in the query; the client's own path is checked below, and the real verifier checks the vector's.
+  const verifier: Verifier = { ...real, openFrames: (c) => { opened.push(c); return real.openFrames({ ...c, pathAndQuery: connection.path_and_query }); } };
   const address = options.address ?? (() => VECTORS.signer);
   const trust = new NodeTrust({
-    attestation: async () => mockAttestation(address()), collateral: async () => null, verifier, manifests: [], acceptsMock: true, nowMs: () => 0, onStatus: () => {},
+    attestation: async () => mockAttestation(address()), collateral: async () => null, verifier: async () => verifier, manifests: [], acceptsMock: true, nowMs: () => 0, onStatus: () => {},
   });
   const stream = new LiveStream({
-    origin: "wss://node.test", chainId: connection.chain_id, vault: connection.vault, heartbeatMs: HEARTBEAT_MS, verifier, trust,
+    origin: "wss://node.test", chainId: connection.chain_id, vault: connection.vault, heartbeatMs: HEARTBEAT_MS, verifier: () => verifier, trust,
     openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
     scheduler, nowMs: () => options.clockMs ?? connection.frames[0]?.time ?? 0, challenge: () => connection.challenge,
     onMessage: (m) => messages.push(m), onFeed: (f) => feeds.push(f), onProblem: (p) => problems.push(p),

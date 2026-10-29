@@ -1,17 +1,21 @@
 /** Tests only: a fake node's HTTP routes, WebSocket, and timers for the live client. */
 
+import { createHash } from "node:crypto";
+
 import type { Scheduler, Socket } from "./live-stream";
-import type { Attestation } from "./types";
-import { SEQ_HEADER, SIGNATURE_HEADER, TIME_HEADER } from "./wire";
+import type { Verifier } from "./verifier";
+import { CHALLENGE_HEADER, SEQ_HEADER, SIGNATURE_HEADER, TIME_HEADER } from "./wire";
 
-const toHex = (text: string) => Array.from(text, (c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+const hex = (bytes: Buffer | Uint8Array) => `0x${Buffer.from(bytes).toString("hex")}`;
 
-/** A node's mock attestation naming `address`, as `GET /v1/attestation` serves it. */
-export function mockAttestation(address: string): Attestation {
-  return {
-    provider: "mock", enclave_address: address, config_sha256: "0x1", tls_public_key_sha256: "0x2", bundle: "0x3", report_data: "0x4",
-    quote: `0x${toHex("MOCK-ATTESTATION-NOT-A-TEE:")}00`,
-  };
+/** A node's mock attestation naming `address`, as `GET /v1/attestation` serves it: the bundle, its binding report data, and the mock quote. */
+export function mockAttestation(address: string): string {
+  const bundle = Buffer.concat([Buffer.from("engine.attestation.v1"), Buffer.from(address.slice(2), "hex"), Buffer.alloc(32, 1), Buffer.alloc(32, 2)]);
+  const reportData = Buffer.concat([createHash("sha256").update(bundle).digest(), Buffer.alloc(32)]);
+  return JSON.stringify({
+    provider: "mock", enclave_address: address, config_sha256: hex(Buffer.alloc(32, 1)), tls_public_key_sha256: hex(Buffer.alloc(32, 2)),
+    bundle: hex(bundle), report_data: hex(reportData), quote: hex(Buffer.concat([Buffer.from("MOCK-ATTESTATION-NOT-A-TEE:"), reportData])),
+  });
 }
 
 export interface SignedReply {
@@ -25,7 +29,7 @@ export interface SignedReply {
 /** A fake `fetch`: each route's handler answers one request, and the log records the paths and headers requested. */
 export class FakeNode {
   readonly requests: { path: string; challenge: string | null }[] = [];
-  routes = new Map<string, () => Response>();
+  routes = new Map<string, (challenge: string | null) => Response>();
 
   readonly fetch: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
@@ -33,17 +37,19 @@ export class FakeNode {
     const headers = new Headers(init?.headers);
     this.requests.push({ path, challenge: headers.get("X-Engine-Challenge") });
     const route = this.routes.get(path);
-    return route ? route() : new Response('{"error":"not found"}', { status: 404 });
+    return route ? route(headers.get("X-Engine-Challenge")) : new Response('{"error":"not found"}', { status: 404 });
   };
 
   attestation(address: () => string): void {
-    this.routes.set("/v1/attestation", () => Response.json(mockAttestation(address())));
+    this.routes.set("/v1/attestation", () => new Response(mockAttestation(address())));
   }
 
   signed(path: string, reply: () => SignedReply): void {
-    this.routes.set(path, () => {
+    // The node echoes the request's challenge, or 32 zero bytes when it sent none.
+    this.routes.set(path, (challenge) => {
       const { status, body, signature, timeMs, seq } = reply();
-      return new Response(body, { status, headers: { [SIGNATURE_HEADER]: signature, [TIME_HEADER]: String(timeMs), [SEQ_HEADER]: String(seq) } });
+      const echoed = challenge ?? "0".repeat(64);
+      return new Response(body, { status, headers: { [SIGNATURE_HEADER]: signature, [TIME_HEADER]: String(timeMs), [SEQ_HEADER]: String(seq), [CHALLENGE_HEADER]: echoed } });
     });
   }
 }
@@ -107,4 +113,12 @@ export class FakeScheduler implements Scheduler {
 /** Lets pending promise callbacks run. */
 export const settle = async (): Promise<void> => {
   for (let i = 0; i < 50; i++) await Promise.resolve();
+};
+
+/** A verifier that accepts every answer, for tests of what the client does with an answer once it verifies. */
+export const acceptAll: Verifier = {
+  verifyAttestation: () => ({ ok: false, reason: "unused" }),
+  verifyMockAttestation: () => ({ ok: true, enclave: { address: "0x0000000000000000000000000000000000000001", release: null, config: null } }),
+  verifyResponse: (input) => ({ ok: true, response: { timeMs: Number(input.time) } }),
+  openFrames: () => ({ verify: (text) => ({ ok: true, msg: (JSON.parse(text) as { msg: string }).msg }) }),
 };
