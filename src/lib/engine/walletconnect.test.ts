@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { WALLETCONNECT_RELAY } from "./deploy";
 import { cancelTypedData, requestDomain } from "./eip712";
+import { settle } from "./test-kit";
 import { WalletConnectConnector, type PairingState } from "./walletconnect";
 import { MemoryStorage, type WcModule, type WcOptions, type WcProvider, type WcSession } from "./walletconnect-sdk";
 
@@ -159,7 +160,7 @@ describe("WalletConnectConnector.connect", () => {
       await env.fake.called.promise;
       env.fake.pending.resolve(approved);
       await expect(connecting).rejects.toThrow("did not approve signing on chain 31337");
-      expect(env.fake.disconnects).toBe(1);
+      expect([env.fake.disconnects, env.fake.closes]).toEqual([1, 1]);
       expect(env.connector.pairing()).toEqual({ status: "idle" });
     }
   });
@@ -180,6 +181,8 @@ describe("WalletConnectConnector.connect", () => {
     await fake.called.promise;
     fake.pending.reject({ code: 5000, message: "User rejected." });
     await expect(connecting).rejects.toThrow("Your wallet did not connect over WalletConnect: User rejected.");
+    // Nothing is left for the relay socket to carry, so it closes.
+    expect([fake.cleanups.length, fake.closes]).toEqual([1, 1]);
   });
 
   it("reports an SDK that does not load, and loads it again on the next connect", async () => {
@@ -209,12 +212,13 @@ describe("WalletConnectConnector.cancel", () => {
 
     fake.called = deferred();
     fake.pending.resolve(session("late"));
+    await settle();
+    // The session the wallet approved as the user closed the pairing is ended at once, without another connect.
+    expect([fake.disconnects, fake.closes]).toEqual([1, 2]);
     fake.pending = deferred();
     const second = connector.connect();
     await fake.called.promise;
     expect(fake.cleanups).toEqual([{ deletePairings: true }]);
-    expect(fake.closes).toBe(1);
-    // The session the wallet approved as the user closed the first pairing is ended before the second pairs.
     expect(fake.disconnects).toBe(1);
     fake.pending.resolve(session("topic-2"));
     expect((await second).address).toBe(ADDRESS.toLowerCase());

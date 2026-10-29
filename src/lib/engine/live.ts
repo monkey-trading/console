@@ -205,9 +205,9 @@ export class LiveEngineClient implements EngineClient {
     await this.transport.post(`/v1/accounts/${account}/withdrawals/${nonce}/reissue`, body);
   }
 
-  async findWithdrawal(account: Address, nonce: number, fromSeq: number, nowMs: number): Promise<SignedWithdrawal | null> {
+  async findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<SignedWithdrawal | null> {
     const signer = await this.trust.signer();
-    return scanForWithdrawal({ ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) }, account, nonce, fromSeq, Math.floor(nowMs / 1000));
+    return scanForWithdrawal({ ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) }, account, nonce, fromSeq);
   }
 
   quotes(request: QuoteRequest | null): void {

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { fixedFromInt } from "./fixed";
 import { decodeMarket, type AccountModel } from "./models";
 import { createMockNode } from "./mock";
-import { previewTicket } from "./ticket";
+import { previewTicket, slippageBound } from "./ticket";
 
 const START = Date.UTC(2026, 9, 28, 15, 0, 0);
 
@@ -88,5 +88,16 @@ describe("previewTicket", () => {
     expect(preview.marginRateBps).toBe(200);
     expect(preview.impliedLeverage).toBeGreaterThanOrEqual(49.9);
     expect(preview.impliedLeverage).toBeLessThanOrEqual(50.1);
+  });
+});
+
+describe("slippageBound", () => {
+  it("keeps the user's choice up to the market's own bound, and the market's bound past it", async () => {
+    const market = await btc();
+    const capped = { ...market, view: { ...market.view, max_slippage_bps: 5 } };
+    expect(slippageBound(10, market)).toBe(Math.min(10, market.view.max_slippage_bps));
+    expect(slippageBound(10, capped)).toBe(5);
+    expect(slippageBound(5, capped)).toBe(5);
+    expect(slippageBound(4, capped)).toBe(4);
   });
 });

@@ -198,7 +198,8 @@ iframe, or embed.
   fonts, images, or embeds? Each needs the owner's explicit approval first.
 - Does the production build make any request to another origin while a visitor uses it? Check the
   browser's network panel: every request is same-origin, but for the engine node's origin once the
-  owner has approved it ([AGENTS.md](../AGENTS.md)).
+  owner has approved it, and WalletConnect's relay while a user connects a wallet app over it
+  ([AGENTS.md](../AGENTS.md)).
 - Does anything a visitor types or does leave the browser? It must not, but for the orders,
   deposits, and withdrawals the app sends to the engine node.
 

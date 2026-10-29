@@ -4,6 +4,7 @@
  * authorization the page's stream did not carry, and the request for a fresh one once it expired.
  */
 
+import { EngineError } from "../engine/client";
 import { reissueTypedData } from "../engine/eip712";
 import type { SignedWithdrawal } from "../engine/types";
 import { fixedFromWire, formatFixedPlaces, type Fixed } from "../fixed";
@@ -122,7 +123,7 @@ export async function findAuthorization(store: ConsoleStore, nonce: number, appr
   if (address === undefined) return;
   store.patch({ busy: true });
   try {
-    const found = await store.deps.client.findWithdrawal(address, nonce, approvedSeq, store.getSnapshot().now);
+    const found = await store.deps.client.findWithdrawal(address, nonce, approvedSeq);
     const state = store.getSnapshot();
     if (state.wallet?.address !== address) return;
     if (found === null || found.authorization === undefined) store.toast("info", "The log holds no authorization for this withdrawal yet. The node signs one once a checkpoint covering the approval is confirmed on chain; it then arrives here.");
@@ -134,8 +135,15 @@ export async function findAuthorization(store: ConsoleStore, nonce: number, appr
   }
 }
 
-/** Asks the node to sign payout `nonce` again, replacing the authorization that expired at `expiresAt`. */
-export async function reissue(store: ConsoleStore, nonce: number, expiresAt: number): Promise<void> {
+/** The node's refusal of a reissue that names an older authorization than its latest (`reissue.rs`, `Reissue::Stale`). */
+const NEWER_EXISTS = "the latest authorization expires at";
+
+/**
+ * Asks the node to sign payout `nonce` again, replacing the authorization that expired at
+ * `expiresAt`. When the node has signed a newer one the page missed, it looks for that in the log
+ * from `approvedSeq` instead.
+ */
+export async function reissue(store: ConsoleStore, nonce: number, expiresAt: number, approvedSeq: number): Promise<void> {
   const wallet = usableWallet(store, "sign");
   if (!wallet) return;
   store.patch({ busy: true });
@@ -146,6 +154,12 @@ export async function reissue(store: ConsoleStore, nonce: number, expiresAt: num
     await store.deps.client.reissue(wallet.address, nonce, { replaces_expires_at: expiresAt, signature });
     store.toast("ok", "Requested. The new authorization arrives here once the node signs it.");
   } catch (error) {
+    if (error instanceof EngineError && error.status === 400 && error.message.startsWith(NEWER_EXISTS)) {
+      store.patch({ busy: false });
+      store.toast("info", "The node has signed a newer authorization for this withdrawal; looking for it in the log.");
+      await findAuthorization(store, nonce, approvedSeq);
+      return;
+    }
     if (!store.noteAccess(error)) store.toast("error", errorText(error));
   } finally {
     store.patch({ busy: false });

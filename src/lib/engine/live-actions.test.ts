@@ -135,6 +135,27 @@ describe("quotes and authorizations on the stream", () => {
   });
 });
 
+describe("a quote refusal that arrives late", () => {
+  it("is asked again once when the page asked for the same quotes while the refusal was on its way, and not again after", async () => {
+    const sockets: FakeSocket[] = [];
+    const { client } = accepting(sockets);
+    client.subscribe(() => {});
+    await settle();
+    const socket = sockets[0];
+    if (!socket) throw new Error("no socket");
+    socket.open();
+    const op = JSON.stringify({ op: "quotes", account: ACCOUNT, markets: [1] });
+    client.quotes({ account: ACCOUNT, markets: [1] });
+    // The account is credited and the page asks again before the first refusal arrives.
+    client.quotes({ account: ACCOUNT, markets: [1] });
+    expect(socket.sent).toEqual([op]);
+    socket.receive(JSON.stringify({ v: 1, n: 0, time: 1_000, msg: JSON.stringify({ type: "quote_error", error: "the account has never been credited" }), sig: "0x00" }));
+    expect(socket.sent).toEqual([op, op]);
+    socket.receive(JSON.stringify({ v: 1, n: 1, time: 1_000, msg: JSON.stringify({ type: "quote_error", error: "the account has never been credited" }), sig: "0x00" }));
+    expect(socket.sent).toEqual([op, op]);
+  });
+});
+
 describe("quotes across a reconnect", () => {
   it("asks a reconnected socket for the same quotes again once it opens", async () => {
     const sockets: FakeSocket[] = [];
@@ -161,7 +182,7 @@ describe("finding an authorization in the log", () => {
   it("reads from the approval's seq until the head a heartbeat names, keeping the latest authorization of that payout", async () => {
     const sockets: FakeSocket[] = [];
     const { client } = accepting(sockets);
-    const found = client.findWithdrawal(ACCOUNT, 1, 40, 1_000_000);
+    const found = client.findWithdrawal(ACCOUNT, 1, 40);
     await settle();
     const socket = sockets[0];
     if (!socket) throw new Error("no socket");
@@ -178,38 +199,39 @@ describe("finding an authorization in the log", () => {
   it("answers null when the log holds nothing after the seq, and fails on a frame out of order", async () => {
     const sockets: FakeSocket[] = [];
     const { client } = accepting(sockets);
-    const none = client.findWithdrawal(ACCOUNT, 1, 50, 1_000_000);
+    const none = client.findWithdrawal(ACCOUNT, 1, 50);
     await settle();
     sockets[0]?.receive(frame(0, { type: "heartbeat", head: "45:0" }));
     await expect(none).resolves.toBeNull();
-    const broken = client.findWithdrawal(ACCOUNT, 1, 40, 1_000_000);
+    const broken = client.findWithdrawal(ACCOUNT, 1, 40);
     await settle();
     sockets[1]?.receive(frame(1, { type: "heartbeat", head: "45:0" }));
     await expect(broken).rejects.toThrow("skipped");
   });
 
-  it("ends the read at an authorization still unexpired at node time, the latest the node signs", async () => {
+  it("reads past an unexpired authorization to the head, since the node signs a payout again when the vault's signer rotates", async () => {
     const sockets: FakeSocket[] = [];
     const { client } = accepting(sockets);
-    const found = client.findWithdrawal(ACCOUNT, 1, 40, 150_000);
+    const found = client.findWithdrawal(ACCOUNT, 1, 40);
     await settle();
-    sockets[0]?.receive(frame(0, { type: "heartbeat", head: "90:0" }));
-    sockets[0]?.receive(frame(1, signed(1, 100)));
-    sockets[0]?.receive(frame(2, signed(1, 200)));
-    await expect(found).resolves.toMatchObject({ authorization: { expires_at: 200 } });
-    expect(sockets[0]?.closed).toBe(true);
+    sockets[0]?.receive(frame(0, { type: "heartbeat", head: "45:0" }));
+    sockets[0]?.receive(frame(1, signed(1, 2_000_000_000)));
+    expect(sockets[0]?.closed).toBe(false);
+    sockets[0]?.receive(frame(2, { ...signed(1, 2_000_000_100), offset: "45:0" }));
+    sockets[0]?.receive(frame(3, { type: "heartbeat", head: "45:0" }));
+    await expect(found).resolves.toMatchObject({ authorization: { expires_at: 2_000_000_100 } });
   });
 
   it("answers with the latest authorization found when the read fails or runs out of time after it", async () => {
     const sockets: FakeSocket[] = [];
     const { client, scheduler } = accepting(sockets);
-    const timedOut = client.findWithdrawal(ACCOUNT, 1, 40, 1_000_000);
+    const timedOut = client.findWithdrawal(ACCOUNT, 1, 40);
     await settle();
     sockets[0]?.receive(frame(0, { type: "heartbeat", head: "90:0" }));
     sockets[0]?.receive(frame(1, signed(1, 100)));
     scheduler.advance(30_000);
     await expect(timedOut).resolves.toMatchObject({ authorization: { expires_at: 100 } });
-    const dropped = client.findWithdrawal(ACCOUNT, 1, 40, 1_000_000);
+    const dropped = client.findWithdrawal(ACCOUNT, 1, 40);
     await settle();
     sockets[1]?.receive(frame(0, signed(1, 100)));
     sockets[1]?.drop("close");
@@ -219,7 +241,7 @@ describe("finding an authorization in the log", () => {
   it("gives up after 30 s", async () => {
     const sockets: FakeSocket[] = [];
     const { client, scheduler } = accepting(sockets);
-    const slow = client.findWithdrawal(ACCOUNT, 1, 40, 1_000_000);
+    const slow = client.findWithdrawal(ACCOUNT, 1, 40);
     await settle();
     scheduler.advance(30_000);
     await expect(slow).rejects.toThrow("took too long");

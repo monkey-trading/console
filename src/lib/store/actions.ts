@@ -121,7 +121,9 @@ async function signed(
     if (store.noteAccess(error)) return { ok: false };
     // A sent request the node refused, left unanswered, or answered unverifiably may still have run: read the account first.
     if (sent) await store.refresh(true);
-    const unknown = sent && error instanceof UntrustedError ? " It may have run: check your positions, orders, withdrawals and history before trying again." : "";
+    // Only a refusal the node signed says the request did not run; no answer, or one that does not verify, says nothing.
+    const unanswered = error instanceof UntrustedError || (error instanceof EngineError && error.status === 0);
+    const unknown = sent && unanswered ? " It may have run: check your positions, orders, withdrawals and history before trying again." : "";
     store.toast("error", `${errorText(error)}${unknown}`);
     return { ok: false };
   } finally {

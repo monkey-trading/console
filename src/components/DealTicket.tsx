@@ -9,7 +9,7 @@ import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { formatMark } from "@/lib/price-format";
 import { ticketPrices } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
-import { MARGIN_SHORT, previewTicket, SLIPPAGE_CHOICES } from "@/lib/ticket";
+import { MARGIN_SHORT, previewTicket, SLIPPAGE_CHOICES, slippageBound } from "@/lib/ticket";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { MarketInfo } from "./MarketInfo";
@@ -39,9 +39,10 @@ export function DealTicket() {
   const [kind, setKind] = useState<Kind>("market");
   const [size, setSize] = useState("10000");
   const [price, setPrice] = useState("");
-  const [slippage, setSlippage] = useState<number>(10);
+  const [chosenSlippage, setSlippage] = useState<number>(10);
   const market = state.markets.find((m) => m.id === state.selected);
   if (!market) return null;
+  const slippage = slippageBound(chosenSlippage, market);
   const notional = parseFixed(size) ?? 0n;
   const triggerPrice = parseFixed(price);
   const preview = previewTicket({ market, side, notional, slippageBps: slippage, resting: kind !== "market", triggerPrice, account: state.account, houseNav: state.house.nav });

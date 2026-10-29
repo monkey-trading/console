@@ -69,13 +69,13 @@ describe("signed actions with a fixed-key wallet", () => {
     }
   });
 
-  it("reads the account again before showing any refusal of a request, which may have run from a copy", async () => {
+  it("reads the account again and says a sent request may have run when the node does not answer", async () => {
     const { client, store } = await connected();
     client.answer = () => { throw new EngineError(0, "The node did not answer."); };
     const reads = client.marketReads;
     await cancelOrder(store, 42);
     expect(client.marketReads).toBeGreaterThan(reads);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node did not answer.");
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node did not answer. It may have run: check your positions, orders, withdrawals and history before trying again.");
   });
 
   it("reads the account and says a sent request may have run when its answer does not verify, but not for a failure before sending", async () => {

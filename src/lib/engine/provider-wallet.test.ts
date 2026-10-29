@@ -142,6 +142,23 @@ describe("deposits", () => {
     await expect(w.deposit(fixedFromInt(10))).rejects.toThrow(/^The transaction to deposit was sent \(0x0+1\) but its receipt could not be read: relay closed\. Check it in your wallet before trying again\.$/);
   });
 
+  it("polls a pending receipt, waiting between polls, until the transaction is mined", async () => {
+    const provider = new StubProvider({ balance: 5_000_000_000n, allowance: 5_000_000_000n, pendingReceipts: 3 });
+    const waits: number[] = [];
+    const w = new ProviderWallet(ACCOUNT, "Test wallet", provider, CHAIN, { wait: async (ms) => void waits.push(ms) });
+    await w.deposit(fixedFromInt(10));
+    expect(waits).toEqual([1_000, 1_000, 1_000]);
+    expect(provider.calls.filter((c) => c.method === "eth_getTransactionReceipt" && c.params[0] !== `0x${"0".repeat(64)}`)).toHaveLength(4);
+  });
+
+  it("says a transaction is sent but not confirmed once it stays pending through every poll", async () => {
+    const provider = new StubProvider({ balance: 5_000_000_000n, allowance: 5_000_000_000n, pendingReceipts: Number.POSITIVE_INFINITY });
+    let waits = 0;
+    const w = new ProviderWallet(ACCOUNT, "Test wallet", provider, CHAIN, { wait: async () => void (waits += 1) });
+    await expect(w.deposit(fixedFromInt(10))).rejects.toThrow(/^The transaction to deposit was sent \(0x0+1\) but is not confirmed yet\. Check it in your wallet before trying again\.$/);
+    expect(waits).toBe(180);
+  });
+
   it("fails a deposit whose transaction reverts", async () => {
     const { wallet: w } = wallet({ balance: 5_000_000_000n, allowance: 5_000_000_000n, receiptStatus: "0x0" });
     await expect(w.deposit(fixedFromInt(10))).rejects.toThrow("The transaction to deposit failed on chain");

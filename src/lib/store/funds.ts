@@ -15,6 +15,8 @@ export function applyFeedEvent(state: ConsoleState, event: ClientEvent): Partial
     return { quotes: { ...state.quotes, [event.quote.market]: event.quote }, quoteError: null };
   }
   if (event.type === "quote_error") return mine === undefined ? null : { quotes: {}, quoteError: event.error };
+  // A quote from before an outage is not executable; the reconnected stream sends fresh ones.
+  if (event.type === "feed" && event.status === "stale") return Object.keys(state.quotes).length === 0 ? null : { quotes: {} };
   if (event.type === "withdrawal") {
     const signed = event.withdrawal;
     if (signed.account.toLowerCase() !== mine || signed.authorization === undefined) return null;

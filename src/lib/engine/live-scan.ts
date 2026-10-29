@@ -34,13 +34,13 @@ const atOrPast = (a: [number, number], b: [number, number]) => a[0] > b[0] || (a
 
 /**
  * The latest authorization of `account`'s payout `nonce` after seq `fromSeq`, or null once the read
- * reaches the head a heartbeat names without one. One still unexpired at `nowSeconds` ends the read
- * at once: the node signs a new one only after the last expires, so it is the latest. When the read
- * fails or runs out of time after finding one, the latest found is the answer.
+ * reaches the head a heartbeat names without one. The read goes to the head, since the node also
+ * signs a payout again, unexpired, when the vault's signer rotates. When the read fails or runs out
+ * of time after finding one, the latest found is the answer.
  * Error cases:
  * - with none found: a frame is out of order or does not verify, the connection fails, or the search takes over 30 s
  */
-export function scanForWithdrawal(deps: ScanDeps, account: Address, nonce: number, fromSeq: number, nowSeconds: number): Promise<SignedWithdrawal | null> {
+export function scanForWithdrawal(deps: ScanDeps, account: Address, nonce: number, fromSeq: number): Promise<SignedWithdrawal | null> {
   return new Promise((resolve, reject) => {
     const challenge = deps.challenge();
     const path = `/v1/stream?signed=1&challenge=${challenge}&from=${fromSeq}`;
@@ -77,10 +77,7 @@ export function scanForWithdrawal(deps: ScanDeps, account: Address, nonce: numbe
         return;
       }
       if ("offset" in message) last = position(message.offset);
-      if (message.type === "withdrawal" && message.account.toLowerCase() === account.toLowerCase() && message.nonce === nonce) {
-        found = message;
-        if ((message.authorization?.expires_at ?? 0) > nowSeconds) finish(null);
-      }
+      if (message.type === "withdrawal" && message.account.toLowerCase() === account.toLowerCase() && message.nonce === nonce) found = message;
     };
     socket.onclose = () => finish(new Error("The connection to the node closed while reading the log."));
     socket.onerror = () => finish(new Error("The connection to the node failed while reading the log."));

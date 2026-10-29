@@ -1,6 +1,7 @@
 /** The static notices page: what leaves the browser, and the notices third-party software in the console requires. */
 
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { SITE_NAME } from "@/lib/site";
 
@@ -16,7 +17,7 @@ export default function Page() {
     <main className="mx-auto flex min-h-dvh max-w-3xl flex-col gap-6 px-4 py-10 sm:px-6">
       <p className="text-label tracking-label text-amber uppercase">{SITE_NAME}</p>
       <h1 className="text-lead tracking-caps text-glow uppercase">Notices</h1>
-      <p className={P}><a href="/" className={LINK}>Back to the console</a></p>
+      <p className={P}><Link href="/" className={LINK}>Back to the console</Link></p>
       <section aria-labelledby="privacy" className="space-y-3">
         <h2 id="privacy" className={H2}>Privacy</h2>
         <p className={P}>

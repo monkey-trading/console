@@ -14,6 +14,11 @@ export const MARGIN_SHORT = "Not enough equity for the margin this needs.";
 /** The slippage bounds offered, in basis points. */
 export const SLIPPAGE_CHOICES = [5, 10, 25, 50] as const;
 
+/** The bound a market order is shown and signed with: the user's choice, never past the market's own, which the engine clamps to (`execution/mod.rs`). */
+export function slippageBound(chosenBps: number, market: MarketModel): number {
+  return Math.min(chosenBps, market.view.max_slippage_bps);
+}
+
 export interface TicketInput {
   market: MarketModel;
   side: Side;

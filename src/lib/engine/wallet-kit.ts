@@ -38,6 +38,8 @@ export interface StubOptions {
   paid?: boolean;
   /** Each receipt's status, `0x1` by default. */
   receiptStatus?: string;
+  /** How many times a sent transaction's receipt is not there yet (null) before it is mined. */
+  pendingReceipts?: number;
   /** Answers a method with an error, such as `{ code: 4001 }` for a declined request. */
   fail?: Partial<Record<string, { code: number; message: string }>>;
 }
@@ -46,6 +48,7 @@ export interface StubOptions {
 export class StubProvider implements Eip1193Provider {
   readonly calls: { method: string; params: readonly unknown[] }[] = [];
   chainId: number;
+  private receiptPolls = 0;
 
   constructor(private readonly options: StubOptions = {}) {
     this.chainId = options.chainId ?? 31337;
@@ -69,7 +72,11 @@ export class StubProvider implements Eip1193Provider {
         return null;
       case "eth_signTypedData_v4": return privateKeyToAccount(this.options.key ?? KEY).signTypedData(parseTyped(String(params[1])));
       case "eth_sendTransaction": return `0x${String(this.sent.length).padStart(64, "0")}`;
-      case "eth_getTransactionReceipt": return { status: this.options.receiptStatus ?? "0x1" };
+      case "eth_getTransactionReceipt": {
+        // The zero hash is the wallet's check that it can read receipts at all.
+        const pending = String(params[0]) !== `0x${"0".repeat(64)}` && this.receiptPolls++ < (this.options.pendingReceipts ?? 0);
+        return pending ? null : { status: this.options.receiptStatus ?? "0x1" };
+      }
       case "eth_call": return this.call((params[0] as { data: Hex }).data);
       default: throw new Error(`stub provider has no ${method}`);
     }

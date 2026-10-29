@@ -65,8 +65,11 @@ export class LiveStream {
   private generation = 0;
   /** The quotes the page wants, sent on each connection once it opens. */
   private quotes: QuoteRequest | null = null;
-  /** The quote request sent on the open connection, as sent, and whether the node refused it. */
-  private sent: { account: Address; op: string; refused: boolean } | null = null;
+  /**
+   * The quote request sent on the open connection, as sent; whether the node refused it; and whether
+   * the page asked for it again before the answer came, so a refusal that arrives later is retried once.
+   */
+  private sent: { account: Address; op: string; refused: boolean; again: boolean } | null = null;
   /** Whether the socket has opened, so it can carry the quote request. */
   private connected = false;
 
@@ -92,8 +95,11 @@ export class LiveStream {
     const request = this.quotes ?? (this.sent === null ? null : { account: this.sent.account, markets: [] });
     if (request === null) return;
     const op = JSON.stringify({ op: "quotes", account: request.account, markets: request.markets });
-    if (this.sent?.op === op && !this.sent.refused) return;
-    this.sent = { account: request.account, op, refused: false };
+    if (this.sent?.op === op && !this.sent.refused) {
+      this.sent.again = true;
+      return;
+    }
+    this.sent = { account: request.account, op, refused: false, again: false };
     this.socket?.send(op);
   }
 
@@ -169,8 +175,13 @@ export class LiveStream {
       else if (message.type === "quote") this.deps.onQuote(message);
       else if (message.type === "withdrawal") this.deps.onWithdrawal(message);
       else if (message.type === "quote_error") {
-        if (this.sent !== null) this.sent.refused = true;
         this.deps.onQuoteError(message.error);
+        if (this.sent !== null) {
+          // Asked again while this answer was on its way, such as once the account was credited: ask once more.
+          const retry = this.sent.again;
+          this.sent.refused = true;
+          if (retry) this.sendQuotes();
+        }
       }
     };
     socket.onclose = () => {

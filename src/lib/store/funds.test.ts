@@ -27,6 +27,12 @@ describe("applyFeedEvent", () => {
     expect(applyFeedEvent(state, { type: "quote", quote: quote(ME, 2) })).toBeNull();
   });
 
+  it("drops every quote once the feed goes stale, as none from before an outage is executable", () => {
+    expect(applyFeedEvent({ ...base(), quotes: { 1: quote(ME) } }, { type: "feed", status: "stale" })).toEqual({ quotes: {} });
+    expect(applyFeedEvent({ ...base(), quotes: { 1: quote(ME) } }, { type: "feed", status: "live" })).toBeNull();
+    expect(applyFeedEvent(base(), { type: "feed", status: "stale" })).toBeNull();
+  });
+
   it("drops every quote when the node refuses the request, and ignores a refusal with no wallet", () => {
     const state = { ...base(), quotes: { 1: quote(ME) } };
     expect(applyFeedEvent(state, { type: "quote_error", error: "uncredited" })).toEqual({ quotes: {}, quoteError: "uncredited" });
@@ -38,7 +44,6 @@ describe("applyFeedEvent", () => {
     expect(applyFeedEvent(state, { type: "withdrawal", withdrawal: signed(1, 200) })).toEqual({ authorizations: [signed(2, 100), signed(1, 200)] });
     expect(applyFeedEvent(state, { type: "withdrawal", withdrawal: signed(1, 200, OTHER) })).toBeNull();
     expect(applyFeedEvent(state, { type: "withdrawal", withdrawal: { ...signed(3, 100), authorization: undefined } })).toBeNull();
-    expect(applyFeedEvent(state, { type: "feed", status: "live" })).toBeNull();
   });
 });
 

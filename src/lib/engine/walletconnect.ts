@@ -146,9 +146,16 @@ export class WalletConnectConnector implements WalletConnector {
     try {
       session = await provider.connect({ optionalNamespaces: { eip155: { chains: [`eip155:${this.chain.chainId}`], methods: [...WALLET_METHODS], events: [...EVENTS] } } });
     } catch (cause) {
+      // A declined or expired pairing leaves nothing to keep the relay socket open for; a cancelled one closed it already.
+      if (this.attempt === attempt) await this.close(provider);
       throw new Error(`Your wallet did not connect over WalletConnect: ${detail(cause)}`, { cause });
     } finally {
       provider.off("display_uri", onUri);
+    }
+    if (this.attempt !== attempt) {
+      // The user closed the pairing as the wallet approved it: end that session at once.
+      if (session !== undefined) await provider.disconnect();
+      await provider.client.core.relayer.transportClose();
     }
     attempt.check();
     // The SDK returns no session only when asked to skip pairing, which the connector never does.
@@ -159,6 +166,7 @@ export class WalletConnectConnector implements WalletConnector {
       await provider.disconnect().catch((cause: unknown) => {
         throw new Error(`${refused} WalletConnect could not end the session.`, { cause });
       });
+      await provider.client.core.relayer.transportClose();
       throw new Error(refused);
     }
     this.live = session.topic;

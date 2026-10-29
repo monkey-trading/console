@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { EngineError } from "../engine/client";
 import vectors from "../engine/eip712-vectors.json";
 import { reissueTypedData, requestDomain } from "../engine/eip712";
 import type { HistoryEvent, SignedWithdrawal } from "../engine/types";
@@ -102,12 +103,21 @@ describe("authorizations", () => {
 
   it("asks for a fresh authorization with a ReissueRequest the account signs over the expired one's expiry", async () => {
     const { client, store } = await connected();
-    await reissue(store, 3, 1_700_000_000);
+    await reissue(store, 3, 1_700_000_000, 40);
     const posted = client.posted[0];
     expect(posted?.route).toBe("reissue 3");
     const body = posted?.body as { replaces_expires_at: number; signature: string };
     expect(body.replaces_expires_at).toBe(1_700_000_000);
     expect(await signerOf(reissueTypedData(requestDomain(vectors.chain_id, VAULT), ACCOUNT, 3, 1_700_000_000), body.signature)).toBe(ACCOUNT);
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("Requested. The new authorization arrives here once the node signs it.");
+  });
+
+  it("looks in the log for the newer authorization when the node says one replaced the expired one", async () => {
+    const { client, store } = await connected();
+    client.answer = () => { throw new EngineError(400, "the latest authorization expires at 1700086400, not the one replaced"); };
+    client.found = signed(3, 1_700_086_400);
+    await reissue(store, 3, 1_700_000_000, 40);
+    expect(store.getSnapshot().authorizations).toEqual([signed(3, 1_700_086_400)]);
+    expect(store.getSnapshot()).toMatchObject({ busy: false });
   });
 });

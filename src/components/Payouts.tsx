@@ -66,7 +66,8 @@ function PayoutRow({ payout, busy, act }: { payout: Payout; busy: boolean; act: 
       {status.kind === "expired" && (
         <>
           <p className="mt-2 text-fg-3">Its authorization expired unclaimed at {formatStamp(status.expiresAt * 1000)} UTC.</p>
-          <button type="button" aria-disabled={busy} onClick={() => act(() => reissue(store, payout.nonce, status.expiresAt))} className={BUTTON}>Ask for a new authorization</button>
+          <button type="button" aria-disabled={busy} onClick={() => act(() => reissue(store, payout.nonce, status.expiresAt, payout.approvedSeq))} className={BUTTON}>Ask for a new authorization</button>
+          <button type="button" aria-disabled={busy} onClick={() => act(() => findAuthorization(store, payout.nonce, payout.approvedSeq))} className={BUTTON}>Look for a newer one in the log</button>
         </>
       )}
       {status.kind === "waiting" && (
