@@ -46,10 +46,13 @@ export function DealTicket() {
   const problems = [...preview.problems];
   if (size.trim() !== "" && parseFixed(size) === null) problems.push("Enter the size in digits, such as 10000 or 2500.50.");
   if (kind !== "market" && triggerPrice === null) problems.push(price.trim() === "" ? "Enter a trigger price." : "Enter the trigger price in digits, such as 61250.50.");
-  const gate = !state.wallet ? "Connect a wallet to trade." : state.eligibility === null ? "Attest your eligibility before trading." : signBlock(state.attestation, state.stream);
+  const blockSentence = (why: string | null) => (why === null ? null : `Trading is paused: ${why}.`);
+  const gate = !state.wallet ? "Connect a wallet to trade." : state.eligibility === null ? "Attest your eligibility before trading." : blockSentence(signBlock(state.attestation, state.stream));
   const canPlace = gate === null && problems.length === 0 && !state.busy;
   const places = market.places;
-  const show = (value: bigint | null) => (value === null ? "—" : formatMark(value, places));
+  // A live node's executable quote is not in this build (it depends on toxicity and the account's position), so the ticket shows none.
+  const quoted = state.signatures === "none";
+  const show = (value: bigint | null) => (value === null || !quoted ? "—" : formatMark(value, places));
   const submit = () => {
     const base = { market: market.id, side, notional, slippageBps: slippage, reduceOnly: false };
     if (kind === "market") void placeOrder(store, { ...base, kind: { kind: "market" } });
@@ -75,7 +78,9 @@ export function DealTicket() {
         <div className="mt-4 grid grid-cols-2 divide-x divide-line rounded border border-edge text-center">
           <div className="px-2 py-3"><p className="text-label text-fg-3">Bid (you sell)</p><p className={`mt-1 text-data ${side === "sell" ? "text-ember" : "text-fg-2"}`}>{show(preview.bid)}</p></div>
           <div className="px-2 py-3"><p className="text-label text-fg-3">Offer (you buy)</p><p className={`mt-1 text-data ${side === "buy" ? "text-glow" : "text-fg-2"}`}>{show(preview.offer)}</p></div>
-          <p className="col-span-2 border-t border-line px-2 py-2 text-label text-fg-3">Spread for this size <span className="text-fg-2">{(preview.spreadBps / 100).toFixed(2)}%</span> <span className="text-fg-3">({preview.spreadBps} bps)</span></p>
+          <p className="col-span-2 border-t border-line px-2 py-2 text-label text-fg-3">
+            {quoted ? <>Spread for this size <span className="text-fg-2">{(preview.spreadBps / 100).toFixed(2)}%</span> <span className="text-fg-3">({preview.spreadBps} bps)</span></> : "The node's executable quote is not shown in this build yet."}
+          </p>
         </div>
         <div className="mt-4">
           <label htmlFor={`${id}-size`} className="block text-caption text-fg-2">Position size (USD)</label>

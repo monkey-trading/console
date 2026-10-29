@@ -41,7 +41,7 @@ function Status({ attestation, signatures }: { attestation: ReturnType<typeof us
         </div>
       );
     case "clock":
-      return <div role="alert" className={BAD}><strong className="font-medium">Your device clock is wrong.</strong> It differs from the node&apos;s signed time by {Math.round(Math.abs(attestation.skewMs) / 1000)} s. Correct it and reload; the console shows nothing from the node until then.</div>;
+      return <div role="alert" className={BAD}><strong className="font-medium">Your device clock is wrong.</strong> It differs from the node&apos;s signed time by {Math.round(Math.abs(attestation.skewMs) / 1000)} s. Correct it and reload; what is on screen is from before the check failed and will not update.</div>;
     case "unverified":
       return <div role="alert" className={BAD}><strong className="font-medium">Attestation not verified: the console will not sign.</strong> {attestation.reason}</div>;
     default:

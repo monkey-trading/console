@@ -4,7 +4,7 @@
 
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
-import { parseDeploy, rawDeploy } from "@/lib/engine/deploy";
+import { parseDeploy, rawDeploy, type Deploy } from "@/lib/engine/deploy";
 import { createLiveClient, GLUE_PATH } from "@/lib/engine/live-session";
 import type { VerifierModule } from "@/lib/engine/wasm-verifier";
 import { WatchConnector } from "@/lib/engine/watch-wallet";
@@ -28,8 +28,7 @@ const SessionContext = createContext<Session | null>(null);
 const TICK_MS = 1_000;
 
 /** The store for a live node: nothing is loaded until its attestation is trusted, and the account is read-only. */
-function createLiveSession(): Session {
-  const deploy = parseDeploy(rawDeploy());
+function createLiveSession(deploy: Deploy): Session {
   const client = createLiveClient(deploy, {
     fetch: (input, init) => fetch(input, init),
     openSocket: (url) => new WebSocket(url),
@@ -44,7 +43,8 @@ function createLiveSession(): Session {
 }
 
 function createSession(): Session {
-  if (parseDeploy(rawDeploy()).mode !== "mock") return createLiveSession();
+  const deploy = parseDeploy(rawDeploy());
+  if (deploy.mode !== "mock") return createLiveSession(deploy);
   const node = createMockNode(SIM_EPOCH_MS, true);
   const store = new ConsoleStore({
     client: node.client,

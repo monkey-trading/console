@@ -2,17 +2,16 @@
 
 import { describe, expect, it } from "vitest";
 
-import { EngineError, type ClientEvent, type EngineClient } from "../engine/client";
-import type { MarketView, StreamMessage } from "../engine/types";
-import { fixedFromWire } from "../fixed";
-import { WatchConnector } from "../engine/watch-wallet";
-import { settle } from "../engine/test-kit";
-import { cancelOrder, connectWallet, deposit } from "./actions";
-import { LiveEngineClient } from "../engine/live";
-import { FakeNode, FakeScheduler, FakeSocket } from "../engine/test-kit";
-import { realVerifier, VECTORS, vectorResponse } from "../engine/test-vectors";
-import { ConsoleStore } from "./store";
 import { signBlock } from "../engine/attestation";
+import { EngineError, type ClientEvent, type EngineClient } from "../engine/client";
+import { LiveEngineClient } from "../engine/live";
+import { acceptAll, FakeNode, FakeScheduler, FakeSocket, mockAttestation, settle } from "../engine/test-kit";
+import { realVerifier, VECTORS, vectorResponse } from "../engine/test-vectors";
+import type { MarketView, StreamMessage } from "../engine/types";
+import { WatchConnector } from "../engine/watch-wallet";
+import { fixedFromWire } from "../fixed";
+import { cancelOrder, connectWallet, deposit } from "./actions";
+import { ConsoleStore } from "./store";
 
 const BTC: MarketView = {
   id: 1, symbol: "BTC-USD", open: true, reduce_only: false, mark: "100000", fx_mark: null, stress_level: 0,
@@ -82,11 +81,11 @@ describe("a live client's trust and feed", () => {
     const { client, store } = setup();
     store.start(0);
     await settle();
-    expect(signBlock(store.getSnapshot().attestation, store.getSnapshot().stream)).toBe("Waiting for the node's feed.");
+    expect(signBlock(store.getSnapshot().attestation, store.getSnapshot().stream)).toBe("the node's feed has not started yet");
     client.listener?.({ type: "feed", status: "live" });
     expect(signBlock(store.getSnapshot().attestation, store.getSnapshot().stream)).toBeNull();
     client.listener?.({ type: "feed", status: "stale" });
-    expect(signBlock(store.getSnapshot().attestation, store.getSnapshot().stream)).toContain("stale");
+    expect(signBlock(store.getSnapshot().attestation, store.getSnapshot().stream)).toBe("the node's feed is stale");
     client.listener?.({ type: "feed", status: "live" });
     expect(signBlock(store.getSnapshot().attestation, store.getSnapshot().stream)).toBeNull();
   });
@@ -103,7 +102,7 @@ describe("a live client's trust and feed", () => {
     expect(client.marketReads).toBe(1);
   });
 
-  it("reads everything again when another enclave is trusted, or after trust returns from a clock error or a failed check", async () => {
+  it("reads everything again when another enclave is trusted, or after trust returns from a clock error or a failed check, whatever states it passes through", async () => {
     const { client, store } = setup();
     store.start(0);
     await settle();
@@ -112,10 +111,24 @@ describe("a live client's trust and feed", () => {
     expect(client.marketReads).toBe(2);
     for (const was of [{ kind: "clock", skewMs: 60_000 }, { kind: "unverified", reason: "x" }] as const) {
       client.listener?.({ type: "attestation", status: was });
+      client.listener?.({ type: "attestation", status: { kind: "checking" } });
       client.listener?.({ type: "attestation", status: { kind: "mock" } });
       await settle();
     }
     expect(client.marketReads).toBe(4);
+  });
+
+  it("reads again when the feed returns from a failure, and not when it first connects", async () => {
+    const { client, store } = setup();
+    store.start(0);
+    await settle();
+    client.listener?.({ type: "feed", status: "live" });
+    await settle();
+    expect(client.marketReads).toBe(1);
+    client.listener?.({ type: "feed", status: "stale" });
+    client.listener?.({ type: "feed", status: "live" });
+    await settle();
+    expect(client.marketReads).toBe(2);
   });
 
   it("decodes a live node's markets without the mock's base spread", async () => {
@@ -166,7 +179,7 @@ describe("a live client's trust and feed", () => {
     await connectWallet(store, "watch", true);
     client.listener?.({ type: "feed", status: "stale" });
     await cancelOrder(store, 1);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not sign: The node's feed is stale, so orders are disabled until it recovers.");
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not sign: the node's feed is stale.");
   });
 
   it("says why it will not send a deposit while the feed is stale, whatever the attestation", async () => {
@@ -176,7 +189,7 @@ describe("a live client's trust and feed", () => {
     await connectWallet(store, "watch", true);
     client.listener?.({ type: "feed", status: "stale" });
     await deposit(store, 10n);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not send a deposit: The node's feed is stale, so orders are disabled until it recovers.");
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not send a deposit: the node's feed is stale.");
   });
 });
 
@@ -198,5 +211,31 @@ describe("a live client that keeps failing its signature checks", () => {
     expect(node.requests.filter((r) => r.path === "/v1/markets")).toHaveLength(1);
     expect(store.getSnapshot().markets).toEqual([]);
     expect(store.getSnapshot().toasts.at(-1)?.text).toContain("did not verify");
+  });
+});
+
+describe("a live node that is down at first", () => {
+  it("loads markets once the stream's retry finds it trusted, through the real event sequence", async () => {
+    const node = new FakeNode();
+    let up = false;
+    node.routes.set("/v1/attestation", () => (up ? new Response(mockAttestation(VECTORS.signer)) : new Response("", { status: 503 })));
+    const signed = (body: unknown) => ({ status: 200, body: JSON.stringify(body), signature: "0x", timeMs: 1, seq: 1 });
+    node.signed("/v1/markets", () => signed([BTC]));
+    node.signed("/v1/house", () => signed({ cash: "1", nav: "1", gross_exposure: "0" }));
+    const scheduler = new FakeScheduler();
+    const live = new LiveEngineClient({
+      origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: ACCOUNT, heartbeatMs: 5_000, loadVerifier: async () => acceptAll,
+      manifests: [], acceptsMock: true, fetch: node.fetch, openSocket: () => new FakeSocket("wss://node.test"), scheduler, nowMs: () => 1,
+    });
+    const store = new ConsoleStore({ client: live, wallets: new WatchConnector(() => ""), history: () => [], initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
+    store.start(0);
+    await settle();
+    expect(store.getSnapshot().attestation.kind).toBe("unverified");
+    expect(store.getSnapshot().markets).toEqual([]);
+    up = true;
+    scheduler.advance(1_000);
+    for (let i = 0; i < 20; i++) await settle();
+    expect(store.getSnapshot().attestation.kind).toBe("mock");
+    expect(store.getSnapshot().markets.map((m) => m.symbol)).toEqual(["BTC-USD"]);
   });
 });

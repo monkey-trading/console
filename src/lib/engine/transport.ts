@@ -18,6 +18,8 @@ export interface TransportDeps {
   fetch: typeof fetch;
   nowMs(): number;
   challenge(): string;
+  /** A signal that aborts a request, and the read of its body, when the node stalls. */
+  signal(): AbortSignal;
 }
 
 const decoder = new TextDecoder();
@@ -68,7 +70,7 @@ export class SignedTransport {
     let bytes: Uint8Array;
     try {
       response = await this.deps.fetch(this.deps.origin + path, {
-        headers: { [CHALLENGE_HEADER]: challenge }, cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer",
+        headers: { [CHALLENGE_HEADER]: challenge }, cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal: this.deps.signal(),
       });
       bytes = new Uint8Array(await response.arrayBuffer());
     } catch (cause) {

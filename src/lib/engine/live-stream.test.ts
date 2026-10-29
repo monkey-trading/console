@@ -125,10 +125,11 @@ describe("a stale feed", () => {
     const t = await started();
     send(t.sockets[0], 0);
     t.sockets[0]?.drop("close");
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // Different reasons in one outage are still one report.
+    for (const how of ["error", "close", "error"] as const) {
       t.scheduler.advance(15_000);
       await settle();
-      t.sockets.at(-1)?.drop("close");
+      t.sockets.at(-1)?.drop(how);
     }
     expect(t.sockets.length).toBeGreaterThan(3);
     expect(t.feeds).toEqual(["live", "stale"]);
@@ -148,7 +149,7 @@ describe("a stale feed", () => {
     expect(t.feeds.at(-1)).toBe("live");
   });
 
-  it("resumes after the last offset it delivered, with a delay that doubles while it keeps failing", async () => {
+  it("reopens at the live end, never replaying from an old offset, with a delay that doubles while it keeps failing", async () => {
     const t = await started();
     send(t.sockets[0], 0, 1);
     t.sockets[0]?.drop("close");
@@ -157,7 +158,7 @@ describe("a stale feed", () => {
     expect(t.sockets).toHaveLength(1);
     t.scheduler.advance(1);
     await settle();
-    expect(t.sockets[1]?.url).toBe(`wss://node.test/v1/stream?signed=1&challenge=${connection.challenge}&after=1205:0`);
+    expect(t.sockets[1]?.url).toBe(`wss://node.test/v1/stream?signed=1&challenge=${connection.challenge}`);
     t.sockets[1]?.drop("error");
     t.scheduler.advance(1_999);
     await settle();
@@ -165,6 +166,18 @@ describe("a stale feed", () => {
     t.scheduler.advance(1);
     await settle();
     expect(t.sockets).toHaveLength(3);
+  });
+
+  it("opens nothing when stopped while a recheck is pending", async () => {
+    let address = OTHER;
+    const t = await started({ address: () => address });
+    address = VECTORS.signer;
+    send(t.sockets[0], 0);
+    t.stream.stop();
+    await settle();
+    t.scheduler.advance(60_000);
+    await settle();
+    expect(t.sockets).toHaveLength(1);
   });
 
   it("stops for good when stopped, and ignores a late frame from the closed socket", async () => {

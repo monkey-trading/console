@@ -10,7 +10,7 @@ simulated, and the app says so on screen. It opens on a demo account with positi
 history and a withdrawal in the queue; Mock controls can reset it to an empty account.
 
 A build can instead read a real engine node: it checks the node's attestation, shows only answers the
-attested enclave signed for the request, and follows the node's signed stream, marking the feed stale
+attested enclave signed for the request, and follows the node's signed stream, which starts at the live end of the log and reconnects there, marking the feed stale
 (and disabling order entry) when it stops. Signing orders and funds is not wired yet. The checks run
 in the engine's own verifier, built for the browser (`public/engine-verify/`, pinned by SHA-256 in
 `src/lib/engine/wasm-pin.json`, which `npm run build` checks).
@@ -64,8 +64,8 @@ A live build is configured by environment variables at build time, all pinned in
 | `NEXT_PUBLIC_ENGINE_DEV_ORIGINS` | Comma-separated node origins a `live-dev` build may accept a mock attestation from |
 
 The node's origin is added to the Content Security Policy's `connect-src` (with its `wss:` form), and
-`'wasm-unsafe-eval'` to `script-src`. A `live` build refuses a mock attestation, and its verifier does
-not have the mock entry point at all; with no release manifests pinned yet
+`'wasm-unsafe-eval'` to `script-src`. A `live` build refuses a mock attestation, and the console's wrapper of the verifier does
+not expose the mock entry point there (the served package still exports it); with no release manifests pinned yet
 (`src/lib/engine/manifests.ts`), it trusts no hardware node either.
 
 `npm run dev:live` against a running node is checked by `scripts/dev-live-client.sh` (Node, `curl`,

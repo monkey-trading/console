@@ -9,7 +9,8 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-engine_dir="${ENGINE_DIR:?ENGINE_DIR is the engine checkout}"
+engine_dir="$(cd "${ENGINE_DIR:?ENGINE_DIR is the engine checkout}" && pwd)"
+[[ -z "${ENGINE_BIN:-}" ]] || ENGINE_BIN="$(cd "$(dirname "$ENGINE_BIN")" && pwd)/$(basename "$ENGINE_BIN")"
 work="$(mktemp -d)"
 node_pid=""
 cleanup() {

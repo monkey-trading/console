@@ -45,11 +45,13 @@ export function checkAttestation(attestation: Attestation, acceptsMock: boolean)
   return null;
 }
 
-/** Why the console may not sign now, or null when it may: the node is attested and its feed is arriving. */
+/** Why the console may not sign now, as a clause, or null when it may: the node is attested and its feed is arriving. */
 export function signBlock(status: AttestationStatus, feed: FeedStatus): string | null {
-  if (status.kind !== "mock" && status.kind !== "verified") return "The node's attestation is not verified.";
-  if (feed === "stale") return "The node's feed is stale, so orders are disabled until it recovers.";
-  return feed === "connecting" ? "Waiting for the node's feed." : null;
+  if (status.kind === "clock") return "your device clock differs from the node's signed time";
+  if (status.kind === "reverifying") return "the node is being verified again";
+  if (status.kind !== "mock" && status.kind !== "verified") return "the node's attestation is not verified";
+  if (feed === "stale") return "the node's feed is stale";
+  return feed === "connecting" ? "the node's feed has not started yet" : null;
 }
 
 /** Whether the console may sign a request now. */

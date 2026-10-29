@@ -39,8 +39,8 @@ matches the current action.
   own formula that the owner has yet to settle), the `EngineClient` and wallet interfaces,
   and the attestation check. The live client is `live.ts` over `transport.ts` (a `fetch` with a fresh
   challenge, accepting only an answer that verifies for that request, with the signed time within 30 s of the device
-  clock), `live-stream.ts` (the signed stream: consecutive `n`, resume after the last offset, stale after
-  three heartbeats) and `trust.ts` (the verified enclave address, verified again when an answer fails or the
+  clock), `live-stream.ts` (the signed stream: consecutive `n`, a fresh connection at the live end of the log after a failure, stale after
+  three heartbeats), `live-session.ts` (the client for a deployment, from the browser's `fetch`, WebSocket and clock) and `trust.ts` (the verified enclave address, verified again when an answer fails or the
   enclave restarts); `verifier.ts` is the `Verifier` interface for the engine's browser verifier,
   `wasm-verifier.ts` wraps the vendored package to it (the dev-only mock entry point only when
   `allowMock`) and `load-verifier.ts` checks the `.wasm` against `wasm-pin.json` before running it;

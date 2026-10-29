@@ -1,4 +1,4 @@
-/** The signed WebSocket stream: verifies each frame in order, tracks staleness, and reconnects where it left off. */
+/** The signed WebSocket stream: verifies each frame in order, tracks staleness, and reconnects at the live end. */
 
 import type { FeedStatus } from "./attestation";
 import { CLOCK_TOLERANCE_MS } from "./transport";
@@ -44,12 +44,11 @@ export class LiveStream {
   private socket: Socket | null = null;
   private stopped = true;
   private feed: FeedStatus = "connecting";
-  private lastOffset: string | null = null;
   private watchdog: unknown = null;
   private retry: unknown = null;
   private backoff = RECONNECT_MIN_MS;
-  /** The last reason reported, so one outage is reported once however many attempts it takes. */
-  private lastProblem: string | null = null;
+  /** Whether the outage in progress has been reported, so it is reported once however many attempts it takes. */
+  private reported = false;
   /** Bumped on each connection, so a late event from a closed socket is ignored. */
   private generation = 0;
 
@@ -81,6 +80,7 @@ export class LiveStream {
   }
 
   private async open(): Promise<void> {
+    if (this.stopped) return;
     const generation = ++this.generation;
     let signer: string;
     try {
@@ -91,8 +91,8 @@ export class LiveStream {
     }
     if (generation !== this.generation || this.stopped) return;
     const challenge = this.deps.challenge();
-    const after = this.lastOffset === null ? "" : `&after=${this.lastOffset}`;
-    const path = `/v1/stream?signed=1&challenge=${challenge}${after}`;
+    // Every connection starts at the live end of the log; the store reads what an outage missed.
+    const path = `/v1/stream?signed=1&challenge=${challenge}`;
     const frames = this.deps.verifier().openFrames({ signer, chainId: this.deps.chainId, vault: this.deps.vault, challenge, pathAndQuery: path });
     let expected = 0;
     const socket = this.deps.openSocket(this.deps.origin + path);
@@ -115,14 +115,11 @@ export class LiveStream {
       if (message === null) return this.fail("A signed stream frame carried a message the console does not know.", true);
       expected++;
       this.backoff = RECONNECT_MIN_MS;
-      this.lastProblem = null;
+      this.reported = false;
       this.deps.trust.clockRight();
       this.setFeed("live");
       this.armWatchdog(generation);
-      if (message.type === "command") {
-        this.lastOffset = message.offset;
-        this.deps.onMessage(message);
-      }
+      if (message.type === "command") this.deps.onMessage(message);
     };
     socket.onclose = () => {
       if (generation === this.generation) this.fail("The connection to the node closed.", false);
@@ -142,8 +139,8 @@ export class LiveStream {
 
   /**
    * Drops the connection and marks the feed stale. After a frame that fails, the node's attestation
-   * is checked again, since an enclave restart changes the signing key; then the stream reopens where
-   * it left off, after a delay that doubles to 15 s while it keeps failing.
+   * is checked again, since an enclave restart changes the signing key; then the stream reopens at
+   * the live end, after a delay that doubles to 15 s while it keeps failing.
    */
   private fail(reason: string, checkNode: boolean, signer?: string): void {
     if (this.stopped) return;
@@ -153,11 +150,12 @@ export class LiveStream {
     this.clearTimers();
     // The feed stays stale through the reconnect attempts, until a verified frame arrives.
     this.setFeed("stale");
-    if (reason !== this.lastProblem) this.deps.onProblem(reason);
-    this.lastProblem = reason;
+    if (!this.reported) this.deps.onProblem(reason);
+    this.reported = true;
     const delay = this.backoff;
     this.backoff = Math.min(this.backoff * 2, RECONNECT_MAX_MS);
     const reopen = () => {
+      if (this.stopped) return;
       this.retry = this.deps.scheduler.setTimeout(() => void this.open(), delay);
     };
     if (checkNode && signer !== undefined) void this.deps.trust.recheck(signer).then(reopen, reopen);

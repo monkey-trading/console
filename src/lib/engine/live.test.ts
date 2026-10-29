@@ -103,6 +103,23 @@ describe("a restarted enclave", () => {
     await expect(client.markets()).resolves.toHaveLength(1);
     const kinds = events.flatMap((e) => (e.type === "attestation" ? [e.status.kind] : []));
     expect(kinds).toEqual(["checking", "mock", "reverifying", "mock"]);
+    expect(events.filter((e) => e.type === "enclave")).toHaveLength(1);
+  });
+
+  it("reports no enclave change when the same address is verified again", async () => {
+    const { node, client, events } = setup();
+    node.signed("/v1/markets", () => replyOf(markets, { body: "[]" }));
+    await expect(client.markets()).rejects.toBeInstanceOf(SignatureError);
+    expect(events.filter((e) => e.type === "enclave")).toEqual([]);
+  });
+
+  it("keeps showing a failed check as failed while it is tried again", async () => {
+    const { node, client, events } = setup();
+    node.routes.set("/v1/attestation", () => new Response("", { status: 503 }));
+    await client.verify();
+    await client.verify();
+    await client.verify();
+    expect(events.flatMap((e) => (e.type === "attestation" ? [e.status.kind] : []))).toEqual(["checking", "unverified", "unverified", "unverified"]);
   });
 
   it("keeps rejecting when the attestation names the same address and the signature still fails", async () => {
@@ -165,6 +182,30 @@ describe("what the build trusts", () => {
 
   it("reports its signatures as checked", () => {
     expect(setup().client.signatures).toBe("checked");
+  });
+});
+
+describe("a stalled node", () => {
+  it("aborts a read when the deadline passes, and says the node did not answer", async () => {
+    const node = new FakeNode();
+    node.attestation(() => VECTORS.signer);
+    const deadline = new AbortController();
+    const hanging: typeof fetch = (input, init) =>
+      String(input).endsWith("/v1/attestation")
+        ? node.fetch(input, init)
+        : new Promise((_, reject) => {
+            const signal = init?.signal;
+            if (signal?.aborted) reject(new Error("aborted"));
+            signal?.addEventListener("abort", () => reject(new Error("aborted")));
+          });
+    const client = new LiveEngineClient({
+      origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000, loadVerifier: async () => dev,
+      manifests: [], acceptsMock: true, fetch: hanging, openSocket: () => { throw new Error("unused"); }, scheduler: new FakeScheduler(), nowMs: () => markets.time_ms,
+      signal: () => deadline.signal,
+    });
+    const read = client.markets();
+    deadline.abort();
+    await expect(read).rejects.toMatchObject({ name: "EngineError", status: 0, message: "The node did not answer." });
   });
 });
 

@@ -61,7 +61,7 @@ async function signed(
   }
   const blocked = signBlock(state.attestation, state.stream);
   if (blocked !== null) {
-    store.toast("error", `The console will not sign: ${blocked}`);
+    store.toast("error", `The console will not sign: ${blocked}.`);
     return { ok: false };
   }
   store.patch({ busy: true });
@@ -102,7 +102,7 @@ export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void>
   if (!wallet) return;
   const blocked = signBlock(store.getSnapshot().attestation, store.getSnapshot().stream);
   if (blocked !== null) {
-    store.toast("error", `The console will not send a deposit: ${blocked}`);
+    store.toast("error", `The console will not send a deposit: ${blocked}.`);
     return;
   }
   store.patch({ busy: true });

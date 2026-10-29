@@ -28,8 +28,12 @@ export interface LiveDeps {
   scheduler: Scheduler;
   nowMs(): number;
   challenge?: () => string;
+  /** A signal that aborts a read of the node when it stalls; ten seconds by default. */
+  signal?: () => AbortSignal;
 }
 
+/** How long a read of the node may take, in milliseconds. */
+const READ_TIMEOUT_MS = 10_000;
 const NOT_WIRED = "Signing is not available in this build yet.";
 
 export class LiveEngineClient implements EngineClient {
@@ -51,7 +55,7 @@ export class LiveEngineClient implements EngineClient {
       onStatus: (status) => this.emit({ type: "attestation", status }),
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
     });
-    this.transport = new SignedTransport({ ...deps, verifier: () => this.requireVerifier(), trust: this.trust, challenge });
+    this.transport = new SignedTransport({ ...deps, verifier: () => this.requireVerifier(), trust: this.trust, challenge, signal: this.signal });
   }
 
   private emit(event: ClientEvent): void {
@@ -64,6 +68,8 @@ export class LiveEngineClient implements EngineClient {
       this.listeners.delete(listener);
     };
   }
+
+  private readonly signal = (): AbortSignal => this.deps.signal?.() ?? AbortSignal.timeout(READ_TIMEOUT_MS);
 
   /** The verifier, loading it the first time. */
   private verifier(): Promise<Verifier> {
@@ -86,7 +92,7 @@ export class LiveEngineClient implements EngineClient {
   /** An unsigned read of a route the attestation itself authenticates: its status, and its body as text when 200. */
   private async plain(path: string): Promise<{ status: number; text: string }> {
     try {
-      const response = await this.deps.fetch(this.deps.origin + path, { cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer" });
+      const response = await this.deps.fetch(this.deps.origin + path, { cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal: this.signal() });
       return { status: response.status, text: response.status === 200 ? await response.text() : "" };
     } catch (cause) {
       throw new EngineError(0, "The node did not answer.", null, { cause });

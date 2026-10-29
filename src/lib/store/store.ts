@@ -39,6 +39,8 @@ export class ConsoleStore {
   private rerun: { accountChanged: boolean } | null = null;
   private unsubscribe: (() => void) | null = null;
   private unwatch: (() => void) | null = null;
+  /** Whether trust in the node was lost (a failed check or a wrong clock) and not yet regained. */
+  private trustLost = false;
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
@@ -168,16 +170,23 @@ export class ConsoleStore {
 
   /** Applies a change the client reports: the node's attestation, its feed, or a dropped stream. */
   private onClientEvent(event: ClientEvent): void {
-    if (event.type === "feed") this.patch({ stream: event.status });
-    else if (event.type === "problem") this.toast("error", event.reason);
+    if (event.type === "feed") {
+      // A feed back from a failure resumes at the live end, so what it missed is read again.
+      const recovered = event.status === "live" && this.snapshot.stream === "stale";
+      this.patch({ stream: event.status });
+      if (recovered) void this.refresh(true);
+    } else if (event.type === "problem") this.toast("error", event.reason);
     // Data read under the old enclave is read again once the new one is trusted; a check that ends
     // at the same address changes nothing, so a read that keeps failing is not repeated by it.
     else if (event.type === "enclave") void this.refresh(true);
     else {
-      const was = this.snapshot.attestation.kind;
       this.patch({ attestation: event.status });
       const trusted = event.status.kind === "mock" || event.status.kind === "verified";
-      if (trusted && (was === "clock" || was === "unverified")) void this.refresh(true);
+      if (event.status.kind === "clock" || event.status.kind === "unverified") this.trustLost = true;
+      else if (trusted && this.trustLost) {
+        this.trustLost = false;
+        void this.refresh(true);
+      }
     }
   }
 

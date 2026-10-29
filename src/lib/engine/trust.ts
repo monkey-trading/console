@@ -74,7 +74,9 @@ export class NodeTrust {
   /** Verifies the node's attestation now, or joins the check already running. */
   verify(): Promise<void> {
     if (this.verifying === null) {
-      this.setStatus(this.verifiedStatus === null ? { kind: "checking" } : { kind: "reverifying" });
+      // A node that failed its check stays shown as failed while the next attempt runs.
+      if (this.verifiedStatus !== null) this.setStatus({ kind: "reverifying" });
+      else if (this.current.kind !== "unverified") this.setStatus({ kind: "checking" });
       this.verifying = this.run().finally(() => {
         this.verifying = null;
       });

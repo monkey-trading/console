@@ -1,4 +1,4 @@
-/** The interface the console talks to an engine node through; a live client replaces the mock. */
+/** The interface the console talks to an engine node through: the in-browser mock or the live client. */
 
 import type { AttestationStatus, FeedStatus } from "./attestation";
 import type {

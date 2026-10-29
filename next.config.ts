@@ -11,7 +11,7 @@ const deploy = parseDeploy(rawDeploy());
 const nodeOrigins = deploy.origin === null ? [] : [deploy.origin, streamOrigin(deploy.origin)];
 
 // The page is statically rendered, so its inline bootstrap scripts cannot carry a nonce; the policy
-// allows inline scripts and styles but nothing from another origin. Dev mode also needs eval.
+// allows inline scripts and styles but nothing from another origin but the pinned node's. Dev mode also needs eval.
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${deploy.origin === null ? "" : " 'wasm-unsafe-eval'"}${isDev ? " 'unsafe-eval'" : ""}`,
