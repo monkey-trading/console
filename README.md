@@ -91,7 +91,8 @@ A live build is configured by environment variables at build time, all pinned in
 
 The node's origin is added to the Content Security Policy's `connect-src` (with its `wss:` form), and
 `'wasm-unsafe-eval'` to `script-src`; a build with a WalletConnect project id also adds WalletConnect's relay,
-`wss://relay.walletconnect.org`. Chain reads go through the user's wallet, never to an RPC of the console's
+`wss://relay.walletconnect.org`, to `connect-src`, and its Verify service, `https://verify.walletconnect.org`, to
+`frame-src`. Chain reads go through the user's wallet, never to an RPC of the console's
 own. `/notices` says what leaves the browser. A `live` build refuses a mock attestation, and the console's wrapper of the verifier does
 not expose the mock entry point there (the served package still exports it); with no release manifests pinned yet
 (`src/lib/engine/manifests.ts`), it trusts no hardware node either.

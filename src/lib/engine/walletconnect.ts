@@ -199,9 +199,10 @@ export class WalletConnectConnector implements WalletConnector {
   }
 
   /**
-   * Starts the SDK as published, unmodified. Its Verify step loads a frame from
-   * verify.walletconnect.org on each proposal and request; the CSP blocks it, so each waits up to
-   * five seconds and goes on without an attestation, and wallets show the console's domain as unverified.
+   * Starts the SDK as published, unmodified. Its Verify step loads a hidden frame from
+   * verify.walletconnect.org on each proposal and request, which the CSP allows, so the wallet can
+   * show the console's domain as verified; if the frame does not answer within five seconds, the
+   * step goes on without an attestation.
    */
   private async start(): Promise<WcProvider> {
     const { UniversalProvider } = await this.load();
@@ -268,7 +269,7 @@ export class WalletConnectConnector implements WalletConnector {
         if (!WALLET_METHODS.includes(method)) throw new Error(`The console does not send ${method} over WalletConnect.`);
         if (!scope.methods.has(method)) throw new Error(`Your wallet does not allow ${method} over WalletConnect, and the console sends chain requests only through your wallet.`);
         // One request at a time: the SDK's Verify step keeps one abort timer, so a request that overlaps
-        // another is never released while the CSP blocks Verify's frame.
+        // another is never released while Verify's frame does not answer.
         const sent = this.requests.then(() => provider.request({ method, params }, chain));
         this.requests = sent.then(() => undefined, () => undefined);
         return sent;

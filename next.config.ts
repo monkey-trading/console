@@ -2,18 +2,20 @@
 
 import type { NextConfig } from "next";
 
-import { parseDeploy, rawDeploy, streamOrigin, WALLETCONNECT_RELAY } from "./src/lib/engine/deploy";
+import { parseDeploy, rawDeploy, streamOrigin, WALLETCONNECT_RELAY, WALLETCONNECT_VERIFY } from "./src/lib/engine/deploy";
 import { geoBlockRewrites } from "./src/lib/geo-block";
 
 const isDev = process.env.NODE_ENV === "development";
 const deploy = parseDeploy(rawDeploy());
 // The engine node's origin is the one cross-origin destination, with its wss: stream; a live build also loads the verifier's WebAssembly.
 const nodeOrigins = deploy.origin === null ? [] : [deploy.origin, streamOrigin(deploy.origin)];
-// A build with a WalletConnect project id also reaches WalletConnect's relay, and nothing else of WalletConnect's (monkey-trading/console#7).
-const relayOrigins = deploy.walletConnectProjectId === null ? [] : [WALLETCONNECT_RELAY];
+// A build with a WalletConnect project id also reaches WalletConnect's relay (monkey-trading/console#7) and frames its Verify
+// service (owner approval recorded in monkey-trading/console#27), and nothing else of WalletConnect's.
+const walletConnect = deploy.walletConnectProjectId !== null;
+const relayOrigins = walletConnect ? [WALLETCONNECT_RELAY] : [];
 
 // The page is statically rendered, so its inline bootstrap scripts cannot carry a nonce; the policy
-// allows inline scripts and styles but nothing from another origin but the pinned node's and the relay. Dev mode also needs eval.
+// allows inline scripts and styles but nothing from another origin but the pinned node's, the relay, and Verify's frame. Dev mode also needs eval.
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${deploy.origin === null ? "" : " 'wasm-unsafe-eval'"}${isDev ? " 'unsafe-eval'" : ""}`,
@@ -21,6 +23,8 @@ const contentSecurityPolicy = [
   "img-src 'self' data:",
   "font-src 'self'",
   ["connect-src 'self'", ...nodeOrigins, ...relayOrigins].join(" "),
+  // Without this directive frames fall back to default-src 'self', which stays allowed.
+  ...(walletConnect ? [`frame-src 'self' ${WALLETCONNECT_VERIFY}`] : []),
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

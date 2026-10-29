@@ -51,7 +51,7 @@ matches the current action.
   verifier) pin and test the wire formats. `store/` holds the state, the store that follows the node's stream,
   the user's actions (`actions.ts`), the quotes and authorizations the stream carries for the account (`funds.ts`), the payouts to claim on the vault (`payouts.ts`), `live-fake.ts`, the store tests' canned live client, and `live-kit.ts`, the tests' live client and a store connected through the fixed-key wallet. `mock/` is the in-browser node (state, orders, fills, close-out, funds and
   the first-in first-out withdrawal queue, the clock step, the demo account's backstory in `demo.ts`, and the controls the mock build exposes).
-- **next.config.ts** — the security headers on every path (a CSP without nonces, with the node's origin in `connect-src` and `'wasm-unsafe-eval'` in `script-src` for a live build, and WalletConnect's relay in `connect-src` when the build sets a WalletConnect project id, nosniff, referrer,
+- **next.config.ts** — the security headers on every path (a CSP without nonces, with the node's origin in `connect-src` and `'wasm-unsafe-eval'` in `script-src` for a live build, and WalletConnect's relay in `connect-src` and its Verify frame in `frame-src` when the build sets a WalletConnect project id, nosniff, referrer,
   frame, opener, and permissions policies), `reactStrictMode`, `poweredByHeader: false`, the geo-block `beforeFiles` rewrite, and
   `agentRules: false`, so `next dev` leaves this index alone, and `devIndicators: false`, so its
   overlay does not cover the terminal.
@@ -156,7 +156,9 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   monkey-trading/engine#292 (rule 6): the build's pinned origin, and no other, is in the CSP
   `connect-src` with its `https:` and `wss:` schemes, and every answer from it is shown only if
   the attested enclave signed it for that request. WalletConnect's relay (`wss://relay.walletconnect.org`) is
-  the one other, approved in monkey-trading/console#7, and only in a build with a WalletConnect project id;
+  the one other, approved in monkey-trading/console#7, with its Verify service's frame
+  (`https://verify.walletconnect.org`, approved by the owner as monkey-trading/console#27 records), and only in
+  a build with a WalletConnect project id;
   chain reads go through the user's wallet, never to an RPC of the console's own. `/notices` states what leaves
   the browser.
 - **The rules come from the website.** The checklist and the implementation skill were ported from
