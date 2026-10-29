@@ -4,7 +4,7 @@
 
 import { useEffect, useId, useRef } from "react";
 
-import { checkPaid, claim, findAuthorization, loadApprovals, payoutsOf, reissue, type Payout } from "@/lib/store/payouts";
+import { checkPaid, claim, findAuthorization, loadApprovals, payoutsOf, reissue, unreadPayouts, type Payout } from "@/lib/store/payouts";
 import { formatStamp } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
 
@@ -23,13 +23,12 @@ export function Payouts() {
   const address = state.wallet?.address;
   // A new approval reaches the recent history first; it prompts a fresh read of every approval.
   const latest = state.history.find((e) => e.type === "withdrawal_approved")?.cursor ?? "";
-  // The payouts whose authorization the page holds and whose payment the vault has not been asked about.
-  const unread = state.authorizations.map((w) => w.nonce).filter((nonce) => !state.paid.includes(nonce) && !state.unpaid.includes(nonce)).join(",");
+  const unread = unreadPayouts(state).join(",");
   useEffect(() => {
     if (address !== undefined) void loadApprovals(store);
   }, [store, address, latest]);
   useEffect(() => {
-    // The vault's own record says which payouts it has paid, including claims made elsewhere.
+    // The vault's own record says whether it has paid each payout the page can act on, including by a claim made elsewhere before the read.
     if (unread !== "") void checkPaid(store);
   }, [store, unread]);
   // An action replaces or settles the row's button, so focus returns to the section's heading.
@@ -84,7 +83,7 @@ function PayoutRow({ payout, idle, signs, describedBy, searching, act }: { payou
       )}
       {status.kind === "expired" && (
         <>
-          <p className="mt-2 text-fg-3">Its authorization expired unclaimed at {formatStamp(status.expiresAt * 1000)} UTC.</p>
+          <p className="mt-2 text-fg-3">Its authorization expired{payout.read ? " unclaimed" : ""} at {formatStamp(status.expiresAt * 1000)} UTC.</p>
           <button type="button" aria-disabled={!idle || !signs} aria-describedby={describedBy} onClick={() => signs && act(() => reissue(store, nonce, status.expiresAt, searchFrom))} className={BUTTON}>Ask for a new authorization</button>
           {search("Look for a newer one in the log")}
         </>

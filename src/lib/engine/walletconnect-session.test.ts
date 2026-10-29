@@ -14,7 +14,7 @@ describe("a WalletConnect session", () => {
       fake.requests.push({ method: args.method, params: args.params, chain });
       return answers.shift();
     };
-    const reads = [wallet.claimed(1), wallet.claimed(2)];
+    const reads = [wallet.claimed?.(1), wallet.claimed?.(2)];
     await settle();
     expect(fake.requests).toHaveLength(1);
     first.resolve(`0x${"0".repeat(64)}`);

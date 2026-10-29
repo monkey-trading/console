@@ -29,6 +29,8 @@ export class ConsoleStore {
   readonly deps: StoreDeps;
   /** The connected wallet, which holds a signer and so is not part of the snapshot. */
   liveWallet: Wallet | null = null;
+  /** The wallet whose reads of the vault's paid payouts are running, one at a time (`checkPaid`). */
+  paidCheck: Wallet | null = null;
   private snapshot: ConsoleState;
   private readonly listeners = new Set<() => void>();
   private nextId = 1;

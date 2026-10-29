@@ -98,27 +98,34 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
   }
 }
 
+/** The payouts the page holds an authorization for, which a claim or a reissue acts on, whose payment the vault has not been asked about. */
+export function unreadPayouts(state: ConsoleState): number[] {
+  return state.authorizations.map((w) => w.nonce).filter((nonce) => !state.paid.includes(nonce) && !state.unpaid.includes(nonce));
+}
+
 /**
- * Reads, through the wallet's chain provider, whether the vault has paid each payout the page holds an
- * authorization for and has not read yet: those are the ones a claim or a reissue acts on. One read at
- * a time, so a wallet app over WalletConnect is never handed a batch.
+ * Reads, through the wallet's chain provider, whether the vault has paid each unread payout. One run
+ * per wallet at a time, one read at a time, each taking the next unread payout as the state is then,
+ * so a wallet app over WalletConnect is never handed a batch and no payout is read twice. A failed
+ * read ends the run; the next run, when another authorization arrives, tries it again.
  */
 export async function checkPaid(store: ConsoleStore): Promise<void> {
   const wallet = store.liveWallet;
   const address = store.getSnapshot().wallet?.address;
-  if (!wallet || address === undefined) return;
-  const state = store.getSnapshot();
-  const unread = state.authorizations.map((w) => w.nonce).filter((nonce) => !state.paid.includes(nonce) && !state.unpaid.includes(nonce));
+  if (!wallet?.claimed || address === undefined || store.paidCheck === wallet) return;
+  store.paidCheck = wallet;
+  const current = () => store.liveWallet === wallet && store.getSnapshot().wallet?.address === address;
   try {
-    for (const nonce of unread) {
+    for (let nonce = unreadPayouts(store.getSnapshot())[0]; nonce !== undefined && current(); nonce = unreadPayouts(store.getSnapshot())[0]) {
       const paid = await wallet.claimed(nonce);
+      if (!current()) return;
       const now = store.getSnapshot();
-      if (now.wallet?.address !== address) return;
-      if (paid) store.patch({ paid: [...new Set([...now.paid, nonce])] });
-      else store.patch({ unpaid: [...new Set([...now.unpaid, nonce])] });
+      store.patch(paid ? { paid: [...new Set([...now.paid, nonce])] } : { unpaid: [...new Set([...now.unpaid, nonce])] });
     }
   } catch (error) {
-    store.toast("error", `The vault's payouts could not be read: ${errorText(error)}`);
+    if (current()) store.toast("error", `The vault's payouts could not be read: ${errorText(error)}`);
+  } finally {
+    if (store.paidCheck === wallet) store.paidCheck = null;
   }
 }
 
@@ -141,6 +148,9 @@ export async function claim(store: ConsoleStore, nonce: number): Promise<void> {
     store.toast("ok", `The vault paid ${amount} to ${wallet.address === state.wallet?.address ? "your wallet" : wallet.address}.`);
   } catch (error) {
     store.toast("error", errorText(error));
+    // The vault may have paid it since it was read, such as on a claim from another device, so it is read again.
+    const state = store.getSnapshot();
+    if (state.wallet?.address === wallet.address) store.patch({ unpaid: state.unpaid.filter((n) => n !== nonce) });
   } finally {
     store.patch({ busy: false });
   }
@@ -200,6 +210,8 @@ export async function reissue(store: ConsoleStore, nonce: number, expiresAt: num
   } catch (error) {
     const stale = error instanceof EngineError && error.status === 400 ? NEWER_EXISTS.exec(error.message) : null;
     if (stale?.[1] !== undefined) newer = Number(stale[1]);
+    // The node holds no unpaid approval under this nonce (`reissue.rs`, `Reissue::Unknown`).
+    else if (error instanceof EngineError && error.status === 404) store.toast("error", `The node holds no unpaid withdrawal ${nonce} for this account: the vault has paid it, or the node is still loading it after a restart.`);
     else if (!store.noteAccess(error)) store.toast("error", errorText(error));
   } finally {
     store.patch({ busy: false });
