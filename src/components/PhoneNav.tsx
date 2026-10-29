@@ -13,9 +13,6 @@ const PHONE_PANES = [
   { id: "account", label: "Account" },
 ] as const;
 
-/** The pane ids, for matching a DOM attribute. */
-export const PHONE_PANE_IDS: readonly string[] = PHONE_PANES.map((p) => p.id);
-
 export type PhonePane = (typeof PHONE_PANES)[number]["id"];
 
 export function PhoneNav({ pane, onChange }: { pane: PhonePane; onChange: (pane: PhonePane) => void }) {
