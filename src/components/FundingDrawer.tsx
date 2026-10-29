@@ -47,7 +47,7 @@ export function FundingDrawer() {
       ref={dialog}
       aria-labelledby="funding-title"
       onClose={() => store.setFundingOpen(false)}
-      className="m-0 ml-auto h-dvh max-h-dvh w-screen max-w-none overflow-y-auto max-lg:scroll-pt-16 border-line-2 lg:w-[min(30rem,100vw)] lg:border-l bg-ink-1 p-0 text-fg backdrop:bg-ink/70"
+      className="m-0 ml-auto h-dvh max-h-dvh w-full max-w-none overflow-y-auto max-lg:scroll-pt-16 border-line-2 lg:w-[min(30rem,100vw)] lg:border-l bg-ink-1 p-0 text-fg backdrop:bg-ink/70"
     >
       <div className="flex items-center justify-between border-b border-line px-4 py-2 max-lg:sticky max-lg:top-0 max-lg:z-10 max-lg:bg-ink-1 lg:px-5 lg:py-4">
         <h2 id="funding-title" tabIndex={-1} className="text-label tracking-caps text-glow uppercase outline-none">Funding</h2>

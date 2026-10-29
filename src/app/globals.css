@@ -44,9 +44,9 @@ html {
   scroll-behavior: smooth;
 }
 
-/* A focused control scrolls clear of the phone's bar (64rem is Tailwind's `lg`). */
-@media (width < 64rem) {
-  html {
+/* A focused control scrolls clear of the phone's bar. */
+html {
+  @variant max-lg {
     scroll-padding-bottom: calc(var(--bar-height, var(--spacing-bar)) + 0.5rem);
   }
 }

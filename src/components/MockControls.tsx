@@ -29,10 +29,13 @@ export function MockControls() {
   const [region, setRegion] = useState<Region>("allowed");
   const id = useId();
   const toggle = useRef<HTMLButtonElement>(null);
+  const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
+      // Only an Escape from inside the panel (or its toggle) counts, so a drawer opened over it keeps its own.
+      if (event.key !== "Escape" || event.defaultPrevented || !(event.target instanceof Node && root.current?.contains(event.target))) return;
+      event.preventDefault();
       setOpen(false);
       toggle.current?.focus();
     };
@@ -53,7 +56,7 @@ export function MockControls() {
     void store.checkNode();
   };
   return (
-    <div className="relative">
+    <div ref={root} className="relative">
       <button ref={toggle} type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} className="min-h-11 rounded border border-amber/60 px-2.5 py-2 sm:px-3 lg:min-h-0 text-label tracking-caps text-amber uppercase focus-visible:outline-2 focus-visible:outline-glow">
         Mock<span className="max-sm:sr-only"> controls</span>
       </button>

@@ -17,6 +17,7 @@ export function WalletButton() {
   const [open, setOpen] = useState(false);
   const menu = useId();
   const primary = useRef<HTMLButtonElement>(null);
+  const root = useRef<HTMLDivElement>(null);
   const moved = useRef(false);
   useEffect(() => {
     // The button the user used has been replaced; keep their place by focusing its successor.
@@ -26,7 +27,8 @@ export function WalletButton() {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.key !== "Escape" || event.defaultPrevented || !(event.target instanceof Node && root.current?.contains(event.target))) return;
+      event.preventDefault();
       setOpen(false);
       primary.current?.focus();
     };
@@ -42,7 +44,7 @@ export function WalletButton() {
     );
   }
   return (
-    <div className="relative">
+    <div ref={root} className="relative">
       <button ref={primary} type="button" aria-expanded={open} aria-controls={menu} onClick={() => setOpen(!open)} className={BUTTON}>
         Connect wallet
       </button>

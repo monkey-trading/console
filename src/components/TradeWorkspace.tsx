@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { BottomPanel } from "./BottomPanel";
 import { ChartPanel } from "./ChartPanel";
 import { OrderTicket } from "./OrderTicket";
-import { PhoneNav, type PhonePane } from "./PhoneNav";
+import { PHONE_PANE_IDS, PhoneNav, type PhonePane } from "./PhoneNav";
 import { Watchlist } from "./Watchlist";
 
 /** Hides a pane below 1024 px unless it is the one chosen; the desktop layout shows all of them. */
@@ -29,6 +29,16 @@ export function TradeWorkspace() {
     if (next !== pane) window.scrollTo({ top: 0, behavior: "instant" });
     setPane(next);
   };
+  useEffect(() => {
+    // Narrowing the window hides the panes that are not chosen: keep the one that holds focus.
+    const query = window.matchMedia("(width < 64rem)");
+    const onChange = () => {
+      const held = document.activeElement?.closest("[data-pane]")?.getAttribute("data-pane");
+      if (query.matches && PHONE_PANE_IDS.some((id) => id === held)) setPane(held as PhonePane);
+    };
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
   const picked = () => {
     if (window.matchMedia("(width >= 64rem)").matches) return;
     focusMarket.current = true;
@@ -36,12 +46,12 @@ export function TradeWorkspace() {
   };
   return (
     <div className="grid min-h-0 flex-1 max-lg:content-start lg:grid-cols-[210px_minmax(0,1fr)_290px] xl:grid-cols-[230px_minmax(0,1fr)_310px]">
-      <div className={`min-h-0 lg:overflow-y-auto ${hiddenUnless(pane, "markets")}`}><Watchlist onPick={picked} /></div>
+      <div data-pane="markets" className={`min-h-0 lg:overflow-y-auto ${hiddenUnless(pane, "markets")}`}><Watchlist onPick={picked} /></div>
       <div className="flex min-h-0 min-w-0 flex-col lg:overflow-y-auto">
-        <div className={`flex flex-1 flex-col ${hiddenUnless(pane, "chart")}`}><ChartPanel /></div>
-        <div className={`flex shrink-0 flex-col ${hiddenUnless(pane, "account")}`}><BottomPanel /></div>
+        <div data-pane="chart" className={`flex flex-1 flex-col ${hiddenUnless(pane, "chart")}`}><ChartPanel /></div>
+        <div data-pane="account" className={`flex shrink-0 flex-col ${hiddenUnless(pane, "account")}`}><BottomPanel /></div>
       </div>
-      <div className={`min-h-0 border-line lg:overflow-y-auto lg:border-l ${hiddenUnless(pane, "trade")}`}><OrderTicket /></div>
+      <div data-pane="trade" className={`min-h-0 border-line lg:overflow-y-auto lg:border-l ${hiddenUnless(pane, "trade")}`}><OrderTicket /></div>
       <PhoneNav pane={pane} onChange={choose} />
     </div>
   );
