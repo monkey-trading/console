@@ -49,6 +49,7 @@ export class LiveEngineClient implements EngineClient {
       collateral: () => this.collateral(),
       verifier: () => this.verifier(), manifests: deps.manifests, acceptsMock: deps.acceptsMock, nowMs: deps.nowMs,
       onStatus: (status) => this.emit({ type: "attestation", status }),
+      onEnclaveChanged: () => this.emit({ type: "enclave" }),
     });
     this.transport = new SignedTransport({ ...deps, verifier: () => this.requireVerifier(), trust: this.trust, challenge });
   }

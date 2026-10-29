@@ -115,7 +115,14 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
   useEffect(() => {
     const c = live.current;
     const last = bars[bars.length - 1];
-    if (!c || !last) return;
+    if (!c) return;
+    if (!last) {
+      // A market with no bars shows none, not the last market's.
+      c.series.setData([]);
+      c.key = "";
+      c.count = c.first = c.last = 0;
+      return;
+    }
     c.series.applyOptions({ priceFormat: { type: "price", precision: places, minMove: 1 / 10 ** places } });
     const reload = c.key !== seriesKey || bars.length < c.count || bars.length - c.count > 1;
     if (reload) {

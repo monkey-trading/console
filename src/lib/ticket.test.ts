@@ -13,7 +13,7 @@ async function btc() {
   const node = createMockNode(START);
   const view = (await node.client.markets()).find((m) => m.symbol === "BTC-USD");
   if (!view) throw new Error("BTC-USD is listed");
-  return decodeMarket(view, undefined);
+  return decodeMarket(view, undefined, true);
 }
 
 const account = (equity: number, margin = 0): AccountModel => ({

@@ -31,7 +31,7 @@ export interface ConsoleState {
   attestation: AttestationStatus;
   /** Whether the node's stream is arriving; order entry waits while it is stale. */
   stream: FeedStatus;
-  /** What the client does about the node's signatures; `unchecked` is shown on screen. */
+  /** Whether the client checks the node's signatures; `none` is the in-browser mock. */
   signatures: SignatureChecks;
   /** Set when the node refuses the caller's region. */
   blocked: BlockReason | null;
@@ -74,7 +74,7 @@ export function seedAllBars(markets: readonly MarketModel[], startMs: number, hi
 
 /** The state before anything has loaded, from the first `GET /v1/markets` and `/v1/house`. */
 export function initialState(markets: MarketView[], house: HouseView, startMs: number, history: HistorySource, signatures: SignatureChecks): ConsoleState {
-  const models = markets.map((view) => decodeMarket(view, undefined));
+  const models = markets.map((view) => decodeMarket(view, undefined, signatures === "none"));
   return {
     now: startMs,
     attestation: { kind: "checking" },

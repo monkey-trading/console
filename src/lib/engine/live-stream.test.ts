@@ -29,7 +29,7 @@ function setup(options: { address?: () => string; clockMs?: number } = {}) {
   const verifier: Verifier = { ...real, openFrames: (c) => { opened.push(c); return real.openFrames({ ...c, pathAndQuery: connection.path_and_query }); } };
   const address = options.address ?? (() => VECTORS.signer);
   const trust = new NodeTrust({
-    attestation: async () => mockAttestation(address()), collateral: async () => null, verifier: async () => verifier, manifests: [], acceptsMock: true, nowMs: () => 0, onStatus: () => {},
+    attestation: async () => mockAttestation(address()), collateral: async () => null, verifier: async () => verifier, manifests: [], acceptsMock: true, nowMs: () => 0, onStatus: () => {}, onEnclaveChanged: () => {},
   });
   const stream = new LiveStream({
     origin: "wss://node.test", chainId: connection.chain_id, vault: connection.vault, heartbeatMs: HEARTBEAT_MS, verifier: () => verifier, trust,
@@ -67,7 +67,7 @@ describe("a signed stream", () => {
     send(t.sockets[0], 0, 2);
     expect(t.messages).toEqual([]);
     expect(t.sockets[0]?.closed).toBe(true);
-    expect(t.problems[0]).toContain("skipped");
+    expect(t.problems[0]).toContain("expected frame 1 but received 2");
     expect(t.feeds.at(-1)).toBe("stale");
   });
 
@@ -119,6 +119,24 @@ describe("a stale feed", () => {
     expect(t.sockets).toHaveLength(2);
     send(t.sockets[1], 0);
     expect(t.feeds.at(-1)).toBe("live");
+  });
+
+  it("stays stale through every reconnect attempt, and reports one outage once", async () => {
+    const t = await started();
+    send(t.sockets[0], 0);
+    t.sockets[0]?.drop("close");
+    for (let attempt = 0; attempt < 3; attempt++) {
+      t.scheduler.advance(15_000);
+      await settle();
+      t.sockets.at(-1)?.drop("close");
+    }
+    expect(t.sockets.length).toBeGreaterThan(3);
+    expect(t.feeds).toEqual(["live", "stale"]);
+    expect(t.problems).toEqual(["The connection to the node closed."]);
+    t.scheduler.advance(15_000);
+    await settle();
+    send(t.sockets.at(-1), 0);
+    expect(t.feeds).toEqual(["live", "stale", "live"]);
   });
 
   it("counts a heartbeat as life, so a quiet market is not a stale feed", async () => {

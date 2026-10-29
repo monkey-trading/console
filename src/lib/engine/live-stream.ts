@@ -48,6 +48,8 @@ export class LiveStream {
   private watchdog: unknown = null;
   private retry: unknown = null;
   private backoff = RECONNECT_MIN_MS;
+  /** The last reason reported, so one outage is reported once however many attempts it takes. */
+  private lastProblem: string | null = null;
   /** Bumped on each connection, so a late event from a closed socket is ignored. */
   private generation = 0;
 
@@ -80,7 +82,6 @@ export class LiveStream {
 
   private async open(): Promise<void> {
     const generation = ++this.generation;
-    this.setFeed("connecting");
     let signer: string;
     try {
       signer = await this.deps.trust.signer();
@@ -102,7 +103,7 @@ export class LiveStream {
       const text = typeof event.data === "string" ? event.data : null;
       const frame = text === null ? null : parseSignedFrame(text);
       if (text === null || frame === null) return this.fail("The node sent a stream frame that is not a signed envelope.", true);
-      if (frame.n !== expected) return this.fail(`The stream skipped from frame ${expected - 1} to ${frame.n}: a frame was dropped, repeated or reordered.`, true);
+      if (frame.n !== expected) return this.fail(`The stream skipped: expected frame ${expected} but received ${frame.n}, so a frame was dropped, repeated or reordered.`, true);
       const checked = frames.verify(text);
       if (!checked.ok) return this.fail(`A stream frame did not verify: ${checked.reason}.`, true, signer);
       const skewMs = frame.time - this.deps.nowMs();
@@ -114,6 +115,7 @@ export class LiveStream {
       if (message === null) return this.fail("A signed stream frame carried a message the console does not know.", true);
       expected++;
       this.backoff = RECONNECT_MIN_MS;
+      this.lastProblem = null;
       this.deps.trust.clockRight();
       this.setFeed("live");
       this.armWatchdog(generation);
@@ -149,8 +151,10 @@ export class LiveStream {
     this.socket?.close();
     this.socket = null;
     this.clearTimers();
+    // The feed stays stale through the reconnect attempts, until a verified frame arrives.
     this.setFeed("stale");
-    this.deps.onProblem(reason);
+    if (reason !== this.lastProblem) this.deps.onProblem(reason);
+    this.lastProblem = reason;
     const delay = this.backoff;
     this.backoff = Math.min(this.backoff * 2, RECONNECT_MAX_MS);
     const reopen = () => {

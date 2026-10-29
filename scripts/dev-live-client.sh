@@ -18,6 +18,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# A node already on the port would answer the health check below in place of the one started here.
+[[ "$(curl -sk https://127.0.0.1:8080/v1/health || true)" == ok ]] && { echo "FAIL: something already answers on https://127.0.0.1:8080; stop it first" >&2; exit 1; }
+
 # The node writes `data/dev` under its working directory.
 cd "$work"
 if [[ -n "${ENGINE_BIN:-}" ]]; then
@@ -30,6 +33,7 @@ fi
 node_pid=$!
 
 for _ in $(seq 1 60); do
+  kill -0 "$node_pid" 2>/dev/null || { echo "FAIL: the dev node exited" >&2; tail -20 "$work/node.log" >&2; exit 1; }
   [[ "$(curl -sk https://127.0.0.1:8080/v1/health || true)" == ok ]] && break
   sleep 1
 done

@@ -26,12 +26,12 @@ export interface Browser {
  * Error cases:
  * - the deployment is the mock, which has no node to talk to
  */
-export function createLiveClient(deploy: Deploy, browser: Browser): LiveEngineClient {
+export function createLiveClient(deploy: Deploy, browser: Browser, load: typeof loadVerifier = loadVerifier): LiveEngineClient {
   if (deploy.origin === null || deploy.chainId === null || deploy.vault === null) throw new Error("A live client needs a deployment with a node origin, chain id and vault.");
   const allowMock = acceptsMockAttestation(deploy);
   return new LiveEngineClient({
     origin: deploy.origin, streamOrigin: streamOrigin(deploy.origin), chainId: deploy.chainId, vault: deploy.vault, heartbeatMs: deploy.heartbeatMs,
-    loadVerifier: () => loadVerifier({ allowMock, loadGlue: browser.loadGlue, fetchWasm: async () => new Uint8Array(await (await browser.fetch(WASM_PATH)).arrayBuffer()) }),
+    loadVerifier: () => load({ allowMock, loadGlue: browser.loadGlue, fetchWasm: async () => new Uint8Array(await (await browser.fetch(WASM_PATH)).arrayBuffer()) }),
     manifests: RELEASE_MANIFESTS, acceptsMock: allowMock, ...browser,
   });
 }

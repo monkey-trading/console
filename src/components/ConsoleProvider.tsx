@@ -1,6 +1,6 @@
 "use client";
 
-/** Creates the mock node and the store once, follows the node's clock, and shares both. */
+/** Creates the store once, over the in-browser mock node or a live node by the build's deployment, follows the node's clock, and shares them. */
 
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
@@ -68,10 +68,10 @@ function createSession(): Session {
 const MAX_TICK_MS = 5_000;
 
 /**
- * Provides the console's session to every screen. The node's clock starts at the demo's fixed
- * instant and advances with real time, but only while the simulation runs: it stands still when
- * the user pauses it, when the tab is hidden, and from the start for a visitor who prefers reduced
- * motion, until they press play.
+ * Provides the console's session to every screen. A live node sets its own clock with its
+ * messages. The mock's clock starts at the demo's fixed instant and advances with real time, but
+ * only while the simulation runs: it stands still when the user pauses it, when the tab is hidden,
+ * and from the start for a visitor who prefers reduced motion, until they press play.
  */
 export function ConsoleProvider({ children }: { children: ReactNode }) {
   const [session] = useState(createSession);

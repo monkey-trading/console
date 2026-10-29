@@ -35,6 +35,8 @@ export interface TrustDeps {
   acceptsMock: boolean;
   nowMs(): number;
   onStatus(status: AttestationStatus): void;
+  /** The verified enclave address changed from an earlier one. */
+  onEnclaveChanged(): void;
 }
 
 /**
@@ -49,6 +51,8 @@ export class NodeTrust {
   private current: AttestationStatus = { kind: "checking" };
   /** The last status that trusted the node, which a clock disagreement hides and its resolution restores. */
   private verifiedStatus: AttestationStatus | null = null;
+  /** The last address that was trusted, which a re-verification compares the next one with. */
+  private lastSigner: string | null = null;
 
   constructor(private readonly deps: TrustDeps) {}
 
@@ -108,6 +112,12 @@ export class NodeTrust {
     this.deps.onStatus(status);
   }
 
+  private trust(address: string): void {
+    const changed = this.lastSigner !== null && this.lastSigner !== address;
+    this.signerAddress = this.lastSigner = address;
+    if (changed) this.deps.onEnclaveChanged();
+  }
+
   private async run(): Promise<void> {
     this.signerAddress = null;
     this.verifiedStatus = null;
@@ -120,7 +130,7 @@ export class NodeTrust {
         if (!this.deps.acceptsMock || !verifier.verifyMockAttestation) return this.setStatus({ kind: "unverified", reason: MOCK_REFUSED });
         const mock = verifier.verifyMockAttestation(text);
         if (!mock.ok) return this.setStatus({ kind: "unverified", reason: mock.reason });
-        this.signerAddress = mock.enclave.address.toLowerCase();
+        this.trust(mock.enclave.address.toLowerCase());
         return this.setStatus({ kind: "mock" });
       }
       const collateral = await this.deps.collateral();
@@ -131,8 +141,8 @@ export class NodeTrust {
         return this.setStatus({ kind: "unverified", reason: verdict.reason + hint });
       }
       const { address, release, config } = verdict.enclave;
-      this.signerAddress = address.toLowerCase();
-      this.setStatus({ kind: "verified", release: release ?? "", config: config ?? "", address: this.signerAddress });
+      this.trust(address.toLowerCase());
+      this.setStatus({ kind: "verified", release: release ?? "", config: config ?? "", address: address.toLowerCase() });
     } catch (error) {
       this.setStatus({ kind: "unverified", reason: error instanceof Error ? error.message : "The attestation could not be read." });
     }

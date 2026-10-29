@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseDeploy, type RawDeploy } from "./deploy";
+import { loadVerifier } from "./load-verifier";
 import { createLiveClient, WASM_PATH, type Browser } from "./live-session";
 import { FakeNode, FakeScheduler } from "./test-kit";
 import { loadGlue, readWasm, VECTORS } from "./test-vectors";
@@ -30,6 +31,13 @@ describe("createLiveClient", () => {
   it("gives a production build a verifier with no mock entry point, so a mock attestation is refused", async () => {
     const client = createLiveClient(parseDeploy({ ...raw, mode: "live" }), await browserFor());
     await expect(client.verify()).resolves.toMatchObject({ kind: "unverified", reason: expect.stringContaining("refuses") });
+  });
+
+  it("lets only a dev build's verifier read a mock attestation", async () => {
+    const allowed: boolean[] = [];
+    const spy: typeof loadVerifier = async (deps) => { allowed.push(deps.allowMock); return loadVerifier(deps); };
+    for (const mode of ["live-dev", "live"]) await createLiveClient(parseDeploy({ ...raw, mode }), await browserFor(), spy).verify();
+    expect(allowed).toEqual([true, false]);
   });
 
   it("refuses a deployment with no node", async () => {

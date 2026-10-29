@@ -1,6 +1,6 @@
 /** What the user can do: connect a wallet, attest, deposit, trade, and withdraw. */
 
-import { maySign } from "../engine/attestation";
+import { signBlock } from "../engine/attestation";
 import { EngineError, type ActionResult } from "../engine/client";
 import type { EligibilityClass, OrderKind, RequestAuth, Side } from "../engine/types";
 import type { SignRequest, Wallet } from "../engine/wallet";
@@ -59,8 +59,9 @@ async function signed(
     store.toast("error", "Connect a wallet first.");
     return { ok: false };
   }
-  if (!maySign(state.attestation, state.stream)) {
-    store.toast("error", "The node's attestation is not verified, so the console will not sign for it.");
+  const blocked = signBlock(state.attestation, state.stream);
+  if (blocked !== null) {
+    store.toast("error", `The console will not sign: ${blocked}`);
     return { ok: false };
   }
   store.patch({ busy: true });
@@ -99,8 +100,9 @@ export async function attestEligibility(store: ConsoleStore, cls: EligibilityCla
 export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void> {
   const wallet = walletOf(store);
   if (!wallet) return;
-  if (!maySign(store.getSnapshot().attestation, store.getSnapshot().stream)) {
-    store.toast("error", "The node's attestation is not verified, so the console will not send a deposit for it.");
+  const blocked = signBlock(store.getSnapshot().attestation, store.getSnapshot().stream);
+  if (blocked !== null) {
+    store.toast("error", `The console will not send a deposit: ${blocked}`);
     return;
   }
   store.patch({ busy: true });

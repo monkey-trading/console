@@ -47,6 +47,8 @@ export type Unsubscribe = () => void;
 export type ClientEvent =
   | { type: "attestation"; status: AttestationStatus }
   | { type: "feed"; status: FeedStatus }
+  /** The node's answers now come from another enclave address than before. */
+  | { type: "enclave" }
   /** Why the stream was dropped, written for the user. */
   | { type: "problem"; reason: string };
 

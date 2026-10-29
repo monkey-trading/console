@@ -11,6 +11,13 @@ function decimals(wire: string, places: number): string {
 
 const usd = (wire: string) => formatUsd(fixedFromWire(wire));
 
+/** What the console says when it accepts a mock attestation: the in-browser simulation, or a development node it did not verify. */
+export function describeMockAttestation(signatures: "checked" | "none"): { lead: string; rest: string } {
+  return signatures === "none"
+    ? { lead: "Mock attestation accepted.", rest: "Simulated node in your browser, not an enclave: prices, fills and funds are not real." }
+    : { lead: "Mock attestation accepted.", rest: "A development node whose attestation proves no enclave, read through the verifier's dev-only mock entry point: prices, fills and funds are not real." };
+}
+
 /** One sentence for a typed refusal. */
 export function describeReject(reject: Reject): string {
   switch (reject.kind) {

@@ -15,7 +15,7 @@ export type AttestationStatus =
   /** A quote this build cannot verify, or one that fails its checks. Nothing is signed for the node. */
   | { kind: "unverified"; reason: string };
 
-/** Whether the node's feed is arriving: `stale` once no valid frame or heartbeat has come for three heartbeat intervals. */
+/** Whether the node's feed is arriving: `stale` from the moment the stream fails a check, closes, or goes three heartbeat intervals without a valid frame, until the next valid frame. */
 export type FeedStatus = "connecting" | "live" | "stale";
 
 const MOCK_QUOTE_PREFIX = "MOCK-ATTESTATION-NOT-A-TEE:";

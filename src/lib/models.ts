@@ -20,11 +20,15 @@ export interface MarketModel {
   reference: Fixed | null;
 }
 
-export function decodeMarket(view: MarketView, previous: MarketModel | undefined): MarketModel {
+/**
+ * `simulated` adds the mock's base spread; a live node has none, since the engine charges only its
+ * stress, toxicity and size spreads (and the quote route is still to come).
+ */
+export function decodeMarket(view: MarketView, previous: MarketModel | undefined, simulated: boolean): MarketModel {
   const meta = metaFor(view.symbol);
   const mark = view.mark === null ? null : fixedFromWire(view.mark);
   return {
-    view, id: view.id, symbol: view.symbol, name: meta.name, places: meta.places, baseSpreadBps: meta.baseSpreadBps,
+    view, id: view.id, symbol: view.symbol, name: meta.name, places: meta.places, baseSpreadBps: simulated ? meta.baseSpreadBps : 0,
     open: view.open, reduceOnly: view.reduce_only, stress: view.stress_level, mark,
     reference: previous?.reference ?? mark,
   };

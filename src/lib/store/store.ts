@@ -54,6 +54,11 @@ export class ConsoleStore {
     };
   }
 
+  /** Whether the node is the in-browser mock, whose quotes are simulated. */
+  private get simulated(): boolean {
+    return this.deps.client.signatures === "none";
+  }
+
   /** Whether an event belongs in this user's activity: market events, and events of their own account. */
   private isMine(event: EngineEvent): boolean {
     if (!("account" in event)) return true;
@@ -165,12 +170,14 @@ export class ConsoleStore {
   private onClientEvent(event: ClientEvent): void {
     if (event.type === "feed") this.patch({ stream: event.status });
     else if (event.type === "problem") this.toast("error", event.reason);
+    // Data read under the old enclave is read again once the new one is trusted; a check that ends
+    // at the same address changes nothing, so a read that keeps failing is not repeated by it.
+    else if (event.type === "enclave") void this.refresh(true);
     else {
       const was = this.snapshot.attestation.kind;
       this.patch({ attestation: event.status });
-      // Data read under the old enclave is read again once the new one is trusted.
       const trusted = event.status.kind === "mock" || event.status.kind === "verified";
-      if (trusted && (was === "reverifying" || was === "clock" || was === "unverified")) void this.refresh(true);
+      if (trusted && (was === "clock" || was === "unverified")) void this.refresh(true);
     }
   }
 
@@ -209,7 +216,11 @@ export class ConsoleStore {
     // Price updates change nothing on screen by themselves; only the node's tick moves the clock and the log.
     if (message.cmd.type === "prices" && lines.length === 0) return;
     this.patch({ now: message.ts, feed: [...lines.reverse(), ...this.snapshot.feed].slice(0, FEED_LIMIT) });
-    if (message.cmd.type === "tick") void this.refresh(message.events.some((e) => "account" in e));
+    // An event for the connected account, from any command, may have changed its history too.
+    const mine = this.snapshot.wallet?.address.toLowerCase();
+    const own = mine !== undefined && message.events.some((e) => "account" in e && e.account.toLowerCase() === mine);
+    if (own) void this.refresh(true);
+    else if (message.cmd.type === "tick") void this.refresh(message.events.some((e) => "account" in e));
   }
 
   /**
@@ -231,7 +242,7 @@ export class ConsoleStore {
   private async readAll(accountChanged: boolean): Promise<void> {
     try {
       const [views, house] = await Promise.all([this.deps.client.markets(), this.deps.client.house()]);
-      const markets = views.map((view) => decodeMarket(view, this.snapshot.markets.find((m) => m.id === view.id)));
+      const markets = views.map((view) => decodeMarket(view, this.snapshot.markets.find((m) => m.id === view.id), this.simulated));
       const bars = { ...this.snapshot.bars };
       for (const m of markets) {
         if (m.mark === null || !m.open) continue;

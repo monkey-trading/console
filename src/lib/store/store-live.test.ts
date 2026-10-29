@@ -7,6 +7,10 @@ import type { MarketView, StreamMessage } from "../engine/types";
 import { fixedFromWire } from "../fixed";
 import { WatchConnector } from "../engine/watch-wallet";
 import { settle } from "../engine/test-kit";
+import { cancelOrder, connectWallet, deposit } from "./actions";
+import { LiveEngineClient } from "../engine/live";
+import { FakeNode, FakeScheduler, FakeSocket } from "../engine/test-kit";
+import { realVerifier, VECTORS, vectorResponse } from "../engine/test-vectors";
 import { ConsoleStore } from "./store";
 import { signBlock } from "../engine/attestation";
 
@@ -87,17 +91,56 @@ describe("a live client's trust and feed", () => {
     expect(signBlock(store.getSnapshot().attestation, store.getSnapshot().stream)).toBeNull();
   });
 
-  it("shows the session as re-verifying, then reads everything again once the new enclave is trusted", async () => {
+  it("shows the session as re-verifying, and reads nothing again when the same enclave is trusted", async () => {
     const { client, store } = setup();
     store.start(0);
     await settle();
     client.listener?.({ type: "attestation", status: { kind: "reverifying" } });
     expect(store.getSnapshot().attestation.kind).toBe("reverifying");
-    expect(client.marketReads).toBe(1);
     client.listener?.({ type: "attestation", status: { kind: "mock" } });
     await settle();
     expect(store.getSnapshot().attestation.kind).toBe("mock");
+    expect(client.marketReads).toBe(1);
+  });
+
+  it("reads everything again when another enclave is trusted, or after trust returns from a clock error or a failed check", async () => {
+    const { client, store } = setup();
+    store.start(0);
+    await settle();
+    client.listener?.({ type: "enclave" });
+    await settle();
     expect(client.marketReads).toBe(2);
+    for (const was of [{ kind: "clock", skewMs: 60_000 }, { kind: "unverified", reason: "x" }] as const) {
+      client.listener?.({ type: "attestation", status: was });
+      client.listener?.({ type: "attestation", status: { kind: "mock" } });
+      await settle();
+    }
+    expect(client.marketReads).toBe(4);
+  });
+
+  it("decodes a live node's markets without the mock's base spread", async () => {
+    const { store } = setup();
+    store.start(0);
+    await settle();
+    expect(store.getSnapshot().markets[0]?.baseSpreadBps).toBe(0);
+  });
+
+  it("refreshes the watched account's history for an event of its own from any command, and for no other account's", async () => {
+    const { client, store } = setup();
+    let histories = 0;
+    client.history = async () => { histories++; return { events: [], next: null }; };
+    store.start(0);
+    await settle();
+    await connectWallet(store, "watch", true);
+    const base = histories;
+    const event = (account: string) => ({ type: "deposited", account, amount: "5" }) as unknown as StreamMessage["events"][number];
+    const message = (type: string, account: string): StreamMessage => ({ offset: "9:0", type: "command", seq: 9, ts: 1, cmd: { type } as StreamMessage["cmd"], events: [event(account)] });
+    client.onMessage?.(message("deposit", "0xabc0000000000000000000000000000000000001"));
+    await settle();
+    expect(histories).toBe(base);
+    client.onMessage?.(message("deposit", ACCOUNT.toUpperCase().replace("0X", "0x")));
+    await settle();
+    expect(histories).toBe(base + 1);
   });
 
   it("tells the user why the stream was dropped", async () => {
@@ -112,6 +155,47 @@ describe("a live client's trust and feed", () => {
     client.markets = async () => { throw new Error("The node's answer did not verify: wrong_signer."); };
     store.start(0);
     await settle();
+    expect(store.getSnapshot().markets).toEqual([]);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("did not verify");
+  });
+
+  it("says why it will not sign an action while the feed is stale, whatever the attestation", async () => {
+    const { client, store } = setup();
+    store.start(0);
+    await settle();
+    await connectWallet(store, "watch", true);
+    client.listener?.({ type: "feed", status: "stale" });
+    await cancelOrder(store, 1);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not sign: The node's feed is stale, so orders are disabled until it recovers.");
+  });
+
+  it("says why it will not send a deposit while the feed is stale, whatever the attestation", async () => {
+    const { client, store } = setup();
+    store.start(0);
+    await settle();
+    await connectWallet(store, "watch", true);
+    client.listener?.({ type: "feed", status: "stale" });
+    await deposit(store, 10n);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not send a deposit: The node's feed is stale, so orders are disabled until it recovers.");
+  });
+});
+
+describe("a live client that keeps failing its signature checks", () => {
+  it("reads once and shows the refusal, without reading again by itself", async () => {
+    const node = new FakeNode();
+    node.attestation(() => VECTORS.signer);
+    const market = vectorResponse("markets");
+    node.signed("/v1/markets", () => ({ status: 200, body: market.body, signature: market.signature, timeMs: market.time_ms, seq: market.head_seq }));
+    node.signed("/v1/house", () => ({ status: 200, body: "{}", signature: market.signature, timeMs: market.time_ms, seq: 1 }));
+    const verifier = await realVerifier();
+    const live = new LiveEngineClient({
+      origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 1, vault: market.vault, heartbeatMs: 5_000, loadVerifier: async () => verifier,
+      manifests: [], acceptsMock: true, fetch: node.fetch, openSocket: () => new FakeSocket("wss://node.test"), scheduler: new FakeScheduler(), nowMs: () => market.time_ms,
+    });
+    const store = new ConsoleStore({ client: live, wallets: new WatchConnector(() => ""), history: () => [], initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
+    store.start(0);
+    for (let i = 0; i < 20; i++) await settle();
+    expect(node.requests.filter((r) => r.path === "/v1/markets")).toHaveLength(1);
     expect(store.getSnapshot().markets).toEqual([]);
     expect(store.getSnapshot().toasts.at(-1)?.text).toContain("did not verify");
   });

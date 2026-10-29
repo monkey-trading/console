@@ -22,7 +22,9 @@ beforeAll(async () => {
   production = await realVerifier(false);
 });
 
-function setup(options: { verifier?: Verifier; acceptsMock?: boolean; address?: () => string; challenge?: string; nowMs?: number; chainId?: number } = {}) {
+const constant = (value: number) => () => value;
+
+function setup(options: { verifier?: Verifier; acceptsMock?: boolean; address?: () => string; challenge?: string; nowMs?: number | (() => number); chainId?: number } = {}) {
   const node = new FakeNode();
   node.attestation(options.address ?? (() => VECTORS.signer));
   node.signed("/v1/markets", () => replyOf(markets));
@@ -32,7 +34,7 @@ function setup(options: { verifier?: Verifier; acceptsMock?: boolean; address?: 
     origin: "https://node.test", streamOrigin: "wss://node.test", chainId: options.chainId ?? 31337, vault: markets.vault, heartbeatMs: 5_000,
     loadVerifier: async () => verifier, manifests: [], acceptsMock: options.acceptsMock ?? true,
     fetch: node.fetch, openSocket: () => { throw new Error("no stream in these tests"); }, scheduler: new FakeScheduler(),
-    nowMs: () => options.nowMs ?? markets.time_ms, challenge: () => options.challenge ?? markets.challenge,
+    nowMs: typeof options.nowMs === "function" ? options.nowMs : constant(options.nowMs ?? markets.time_ms), challenge: () => options.challenge ?? markets.challenge,
   });
   client.watch((event) => events.push(event));
   return { node, client, events };
@@ -82,10 +84,13 @@ describe("signed reads", () => {
     expect(events).toContainEqual({ type: "attestation", status: { kind: "clock", skewMs: -31_000 } });
   });
 
-  it("accepts a signed time within 30 s and clears a clock error", async () => {
-    const { client, events } = setup({ nowMs: markets.time_ms + 30_000 });
+  it("accepts a signed time within 30 s, and returns to trusted once a wrong clock is corrected", async () => {
+    let now = markets.time_ms + 31_000;
+    const { client, events } = setup({ nowMs: () => now });
+    await expect(client.markets()).rejects.toThrow("device clock");
+    now = markets.time_ms + 30_000;
     await expect(client.markets()).resolves.toHaveLength(1);
-    expect(events.some((e) => e.type === "attestation" && e.status.kind === "clock")).toBe(false);
+    expect(events.flatMap((e) => (e.type === "attestation" ? [e.status.kind] : []))).toEqual(["checking", "mock", "clock", "mock"]);
   });
 });
 

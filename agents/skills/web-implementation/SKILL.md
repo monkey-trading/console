@@ -195,6 +195,7 @@ in a test file: a test cannot reset it, and a second instance of a component can
 `next.config.ts` sets the headers on every path (`source: "/:path*"`). Keep each:
 
 - `Content-Security-Policy`: `default-src 'self'`; `script-src 'self' 'unsafe-inline'`, plus
+  `'wasm-unsafe-eval'` in a live build (the engine's verifier is WebAssembly) and
   `'unsafe-eval'` in development only; `style-src 'self' 'unsafe-inline'`; `img-src 'self' data:`;
   `font-src 'self'`; `connect-src 'self'`, plus the approved engine node's `https:` and `wss:` host once there is one;
   `object-src 'none'`; `base-uri 'self'`;
@@ -221,7 +222,8 @@ in a test file: a test cannot reset it, and a second instance of a component can
 ## Configuration and environment
 
 - The site needs no secret and no runtime environment variable. Two are read at build time, both
-  in `siteUrl()` in `src/lib/site.ts` and nowhere else: `SITE_URL`, an optional override of the
+  in `siteUrl()` in `src/lib/site.ts` and nowhere else (apart from the `NEXT_PUBLIC_ENGINE_*` values
+  `src/lib/engine/deploy.ts` reads, which pin the live node a build talks to): `SITE_URL`, an optional override of the
   canonical origin, and `VERCEL_PROJECT_PRODUCTION_URL`, which Vercel sets.
 - A new variable needs a safe default or a build that fails without it, a line in the README's
   deployment section, and the owner to set it at Vercel; an agent sets it only on the owner's
