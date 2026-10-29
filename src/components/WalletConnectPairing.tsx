@@ -4,7 +4,7 @@
 
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 
-import type { WalletConnectConnector } from "@/lib/engine/walletconnect";
+import { WALLETCONNECT_ICON, type WalletConnectConnector } from "@/lib/engine/walletconnect";
 import { qrPath } from "@/lib/qr";
 
 import { useSession } from "./ConsoleProvider";
@@ -48,7 +48,10 @@ function PairingDialog({ connector }: { connector: WalletConnectConnector }) {
       className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm overflow-y-auto rounded-xl border border-line-2 bg-ink-1 p-0 text-fg backdrop:bg-ink/70"
     >
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-2">
-        <h2 id={title} className="text-label tracking-caps text-glow uppercase">Connect with WalletConnect</h2>
+        <h2 id={title} className="flex items-center gap-2 text-label tracking-caps text-glow uppercase">
+          <img src={WALLETCONNECT_ICON} alt="" width={20} height={20} className="size-5" />
+          Connect with WalletConnect
+        </h2>
         <button type="button" onClick={connector.cancel} className="min-h-11 rounded border border-line-2 px-4 py-1.5 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Cancel</button>
       </div>
       <div className="space-y-4 p-4">
@@ -63,7 +66,10 @@ function PairingDialog({ connector }: { connector: WalletConnectConnector }) {
             </div>
           </>
         )}
-        <p className="text-label leading-relaxed text-fg-3">The pairing runs through WalletConnect&apos;s relay, a third party that passes encrypted messages between this page and your wallet and sees your IP address.</p>
+        <p className="text-label leading-relaxed text-fg-3">
+          The pairing runs through WalletConnect&apos;s relay, a third party that passes encrypted messages between this page and your wallet and sees your IP address.{" "}
+          <a href="/notices" className="text-fg-2 underline focus-visible:outline-2 focus-visible:outline-glow">Privacy and notices</a>
+        </p>
       </div>
     </dialog>
   );

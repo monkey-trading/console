@@ -9,9 +9,12 @@ By default this build runs against a simulated node inside the browser. Prices, 
 simulated, and the app says so on screen. It opens on a demo account with positions, resting orders,
 history and a withdrawal in the queue; Mock controls can reset it to an empty account.
 
-A build can instead read a real engine node: it checks the node's attestation, shows only answers the
+A build can instead talk to a real engine node: it checks the node's attestation, shows only answers the
 attested enclave signed for the request, and follows the node's signed stream, which starts at the live end of the log and reconnects there, marking the feed stale
-(and disabling order entry) when it stops. Signing orders and funds is not wired yet. The checks run
+(and disabling order entry) when it stops. With a browser wallet, or a wallet app over WalletConnect, it
+deposits USDC to the vault, signs the engine's typed requests (orders, cancels, withdrawals, the eligibility
+declaration) for a node whose attestation it accepts, trades at the executable quote the node streams for the
+account, and claims approved withdrawals on the vault. The checks run
 in the engine's own verifier, built for the browser (`public/engine-verify/`, pinned by SHA-256 in
 `src/lib/engine/wasm-pin.json`, which `npm run build` checks).
 
@@ -30,7 +33,28 @@ trigger a close-out, market halts, stress levels, and vault liquidity for the wi
 `npm run typecheck`, `npm test`, `npm run build`, and `npm audit --audit-level=high`; CI runs these,
 the geo-block check (`scripts/check-geo-block.sh`, after the build), and the docs and workflow checks.
 
-## Run it against a local engine node
+## Trade against a local engine node
+
+`scripts/dev-local-stack.sh` starts everything a wallet needs on one machine: an Anvil chain with the vault
+and a mock USDC, the house's capital in the vault, mock USDC in a dev wallet, an engine node on that chain's
+custody that prices BTC-USD and ETH-USD from live crypto venues (the other markets need market-data vendor
+keys and stay unpriced) and posts checkpoints so withdrawals can be claimed, and the console in development
+mode against it. It needs Anvil, Forge and Cast, Cargo, Node.js, `jq`, Python 3.11 or later, and the engine's
+repository beside this one (or at `ENGINE_DIR`) with its contract dependencies installed (`forge soldeer
+install` in its `contracts/`):
+
+```sh
+npm ci
+./scripts/dev-local-stack.sh
+```
+
+It prints how to add the Anvil network and import the dev wallet's key (a public test key) into a browser
+wallet, the mock USDC's address, and the console's address, `http://localhost:3000`; Ctrl-C stops everything
+it started. In the console, connect the wallet, deposit from Funding, sign the eligibility declaration once
+the node sees the deposit pending, and trade. Its header lists the variables that move its ports, fund
+another address, or serve a production build.
+
+## Read a local engine development node
 
 Needs the engine's repository, Cargo, and a development node (`config/dev.toml` lists
 `http://localhost:3000` as an allowed origin). In the engine checkout:
@@ -59,12 +83,16 @@ A live build is configured by environment variables at build time, all pinned in
 | `NEXT_PUBLIC_ENGINE_MODE` | `mock` (default), `live-dev`, or `live` |
 | `NEXT_PUBLIC_ENGINE_ORIGIN` | The node's bare `https://` origin; the stream is the same host over `wss` |
 | `NEXT_PUBLIC_ENGINE_CHAIN_ID`, `NEXT_PUBLIC_ENGINE_VAULT` | The deployment every signature must name |
-| `NEXT_PUBLIC_ENGINE_USDC` | Optional USDC address |
+| `NEXT_PUBLIC_ENGINE_USDC` | The USDC the vault takes; without it the build cannot deposit |
+| `NEXT_PUBLIC_ENGINE_RPC_URL` | Optional RPC URL a wallet that does not know the chain is offered, such as a local Anvil chain's |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional WalletConnect project id (32 hex characters); without it the build offers no WalletConnect |
 | `NEXT_PUBLIC_ENGINE_HEARTBEAT_MS` | The node's `[api] heartbeat_interval`, in milliseconds (default 5000) |
 | `NEXT_PUBLIC_ENGINE_DEV_ORIGINS` | Comma-separated node origins a `live-dev` build may accept a mock attestation from |
 
 The node's origin is added to the Content Security Policy's `connect-src` (with its `wss:` form), and
-`'wasm-unsafe-eval'` to `script-src`. A `live` build refuses a mock attestation, and the console's wrapper of the verifier does
+`'wasm-unsafe-eval'` to `script-src`; a build with a WalletConnect project id also adds WalletConnect's relay,
+`wss://relay.walletconnect.org`. Chain reads go through the user's wallet, never to an RPC of the console's
+own. `/notices` says what leaves the browser. A `live` build refuses a mock attestation, and the console's wrapper of the verifier does
 not expose the mock entry point there (the served package still exports it); with no release manifests pinned yet
 (`src/lib/engine/manifests.ts`), it trusts no hardware node either.
 
@@ -90,8 +118,13 @@ environment variables for the canonical origin in the document metadata: `SITE_U
 http(s) origin such as `https://console.monkey.trading` that takes precedence, and
 `VERCEL_PROJECT_PRODUCTION_URL`, a bare host that Vercel sets once the repository is connected to
 it. With neither, the origin is `http://localhost:3000`. A build that talks to a live node also reads the
-`NEXT_PUBLIC_ENGINE_*` variables in the table under "Run it against a local engine node", which the
-owner sets in the hosting settings.
+`NEXT_PUBLIC_ENGINE_*` variables and the WalletConnect project id in the table under "Read a local engine
+development node", which the owner sets in the hosting settings.
+
+The WalletConnect connection uses Reown's WalletConnect SDK under the WalletConnect Community License
+Agreement, not an open-source licence. The console uses it unmodified, ships the notice and a copy of the
+licence (`public/walletconnect/LICENSE.txt`, both shown on `/notices`), and shows WalletConnect's logo where
+it offers WalletConnect; above 500 monthly active users the licence requires a paid licence from Reown.
 
 ## Restricted regions
 

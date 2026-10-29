@@ -208,6 +208,9 @@ When: `package.json`, `package-lock.json`, `.npmrc`, `.nvmrc`, `.github/workflow
 with `npx`.
 
 - Is every dependency an exact version, with no `^`, `~`, tag, git, URL, or `file:` specifier?
+- Is every new dependency under a licence the
+  [web-implementation](../skills/web-implementation/SKILL.md#dependencies) skill allows, with the
+  terms of its one approved exception met?
 - Is the lockfile written by npm, committed with the change, and installable by `npm ci`?
 - Does `npm audit --audit-level=high` pass?
 - Is every GitHub Action pinned to a full commit SHA with its version in a comment, with

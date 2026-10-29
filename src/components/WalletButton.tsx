@@ -58,7 +58,11 @@ export function WalletButton() {
                 }}
                 className="min-h-11 w-full rounded px-3 py-2 text-left hover:bg-glow/10 focus-visible:outline-2 focus-visible:outline-glow"
               >
-                <span className="block text-caption text-fg">{option.label}</span>
+                <span className="flex items-center gap-2 text-caption text-fg">
+                  {/* The label names the option, so the logo beside it is decorative. */}
+                  {option.icon !== undefined && <img src={option.icon} alt="" width={16} height={16} className="size-4" />}
+                  {option.label}
+                </span>
                 <span className="block text-label text-fg-3">{option.detail}</span>
               </button>
             </li>

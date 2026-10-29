@@ -8,6 +8,8 @@ export interface WalletOption {
   id: string;
   label: string;
   detail: string;
+  /** A logo the option must show beside its label, served from the app's own origin. */
+  icon?: string;
 }
 
 /** The typed data a wallet is asked to sign, as the engine's EIP-712 types define it. */

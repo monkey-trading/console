@@ -1,6 +1,6 @@
 /** Tests for the WalletConnect connector, over a stub of the SDK's `UniversalProvider`. */
 
-import { serializeTypedData } from "viem";
+import { getTypesForEIP712Domain, serializeTypedData } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
 
@@ -49,7 +49,6 @@ class FakeProvider implements WcProvider {
   private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
   readonly client: WcProvider["client"] = {
     core: {
-      verify: { register: async () => "attestation" },
       relayer: { transportClose: async () => void (this.closes += 1) },
     },
   };
@@ -151,8 +150,6 @@ describe("WalletConnectConnector.connect", () => {
       logger: "silent",
     });
     expect(storage).toBeInstanceOf(MemoryStorage);
-    // Verify registration, which would load a frame from another origin, registers nothing.
-    expect(await fake.client.core.verify.register({ id: "a", decryptedId: "b" })).toBe("");
   });
 
   it("refuses a session with no account on the deployment's chain, or without typed-data signing, and ends it", async () => {
@@ -240,7 +237,8 @@ describe("the WalletConnect wallet", () => {
     fake.answers = [signature];
     expect(await wallet.sign({ summary: "", typed: TYPED })).toBe(signature);
     expect(fake.requests).toEqual([
-      { method: "eth_signTypedData_v4", params: [ADDRESS.toLowerCase(), serializeTypedData(TYPED as unknown as Parameters<typeof serializeTypedData>[0])], chain: "eip155:31337" },
+      // The wallet hashes the domain from the `EIP712Domain` fields the typed data lists.
+      { method: "eth_signTypedData_v4", params: [ADDRESS.toLowerCase(), serializeTypedData({ ...TYPED, types: { EIP712Domain: getTypesForEIP712Domain({ domain: TYPED.domain }), ...TYPED.types } } as unknown as Parameters<typeof serializeTypedData>[0])], chain: "eip155:31337" },
     ]);
   });
 

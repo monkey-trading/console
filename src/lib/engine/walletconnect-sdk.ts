@@ -19,7 +19,6 @@ export interface WcProvider {
   session?: WcSession | undefined;
   client: {
     core: {
-      verify: { register(params: { id: string; decryptedId: string }): Promise<string | undefined> };
       relayer: { transportClose(): Promise<void> };
     };
   };

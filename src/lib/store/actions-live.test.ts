@@ -8,7 +8,7 @@ import vectors from "../engine/eip712-vectors.json";
 import { cancelTypedData, eligibilityTypedData, orderTypedData, requestDomain, withdrawalTypedData } from "../engine/eip712";
 import { ProviderWallet } from "../engine/provider-wallet";
 import { settle } from "../engine/test-kit";
-import type { CancelRequest, EligibilityRequest, MarketView, OrderRequest, RequestAuth, StreamMessage, WithdrawalRequest } from "../engine/types";
+import type { CancelRequest, EligibilityRequest, MarketView, OrderRequest, RequestAuth, WithdrawalRequest } from "../engine/types";
 import { ACCOUNT, StubProvider, type StubOptions } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
 import { fixedFromInt, fixedFromWire } from "../fixed";
@@ -48,7 +48,7 @@ class ActionClient implements EngineClient {
   quotes() {}
   async withdrawalQueue() { return { seq: 1, queue: [], next: null }; }
   async history() { return { events: [], next: null }; }
-  subscribe(_: (message: StreamMessage) => void) { return () => {}; }
+  subscribe() { return () => {}; }
 }
 
 async function connected(options: StubOptions = {}) {

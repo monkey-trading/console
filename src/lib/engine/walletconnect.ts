@@ -17,6 +17,8 @@ export type PairingState =
   | { status: "ready"; uri: string };
 
 const IDLE: PairingState = { status: "idle" };
+/** WalletConnect's logo, which its licence asks the connect screens to show. */
+export const WALLETCONNECT_ICON = "/walletconnect/icon.svg";
 const SIGN = "eth_signTypedData_v4";
 /** What `ProviderWallet` asks of a wallet: signatures, the vault's transactions, and the chain reads around them. */
 const WALLET_METHODS: readonly string[] = [SIGN, "eth_sendTransaction", "eth_call", "eth_getTransactionReceipt"];
@@ -50,7 +52,7 @@ class Attempt {
 
 
 export class WalletConnectConnector implements WalletConnector {
-  readonly options = [{ id: "walletconnect", label: "WalletConnect", detail: "A wallet app on your phone or computer, by QR code or link" }] as const;
+  readonly options = [{ id: "walletconnect", label: "WalletConnect", detail: "A wallet app on your phone or computer, by QR code or link", icon: WALLETCONNECT_ICON }] as const;
   private state: PairingState = IDLE;
   private readonly listeners = new Set<() => void>();
   private attempt: Attempt | null = null;
@@ -172,6 +174,11 @@ export class WalletConnectConnector implements WalletConnector {
     return this.starting;
   }
 
+  /**
+   * Starts the SDK as published, unmodified. Its Verify step loads a frame from
+   * verify.walletconnect.org on each proposal and request; the CSP blocks it, so each waits up to
+   * five seconds and goes on without an attestation, and wallets show the console's domain as unverified.
+   */
   private async start(): Promise<WcProvider> {
     const { UniversalProvider } = await this.load();
     const provider = await UniversalProvider.init({
@@ -182,9 +189,6 @@ export class WalletConnectConnector implements WalletConnector {
       telemetryEnabled: false,
       logger: "silent",
     });
-    // Verify registration loads a hidden frame from verify.walletconnect.org on every proposal and
-    // request; the CSP blocks it, and each would wait five seconds. Wallets see the domain as unverified.
-    provider.client.core.verify.register = async () => "";
     provider.on("session_delete", (payload) => {
       if (typeof payload === "object" && payload !== null && "topic" in payload && payload.topic === this.live) this.live = null;
     });
