@@ -74,6 +74,27 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: gh run cancel "$RUN_ID"
 
+  # Tests the review-delta helper, which the review loop uses to re-check a change made after it
+  # ends, on a scratch git repository.
+  review-delta:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test the review-delta helper
+        run: ./agents/skills/agent-code-review/scripts/review-delta-test.sh
+      - name: Cancel the run
+        if: failure() && !github.event.pull_request.head.repo.fork
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh run cancel "$RUN_ID"
+
   # ESLint, including jsx-a11y strict and the 300-line cap per source file.
   lint:
     runs-on: ubuntu-24.04
@@ -229,7 +250,7 @@ jobs:
   # cancelled run never passes it; each new job must be added to `needs`.
   ci-passed:
     if: always()
-    needs: [workflows, docs, lint, typecheck, test, build, geo-block, audit]
+    needs: [workflows, docs, review-delta, lint, typecheck, test, build, geo-block, audit]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

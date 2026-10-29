@@ -6,7 +6,8 @@ description: >
   (parallel subagents allowed), self-reviews it with agent-code-review, runs its dev scenario in a
   browser on a production build of the branch before the PR is marked ready, and opens the PR
   through agent-create-pr ending `Closes #<feature>`, so the merge closes the issue. Merges,
-  deploys, and issue writes need the user's approval.
+  deploys, and issue writes need the user's approval, except the `bug` issues the review loop files
+  for Mediums from round 3 on.
 ---
 
 # agent-build-feature
@@ -105,7 +106,7 @@ The scenario's check is a script that drives a browser, so anyone can run it aga
   is the scenario's gate; a browser job in CI is the operator's call
   ([general-practices](../../rules/general-practices.md)). A mechanical rebase, as
   [the review loop](../agent-code-review/SKILL.md#the-review-loop) defines it, needs no new review
-  round; any other rebase does.
+  round; any other rebase is re-checked by its delta (the same section).
 - Put what promotion needs in the PR body: anything the owner must set at Vercel, ordering against
   an engine change, and rollback when a revert is not enough.
 
@@ -125,6 +126,8 @@ The scenario's check is a script that drives a browser, so anyone can run it aga
 
 - One feature never spans several pushed branches or PRs.
 - Never build part of a feature that is not ready.
-- Never write to a GitHub issue without the user's yes to the exact text. The one exception is the
-  merge closing the feature issue through `Closes #<feature>`.
+- Never write to a GitHub issue without the user's yes to the exact text. The exceptions are the
+  merge closing the feature issue through `Closes #<feature>`, and the `bug` issues
+  [the review loop](../agent-code-review/SKILL.md#the-review-loop) files for Mediums from round 3
+  on.
 - Never merge, deploy, or change an environment without explicit per-action approval.
