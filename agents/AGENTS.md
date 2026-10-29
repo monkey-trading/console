@@ -3,24 +3,46 @@
 ## Description
 
 The Monkey Trading web app, to be served at console.monkey.trading: the client for the open-source CFD
-engine in `monkey-trading/engine`, whose deterministic core runs inside a TEE. It will let a user
-connect a wallet, fund an account, trade, and withdraw, against the engine node's REST API and
-WebSocket stream. For now it is a Next.js, Tailwind CSS, and TypeScript scaffold with the tooling
-and CI the app is built under. This file is an index: load only the rule whose hint matches the
-current action.
+engine in `monkey-trading/engine`, whose deterministic core runs inside a TEE. One full-view trading
+terminal: watchlist, chart, order ticket, account panels, and a funding drawer, with the access rules
+(geo-block, eligibility declaration) and a check of the node's attestation before it signs. It runs
+against a mock node in the browser that mirrors the engine node's REST and stream shapes, behind an
+`EngineClient` interface a live client replaces. This file is an index: load only the rule whose hint
+matches the current action.
 
 ## Structure
 
-- **src/app/** — the App Router. `layout.tsx` (fonts through `next/font`, the `metadata` and
-  `viewport` exports), `page.tsx` (the placeholder page), and `globals.css` (Tailwind CSS 4
-  `@theme` tokens shared with the website's design language, and the reduced-motion rule).
+- **src/app/** — the App Router: `layout.tsx` (fonts through `next/font`, the `metadata` and
+  `viewport` exports, the provider and shell), `page.tsx` (the one screen), `globals.css` (Tailwind
+  CSS 4 `@theme` tokens shared with the website's design language, and the reduced-motion rule),
+  and the icons.
+- **src/components/** — the terminal. `ConsoleProvider` creates the session, connects the demo account
+  and drives the clock; `Shell`, `TopBar`, `AttestationBanner`, `RiskStrip`, `Toasts` and `ToastList` frame it;
+  `TradeWorkspace` lays out `Watchlist`, `ChartPanel` (with `PriceChart`, which loads Lightweight
+  Charts in the browser), `OrderTicket` (which remounts `DealTicket` per market: order type, side, best bid and offer, size,
+  Advanced, and `MarketInfo`) and `BottomPanel` (`PositionsView`, `OrdersView`, `HistoryList`, activity); `FundingDrawer` holds
+  `EligibilityCard`, `DepositForm`, `WithdrawForm`, `WithdrawalQueue` and `AccountSummary`;
+  `Select` is the console's accessible select; `keep-focus.ts` keeps focus on the tab panel when an action removes a button; `AccessGate` shows the geo-block; `WalletButton` and
+  `MockControls` drive the mock.
+- **public/** — the supplied logo bitmap, served from the app's own origin; `Logo.tsx` frames it.
 - **src/lib/** — pure TypeScript with no React or DOM. Logic modules have adjacent `*.test.ts`:
-  `site.ts` holds identity and `siteUrl()`, the one environment-variable reader.
+  `site.ts` holds identity and `siteUrl()`, the one environment-variable reader; `fixed.ts` is the
+  engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `bars.ts` (marks into bars per timeframe) and
+  `vault.ts` (deposit bounds, the withdrawable amount) and `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
+  margin and market-hours rules and the ticket preview; `models.ts` and `messages.ts` decode and
+  describe engine data; `build.ts` says whether this build accepts the mock attestation.
+  `engine/` holds the node's wire shapes (`types.ts`), the display facts the console keeps per
+  market (`meta.ts`: names, places, and the mock's base quote spread, a simplification of the engine's
+  own formula that the owner has yet to settle), the `EngineClient` and wallet interfaces,
+  and the attestation check. `store/` holds the state, the store that follows the node's stream,
+  and the user's actions. `mock/` is the in-browser node (state, orders, fills, close-out, funds and
+  the first-in first-out withdrawal queue, the clock step, the demo account's backstory in `demo.ts`, and the controls the mock build exposes).
 - **next.config.ts** — the security headers on every path (a CSP without nonces, nosniff, referrer,
   frame, opener, and permissions policies), `reactStrictMode`, `poweredByHeader: false`, and
-  `agentRules: false`, so `next dev` leaves this index alone.
+  `agentRules: false`, so `next dev` leaves this index alone, and `devIndicators: false`, so its
+  overlay does not cover the terminal.
 - **eslint.config.mjs** — ESLint flat config: `@eslint/js`, `typescript-eslint`, `react-hooks`, and
-  `jsx-a11y` strict, which lets a scrolling `log` take focus; the 300-line `max-lines` cap; and no
+  `jsx-a11y` strict, which lets a scrolling `log` or `tabpanel` take focus; the 300-line `max-lines` cap; and no
   non-null assertions. `npm run lint` allows no warnings.
 - **tsconfig.json** — `strict` and `noUncheckedIndexedAccess`; `@/*` maps to `src/*`.
 - **vitest.config.ts** — runs `src/**/*.test.ts` in the Node environment.
@@ -86,6 +108,10 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   may make a route dynamic or add a route handler (`route.ts`), server action, or proxy
   (`proxy.ts`, or the deprecated `middleware.ts`) without the owner's approval. The app talks to
   the engine node from the browser only.
+- **The mock follows the engine where it models it,** and keeps two known simplifications for the
+  owner to settle: a base quote spread per market (`src/lib/engine/meta.ts`), and a funding order of
+  eligibility declaration before the first deposit, where the engine admits a never-credited
+  account's declaration only after a deposit is pending.
 - **The engine is the source of truth.** Every number, rule, and message the app shows about the
   engine matches the engine's README and its decision issues.
 - **Private by construction.** No analytics, cookies, browser storage, trackers, third-party

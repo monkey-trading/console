@@ -34,6 +34,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // Keep `next dev` from writing its own block into the curated AGENTS.md.
   agentRules: false,
+  devIndicators: false,
   poweredByHeader: false,
   reactStrictMode: true,
   async headers() {

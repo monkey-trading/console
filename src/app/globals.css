@@ -14,8 +14,11 @@
   --color-fg-3: #7f9189;
   --color-glow: #30efaa;
   --color-glow-hover: #78ffd0;
+  /* The loss colour that pairs with glow: a neon pink at glow's chroma, oklch(0.756 0.175 350), at the most
+     lightness the sRGB gamut holds at that hue. 8.2:1 on ink-1. Hover is lighter, as glow-hover is. */
+  --color-ember: #ff7cbf;
+  --color-ember-hover: #ff97ca;
   --color-amber: #ffbe5c;
-  --color-alarm: #ff6b62;
 
   --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --font-serif: "Iowan Old Style", Georgia, serif;
@@ -44,6 +47,28 @@ body {
   font-family: var(--font-mono);
   font-feature-settings: "zero" 1, "ss01" 1;
   text-rendering: optimizeLegibility;
+}
+
+/* Everything that can be clicked shows it; a disabled control shows that it cannot be. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"],
+  [role="option"],
+  summary,
+  label[for],
+  label:has(input[type="radio"], input[type="checkbox"]),
+  a[href],
+  input[type="radio"],
+  input[type="checkbox"],
+  input[type="range"] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  button[aria-disabled="true"] {
+    cursor: not-allowed;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

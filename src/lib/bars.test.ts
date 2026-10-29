@@ -1,0 +1,61 @@
+/** Tests for the adapter that turns marks into the chart's bars. */
+
+import { describe, expect, it } from "vitest";
+
+import { MAX_BARS, pushTick, secondsOf, seedBars, TIMEFRAMES } from "./bars";
+
+const MIN = 60;
+const at = (seconds: number) => seconds * 1000;
+
+describe("pushTick", () => {
+  it("opens a bar at the first mark and widens it with later marks in the same bucket", () => {
+    let bars = pushTick([], at(120), 100, MIN);
+    bars = pushTick(bars, at(130), 103, MIN);
+    bars = pushTick(bars, at(150), 98, MIN);
+    bars = pushTick(bars, at(179), 101, MIN);
+    expect(bars).toEqual([{ time: 120, open: 100, high: 103, low: 98, close: 101 }]);
+  });
+
+  it("opens the next bar at the previous close, and fills no empty bucket for a gap", () => {
+    let bars = pushTick([], at(120), 100, MIN);
+    bars = pushTick(bars, at(125), 104, MIN);
+    bars = pushTick(bars, at(125 + 5 * MIN), 90, MIN);
+    expect(bars).toHaveLength(2);
+    expect(bars[1]).toEqual({ time: 420, open: 104, high: 104, low: 90, close: 90 });
+  });
+
+  it("ignores a mark older than the last bar and does not mutate its input", () => {
+    const first = pushTick([], at(300), 100, MIN);
+    const frozen = JSON.stringify(first);
+    expect(pushTick(first, at(100), 50, MIN)).toEqual(first);
+    pushTick(first, at(310), 120, MIN);
+    expect(JSON.stringify(first)).toBe(frozen);
+  });
+
+  it("aligns buckets to each timeframe and bounds the series", () => {
+    const hour = secondsOf("1h");
+    expect(pushTick([], at(3_700), 1, hour)[0]?.time).toBe(3_600);
+    expect(pushTick([], at(90_000), 1, secondsOf("1D"))[0]?.time).toBe(86_400);
+    let bars = pushTick([], 0, 1, MIN);
+    for (let i = 1; i < MAX_BARS + 20; i++) bars = pushTick(bars, at(i * MIN), 1 + i, MIN);
+    expect(bars).toHaveLength(MAX_BARS);
+    expect(TIMEFRAMES.map((t) => t.id)).toEqual(["1m", "5m", "15m", "1h", "1D"]);
+  });
+});
+
+describe("seedBars", () => {
+  it("is deterministic, ends at the given price in the current bucket, and has well-formed bars", () => {
+    const a = seedBars(7, at(1_000_000), 100, 300, 1.5);
+    expect(seedBars(7, at(1_000_000), 100, 300, 1.5)).toEqual(a);
+    expect(a).toHaveLength(240);
+    expect(a[a.length - 1]).toMatchObject({ time: 999_900, close: 100 });
+    expect(a.every((b, i) => b.low <= Math.min(b.open, b.close) && b.high >= Math.max(b.open, b.close) && (i === 0 || b.time - (a[i - 1]?.time ?? 0) === 300))).toBe(true);
+  });
+
+  it("lets a live mark continue the last seeded bar", () => {
+    const seeded = seedBars(7, at(1_000_000), 100, 300, 1.5);
+    const live = pushTick(seeded, at(1_000_020), 101, 300);
+    expect(live).toHaveLength(seeded.length);
+    expect(live[live.length - 1]?.close).toBe(101);
+  });
+});

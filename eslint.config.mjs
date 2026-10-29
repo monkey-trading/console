@@ -19,8 +19,8 @@ export default defineConfig([
       // Narrow instead; an absence our own code cannot produce throws an Error.
       "@typescript-eslint/no-non-null-assertion": "error",
       // As strict, except that a scrolling `log` may take focus, so the keyboard can scroll it in
-      // browsers that do not make scroll containers focusable (WCAG 2.1.1).
-      "jsx-a11y/no-noninteractive-tabindex": ["error", { tags: [], roles: ["log"], allowExpressionValues: false }],
+      // browsers that do not make scroll containers focusable (WCAG 2.1.1); so may a tab panel with nothing focusable in it.
+      "jsx-a11y/no-noninteractive-tabindex": ["error", { tags: [], roles: ["log", "tabpanel"], allowExpressionValues: false }],
     },
   },
 ]);
