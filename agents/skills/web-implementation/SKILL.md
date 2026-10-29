@@ -201,7 +201,9 @@ in a test file: a test cannot reset it, and a second instance of a component can
   `object-src 'none'`; `base-uri 'self'`;
   `form-action 'self'`; `frame-ancestors 'none'`. A statically rendered page is built once for
   every visitor, so its inline bootstrap scripts cannot carry a per-request nonce;
-  `'unsafe-inline'` covers them, and the policy allows nothing from another origin but the approved engine node's.
+  `'unsafe-inline'` covers them, and the policy allows nothing from another origin but the approved engine node's
+  and, in a build with a WalletConnect project id, WalletConnect's relay (`wss://relay.walletconnect.org`,
+  approved in monkey-trading/console#7) in `connect-src`.
 - `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
   `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, and a `Permissions-Policy`
   that turns off `camera`, `microphone`, `geolocation`, `payment`, `usb`, and `browsing-topics`.
@@ -337,7 +339,8 @@ The bar is WCAG 2.2 AA; the [development checklist](../../rules/development-chec
   iframes, or embeds without the owner's explicit approval. A visitor's choices, such as the pause
   switch, live in memory and end with the tab.
 - Every request the page makes is same-origin, but for the engine node's origin once the owner has
-  approved it: the site serves its own fonts, images, and scripts. Check the production build's
+  approved it, and WalletConnect's relay while a user pairs or uses a wallet app over it (approved in
+  monkey-trading/console#7): the site serves its own fonts, images, and scripts. Check the production build's
   network panel after any change to what the page loads.
 - Links to other sites are plain links; nothing is fetched from them.
 - Nothing a visitor types leaves the browser, but for what the app sends to the engine node: the
@@ -375,11 +378,23 @@ rules; these are the conventions that keep copy checkable.
   Next.js, React, Tailwind CSS, TypeScript, ESLint, or vitest is its own PR.
 - The lockfile is written only by npm, never by hand, and committed with the `package.json` change
   that caused it.
+- Licences: a dependency is under an open-source licence that allows the console's Apache-2.0
+  distribution (MIT, ISC, BSD, Apache-2.0 and the like); check it with `npm view <package> license`.
+  The one exception, approved by the owner in monkey-trading/console#7 (2026-10-29), is the
+  WalletConnect SDK (`@walletconnect/universal-provider`, `sign-client`, `core`, `types` and `utils`)
+  under the WalletConnect Community License Agreement. Under it the console uses those packages
+  unmodified, since Reown owns any modification; ships the notice "Portions © 2025 Reown, Inc. All
+  Rights Reserved" and a copy of the licence (`public/walletconnect/LICENSE.txt`, both on `/notices`);
+  shows WalletConnect's logo wherever it offers WalletConnect; and needs a paid licence from Reown
+  above 500 monthly active users. A bump of those packages compares their `LICENSE.md` with that copy.
 - Hashing comes from `@noble/hashes`; never another hashing package, never home-rolled.
 - Tools outside the build — Playwright, Lighthouse — are not dependencies of this repository: run
   them from a scratch directory outside it, at an exact version of the official package.
 - In use (non-exhaustive): `next`, `react`, `react-dom`, and `lightweight-charts` (TradingView, Apache-2.0,
-  the owner-approved charting library; its `fancy-canvas` dependency is MIT) at runtime;
+  the owner-approved charting library; its `fancy-canvas` dependency is MIT), `viem` (MIT, typed data,
+  ABI encoding and signature recovery for the wallet), `@walletconnect/universal-provider` (the
+  licence exception above, loaded only when the user picks WalletConnect) and `uqr` (MIT, the pairing
+  QR code) at runtime;
   `typescript`, `@types/*`, `eslint`, `@eslint/js`, `typescript-eslint`,
   `eslint-plugin-react-hooks`, `eslint-plugin-jsx-a11y`, `tailwindcss`, `@tailwindcss/postcss`,
   `vitest`, and `vite` in development.

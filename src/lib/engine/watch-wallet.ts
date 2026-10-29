@@ -34,6 +34,11 @@ export class WatchConnector implements WalletConnector {
       deposit: async () => {
         throw new Error("This account is read-only: nothing can be deposited for it.");
       },
+      claim: async () => {
+        throw new Error("This account is read-only: nothing can be claimed for it.");
+      },
+      // A watched account has no wallet to read the chain through, so its payouts show as unpaid.
+      claimed: async () => false,
     };
   }
 }

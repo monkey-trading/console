@@ -198,7 +198,8 @@ iframe, or embed.
   fonts, images, or embeds? Each needs the owner's explicit approval first.
 - Does the production build make any request to another origin while a visitor uses it? Check the
   browser's network panel: every request is same-origin, but for the engine node's origin once the
-  owner has approved it ([AGENTS.md](../AGENTS.md)).
+  owner has approved it, and WalletConnect's relay while a user connects a wallet app over it
+  ([AGENTS.md](../AGENTS.md)).
 - Does anything a visitor types or does leave the browser? It must not, but for the orders,
   deposits, and withdrawals the app sends to the engine node.
 
@@ -208,6 +209,9 @@ When: `package.json`, `package-lock.json`, `.npmrc`, `.nvmrc`, `.github/workflow
 with `npx`.
 
 - Is every dependency an exact version, with no `^`, `~`, tag, git, URL, or `file:` specifier?
+- Is every new dependency under a licence the
+  [web-implementation](../skills/web-implementation/SKILL.md#dependencies) skill allows, with the
+  terms of its one approved exception met?
 - Is the lockfile written by npm, committed with the change, and installable by `npm ci`?
 - Does `npm audit --audit-level=high` pass?
 - Is every GitHub Action pinned to a full commit SHA with its version in a comment, with

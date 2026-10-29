@@ -2,7 +2,6 @@
 
 import { describe, expect, it } from "vitest";
 
-import { EngineError } from "./client";
 import { LiveEngineClient } from "./live";
 import { dev, markets, replyOf, setup, production } from "./live-setup";
 import { acceptAll, FakeNode, FakeScheduler, mockAttestation } from "./test-kit";
@@ -129,17 +128,10 @@ describe("the other reads", () => {
     ok("/v1/accounts/0xabc/eligibility", { class: null, statement: null });
     ok("/v1/accounts/0xabc/withdrawals", { seq: 1, queue: [], next: null });
     ok("/v1/accounts/0xabc/history?limit=100&before=5%3A0", { events: [], next: null });
-    await expect(client.nonce("0xabc")).resolves.toEqual({ next_nonce: 3 });
+    await expect(client.nonce("0xabc")).resolves.toEqual({ next_nonce: 3, time_ms: markets.time_ms });
     await expect(client.eligibility("0xabc")).resolves.toEqual({ class: null, statement: null });
     await expect(client.withdrawalQueue("0xabc")).resolves.toMatchObject({ queue: [] });
     await expect(client.history("0xabc", { limit: 100, before: "5:0" })).resolves.toEqual({ events: [], next: null });
   });
 
-  it("leaves the signed actions unwired", async () => {
-    const { client } = setup();
-    for (const action of [client.placeOrder(), client.cancelOrder(), client.withdraw(), client.attestEligibility()]) {
-      await expect(action).rejects.toBeInstanceOf(EngineError);
-      await expect(action).rejects.toMatchObject({ status: 501 });
-    }
-  });
 });

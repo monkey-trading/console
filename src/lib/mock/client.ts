@@ -35,6 +35,8 @@ export type AttestationMode = "mock" | "unverifiable";
 
 export class MockEngineClient implements EngineClient {
   readonly signatures: SignatureChecks = "none";
+  /** A stand-in deployment: the mock checks no signature, so nothing binds to it. */
+  readonly deployment = { chainId: 31337, vault: `0x${mockHex("vault", 20)}` };
   attestationMode: AttestationMode = "mock";
 
   constructor(readonly state: MockState) {}
@@ -158,6 +160,18 @@ export class MockEngineClient implements EngineClient {
     return withdraw(this.state, request);
   }
 
+  /** The mock pays approved withdrawals itself, so it signs no authorization to reissue or find. */
+  async reissue(): Promise<never> {
+    throw new EngineError(404, "not found");
+  }
+
+  async findWithdrawal(): Promise<{ withdrawal: null; complete: true; reached: null }> {
+    return { withdrawal: null, complete: true, reached: null };
+  }
+
+  /** The mock streams no executable quotes; the ticket shows its own estimate. */
+  quotes(): void {}
+
   async withdrawalQueue(address: Address): Promise<WithdrawalPage> {
     return queuePage(this.state, address);
   }
@@ -167,13 +181,13 @@ export class MockEngineClient implements EngineClient {
     return this.state.accounts.get(address.toLowerCase())?.eligibility ?? null;
   }
 
-  async history(address: Address, params: { limit?: number; before?: string }): Promise<HistoryPage> {
+  async history(address: Address, params: { limit?: number; before?: string; kind?: string }): Promise<HistoryPage> {
     return this.historyPage(address, params);
   }
 
   /** `GET /v1/accounts/{address}/history` now, without waiting. */
-  historyPage(address: Address, params: { limit?: number; before?: string }): HistoryPage {
-    const items = this.state.history.get(address.toLowerCase()) ?? [];
+  historyPage(address: Address, params: { limit?: number; before?: string; kind?: string }): HistoryPage {
+    const items = (this.state.history.get(address.toLowerCase()) ?? []).filter((item) => params.kind === undefined || item.event.type === params.kind);
     const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
     const [beforeSeq = Number.POSITIVE_INFINITY, beforeIndex = 0] = params.before ? params.before.split(":").map(Number) : [];
     // Strictly older than the cursor, which names one event, not the whole command.

@@ -21,6 +21,7 @@ const ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 /** A client with canned reads and a handle to push its events and stream messages. */
 class FakeClient implements EngineClient {
   signatures = "checked" as const;
+  deployment = { chainId: 31337, vault: "0x5fbdb2315678afecb367f032d93f642f64180aa3" };
   listener: ((event: ClientEvent) => void) | null = null;
   onMessage: ((message: StreamMessage) => void) | null = null;
   marketReads = 0;
@@ -39,6 +40,9 @@ class FakeClient implements EngineClient {
   async placeOrder(): Promise<never> { throw new EngineError(501, "no"); }
   async cancelOrder(): Promise<never> { throw new EngineError(501, "no"); }
   async withdraw(): Promise<never> { throw new EngineError(501, "no"); }
+  async reissue(): Promise<never> { throw new EngineError(501, "no"); }
+  async findWithdrawal() { return { withdrawal: null, complete: true, reached: null }; }
+  quotes() {}
   async withdrawalQueue() { return { seq: 1, queue: [], next: null }; }
   async history() { return { events: [], next: null }; }
   subscribe(onMessage: (message: StreamMessage) => void) { this.onMessage = onMessage; return () => { this.onMessage = null; }; }

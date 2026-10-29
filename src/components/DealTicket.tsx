@@ -7,12 +7,14 @@ import { useId, useState } from "react";
 import { signBlock } from "@/lib/engine/attestation";
 import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { formatMark } from "@/lib/price-format";
+import { ticketPrices } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
-import { previewTicket, SLIPPAGE_CHOICES } from "@/lib/ticket";
+import { MARGIN_SHORT, previewTicket, SLIPPAGE_CHOICES, slippageBound } from "@/lib/ticket";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { MarketInfo } from "./MarketInfo";
 import { Select } from "./Select";
+import { SigningFor } from "./SigningFor";
 
 type Kind = "market" | "limit" | "stop";
 const KINDS = [
@@ -37,26 +39,30 @@ export function DealTicket() {
   const [kind, setKind] = useState<Kind>("market");
   const [size, setSize] = useState("10000");
   const [price, setPrice] = useState("");
-  const [slippage, setSlippage] = useState<number>(10);
+  const [chosenSlippage, setSlippage] = useState<number>(10);
   const market = state.markets.find((m) => m.id === state.selected);
   if (!market) return null;
+  const slippage = slippageBound(chosenSlippage, market);
   const notional = parseFixed(size) ?? 0n;
   const triggerPrice = parseFixed(price);
   const preview = previewTicket({ market, side, notional, slippageBps: slippage, resting: kind !== "market", triggerPrice, account: state.account, houseNav: state.house.nav });
-  const problems = [...preview.problems];
+  const live = state.signatures === "checked";
+  const prices = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview, side, mark: market.mark });
+  // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
+  const problems = preview.problems.filter((p) => !live || p !== MARGIN_SHORT);
+  if (kind === "market" && prices.problem !== null) problems.push(prices.problem);
   if (size.trim() !== "" && parseFixed(size) === null) problems.push("Enter the size in digits, such as 10000 or 2500.50.");
   if (kind !== "market" && triggerPrice === null) problems.push(price.trim() === "" ? "Enter a trigger price." : "Enter the trigger price in digits, such as 61250.50.");
   const blockSentence = (why: string | null) => (why === null ? null : `Trading is paused: ${why}.`);
   const gate = !state.wallet ? "Connect a wallet to trade." : state.eligibility === null ? "Attest your eligibility before trading." : blockSentence(signBlock(state.attestation, state.stream));
   const canPlace = gate === null && problems.length === 0 && !state.busy;
   const places = market.places;
-  // A live node's executable quote is not in this build (it depends on toxicity and the account's position), so the ticket shows none.
-  const quoted = state.signatures === "none";
-  const show = (value: bigint | null) => (value === null || !quoted ? "—" : formatMark(value, places));
+  const show = (value: bigint | null) => (value === null ? "—" : formatMark(value, places));
   const submit = () => {
-    const base = { market: market.id, side, notional, slippageBps: slippage, reduceOnly: false };
-    if (kind === "market") void placeOrder(store, { ...base, kind: { kind: "market" } });
-    else if (triggerPrice !== null) void placeOrder(store, { ...base, kind: { kind, price: triggerPrice } });
+    const base = { market: market.id, side, qty: preview.qty, reduceOnly: false };
+    // A market order is sent at exactly the price the ticket shows for its side.
+    if (kind === "market" && prices.price !== null) void placeOrder(store, { ...base, kind: { kind: "market", quoted: prices.price, slippageBps: slippage } });
+    else if (kind !== "market" && triggerPrice !== null) void placeOrder(store, { ...base, kind: { kind, price: triggerPrice } });
   };
   return (
     <>
@@ -76,10 +82,10 @@ export function DealTicket() {
           <button type="button" aria-pressed={side === "sell"} onClick={() => setSide("sell")} className={`min-h-11 rounded border py-2.5 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-ember ${side === "sell" ? "border-ember bg-ember/10 text-ember" : "border-line-2 text-fg-2"}`}>Sell / Short</button>
         </fieldset>
         <div className="mt-4 grid grid-cols-2 divide-x divide-line rounded border border-edge text-center">
-          <div className="px-2 py-3"><p className="text-label text-fg-3">Bid (you sell)</p><p className={`mt-1 text-data ${side === "sell" ? "text-ember" : "text-fg-2"}`}>{show(preview.bid)}</p></div>
-          <div className="px-2 py-3"><p className="text-label text-fg-3">Offer (you buy)</p><p className={`mt-1 text-data ${side === "buy" ? "text-glow" : "text-fg-2"}`}>{show(preview.offer)}</p></div>
+          <div className="px-2 py-3"><p className="text-label text-fg-3">Bid (you sell)</p><p className={`mt-1 text-data ${side === "sell" ? "text-ember" : "text-fg-2"}`}>{show(prices.bid)}</p></div>
+          <div className="px-2 py-3"><p className="text-label text-fg-3">Offer (you buy)</p><p className={`mt-1 text-data ${side === "buy" ? "text-glow" : "text-fg-2"}`}>{show(prices.offer)}</p></div>
           <p className="col-span-2 border-t border-line px-2 py-2 text-label text-fg-3">
-            {quoted ? <>Spread for this size <span className="text-fg-2">{(preview.spreadBps / 100).toFixed(2)}%</span> <span className="text-fg-3">({preview.spreadBps} bps)</span></> : "The node's executable quote is not shown in this build yet."}
+            {prices.spreadBps === null ? "No executable quote for this size yet." : <>{live ? "Your executable spread" : "Spread"} for this size <span className="text-fg-2">{(prices.spreadBps / 100).toFixed(2)}%</span> <span className="text-fg-3">({prices.spreadBps} bps)</span></>}
           </p>
         </div>
         <div className="mt-4">
@@ -103,12 +109,13 @@ export function DealTicket() {
         <button type="submit" aria-disabled={!canPlace} className={`mt-4 min-h-12 w-full rounded border py-3 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 ${side === "buy" ? "border-glow bg-glow/10 text-glow hover:bg-glow/20" : "border-ember bg-ember/10 text-ember hover:bg-ember/20"}`}>
           {state.busy ? "Signing…" : `Trade: ${side === "buy" ? "Buy" : "Sell"} ${market.symbol}`}
         </button>
+        {live && <div className="mt-3"><SigningFor /></div>}
         <div aria-live="polite" className="mt-3 space-y-1 text-label leading-relaxed text-ember">
           {gate && <p className="text-fg-2">{gate} {state.wallet && state.eligibility === null && <FundingLink />}</p>}
           {!gate && problems.map((p) => <p key={p}>{p}{p === "Fund your account to trade." && <> <FundingLink /></>}</p>)}
         </div>
       </form>
-      <MarketInfo market={market} preview={preview} notional={notional} quoted={quoted} />
+      <MarketInfo market={market} preview={preview} notional={notional} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} />
     </>
   );
 }

@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt, parseFixed } from "./fixed";
-import { isWholeUsdc, withdrawableNow } from "./vault";
+import { formatUsdc, isWholeUsdc, withdrawableNow } from "./vault";
 
 describe("withdrawableNow", () => {
   it("is the smaller of unlocked cash and equity above margin, and never negative", () => {
@@ -17,5 +17,14 @@ describe("isWholeUsdc", () => {
   it("accepts six decimal places and refuses finer amounts", () => {
     expect(isWholeUsdc(parseFixed("10.123456") ?? 1n)).toBe(true);
     expect(isWholeUsdc(parseFixed("10.1234567") ?? 0n)).toBe(false);
+  });
+});
+
+describe("formatUsdc", () => {
+  it("shows USDC to its six places without trailing zeros, grouped in thousands", () => {
+    expect(formatUsdc(fixedFromInt(1_000))).toBe("1,000 USDC");
+    expect(formatUsdc(parseFixed("10.125") ?? 0n)).toBe("10.125 USDC");
+    expect(formatUsdc(parseFixed("3.141592") ?? 0n)).toBe("3.141592 USDC");
+    expect(formatUsdc(parseFixed("0.5") ?? 0n)).toBe("0.5 USDC");
   });
 });

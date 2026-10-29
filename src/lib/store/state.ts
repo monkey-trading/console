@@ -3,7 +3,7 @@
 import { DEFAULT_TIMEFRAME, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
 import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { SignatureChecks } from "../engine/client";
-import type { HistoryEvent, MarketId, MarketView, HouseView, QueuedWithdrawal } from "../engine/types";
+import type { HistoryEvent, MarketId, MarketQuote, MarketView, HouseView, QueuedWithdrawal, SignedWithdrawal } from "../engine/types";
 import { fixedToNumber } from "../fixed";
 import { decodeHouse, decodeMarket, type AccountModel, type Eligibility, type HouseModel, type MarketModel } from "../models";
 
@@ -24,6 +24,14 @@ export interface FeedLine {
 }
 
 export type HistoryEntry = HistoryEvent;
+
+/** Where a payout's newest authorization lies when the page has not seen it. */
+export interface PayoutHint {
+  /** The log head when the node took a reissue request, past which the new authorization lands. */
+  searchFrom?: number;
+  /** The expiry (Unix seconds) of an authorization the node says it signed, newer than any the page holds. */
+  newerUntil?: number;
+}
 
 export interface ConsoleState {
   /** The node's clock: the stamp of the latest message. */
@@ -48,6 +56,28 @@ export interface ConsoleState {
   history: HistoryEntry[];
   feed: FeedLine[];
   toasts: ToastMessage[];
+  /** The node's executable quotes for the connected account, by market; the mock streams none and the ticket estimates. */
+  quotes: Record<MarketId, MarketQuote>;
+  /** Why the node will not quote the connected account, such as an account it has not credited yet. */
+  quoteError: string | null;
+  /** The markets the console asks the node to quote now; a quote for any other is not current. */
+  quoted: MarketId[];
+  /** Signed withdrawal authorizations for the connected account, the latest per payout nonce. */
+  authorizations: SignedWithdrawal[];
+  /** The connected account's approved withdrawals, newest first, read apart from its recent history so none drops out of reach. */
+  approvals: HistoryEvent[];
+  /** The cursor of the next page of older approvals, when the reads so far stopped short of them. */
+  approvalsNext: string | null;
+  /** What the page knows of a payout's authorizations beyond the one it holds, by payout nonce. */
+  payoutHints: Record<number, PayoutHint>;
+  /** The payout nonce whose authorization the log is being searched for. */
+  searching: number | null;
+  /** Counts reads of the approvals, so an answer a later read has overtaken is dropped. */
+  approvalsGeneration: number;
+  /** The connected account's payout nonces the vault has paid, as its wallet's chain reads them. */
+  paid: number[];
+  /** What the wallet is asked to sign or send now, shown while it waits for the user. */
+  prompt: string | null;
   /** Whether a signed action is in flight. */
   busy: boolean;
   /** Whether the funding drawer is open. */
@@ -93,6 +123,17 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     history: [],
     feed: [],
     toasts: [],
+    quotes: {},
+    quoteError: null,
+    quoted: [],
+    authorizations: [],
+    approvals: [],
+    approvalsNext: null,
+    payoutHints: {},
+    searching: null,
+    approvalsGeneration: 0,
+    paid: [],
+    prompt: null,
     busy: false,
     fundingOpen: false,
     paused: false,

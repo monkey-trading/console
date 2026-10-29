@@ -14,7 +14,7 @@ matches the current action.
 ## Structure
 
 - **src/app/** — the App Router: `layout.tsx` (fonts through `next/font`, the `metadata` and
-  `viewport` exports, and the robots meta tag), `robots.ts` (disallow all) with its test, `restricted/page.tsx` (the static page the edge geo-block rewrites a restricted country's requests to), `(console)/` (the route group whose layout holds the provider and shell, and the one screen), `globals.css` (Tailwind
+  `viewport` exports, and the robots meta tag), `robots.ts` (disallow all) with its test, `restricted/page.tsx` (the static page the edge geo-block rewrites a restricted country's requests to), `notices/page.tsx` (the static privacy and third-party notices, which the risk line and the WalletConnect dialog link to), `(console)/` (the route group whose layout holds the provider and shell, and the one screen), `globals.css` (Tailwind
   CSS 4 `@theme` tokens shared with the website's design language, and the reduced-motion rule),
   and the icons.
 - **src/components/** — the terminal. `ConsoleProvider` creates the session, connects the demo account
@@ -22,25 +22,25 @@ matches the current action.
   `TradeWorkspace` lays out, from 1024 px, `Watchlist`, `ChartPanel` (with `PriceChart`, which loads Lightweight
   Charts in the browser), `OrderTicket` (which remounts `DealTicket` per market: order type, side, best bid and offer, size,
   Advanced, and `MarketInfo`) and `BottomPanel` (`PositionsView`, `OrdersView`, `HistoryList`, activity) side by side, and below 1024 px shows one of them at a time, chosen from `PhoneNav`'s bar at the foot (positions and orders are cards there, and the funding drawer fills the screen); `FundingDrawer` holds
-  `EligibilityCard`, `DepositForm`, `WithdrawForm`, `WithdrawalQueue` and `AccountSummary`;
+  `EligibilityCard`, `DepositForm`, `WithdrawForm`, `WithdrawalQueue`, `AccountSummary` and, for a live node, `Payouts` (each approved withdrawal's claim on the vault) and `SigningFor` (the chain and vault every signature names, also under the deal ticket), with the live steps in the engine's order, deposit then declare; `WalletPrompt` says what the wallet is being asked to sign or send while it waits; `WalletConnectPairing` is the WalletConnect pairing dialog (QR code, link, WalletConnect's logo);
   `ToastLog` is the screen-reader log of results, used by `Toasts` and the drawer; `Select` is the console's accessible select; `keep-focus.ts` keeps focus on the tab panel when an action removes a button; `use-escape-close.ts` closes the wallet menu and mock panel on Escape, including after a Safari pointer click; `TradeWorkspace` remembers the pane that held focus and shows it when the layout narrows; `AccessGate` shows the geo-block; `WalletButton` and
   `MockControls` drive the mock.
-- **public/** — the supplied logo bitmap, served from the app's own origin; `Logo.tsx` frames it; and
+- **public/** — the supplied logo bitmap, served from the app's own origin; `Logo.tsx` frames it; `walletconnect/` (WalletConnect's logo and the copy of the WalletConnect Community License the console must ship); and
   `engine-verify/`, the engine's browser verifier package copied unchanged (the `.wasm`, its glue and
   types, `SHA256SUMS`), whose hashes `src/lib/engine/wasm-pin.json` pins.
 - **src/lib/** — pure TypeScript with no React or DOM. Logic modules have adjacent `*.test.ts`:
   `site.ts` holds identity and `siteUrl()`, the server's one environment-variable reader (`engine/deploy.ts` reads the `NEXT_PUBLIC_ENGINE_*` values the browser needs); `geo-block.ts` holds the restricted countries (a placeholder until counsel's list) and builds the geo-block rewrite from them; `fixed.ts` is the
-  engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `bars.ts` (marks into bars per timeframe, and the chart's view when the oldest bar rolls off) and
+  engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `quotes.ts` (the node's executable quotes: the markets asked for, and the price a ticket shows and sends), `qr.ts` (a pairing link as a QR path), `bars.ts` (marks into bars per timeframe, and the chart's view when the oldest bar rolls off) and
   `vault.ts` (deposit bounds, the withdrawable amount) and `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `escape.ts` says which Escape presses close a popup; `panes.ts` picks the workspace pane that keeps the user's focus when the layout narrows; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
   margin and market-hours rules and the ticket preview; `models.ts` and `messages.ts` decode and
   describe engine data.
   `engine/` holds the node's wire shapes (`types.ts`), the display facts the console keeps per
   market (`meta.ts`: names, places, and the mock's base quote spread, a simplification of the engine's
   own formula that the owner has yet to settle), the `EngineClient` and wallet interfaces,
-  and the attestation check. The live client is `live.ts` over `transport.ts` (a `fetch` with a fresh
+  and the attestation check. `eip712.ts` builds the engine's EIP-712 requests as typed data, checked against the engine's own vectors (`eip712-vectors.json`); `provider-wallet.ts` is the `Wallet` over any EIP-1193 provider (chain switch, `eth_signTypedData_v4` with the signer checked, the vault's approve, deposit and claim, chain reads through the wallet), `injected.ts` connects the page's browser wallet, `walletconnect.ts` (with `walletconnect-sdk.ts`, the SDK's narrow types and the in-memory storage) a wallet app over WalletConnect's relay, loading the SDK only when chosen, `connectors.ts` offers several connectors as one, `wallet-kit.ts` is the tests' fixed-key stub provider, and `walletconnect-kit.ts` the tests' stand-in for the WalletConnect SDK. The live client is `live.ts` over `transport.ts` (a `fetch` with a fresh
   challenge, accepting only an answer that verifies for that request, with the signed time within 30 s of the device
-  clock), `live-stream.ts` (the signed stream: consecutive `n`, a fresh connection at the live end of the log after a failure, stale after
-  three heartbeats), `live-session.ts` (the client for a deployment, from the browser's `fetch`, WebSocket and clock) and `trust.ts` (the verified enclave address, verified again when an answer fails or the
+  clock; actions post their request and verify the answer for its exact body), `live-stream.ts` (the signed stream: consecutive `n`, a fresh connection at the live end of the log after a failure, stale after
+  three heartbeats; it carries the account's `quotes` request and delivers quotes and signed withdrawal authorizations), `live-scan.ts` (a one-off read of the log from a seq for an authorization the stream did not carry), `live-session.ts` (the client for a deployment, from the browser's `fetch`, WebSocket and clock) and `trust.ts` (the verified enclave address, verified again when an answer fails or the
   enclave restarts); `verifier.ts` is the `Verifier` interface for the engine's browser verifier,
   `wasm-verifier.ts` wraps the vendored package to it (the dev-only mock entry point only when
   `allowMock`) and `load-verifier.ts` checks the `.wasm` against `wasm-pin.json` before running it;
@@ -49,9 +49,9 @@ matches the current action.
   manifests; `watch-wallet.ts` is the read-only account for `?account=`. `wire.ts`, `test-vectors.ts`,
   `test-kit.ts`, `live-setup.ts` and `wire-vectors.json` (the engine's known-answer vectors, replayed through the real
   verifier) pin and test the wire formats. `store/` holds the state, the store that follows the node's stream,
-  and the user's actions. `mock/` is the in-browser node (state, orders, fills, close-out, funds and
+  the user's actions (`actions.ts`), the quotes and authorizations the stream carries for the account (`funds.ts`), the payouts to claim on the vault (`payouts.ts`), and `live-kit.ts`, the tests' live client and a store connected through the fixed-key wallet. `mock/` is the in-browser node (state, orders, fills, close-out, funds and
   the first-in first-out withdrawal queue, the clock step, the demo account's backstory in `demo.ts`, and the controls the mock build exposes).
-- **next.config.ts** — the security headers on every path (a CSP without nonces, with the node's origin in `connect-src` and `'wasm-unsafe-eval'` in `script-src` for a live build, nosniff, referrer,
+- **next.config.ts** — the security headers on every path (a CSP without nonces, with the node's origin in `connect-src` and `'wasm-unsafe-eval'` in `script-src` for a live build, and WalletConnect's relay in `connect-src` when the build sets a WalletConnect project id, nosniff, referrer,
   frame, opener, and permissions policies), `reactStrictMode`, `poweredByHeader: false`, the geo-block `beforeFiles` rewrite, and
   `agentRules: false`, so `next dev` leaves this index alone, and `devIndicators: false`, so its
   overlay does not cover the terminal.
@@ -65,7 +65,7 @@ matches the current action.
 - **scripts/** — `check-docs.py`, run by CI's `docs` job: every relative Markdown link under
   `agents/` and in the root `*.md` files resolves to a file or directory in the repository, and the
   root `AGENTS.md` and `CLAUDE.md`, when present, are symlinks to `agents/AGENTS.md`; its test is
-  `check-docs.test.py`; and `check-wasm-pin.mjs`, run before every build, which fails when the verifier's `.wasm` or glue is not the pinned one; `dev-live-client.sh`, the live client's dev scenario against an engine dev node through a tampering proxy (`live/`, run by `vitest.live.config.ts`); and `check-geo-block.sh`, run by CI's `geo-block` job, which serves a
+  `check-docs.test.py`; and `check-wasm-pin.mjs`, run before every build, which fails when the verifier's `.wasm` or glue is not the pinned one; `dev-live-client.sh`, the live client's dev scenario against an engine dev node through a tampering proxy (`live/`, run by `vitest.live.config.ts`); `dev-local-stack.sh`, the one-command local stack (Anvil with the vault and mock USDC, a funded dev wallet, an engine node on Anvil custody with live crypto venues and checkpoints, and the console in live-dev mode); and `check-geo-block.sh`, run by CI's `geo-block` job, which serves a
   production build and checks that a restricted, an allowed, and an unknown country each get the
   right page, that every page is `noindex`, and that `robots.txt` is never rewritten.
 - **.github/workflows/** — `ci.yaml`, on every push to `main` and every PR: the `workflows` job
@@ -98,6 +98,10 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
 - Install: `npm ci`
 - Dev server: `npm run dev` (`http://localhost:3000`); against a local engine dev node,
   `npm run dev:live` (see the README)
+- Local trading stack: `./scripts/dev-local-stack.sh` (Anvil, Forge, Cast, Cargo, Node and npm, `curl`, `jq`, Python 3.11+; the engine
+  checkout from `ENGINE_DIR`, default the `engine` beside the main checkout, with `forge soldeer install` run in its
+  `contracts/`; prints the wallet setup and runs until Ctrl-C; ports, the funded wallet and `CONSOLE_BUILD=production`
+  are set by the variables its header lists)
 - Live client dev scenario: `ENGINE_DIR=<engine checkout> ENGINE_BIN=<built engine binary> scripts/dev-live-client.sh`
   (Node, `curl`; starts a dev node on private data and ends `PASS: signed reads verify; tamper, replay, gap
   and mock-in-production are refused`)
@@ -133,9 +137,10 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   (`proxy.ts`, or the deprecated `middleware.ts`) without the owner's approval. The app talks to
   the engine node from the browser only.
 - **The mock follows the engine where it models it,** and keeps two known simplifications for the
-  owner to settle: a base quote spread per market (`src/lib/engine/meta.ts`), and a funding order of
-  eligibility declaration before the first deposit, where the engine admits a never-credited
-  account's declaration only after a deposit is pending.
+  owner to settle: a base quote spread per market (`src/lib/engine/meta.ts`), where a live build shows the
+  node's executable quote, and a funding order of eligibility declaration before the first deposit, where
+  the engine admits a never-credited account's declaration only after a deposit is pending and a live build
+  asks for the deposit first.
 - **Restricted regions are blocked at the edge.** A `beforeFiles` rewrite in `next.config.ts`,
   built from `src/lib/geo-block.ts`, sends requests from the listed countries to the static
   `/restricted` page; an unknown country is allowed, and the engine node's refusal stays the
@@ -150,7 +155,10 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   node's origin is the one cross-origin destination the app exists for, approved in
   monkey-trading/engine#292 (rule 6): the build's pinned origin, and no other, is in the CSP
   `connect-src` with its `https:` and `wss:` schemes, and every answer from it is shown only if
-  the attested enclave signed it for that request.
+  the attested enclave signed it for that request. WalletConnect's relay (`wss://relay.walletconnect.org`) is
+  the one other, approved in monkey-trading/console#7, and only in a build with a WalletConnect project id;
+  chain reads go through the user's wallet, never to an RPC of the console's own. `/notices` states what leaves
+  the browser.
 - **The rules come from the website.** The checklist and the implementation skill were ported from
   the website repository. A module they name that this repository lacks (`content.ts`, `prng.ts`,
   `format.ts`, `components/motion.tsx`, `replay.ts`) is the path its convention takes once the
