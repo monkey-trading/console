@@ -19,8 +19,10 @@ export function PositionsView() {
   if (positions.length === 0) return <p className="px-4 py-6 text-caption text-fg-3">No open positions.</p>;
   const rows = positions.map((p) => {
     const market = markets.find((m) => m.id === p.market);
-    const mark = market?.mark ?? p.entry;
-    const pnl = mulFixed(p.qty, mark - p.entry);
+    // An unpriced market shows no mark and no profit, not the entry price as if it were the mark.
+    const known = market?.mark ?? null;
+    const mark = known ?? p.entry;
+    const pnl = known === null ? null : mulFixed(p.qty, known - p.entry);
     const places = market?.places ?? 2;
     const close = (event: { currentTarget: HTMLElement }) => {
       keepFocus(event.currentTarget);
@@ -32,10 +34,10 @@ export function PositionsView() {
       long: p.qty > 0n,
       size: formatFixedPlaces(absFixed(p.qty), 6),
       entry: formatMark(p.entry, places),
-      mark: formatMark(mark, places),
-      pnl: formatUsd(pnl),
-      loss: pnl < 0n,
-      closable: !busy && market?.open === true,
+      mark: known === null ? "—" : formatMark(known, places),
+      pnl: pnl === null ? "—" : formatUsd(pnl),
+      loss: pnl !== null && pnl < 0n,
+      closable: !busy && market?.open === true && known !== null,
       close,
     };
   });

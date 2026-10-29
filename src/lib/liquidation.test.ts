@@ -11,7 +11,7 @@ const START = Date.UTC(2026, 9, 28, 15, 0, 0);
 
 async function markets() {
   const node = createMockNode(START);
-  return (await node.client.markets()).map((v) => decodeMarket(v, undefined));
+  return (await node.client.markets()).map((v) => decodeMarket(v, undefined, true));
 }
 
 const account = (balance: number, margin: number, qty: bigint, entry: number): AccountModel => ({

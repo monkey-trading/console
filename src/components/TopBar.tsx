@@ -15,7 +15,7 @@ const BUTTON = "min-h-11 rounded border border-edge px-2.5 py-2 sm:px-3 lg:min-h
 
 export function TopBar() {
   const { account, now, paused, blocked } = useConsole();
-  const { store } = useSession();
+  const { store, node } = useSession();
   const free = account ? account.equity - account.margin : 0n;
   const stats: [string, string, string][] = [
     ["Equity", account ? usd(account.equity) : "—", ""],
@@ -39,9 +39,9 @@ export function TopBar() {
       </dl>
       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
         <span className="hidden text-label tracking-caps text-fg-3 uppercase xl:inline">
-          Node clock <span aria-hidden="true" className="text-fg-2">{formatClock(now)} UTC</span>
+          Node clock <span aria-hidden="true" className="text-fg-2">{now === 0 ? "—" : `${formatClock(now)} UTC`}</span>
         </span>
-        <button type="button" onClick={() => store.setPaused(!paused)} className={BUTTON}>{paused ? "Play" : "Pause"}<span className="sr-only"> the simulation</span></button>
+        {node && <button type="button" onClick={() => store.setPaused(!paused)} className={BUTTON}>{paused ? "Play" : "Pause"}<span className="sr-only"> the simulation</span></button>}
         <button type="button" disabled={blocked !== null} onClick={() => store.setFundingOpen(true)} className={`${BUTTON} disabled:opacity-40`}>Funding</button>
         <WalletButton />
         <MockControls />

@@ -14,18 +14,26 @@ describe("decodeMarket", () => {
     const node = createMockNode(START);
     const [view] = await node.client.markets();
     if (!view) throw new Error("a market is listed");
-    const first = decodeMarket(view, undefined);
+    const first = decodeMarket(view, undefined, true);
     expect(first.reference).toBe(first.mark);
-    const moved = decodeMarket({ ...view, mark: "70000" }, first);
+    const moved = decodeMarket({ ...view, mark: "70000" }, first, true);
     expect(moved.mark).toBe(fixedFromInt(70_000));
     expect(moved.reference).toBe(first.reference);
+  });
+
+  it("adds the mock's base spread only to a simulated market, never to a live node's", async () => {
+    const node = createMockNode(START);
+    const [view] = await node.client.markets();
+    if (!view) throw new Error("a market is listed");
+    expect(decodeMarket(view, undefined, true).baseSpreadBps).toBeGreaterThan(0);
+    expect(decodeMarket(view, undefined, false).baseSpreadBps).toBe(0);
   });
 
   it("has no mark or reference before the first price", async () => {
     const node = createMockNode(START);
     const [view] = await node.client.markets();
     if (!view) throw new Error("a market is listed");
-    const model = decodeMarket({ ...view, mark: null }, undefined);
+    const model = decodeMarket({ ...view, mark: null }, undefined, true);
     expect(model.mark).toBeNull();
     expect(model.reference).toBeNull();
   });

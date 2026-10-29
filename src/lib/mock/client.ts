@@ -1,6 +1,7 @@
 /** An in-browser engine node that answers as the real node's REST and stream routes do. */
 
-import { EngineError, type ActionResult, type EngineClient, type Unsubscribe } from "../engine/client";
+import { checkAttestation, type AttestationStatus } from "../engine/attestation";
+import { EngineError, type ActionResult, type EngineClient, type SignatureChecks, type Unsubscribe } from "../engine/client";
 import type {
   EligibilityClass,
   AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView,
@@ -33,6 +34,7 @@ const toHex = (text: string) => Array.from(text, (c) => c.charCodeAt(0).toString
 export type AttestationMode = "mock" | "unverifiable";
 
 export class MockEngineClient implements EngineClient {
+  readonly signatures: SignatureChecks = "none";
   attestationMode: AttestationMode = "mock";
 
   constructor(readonly state: MockState) {}
@@ -60,6 +62,20 @@ export class MockEngineClient implements EngineClient {
       report_data: reportData,
       quote: mock ? toHex(MOCK_QUOTE_PREFIX) + reportData : mockHex("quote", 96),
     };
+  }
+
+  /** The mock accepts its own quote and cannot verify a hardware one. */
+  async verify(): Promise<AttestationStatus> {
+    const attestation = await this.attestation();
+    return checkAttestation(attestation, true) ?? {
+      kind: "unverified",
+      reason: `The ${attestation.provider} quote cannot be verified here: this build does not check vendor certificate chains or a release manifest.`,
+    };
+  }
+
+  /** The mock's trust and feed never change, so there is nothing to report. */
+  watch(): Unsubscribe {
+    return () => {};
   }
 
   async markets(): Promise<MarketView[]> {

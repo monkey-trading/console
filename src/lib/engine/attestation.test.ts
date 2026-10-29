@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { checkAttestation, maySign } from "./attestation";
+import { checkAttestation, maySign, signBlock } from "./attestation";
 import type { Attestation } from "./types";
 
 const toHex = (text: string) => Array.from(text, (c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
@@ -12,21 +12,43 @@ const base: Attestation = {
 };
 
 describe("checkAttestation", () => {
-  it("accepts the node's mock quote in a mock build, and only that", () => {
-    expect(checkAttestation(base)).toEqual({ kind: "mock" });
-    expect(maySign(checkAttestation(base))).toBe(true);
+  it("accepts the node's mock quote where the build allows it, with or without a 0x prefix", () => {
+    expect(checkAttestation(base, true)).toEqual({ kind: "mock" });
+    expect(checkAttestation({ ...base, quote: `0x${base.quote}` }, true)).toEqual({ kind: "mock" });
+  });
+
+  it("refuses a mock quote in a production build", () => {
+    expect(checkAttestation(base, false)).toEqual({ kind: "unverified", reason: "The node presents a mock attestation, which this build refuses." });
+    expect(checkAttestation({ ...base, quote: `0x${base.quote}` }, false)?.kind).toBe("unverified");
   });
 
   it("refuses a mock provider without the marker and the marker under a hardware provider", () => {
-    expect(checkAttestation({ ...base, quote: "00" }).kind).toBe("unverified");
-    expect(checkAttestation({ ...base, provider: "sev_snp" }).kind).toBe("unverified");
+    expect(checkAttestation({ ...base, quote: "00" }, true)?.kind).toBe("unverified");
+    expect(checkAttestation({ ...base, provider: "sev_snp" }, true)?.kind).toBe("unverified");
   });
 
-  it("refuses a hardware quote it cannot verify, and a malformed quote", () => {
-    const status = checkAttestation({ ...base, provider: "sev_snp", quote: "ab".repeat(16) });
-    expect(status).toMatchObject({ kind: "unverified" });
-    expect(maySign(status)).toBe(false);
-    expect(checkAttestation({ ...base, quote: "zz" }).kind).toBe("unverified");
-    expect(maySign({ kind: "checking" })).toBe(false);
+  it("leaves a hardware quote, and a malformed one under a hardware provider, to the verifier", () => {
+    expect(checkAttestation({ ...base, provider: "sev_snp", quote: "ab".repeat(16) }, true)).toBeNull();
+    expect(checkAttestation({ ...base, provider: "sev_snp", quote: "zz" }, false)).toBeNull();
+    expect(checkAttestation({ ...base, quote: "zz" }, true)?.kind).toBe("unverified");
+  });
+});
+
+describe("maySign", () => {
+  it("signs only for an attested node whose feed is arriving", () => {
+    const verified = { kind: "verified", release: "r", config: "c", address: "0x1" } as const;
+    expect(maySign({ kind: "mock" }, "live")).toBe(true);
+    expect(maySign(verified, "live")).toBe(true);
+    for (const status of [{ kind: "checking" }, { kind: "reverifying" }, { kind: "clock", skewMs: 60_000 }, { kind: "unverified", reason: "x" }] as const) {
+      expect(maySign(status, "live")).toBe(false);
+    }
+    expect(maySign(verified, "stale")).toBe(false);
+    expect(maySign(verified, "connecting")).toBe(false);
+  });
+
+  it("says why it may not", () => {
+    expect(signBlock({ kind: "mock" }, "stale")).toContain("stale");
+    expect(signBlock({ kind: "checking" }, "live")).toContain("attestation");
+    expect(signBlock({ kind: "mock" }, "live")).toBeNull();
   });
 });

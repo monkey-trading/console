@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { describeEvent, describeReject } from "./messages";
+import { describeEvent, describeMockAttestation, describeReject } from "./messages";
 
 describe("describeReject", () => {
   it("names the numbers a slippage and a margin refusal carry", () => {
@@ -23,5 +23,16 @@ describe("describeEvent", () => {
   it("describes activity and skips an acknowledgement", () => {
     expect(describeEvent({ type: "market_closed", market: 1 }, symbol)).toBe("BTC-USD closed");
     expect(describeEvent({ type: "order_accepted", account: "0x1", client_id: 1, order_id: 1 }, symbol)).toBeNull();
+  });
+});
+
+describe("describeMockAttestation", () => {
+  it("names the simulation in the browser for the mock and the dev-only verifier entry point for a live dev node, never the other's", () => {
+    const mock = describeMockAttestation("none");
+    const live = describeMockAttestation("checked");
+    expect(mock.rest).toContain("Simulated node in your browser");
+    expect(mock.rest).not.toContain("verifier");
+    expect(live.rest).toContain("dev-only mock entry point");
+    expect(live.rest).not.toContain("in your browser");
   });
 });

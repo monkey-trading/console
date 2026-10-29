@@ -5,6 +5,7 @@
 import { useId, useRef, useState } from "react";
 
 import { fixedFromInt } from "@/lib/fixed";
+import type { MockNode } from "@/lib/mock";
 import type { Region } from "@/lib/mock/state";
 import { MAX_STRESS } from "@/lib/pricing";
 
@@ -23,8 +24,14 @@ const ATTESTATIONS = [
 ] as const;
 const BUTTON = "min-h-11 min-w-11 rounded border border-line-2 px-2 py-1.5 lg:min-h-0 lg:min-w-0 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
 
+/** The controls for the in-browser node; a live node has none. */
 export function MockControls() {
-  const { node, store } = useSession();
+  const { node } = useSession();
+  return node === null ? null : <MockPanel node={node} />;
+}
+
+function MockPanel({ node }: { node: MockNode }) {
+  const { store } = useSession();
   const { markets, selected, attestation, wallet, paused } = useConsole();
   const [open, setOpen] = useState(false);
   const [region, setRegion] = useState<Region>("allowed");
