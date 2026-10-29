@@ -1,7 +1,8 @@
 /** What the console needs from a browser wallet: connect, sign typed data, and fund the vault. */
 
 import type { Fixed } from "../fixed";
-import type { Address } from "./types";
+import type { TypedRequest } from "./eip712";
+import type { Address, SignedWithdrawal } from "./types";
 
 export interface WalletOption {
   id: string;
@@ -9,21 +10,24 @@ export interface WalletOption {
   detail: string;
 }
 
-/** The typed data a wallet is asked to sign, as the engine's EIP-712 domain defines the types. */
+/** The typed data a wallet is asked to sign, as the engine's EIP-712 types define it. */
 export interface SignRequest {
-  primaryType: "Order" | "Cancel" | "Withdrawal" | "Eligibility";
-  /** A one-line statement of what the signature authorises, shown to the user. */
+  /** A one-line statement of what the signature authorises, shown to the user before the wallet opens. */
   summary: string;
-  message: Record<string, string | number>;
+  typed: TypedRequest;
 }
 
 export interface Wallet {
   address: Address;
   label: string;
-  /** Resolves with a 65-byte signature as `0x` hex. Rejects when the user declines. */
+  /** Resolves with a 65-byte signature as `0x` hex, `v` 27 or 28. Rejects when the user declines. */
   sign(request: SignRequest): Promise<string>;
-  /** Sends a USDC deposit to the vault for this account and resolves with its transaction hash. */
+  /** Approves the vault for `amount` USDC if needed, deposits it to this account, and resolves with the deposit's transaction hash. */
   deposit(amount: Fixed): Promise<string>;
+  /** Claims a signed withdrawal authorization on the vault and resolves with the transaction hash. */
+  claim(withdrawal: SignedWithdrawal): Promise<string>;
+  /** Whether the vault has paid this account's payout `nonce`. */
+  claimed(nonce: number): Promise<boolean>;
 }
 
 export interface WalletConnector {

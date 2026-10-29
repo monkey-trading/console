@@ -3,7 +3,7 @@
 import type { FeedStatus } from "./attestation";
 import { CLOCK_TOLERANCE_MS } from "./transport";
 import type { NodeTrust } from "./trust";
-import type { StreamMessage } from "./types";
+import type { Address, MarketId, MarketQuote, SignedWithdrawal, StreamMessage } from "./types";
 import type { Verifier } from "./verifier";
 import { parseFrameMessage, parseSignedFrame } from "./wire";
 
@@ -18,7 +18,13 @@ export interface Scheduler {
 }
 
 /** The part of a WebSocket the stream uses. */
-export type Socket = Pick<WebSocket, "onmessage" | "onclose" | "onerror" | "close">;
+export type Socket = Pick<WebSocket, "onopen" | "onmessage" | "onclose" | "onerror" | "close" | "send">;
+
+/** The account and markets whose executable quotes the connection asks for. */
+export interface QuoteRequest {
+  account: Address;
+  markets: MarketId[];
+}
 
 export interface StreamDeps {
   /** `wss://host[:port]`. */
@@ -34,6 +40,12 @@ export interface StreamDeps {
   nowMs(): number;
   challenge(): string;
   onMessage(message: StreamMessage): void;
+  /** An executable quote for the account the connection asked about. */
+  onQuote(quote: MarketQuote): void;
+  /** The node refused the connection's quote request. */
+  onQuoteError(error: string): void;
+  /** A signed withdrawal authorization, for any account. */
+  onWithdrawal(withdrawal: SignedWithdrawal): void;
   onFeed(status: FeedStatus): void;
   /** Why a connection was dropped, for the log of what the user is told. */
   onProblem(reason: string): void;
@@ -51,6 +63,12 @@ export class LiveStream {
   private reported = false;
   /** Bumped on each connection, so a late event from a closed socket is ignored. */
   private generation = 0;
+  /** The quotes the page wants, sent on each connection once it opens. */
+  private quotes: QuoteRequest | null = null;
+  /** The quote request sent on the open connection, as sent, and whether the node refused it. */
+  private sent: { account: Address; op: string; refused: boolean } | null = null;
+  /** Whether the socket has opened, so it can carry the quote request. */
+  private connected = false;
 
   constructor(private readonly deps: StreamDeps) {}
 
@@ -59,9 +77,30 @@ export class LiveStream {
     void this.open();
   }
 
+  /**
+   * Asks for `request`'s quotes, or for none. Sent at once on an open connection, unless the node is
+   * already serving the same request; a request it refused, such as for an account not yet credited,
+   * is sent again, since the account may have been credited since.
+   */
+  setQuotes(request: QuoteRequest | null): void {
+    this.quotes = request;
+    if (this.connected) this.sendQuotes();
+  }
+
+  /** Sends the wanted quote request; no request after one was sent ends it with an empty market list. */
+  private sendQuotes(): void {
+    const request = this.quotes ?? (this.sent === null ? null : { account: this.sent.account, markets: [] });
+    if (request === null) return;
+    const op = JSON.stringify({ op: "quotes", account: request.account, markets: request.markets });
+    if (this.sent?.op === op && !this.sent.refused) return;
+    this.sent = { account: request.account, op, refused: false };
+    this.socket?.send(op);
+  }
+
   stop(): void {
     this.stopped = true;
     this.generation++;
+    this.connected = false;
     this.clearTimers();
     this.socket?.close();
     this.socket = null;
@@ -97,7 +136,14 @@ export class LiveStream {
     let expected = 0;
     const socket = this.deps.openSocket(this.deps.origin + path);
     this.socket = socket;
+    this.connected = false;
+    this.sent = null;
     this.armWatchdog(generation);
+    socket.onopen = () => {
+      if (generation !== this.generation) return;
+      this.connected = true;
+      this.sendQuotes();
+    };
     socket.onmessage = (event) => {
       if (generation !== this.generation) return;
       const text = typeof event.data === "string" ? event.data : null;
@@ -120,6 +166,12 @@ export class LiveStream {
       this.setFeed("live");
       this.armWatchdog(generation);
       if (message.type === "command") this.deps.onMessage(message);
+      else if (message.type === "quote") this.deps.onQuote(message);
+      else if (message.type === "withdrawal") this.deps.onWithdrawal(message);
+      else if (message.type === "quote_error") {
+        if (this.sent !== null) this.sent.refused = true;
+        this.deps.onQuoteError(message.error);
+      }
     };
     socket.onclose = () => {
       if (generation === this.generation) this.fail("The connection to the node closed.");
@@ -145,6 +197,7 @@ export class LiveStream {
   private fail(reason: string, signer?: string): void {
     if (this.stopped) return;
     this.generation++;
+    this.connected = false;
     this.socket?.close();
     this.socket = null;
     this.clearTimers();

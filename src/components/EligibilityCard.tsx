@@ -12,8 +12,9 @@ import { useSignGate } from "./SignGate";
 
 const CLASSES: readonly EligibilityClass[] = ["professional", "eligible_client"];
 
-export function EligibilityCard() {
-  const { wallet, eligibility, busy } = useConsole();
+/** `step` is the section's place in the drawer. */
+export function EligibilityCard({ step }: { step: number }) {
+  const { wallet, eligibility, busy, signatures, account } = useConsole();
   const { store } = useSession();
   const [choice, setChoice] = useState<EligibilityClass>("professional");
   const name = useId();
@@ -21,12 +22,18 @@ export function EligibilityCard() {
   const heading = useRef<HTMLHeadingElement>(null);
   return (
     <section aria-labelledby="eligibility-title" className="rounded-xl border border-line-2 bg-ink-1 p-5">
-      <h2 ref={heading} id="eligibility-title" tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">1 · Eligibility</h2>
+      <h2 ref={heading} id="eligibility-title" tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">{step} · Eligibility</h2>
       {eligibility ? (
-        <p className="mt-4 text-caption text-glow">Recorded: {STATEMENTS[eligibility]} You can deposit.</p>
+        <p className="mt-4 text-caption text-glow">Recorded: {STATEMENTS[eligibility]} {signatures === "none" ? "You can deposit." : "Your deposits are credited."}</p>
       ) : (
         <form className="mt-4" onSubmit={(event) => { event.preventDefault(); if (!wallet || busy || gate.blocked) return; void attestEligibility(store, choice).then(() => heading.current?.focus()); }}>
-          <p className="text-caption leading-relaxed text-fg-2">Before your first deposit you declare, with your wallet, that you are a professional or eligible client. The declaration is recorded in the public log against your account.</p>
+          <p className="text-caption leading-relaxed text-fg-2">
+            {signatures === "none"
+              ? "Before your first deposit you declare, with your wallet, that you are a professional or eligible client."
+              : "You declare, with your wallet, that you are a professional or eligible client. The node takes a first declaration once a deposit for your account is pending, a few blocks after it is mined, and credits the deposit when the declaration is recorded."}
+            {" "}The declaration is recorded in the public log against your account.
+          </p>
+          {signatures === "checked" && account === null && <p className="mt-2 text-label text-fg-3">Deposit first, then sign the declaration.</p>}
           <fieldset className="mt-4 space-y-2">
             <legend className="sr-only">Client class</legend>
             {CLASSES.map((cls) => (

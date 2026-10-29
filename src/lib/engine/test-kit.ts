@@ -55,15 +55,28 @@ export class FakeNode {
 }
 
 export class FakeSocket implements Socket {
+  onopen: Socket["onopen"] = null;
   onmessage: Socket["onmessage"] = null;
   onclose: Socket["onclose"] = null;
   onerror: Socket["onerror"] = null;
   closed = false;
+  /** The text frames the page sent, in order. */
+  readonly sent: string[] = [];
 
   constructor(readonly url: string) {}
 
   close(): void {
     this.closed = true;
+  }
+
+  send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
+    this.sent.push(String(data));
+  }
+
+  /** The connection opens, as the browser reports it. */
+  open(): void {
+    const handler = this.onopen as (() => void) | null;
+    handler?.();
   }
 
   /** The connection closes or fails, as the browser reports it. */

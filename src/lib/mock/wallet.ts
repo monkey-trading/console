@@ -25,11 +25,17 @@ export class MockWalletConnector implements WalletConnector {
       label: option.label,
       async sign(request: SignRequest) {
         // Not a cryptographic signature: the mock node only checks its shape.
-        return `0x${mockHex(JSON.stringify(request), 65)}`;
+        return `0x${mockHex(JSON.stringify(request, (_, value: unknown) => (typeof value === "bigint" ? String(value) : value)), 65)}`;
       },
       async deposit(amount: Fixed) {
         controls.deposit(address, amount);
         return `0x${mockHex(`tx-${amount}-${address}`, 32)}`;
+      },
+      async claim() {
+        throw new Error("The simulated vault pays withdrawals itself; there is nothing to claim.");
+      },
+      async claimed() {
+        return true;
       },
     };
   }

@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { cancelTypedData, requestDomain } from "./eip712";
 import { WatchConnector } from "./watch-wallet";
 
 const ADDRESS = "0xF39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
@@ -12,7 +13,8 @@ describe("WatchConnector", () => {
     const wallet = await connector.connect();
     expect(wallet.address).toBe(ADDRESS.toLowerCase());
     expect(wallet.label).toBe("Read-only");
-    await expect(wallet.sign({ primaryType: "Order", summary: "", message: {} })).rejects.toThrow("read-only");
+    const typed = cancelTypedData(requestDomain(31337, ADDRESS), { account: ADDRESS, order_id: 1 }, { nonce: 0, expiresAt: 0 });
+    await expect(wallet.sign({ summary: "", typed })).rejects.toThrow("read-only");
     await expect(wallet.deposit(1n)).rejects.toThrow("read-only");
   });
 

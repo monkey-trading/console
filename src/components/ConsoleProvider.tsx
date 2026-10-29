@@ -4,8 +4,11 @@
 
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
+import { MultiConnector } from "@/lib/engine/connectors";
 import { parseDeploy, rawDeploy, type Deploy } from "@/lib/engine/deploy";
+import { InjectedConnector } from "@/lib/engine/injected";
 import { createLiveClient, GLUE_PATH } from "@/lib/engine/live-session";
+import type { Eip1193Provider } from "@/lib/engine/provider-wallet";
 import type { VerifierModule } from "@/lib/engine/wasm-verifier";
 import { WatchConnector } from "@/lib/engine/watch-wallet";
 import { DEMO_ADDRESS } from "@/lib/mock/demo";
@@ -13,6 +16,7 @@ import { queuePage } from "@/lib/mock/funds";
 import { mockHistory } from "@/lib/mock/history";
 import { createMockNode, SIM_EPOCH_MS, type MockNode } from "@/lib/mock";
 import { connectWallet } from "@/lib/store/actions";
+import { followAccountFeeds, syncQuotes } from "@/lib/store/funds";
 import { ConsoleStore } from "@/lib/store/store";
 import type { ConsoleState } from "@/lib/store/state";
 
@@ -27,7 +31,13 @@ const SessionContext = createContext<Session | null>(null);
 /** How often the page advances the mock node, in milliseconds. */
 const TICK_MS = 1_000;
 
-/** The store for a live node: nothing is loaded until its attestation is trusted, and the account is read-only. */
+/** The page's injected EIP-1193 provider, when a browser wallet put one there. */
+function injectedProvider(): Eip1193Provider | undefined {
+  // EIP-1193 providers sit at `window.ethereum`, which the DOM types do not declare.
+  return (window as Window & { ethereum?: Eip1193Provider }).ethereum;
+}
+
+/** The store for a live node: nothing is loaded until its attestation is trusted. */
 function createLiveSession(deploy: Deploy): Session {
   const client = createLiveClient(deploy, {
     fetch: (input, init) => fetch(input, init),
@@ -38,7 +48,10 @@ function createLiveSession(deploy: Deploy): Session {
     // The glue is a static file of the app, loaded as it is rather than bundled; the bundler would otherwise look for the .wasm beside it.
     loadGlue: () => import(/* webpackIgnore: true */ /* turbopackIgnore: true */ GLUE_PATH) as Promise<VerifierModule>,
   });
-  const wallets = new WatchConnector(() => window.location.search);
+  if (deploy.chainId === null || deploy.vault === null) throw new Error("A live session needs the deployment's chain id and vault.");
+  const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, add: deploy.rpcUrl === null ? null : { name: `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
+  const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+  const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, { wait }), new WatchConnector(() => window.location.search)]);
   const store = new ConsoleStore({ client, wallets, history: () => [], initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
   return { store, node: null };
 }
@@ -81,8 +94,12 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
     if (session.node === null) {
       // A live node sets the clock with its first message; the page follows it, and the account the address names.
       const stopLive = store.start(0);
+      const stopFeeds = followAccountFeeds(store);
       if (new URLSearchParams(window.location.search).has("account")) void connectWallet(store, "watch", true);
-      return stopLive;
+      return () => {
+        stopFeeds();
+        stopLive();
+      };
     }
     const stop = store.start(SIM_EPOCH_MS);
     // The demo account is connected on load, so no screen starts empty.
@@ -116,6 +133,25 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       document.removeEventListener("visibilitychange", sync);
       unsubscribe();
       stop();
+    };
+  }, [store, session.node]);
+  useEffect(() => {
+    if (session.node !== null) return;
+    // The node's quote subscription follows the account, the selected market and the markets held; a
+    // request the node refused (an account not yet credited) is sent again once the account is credited.
+    let key = "";
+    const sync = () => {
+      const { wallet, selected, account } = store.getSnapshot();
+      const next = JSON.stringify([wallet?.address ?? null, selected, account?.positions.map((p) => p.market) ?? [], account !== null]);
+      if (next === key) return;
+      key = next;
+      syncQuotes(store);
+    };
+    sync();
+    const unsubscribe = store.subscribe(sync);
+    return () => {
+      unsubscribe();
+      store.deps.client.quotes(null);
     };
   }, [store, session.node]);
   return <SessionContext value={session}>{children}</SessionContext>;

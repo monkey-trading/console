@@ -35,6 +35,8 @@ export type AttestationMode = "mock" | "unverifiable";
 
 export class MockEngineClient implements EngineClient {
   readonly signatures: SignatureChecks = "none";
+  /** A stand-in deployment: the mock checks no signature, so nothing binds to it. */
+  readonly deployment = { chainId: 31337, vault: `0x${mockHex("vault", 20)}` };
   attestationMode: AttestationMode = "mock";
 
   constructor(readonly state: MockState) {}
@@ -157,6 +159,18 @@ export class MockEngineClient implements EngineClient {
   async withdraw(request: WithdrawalRequest): Promise<ActionResult> {
     return withdraw(this.state, request);
   }
+
+  /** The mock pays approved withdrawals itself, so it signs no authorization to reissue or find. */
+  async reissue(): Promise<void> {
+    throw new EngineError(404, "not found");
+  }
+
+  async findWithdrawal(): Promise<null> {
+    return null;
+  }
+
+  /** The mock streams no executable quotes; the ticket shows its own estimate. */
+  quotes(): void {}
 
   async withdrawalQueue(address: Address): Promise<WithdrawalPage> {
     return queuePage(this.state, address);

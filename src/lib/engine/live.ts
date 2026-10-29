@@ -2,11 +2,13 @@
 
 import type { AttestationStatus, FeedStatus } from "./attestation";
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks, type Unsubscribe } from "./client";
-import { LiveStream, type Scheduler, type Socket } from "./live-stream";
+import { scanForWithdrawal } from "./live-scan";
+import { LiveStream, type QuoteRequest, type Scheduler, type Socket } from "./live-stream";
 import { SignedTransport } from "./transport";
 import { NodeTrust } from "./trust";
 import type {
-  AccountView, Address, Attestation, EligibilityView, HistoryPage, HouseView, MarketView, StreamMessage, WithdrawalPage,
+  AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, MarketView, OrderRequest,
+  SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest,
 } from "./types";
 import type { Verifier } from "./verifier";
 import { newChallenge } from "./wire";
@@ -36,7 +38,6 @@ export interface LiveDeps {
 const READ_TIMEOUT_MS = 10_000;
 /** How long loading the verifier may take, in milliseconds. */
 const VERIFIER_LOAD_TIMEOUT_MS = 20_000;
-const NOT_WIRED = "Signing is not available in this build yet.";
 
 export class LiveEngineClient implements EngineClient {
   readonly signatures: SignatureChecks = "checked";
@@ -47,8 +48,12 @@ export class LiveEngineClient implements EngineClient {
   private readonly listeners = new Set<(event: ClientEvent) => void>();
   private readonly subscribers = new Set<(message: StreamMessage) => void>();
   private stream: LiveStream | null = null;
+  /** The quotes the page wants, kept for a stream opened later. */
+  private quoteRequest: QuoteRequest | null = null;
+  readonly deployment: { chainId: number; vault: string };
 
   constructor(private readonly deps: LiveDeps) {
+    this.deployment = { chainId: deps.chainId, vault: deps.vault };
     const challenge = deps.challenge ?? (() => newChallenge());
     this.trust = new NodeTrust({
       attestation: () => this.plainText("/v1/attestation"),
@@ -150,8 +155,9 @@ export class LiveEngineClient implements EngineClient {
   /** The engine has no region route: it screens each action, so a live client learns of a refusal from the action. */
   async accessProbe(): Promise<void> {}
 
-  async nonce(address: Address): Promise<{ next_nonce: number }> {
-    return (await this.transport.get(`/v1/accounts/${address}/nonce`)) as { next_nonce: number };
+  async nonce(address: Address): Promise<{ next_nonce: number; time_ms: number }> {
+    const answer = await this.transport.getSigned(`/v1/accounts/${address}/nonce`);
+    return { next_nonce: (answer.body as { next_nonce: number }).next_nonce, time_ms: answer.timeMs };
   }
 
   async eligibility(address: Address): Promise<EligibilityView> {
@@ -170,20 +176,42 @@ export class LiveEngineClient implements EngineClient {
     return (await this.transport.get(`/v1/accounts/${address}/history${suffix}`)) as HistoryPage;
   }
 
-  async attestEligibility(): Promise<ActionResult> {
-    throw new EngineError(501, NOT_WIRED);
+  /** Posts a signed action; the node answers with the events its command produced, signed for this request. */
+  private async action(path: string, body: unknown): Promise<ActionResult> {
+    const answer = await this.transport.post(path, body);
+    if (!Array.isArray(answer.body)) throw new EngineError(0, "The node's signed answer to the action was not a list of events.");
+    // The attested enclave signed this list for this request, so its events are the engine's.
+    return { seq: answer.seq ?? 0, events: answer.body as ActionResult["events"] };
   }
 
-  async placeOrder(): Promise<ActionResult> {
-    throw new EngineError(501, NOT_WIRED);
+  attestEligibility(request: EligibilityRequest): Promise<ActionResult> {
+    return this.action("/v1/eligibility", request);
   }
 
-  async cancelOrder(): Promise<ActionResult> {
-    throw new EngineError(501, NOT_WIRED);
+  placeOrder(request: OrderRequest): Promise<ActionResult> {
+    return this.action("/v1/orders", request);
   }
 
-  async withdraw(): Promise<ActionResult> {
-    throw new EngineError(501, NOT_WIRED);
+  cancelOrder(request: CancelRequest): Promise<ActionResult> {
+    return this.action("/v1/orders/cancel", request);
+  }
+
+  withdraw(request: WithdrawalRequest): Promise<ActionResult> {
+    return this.action("/v1/withdrawals", request);
+  }
+
+  async reissue(account: Address, nonce: number, body: { replaces_expires_at: number; signature: string }): Promise<void> {
+    await this.transport.post(`/v1/accounts/${account}/withdrawals/${nonce}/reissue`, body);
+  }
+
+  async findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<SignedWithdrawal | null> {
+    const signer = await this.trust.signer();
+    return scanForWithdrawal({ ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) }, account, nonce, fromSeq);
+  }
+
+  quotes(request: QuoteRequest | null): void {
+    this.quoteRequest = request;
+    this.stream?.setQuotes(request);
   }
 
   subscribe(onMessage: (message: StreamMessage) => void): Unsubscribe {
@@ -192,10 +220,14 @@ export class LiveEngineClient implements EngineClient {
       const stream = new LiveStream({
         ...this.deps, verifier: () => this.requireVerifier(), origin: this.deps.streamOrigin, trust: this.trust, challenge: this.deps.challenge ?? (() => newChallenge()),
         onMessage: (message) => { for (const subscriber of this.subscribers) subscriber(message); },
+        onQuote: (quote) => this.emit({ type: "quote", quote }),
+        onQuoteError: (error) => this.emit({ type: "quote_error", error }),
+        onWithdrawal: (withdrawal) => this.emit({ type: "withdrawal", withdrawal }),
         onFeed: (status: FeedStatus) => this.emit({ type: "feed", status }),
         onProblem: (reason) => this.emit({ type: "problem", reason }),
       });
       this.stream = stream;
+      stream.setQuotes(this.quoteRequest);
       stream.start();
     }
     return () => {

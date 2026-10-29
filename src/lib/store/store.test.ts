@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fixedFromInt, parseFixed } from "../fixed";
 import { createMockNode, SIM_EPOCH_MS } from "../mock";
 import { resetVault } from "../mock/test-helpers";
+import { previewTicket } from "../ticket";
 import { mockHistory } from "../mock/history";
 import { attestEligibility, cancelOrder, connectWallet, deposit, placeOrder, withdraw } from "./actions";
 import { ConsoleStore } from "./store";
@@ -35,8 +36,14 @@ async function funded() {
   return ctx;
 }
 
-const buy = (store: ConsoleStore, notional: number, kind: Parameters<typeof placeOrder>[1]["kind"] = { kind: "market" }) =>
-  placeOrder(store, { market: 1, side: "buy", notional: fixedFromInt(notional), slippageBps: 10, kind, reduceOnly: false });
+/** Buys `notional` dollars of market 1 as the ticket does: its size and, for a market order, the price it shows. */
+function buy(store: ConsoleStore, notional: number, kind?: { kind: "limit"; price: bigint }) {
+  const state = store.getSnapshot();
+  const market = state.markets.find((m) => m.id === 1);
+  if (!market) throw new Error("no market 1");
+  const preview = previewTicket({ market, side: "buy", notional: fixedFromInt(notional), slippageBps: 10, resting: kind !== undefined, account: state.account, houseNav: state.house.nav });
+  return placeOrder(store, { market: 1, side: "buy", qty: preview.qty, kind: kind ?? { kind: "market", quoted: preview.quote?.price ?? 0n, slippageBps: 10 }, reduceOnly: false });
+}
 
 describe("the user's path", () => {
   it("accepts the mock attestation, then connects, attests, deposits, and trades", async () => {

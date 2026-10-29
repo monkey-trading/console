@@ -237,3 +237,55 @@ export interface HistoryPage {
   events: HistoryEvent[];
   next: string | null;
 }
+
+/** The vault's EIP-712 authorization of an approved payout, with its proof against a checkpoint root. */
+export interface WithdrawalAuthorization {
+  signer: Address;
+  signer_epoch: number;
+  /** Unix seconds; the vault accepts it until `expires_at`, 24 hours later. */
+  issued_at: number;
+  expires_at: number;
+  checkpoint_seq: number;
+  checkpoint_root: string;
+  siblings: string[];
+}
+
+/** A signed withdrawal as the stream carries it (`type: "withdrawal"`): what the account claims on the vault. */
+export interface SignedWithdrawal {
+  account: Address;
+  amount: string;
+  /** The payout nonce `withdrawal_approved` named. */
+  nonce: number;
+  chain_id: number;
+  vault: Address;
+  signature: string;
+  approved_seq?: number;
+  authorization?: WithdrawalAuthorization;
+}
+
+/** One step of an executable quote: the average price of an order of up to `qty`. */
+export interface QuoteStep {
+  qty: string;
+  price: string;
+  /** Why a fill of this size would be declined; absent when it fills. */
+  declined?: Reject;
+}
+
+/** One account's executable quotes in one market, as the signed stream's `quotes` op delivers them. */
+export interface MarketQuote {
+  type: "quote";
+  account: Address;
+  market: MarketId;
+  open: boolean;
+  reduce_only: boolean;
+  stress_level: number;
+  mark: string | null;
+  /** Why the market has no price now; the sides are then empty. */
+  unavailable?: Reject;
+  /** What a buy pays, by size. */
+  ask: QuoteStep[];
+  /** What a sell receives, by size. */
+  bid: QuoteStep[];
+  /** The price of closing the account's whole position, if it holds one. */
+  close: { side: Side; qty: string; price: string } | null;
+}

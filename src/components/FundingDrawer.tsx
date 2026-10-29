@@ -8,14 +8,17 @@ import { AccountSummary } from "./AccountSummary";
 import { useConsole, useSession } from "./ConsoleProvider";
 import { EligibilityCard } from "./EligibilityCard";
 import { DepositForm } from "./DepositForm";
+import { Payouts } from "./Payouts";
+import { SigningFor } from "./SigningFor";
 import { ToastList } from "./ToastList";
 import { ToastLog } from "./ToastLog";
 import { WalletButton } from "./WalletButton";
+import { WalletPrompt } from "./WalletPrompt";
 import { WithdrawForm } from "./WithdrawForm";
 import { WithdrawalQueue } from "./WithdrawalQueue";
 
 export function FundingDrawer() {
-  const { fundingOpen, wallet, toasts } = useConsole();
+  const { fundingOpen, wallet, toasts, signatures } = useConsole();
   const { store } = useSession();
   const dialog = useRef<HTMLDialogElement>(null);
   const connected = useRef(wallet !== null);
@@ -58,6 +61,7 @@ export function FundingDrawer() {
       <ToastLog toasts={toasts} />
       <div className="space-y-5 p-4 lg:p-5">
         <ToastList focusId="funding-title" />
+        <WalletPrompt inDrawer />
         <AccountSummary />
         {!wallet && (
           <div className="flex items-center justify-between gap-3 rounded-xl border border-line-2 p-4">
@@ -65,10 +69,12 @@ export function FundingDrawer() {
             <WalletButton />
           </div>
         )}
-        <EligibilityCard />
-        <DepositForm />
+        {/* The engine takes a first declaration once a deposit is pending; the mock asks for it before the deposit. */}
+        {signatures === "checked" ? <><DepositForm step={1} /><EligibilityCard step={2} /></> : <><EligibilityCard step={1} /><DepositForm step={2} /></>}
         <WithdrawForm />
         <WithdrawalQueue />
+        {signatures === "checked" && <Payouts />}
+        {signatures === "checked" && <SigningFor />}
       </div>
     </dialog>
   );

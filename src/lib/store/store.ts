@@ -179,7 +179,7 @@ export class ConsoleStore {
       this.trustLost = false; // this read is the one trust regained would ask for
       void this.refresh(true);
     }
-    else {
+    else if (event.type === "attestation") {
       this.patch({ attestation: event.status });
       const trusted = event.status.kind === "mock" || event.status.kind === "verified";
       if (event.status.kind === "clock" || event.status.kind === "unverified") this.trustLost = true;

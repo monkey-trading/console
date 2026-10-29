@@ -3,7 +3,7 @@
 import { DEFAULT_TIMEFRAME, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
 import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { SignatureChecks } from "../engine/client";
-import type { HistoryEvent, MarketId, MarketView, HouseView, QueuedWithdrawal } from "../engine/types";
+import type { HistoryEvent, MarketId, MarketQuote, MarketView, HouseView, QueuedWithdrawal, SignedWithdrawal } from "../engine/types";
 import { fixedToNumber } from "../fixed";
 import { decodeHouse, decodeMarket, type AccountModel, type Eligibility, type HouseModel, type MarketModel } from "../models";
 
@@ -48,6 +48,16 @@ export interface ConsoleState {
   history: HistoryEntry[];
   feed: FeedLine[];
   toasts: ToastMessage[];
+  /** The node's executable quotes for the connected account, by market; the mock streams none and the ticket estimates. */
+  quotes: Record<MarketId, MarketQuote>;
+  /** Why the node will not quote the connected account, such as an account it has not credited yet. */
+  quoteError: string | null;
+  /** Signed withdrawal authorizations for the connected account, the latest per payout nonce. */
+  authorizations: SignedWithdrawal[];
+  /** The connected account's payout nonces the vault has paid, as its wallet's chain reads them. */
+  paid: number[];
+  /** What the wallet is asked to sign or send now, shown while it waits for the user. */
+  prompt: string | null;
   /** Whether a signed action is in flight. */
   busy: boolean;
   /** Whether the funding drawer is open. */
@@ -93,6 +103,11 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     history: [],
     feed: [],
     toasts: [],
+    quotes: {},
+    quoteError: null,
+    authorizations: [],
+    paid: [],
+    prompt: null,
     busy: false,
     fundingOpen: false,
     paused: false,

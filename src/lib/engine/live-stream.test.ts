@@ -6,7 +6,7 @@ import type { FeedStatus } from "./attestation";
 import { LiveStream, STALE_AFTER_INTERVALS } from "./live-stream";
 import { acceptAll, FakeScheduler, FakeSocket, mockAttestation, settle } from "./test-kit";
 import { NodeTrust } from "./trust";
-import type { StreamMessage } from "./types";
+import type { MarketQuote, SignedWithdrawal, StreamMessage } from "./types";
 import type { FrameConnection, Verifier } from "./verifier";
 import { realVerifier, VECTORS, vectorConnection } from "./test-vectors";
 
@@ -25,6 +25,9 @@ function setup(options: { address?: () => string; clockMs?: number; accept?: boo
   const feeds: FeedStatus[] = [];
   const problems: string[] = [];
   const opened: FrameConnection[] = [];
+  const quotes: MarketQuote[] = [];
+  const quoteErrors: string[] = [];
+  const withdrawals: SignedWithdrawal[] = [];
   // The vectors were opened with `after` first in the query; the client's own path is checked below, and the real verifier checks the vector's.
   const verifier: Verifier = options.accept
     ? acceptAll
@@ -38,8 +41,9 @@ function setup(options: { address?: () => string; clockMs?: number; accept?: boo
     openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
     scheduler, nowMs: () => options.clockMs ?? connection.frames[0]?.time ?? 0, challenge: () => connection.challenge,
     onMessage: (m) => messages.push(m), onFeed: (f) => feeds.push(f), onProblem: (p) => problems.push(p),
+    onQuote: (q) => quotes.push(q), onQuoteError: (e) => quoteErrors.push(e), onWithdrawal: (w) => withdrawals.push(w),
   });
-  return { stream, sockets, messages, feeds, problems, scheduler, opened };
+  return { stream, sockets, messages, feeds, problems, scheduler, opened, quotes, quoteErrors, withdrawals };
 }
 
 const send = (socket: FakeSocket | undefined, ...indexes: number[]) => {

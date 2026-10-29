@@ -1,6 +1,7 @@
 /** The interface the console talks to an engine node through: the in-browser mock or the live client. */
 
 import type { AttestationStatus, FeedStatus } from "./attestation";
+import type { QuoteRequest } from "./live-stream";
 import type {
   AccountView,
   Address,
@@ -10,9 +11,11 @@ import type {
   EligibilityView,
   HistoryPage,
   HouseView,
+  MarketQuote,
   MarketView,
   OrderRequest,
   Reject,
+  SignedWithdrawal,
   StreamMessage,
   WithdrawalPage,
   WithdrawalRequest,
@@ -50,7 +53,13 @@ export type ClientEvent =
   /** The node's answers now come from another enclave address than before. */
   | { type: "enclave" }
   /** Why the stream was dropped, written for the user. */
-  | { type: "problem"; reason: string };
+  | { type: "problem"; reason: string }
+  /** An executable quote for the account the console asked about. */
+  | { type: "quote"; quote: MarketQuote }
+  /** The node refused the quote request, such as for an account it has never credited. */
+  | { type: "quote_error"; error: string }
+  /** A signed withdrawal authorization the stream carried, for any account. */
+  | { type: "withdrawal"; withdrawal: SignedWithdrawal };
 
 /**
  * Whether a client checks the signatures on the node's answers: `checked` for a live client, `none`
@@ -67,6 +76,8 @@ export type SignatureChecks = "checked" | "none";
  */
 export interface EngineClient {
   readonly signatures: SignatureChecks;
+  /** The custody chain and vault every signature names. */
+  readonly deployment: { chainId: number; vault: string };
   attestation(): Promise<Attestation>;
   /** Judges the node's attestation; a live client does so again whenever the enclave changes. */
   verify(): Promise<AttestationStatus>;
@@ -82,12 +93,19 @@ export interface EngineClient {
    * derives the answer from the node's refusals, or the node offers a probe (an open decision).
    */
   accessProbe(): Promise<void>;
-  nonce(address: Address): Promise<{ next_nonce: number }>;
+  /** The account's next nonce, and the node's signed time of the answer where the client checks signatures. */
+  nonce(address: Address): Promise<{ next_nonce: number; time_ms?: number }>;
   eligibility(address: Address): Promise<EligibilityView>;
   attestEligibility(request: EligibilityRequest): Promise<ActionResult>;
   placeOrder(request: OrderRequest): Promise<ActionResult>;
   cancelOrder(request: CancelRequest): Promise<ActionResult>;
   withdraw(request: WithdrawalRequest): Promise<ActionResult>;
+  /** Asks for a fresh authorization of payout `nonce`, whose last one expired at `replacesExpiresAt` (0 if none); it arrives on the stream. */
+  reissue(account: Address, nonce: number, body: { replaces_expires_at: number; signature: string }): Promise<void>;
+  /** Payout `nonce`'s latest authorization in the log after seq `fromSeq`, or null when the log holds none yet. */
+  findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<SignedWithdrawal | null>;
+  /** Asks for the account's executable quotes in up to four markets, or for none; they arrive through `watch`. */
+  quotes(request: QuoteRequest | null): void;
   withdrawalQueue(address: Address): Promise<WithdrawalPage>;
   history(address: Address, params: { limit?: number; before?: string }): Promise<HistoryPage>;
   /** Starts at the live end of the log and delivers each message once. */

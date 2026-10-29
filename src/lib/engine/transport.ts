@@ -23,6 +23,7 @@ export interface TransportDeps {
 }
 
 const decoder = new TextDecoder();
+const encoder = new TextEncoder();
 
 function unsigned(status: number): UntrustedError {
   return new UntrustedError(`The node's answer (HTTP ${status}) was not signed by the attested enclave, so it was discarded.`);
@@ -36,11 +37,21 @@ function refusal(status: number, text: string): EngineError {
   } catch {
     body = null;
   }
-  const { error, reason } = typeof body === "object" && body !== null ? (body as { error?: unknown; reason?: unknown }) : {};
+  const { error, reason, expected } = typeof body === "object" && body !== null ? (body as { error?: unknown; reason?: unknown; expected?: unknown }) : {};
   const message = typeof error === "string" ? error : `The node answered HTTP ${status}.`;
   // The node names the region refusal in `reason`; the console's reject types mirror the engine's.
-  const reject = status === 403 && typeof reason === "string" ? ({ kind: "access", reason } as EngineError["reject"]) : null;
-  return new EngineError(status, message, reject);
+  if (status === 403 && typeof reason === "string") return new EngineError(status, message, { kind: "access", reason } as EngineError["reject"]);
+  // A signed request whose nonce is not the account's next: the node names the one it expects.
+  if (status === 409 && Number.isSafeInteger(expected)) return new EngineError(status, message, { kind: "invalid_nonce", expected: expected as number });
+  if (status === 401) return new EngineError(status, message, { kind: message === "missing signature" ? "missing_signature" : "invalid_signature" });
+  return new EngineError(status, message);
+}
+
+/** A verified answer: its parsed JSON, the node's signed time, and the log head it was answered at. */
+export interface SignedAnswer {
+  body: unknown;
+  timeMs: number;
+  seq: number | null;
 }
 
 export class SignedTransport {
@@ -54,23 +65,40 @@ export class SignedTransport {
    * - the node refuses the request in a signed answer: `EngineError`
    */
   async get(path: string): Promise<unknown> {
+    return (await this.getSigned(path)).body;
+  }
+
+  /** `get`, with the node's signed time of the answer. */
+  async getSigned(path: string): Promise<SignedAnswer> {
     const signer = await this.deps.trust.signer();
     try {
-      return await this.attempt(path, signer);
+      return await this.attempt("GET", path, null, signer);
     } catch (error) {
       if (!(error instanceof SignatureError) || !(await this.deps.trust.recheck(signer))) throw error;
       // The enclave restarted and the new attestation verified: answer the same request again under it.
-      return this.attempt(path, await this.deps.trust.signer());
+      return this.attempt("GET", path, null, await this.deps.trust.signer());
     }
   }
 
-  private async attempt(path: string, signer: string): Promise<unknown> {
+  /**
+   * `POST path` with `body` as JSON, resolving with the signed answer of a 2xx. Never sent again
+   * after an answer that does not verify: the request may have been sequenced, and the account's
+   * nonce makes a resend fail anyway.
+   * Error cases: as `get`.
+   */
+  async post(path: string, body: unknown): Promise<SignedAnswer> {
+    return this.attempt("POST", path, JSON.stringify(body), await this.deps.trust.signer());
+  }
+
+  private async attempt(method: "GET" | "POST", path: string, requestBody: string | null, signer: string): Promise<SignedAnswer> {
     const challenge = this.deps.challenge();
     let response: Response;
     let bytes: Uint8Array;
     try {
+      const headers: Record<string, string> = { [CHALLENGE_HEADER]: challenge };
+      if (requestBody !== null) headers["Content-Type"] = "application/json";
       response = await this.deps.fetch(this.deps.origin + path, {
-        headers: { [CHALLENGE_HEADER]: challenge }, cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal: this.deps.signal(),
+        method, headers, ...(requestBody === null ? {} : { body: requestBody }), cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal: this.deps.signal(),
       });
       bytes = new Uint8Array(await response.arrayBuffer());
     } catch (cause) {
@@ -79,7 +107,7 @@ export class SignedTransport {
     const header = (name: string) => response.headers.get(name);
     if (header(SIGNATURE_HEADER) === null) throw unsigned(response.status);
     const checked = this.deps.verifier().verifyResponse({
-      signer, chainId: this.deps.chainId, vault: this.deps.vault, challenge, method: "GET", pathAndQuery: path, requestBody: new Uint8Array(),
+      signer, chainId: this.deps.chainId, vault: this.deps.vault, challenge, method, pathAndQuery: path, requestBody: requestBody === null ? new Uint8Array() : encoder.encode(requestBody),
       status: response.status, signature: header(SIGNATURE_HEADER), time: header(TIME_HEADER), seq: header(SEQ_HEADER), echoedChallenge: header(CHALLENGE_HEADER), body: bytes,
     });
     if (!checked.ok) throw new SignatureError(`The node's answer did not verify: ${checked.reason}.`);
@@ -91,10 +119,13 @@ export class SignedTransport {
     this.deps.trust.clockRight();
     const text = decoder.decode(bytes);
     if (!response.ok) throw refusal(response.status, text);
+    let body: unknown;
     try {
-      return JSON.parse(text);
+      body = JSON.parse(text);
     } catch (cause) {
       throw new UntrustedError("The node's signed answer was not JSON.", { cause });
     }
+    const seq = header(SEQ_HEADER) === null ? NaN : Number(header(SEQ_HEADER));
+    return { body, timeMs: checked.response.timeMs, seq: Number.isSafeInteger(seq) ? seq : null };
   }
 }
