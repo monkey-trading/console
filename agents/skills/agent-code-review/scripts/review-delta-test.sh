@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Checks review-delta.sh on a scratch repository: a rebase onto a main that moved (also under an
+# Checks review-delta.sh and review-change.sh on a scratch repository: a rebase onto a main that moved (also under an
 # inherited diff.interHunkContext), a change that differs, a line moved between functions, a rename,
 # binary fixtures (also under a text conversion), an external diff driver, a caller in a subdirectory
-# under an inherited diff.relative, bad arguments, and failures. Prints one line
+# under an inherited diff.relative, the change added after a rebase (conflicted files included),
+# bad arguments, and failures, among them a comparison command that fails. Prints one line
 # per case and exits 1 if any case fails.
 set -euo pipefail
-script="$(cd "$(dirname "$0")" && pwd)/review-delta.sh"
+dir="$(cd "$(dirname "$0")" && pwd)"
+script=$dir/review-delta.sh change_script=$dir/review-change.sh
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 cd "$tmp"
@@ -41,6 +43,7 @@ from "$base"; { echo "// header"; echo "// header"; cat src/page.ts; } > src/pag
 main=$(commit main)
 page first; { echo "// header"; echo "// header"; cat src/page.ts; } > src/page.next && mv src/page.next src/page.ts
 rebased=$(commit rebased)
+from "$rebased"; echo "// fix" >> src/page.ts; fixed=$(commit fixed)
 from "$base"; printf '\0\1AAAA' > blob.bin; blob_a=$(commit blob-a)
 from "$base"; printf '\0\1BBBB' > blob.bin; blob_b=$(commit blob-b)
 from "$main"; printf '\0\1AAAA' > blob.bin; blob_a_on_main=$(commit blob-a-on-main)
@@ -55,6 +58,12 @@ failed=0
 check() { # name expected-exit args...
   local name=$1 want=$2 got=0; shift 2
   "$script" "$@" > "$name.out" 2> "$name.err" || got=$?
+  if [ "$got" = "$want" ]; then echo "ok   $name"; return; fi
+  echo "FAIL $name: exit $got, want $want"; failed=1
+}
+check_change() { # name expected-exit args...: review-change.sh
+  local name=$1 want=$2 got=0; shift 2
+  "$change_script" "$@" > "$name.out" 2> "$name.err" || got=$?
   if [ "$got" = "$want" ]; then echo "ok   $name"; return; fi
   echo "FAIL $name: exit $got, want $want"; failed=1
 }
@@ -87,6 +96,10 @@ has renamed-file 'new file mode' "the new file, as a rename is not detected"
 echo '*.bin diff=alike' > .git/info/attributes
 git config diff.alike.textconv "sh -c 'echo alike'"
 check binary-changed-under-textconv 1 "$base" "$blob_a" "$base" "$blob_b"
+# A comparison that fails must not pass as a valid residual.
+mkdir bin; printf '#!/bin/sh\nexit 2\n' > bin/diff; chmod +x bin/diff
+PATH="$tmp/bin:$PATH" check diff-fails 3 "$base" "$reviewed" "$base" "$edited"
+PATH="$tmp/bin:$PATH" check diff-fails-on-match 3 "$base" "$reviewed" "$base" "$reviewed"
 check bad-ref 3 "$base" no-such-ref "$base" "$reviewed"
 check too-few-arguments 2 "$base" "$reviewed" "$base"
 check too-many-arguments 2 "$base" "$reviewed" "$base" "$reviewed" extra
@@ -102,5 +115,22 @@ git config diff.relative true
 cd src
 check relative-binary-changed 1 "$base" "$blob_a" "$base" "$blob_b"
 check relative-rebase 0 "$base" "$reviewed" "$main" "$rebased"
+check_change relative-change 0 "$rebased" "$fixed"
 cd "$tmp"
+git config --unset diff.relative
+# The change after a rebase holds the added commits, not what main brought in.
+check_change change-after-rebase 0 "$rebased" "$fixed"
+grep -qx '+// fix' change-after-rebase.out || { echo "FAIL change-after-rebase: lacks the added line"; failed=1; }
+grep -q 'main' change-after-rebase.out && { echo "FAIL change-after-rebase: holds main's commit"; failed=1; }
+grep -qx '+// header' change-after-rebase.out && { echo "FAIL change-after-rebase: holds main's change"; failed=1; }
+# After a conflicted rebase the named file's new diff follows the added commits.
+check_change change-conflicted-file 0 "$rebased" "$fixed" "$main" src/page.ts
+[ "$(grep -cx '+// fix' change-conflicted-file.out)" = 2 ] ||
+  { echo "FAIL change-conflicted-file: lacks the commit or the file's diff"; failed=1; }
+check_change change-none 0 "$rebased" "$rebased"
+empty change-none
+# A reviewed head that was rebased away is not an ancestor: its range would mix in main's commits.
+check_change change-unrebased-head 3 "$reviewed" "$fixed"
+check_change change-too-few-arguments 2 "$rebased"
+check_change change-base-without-file 2 "$rebased" "$fixed" "$main"
 exit "$failed"

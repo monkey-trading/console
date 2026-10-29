@@ -69,8 +69,9 @@ matches the current action.
   production build and checks that a restricted, an allowed, and an unknown country each get the
   right page, that every page is `noindex`, and that `robots.txt` is never rewritten. The review-delta
   helper and its test sit with the review skill, in `agents/skills/agent-code-review/scripts/`
-  (`review-delta.sh` prints what changed in a PR's patch since its review loop ended; the test
-  builds a scratch git repository).
+  (`review-delta.sh` prints what changed in a PR's patch since its review loop ended,
+  `review-change.sh` the commits and conflicted files it gained since; the test builds a scratch
+  git repository).
 - **.github/workflows/** — `ci.yaml`, on every push to `main` and every PR: the `workflows` job
   lints the workflows with actionlint, which also runs shellcheck over each `run:` script; the
   `docs` job runs `scripts/check-docs.test.py`, then `scripts/check-docs.py`; the `review-delta`
