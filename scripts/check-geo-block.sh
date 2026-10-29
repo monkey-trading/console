@@ -62,6 +62,12 @@ expect_console / ZZ
 expect_console /
 expect_console / ""
 
+# A blocked visitor gets none of the console's shell, and an allowed one gets it.
+blocked_page="$(fetch / US)"
+allowed_page="$(fetch / GB)"
+if grep -q 'Mock controls' <<<"$blocked_page" || grep -q '<header' <<<"$blocked_page"; then fail "US / should carry none of the console shell"; fi
+grep -q '<header' <<<"$allowed_page" || fail "GB / should carry the console shell"
+
 # A bare "/restricted" is the page itself for everyone.
 expect_restricted /restricted US
 out="$(fetch /restricted GB)"; grep -q "$marker" <<<"$out" || fail "GB /restricted should show the page"
