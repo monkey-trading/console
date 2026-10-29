@@ -9,6 +9,7 @@ import { useConsole, useSession } from "./ConsoleProvider";
 import { EligibilityCard } from "./EligibilityCard";
 import { DepositForm } from "./DepositForm";
 import { ToastList } from "./ToastList";
+import { ToastLog } from "./ToastLog";
 import { WalletButton } from "./WalletButton";
 import { WithdrawForm } from "./WithdrawForm";
 import { WithdrawalQueue } from "./WithdrawalQueue";
@@ -54,10 +55,7 @@ export function FundingDrawer() {
         <button type="button" onClick={() => store.setFundingOpen(false)} className="min-h-11 rounded border border-line-2 px-4 py-1.5 text-caption text-fg-2 lg:min-h-0 lg:px-3 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Close</button>
       </div>
       {/* The page behind a modal is inert, so the drawer announces results itself. */}
-      <div role="status" aria-live="polite" className="sr-only">
-        {/* Keyed by message, so a result whose text repeats the last is still announced. */}
-        <p key={toasts[toasts.length - 1]?.id ?? 0}>{toasts[toasts.length - 1]?.text ?? ""}</p>
-      </div>
+      <ToastLog toasts={toasts} />
       <div className="space-y-5 p-4 lg:p-5">
         <ToastList focusId="funding-title" />
         <AccountSummary />

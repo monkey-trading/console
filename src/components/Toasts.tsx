@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { ToastList } from "./ToastList";
+import { ToastLog } from "./ToastLog";
 
 /** How long a message stays, in milliseconds. */
 const TOAST_MS = 7_000;
@@ -34,9 +35,7 @@ export function Toasts() {
   }, [latest, store, fundingOpen]);
   return (
     <>
-      <div role="log" aria-live="polite" aria-label="Notifications" className="sr-only">
-        {toasts.map((toast) => <p key={toast.id}>{toast.text}</p>)}
-      </div>
+      <ToastLog toasts={toasts} />
       <div ref={popover} popover="manual" className="fixed inset-auto bottom-[calc(var(--bar-height,var(--spacing-bar))+1rem)] left-1/2 lg:bottom-12 m-0 w-[min(26rem,calc(100vw-2rem))] -translate-x-1/2 overflow-visible border-0 bg-transparent p-0">
         <ToastList focusId="main" />
       </div>

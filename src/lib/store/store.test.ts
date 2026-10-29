@@ -152,9 +152,10 @@ describe("what the store refuses or hides", () => {
     expect(store.getSnapshot().toasts.at(-1)?.text).toContain("could not be filled and was cancelled");
     node.client.state.emit({ type: "tick" }, [{ type: "close_out", account: me, equity: "1", margin: "10" }]);
     expect(store.getSnapshot().toasts.at(-1)?.text).toContain("closed out");
-    // Another account's close-out is not the user's news.
-    const before = store.getSnapshot().toasts.length;
+    // Another account's close-out or cancelled order is not the user's news.
+    const before = store.getSnapshot().toasts;
     node.client.state.emit({ type: "tick" }, [{ type: "close_out", account: "0x2222222222222222222222222222222222222222", equity: "1", margin: "10" }]);
-    expect(store.getSnapshot().toasts).toHaveLength(before);
+    node.client.state.emit({ type: "tick" }, [{ type: "order_cancelled", account: "0x2222222222222222222222222222222222222222", order_id: 9, reason: "unfillable" }]);
+    expect(store.getSnapshot().toasts).toEqual(before);
   });
 });

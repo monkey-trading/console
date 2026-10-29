@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
 
 import { useConsole } from "./ConsoleProvider";
 
-const PHONE_PANES = [
+export const PHONE_PANES = [
   { id: "markets", label: "Markets" },
   { id: "chart", label: "Chart" },
   { id: "trade", label: "Trade" },
