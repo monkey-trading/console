@@ -33,7 +33,7 @@ export function EligibilityCard({ step }: { step: number }) {
               : "You declare, with your wallet, that you are a professional or eligible client. The node takes a first declaration once a deposit for your account is pending, a few blocks after it is mined, and credits the deposit when the declaration is recorded."}
             {" "}The declaration is recorded in the public log against your account.
           </p>
-          {signatures === "checked" && account === null && <p className="mt-2 text-label text-fg-3">Deposit first, then sign the declaration.</p>}
+          {signatures === "checked" && account === null && <p className="mt-2 text-label text-fg-3">Sign it once your deposit is pending, a few blocks after the deposit is mined.</p>}
           <fieldset className="mt-4 space-y-2">
             <legend className="sr-only">Client class</legend>
             {CLASSES.map((cls) => (

@@ -137,7 +137,11 @@ export class WalletConnectConnector implements WalletConnector {
       attempt.check();
     }
     const onUri = (uri: unknown) => {
-      if (this.attempt !== attempt) return;
+      if (this.attempt !== attempt) {
+        // The SDK published a proposal the user had already cancelled, reopening the relay socket: close it again.
+        this.closing = this.close(provider).then(() => null, (error: unknown) => error);
+        return;
+      }
       if (typeof uri === "string" && uri.startsWith("wc:")) this.publish({ status: "ready", uri });
       else attempt.cancel(new Error("WalletConnect produced a pairing link the console does not recognise."));
     };

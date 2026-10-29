@@ -41,7 +41,7 @@ class FakeClient implements EngineClient {
   async cancelOrder(): Promise<never> { throw new EngineError(501, "no"); }
   async withdraw(): Promise<never> { throw new EngineError(501, "no"); }
   async reissue(): Promise<never> { throw new EngineError(501, "no"); }
-  async findWithdrawal() { return null; }
+  async findWithdrawal() { return { withdrawal: null, complete: true }; }
   quotes() {}
   async withdrawalQueue() { return { seq: 1, queue: [], next: null }; }
   async history() { return { events: [], next: null }; }

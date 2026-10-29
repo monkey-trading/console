@@ -32,15 +32,22 @@ function position(offset: string): [number, number] {
 
 const atOrPast = (a: [number, number], b: [number, number]) => a[0] > b[0] || (a[0] === b[0] && a[1] >= b[1]);
 
+/** What a search of the log found, and whether it read to the head, so nothing later can be missing. */
+export interface ScanResult {
+  /** The latest authorization of the payout the read passed, or null. */
+  withdrawal: SignedWithdrawal | null;
+  complete: boolean;
+}
+
 /**
- * The latest authorization of `account`'s payout `nonce` after seq `fromSeq`, or null once the read
- * reaches the head a heartbeat names without one. The read goes to the head, since the node also
- * signs a payout again, unexpired, when the vault's signer rotates. When the read fails or runs out
- * of time after finding one, the latest found is the answer.
+ * Reads the log from seq `fromSeq` to the head a heartbeat names, for the latest authorization of
+ * `account`'s payout `nonce`. The read goes to the head, since the node also signs a payout again,
+ * unexpired, when the vault's signer rotates. A read that fails or runs out of time after finding one
+ * answers with it, marked incomplete.
  * Error cases:
  * - with none found: a frame is out of order or does not verify, the connection fails, or the search takes over 30 s
  */
-export function scanForWithdrawal(deps: ScanDeps, account: Address, nonce: number, fromSeq: number): Promise<SignedWithdrawal | null> {
+export function scanForWithdrawal(deps: ScanDeps, account: Address, nonce: number, fromSeq: number): Promise<ScanResult> {
   return new Promise((resolve, reject) => {
     const challenge = deps.challenge();
     const path = `/v1/stream?signed=1&challenge=${challenge}&from=${fromSeq}`;
@@ -57,7 +64,7 @@ export function scanForWithdrawal(deps: ScanDeps, account: Address, nonce: numbe
       socket.onmessage = socket.onclose = socket.onerror = null;
       socket.close();
       if (error && found === null) reject(error);
-      else resolve(found);
+      else resolve({ withdrawal: found, complete: error === null });
     };
     const timer = deps.scheduler.setTimeout(() => finish(new Error("Looking for the withdrawal's authorization in the log took too long.")), SCAN_TIMEOUT_MS);
     socket.onmessage = (event) => {

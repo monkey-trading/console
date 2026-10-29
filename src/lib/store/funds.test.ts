@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { HistoryEvent, MarketQuote, SignedWithdrawal } from "../engine/types";
 import { fixedFromInt } from "../fixed";
 import { ACCOUNT } from "../engine/wallet-kit";
-import { applyFeedEvent, syncQuotes } from "./funds";
+import { applyFeedEvent, keepLatest, syncQuotes } from "./funds";
 import { connected } from "./live-kit";
 import { payoutsOf } from "./payouts";
 import { initialState, type ConsoleState } from "./state";
@@ -47,6 +47,18 @@ describe("applyFeedEvent", () => {
   });
 });
 
+describe("keepLatest", () => {
+  const at = (epoch: number, expires: number): SignedWithdrawal => ({ ...signed(1, expires), authorization: { ...signed(1, expires).authorization, signer_epoch: epoch } as SignedWithdrawal["authorization"] });
+  it.each([
+    ["a later expiry in the same epoch", at(1, 100), at(1, 200), at(1, 200)],
+    ["an earlier expiry in the same epoch", at(1, 200), at(1, 100), at(1, 200)],
+    ["a later signer epoch, even expiring sooner", at(1, 200), at(2, 150), at(2, 150)],
+    ["an earlier signer epoch", at(2, 150), at(1, 300), at(2, 150)],
+  ])("keeps the newer authorization of a payout: %s", (_, held, arriving, kept) => {
+    expect(keepLatest([held, signed(2, 50)], arriving).find((w) => w.nonce === 1)).toEqual(kept);
+  });
+});
+
 describe("syncQuotes", () => {
   it("asks for the selected market and those held, and drops the quotes of markets it no longer asks about", async () => {
     const { client, store } = await connected();
@@ -71,11 +83,22 @@ describe("payoutsOf", () => {
       approvals: [approved(4, 70), approved(3, 60), approved(2, 50), approved(1, 40), { type: "deposited", account: ME, amount: "10", cursor: "30:0", ts: 0 }],
       authorizations: [signed(1, 900), signed(2, 1_001), signed(3, 1_000)],
     };
-    expect(payoutsOf(state).map(({ nonce, approvedSeq, status, amount }) => ({ nonce, approvedSeq, kind: status.kind, amount }))).toEqual([
-      { nonce: 4, approvedSeq: 70, kind: "waiting", amount: fixedFromInt(10) },
-      { nonce: 3, approvedSeq: 60, kind: "expired", amount: fixedFromInt(10) },
-      { nonce: 2, approvedSeq: 50, kind: "claimable", amount: fixedFromInt(10) },
-      { nonce: 1, approvedSeq: 40, kind: "paid", amount: fixedFromInt(10) },
+    expect(payoutsOf(state).map(({ nonce, searchFrom, status, amount }) => ({ nonce, searchFrom, kind: status.kind, amount }))).toEqual([
+      { nonce: 4, searchFrom: 70, kind: "waiting", amount: fixedFromInt(10) },
+      { nonce: 3, searchFrom: 60, kind: "expired", amount: fixedFromInt(10) },
+      { nonce: 2, searchFrom: 50, kind: "claimable", amount: fixedFromInt(10) },
+      { nonce: 1, searchFrom: 40, kind: "paid", amount: fixedFromInt(10) },
+    ]);
+  });
+
+  it("names a newer authorization the node signed but the page missed, and searches from where a reissue landed", () => {
+    const state: ConsoleState = {
+      ...base(), now: 1_000_000, approvals: [approved(2, 50), approved(1, 40)], authorizations: [signed(1, 900), signed(2, 900)],
+      payoutHints: { 1: { newerUntil: 1_500, searchFrom: 90 }, 2: { newerUntil: 950 } },
+    };
+    expect(payoutsOf(state).map(({ nonce, searchFrom, status }) => ({ nonce, searchFrom, status }))).toEqual([
+      { nonce: 2, searchFrom: 50, status: { kind: "expired", expiresAt: 950 } },
+      { nonce: 1, searchFrom: 90, status: { kind: "missed", expiresAt: 1_500 } },
     ]);
   });
 });

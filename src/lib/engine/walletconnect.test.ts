@@ -206,19 +206,24 @@ describe("WalletConnectConnector.cancel", () => {
     connector.cancel();
     await expect(first).rejects.toThrow("You closed the WalletConnect pairing");
     expect(states).toEqual([{ status: "preparing" }, { status: "ready", uri: URI }, { status: "idle" }]);
-    // A link the SDK reports after the cancel is not shown.
+    // A link the SDK reports after the cancel is not shown, and the relay socket its proposal reopened is closed again.
+    await settle();
+    const closed = fake.closes;
     fake.emit("display_uri", URI);
     expect(connector.pairing()).toEqual({ status: "idle" });
+    await settle();
+    expect(fake.closes).toBe(closed + 1);
 
     fake.called = deferred();
     fake.pending.resolve(session("late"));
     await settle();
     // The session the wallet approved as the user closed the pairing is ended at once, without another connect.
-    expect([fake.disconnects, fake.closes]).toEqual([1, 2]);
+    expect([fake.disconnects, fake.closes]).toEqual([1, 3]);
     fake.pending = deferred();
     const second = connector.connect();
     await fake.called.promise;
-    expect(fake.cleanups).toEqual([{ deletePairings: true }]);
+    // The cancel and the late proposal each dropped the pending pairing.
+    expect(fake.cleanups).toEqual([{ deletePairings: true }, { deletePairings: true }]);
     expect(fake.disconnects).toBe(1);
     fake.pending.resolve(session("topic-2"));
     expect((await second).address).toBe(ADDRESS.toLowerCase());

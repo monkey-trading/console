@@ -20,9 +20,21 @@ export function applyFeedEvent(state: ConsoleState, event: ClientEvent): Partial
   if (event.type === "withdrawal") {
     const signed = event.withdrawal;
     if (signed.account.toLowerCase() !== mine || signed.authorization === undefined) return null;
-    return { authorizations: [...state.authorizations.filter((w) => w.nonce !== signed.nonce), signed] };
+    return { authorizations: keepLatest(state.authorizations, signed) };
   }
   return null;
+}
+
+/**
+ * `authorizations` with `signed` in place of its payout's, unless the one held is newer: a later
+ * signer epoch, or the same epoch and a later expiry. The stream and a search of the log both arrive
+ * here, in either order.
+ */
+export function keepLatest(authorizations: readonly SignedWithdrawal[], signed: SignedWithdrawal): SignedWithdrawal[] {
+  const held = authorizations.find((w) => w.nonce === signed.nonce)?.authorization;
+  const next = signed.authorization;
+  if (held !== undefined && next !== undefined && (held.signer_epoch > next.signer_epoch || (held.signer_epoch === next.signer_epoch && held.expires_at >= next.expires_at))) return [...authorizations];
+  return [...authorizations.filter((w) => w.nonce !== signed.nonce), signed];
 }
 
 /** Applies each quote and authorization the client reports to the store; returns the unsubscribe. */

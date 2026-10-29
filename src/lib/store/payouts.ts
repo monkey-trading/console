@@ -9,8 +9,9 @@ import { reissueTypedData } from "../engine/eip712";
 import type { SignedWithdrawal } from "../engine/types";
 import { fixedFromWire, formatFixedPlaces, type Fixed } from "../fixed";
 import { domainOf, errorText, prompting, usableWallet } from "./actions";
-import { authorizationFor } from "./funds";
-import type { ConsoleState } from "./state";
+import { formatStamp } from "../time";
+import { authorizationFor, keepLatest } from "./funds";
+import type { ConsoleState, PayoutHint } from "./state";
 import type { ConsoleStore } from "./store";
 
 /** The most approvals one read of the account's history returns: the node's page limit. */
@@ -25,6 +26,8 @@ export type PayoutStatus =
   | { kind: "paid" }
   /** Signed and claimable on the vault until `expiresAt` (Unix seconds). */
   | { kind: "claimable"; withdrawal: SignedWithdrawal; expiresAt: number }
+  /** The node signed a newer authorization, valid until `expiresAt`, which the page has not seen. */
+  | { kind: "missed"; expiresAt: number }
   /** Its last authorization expired unclaimed, at `expiresAt`; a fresh one can be asked for. */
   | { kind: "expired"; expiresAt: number }
   /** Not signed yet as far as the page knows: a checkpoint covering the approval comes first. */
@@ -33,9 +36,20 @@ export type PayoutStatus =
 export interface Payout {
   nonce: number;
   amount: Fixed;
-  /** The seq of the command that approved it, where a search of the log starts. */
-  approvedSeq: number;
+  /** Where a search of the log for its latest authorization starts: the approval, or a later reissue. */
+  searchFrom: number;
   status: PayoutStatus;
+}
+
+/** Where payout `nonce` stands at node time `nowSeconds`. */
+function statusOf(state: ConsoleState, nonce: number, nowSeconds: number): PayoutStatus {
+  if (state.paid.includes(nonce)) return { kind: "paid" };
+  const signed = authorizationFor(state, nonce);
+  const held = signed?.authorization?.expires_at ?? 0;
+  const newer = state.payoutHints[nonce]?.newerUntil ?? 0;
+  if (newer > held) return newer > nowSeconds ? { kind: "missed", expiresAt: newer } : { kind: "expired", expiresAt: newer };
+  if (signed === null || held === 0) return { kind: "waiting" };
+  return held > nowSeconds ? { kind: "claimable", withdrawal: signed, expiresAt: held } : { kind: "expired", expiresAt: held };
 }
 
 /** Every unpaid payout of the account's approvals, newest first, then its newest paid ones, with where each stands at node time. */
@@ -44,35 +58,31 @@ export function payoutsOf(state: ConsoleState): Payout[] {
   const all = state.approvals.flatMap((event) => {
     if (event.type !== "withdrawal_approved") return [];
     const approvedSeq = Number(event.cursor.split(":")[0]);
-    const signed = authorizationFor(state, event.nonce);
-    const expiresAt = signed?.authorization?.expires_at ?? null;
-    const status: PayoutStatus = state.paid.includes(event.nonce)
-      ? { kind: "paid" }
-      : signed !== null && expiresAt !== null
-        ? expiresAt > nowSeconds ? { kind: "claimable", withdrawal: signed, expiresAt } : { kind: "expired", expiresAt }
-        : { kind: "waiting" };
-    return [{ nonce: event.nonce, amount: fixedFromWire(event.amount), approvedSeq, status }];
+    const searchFrom = Math.max(approvedSeq, state.payoutHints[event.nonce]?.searchFrom ?? 0);
+    return [{ nonce: event.nonce, amount: fixedFromWire(event.amount), searchFrom, status: statusOf(state, event.nonce, nowSeconds) }];
   });
   return [...all.filter((p) => p.status.kind !== "paid"), ...all.filter((p) => p.status.kind === "paid").slice(0, PAID_SHOWN)];
 }
 
 /**
- * Reads every approved withdrawal of the connected account from its history, page by page and apart
- * from the recent events, so an old unpaid one stays in reach.
+ * Reads the connected account's approved withdrawals from its history, apart from the recent events,
+ * page by page up to a budget; `older` reads on from where the last read stopped.
  */
-export async function loadApprovals(store: ConsoleStore): Promise<void> {
+export async function loadApprovals(store: ConsoleStore, older = false): Promise<void> {
   const address = store.getSnapshot().wallet?.address;
   if (address === undefined) return;
   try {
-    const approvals = [];
-    let before: string | undefined;
+    const approvals = older ? [...store.getSnapshot().approvals] : [];
+    let before = older ? (store.getSnapshot().approvalsNext ?? undefined) : undefined;
+    let next: string | null = null;
     for (let page = 0; page < APPROVAL_PAGES; page++) {
-      const { events, next } = await store.deps.client.history(address, { kind: "withdrawal_approved", limit: APPROVALS_LIMIT, ...(before === undefined ? {} : { before }) });
-      approvals.push(...events);
+      const read = await store.deps.client.history(address, { kind: "withdrawal_approved", limit: APPROVALS_LIMIT, ...(before === undefined ? {} : { before }) });
+      approvals.push(...read.events);
+      next = read.next;
       if (next === null) break;
       before = next;
     }
-    if (store.getSnapshot().wallet?.address === address) store.patch({ approvals });
+    if (store.getSnapshot().wallet?.address === address) store.patch({ approvals, approvalsNext: next });
   } catch (error) {
     store.toast("error", `Your approved withdrawals could not be read: ${errorText(error)}`);
   }
@@ -117,51 +127,61 @@ export async function claim(store: ConsoleStore, nonce: number): Promise<void> {
   }
 }
 
-/** Searches the log from the approval for payout `nonce`'s authorization. */
-export async function findAuthorization(store: ConsoleStore, nonce: number, approvedSeq: number): Promise<void> {
+/** Searches the log from `fromSeq` for payout `nonce`'s latest authorization; nothing else waits on the search. */
+export async function findAuthorization(store: ConsoleStore, nonce: number, fromSeq: number): Promise<void> {
   const address = store.getSnapshot().wallet?.address;
-  if (address === undefined) return;
-  store.patch({ busy: true });
+  if (address === undefined || store.getSnapshot().searching !== null) return;
+  store.patch({ searching: nonce });
   try {
-    const found = await store.deps.client.findWithdrawal(address, nonce, approvedSeq);
+    const { withdrawal, complete } = await store.deps.client.findWithdrawal(address, nonce, fromSeq);
     const state = store.getSnapshot();
     if (state.wallet?.address !== address) return;
-    if (found === null || found.authorization === undefined) store.toast("info", "The log holds no authorization for this withdrawal yet. The node signs one once a checkpoint covering the approval is confirmed on chain; it then arrives here.");
-    else store.patch({ authorizations: [...state.authorizations.filter((w) => w.nonce !== nonce), found] });
+    if (withdrawal?.authorization !== undefined) store.patch({ authorizations: keepLatest(state.authorizations, withdrawal) });
+    if (!complete) store.toast("info", "The search of the log stopped before reaching its end, so a newer authorization may still be there. Search again to read on.");
+    else if (withdrawal?.authorization === undefined) store.toast("info", "The log holds no authorization for this withdrawal yet. The node signs one once a checkpoint covering the approval is confirmed on chain; it then arrives here.");
   } catch (error) {
     store.toast("error", errorText(error));
   } finally {
-    store.patch({ busy: false });
+    store.patch({ searching: null });
   }
 }
 
-/** The node's refusal of a reissue that names an older authorization than its latest (`reissue.rs`, `Reissue::Stale`). */
-const NEWER_EXISTS = "the latest authorization expires at";
+/** The node's refusal of a reissue that names an older authorization than its latest, with that one's expiry (`reissue.rs`, `Reissue::Stale`). */
+const NEWER_EXISTS = /^the latest authorization expires at (\d+)/;
+
+/** Records what the page learnt of payout `nonce`'s authorizations. */
+function hint(store: ConsoleStore, nonce: number, learnt: PayoutHint): void {
+  const hints = store.getSnapshot().payoutHints;
+  store.patch({ payoutHints: { ...hints, [nonce]: { ...hints[nonce], ...learnt } } });
+}
 
 /**
  * Asks the node to sign payout `nonce` again, replacing the authorization that expired at
- * `expiresAt`. When the node has signed a newer one the page missed, it looks for that in the log
- * from `approvedSeq` instead.
+ * `expiresAt`, and keeps where in the log the new one will land. When the node names a newer one the
+ * page missed, an expired one is replaced in turn, and an unexpired one is searched for from `fromSeq`.
  */
-export async function reissue(store: ConsoleStore, nonce: number, expiresAt: number, approvedSeq: number): Promise<void> {
+export async function reissue(store: ConsoleStore, nonce: number, expiresAt: number, fromSeq: number, retried = false): Promise<void> {
   const wallet = usableWallet(store, "sign");
   if (!wallet) return;
   store.patch({ busy: true });
+  let newer: number | null = null;
   try {
     const typed = reissueTypedData(domainOf(store), wallet.address, nonce, expiresAt);
     const summary = `ask for a new authorization of withdrawal ${nonce}`;
     const signature = await prompting(store, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
-    await store.deps.client.reissue(wallet.address, nonce, { replaces_expires_at: expiresAt, signature });
+    const { seq } = await store.deps.client.reissue(wallet.address, nonce, { replaces_expires_at: expiresAt, signature });
+    if (seq !== null) hint(store, nonce, { searchFrom: seq });
     store.toast("ok", "Requested. The new authorization arrives here once the node signs it.");
   } catch (error) {
-    if (error instanceof EngineError && error.status === 400 && error.message.startsWith(NEWER_EXISTS)) {
-      store.patch({ busy: false });
-      store.toast("info", "The node has signed a newer authorization for this withdrawal; looking for it in the log.");
-      await findAuthorization(store, nonce, approvedSeq);
-      return;
-    }
-    if (!store.noteAccess(error)) store.toast("error", errorText(error));
+    const stale = error instanceof EngineError && error.status === 400 ? NEWER_EXISTS.exec(error.message) : null;
+    if (stale?.[1] !== undefined) newer = Number(stale[1]);
+    else if (!store.noteAccess(error)) store.toast("error", errorText(error));
   } finally {
     store.patch({ busy: false });
   }
+  if (newer === null) return;
+  hint(store, nonce, { newerUntil: newer });
+  if (newer * 1000 <= store.getSnapshot().now && !retried) return reissue(store, nonce, newer, fromSeq, true);
+  store.toast("info", `The node has signed a newer authorization for this withdrawal, valid until ${formatStamp(newer * 1000)} UTC; looking for it in the log.`);
+  await findAuthorization(store, nonce, fromSeq);
 }

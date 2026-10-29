@@ -25,6 +25,14 @@ export interface FeedLine {
 
 export type HistoryEntry = HistoryEvent;
 
+/** Where a payout's newest authorization lies when the page has not seen it. */
+export interface PayoutHint {
+  /** The log head when the node took a reissue request, past which the new authorization lands. */
+  searchFrom?: number;
+  /** The expiry (Unix seconds) of an authorization the node says it signed, newer than any the page holds. */
+  newerUntil?: number;
+}
+
 export interface ConsoleState {
   /** The node's clock: the stamp of the latest message. */
   now: number;
@@ -58,6 +66,12 @@ export interface ConsoleState {
   authorizations: SignedWithdrawal[];
   /** The connected account's approved withdrawals, newest first, read apart from its recent history so none drops out of reach. */
   approvals: HistoryEvent[];
+  /** The cursor of the next page of older approvals, when the reads so far stopped short of them. */
+  approvalsNext: string | null;
+  /** What the page knows of a payout's authorizations beyond the one it holds, by payout nonce. */
+  payoutHints: Record<number, PayoutHint>;
+  /** The payout nonce whose authorization the log is being searched for. */
+  searching: number | null;
   /** The connected account's payout nonces the vault has paid, as its wallet's chain reads them. */
   paid: number[];
   /** What the wallet is asked to sign or send now, shown while it waits for the user. */
@@ -112,6 +126,9 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     quoted: [],
     authorizations: [],
     approvals: [],
+    approvalsNext: null,
+    payoutHints: {},
+    searching: null,
     paid: [],
     prompt: null,
     busy: false,

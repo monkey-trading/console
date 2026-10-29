@@ -121,3 +121,52 @@ describe("authorizations", () => {
     expect(store.getSnapshot()).toMatchObject({ busy: false });
   });
 });
+
+describe("recovering a missed authorization", () => {
+  it("replaces in turn a newer authorization the node names when it has expired too, signing over its expiry", async () => {
+    const { client, store } = await connected();
+    store.patch({ now: 1_800_000_000_000 });
+    let answered = 0;
+    client.answer = () => {
+      answered += 1;
+      if (answered === 1) throw new EngineError(400, "the latest authorization expires at 1700086400, not the one replaced");
+      return { seq: 1, events: [] };
+    };
+    await reissue(store, 3, 1_700_000_000, 40);
+    expect(client.posted.map((p) => (p.body as { replaces_expires_at: number }).replaces_expires_at)).toEqual([1_700_000_000, 1_700_086_400]);
+    expect(store.getSnapshot().payoutHints[3]).toEqual({ newerUntil: 1_700_086_400, searchFrom: 77 });
+  });
+
+  it("searches from where a reissue landed, and keeps an authorization the page holds when the search returns an older one", async () => {
+    const { client, store } = await connected();
+    store.patch({ approvals: [approved(3, 40)] });
+    await reissue(store, 3, 1_700_000_000, 40);
+    expect(payoutsOf(store.getSnapshot())[0]?.searchFrom).toBe(77);
+    store.patch({ authorizations: [signed(3, 2_000_000_000)] });
+    client.found = signed(3, 1_900_000_000);
+    await findAuthorization(store, 3, 77);
+    expect(client.searches).toEqual([77]);
+    expect(store.getSnapshot().authorizations).toEqual([signed(3, 2_000_000_000)]);
+  });
+
+  it("says when a search stopped before the end of the log, and holds the payout's search, not the signing flag", async () => {
+    const { client, store } = await connected();
+    client.found = signed(1, 2_000_000_000);
+    client.complete = false;
+    const searching = findAuthorization(store, 1, 40);
+    expect(store.getSnapshot()).toMatchObject({ searching: 1, busy: false });
+    await searching;
+    expect(store.getSnapshot()).toMatchObject({ searching: null, authorizations: [signed(1, 2_000_000_000)] });
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The search of the log stopped before reaching its end, so a newer authorization may still be there. Search again to read on.");
+  });
+
+  it("keeps the cursor of older approvals past the page budget, and reads on from it", async () => {
+    const { client, store } = await connected();
+    client.historyPages = Object.fromEntries(Array.from({ length: 21 }, (_, i) => [i === 0 ? "" : `${100 - i}:0`, { events: [approved(100 - i, 100 - i)], next: `${99 - i}:0` }]));
+    await loadApprovals(store);
+    expect(store.getSnapshot().approvals).toHaveLength(20);
+    expect(store.getSnapshot().approvalsNext).toBe("80:0");
+    await loadApprovals(store, true);
+    expect(store.getSnapshot().approvals).toHaveLength(21);
+  });
+});

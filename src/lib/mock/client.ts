@@ -161,12 +161,12 @@ export class MockEngineClient implements EngineClient {
   }
 
   /** The mock pays approved withdrawals itself, so it signs no authorization to reissue or find. */
-  async reissue(): Promise<void> {
+  async reissue(): Promise<never> {
     throw new EngineError(404, "not found");
   }
 
-  async findWithdrawal(): Promise<null> {
-    return null;
+  async findWithdrawal(): Promise<{ withdrawal: null; complete: true }> {
+    return { withdrawal: null, complete: true };
   }
 
   /** The mock streams no executable quotes; the ticket shows its own estimate. */

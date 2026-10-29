@@ -2,13 +2,13 @@
 
 import type { AttestationStatus, FeedStatus } from "./attestation";
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks, type Unsubscribe } from "./client";
-import { scanForWithdrawal } from "./live-scan";
+import { scanForWithdrawal, type ScanResult } from "./live-scan";
 import { LiveStream, type QuoteRequest, type Scheduler, type Socket } from "./live-stream";
 import { SignedTransport } from "./transport";
 import { NodeTrust } from "./trust";
 import type {
   AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, MarketView, OrderRequest,
-  SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest,
+  StreamMessage, WithdrawalPage, WithdrawalRequest,
 } from "./types";
 import type { Verifier } from "./verifier";
 import { newChallenge } from "./wire";
@@ -201,11 +201,12 @@ export class LiveEngineClient implements EngineClient {
     return this.action("/v1/withdrawals", request);
   }
 
-  async reissue(account: Address, nonce: number, body: { replaces_expires_at: number; signature: string }): Promise<void> {
-    await this.transport.post(`/v1/accounts/${account}/withdrawals/${nonce}/reissue`, body);
+  async reissue(account: Address, nonce: number, body: { replaces_expires_at: number; signature: string }): Promise<{ seq: number | null }> {
+    const answer = await this.transport.post(`/v1/accounts/${account}/withdrawals/${nonce}/reissue`, body);
+    return { seq: answer.seq };
   }
 
-  async findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<SignedWithdrawal | null> {
+  async findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<ScanResult> {
     const signer = await this.trust.signer();
     return scanForWithdrawal({ ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) }, account, nonce, fromSeq);
   }
