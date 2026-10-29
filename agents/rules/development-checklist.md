@@ -226,7 +226,7 @@ When: `src/app/layout.tsx`, metadata files, `robots.ts`, `sitemap.ts`, the title
 - Are the Open Graph and Twitter images 1200 × 630 with an `.alt.txt` each, and does their text
   match the page and follow section 12?
 - Is the heading structure semantic, with link text that names its destination, `lang` set, and no
-  `noindex` left behind?
+  `noindex` beyond the console's deliberate one (root layout, `X-Robots-Tag`, `robots.ts`)?
 - Is there no tool, generator, or AI attribution in metadata?
 
 ## 12. Public copy

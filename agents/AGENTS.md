@@ -13,7 +13,7 @@ matches the current action.
 ## Structure
 
 - **src/app/** — the App Router: `layout.tsx` (fonts through `next/font`, the `metadata` and
-  `viewport` exports, the provider and shell), `page.tsx` (the one screen), `globals.css` (Tailwind
+  `viewport` exports, and the robots meta tag), `robots.ts` (disallow all) with its test, `restricted/page.tsx` (the static page the edge geo-block rewrites a restricted country's requests to), `(console)/` (the route group whose layout holds the provider and shell, and the one screen), `globals.css` (Tailwind
   CSS 4 `@theme` tokens shared with the website's design language, and the reduced-motion rule),
   and the icons.
 - **src/components/** — the terminal. `ConsoleProvider` creates the session, connects the demo account
@@ -26,7 +26,7 @@ matches the current action.
   `MockControls` drive the mock.
 - **public/** — the supplied logo bitmap, served from the app's own origin; `Logo.tsx` frames it.
 - **src/lib/** — pure TypeScript with no React or DOM. Logic modules have adjacent `*.test.ts`:
-  `site.ts` holds identity and `siteUrl()`, the one environment-variable reader; `fixed.ts` is the
+  `site.ts` holds identity and `siteUrl()`, the one environment-variable reader; `geo-block.ts` holds the restricted countries (a placeholder until counsel's list) and builds the geo-block rewrite from them; `fixed.ts` is the
   engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `bars.ts` (marks into bars per timeframe) and
   `vault.ts` (deposit bounds, the withdrawable amount) and `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
   margin and market-hours rules and the ticket preview; `models.ts` and `messages.ts` decode and
@@ -38,7 +38,7 @@ matches the current action.
   and the user's actions. `mock/` is the in-browser node (state, orders, fills, close-out, funds and
   the first-in first-out withdrawal queue, the clock step, the demo account's backstory in `demo.ts`, and the controls the mock build exposes).
 - **next.config.ts** — the security headers on every path (a CSP without nonces, nosniff, referrer,
-  frame, opener, and permissions policies), `reactStrictMode`, `poweredByHeader: false`, and
+  frame, opener, and permissions policies), `reactStrictMode`, `poweredByHeader: false`, the geo-block `beforeFiles` rewrite, and
   `agentRules: false`, so `next dev` leaves this index alone, and `devIndicators: false`, so its
   overlay does not cover the terminal.
 - **eslint.config.mjs** — ESLint flat config: `@eslint/js`, `typescript-eslint`, `react-hooks`, and
@@ -50,11 +50,14 @@ matches the current action.
 - **scripts/** — `check-docs.py`, run by CI's `docs` job: every relative Markdown link under
   `agents/` and in the root `*.md` files resolves to a file or directory in the repository, and the
   root `AGENTS.md` and `CLAUDE.md`, when present, are symlinks to `agents/AGENTS.md`; its test is
-  `check-docs.test.py`.
+  `check-docs.test.py`; and `check-geo-block.sh`, run by CI's `geo-block` job, which serves a
+  production build and checks that a restricted, an allowed, and an unknown country each get the
+  right page, that every page is `noindex`, and that `robots.txt` is never rewritten.
 - **.github/workflows/** — `ci.yaml`, on every push to `main` and every PR: the `workflows` job
   lints the workflows with actionlint, which also runs shellcheck over each `run:` script; the
   `docs` job runs `scripts/check-docs.test.py`, then `scripts/check-docs.py`; and the `lint`,
-  `typecheck`, `test`, and `build` jobs run the app's checks after `npm ci`, and `audit` runs
+  `typecheck`, `test`, and `build` jobs run the app's checks after `npm ci`, the `geo-block` job
+  builds and runs `scripts/check-geo-block.sh`, and `audit` runs
   `npm audit` against the lockfile. Actions are pinned by commit SHA. `ci-passed` is the one CI
   check branch rules require: it passes only when every other job succeeded, so each new job must
   be added to its `needs`. The first job to fail cancels the whole run: every job but `ci-passed` ends with an
@@ -88,6 +91,8 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
 - Security headers of the production build: `curl -sI http://localhost:<port>/` on the port the
   `npm start` log reports
 - Supply chain: `npm audit --audit-level=high`
+- Geo-block check (after `npm run build`; serves it on port 3217 or the one given):
+  `scripts/check-geo-block.sh [port]`
 - Docs check: `python3 scripts/check-docs.py`; its test: `python3 scripts/check-docs.test.py`
 - Workflow lint: `actionlint`, at the version `.github/workflows/ci.yaml` pins
 
@@ -112,6 +117,13 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   owner to settle: a base quote spread per market (`src/lib/engine/meta.ts`), and a funding order of
   eligibility declaration before the first deposit, where the engine admits a never-credited
   account's declaration only after a deposit is pending.
+- **Restricted regions are blocked at the edge.** A `beforeFiles` rewrite in `next.config.ts`,
+  built from `src/lib/geo-block.ts`, sends requests from the listed countries to the static
+  `/restricted` page; an unknown country is allowed, and the engine node's refusal stays the
+  enforcement. The list is a placeholder (the US and its territories) until counsel supplies it;
+  changing it is a reviewed change. The whole console is `noindex` by the owner's decision: the
+  root layout's robots meta tag, an `X-Robots-Tag` header in `next.config.ts`, and `robots.ts`. Blocked visitors run the root layout but not the `(console)` layout, so the root layout stays free of the provider, wallet and
+  engine code.
 - **The engine is the source of truth.** Every number, rule, and message the app shows about the
   engine matches the engine's README and its decision issues.
 - **Private by construction.** No analytics, cookies, browser storage, trackers, third-party

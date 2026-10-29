@@ -6,9 +6,6 @@ import type { ReactNode } from "react";
 
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, siteUrl } from "@/lib/site";
 
-import { ConsoleProvider } from "@/components/ConsoleProvider";
-import { Shell } from "@/components/Shell";
-
 import "./globals.css";
 
 const mono = Geist_Mono({
@@ -22,6 +19,7 @@ export const metadata: Metadata = {
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
+  robots: { index: false, follow: false },
   alternates: { canonical: "/" },
   openGraph: { type: "website", url: "/", siteName: SITE_NAME, title: SITE_TITLE, description: SITE_DESCRIPTION },
   twitter: { card: "summary", title: SITE_TITLE, description: SITE_DESCRIPTION },
@@ -37,11 +35,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={mono.variable}>
-      <body className="min-h-dvh antialiased">
-        <ConsoleProvider>
-          <Shell>{children}</Shell>
-        </ConsoleProvider>
-      </body>
+      <body className="min-h-dvh antialiased">{children}</body>
     </html>
   );
 }

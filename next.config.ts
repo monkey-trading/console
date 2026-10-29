@@ -1,6 +1,8 @@
-/** Next.js configuration: security headers and static-rendering options. */
+/** Next.js configuration: security headers, the geo-block rewrite, and static-rendering options. */
 
 import type { NextConfig } from "next";
+
+import { geoBlockRewrites } from "./src/lib/geo-block";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -29,6 +31,8 @@ const securityHeaders = [
     value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()",
   },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  // The console is not for search indexes; the root layout sets the matching robots meta tag.
+  { key: "X-Robots-Tag", value: "noindex, nofollow" },
 ];
 
 const nextConfig: NextConfig = {
@@ -39,6 +43,10 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
+  },
+  // Matched before files, at the edge, so a blocked visitor is served the restricted page alone.
+  async rewrites() {
+    return { beforeFiles: geoBlockRewrites() };
   },
 };
 
