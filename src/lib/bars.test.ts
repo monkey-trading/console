@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { MAX_BARS, pushTick, secondsOf, seedBars, TIMEFRAMES } from "./bars";
+import { type Bar, MAX_BARS, pushTick, rolledRange, secondsOf, seedBars, TIMEFRAMES } from "./bars";
 
 const MIN = 60;
 const at = (seconds: number) => seconds * 1000;
@@ -57,5 +57,35 @@ describe("seedBars", () => {
     const live = pushTick(seeded, at(1_000_020), 101, 300);
     expect(live).toHaveLength(seeded.length);
     expect(live[live.length - 1]?.close).toBe(101);
+  });
+});
+
+describe("rolledRange", () => {
+  const series = (firstTime: number, count: number): Bar[] =>
+    Array.from({ length: count }, (_, i) => ({ time: firstTime + i * MIN, open: 1, high: 1, low: 1, close: 1 }));
+  const before = series(0, MAX_BARS);
+  const lastTime = before[MAX_BARS - 1]?.time ?? 0;
+  // The oldest bar rolled off and one opened: the same count, every bar one index lower.
+  const after = series(MIN, MAX_BARS);
+
+  it("keeps a panned view on the same bars, so its offset from the newest bar grows by the bars dropped", () => {
+    expect(rolledRange({ from: 300, to: 400 }, MAX_BARS, lastTime, after)).toEqual({ from: 299, to: 399 });
+  });
+
+  it("keeps the offset right of the newest bar when the view shows it", () => {
+    expect(rolledRange({ from: 404, to: 524 }, MAX_BARS, lastTime, after)).toEqual({ from: 404, to: 524 });
+    expect(rolledRange({ from: 399, to: 499 }, MAX_BARS, lastTime, after)).toEqual({ from: 399, to: 499 });
+  });
+
+  it("follows the newest bar while the series is still growing", () => {
+    expect(rolledRange({ from: 50, to: 154 }, 150, 149 * MIN, series(0, 151))).toEqual({ from: 51, to: 155 });
+  });
+
+  it("follows each bar that opened when several rolled in at once", () => {
+    expect(rolledRange({ from: 300, to: 400 }, MAX_BARS, lastTime, series(2 * MIN, MAX_BARS))).toEqual({ from: 298, to: 398 });
+  });
+
+  it("gives nothing when the bar the view ended at is gone", () => {
+    expect(rolledRange({ from: 300, to: 400 }, MAX_BARS, lastTime, series(1_000 * MIN, MAX_BARS))).toBeNull();
   });
 });

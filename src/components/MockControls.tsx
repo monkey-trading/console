@@ -2,7 +2,7 @@
 
 /** The mock build's controls: push the simulated node into each state the screens must handle. */
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { fixedFromInt } from "@/lib/fixed";
 import type { Region } from "@/lib/mock/state";
@@ -10,6 +10,7 @@ import { MAX_STRESS } from "@/lib/pricing";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { Select } from "./Select";
+import { useEscapeClose } from "./use-escape-close";
 
 const REGIONS = [
   { value: "allowed", label: "Allowed region" },
@@ -30,18 +31,10 @@ export function MockControls() {
   const id = useId();
   const toggle = useRef<HTMLButtonElement>(null);
   const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      // Only an Escape from inside the panel (or its toggle) counts, so a drawer opened over it keeps its own.
-      if (event.key !== "Escape" || event.defaultPrevented || !(event.target instanceof Node && root.current?.contains(event.target))) return;
-      event.preventDefault();
-      setOpen(false);
-      toggle.current?.focus();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  useEscapeClose(open, root, () => {
+    setOpen(false);
+    toggle.current?.focus();
+  });
   const market = markets.find((m) => m.id === selected);
   const { controls } = node;
   const haltedNow = market ? node.client.state.markets.get(market.id)?.halted === true : false;

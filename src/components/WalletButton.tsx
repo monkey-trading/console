@@ -8,6 +8,7 @@ import { shortHex } from "@/lib/format";
 import { connectWallet, disconnectWallet } from "@/lib/store/actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
+import { useEscapeClose } from "./use-escape-close";
 
 const BUTTON = "min-h-11 rounded border border-edge px-2.5 py-2 sm:px-3 lg:min-h-0 text-caption text-fg hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
 
@@ -24,17 +25,10 @@ export function WalletButton() {
     if (moved.current) primary.current?.focus();
     moved.current = false;
   }, [wallet]);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented || !(event.target instanceof Node && root.current?.contains(event.target))) return;
-      event.preventDefault();
-      setOpen(false);
-      primary.current?.focus();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  useEscapeClose(open, root, () => {
+    setOpen(false);
+    primary.current?.focus();
+  });
   if (wallet) {
     return (
       <div className="flex items-center gap-2">

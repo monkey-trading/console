@@ -71,3 +71,26 @@ export function seedBars(seed: number, endMs: number, endPrice: number, seconds:
     return { time: end - (closes.length - 1 - i) * seconds, open, close, high: Math.max(open, close) + wick, low: Math.min(open, close) - wick };
   });
 }
+
+/** A range of bar indices, as the chart reports its visible window; the ends may be fractional. */
+export interface LogicalRange {
+  from: number;
+  to: number;
+}
+
+/**
+ * The window to show after the oldest bar rolled off, so the view keeps its width and its offset
+ * from the newest bar. A view that shows the newest bar follows it (its indices move with the
+ * count); any other view stays on the same bars, which moved down the index by the bars dropped.
+ * It is `null` when the newest bar the old view held is gone, and the chart keeps its own window.
+ */
+export function rolledRange(range: LogicalRange, previousCount: number, previousLastTime: number, bars: readonly Bar[]): LogicalRange | null {
+  const previousLast = previousCount - 1;
+  let shift = bars.length - previousCount;
+  if (range.to < previousLast) {
+    const moved = bars.findIndex((b) => b.time === previousLastTime);
+    if (moved < 0) return null;
+    shift = moved - previousLast;
+  }
+  return { from: range.from + shift, to: range.to + shift };
+}

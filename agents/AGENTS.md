@@ -22,13 +22,13 @@ matches the current action.
   Charts in the browser), `OrderTicket` (which remounts `DealTicket` per market: order type, side, best bid and offer, size,
   Advanced, and `MarketInfo`) and `BottomPanel` (`PositionsView`, `OrdersView`, `HistoryList`, activity) side by side, and below 1024 px shows one of them at a time, chosen from `PhoneNav`'s bar at the foot (positions and orders are cards there, and the funding drawer fills the screen); `FundingDrawer` holds
   `EligibilityCard`, `DepositForm`, `WithdrawForm`, `WithdrawalQueue` and `AccountSummary`;
-  `Select` is the console's accessible select; `keep-focus.ts` keeps focus on the tab panel when an action removes a button; `AccessGate` shows the geo-block; `WalletButton` and
+  `ToastLog` is the screen-reader log of results, used by `Toasts` and the drawer; `Select` is the console's accessible select; `keep-focus.ts` keeps focus on the tab panel when an action removes a button; `use-escape-close.ts` closes the wallet menu and mock panel on Escape, including after a Safari pointer click; `TradeWorkspace` remembers the pane that held focus and shows it when the layout narrows; `AccessGate` shows the geo-block; `WalletButton` and
   `MockControls` drive the mock.
 - **public/** — the supplied logo bitmap, served from the app's own origin; `Logo.tsx` frames it.
 - **src/lib/** — pure TypeScript with no React or DOM. Logic modules have adjacent `*.test.ts`:
   `site.ts` holds identity and `siteUrl()`, the one environment-variable reader; `geo-block.ts` holds the restricted countries (a placeholder until counsel's list) and builds the geo-block rewrite from them; `fixed.ts` is the
-  engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `bars.ts` (marks into bars per timeframe) and
-  `vault.ts` (deposit bounds, the withdrawable amount) and `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
+  engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `bars.ts` (marks into bars per timeframe, and the chart's view when the oldest bar rolls off) and
+  `vault.ts` (deposit bounds, the withdrawable amount) and `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `escape.ts` says which Escape presses close a popup; `panes.ts` picks the workspace pane that keeps the user's focus when the layout narrows; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
   margin and market-hours rules and the ticket preview; `models.ts` and `messages.ts` decode and
   describe engine data; `build.ts` says whether this build accepts the mock attestation.
   `engine/` holds the node's wire shapes (`types.ts`), the display facts the console keeps per

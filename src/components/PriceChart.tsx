@@ -9,7 +9,7 @@
 import type { IChartApi, IPriceLine, ISeriesApi, LineStyle as LineStyleEnum } from "lightweight-charts";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { Bar } from "@/lib/bars";
+import { rolledRange, type Bar } from "@/lib/bars";
 import { formatPrice } from "@/lib/price-format";
 import { formatStamp } from "@/lib/time";
 
@@ -42,6 +42,8 @@ interface Live {
   count: number;
   /** The time of the first bar loaded, so a series that dropped its oldest bar reloads. */
   first: number;
+  /** The time of the last bar loaded, which anchors the user's view when the oldest bar rolls off. */
+  last: number;
 }
 
 const VISIBLE_BARS = 100;
@@ -96,7 +98,7 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
       });
       // The attribution link opens another site in a new tab; it gets the same rel as every other such link.
       for (const link of el.querySelectorAll("a")) link.rel = "noopener noreferrer";
-      live.current = { chart, series, lineStyle: LineStyle, lines: [], key: "", count: 0, first: 0 };
+      live.current = { chart, series, lineStyle: LineStyle, lines: [], key: "", count: 0, first: 0, last: 0 };
       dispose = () => chart.remove();
       setReady((n) => n + 1);
     }).catch(() => {
@@ -123,19 +125,16 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
       // The oldest retained bar rolled off: reload the data but keep the user's pan and zoom.
       const scale = c.chart.timeScale();
       const logical = scale.getVisibleLogicalRange();
-      const view = scale.getVisibleRange();
       c.series.setData(bars.map(toData));
-      if (logical && logical.to >= c.count - 1) {
-        // The user was at the live edge: keep following it at the same zoom.
-        const width = logical.to - logical.from;
-        scale.setVisibleLogicalRange({ from: bars.length + 4 - width, to: bars.length + 4 });
-      } else if (view) scale.setVisibleRange(view);
+      const next = logical && rolledRange(logical, c.count, c.last, bars);
+      if (next) scale.setVisibleLogicalRange(next);
     } else {
       c.series.update(toData(last));
     }
     c.key = seriesKey;
     c.count = bars.length;
     c.first = bars[0]?.time ?? 0;
+    c.last = last.time;
   }, [ready, bars, seriesKey, places]);
 
   useEffect(() => {
