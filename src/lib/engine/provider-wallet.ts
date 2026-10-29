@@ -5,7 +5,7 @@
  * through the same provider, so nothing but the wallet's own chain provider sees them.
  */
 
-import { decodeFunctionResult, encodeFunctionData, parseAbi, recoverTypedDataAddress, serializeTypedData, type Hex } from "viem";
+import { decodeFunctionResult, encodeFunctionData, getTypesForEIP712Domain, parseAbi, recoverTypedDataAddress, serializeTypedData, type Hex } from "viem";
 
 import { fixedFromWire, type Fixed } from "../fixed";
 import { isWholeUsdc, USDC_UNIT } from "../vault";
@@ -124,7 +124,9 @@ export class ProviderWallet implements Wallet {
     await this.ensureChain();
     let signature: Hex;
     try {
-      const raw = await this.provider.request({ method: "eth_signTypedData_v4", params: [this.address, serializeTypedData(viemTyped(request.typed))] });
+      // A wallet hashes the domain with the `EIP712Domain` fields the typed data lists, and viem serializes only those.
+      const withDomain = { ...request.typed, types: { EIP712Domain: getTypesForEIP712Domain({ domain }), ...request.typed.types } };
+      const raw = await this.provider.request({ method: "eth_signTypedData_v4", params: [this.address, serializeTypedData(viemTyped(withDomain))] });
       signature = normaliseSignature(String(raw));
     } catch (error) {
       throw walletError(error, "sign");
