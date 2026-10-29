@@ -20,7 +20,7 @@ const ATTESTATIONS = [
   { value: "mock", label: "Mock quote (accepted in this build)" },
   { value: "unverifiable", label: "Hardware quote (cannot be verified)" },
 ] as const;
-const BUTTON = "rounded border border-line-2 px-2 py-1.5 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
+const BUTTON = "min-h-11 min-w-11 rounded border border-line-2 px-2 py-1.5 lg:min-h-0 lg:min-w-0 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
 
 export function MockControls() {
   const { node, store } = useSession();
@@ -43,8 +43,8 @@ export function MockControls() {
   };
   return (
     <div className="relative">
-      <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} className="rounded border border-amber/60 px-3 py-2 text-label tracking-caps text-amber uppercase focus-visible:outline-2 focus-visible:outline-glow">
-        Mock controls
+      <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} className="min-h-11 rounded border border-amber/60 px-2.5 py-2 sm:px-3 lg:min-h-0 text-label tracking-caps text-amber uppercase focus-visible:outline-2 focus-visible:outline-glow">
+        Mock<span className="max-sm:sr-only"> controls</span>
       </button>
       {open && (
         <div id={id} className="fixed inset-x-4 top-24 z-50 max-h-[calc(100dvh-7rem)] space-y-4 overflow-y-auto sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-80 rounded border border-line-2 bg-ink-2 p-4 text-caption shadow-platform">

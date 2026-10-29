@@ -20,12 +20,12 @@ const KINDS = [
   { value: "limit", label: "Limit" },
   { value: "stop", label: "Stop" },
 ] as const;
-const INPUT = "mt-1 w-full rounded border border-edge bg-ink px-2 py-2 text-data text-fg focus-visible:outline-2 focus-visible:outline-glow";
+const INPUT = "mt-1 min-h-11 w-full rounded border border-edge bg-ink px-2 py-2 text-base text-fg lg:min-h-0 lg:text-data focus-visible:outline-2 focus-visible:outline-glow";
 
 /** Opens the funding drawer. */
 function FundingLink() {
   const { store } = useSession();
-  return <button type="button" onClick={() => store.setFundingOpen(true)} className="text-glow underline focus-visible:outline-2 focus-visible:outline-glow">Open funding</button>;
+  return <button type="button" onClick={() => store.setFundingOpen(true)} className="-my-3 inline-block py-3 text-glow underline focus-visible:outline-2 focus-visible:outline-glow lg:my-0 lg:py-0">Open funding</button>;
 }
 
 /** The deal ticket for the selected market; `OrderTicket` remounts it per market so no typed value carries over. */
@@ -69,8 +69,8 @@ export function DealTicket() {
         )}
         <fieldset className="mt-4 grid grid-cols-2 gap-2">
           <legend className="sr-only">Side</legend>
-          <button type="button" aria-pressed={side === "buy"} onClick={() => setSide("buy")} className={`rounded border py-2.5 text-caption focus-visible:outline-2 focus-visible:outline-glow ${side === "buy" ? "border-glow bg-glow/10 text-glow" : "border-line-2 text-fg-2"}`}>Buy / Long</button>
-          <button type="button" aria-pressed={side === "sell"} onClick={() => setSide("sell")} className={`rounded border py-2.5 text-caption focus-visible:outline-2 focus-visible:outline-ember ${side === "sell" ? "border-ember bg-ember/10 text-ember" : "border-line-2 text-fg-2"}`}>Sell / Short</button>
+          <button type="button" aria-pressed={side === "buy"} onClick={() => setSide("buy")} className={`min-h-11 rounded border py-2.5 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow ${side === "buy" ? "border-glow bg-glow/10 text-glow" : "border-line-2 text-fg-2"}`}>Buy / Long</button>
+          <button type="button" aria-pressed={side === "sell"} onClick={() => setSide("sell")} className={`min-h-11 rounded border py-2.5 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-ember ${side === "sell" ? "border-ember bg-ember/10 text-ember" : "border-line-2 text-fg-2"}`}>Sell / Short</button>
         </fieldset>
         <div className="mt-4 grid grid-cols-2 divide-x divide-line rounded border border-edge text-center">
           <div className="px-2 py-3"><p className="text-label text-fg-3">Bid (you sell)</p><p className={`mt-1 text-data ${side === "sell" ? "text-ember" : "text-fg-2"}`}>{show(preview.bid)}</p></div>
@@ -83,19 +83,19 @@ export function DealTicket() {
           <p className="mt-1 text-label text-fg-3">≈ {formatFixedPlaces(preview.qty, 6)} {market.symbol.split("-")[0]} · ${formatFixedPlaces(notional, 2)}</p>
         </div>
         <details className="mt-4 rounded border border-line-2">
-          <summary className="px-3 py-2 text-caption text-fg-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-glow">Advanced</summary>
+          <summary className="px-3 py-3.5 text-caption lg:py-2 text-fg-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-glow">Advanced</summary>
           <fieldset className="px-3 pb-3">
             <legend className="sr-only">Slippage bound</legend>
             <p className="text-caption text-fg-2">Slippage bound</p>
             <div className="mt-2 grid grid-cols-4 gap-2">
               {SLIPPAGE_CHOICES.filter((bps) => bps <= market.view.max_slippage_bps).map((bps) => (
-                <button key={bps} type="button" aria-pressed={slippage === bps} onClick={() => setSlippage(bps)} className={`rounded border py-2 text-caption focus-visible:outline-2 focus-visible:outline-glow ${slippage === bps ? "border-glow bg-glow/10 text-glow" : "border-line-2 text-fg-2"}`}>{bps} bps</button>
+                <button key={bps} type="button" aria-pressed={slippage === bps} onClick={() => setSlippage(bps)} className={`min-h-11 rounded border py-2 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow ${slippage === bps ? "border-glow bg-glow/10 text-glow" : "border-line-2 text-fg-2"}`}>{bps} bps</button>
               ))}
             </div>
             <p className="mt-2 text-label leading-relaxed text-fg-3">{kind === "market" ? "The node declines the order if the live price is more than this worse than the quote shown." : "Resting orders fill at the live price when triggered."}</p>
           </fieldset>
         </details>
-        <button type="submit" aria-disabled={!canPlace} className={`mt-4 w-full rounded border py-3 text-caption focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 ${side === "buy" ? "border-glow bg-glow/10 text-glow hover:bg-glow/20" : "border-ember bg-ember/10 text-ember hover:bg-ember/20"}`}>
+        <button type="submit" aria-disabled={!canPlace} className={`mt-4 min-h-12 w-full rounded border py-3 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 ${side === "buy" ? "border-glow bg-glow/10 text-glow hover:bg-glow/20" : "border-ember bg-ember/10 text-ember hover:bg-ember/20"}`}>
           {state.busy ? "Signing…" : `Trade: ${side === "buy" ? "Buy" : "Sell"} ${market.symbol}`}
         </button>
         <div aria-live="polite" className="mt-3 space-y-1 text-label leading-relaxed text-ember">

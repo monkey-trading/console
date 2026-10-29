@@ -3,6 +3,7 @@
 /** Balance, equity, margin and what is free, for the connected account. */
 
 import { formatFixedPlaces, type Fixed } from "@/lib/fixed";
+import { shortHex } from "@/lib/format";
 
 import { useConsole } from "./ConsoleProvider";
 
@@ -28,6 +29,7 @@ export function AccountSummary() {
           </div>
         ))}
       </dl>
+      {wallet && <p className="border-t border-line px-4 py-3 text-caption text-fg-3 sm:hidden">Wallet <span className="text-fg-2">{shortHex(wallet.address)}</span></p>}
       {!wallet && <p className="border-t border-line px-4 py-3 text-caption text-fg-3">Connect a wallet to see your account.</p>}
     </section>
   );

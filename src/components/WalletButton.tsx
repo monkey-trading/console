@@ -9,7 +9,7 @@ import { connectWallet, disconnectWallet } from "@/lib/store/actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 
-const BUTTON = "rounded border border-edge px-3 py-2 text-caption text-fg hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
+const BUTTON = "min-h-11 rounded border border-edge px-2.5 py-2 sm:px-3 lg:min-h-0 text-caption text-fg hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
 
 export function WalletButton() {
   const { wallet } = useConsole();
@@ -36,7 +36,7 @@ export function WalletButton() {
   if (wallet) {
     return (
       <div className="flex items-center gap-2">
-        <span className="rounded border border-line-2 px-2 py-2 text-caption text-fg-2" title={wallet.address}>{shortHex(wallet.address)}</span>
+        <span className="hidden rounded border border-line-2 px-2 py-2.5 text-caption text-fg-2 sm:inline lg:py-2" title={wallet.address}>{shortHex(wallet.address)}</span>
         <button ref={primary} type="button" onClick={() => { moved.current = true; disconnectWallet(store); }} className={BUTTON}>Disconnect</button>
       </div>
     );
@@ -47,7 +47,7 @@ export function WalletButton() {
         Connect wallet
       </button>
       {open && (
-        <ul id={menu} className="absolute right-0 z-50 mt-2 w-64 rounded border border-line-2 bg-ink-2 p-1 shadow-platform">
+        <ul id={menu} className="fixed inset-x-4 z-50 mt-2 rounded border sm:absolute sm:inset-x-auto sm:right-0 sm:w-64 border-line-2 bg-ink-2 p-1 shadow-platform">
           {store.deps.wallets.options.map((option) => (
             <li key={option.id}>
               <button
@@ -57,7 +57,7 @@ export function WalletButton() {
                   moved.current = true;
                   void connectWallet(store, option.id);
                 }}
-                className="w-full rounded px-3 py-2 text-left hover:bg-glow/10 focus-visible:outline-2 focus-visible:outline-glow"
+                className="min-h-11 w-full rounded px-3 py-2 text-left hover:bg-glow/10 focus-visible:outline-2 focus-visible:outline-glow"
               >
                 <span className="block text-caption text-fg">{option.label}</span>
                 <span className="block text-label text-fg-3">{option.detail}</span>
