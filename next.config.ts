@@ -2,19 +2,23 @@
 
 import type { NextConfig } from "next";
 
+import { parseDeploy, rawDeploy, streamOrigin } from "./src/lib/engine/deploy";
 import { geoBlockRewrites } from "./src/lib/geo-block";
 
 const isDev = process.env.NODE_ENV === "development";
+const deploy = parseDeploy(rawDeploy());
+// The engine node's origin is the one cross-origin destination, with its wss: stream; a live build also loads the verifier's WebAssembly.
+const nodeOrigins = deploy.origin === null ? [] : [deploy.origin, streamOrigin(deploy.origin)];
 
 // The page is statically rendered, so its inline bootstrap scripts cannot carry a nonce; the policy
 // allows inline scripts and styles but nothing from another origin. Dev mode also needs eval.
 const contentSecurityPolicy = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  `script-src 'self' 'unsafe-inline'${deploy.origin === null ? "" : " 'wasm-unsafe-eval'"}${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src 'self'",
+  ["connect-src 'self'", ...nodeOrigins].join(" "),
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

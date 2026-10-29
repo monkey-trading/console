@@ -1,7 +1,8 @@
 /** The console's state: what the screens read, replaced whole on every change. */
 
 import { DEFAULT_TIMEFRAME, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
-import type { AttestationStatus } from "../engine/attestation";
+import type { AttestationStatus, FeedStatus } from "../engine/attestation";
+import type { SignatureChecks } from "../engine/client";
 import type { HistoryEvent, MarketId, MarketView, HouseView, QueuedWithdrawal } from "../engine/types";
 import { fixedToNumber } from "../fixed";
 import { decodeHouse, decodeMarket, type AccountModel, type Eligibility, type HouseModel, type MarketModel } from "../models";
@@ -28,6 +29,10 @@ export interface ConsoleState {
   /** The node's clock: the stamp of the latest message. */
   now: number;
   attestation: AttestationStatus;
+  /** Whether the node's stream is arriving; order entry waits while it is stale. */
+  stream: FeedStatus;
+  /** What the client does about the node's signatures; `unchecked` is shown on screen. */
+  signatures: SignatureChecks;
   /** Set when the node refuses the caller's region. */
   blocked: BlockReason | null;
   markets: MarketModel[];
@@ -68,11 +73,13 @@ export function seedAllBars(markets: readonly MarketModel[], startMs: number, hi
 }
 
 /** The state before anything has loaded, from the first `GET /v1/markets` and `/v1/house`. */
-export function initialState(markets: MarketView[], house: HouseView, startMs: number, history: HistorySource): ConsoleState {
+export function initialState(markets: MarketView[], house: HouseView, startMs: number, history: HistorySource, signatures: SignatureChecks): ConsoleState {
   const models = markets.map((view) => decodeMarket(view, undefined));
   return {
     now: startMs,
     attestation: { kind: "checking" },
+    stream: signatures === "none" ? "live" : "connecting",
+    signatures,
     blocked: null,
     markets: models,
     bars: seedAllBars(models, startMs, history),

@@ -5,10 +5,15 @@ engine in [monkey-trading/engine](https://github.com/monkey-trading/engine). One
 terminal with a watchlist, a candlestick chart, a deal ticket that sends the quote you saw with your
 slippage bound, positions, orders, history, and a funding drawer.
 
-This build runs against a simulated node inside the browser, behind an interface a live client
-replaces. Prices, fills and funds are simulated, and the app says so on screen. It opens on a demo
-account with positions, resting orders, history and a withdrawal in the queue; Mock controls can reset
-it to an empty account.
+By default this build runs against a simulated node inside the browser. Prices, fills and funds are
+simulated, and the app says so on screen. It opens on a demo account with positions, resting orders,
+history and a withdrawal in the queue; Mock controls can reset it to an empty account.
+
+A build can instead read a real engine node: it checks the node's attestation, shows only answers the
+attested enclave signed for the request, and follows the node's signed stream, marking the feed stale
+(and disabling order entry) when it stops. Signing orders and funds is not wired yet. Until the
+engine's browser verifier is built in, only a development build against a development node works, and
+it says on screen that signatures are not verified.
 
 ## Run it
 
@@ -24,6 +29,42 @@ simulated node: the region it sees you in (to show the geo-block), its attestati
 trigger a close-out, market halts, stress levels, and vault liquidity for the withdrawal queue. Before sending a change, run `npm run lint`,
 `npm run typecheck`, `npm test`, `npm run build`, and `npm audit --audit-level=high`; CI runs these,
 the geo-block check (`scripts/check-geo-block.sh`, after the build), and the docs and workflow checks.
+
+## Run it against a local engine node
+
+Needs the engine's repository, Cargo, and a development node (`config/dev.toml` lists
+`http://localhost:3000` as an allowed origin). In the engine checkout:
+
+```sh
+cargo run -p engine-node -- run --config config/dev.toml
+```
+
+The node serves TLS on `https://127.0.0.1:8080` with a self-signed certificate: open
+`https://127.0.0.1:8080/v1/health` in the browser once and accept it, so the page may fetch and open
+the stream. Then, here:
+
+```sh
+npm run dev:live
+```
+
+Open `http://localhost:3000` (not `127.0.0.1`: the node allows that origin only). Markets and prices
+stream in under a banner saying the mock attestation was accepted and signatures are not verified. To
+read an account, add `?account=<address>` to the page address; it is read-only.
+
+A live build is configured by environment variables at build time, all pinned into the bundle:
+
+| Variable | Meaning |
+| --- | --- |
+| `NEXT_PUBLIC_ENGINE_MODE` | `mock` (default), `live-dev`, or `live` |
+| `NEXT_PUBLIC_ENGINE_ORIGIN` | The node's bare `https://` origin; the stream is the same host over `wss` |
+| `NEXT_PUBLIC_ENGINE_CHAIN_ID`, `NEXT_PUBLIC_ENGINE_VAULT` | The deployment every signature must name |
+| `NEXT_PUBLIC_ENGINE_USDC` | Optional USDC address |
+| `NEXT_PUBLIC_ENGINE_HEARTBEAT_MS` | The node's `[api] heartbeat_interval`, in milliseconds (default 5000) |
+| `NEXT_PUBLIC_ENGINE_DEV_ORIGINS` | Comma-separated node origins a `live-dev` build may accept a mock attestation from |
+
+The node's origin is added to the Content Security Policy's `connect-src` (with its `wss:` form), and
+`'wasm-unsafe-eval'` to `script-src`. A `live` build refuses a mock attestation and has no verifier
+yet, so it trusts no node.
 
 ## Deploy
 

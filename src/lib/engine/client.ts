@@ -1,5 +1,6 @@
 /** The interface the console talks to an engine node through; a live client replaces the mock. */
 
+import type { AttestationStatus, FeedStatus } from "./attestation";
 import type {
   AccountView,
   Address,
@@ -25,8 +26,8 @@ export class EngineError extends Error {
   readonly status: number;
   readonly reject: Reject | null;
 
-  constructor(status: number, message: string, reject: Reject | null = null) {
-    super(message);
+  constructor(status: number, message: string, reject: Reject | null = null, options?: ErrorOptions) {
+    super(message, options);
     this.name = "EngineError";
     this.status = status;
     this.reject = reject;
@@ -42,14 +43,34 @@ export interface ActionResult {
 /** Unsubscribes from the stream. */
 export type Unsubscribe = () => void;
 
+/** What a client reports about its trust in the node, whether its feed is arriving, and why it dropped the stream. */
+export type ClientEvent =
+  | { type: "attestation"; status: AttestationStatus }
+  | { type: "feed"; status: FeedStatus }
+  /** Why the stream was dropped, written for the user. */
+  | { type: "problem"; reason: string };
+
+/**
+ * What a client does about the signatures the node puts on its answers: `checked` when a verifier
+ * judges each one, `unchecked` when a development stand-in accepts them all, `none` for the mock,
+ * which has none.
+ */
+export type SignatureChecks = "checked" | "unchecked" | "none";
+
 /**
  * The engine node's client API. Reads mirror `GET /v1/…`, actions mirror the signed `POST /v1/…`
  * routes, and `subscribe` mirrors the resumable WebSocket at `/v1/stream`.
  * Error cases (every method):
  * - the node refuses the request: rejects with an `EngineError` carrying the status and message
+ * - a live client receives an answer that is unsigned or does not verify: rejects with an `UntrustedError`, and the answer is not shown
  */
 export interface EngineClient {
+  readonly signatures: SignatureChecks;
   attestation(): Promise<Attestation>;
+  /** Judges the node's attestation; a live client does so again whenever the enclave changes. */
+  verify(): Promise<AttestationStatus>;
+  /** Reports each change of attestation status and of the feed. */
+  watch(listener: (event: ClientEvent) => void): Unsubscribe;
   markets(): Promise<MarketView[]>;
   house(): Promise<HouseView>;
   /** Rejects with a 404 `EngineError` for an account the engine has never credited. */

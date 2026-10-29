@@ -6,8 +6,9 @@ The Monkey Trading web app, to be served at console.monkey.trading: the client f
 engine in `monkey-trading/engine`, whose deterministic core runs inside a TEE. One full-view trading
 terminal: watchlist, chart, order ticket, account panels, and a funding drawer, with the access rules
 (geo-block, eligibility declaration) and a check of the node's attestation before it signs. It runs
-against a mock node in the browser that mirrors the engine node's REST and stream shapes, behind an
-`EngineClient` interface a live client replaces. This file is an index: load only the rule whose hint
+against a mock node in the browser that mirrors the engine node's REST and stream shapes, or, in a
+build that pins a node, against a live client that verifies the node's attestation and every answer
+it signs, behind one `EngineClient` interface. This file is an index: load only the rule whose hint
 matches the current action.
 
 ## Structure
@@ -26,18 +27,27 @@ matches the current action.
   `MockControls` drive the mock.
 - **public/** — the supplied logo bitmap, served from the app's own origin; `Logo.tsx` frames it.
 - **src/lib/** — pure TypeScript with no React or DOM. Logic modules have adjacent `*.test.ts`:
-  `site.ts` holds identity and `siteUrl()`, the one environment-variable reader; `geo-block.ts` holds the restricted countries (a placeholder until counsel's list) and builds the geo-block rewrite from them; `fixed.ts` is the
+  `site.ts` holds identity and `siteUrl()`, the server's one environment-variable reader (`engine/deploy.ts` reads the `NEXT_PUBLIC_ENGINE_*` values the browser needs); `geo-block.ts` holds the restricted countries (a placeholder until counsel's list) and builds the geo-block rewrite from them; `fixed.ts` is the
   engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `bars.ts` (marks into bars per timeframe, and the chart's view when the oldest bar rolls off) and
   `vault.ts` (deposit bounds, the withdrawable amount) and `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `escape.ts` says which Escape presses close a popup; `panes.ts` picks the workspace pane that keeps the user's focus when the layout narrows; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
   margin and market-hours rules and the ticket preview; `models.ts` and `messages.ts` decode and
-  describe engine data; `build.ts` says whether this build accepts the mock attestation.
+  describe engine data.
   `engine/` holds the node's wire shapes (`types.ts`), the display facts the console keeps per
   market (`meta.ts`: names, places, and the mock's base quote spread, a simplification of the engine's
   own formula that the owner has yet to settle), the `EngineClient` and wallet interfaces,
-  and the attestation check. `store/` holds the state, the store that follows the node's stream,
+  and the attestation check. The live client is `live.ts` over `transport.ts` (a `fetch` with a fresh
+  challenge, accepting only an answer that verifies for that request, with the signed time within 30 s of the device
+  clock), `live-stream.ts` (the signed stream: consecutive `n`, resume after the last offset, stale after
+  three heartbeats) and `trust.ts` (the verified enclave address, verified again when an answer fails or the
+  enclave restarts); `verifier.ts` is the `Verifier` interface for the engine's browser verifier, whose
+  development stand-in `dev-stub-verifier.ts` verifies nothing and makes the screens say so;
+  `deploy.ts` parses the `NEXT_PUBLIC_ENGINE_*` values a build pins (the node's origin, chain, vault and
+  mode) and decides whether a mock attestation is accepted; `manifests.ts` holds the pinned release
+  manifests; `watch-wallet.ts` is the read-only account for `?account=`. `wire.ts`, `vector-verifier.ts`,
+  `test-kit.ts` and `wire-vectors.json` (the engine's known-answer vectors) pin and test the wire formats. `store/` holds the state, the store that follows the node's stream,
   and the user's actions. `mock/` is the in-browser node (state, orders, fills, close-out, funds and
   the first-in first-out withdrawal queue, the clock step, the demo account's backstory in `demo.ts`, and the controls the mock build exposes).
-- **next.config.ts** — the security headers on every path (a CSP without nonces, nosniff, referrer,
+- **next.config.ts** — the security headers on every path (a CSP without nonces, with the node's origin in `connect-src` and `'wasm-unsafe-eval'` in `script-src` for a live build, nosniff, referrer,
   frame, opener, and permissions policies), `reactStrictMode`, `poweredByHeader: false`, the geo-block `beforeFiles` rewrite, and
   `agentRules: false`, so `next dev` leaves this index alone, and `devIndicators: false`, so its
   overlay does not cover the terminal.
@@ -81,7 +91,8 @@ matches the current action.
 Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the docs check:
 
 - Install: `npm ci`
-- Dev server: `npm run dev` (`http://localhost:3000`)
+- Dev server: `npm run dev` (`http://localhost:3000`); against a local engine dev node,
+  `npm run dev:live` (see the README)
 - Lint: `npm run lint`
 - Typecheck: `npm run typecheck` (`next typegen`, then `tsc --noEmit`)
 - Unit tests: `npm test`; one file: `npm test -- src/lib/site.test.ts`
@@ -128,9 +139,10 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   engine matches the engine's README and its decision issues.
 - **Private by construction.** No analytics, cookies, browser storage, trackers, third-party
   requests, or embeds without the owner's approval; fonts are bundled at build time. The engine
-  node's origin is the one cross-origin destination the app exists for: the feature that first
-  calls it asks for the owner's approval and adds that origin, and no other, to the CSP
-  `connect-src` with its `https:` and `wss:` schemes.
+  node's origin is the one cross-origin destination the app exists for, approved in
+  monkey-trading/engine#292 (rule 6): the build's pinned origin, and no other, is in the CSP
+  `connect-src` with its `https:` and `wss:` schemes, and every answer from it is shown only if
+  the attested enclave signed it for that request.
 - **The rules come from the website.** The checklist and the implementation skill were ported from
   the website repository. A module they name that this repository lacks (`content.ts`, `prng.ts`,
   `format.ts`, `components/motion.tsx`, `replay.ts`) is the path its convention takes once the

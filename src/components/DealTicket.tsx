@@ -4,7 +4,7 @@
 
 import { useId, useState } from "react";
 
-import { maySign } from "@/lib/engine/attestation";
+import { signBlock } from "@/lib/engine/attestation";
 import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { formatMark } from "@/lib/price-format";
 import { placeOrder } from "@/lib/store/actions";
@@ -46,7 +46,7 @@ export function DealTicket() {
   const problems = [...preview.problems];
   if (size.trim() !== "" && parseFixed(size) === null) problems.push("Enter the size in digits, such as 10000 or 2500.50.");
   if (kind !== "market" && triggerPrice === null) problems.push(price.trim() === "" ? "Enter a trigger price." : "Enter the trigger price in digits, such as 61250.50.");
-  const gate = !state.wallet ? "Connect a wallet to trade." : state.eligibility === null ? "Attest your eligibility before trading." : !maySign(state.attestation) ? "The node's attestation is not verified." : null;
+  const gate = !state.wallet ? "Connect a wallet to trade." : state.eligibility === null ? "Attest your eligibility before trading." : signBlock(state.attestation, state.stream);
   const canPlace = gate === null && problems.length === 0 && !state.busy;
   const places = market.places;
   const show = (value: bigint | null) => (value === null ? "—" : formatMark(value, places));

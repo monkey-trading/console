@@ -1,8 +1,8 @@
 /** The console's store: reads the node, follows its stream, and notifies the screens. */
 
-import { pushTick, TIMEFRAMES, type TimeframeId } from "../bars";
-import { checkAttestation } from "../engine/attestation";
-import { EngineError, type EngineClient } from "../engine/client";
+import { pushTick, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
+import { maySign } from "../engine/attestation";
+import { EngineError, type ClientEvent, type EngineClient } from "../engine/client";
 import type { AccountView, EligibilityClass, EngineEvent, HistoryEvent, HouseView, MarketId, MarketView, QueuedWithdrawal, StreamMessage } from "../engine/types";
 import type { Wallet, WalletConnector } from "../engine/wallet";
 import { fixedToNumber } from "../fixed";
@@ -38,11 +38,12 @@ export class ConsoleStore {
   /** A refresh asked for while one ran: its answer may predate the change, so it reads again. */
   private rerun: { accountChanged: boolean } | null = null;
   private unsubscribe: (() => void) | null = null;
+  private unwatch: (() => void) | null = null;
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
     this.viewer = deps.initial.viewer;
-    const state = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs, deps.history);
+    const state = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs, deps.history, deps.client.signatures);
     const session = deps.initial.session;
     this.snapshot = {
       ...state,
@@ -145,11 +146,13 @@ export class ConsoleStore {
   start(nowMs: number): () => void {
     this.deps.drive?.(nowMs);
     this.patch({ now: nowMs, bars: seedAllBars(this.snapshot.markets, nowMs, this.deps.history) });
+    this.unwatch = this.deps.client.watch((event) => this.onClientEvent(event));
     this.unsubscribe = this.deps.client.subscribe((message) => this.onMessage(message));
     void this.checkNode();
     return () => {
       this.unsubscribe?.();
-      this.unsubscribe = null;
+      this.unwatch?.();
+      this.unsubscribe = this.unwatch = null;
     };
   }
 
@@ -158,14 +161,28 @@ export class ConsoleStore {
     this.deps.drive?.(nowMs);
   }
 
-  /** Reads the attestation and probes access. Run at start and after a change of region. */
+  /** Applies a change the client reports: the node's attestation, its feed, or a dropped stream. */
+  private onClientEvent(event: ClientEvent): void {
+    if (event.type === "feed") this.patch({ stream: event.status });
+    else if (event.type === "problem") this.toast("error", event.reason);
+    else {
+      const was = this.snapshot.attestation.kind;
+      this.patch({ attestation: event.status });
+      // Data read under the old enclave is read again once the new one is trusted.
+      const trusted = event.status.kind === "mock" || event.status.kind === "verified";
+      if (trusted && (was === "reverifying" || was === "clock" || was === "unverified")) void this.refresh(true);
+    }
+  }
+
+  /** Judges the attestation and probes access. Run at start and after a change of region. */
   async checkNode(): Promise<void> {
     try {
-      const attestation = await this.deps.client.attestation();
-      this.patch({ attestation: checkAttestation(attestation) });
+      this.patch({ attestation: await this.deps.client.verify() });
     } catch (error) {
       this.patch({ attestation: { kind: "unverified", reason: error instanceof Error ? error.message : "The attestation could not be read." } });
     }
+    // A node whose markets have not loaded yet is read once it is trusted.
+    if (this.snapshot.markets.length === 0 && maySign(this.snapshot.attestation, "live")) await this.refresh(true);
     try {
       await this.deps.client.accessProbe();
       this.patch({ blocked: null });
@@ -217,13 +234,16 @@ export class ConsoleStore {
       const markets = views.map((view) => decodeMarket(view, this.snapshot.markets.find((m) => m.id === view.id)));
       const bars = { ...this.snapshot.bars };
       for (const m of markets) {
-        const frames = bars[m.id];
-        if (m.mark === null || !m.open || !frames) continue;
+        if (m.mark === null || !m.open) continue;
         const price = fixedToNumber(m.mark);
+        // A market first seen now, as a live node's list arrives, starts from the history source.
+        const frames = bars[m.id] ?? (Object.fromEntries(TIMEFRAMES.map((tf) => [tf.id, this.deps.history(m.symbol, tf.seconds, this.snapshot.now, price)])) as Record<TimeframeId, Bar[]>);
         // `fromEntries` loses the key type; the keys are exactly the timeframes `frames` holds.
-        bars[m.id] = Object.fromEntries(TIMEFRAMES.map((tf) => [tf.id, pushTick(frames[tf.id], this.snapshot.now, price, tf.seconds)])) as typeof frames;
+        // Before the node's first message there is no node time to place a bar at.
+        bars[m.id] = this.snapshot.now === 0 ? frames : (Object.fromEntries(TIMEFRAMES.map((tf) => [tf.id, pushTick(frames[tf.id], this.snapshot.now, price, tf.seconds)])) as typeof frames);
       }
-      this.patch({ markets, bars, house: decodeHouse(house) });
+      const selected = markets.some((m) => m.id === this.snapshot.selected) ? this.snapshot.selected : (markets[0]?.id ?? this.snapshot.selected);
+      this.patch({ markets, bars, selected, house: decodeHouse(house) });
       if (this.snapshot.wallet) await this.loadAccount(accountChanged);
     } catch (error) {
       if (!this.noteAccess(error)) this.toast("error", error instanceof Error ? error.message : "The node did not answer.");

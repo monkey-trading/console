@@ -1,44 +1,58 @@
 /** The console's check of a node's attestation, which must pass before it signs anything for the node. */
 
-import { MOCK_BUILD } from "../build";
 import type { Attestation } from "./types";
 
 export type AttestationStatus =
   | { kind: "checking" }
-  /** The node's own mock quote, accepted only by a mock build. */
+  /** The node's own mock quote, accepted only where the build allows it. */
   | { kind: "mock" }
+  /** A hardware quote that verified against a pinned release manifest. */
+  | { kind: "verified"; release: string; config: string; address: string }
+  /** The enclave changed or a signature failed, and the console is checking the node again. */
+  | { kind: "reverifying" }
+  /** The device clock and the verified enclave's signed time disagree, so nothing the node says can be judged. */
+  | { kind: "clock"; skewMs: number }
   /** A quote this build cannot verify, or one that fails its checks. Nothing is signed for the node. */
   | { kind: "unverified"; reason: string };
+
+/** Whether the node's feed is arriving: `stale` once no valid frame or heartbeat has come for three heartbeat intervals. */
+export type FeedStatus = "connecting" | "live" | "stale";
 
 const MOCK_QUOTE_PREFIX = "MOCK-ATTESTATION-NOT-A-TEE:";
 
 function hexToText(hex: string): string | null {
-  if (hex.length % 2 !== 0 || /[^0-9a-f]/i.test(hex)) return null;
+  const digits = hex.startsWith("0x") ? hex.slice(2) : hex;
+  if (digits.length % 2 !== 0 || /[^0-9a-f]/i.test(digits)) return null;
   let out = "";
-  for (let i = 0; i < hex.length; i += 2) out += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16));
+  for (let i = 0; i < digits.length; i += 2) out += String.fromCharCode(parseInt(digits.slice(i, i + 2), 16));
   return out;
 }
 
 /**
- * Judges an attestation. A hardware quote needs the vendor certificate chain and a release
- * manifest, which only `engine verify-attestation` has, so this build never accepts one.
+ * Judges a quote the console can decide alone: the node's mock quote, accepted only when
+ * `acceptsMock`, and a quote that lies about being one. Null for a hardware quote, which only the
+ * engine's verifier can judge.
  */
-export function checkAttestation(attestation: Attestation): AttestationStatus {
+export function checkAttestation(attestation: Attestation, acceptsMock: boolean): AttestationStatus | null {
   const quote = hexToText(attestation.quote);
   const isMockQuote = quote !== null && quote.startsWith(MOCK_QUOTE_PREFIX);
   if (attestation.provider === "mock") {
     if (!isMockQuote) return { kind: "unverified", reason: "The node claims a mock provider but its quote is not the mock marker." };
-    if (!MOCK_BUILD) return { kind: "unverified", reason: "The node presents a mock attestation, which this build refuses." };
+    if (!acceptsMock) return { kind: "unverified", reason: "The node presents a mock attestation, which this build refuses." };
     return { kind: "mock" };
   }
   if (isMockQuote) return { kind: "unverified", reason: "The node's quote is the mock marker under a hardware provider name." };
-  return {
-    kind: "unverified",
-    reason: `The ${attestation.provider} quote cannot be verified here: this build does not check vendor certificate chains or a release manifest.`,
-  };
+  return null;
 }
 
-/** Whether the console may sign a request for a node with this status. */
-export function maySign(status: AttestationStatus): boolean {
-  return status.kind === "mock";
+/** Why the console may not sign now, or null when it may: the node is attested and its feed is arriving. */
+export function signBlock(status: AttestationStatus, feed: FeedStatus): string | null {
+  if (status.kind !== "mock" && status.kind !== "verified") return "The node's attestation is not verified.";
+  if (feed === "stale") return "The node's feed is stale, so orders are disabled until it recovers.";
+  return feed === "connecting" ? "Waiting for the node's feed." : null;
+}
+
+/** Whether the console may sign a request now. */
+export function maySign(status: AttestationStatus, feed: FeedStatus): boolean {
+  return signBlock(status, feed) === null;
 }

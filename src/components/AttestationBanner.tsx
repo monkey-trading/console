@@ -1,28 +1,53 @@
 "use client";
 
-/** A compact line saying what the console found when it checked the node's attestation. */
+/** Compact lines saying what the console found when it checked the node, and what it cannot vouch for. */
+
+import { shortHex } from "@/lib/format";
 
 import { useConsole } from "./ConsoleProvider";
 
+const LINE = "border-b px-4 py-1 text-center text-label";
+const WARN = `${LINE} border-amber/40 bg-amber/10 text-amber`;
+const BAD = `${LINE} border-ember/50 bg-ember/10 text-ember`;
+
 export function AttestationBanner() {
-  const { attestation } = useConsole();
-  return <section aria-label="Node attestation"><Status attestation={attestation} /></section>;
+  const { attestation, stream, signatures } = useConsole();
+  return (
+    <section aria-label="Node attestation">
+      <Status attestation={attestation} />
+      {signatures === "unchecked" && (
+        <div role="status" className={WARN}>
+          <strong className="font-medium">Signatures are not verified.</strong> This development build accepts whatever the node says without checking that the attested enclave signed it.
+        </div>
+      )}
+      {stream === "stale" && attestation.kind !== "unverified" && (
+        <div role="alert" className={BAD}>
+          <strong className="font-medium">The node&apos;s feed is stale.</strong> Nothing has arrived for three heartbeats, so orders are disabled until it recovers.
+        </div>
+      )}
+    </section>
+  );
 }
 
 function Status({ attestation }: { attestation: ReturnType<typeof useConsole>["attestation"] }) {
-  if (attestation.kind === "checking") {
-    return <div role="status" className="border-b border-line px-4 py-1 text-center text-label text-fg-3">Checking the node's attestation…</div>;
+  switch (attestation.kind) {
+    case "checking":
+      return <div role="status" className={`${LINE} border-line text-fg-3`}>Checking the node&apos;s attestation…</div>;
+    case "reverifying":
+      return <div role="status" className={WARN}><strong className="font-medium">Re-verifying the node.</strong> The enclave changed or an answer failed its check; nothing is shown as trusted until it passes.</div>;
+    case "mock":
+      return <div role="status" className={WARN}><strong className="font-medium">Mock attestation accepted.</strong> A development node, not an enclave: prices, fills and funds are not real.</div>;
+    case "verified":
+      return (
+        <div role="status" className={`${LINE} border-line text-fg-3`}>
+          <strong className="font-medium text-glow">Attestation verified.</strong> Release {attestation.release}, enclave <span title={attestation.address}>{shortHex(attestation.address)}</span>.
+        </div>
+      );
+    case "clock":
+      return <div role="alert" className={BAD}><strong className="font-medium">Your device clock is wrong.</strong> It differs from the node&apos;s signed time by {Math.round(Math.abs(attestation.skewMs) / 1000)} s. Correct it and reload; the console shows nothing from the node until then.</div>;
+    case "unverified":
+      return <div role="alert" className={BAD}><strong className="font-medium">Attestation not verified: the console will not sign.</strong> {attestation.reason}</div>;
+    default:
+      return attestation satisfies never;
   }
-  if (attestation.kind === "mock") {
-    return (
-      <div role="status" className="border-b border-amber/40 bg-amber/10 px-4 py-1 text-center text-label text-amber">
-        <strong className="font-medium">Mock attestation accepted.</strong> Simulated node in your browser, not an enclave: prices, fills and funds are not real.
-      </div>
-    );
-  }
-  return (
-    <div role="alert" className="border-b border-ember/50 bg-ember/10 px-4 py-1 text-center text-label text-ember">
-      <strong className="font-medium">Attestation not verified: the console will not sign.</strong> {attestation.reason}
-    </div>
-  );
 }

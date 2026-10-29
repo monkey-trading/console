@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "dev:live": "NEXT_PUBLIC_ENGINE_MODE=live-dev NEXT_PUBLIC_ENGINE_ORIGIN=https://127.0.0.1:8080 NEXT_PUBLIC_ENGINE_DEV_ORIGINS=https://127.0.0.1:8080 NEXT_PUBLIC_ENGINE_CHAIN_ID=31337 NEXT_PUBLIC_ENGINE_VAULT=0x0000000000000000000000000000000000000000 next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint --max-warnings 0",

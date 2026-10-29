@@ -59,7 +59,7 @@ async function signed(
     store.toast("error", "Connect a wallet first.");
     return { ok: false };
   }
-  if (!maySign(state.attestation)) {
+  if (!maySign(state.attestation, state.stream)) {
     store.toast("error", "The node's attestation is not verified, so the console will not sign for it.");
     return { ok: false };
   }
@@ -99,7 +99,7 @@ export async function attestEligibility(store: ConsoleStore, cls: EligibilityCla
 export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void> {
   const wallet = walletOf(store);
   if (!wallet) return;
-  if (!maySign(store.getSnapshot().attestation)) {
+  if (!maySign(store.getSnapshot().attestation, store.getSnapshot().stream)) {
     store.toast("error", "The node's attestation is not verified, so the console will not send a deposit for it.");
     return;
   }
