@@ -42,9 +42,9 @@ selects multi-agent mode. A severity filter alone does not select a review level
   read-only `gh` commands.
 - **Delta scope:** a delta round after the review loop ended ([The review loop](#the-review-loop)):
   the residual [scripts/review-delta.sh](scripts/review-delta.sh) prints, saved as
-  `.residual.diff`, and the change itself in context, saved as `.change.diff`, with the full
+  `.residual.diff`, and the change itself in context ([scripts/review-change.sh](scripts/review-change.sh)), saved as `.change.diff`, with the full
   reviewed diff (`<reviewed-base>...<reviewed-head>`) saved as `.reviewed.diff` for context.
-  `scope.md` records both base and head pairs. The round reads source at the new head, and the
+  `scope.md` records both base and head pairs and the stand-in head. The round reads source at the new head, and the
   next re-check starts from its new base and head. Save them with:
 
   ```bash
@@ -53,9 +53,11 @@ selects multi-agent mode. A severity filter alone does not select a review level
   "$delta" <reviewed-base> <reviewed-head> <new-base> <new-head> \
     > <run-dir>/.residual.diff || status=$?
   echo "$status" > <run-dir>/.residual.status   # 0 and empty, or 1 and the residual; else fix and rerun
-  # The change: the commits added since the reviewed head. After a rebase that resolved
-  # conflicts, save instead the new diff of each conflicted file, git diff <new-base>...<new-head> -- <file>.
-  git diff <reviewed-head> <new-head> > <run-dir>/.change.diff
+  # The change: the commits added after the reviewed head as it stands after any rebase
+  # (<stand-in-head>, from the round log). Name <new-base> and each conflicted file when a rebase
+  # resolved conflicts.
+  agents/skills/agent-code-review/scripts/review-change.sh <stand-in-head> <new-head> [<new-base> <conflicted-file>...] \
+    > <run-dir>/.change.diff
   git diff <reviewed-base>...<reviewed-head> > <run-dir>/.reviewed.diff
   ```
 
@@ -236,7 +238,10 @@ finding is fixed by class before the next round.
   `<reviewed-base> <reviewed-head> <new-base> <new-head>`. It compares the reviewed patch with the
   new one, each taken against its own base so `main`'s changes drop out. The script exits 0 when
   the patches match and 1 with the residual printed; any other exit is a failure to fix before
-  relying on it. Record in the round log which re-check ran (no round, a delta round, or a
+  relying on it. After a rebase, even a mechanical one, record in the round log the base and head it
+  produced: the rebased head stands in for the reviewed head, so a later change is captured from
+  it by [scripts/review-change.sh](scripts/review-change.sh), which exits 3 for a head that is not
+  its descendant. Record in the round log which re-check ran (no round, a delta round, or a
   full-diff round) and the script's exit status. This repository has no protocol versions, so the
   script has no label pairs and the loop has no renumber rule.
 - **Any other change gets a delta round.** A rebase that resolves conflicts or changes the PR's
@@ -244,8 +249,8 @@ finding is fixed by class before the next round.
   change the user asks for, or any other change to the patch moves the PR back to draft and
   reopens the loop for one delta round: the same reviewer pair, in fresh sessions and
   cross-validated as usual (for a bug-fix PR, the owning agent alone, as above), reviews the residual the script prints and the change itself in
-  context (the new diff of each file where a rebase resolved a conflict, and each commit the
-  change added), with the full reviewed diff as context. The residual has no context lines, so it
+  context (each commit added after the stand-in head, and the new diff of each file where a rebase
+  resolved a conflict, both from `review-change.sh`), with the full reviewed diff as context. The residual has no context lines, so it
   cannot show where an unchanged line now sits; the round runs even when the script exits 0. It
   is numbered in the round log, and the rule below for Mediums from round 3 applies to it.
 - **A behaviour change needs a full-diff round.** When the residual or the change itself changes
