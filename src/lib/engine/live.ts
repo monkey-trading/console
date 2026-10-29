@@ -202,9 +202,8 @@ export class LiveEngineClient implements EngineClient {
     return this.action("/v1/withdrawals", request);
   }
 
-  async reissue(account: Address, nonce: number, body: { replaces_expires_at: number; signature: string }): Promise<{ seq: number | null }> {
-    const answer = await this.transport.post(`/v1/accounts/${account}/withdrawals/${nonce}/reissue`, body);
-    return { seq: answer.seq };
+  async reissue(account: Address, nonce: number, body: { replaces_expires_at: number; signature: string }): Promise<void> {
+    await this.transport.post(`/v1/accounts/${account}/withdrawals/${nonce}/reissue`, body);
   }
 
   async findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<ScanResult> {

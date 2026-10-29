@@ -40,6 +40,8 @@ export interface Payout {
   /** Where a search of the log for its latest authorization starts: the approval, or a later reissue. */
   searchFrom: number;
   status: PayoutStatus;
+  /** Whether the vault's record of the payout has been read, so an unpaid status is known rather than assumed. */
+  read: boolean;
 }
 
 /** Where payout `nonce` stands at node time `nowSeconds`. */
@@ -53,14 +55,17 @@ function statusOf(state: ConsoleState, nonce: number, nowSeconds: number): Payou
   return held > nowSeconds ? { kind: "claimable", withdrawal: signed, expiresAt: held } : { kind: "expired", expiresAt: held };
 }
 
-/** Every unpaid payout of the account's approvals, newest first, then its newest paid ones, with where each stands at node time. */
+/** Every unpaid payout of the account's approvals and recent history, newest first, then its newest paid ones, with where each stands at node time. */
 export function payoutsOf(state: ConsoleState): Payout[] {
   const nowSeconds = Math.floor(state.now / 1000);
-  const all = state.approvals.flatMap((event) => {
+  // The recent history has the newest approvals even when the separate read of them failed or lags.
+  const recent = state.history.filter((e) => e.type === "withdrawal_approved" && !state.approvals.some((a) => a.type === "withdrawal_approved" && a.nonce === e.nonce));
+  const all = [...recent, ...state.approvals].flatMap((event) => {
     if (event.type !== "withdrawal_approved") return [];
     const approvedSeq = Number(event.cursor.split(":")[0]);
     const searchFrom = Math.max(approvedSeq, state.payoutHints[event.nonce]?.searchFrom ?? 0);
-    return [{ nonce: event.nonce, amount: fixedFromWire(event.amount), searchFrom, status: statusOf(state, event.nonce, nowSeconds) }];
+    const status = statusOf(state, event.nonce, nowSeconds);
+    return [{ nonce: event.nonce, amount: fixedFromWire(event.amount), searchFrom, status, read: status.kind === "paid" || state.unpaid.includes(event.nonce) }];
   });
   return [...all.filter((p) => p.status.kind !== "paid"), ...all.filter((p) => p.status.kind === "paid").slice(0, PAID_SHOWN)];
 }
@@ -93,16 +98,25 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
   }
 }
 
-/** Reads, through the wallet's chain provider, which of the account's unpaid payouts the vault has paid since. */
+/**
+ * Reads, through the wallet's chain provider, whether the vault has paid each payout the page holds an
+ * authorization for and has not read yet: those are the ones a claim or a reissue acts on. One read at
+ * a time, so a wallet app over WalletConnect is never handed a batch.
+ */
 export async function checkPaid(store: ConsoleStore): Promise<void> {
   const wallet = store.liveWallet;
   const address = store.getSnapshot().wallet?.address;
   if (!wallet || address === undefined) return;
-  const unknown = payoutsOf(store.getSnapshot()).filter((p) => p.status.kind !== "paid").map((p) => p.nonce);
+  const state = store.getSnapshot();
+  const unread = state.authorizations.map((w) => w.nonce).filter((nonce) => !state.paid.includes(nonce) && !state.unpaid.includes(nonce));
   try {
-    const paid = (await Promise.all(unknown.map(async (nonce) => ((await wallet.claimed(nonce)) ? [nonce] : [])))).flat();
-    const state = store.getSnapshot();
-    if (paid.length > 0 && state.wallet?.address === address) store.patch({ paid: [...new Set([...state.paid, ...paid])] });
+    for (const nonce of unread) {
+      const paid = await wallet.claimed(nonce);
+      const now = store.getSnapshot();
+      if (now.wallet?.address !== address) return;
+      if (paid) store.patch({ paid: [...new Set([...now.paid, nonce])] });
+      else store.patch({ unpaid: [...new Set([...now.unpaid, nonce])] });
+    }
   } catch (error) {
     store.toast("error", `The vault's payouts could not be read: ${errorText(error)}`);
   }
@@ -175,11 +189,13 @@ export async function reissue(store: ConsoleStore, nonce: number, expiresAt: num
   store.patch({ busy: true });
   let newer: number | null = null;
   try {
+    // A signed read of the log head before the request: the new authorization can only land after it.
+    const { seq: before } = await store.deps.client.withdrawalQueue(wallet.address);
     const typed = reissueTypedData(domainOf(store), wallet.address, nonce, expiresAt);
     const summary = `ask for a new authorization of withdrawal ${nonce}`;
     const signature = await prompting(store, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
-    const { seq } = await store.deps.client.reissue(wallet.address, nonce, { replaces_expires_at: expiresAt, signature });
-    if (seq !== null && asking()) hint(store, nonce, { searchFrom: seq });
+    await store.deps.client.reissue(wallet.address, nonce, { replaces_expires_at: expiresAt, signature });
+    if (before !== null && asking()) hint(store, nonce, { searchFrom: before });
     store.toast("ok", "Requested. The new authorization arrives here once the node signs it.");
   } catch (error) {
     const stale = error instanceof EngineError && error.status === 400 ? NEWER_EXISTS.exec(error.message) : null;

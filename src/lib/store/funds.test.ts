@@ -104,6 +104,11 @@ describe("payoutsOf", () => {
     ]);
   });
 
+  it("lists an approval the recent history holds before the separate read of approvals has it, once", () => {
+    const state: ConsoleState = { ...base(), approvals: [approved(1, 40)], history: [approved(2, 50), approved(1, 40)] };
+    expect(payoutsOf(state).map((p) => p.nonce)).toEqual([2, 1]);
+  });
+
   it("names a newer authorization the node signed but the page missed, and searches from where a reissue landed", () => {
     const state: ConsoleState = {
       ...base(), now: 1_000_000, approvals: [approved(2, 50), approved(1, 40)], authorizations: [signed(1, 900), signed(2, 900)],

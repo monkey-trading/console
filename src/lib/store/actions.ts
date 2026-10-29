@@ -20,7 +20,7 @@ export const REQUEST_TTL_MS = 120_000;
 type Outcome = { ok: true; result: ActionResult } | { ok: false };
 
 /** The state a wallet change clears: everything read or streamed for the account before. */
-const NO_ACCOUNT = { account: null, eligibility: null, queue: [], history: [], quotes: {}, quoteError: null, quoted: [], authorizations: [], approvals: [], approvalsNext: null, payoutHints: {}, searching: null, paid: [] };
+const NO_ACCOUNT = { account: null, eligibility: null, queue: [], history: [], quotes: {}, quoteError: null, quoted: [], authorizations: [], approvals: [], approvalsNext: null, payoutHints: {}, searching: null, paid: [], unpaid: [] };
 
 /** Ends a wallet's connection in the background, telling the user if that fails. */
 function release(store: ConsoleStore, wallet: Wallet | null): void {

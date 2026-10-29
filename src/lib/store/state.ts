@@ -76,6 +76,8 @@ export interface ConsoleState {
   approvalsGeneration: number;
   /** The connected account's payout nonces the vault has paid, as its wallet's chain reads them. */
   paid: number[];
+  /** The payout nonces the vault had not paid when last read. */
+  unpaid: number[];
   /** What the wallet is asked to sign or send now, shown while it waits for the user. */
   prompt: string | null;
   /** Whether a signed action is in flight. */
@@ -133,6 +135,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     searching: null,
     approvalsGeneration: 0,
     paid: [],
+    unpaid: [],
     prompt: null,
     busy: false,
     fundingOpen: false,

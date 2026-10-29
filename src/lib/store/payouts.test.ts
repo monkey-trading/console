@@ -48,15 +48,24 @@ describe("approvals and paid payouts", () => {
     ]);
   });
 
-  it("marks the payouts the vault has paid, and says when the wallet is on another chain", async () => {
+  it("reads the vault's record only for payouts the page holds an authorization for, once each, and says when the wallet is on another chain", async () => {
     const paid = await connected({ paid: true });
-    paid.store.patch({ approvals: [approved(1, 40)] });
+    paid.store.patch({ approvals: [approved(2, 50), approved(1, 40)], authorizations: [signed(1, 2_000_000_000)] });
     await checkPaid(paid.store);
-    expect(paid.store.getSnapshot().paid).toEqual([1]);
+    expect(paid.store.getSnapshot()).toMatchObject({ paid: [1], unpaid: [] });
+    expect(paid.provider.calls.filter((c) => c.method === "eth_call")).toHaveLength(1);
+    await checkPaid(paid.store);
+    expect(paid.provider.calls.filter((c) => c.method === "eth_call")).toHaveLength(1);
+    const unpaid = await connected({ paid: false });
+    unpaid.store.patch({ approvals: [approved(1, 40)], authorizations: [signed(1, 2_000_000_000)] });
+    await checkPaid(unpaid.store);
+    expect(unpaid.store.getSnapshot()).toMatchObject({ paid: [], unpaid: [1] });
+    expect(payoutsOf(unpaid.store.getSnapshot())[0]).toMatchObject({ read: true, status: { kind: "claimable" } });
     const elsewhere = await connected({ paid: true, chainId: 1 });
-    elsewhere.store.patch({ approvals: [approved(1, 40)] });
+    elsewhere.store.patch({ approvals: [approved(1, 40)], authorizations: [signed(1, 2_000_000_000)] });
     await checkPaid(elsewhere.store);
-    expect(elsewhere.store.getSnapshot().paid).toEqual([]);
+    expect(elsewhere.store.getSnapshot()).toMatchObject({ paid: [], unpaid: [] });
+    expect(payoutsOf(elsewhere.store.getSnapshot())[0]?.read).toBe(false);
     expect(elsewhere.store.getSnapshot().toasts.at(-1)?.text).toBe("The vault's payouts could not be read: your wallet is on chain 1, not chain 31337");
   });
 });

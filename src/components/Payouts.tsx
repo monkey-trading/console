@@ -23,14 +23,15 @@ export function Payouts() {
   const address = state.wallet?.address;
   // A new approval reaches the recent history first; it prompts a fresh read of every approval.
   const latest = state.history.find((e) => e.type === "withdrawal_approved")?.cursor ?? "";
-  const unpaid = payouts.filter((p) => p.status.kind !== "paid").map((p) => p.nonce).join(",");
+  // The payouts whose authorization the page holds and whose payment the vault has not been asked about.
+  const unread = state.authorizations.map((w) => w.nonce).filter((nonce) => !state.paid.includes(nonce) && !state.unpaid.includes(nonce)).join(",");
   useEffect(() => {
     if (address !== undefined) void loadApprovals(store);
   }, [store, address, latest]);
   useEffect(() => {
     // The vault's own record says which payouts it has paid, including claims made elsewhere.
-    if (unpaid !== "") void checkPaid(store);
-  }, [store, unpaid]);
+    if (unread !== "") void checkPaid(store);
+  }, [store, unread]);
   // An action replaces or settles the row's button, so focus returns to the section's heading.
   const act = (run: () => Promise<void>) => {
     if (state.busy || state.searching !== null) return;
@@ -67,6 +68,7 @@ function PayoutRow({ payout, idle, signs, describedBy, searching, act }: { payou
     <li className="rounded border border-line-2 px-3 py-3 text-caption">
       <p className="flex justify-between gap-2"><span className="text-fg">Withdrawal {nonce}</span><span className="text-fg-2">{amount}</span></p>
       {status.kind === "paid" && <p className="mt-2 text-glow">Paid to your wallet.</p>}
+      {status.kind !== "paid" && status.kind !== "waiting" && !payout.read && <p className="mt-2 text-fg-3">The vault&apos;s record of whether it was paid has not been read.</p>}
       {status.kind === "claimable" && (
         <>
           <p className="mt-2 text-fg-3">Authorized until {formatStamp(status.expiresAt * 1000)} UTC.</p>
@@ -89,7 +91,7 @@ function PayoutRow({ payout, idle, signs, describedBy, searching, act }: { payou
       )}
       {status.kind === "waiting" && (
         <>
-          <p className="mt-2 text-fg-3">Waiting for its authorization, which the node signs once a checkpoint covering the approval is confirmed on chain.</p>
+          <p className="mt-2 text-fg-3">This page has not received its authorization. The node signs one once a checkpoint covering the approval is confirmed on chain; if the vault has paid it already, its record says so once the authorization is found.</p>
           {search("Look for it in the log")}
         </>
       )}
