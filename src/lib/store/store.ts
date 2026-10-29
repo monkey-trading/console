@@ -2,28 +2,16 @@
 
 import { pushTick, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
 import { maySign } from "../engine/attestation";
-import { EngineError, type ClientEvent, type EngineClient } from "../engine/client";
-import type { AccountView, EligibilityClass, EngineEvent, HistoryEvent, HouseView, MarketId, MarketView, QueuedWithdrawal, StreamMessage } from "../engine/types";
-import type { Wallet, WalletConnector } from "../engine/wallet";
+import { EngineError, type ClientEvent } from "../engine/client";
+import type { EngineEvent, MarketId, StreamMessage } from "../engine/types";
+import type { Wallet } from "../engine/wallet";
 import { fixedToNumber } from "../fixed";
 import { describeEvent } from "../messages";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
-import { initialState, seedAllBars, type BlockReason, type ConsoleState, type FeedLine, type HistorySource, type ToastMessage } from "./state";
+import { initialState, seedAllBars, type BlockReason, type ConsoleState, type FeedLine, type ToastMessage } from "./state";
+import type { StoreDeps } from "./store-deps";
 
 const FEED_LIMIT = 150;
-
-export interface StoreDeps {
-  client: EngineClient;
-  wallets: WalletConnector;
-  /** Advances a node that runs in this page; absent for a live node. */
-  drive?: (ms: number) => void;
-  initial: { markets: MarketView[]; house: HouseView; startMs: number; recent?: StreamMessage[]; /** The account whose events the activity log shows before a wallet connects. */ viewer?: string;
-    /** A wallet already connected when the page loads, with what the node holds for it. */
-    session?: { wallet: { address: string; label: string; readOnly?: boolean }; account: AccountView | null; eligibility: EligibilityClass | null; queue: QueuedWithdrawal[]; history: HistoryEvent[] };
-  };
-  /** Price history for the chart, ending at the current mark. */
-  history: HistorySource;
-}
 
 export class ConsoleStore {
   readonly deps: StoreDeps;
