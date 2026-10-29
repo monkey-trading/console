@@ -25,7 +25,7 @@ const INPUT = "mt-1 min-h-11 w-full rounded border border-edge bg-ink px-2 py-2 
 /** Opens the funding drawer. */
 function FundingLink() {
   const { store } = useSession();
-  return <button type="button" onClick={() => store.setFundingOpen(true)} className="-my-3 inline-block py-3 text-glow underline focus-visible:outline-2 focus-visible:outline-glow lg:my-0 lg:py-0">Open funding</button>;
+  return <button type="button" onClick={() => store.setFundingOpen(true)} className="-my-3.5 inline-flex min-h-11 items-center text-glow underline focus-visible:outline-2 focus-visible:outline-glow lg:my-0 lg:min-h-0">Open funding</button>;
 }
 
 /** The deal ticket for the selected market; `OrderTicket` remounts it per market so no typed value carries over. */

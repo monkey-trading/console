@@ -41,6 +41,13 @@ html {
   scroll-behavior: smooth;
 }
 
+/* The phone's bar at the foot is 3.5rem tall; a focused control scrolls clear of it. */
+@media (width < 64rem) {
+  html {
+    scroll-padding-bottom: 4rem;
+  }
+}
+
 body {
   background: var(--color-ink);
   color: var(--color-fg);

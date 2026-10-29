@@ -48,7 +48,7 @@ export function PositionsView() {
               <p><span className="text-fg">{r.symbol}</span> <span className={r.long ? "text-glow" : "text-ember"}>{r.long ? "Long" : "Short"}</span></p>
               <p className={r.loss ? "text-ember" : "text-glow"}><span className="sr-only">Profit and loss </span>{r.pnl}</p>
             </div>
-            <dl className="mt-2 grid grid-cols-[repeat(3,minmax(max-content,1fr))] gap-x-3 gap-y-1 text-fg-2">
+            <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-fg-2">
               <div><dt className="text-label text-fg-3">Size</dt><dd>{r.size}</dd></div>
               <div><dt className="text-label text-fg-3">Entry</dt><dd>{r.entry}</dd></div>
               <div><dt className="text-label text-fg-3">Mark</dt><dd>{r.mark}</dd></div>

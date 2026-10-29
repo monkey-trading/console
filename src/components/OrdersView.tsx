@@ -34,7 +34,7 @@ export function OrdersView() {
           <li key={r.id} className="border-b border-line px-4 py-3 text-caption last:border-b-0">
             <p className="flex items-center justify-between gap-3">
               <span><span className="text-fg">{r.symbol}</span> <span className={r.buy ? "text-glow" : "text-ember"}>{r.buy ? "Buy" : "Sell"}</span> <span className="text-fg-2 capitalize">{r.type}</span></span>
-              <span className="text-fg-3">{r.id}</span>
+              <span className="text-fg-3">Order {r.id}</span>
             </p>
             <dl className="mt-2 grid grid-cols-2 gap-2 text-fg-2">
               <div><dt className="text-label text-fg-3">Size</dt><dd>{r.size}</dd></div>
