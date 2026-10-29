@@ -159,11 +159,14 @@ describe("authorizations", () => {
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node did not answer.");
   });
 
-  it("explains a reissue the node refuses for holding no unpaid approval under its nonce", async () => {
+  it("explains a reissue the node refuses for holding no unpaid approval under its nonce, and has the vault's record read again", async () => {
     const { client, store } = await connected();
+    store.patch({ authorizations: [signed(3, 1_700_000_000)], unpaid: [3] });
     client.answer = () => { throw new EngineError(404, "not found"); };
     await reissue(store, 3, 1_700_000_000, 40);
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node holds no unpaid withdrawal 3 for this account: the vault has paid it, or the node is still loading it after a restart.");
+    // The vault's record of it is read again.
+    expect(unreadPayouts(store.getSnapshot())).toEqual([3]);
   });
 
   it("looks in the log for the newer authorization when the node says one replaced the expired one", async () => {

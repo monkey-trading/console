@@ -210,9 +210,11 @@ export async function reissue(store: ConsoleStore, nonce: number, expiresAt: num
   } catch (error) {
     const stale = error instanceof EngineError && error.status === 400 ? NEWER_EXISTS.exec(error.message) : null;
     if (stale?.[1] !== undefined) newer = Number(stale[1]);
-    // The node holds no unpaid approval under this nonce (`reissue.rs`, `Reissue::Unknown`).
-    else if (error instanceof EngineError && error.status === 404) store.toast("error", `The node holds no unpaid withdrawal ${nonce} for this account: the vault has paid it, or the node is still loading it after a restart.`);
-    else if (!store.noteAccess(error)) store.toast("error", errorText(error));
+    // The node holds no unpaid approval under this nonce (`reissue.rs`, `Reissue::Unknown`), so the vault's record is read again.
+    else if (error instanceof EngineError && error.status === 404) {
+      store.toast("error", `The node holds no unpaid withdrawal ${nonce} for this account: the vault has paid it, or the node is still loading it after a restart.`);
+      if (asking()) store.patch({ unpaid: store.getSnapshot().unpaid.filter((n) => n !== nonce) });
+    } else if (!store.noteAccess(error)) store.toast("error", errorText(error));
   } finally {
     store.patch({ busy: false });
   }
