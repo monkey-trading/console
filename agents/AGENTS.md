@@ -118,7 +118,7 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   `scripts/check-geo-block.sh [port]`
 - Docs check: `python3 scripts/check-docs.py`; its test: `python3 scripts/check-docs.test.py`
 - Review-delta script test: `agents/skills/agent-code-review/scripts/review-delta-test.sh` (builds a
-  scratch git repository; needs only `git`, `sed`, and `diff`)
+  scratch git repository; needs `git` and the POSIX tools)
 - Workflow lint: `actionlint`, at the version `.github/workflows/ci.yaml` pins
 
 ## Repo facts

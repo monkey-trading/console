@@ -45,7 +45,14 @@ selects multi-agent mode. A severity filter alone does not select a review level
   `.residual.diff`, and the change itself in context, saved as `.change.diff`, with the full
   reviewed diff (`<reviewed-base>...<reviewed-head>`) saved as `.reviewed.diff` for context.
   `scope.md` records both base and head pairs. The round reads source at the new head, and the
-  next re-check starts from its new base and head.
+  next re-check starts from its new base and head. Save them with:
+
+  ```bash
+  review-delta.sh <reviewed-base> <reviewed-head> <new-base> <new-head> > <run-dir>/.residual.diff
+  echo $? >> <run-dir>/.residual.status   # 0 and empty, or 1 and the residual; else fix and rerun
+  git diff <new-base>...<new-head> > <run-dir>/.change.diff   # or the new diff of each conflicted file
+  git diff <reviewed-base>...<reviewed-head> > <run-dir>/.reviewed.diff
+  ```
 
 Honor a user-provided base ref, path subset, or commit range exactly. In PR scope, re-check the
 head SHA immediately before the review begins. Use only read-only `gh` commands, and never print or
@@ -200,7 +207,8 @@ finding is fixed by class before the next round.
   finding by class (there is no multi-agent round, so the round-3 Medium rule does not apply —
   Mediums from this check are fixed in the PR too), and records one round-log row naming the
   single-agent check, its findings, and its fixes. A later change is still re-checked by its delta
-  below. The PR is marked ready once `ci-passed` is green on the head, as after a clean round.
+  below, as a single-agent check by the owning agent over the same residual and change (the full
+  diff when behaviour changes), numbered in the round log, with its Mediums fixed in the PR too. The PR is marked ready once `ci-passed` is green on the head, as after a clean round.
   Feature PRs always run the full loop.
 - **The round log is the count.** The branch's fix notes
   ([Fixing an accepted finding](#fixing-an-accepted-finding)) open with a round log: one line per
@@ -229,7 +237,7 @@ finding is fixed by class before the next round.
   behaviour, a fix for a failed check or dev scenario, a fix for a review comment on a ready PR, a
   change the user asks for, or any other change to the patch moves the PR back to draft and
   reopens the loop for one delta round: the same reviewer pair, in fresh sessions and
-  cross-validated as usual, reviews the residual the script prints and the change itself in
+  cross-validated as usual (for a bug-fix PR, the owning agent alone, as above), reviews the residual the script prints and the change itself in
   context (the new diff of each file where a rebase resolved a conflict, and each commit the
   change added), with the full reviewed diff as context. The residual has no context lines, so it
   cannot show where an unchanged line now sits; the round runs even when the script exits 0. It
