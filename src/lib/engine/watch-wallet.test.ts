@@ -13,6 +13,7 @@ describe("WatchConnector", () => {
     const wallet = await connector.connect();
     expect(wallet.address).toBe(ADDRESS.toLowerCase());
     expect(wallet.label).toBe("Read-only");
+    expect(wallet.readOnly).toBe(true);
     const typed = cancelTypedData(requestDomain(31337, ADDRESS), { account: ADDRESS, order_id: 1 }, { nonce: 0, expiresAt: 0 });
     await expect(wallet.sign({ summary: "", typed })).rejects.toThrow("read-only");
     await expect(wallet.deposit(1n)).rejects.toThrow("read-only");

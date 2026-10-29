@@ -34,11 +34,12 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     if (store.liveWallet !== wallet) release(store, store.liveWallet);
     store.liveWallet = wallet;
     store.patch(NO_ACCOUNT);
-    store.setWallet({ address: wallet.address, label: wallet.label });
+    store.setWallet({ address: wallet.address, label: wallet.label, ...(wallet.readOnly ? { readOnly: true } : {}) });
     await store.loadAccount(true);
     if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);
   } catch (error) {
-    if (!store.noteAccess(error)) store.toast("error", error instanceof Error ? error.message : "The wallet did not connect.");
+    // A node that cannot be trusted is reported by the attestation banner and the stream, once; the account read waiting on the same check does not repeat it.
+    if (!store.noteAccess(error) && !(error instanceof UntrustedError)) store.toast("error", error instanceof Error ? error.message : "The wallet did not connect.");
     if (!store.getSnapshot().wallet) store.liveWallet = null;
   }
 }
@@ -58,7 +59,7 @@ export function usableWallet(store: ConsoleStore, action: string): Wallet | null
     store.toast("error", "Connect a wallet first.");
     return null;
   }
-  const blocked = signBlock(state.attestation, state.stream);
+  const blocked = signBlock(state.attestation, state.stream, state.wallet?.readOnly === true);
   if (blocked !== null) {
     store.toast("error", `The console will not ${action}: ${blocked}.`);
     return null;

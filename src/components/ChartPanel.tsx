@@ -5,7 +5,7 @@
 import { TIMEFRAMES } from "@/lib/bars";
 import { fixedToNumber, moveBps } from "@/lib/fixed";
 import { formatMovePercent } from "@/lib/format";
-import { liquidationPrice } from "@/lib/liquidation";
+import { closeOutMarker } from "@/lib/liquidation";
 import type { MarketModel } from "@/lib/models";
 import { formatMark, splitDecimals } from "@/lib/price-format";
 import type { ConsoleState } from "@/lib/store/state";
@@ -19,7 +19,7 @@ function markersFor(state: ConsoleState, market: MarketModel): PriceMarker[] {
   const position = state.account?.positions.find((p) => p.market === market.id);
   if (state.account && position) {
     out.push({ price: fixedToNumber(position.entry), tone: "glow", style: "dotted", title: `${position.qty > 0n ? "Long" : "Short"} entry` });
-    const liq = liquidationPrice(state.account, market, state.markets);
+    const liq = closeOutMarker(state.signatures, state.account, market, state.markets);
     if (liq !== null) out.push({ price: fixedToNumber(liq), tone: "ember", style: "dashed", title: "Close-out (est.)" });
   }
   for (const order of state.account?.orders ?? []) {

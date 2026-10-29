@@ -19,7 +19,7 @@ export interface StoreDeps {
   drive?: (ms: number) => void;
   initial: { markets: MarketView[]; house: HouseView; startMs: number; recent?: StreamMessage[]; /** The account whose events the activity log shows before a wallet connects. */ viewer?: string;
     /** A wallet already connected when the page loads, with what the node holds for it. */
-    session?: { wallet: { address: string; label: string }; account: AccountView | null; eligibility: EligibilityClass | null; queue: QueuedWithdrawal[]; history: HistoryEvent[] };
+    session?: { wallet: { address: string; label: string; readOnly?: boolean }; account: AccountView | null; eligibility: EligibilityClass | null; queue: QueuedWithdrawal[]; history: HistoryEvent[] };
   };
   /** Price history for the chart, ending at the current mark. */
   history: HistorySource;
@@ -113,7 +113,7 @@ export class ConsoleStore {
   }
 
   /** Sets the connected wallet (or none) and drops activity lines that belong to another account. */
-  setWallet(wallet: { address: string; label: string } | null): void {
+  setWallet(wallet: { address: string; label: string; readOnly?: boolean } | null): void {
     this.viewer = undefined; // once a wallet has been connected or left, the starting viewer no longer applies
     const mine = wallet?.address.toLowerCase();
     this.patch({ wallet, feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
@@ -168,10 +168,14 @@ export class ConsoleStore {
   /** Applies a change the client reports: the node's attestation, its feed, or a dropped stream. */
   private onClientEvent(event: ClientEvent): void {
     if (event.type === "feed") {
-      // A feed back from a failure resumes at the live end, so what it missed is read again.
-      const recovered = event.status === "live" && this.snapshot.stream === "stale";
-      this.patch({ stream: event.status });
-      if (recovered) void this.refresh(true);
+      // A feed back from a failure resumes at the live end, so what it missed is read again. The
+      // first frame of the first connection does the same: the reads made while it was connecting
+      // may predate an event the stream, which starts at the live end, will never carry.
+      const was = this.snapshot.stream;
+      const read = event.status === "live" && (was === "stale" || was === "connecting");
+      // The frame's signed time moves the node clock first, so a read it prompts plots marks at node time, not the pre-outage time.
+      this.patch({ stream: event.status, ...(event.time !== undefined && event.time > this.snapshot.now ? { now: event.time } : {}) });
+      if (read) void this.refresh(true);
     } else if (event.type === "problem") this.toast("error", event.reason);
     // Data read under the old enclave is read again once the new one is trusted; a check that ends
     // at the same address changes nothing, so a read that keeps failing is not repeated by it.

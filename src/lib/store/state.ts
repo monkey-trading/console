@@ -49,7 +49,7 @@ export interface ConsoleState {
   timeframe: TimeframeId;
   selected: MarketId;
   house: HouseModel;
-  wallet: { address: string; label: string } | null;
+  wallet: { address: string; label: string; readOnly?: boolean } | null;
   eligibility: Eligibility;
   account: AccountModel | null;
   queue: QueuedWithdrawal[];

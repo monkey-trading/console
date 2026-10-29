@@ -2,6 +2,8 @@
 
 /** Open positions with their profit and loss and a Close button: a table from 1024 px, cards below. */
 
+import { useId } from "react";
+
 import { formatMark } from "@/lib/price-format";
 import { absFixed, formatFixedPlaces, formatUsd, mulFixed } from "@/lib/fixed";
 import { closingPrice } from "@/lib/quotes";
@@ -10,6 +12,7 @@ import { previewTicket } from "@/lib/ticket";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
+import { useReadOnlyNote } from "./SignGate";
 
 const TH = "px-4 py-3 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
 const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
@@ -20,6 +23,7 @@ const CLOSE_SLIPPAGE_BPS = 25;
 export function PositionsView() {
   const { account, markets, busy, signatures, quotes, house, quoted: asked } = useConsole();
   const { store } = useSession();
+  const readOnly = useReadOnlyNote(useId(), "Close");
   const positions = account?.positions ?? [];
   if (positions.length === 0) return <p className="px-4 py-6 text-caption text-fg-3">No open positions.</p>;
   const rows = positions.map((p) => {
@@ -51,7 +55,7 @@ export function PositionsView() {
       mark: known === null ? "—" : formatMark(known, places),
       pnl: pnl === null ? "—" : formatUsd(pnl),
       loss: pnl !== null && pnl < 0n,
-      closable: !busy && market?.open === true && known !== null && quoted !== null,
+      closable: !busy && !readOnly.readOnly && market?.open === true && known !== null && quoted !== null,
       // The node quotes at most four markets at once, the selected one first; a held market left out has no closing price until it is selected.
       unquoted: signatures === "checked" && !asked.includes(p.market) && market?.open === true && known !== null,
       close,
@@ -59,6 +63,7 @@ export function PositionsView() {
   });
   return (
     <>
+      {readOnly.note}
       <ul className="lg:hidden">
         {rows.map((r) => (
           <li key={r.key} className="border-b border-line px-4 py-3 text-caption last:border-b-0">
@@ -71,7 +76,7 @@ export function PositionsView() {
               <div><dt className="text-label text-fg-3">Entry</dt><dd>{r.entry}</dd></div>
               <div><dt className="text-label text-fg-3">Mark</dt><dd>{r.mark}</dd></div>
             </dl>
-            <button type="button" disabled={!r.closable} className={`${BUTTON} mt-3 w-full`} aria-label={`Close ${r.symbol} position`} onClick={r.close}>Close</button>
+            <button type="button" disabled={!r.closable} className={`${BUTTON} mt-3 w-full`} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
             {r.unquoted && <p className="mt-2 text-label text-fg-3">Select {r.symbol} to get its closing price.</p>}
           </li>
         ))}
@@ -89,7 +94,7 @@ export function PositionsView() {
                 <td className="px-4 py-4">{r.mark}</td>
                 <td className={`px-4 py-4 ${r.loss ? "text-ember" : "text-glow"}`}>{r.pnl}</td>
                 <td className="px-4 py-4 text-right">
-                  <button type="button" disabled={!r.closable} className={BUTTON} aria-label={`Close ${r.symbol} position`} onClick={r.close}>Close</button>
+                  <button type="button" disabled={!r.closable} className={BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
                   {r.unquoted && <p className="mt-1 text-label text-fg-3">Select {r.symbol} to get its closing price.</p>}
                 </td>
               </tr>

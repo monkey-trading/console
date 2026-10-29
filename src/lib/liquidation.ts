@@ -2,6 +2,7 @@
 
 import { bpsOf, divFixed, mulFixed, type Fixed } from "./fixed";
 import type { AccountModel, MarketModel } from "./models";
+import type { SignatureChecks } from "./engine/client";
 import { CLOSE_OUT_BPS } from "./pricing";
 
 /**
@@ -20,4 +21,12 @@ export function liquidationPrice(account: AccountModel, market: MarketModel, oth
   const threshold = bpsOf(account.margin, CLOSE_OUT_BPS);
   const price = position.entry + divFixed(threshold - account.balance - otherPnl, position.qty);
   return price > 0n ? price : null;
+}
+
+/**
+ * The close-out marker the chart draws, or null: the console's estimate is shown only where it
+ * models the node (`signatures` is `none`), since a live node's own margin and spreads decide it.
+ */
+export function closeOutMarker(signatures: SignatureChecks, account: AccountModel, market: MarketModel, others: readonly MarketModel[]): Fixed | null {
+  return signatures === "none" ? liquidationPrice(account, market, others) : null;
 }

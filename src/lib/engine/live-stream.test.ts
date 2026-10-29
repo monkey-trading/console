@@ -23,6 +23,7 @@ function setup(options: { address?: () => string; clockMs?: number; accept?: boo
   const sockets: FakeSocket[] = [];
   const messages: StreamMessage[] = [];
   const feeds: FeedStatus[] = [];
+  const feedTimes: (number | undefined)[] = [];
   const problems: string[] = [];
   const opened: FrameConnection[] = [];
   // The vectors were opened with `after` first in the query; the client's own path is checked below, and the real verifier checks the vector's.
@@ -37,11 +38,11 @@ function setup(options: { address?: () => string; clockMs?: number; accept?: boo
     origin: "wss://node.test", chainId: connection.chain_id, vault: connection.vault, heartbeatMs: HEARTBEAT_MS, verifier: () => verifier, trust,
     openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
     scheduler, nowMs: () => options.clockMs ?? connection.frames[0]?.time ?? 0, challenge: () => connection.challenge,
-    onMessage: (m) => messages.push(m), onFeed: (f) => feeds.push(f), onProblem: (p) => problems.push(p),
+    onMessage: (m) => messages.push(m), onFeed: (f, time) => { feeds.push(f); feedTimes.push(time); }, onProblem: (p) => problems.push(p),
     // Quotes and authorizations are tested through the live client in live-actions.test.ts.
     onQuote: () => {}, onQuoteError: () => {}, onWithdrawal: () => {},
   });
-  return { stream, sockets, messages, feeds, problems, scheduler, opened };
+  return { stream, sockets, messages, feeds, feedTimes, problems, scheduler, opened };
 }
 
 const send = (socket: FakeSocket | undefined, ...indexes: number[]) => {
@@ -105,6 +106,35 @@ describe("a signed stream", () => {
     send(t.sockets[0], 0);
     expect(t.problems[0]).toContain("clock");
     expect(t.feeds.at(-1)).toBe("stale");
+  });
+});
+
+describe("a stream stopped before trust resolves", () => {
+  it("opens no socket, however the check ends", async () => {
+    const t = setup();
+    t.stream.start();
+    t.stream.stop();
+    await settle();
+    expect(t.sockets).toEqual([]);
+    expect(t.feeds).toEqual([]);
+  });
+
+  it("opens one socket when stopped and started again before trust resolves", async () => {
+    const t = setup();
+    t.stream.start();
+    t.stream.stop();
+    t.stream.start();
+    await settle();
+    expect(t.sockets).toHaveLength(1);
+  });
+});
+
+describe("the feed going live", () => {
+  it("carries the signed time of the frame that made it live, and only that frame", async () => {
+    const t = await started();
+    send(t.sockets[0], 0, 1);
+    expect(t.feeds).toEqual(["live"]);
+    expect(t.feedTimes).toEqual([connection.frames[0]?.time]);
   });
 });
 

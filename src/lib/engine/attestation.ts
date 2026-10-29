@@ -47,8 +47,9 @@ export function checkAttestation(attestation: Attestation, acceptsMock: boolean)
   return null;
 }
 
-/** Why the console may not sign now, as a clause, or null when it may: the node is attested and its feed is arriving. */
-export function signBlock(status: AttestationStatus, feed: FeedStatus): string | null {
+/** Why the console may not sign now, as a clause, or null when it may: the account can sign, the node is attested and its feed is arriving. */
+export function signBlock(status: AttestationStatus, feed: FeedStatus, readOnly = false): string | null {
+  if (readOnly) return "this account is read-only, so nothing can be signed for it";
   if (status.kind === "clock") return "your device clock differs from the node's signed time";
   if (status.kind === "reverifying") return "the node is being verified again";
   if (status.kind !== "mock" && status.kind !== "verified") return "the node's attestation is not verified";

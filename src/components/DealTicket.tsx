@@ -45,8 +45,9 @@ export function DealTicket() {
   const slippage = slippageBound(chosenSlippage, market);
   const notional = parseFixed(size) ?? 0n;
   const triggerPrice = parseFixed(price);
-  const preview = previewTicket({ market, side, notional, slippageBps: slippage, resting: kind !== "market", triggerPrice, account: state.account, houseNav: state.house.nav });
   const live = state.signatures === "checked";
+  // The margin use after the order comes from the console's own quote model, which does not know a live node's toxicity spread, so it is shown only for the in-browser node.
+  const preview = previewTicket({ market, side, notional, slippageBps: slippage, resting: kind !== "market", triggerPrice, account: state.account, houseNav: state.house.nav, estimates: !live });
   const prices = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview, side, mark: market.mark });
   // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
   const problems = preview.problems.filter((p) => !live || p !== MARGIN_SHORT);
@@ -54,7 +55,9 @@ export function DealTicket() {
   if (size.trim() !== "" && parseFixed(size) === null) problems.push("Enter the size in digits, such as 10000 or 2500.50.");
   if (kind !== "market" && triggerPrice === null) problems.push(price.trim() === "" ? "Enter a trigger price." : "Enter the trigger price in digits, such as 61250.50.");
   const blockSentence = (why: string | null) => (why === null ? null : `Trading is paused: ${why}.`);
-  const gate = !state.wallet ? "Connect a wallet to trade." : state.eligibility === null ? "Attest your eligibility before trading." : blockSentence(signBlock(state.attestation, state.stream));
+  // A read-only account is named as the cause before eligibility, which it could not attest.
+  const readOnlyWhy = signBlock(state.attestation, state.stream, state.wallet?.readOnly === true);
+  const gate = !state.wallet ? "Connect a wallet to trade." : state.wallet.readOnly ? blockSentence(readOnlyWhy) : state.eligibility === null ? "Attest your eligibility before trading." : blockSentence(readOnlyWhy);
   const canPlace = gate === null && problems.length === 0 && !state.busy;
   const places = market.places;
   const show = (value: bigint | null) => (value === null ? "—" : formatMark(value, places));
@@ -111,7 +114,7 @@ export function DealTicket() {
         </button>
         {live && <div className="mt-3"><SigningFor /></div>}
         <div aria-live="polite" className="mt-3 space-y-1 text-label leading-relaxed text-ember">
-          {gate && <p className="text-fg-2">{gate} {state.wallet && state.eligibility === null && <FundingLink />}</p>}
+          {gate && <p className="text-fg-2">{gate} {state.wallet && !state.wallet.readOnly && state.eligibility === null && <FundingLink />}</p>}
           {!gate && problems.map((p) => <p key={p}>{p}{p === "Fund your account to trade." && <> <FundingLink /></>}</p>)}
         </div>
       </form>

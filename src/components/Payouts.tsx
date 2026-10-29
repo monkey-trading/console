@@ -2,13 +2,14 @@
 
 /** The account's approved withdrawals and their claims on the vault: claim, find a missed authorization, or ask for a fresh one. */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 
 import { checkPaid, claim, findAuthorization, loadApprovals, payoutsOf, reissue, type Payout } from "@/lib/store/payouts";
 import { formatStamp } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
 
 import { useConsole, useSession } from "./ConsoleProvider";
+import { useReadOnlyNote } from "./SignGate";
 
 const BUTTON = "mt-3 min-h-11 w-full rounded border border-glow bg-glow/10 px-3 py-2 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 lg:min-h-0";
 
@@ -17,6 +18,7 @@ export function Payouts() {
   const state = useConsole();
   const { store } = useSession();
   const heading = useRef<HTMLHeadingElement>(null);
+  const readOnly = useReadOnlyNote(useId(), "Claiming and asking for a new authorization");
   const payouts = payoutsOf(state);
   const address = state.wallet?.address;
   // A new approval reaches the recent history first; it prompts a fresh read of every approval.
@@ -38,11 +40,12 @@ export function Payouts() {
   return (
     <section aria-labelledby="payouts-title" className="rounded-xl border border-line-2 bg-ink-1 p-5">
       <h2 ref={heading} id="payouts-title" tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">Claims on the vault</h2>
+      {readOnly.note}
       {payouts.length === 0 ? (
         <p className="mt-4 text-caption text-fg-3">{state.wallet ? "No approved withdrawals yet." : "Connect a wallet to see your withdrawals."}</p>
       ) : (
         <ul className="mt-4 space-y-3">
-          {payouts.map((payout) => <PayoutRow key={payout.nonce} payout={payout} idle={idle} searching={state.searching === payout.nonce} act={act} />)}
+          {payouts.map((payout) => <PayoutRow key={payout.nonce} payout={payout} idle={idle} signs={!readOnly.readOnly} describedBy={readOnly.describedBy} searching={state.searching === payout.nonce} act={act} />)}
         </ul>
       )}
       {state.approvalsNext !== null && (
@@ -53,7 +56,7 @@ export function Payouts() {
 }
 
 /** One approved withdrawal and the actions its status allows; `act` runs one unless another is in flight. */
-function PayoutRow({ payout, idle, searching, act }: { payout: Payout; idle: boolean; searching: boolean; act: (run: () => Promise<void>) => void }) {
+function PayoutRow({ payout, idle, signs, describedBy, searching, act }: { payout: Payout; idle: boolean; /** False for a read-only account, which cannot claim or ask for a signature. */ signs: boolean; describedBy: string | undefined; searching: boolean; act: (run: () => Promise<void>) => void }) {
   const { store } = useSession();
   const amount = formatUsdc(payout.amount);
   const { status, nonce, searchFrom } = payout;
@@ -67,7 +70,7 @@ function PayoutRow({ payout, idle, searching, act }: { payout: Payout; idle: boo
       {status.kind === "claimable" && (
         <>
           <p className="mt-2 text-fg-3">Authorized until {formatStamp(status.expiresAt * 1000)} UTC.</p>
-          <button type="button" aria-disabled={!idle} onClick={() => act(() => claim(store, nonce))} className={BUTTON}>Claim {amount} on the vault</button>
+          <button type="button" aria-disabled={!idle || !signs} aria-describedby={describedBy} onClick={() => signs && act(() => claim(store, nonce))} className={BUTTON}>Claim {amount} on the vault</button>
           {search("Look for a newer authorization in the log")}
         </>
       )}
@@ -80,7 +83,7 @@ function PayoutRow({ payout, idle, searching, act }: { payout: Payout; idle: boo
       {status.kind === "expired" && (
         <>
           <p className="mt-2 text-fg-3">Its authorization expired unclaimed at {formatStamp(status.expiresAt * 1000)} UTC.</p>
-          <button type="button" aria-disabled={!idle} onClick={() => act(() => reissue(store, nonce, status.expiresAt, searchFrom))} className={BUTTON}>Ask for a new authorization</button>
+          <button type="button" aria-disabled={!idle || !signs} aria-describedby={describedBy} onClick={() => signs && act(() => reissue(store, nonce, status.expiresAt, searchFrom))} className={BUTTON}>Ask for a new authorization</button>
           {search("Look for a newer one in the log")}
         </>
       )}

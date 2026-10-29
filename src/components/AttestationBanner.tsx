@@ -3,7 +3,7 @@
 /** Compact lines saying what the console found when it checked the node, and what it cannot vouch for. */
 
 import { shortHex } from "@/lib/format";
-import { describeMockAttestation } from "@/lib/messages";
+import { describeMockAttestation, describeReverifying } from "@/lib/messages";
 
 import { useConsole } from "./ConsoleProvider";
 
@@ -27,11 +27,12 @@ export function AttestationBanner() {
 
 function Status({ attestation, signatures }: { attestation: ReturnType<typeof useConsole>["attestation"]; signatures: ReturnType<typeof useConsole>["signatures"] }) {
   const mock = describeMockAttestation(signatures);
+  const reverifying = describeReverifying();
   switch (attestation.kind) {
     case "checking":
       return <div role="status" className={`${LINE} border-line text-fg-3`}>Checking the node&apos;s attestation…</div>;
     case "reverifying":
-      return <div role="status" className={WARN}><strong className="font-medium">Re-verifying the node.</strong> The enclave changed or an answer failed its check; nothing is shown as trusted until it passes.</div>;
+      return <div role="status" className={WARN}><strong className="font-medium">{reverifying.lead}</strong> {reverifying.rest}</div>;
     case "mock":
       return <div role="status" className={WARN}><strong className="font-medium">{mock.lead}</strong> {mock.rest}</div>;
     case "verified":
