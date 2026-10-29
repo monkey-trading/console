@@ -37,15 +37,17 @@ export interface ScanResult {
   /** The latest authorization of the payout the read passed, or null. */
   withdrawal: SignedWithdrawal | null;
   complete: boolean;
+  /** The seq of the last entry read, where a search that stopped short reads on from; null before any entry. */
+  reached: number | null;
 }
 
 /**
  * Reads the log from seq `fromSeq` to the head a heartbeat names, for the latest authorization of
  * `account`'s payout `nonce`. The read goes to the head, since the node also signs a payout again,
- * unexpired, when the vault's signer rotates. A read that fails or runs out of time after finding one
- * answers with it, marked incomplete.
+ * unexpired, when the vault's signer rotates. A read that fails or runs out of time after reading any
+ * entry answers with what it found and how far it got, marked incomplete.
  * Error cases:
- * - with none found: a frame is out of order or does not verify, the connection fails, or the search takes over 30 s
+ * - before any entry: a frame is out of order or does not verify, the connection fails, or the search takes over 30 s
  */
 export function scanForWithdrawal(deps: ScanDeps, account: Address, nonce: number, fromSeq: number): Promise<ScanResult> {
   return new Promise((resolve, reject) => {
@@ -63,8 +65,8 @@ export function scanForWithdrawal(deps: ScanDeps, account: Address, nonce: numbe
       deps.scheduler.clearTimeout(timer);
       socket.onmessage = socket.onclose = socket.onerror = null;
       socket.close();
-      if (error && found === null) reject(error);
-      else resolve({ withdrawal: found, complete: error === null });
+      if (error && last === null) reject(error);
+      else resolve({ withdrawal: found, complete: error === null, reached: last?.[0] ?? null });
     };
     const timer = deps.scheduler.setTimeout(() => finish(new Error("Looking for the withdrawal's authorization in the log took too long.")), SCAN_TIMEOUT_MS);
     socket.onmessage = (event) => {

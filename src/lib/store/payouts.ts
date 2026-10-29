@@ -7,7 +7,8 @@
 import { EngineError } from "../engine/client";
 import { reissueTypedData } from "../engine/eip712";
 import type { SignedWithdrawal } from "../engine/types";
-import { fixedFromWire, formatFixedPlaces, type Fixed } from "../fixed";
+import { fixedFromWire, type Fixed } from "../fixed";
+import { formatUsdc } from "../vault";
 import { domainOf, errorText, prompting, usableWallet } from "./actions";
 import { formatStamp } from "../time";
 import { authorizationFor, keepLatest } from "./funds";
@@ -71,6 +72,8 @@ export function payoutsOf(state: ConsoleState): Payout[] {
 export async function loadApprovals(store: ConsoleStore, older = false): Promise<void> {
   const address = store.getSnapshot().wallet?.address;
   if (address === undefined) return;
+  const generation = store.getSnapshot().approvalsGeneration + 1;
+  store.patch({ approvalsGeneration: generation });
   try {
     const approvals = older ? [...store.getSnapshot().approvals] : [];
     let before = older ? (store.getSnapshot().approvalsNext ?? undefined) : undefined;
@@ -82,7 +85,9 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
       if (next === null) break;
       before = next;
     }
-    if (store.getSnapshot().wallet?.address === address) store.patch({ approvals, approvalsNext: next });
+    const state = store.getSnapshot();
+    // A read started later answers for the account as it is now; this one's answer is older.
+    if (state.wallet?.address === address && state.approvalsGeneration === generation) store.patch({ approvals, approvalsNext: next });
   } catch (error) {
     store.toast("error", `Your approved withdrawals could not be read: ${errorText(error)}`);
   }
@@ -112,10 +117,10 @@ export async function claim(store: ConsoleStore, nonce: number): Promise<void> {
   const wallet = store.liveWallet;
   if (!wallet) return store.toast("error", "Connect a wallet first.");
   if (signed === null) return;
-  const amount = `${formatFixedPlaces(fixedFromWire(signed.amount), 2)} USDC`;
+  const amount = formatUsdc(fixedFromWire(signed.amount));
   store.patch({ busy: true });
   try {
-    await prompting(store, `Confirm in your wallet: claim ${amount} from the vault.`, () => wallet.claim(signed));
+    await prompting(store, `Confirm in your wallet: claim ${amount} from the vault.`, () => wallet.claim(signed, (waitingFor) => store.patch({ prompt: waitingFor })));
     // The payout belongs to the account that claimed it, which may no longer be the one connected.
     const state = store.getSnapshot();
     if (state.wallet?.address === wallet.address) store.patch({ paid: [...new Set([...state.paid, nonce])] });
@@ -133,10 +138,12 @@ export async function findAuthorization(store: ConsoleStore, nonce: number, from
   if (address === undefined || store.getSnapshot().searching !== null) return;
   store.patch({ searching: nonce });
   try {
-    const { withdrawal, complete } = await store.deps.client.findWithdrawal(address, nonce, fromSeq);
+    const { withdrawal, complete, reached } = await store.deps.client.findWithdrawal(address, nonce, fromSeq);
     const state = store.getSnapshot();
     if (state.wallet?.address !== address) return;
     if (withdrawal?.authorization !== undefined) store.patch({ authorizations: keepLatest(state.authorizations, withdrawal) });
+    // The next search reads on from where this one stopped.
+    if (!complete && reached !== null) hint(store, nonce, { searchFrom: reached });
     if (!complete) store.toast("info", "The search of the log stopped before reaching its end, so a newer authorization may still be there. Search again to read on.");
     else if (withdrawal?.authorization === undefined) store.toast("info", "The log holds no authorization for this withdrawal yet. The node signs one once a checkpoint covering the approval is confirmed on chain; it then arrives here.");
   } catch (error) {
@@ -163,6 +170,8 @@ function hint(store: ConsoleStore, nonce: number, learnt: PayoutHint): void {
 export async function reissue(store: ConsoleStore, nonce: number, expiresAt: number, fromSeq: number, retried = false): Promise<void> {
   const wallet = usableWallet(store, "sign");
   if (!wallet) return;
+  // Every step after an await applies only while the wallet that asked is still the one connected.
+  const asking = () => store.getSnapshot().wallet?.address === wallet.address;
   store.patch({ busy: true });
   let newer: number | null = null;
   try {
@@ -170,7 +179,7 @@ export async function reissue(store: ConsoleStore, nonce: number, expiresAt: num
     const summary = `ask for a new authorization of withdrawal ${nonce}`;
     const signature = await prompting(store, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
     const { seq } = await store.deps.client.reissue(wallet.address, nonce, { replaces_expires_at: expiresAt, signature });
-    if (seq !== null) hint(store, nonce, { searchFrom: seq });
+    if (seq !== null && asking()) hint(store, nonce, { searchFrom: seq });
     store.toast("ok", "Requested. The new authorization arrives here once the node signs it.");
   } catch (error) {
     const stale = error instanceof EngineError && error.status === 400 ? NEWER_EXISTS.exec(error.message) : null;
@@ -179,7 +188,7 @@ export async function reissue(store: ConsoleStore, nonce: number, expiresAt: num
   } finally {
     store.patch({ busy: false });
   }
-  if (newer === null) return;
+  if (newer === null || !asking()) return;
   hint(store, nonce, { newerUntil: newer });
   if (newer * 1000 <= store.getSnapshot().now && !retried) return reissue(store, nonce, newer, fromSeq, true);
   store.toast("info", `The node has signed a newer authorization for this withdrawal, valid until ${formatStamp(newer * 1000)} UTC; looking for it in the log.`);

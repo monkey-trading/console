@@ -46,6 +46,15 @@ export function followAccountFeeds(store: ConsoleStore): () => void {
 }
 
 /**
+ * What the quote request depends on: the account, the selected market, the markets held, and whether
+ * the account is credited, so a request the node refused before the credit is sent again after it.
+ * The request is sent again only when this changes.
+ */
+export function quoteSyncKey(state: ConsoleState): string {
+  return JSON.stringify([state.wallet?.address ?? null, state.selected, state.account?.positions.map((p) => p.market) ?? [], state.account !== null]);
+}
+
+/**
  * Asks the node for the connected account's quotes in the selected market and those it holds, or for
  * none without a wallet, and drops the quotes of markets it no longer asks about, which stop updating.
  */

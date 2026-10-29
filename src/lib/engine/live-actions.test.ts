@@ -202,7 +202,7 @@ describe("finding an authorization in the log", () => {
     const none = client.findWithdrawal(ACCOUNT, 1, 50);
     await settle();
     sockets[0]?.receive(frame(0, { type: "heartbeat", head: "45:0" }));
-    await expect(none).resolves.toEqual({ withdrawal: null, complete: true });
+    await expect(none).resolves.toEqual({ withdrawal: null, complete: true, reached: null });
     const broken = client.findWithdrawal(ACCOUNT, 1, 40);
     await settle();
     sockets[1]?.receive(frame(1, { type: "heartbeat", head: "45:0" }));
@@ -230,7 +230,7 @@ describe("finding an authorization in the log", () => {
     sockets[0]?.receive(frame(0, { type: "heartbeat", head: "90:0" }));
     sockets[0]?.receive(frame(1, signed(1, 100)));
     scheduler.advance(30_000);
-    await expect(timedOut).resolves.toMatchObject({ withdrawal: { authorization: { expires_at: 100 } }, complete: false });
+    await expect(timedOut).resolves.toMatchObject({ withdrawal: { authorization: { expires_at: 100 } }, complete: false, reached: 41 });
     const dropped = client.findWithdrawal(ACCOUNT, 1, 40);
     await settle();
     sockets[1]?.receive(frame(0, signed(1, 100)));

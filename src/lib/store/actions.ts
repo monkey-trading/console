@@ -7,6 +7,7 @@ import { cancelTypedData, eligibilityTypedData, orderTypedData, requestDomain, S
 import type { EligibilityClass, OrderKind, RequestAuth, Side } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
 import { fixedToWire, formatFixedPlaces, parseFixed, type Fixed } from "../fixed";
+import { formatUsdc } from "../vault";
 import { describeReject } from "../messages";
 import type { ConsoleStore } from "./store";
 
@@ -154,10 +155,10 @@ export async function attestEligibility(store: ConsoleStore, cls: EligibilityCla
 export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void> {
   const wallet = usableWallet(store, "send a deposit");
   if (!wallet) return;
-  const shown = `${formatFixedPlaces(amount, 2)} USDC`;
+  const shown = formatUsdc(amount);
   store.patch({ busy: true });
   try {
-    await prompting(store, `Confirm in your wallet: deposit ${shown} to the vault (an approval first, if the vault needs one).`, () => wallet.deposit(amount));
+    await prompting(store, `Confirm in your wallet: deposit ${shown} to the vault (an approval first, if the vault needs one).`, () => wallet.deposit(amount, (waitingFor) => store.patch({ prompt: waitingFor })));
     store.toast("info", store.deps.client.signatures === "none"
       ? `Deposit of ${shown} sent. It counts as collateral now and can be withdrawn once the vault's transaction is final.`
       : `Deposit of ${shown} sent. The node sees it a few blocks after it is mined and credits it once your eligibility is recorded; it can be withdrawn once the vault's transaction is final.`);

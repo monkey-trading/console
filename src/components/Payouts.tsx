@@ -4,9 +4,9 @@
 
 import { useEffect, useRef } from "react";
 
-import { formatFixedPlaces } from "@/lib/fixed";
 import { checkPaid, claim, findAuthorization, loadApprovals, payoutsOf, reissue, type Payout } from "@/lib/store/payouts";
 import { formatStamp } from "@/lib/time";
+import { formatUsdc } from "@/lib/vault";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 
@@ -55,7 +55,7 @@ export function Payouts() {
 /** One approved withdrawal and the actions its status allows; `act` runs one unless another is in flight. */
 function PayoutRow({ payout, idle, searching, act }: { payout: Payout; idle: boolean; searching: boolean; act: (run: () => Promise<void>) => void }) {
   const { store } = useSession();
-  const amount = `${formatFixedPlaces(payout.amount, 2)} USDC`;
+  const amount = formatUsdc(payout.amount);
   const { status, nonce, searchFrom } = payout;
   const search = (label: string) => (
     <button type="button" aria-disabled={!idle} onClick={() => act(() => findAuthorization(store, nonce, searchFrom))} className={BUTTON}>{searching ? "Searching the log…" : label}</button>

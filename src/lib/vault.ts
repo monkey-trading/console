@@ -1,6 +1,6 @@
 /** What the vault accepts, which the console and the mock both state. */
 
-import { fixedFromInt, type Fixed } from "./fixed";
+import { fixedFromInt, formatFixedPlaces, type Fixed } from "./fixed";
 
 /** The vault accepts deposits of 10 to 1e9 USDC, as the contract does. */
 export const MIN_DEPOSIT: Fixed = fixedFromInt(10);
@@ -11,6 +11,12 @@ export const MIN_WITHDRAWAL: Fixed = fixedFromInt(10);
 
 /** One USDC base unit (six decimals) in the nine-decimal representation. */
 export const USDC_UNIT: Fixed = 1_000n;
+
+/** `amount` as USDC at the vault's own precision, six places, without trailing zeros: `1,000`, `10.125`. */
+export function formatUsdc(amount: Fixed): string {
+  const text = formatFixedPlaces(amount, 6);
+  return `${text.replace(/\.?0+$/, "")} USDC`;
+}
 
 /** Whether `amount` is a whole number of USDC base units, the finest a transfer can carry. */
 export function isWholeUsdc(amount: Fixed): boolean {

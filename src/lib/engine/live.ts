@@ -157,6 +157,7 @@ export class LiveEngineClient implements EngineClient {
 
   async nonce(address: Address): Promise<{ next_nonce: number; time_ms: number }> {
     const answer = await this.transport.getSigned(`/v1/accounts/${address}/nonce`);
+    // The attested enclave signed this answer to the nonce route, so its shape is the engine's.
     return { next_nonce: (answer.body as { next_nonce: number }).next_nonce, time_ms: answer.timeMs };
   }
 

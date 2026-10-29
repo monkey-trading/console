@@ -16,8 +16,8 @@ import { DEMO_ADDRESS } from "@/lib/mock/demo";
 import { queuePage } from "@/lib/mock/funds";
 import { mockHistory } from "@/lib/mock/history";
 import { createMockNode, SIM_EPOCH_MS, type MockNode } from "@/lib/mock";
-import { connectWallet } from "@/lib/store/actions";
-import { followAccountFeeds, syncQuotes } from "@/lib/store/funds";
+import { connectWallet, disconnectWallet } from "@/lib/store/actions";
+import { followAccountFeeds, quoteSyncKey, syncQuotes } from "@/lib/store/funds";
 import { ConsoleStore } from "@/lib/store/store";
 import type { ConsoleState } from "@/lib/store/state";
 
@@ -55,8 +55,14 @@ function createLiveSession(deploy: Deploy): Session {
   const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, add: deploy.rpcUrl === null ? null : { name: `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   // The SDK is a separate chunk, loaded when the user picks WalletConnect.
+  // When the wallet app ends the session, the console shows the wallet disconnected rather than failing every action.
+  const ended = () => {
+    if (store.liveWallet?.label !== "WalletConnect") return;
+    disconnectWallet(store);
+    store.toast("info", "Your wallet ended the WalletConnect session, so the console disconnected it.");
+  };
   const walletConnect = deploy.walletConnectProjectId === null ? null : new WalletConnectConnector(
-    { projectId: deploy.walletConnectProjectId, url: () => window.location.origin }, chain, { wait }, () => import("@walletconnect/universal-provider"),
+    { projectId: deploy.walletConnectProjectId, url: () => window.location.origin }, chain, { wait }, () => import("@walletconnect/universal-provider"), ended,
   );
   const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, { wait }), ...(walletConnect === null ? [] : [walletConnect]), new WatchConnector(() => window.location.search)]);
   const store = new ConsoleStore({ client, wallets, history: () => [], initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
@@ -148,8 +154,7 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
     // request the node refused (an account not yet credited) is sent again once the account is credited.
     let key = "";
     const sync = () => {
-      const { wallet, selected, account } = store.getSnapshot();
-      const next = JSON.stringify([wallet?.address ?? null, selected, account?.positions.map((p) => p.market) ?? [], account !== null]);
+      const next = quoteSyncKey(store.getSnapshot());
       if (next === key) return;
       key = next;
       syncQuotes(store);

@@ -165,8 +165,8 @@ export class MockEngineClient implements EngineClient {
     throw new EngineError(404, "not found");
   }
 
-  async findWithdrawal(): Promise<{ withdrawal: null; complete: true }> {
-    return { withdrawal: null, complete: true };
+  async findWithdrawal(): Promise<{ withdrawal: null; complete: true; reached: null }> {
+    return { withdrawal: null, complete: true, reached: null };
   }
 
   /** The mock streams no executable quotes; the ticket shows its own estimate. */

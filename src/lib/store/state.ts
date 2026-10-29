@@ -72,6 +72,8 @@ export interface ConsoleState {
   payoutHints: Record<number, PayoutHint>;
   /** The payout nonce whose authorization the log is being searched for. */
   searching: number | null;
+  /** Counts reads of the approvals, so an answer a later read has overtaken is dropped. */
+  approvalsGeneration: number;
   /** The connected account's payout nonces the vault has paid, as its wallet's chain reads them. */
   paid: number[];
   /** What the wallet is asked to sign or send now, shown while it waits for the user. */
@@ -129,6 +131,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     approvalsNext: null,
     payoutHints: {},
     searching: null,
+    approvalsGeneration: 0,
     paid: [],
     prompt: null,
     busy: false,

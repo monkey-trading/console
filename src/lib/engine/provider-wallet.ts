@@ -11,7 +11,7 @@ import { fixedFromWire, type Fixed } from "../fixed";
 import { isWholeUsdc, USDC_UNIT } from "../vault";
 import type { TypedRequest } from "./eip712";
 import type { Address, SignedWithdrawal } from "./types";
-import type { SignRequest, Wallet } from "./wallet";
+import type { Progress, SignRequest, Wallet } from "./wallet";
 
 /** The part of an EIP-1193 provider the wallet uses. */
 export interface Eip1193Provider {
@@ -150,7 +150,7 @@ export class ProviderWallet implements Wallet {
    * - the build names no USDC token, or the amount is not a positive whole number of USDC base units, or exceeds the wallet's USDC
    * - the user declines a transaction, or one reverts or is not mined within three minutes
    */
-  async deposit(amount: Fixed): Promise<string> {
+  async deposit(amount: Fixed, progress: Progress = () => undefined): Promise<string> {
     const units = usdcUnits(amount);
     const usdc = this.chain.usdc;
     if (usdc === null) throw new Error("This build names no USDC token, so it cannot deposit.");
@@ -160,8 +160,8 @@ export class ProviderWallet implements Wallet {
     const balance = await this.read(usdc, encodeFunctionData({ abi: ERC20, functionName: "balanceOf", args: [owner] }), "balanceOf");
     if (balance < units) throw new Error("Your wallet holds less USDC than that.");
     const allowance = await this.read(usdc, encodeFunctionData({ abi: ERC20, functionName: "allowance", args: [owner, vault] }), "allowance");
-    if (allowance < units) await this.send(usdc, encodeFunctionData({ abi: ERC20, functionName: "approve", args: [vault, units] }), "approve the vault");
-    return this.send(this.chain.vault, encodeFunctionData({ abi: VAULT, functionName: "deposit", args: [units] }), "deposit");
+    if (allowance < units) await this.send(usdc, encodeFunctionData({ abi: ERC20, functionName: "approve", args: [vault, units] }), "approve the vault", progress);
+    return this.send(this.chain.vault, encodeFunctionData({ abi: VAULT, functionName: "deposit", args: [units] }), "deposit", progress);
   }
 
   /**
@@ -169,7 +169,7 @@ export class ProviderWallet implements Wallet {
    * - the authorization is for another account or deployment, or has no typed authorization
    * - the user declines, or the transaction reverts or is not mined within three minutes
    */
-  async claim(withdrawal: SignedWithdrawal): Promise<string> {
+  async claim(withdrawal: SignedWithdrawal, progress: Progress = () => undefined): Promise<string> {
     const auth = withdrawal.authorization;
     if (auth === undefined || withdrawal.approved_seq === undefined) throw new Error("This withdrawal has no authorization to claim yet.");
     if (withdrawal.account.toLowerCase() !== this.address || withdrawal.chain_id !== this.chain.chainId || withdrawal.vault.toLowerCase() !== this.chain.vault.toLowerCase()) {
@@ -183,7 +183,7 @@ export class ProviderWallet implements Wallet {
         BigInt(auth.checkpoint_seq), auth.siblings.map(hexOf), hexOf(withdrawal.signature),
       ],
     });
-    return this.send(this.chain.vault, data, "claim the withdrawal");
+    return this.send(this.chain.vault, data, "claim the withdrawal", progress);
   }
 
   /** Ends the wallet's connection where it has one to end. */
@@ -217,19 +217,21 @@ export class ProviderWallet implements Wallet {
    * return receipts is refused before anything is sent, so the console never leaves a sent
    * transaction unconfirmed for want of the read.
    */
-  private async send(to: string, data: Hex, action: string): Promise<string> {
+  private async send(to: string, data: Hex, action: string, progress: Progress): Promise<string> {
     try {
       await this.provider.request({ method: "eth_getTransactionReceipt", params: [NO_TRANSACTION] });
     } catch (error) {
       throw walletError(error, `read transaction receipts, so the console did not ask it to ${action}`);
     }
     await this.ensureChain();
+    progress(`Confirm in your wallet: ${action}.`);
     let hash: string;
     try {
       hash = String(await this.provider.request({ method: "eth_sendTransaction", params: [{ from: this.address, to, data, chainId: hex(this.chain.chainId) }] }));
     } catch (error) {
       throw walletError(error, action);
     }
+    progress(`Waiting for the transaction to ${action} to be mined.`);
     const unconfirmed = (why: string) => new Error(`The transaction to ${action} was sent (${hash}) but ${why}. Check it in your wallet before trying again.`);
     for (let poll = 0; poll < RECEIPT_POLLS; poll++) {
       let receipt: unknown;

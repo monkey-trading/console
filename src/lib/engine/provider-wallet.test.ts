@@ -115,6 +115,16 @@ describe("deposits", () => {
     expect(provider.calls.filter((c) => c.method === "eth_sendTransaction").map((c) => (c.params[0] as { chainId: string }).chainId)).toEqual(["0x7a69", "0x7a69"]);
   });
 
+  it("says what each transaction waits for: the user's confirmation, then the chain", async () => {
+    const { wallet: w } = wallet({ balance: 5_000_000_000n, allowance: 0n });
+    const heard: string[] = [];
+    await w.deposit(fixedFromInt(10), (waitingFor) => heard.push(waitingFor));
+    expect(heard).toEqual([
+      "Confirm in your wallet: approve the vault.", "Waiting for the transaction to approve the vault to be mined.",
+      "Confirm in your wallet: deposit.", "Waiting for the transaction to deposit to be mined.",
+    ]);
+  });
+
   it("deposits without an approval when the allowance covers the amount", async () => {
     const { provider, wallet: w } = wallet({ balance: 5_000_000_000n, allowance: 1_000_000_000n });
     await w.deposit(fixedFromInt(1_000));

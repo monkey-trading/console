@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { HistoryEvent, MarketQuote, SignedWithdrawal } from "../engine/types";
 import { fixedFromInt } from "../fixed";
 import { ACCOUNT } from "../engine/wallet-kit";
-import { applyFeedEvent, keepLatest, syncQuotes } from "./funds";
+import { applyFeedEvent, keepLatest, quoteSyncKey, syncQuotes } from "./funds";
 import { connected } from "./live-kit";
 import { payoutsOf } from "./payouts";
 import { initialState, type ConsoleState } from "./state";
@@ -56,6 +56,19 @@ describe("keepLatest", () => {
     ["an earlier signer epoch", at(2, 150), at(1, 300), at(2, 150)],
   ])("keeps the newer authorization of a payout: %s", (_, held, arriving, kept) => {
     expect(keepLatest([held, signed(2, 50)], arriving).find((w) => w.nonce === 1)).toEqual(kept);
+  });
+});
+
+describe("quoteSyncKey", () => {
+  it("changes with the account, the selected market, the markets held and the account's credit, and with nothing else", () => {
+    const start = base();
+    const key = quoteSyncKey(start);
+    const account = { balance: 0n, unfinalised: 0n, equity: 0n, margin: 0n, positions: [], orders: [] };
+    expect(quoteSyncKey({ ...start, account })).not.toBe(key);
+    expect(quoteSyncKey({ ...start, account: { ...account, positions: [{ market: 2, qty: 1n, entry: 1n }] } })).not.toBe(quoteSyncKey({ ...start, account }));
+    expect(quoteSyncKey({ ...start, selected: 9 })).not.toBe(key);
+    expect(quoteSyncKey({ ...start, wallet: null })).not.toBe(key);
+    expect(quoteSyncKey({ ...start, toasts: [{ id: 1, tone: "ok", text: "x" }], quotes: { 1: quote(ME) } })).toBe(key);
   });
 });
 

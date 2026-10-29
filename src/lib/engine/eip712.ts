@@ -93,6 +93,7 @@ export function requestDomain(chainId: number, vault: string): RequestDomain {
 
 function hexAddress(value: string): `0x${string}` {
   if (!/^0x[0-9a-fA-F]{40}$/.test(value)) throw new Error(`not a 20-byte 0x address: ${value}`);
+  // The pattern above holds, so the text is `0x` hex.
   return value.toLowerCase() as `0x${string}`;
 }
 

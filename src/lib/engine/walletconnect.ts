@@ -61,8 +61,10 @@ export class WalletConnectConnector implements WalletConnector {
   private started: WcProvider | null = null;
   /** The topic of the session the last connect returned, until it ends. */
   private live: string | null = null;
-  /** The teardown a cancel started, resolving to its failure or null; the next connect waits for it. */
+  /** The teardown a cancel or disconnect started, resolving to its failure or null; the next connect waits for it. */
   private closing: Promise<unknown> = Promise.resolve(null);
+  /** The last request sent over the session; each waits for the one before (see `sessionProvider`). */
+  private requests: Promise<unknown> = Promise.resolve();
 
   /**
    * `app.url` returns the page's origin, which the wallet shows; `load` imports the SDK, which the page
@@ -73,6 +75,8 @@ export class WalletConnectConnector implements WalletConnector {
     private readonly chain: WalletChain,
     private readonly deps: ProviderWalletDeps,
     private readonly load: () => Promise<WcModule>,
+    /** Told when the wallet app ends the live session, so the console can show it disconnected. */
+    private readonly onEnded: () => void = () => undefined,
   ) {}
 
   /** Calls `listener` whenever the pairing state changes; returns the unsubscribe. */
@@ -138,8 +142,9 @@ export class WalletConnectConnector implements WalletConnector {
     }
     const onUri = (uri: unknown) => {
       if (this.attempt !== attempt) {
-        // The SDK published a proposal the user had already cancelled, reopening the relay socket: close it again.
-        this.closing = this.close(provider).then(() => null, (error: unknown) => error);
+        // A cancelled attempt's proposal, published late, reopened the relay socket: close it again, but
+        // never under a newer pairing or a live session, whose link this may be.
+        if (this.idle()) this.closing = this.close(provider).then(() => null, (error: unknown) => error);
         return;
       }
       if (typeof uri === "string" && uri.startsWith("wc:")) this.publish({ status: "ready", uri });
@@ -157,9 +162,10 @@ export class WalletConnectConnector implements WalletConnector {
       provider.off("display_uri", onUri);
     }
     if (this.attempt !== attempt) {
-      // The user closed the pairing as the wallet approved it: end that session at once.
-      if (session !== undefined) await provider.disconnect();
-      await provider.client.core.relayer.transportClose();
+      // The user closed the pairing as the wallet approved it: end that session at once, and close the
+      // relay socket unless a newer pairing is using it.
+      if (session !== undefined && provider.session?.topic === session.topic) await provider.disconnect();
+      if (this.idle()) await provider.client.core.relayer.transportClose();
     }
     attempt.check();
     // The SDK returns no session only when asked to skip pairing, which the connector never does.
@@ -176,6 +182,11 @@ export class WalletConnectConnector implements WalletConnector {
     this.live = session.topic;
     const topic = session.topic;
     return new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, topic) });
+  }
+
+  /** Whether nothing uses the relay socket now: no pairing open and no live session. */
+  private idle(): boolean {
+    return this.attempt === null && this.live === null;
   }
 
   /** The SDK's provider, loaded and started once; a failed start is tried again on the next connect. */
@@ -203,7 +214,9 @@ export class WalletConnectConnector implements WalletConnector {
       logger: "silent",
     });
     provider.on("session_delete", (payload) => {
-      if (typeof payload === "object" && payload !== null && "topic" in payload && payload.topic === this.live) this.live = null;
+      if (typeof payload !== "object" || payload === null || !("topic" in payload) || payload.topic !== this.live) return;
+      this.live = null;
+      this.onEnded();
     });
     this.started = provider;
     return provider;
@@ -214,6 +227,13 @@ export class WalletConnectConnector implements WalletConnector {
    * closes the relay socket, so the relay sees nothing more from this page until the next connect.
    */
   private async end(provider: WcProvider, topic: string): Promise<void> {
+    const ending = this.endSession(provider, topic);
+    // The next connect waits for this, so a late close cannot cut the relay socket under a new pairing.
+    this.closing = ending.then(() => null, (error: unknown) => error);
+    await ending;
+  }
+
+  private async endSession(provider: WcProvider, topic: string): Promise<void> {
     try {
       if (this.live === topic && provider.session?.topic === topic) await provider.disconnect();
       // A session the SDK could not end stays marked, so the next connect ends it first.
@@ -247,7 +267,11 @@ export class WalletConnectConnector implements WalletConnector {
         if (method === "eth_chainId") return `0x${this.chain.chainId.toString(16)}`;
         if (!WALLET_METHODS.includes(method)) throw new Error(`The console does not send ${method} over WalletConnect.`);
         if (!scope.methods.has(method)) throw new Error(`Your wallet does not allow ${method} over WalletConnect, and the console sends chain requests only through your wallet.`);
-        return provider.request({ method, params }, chain);
+        // One request at a time: the SDK's Verify step keeps one abort timer, so a request that overlaps
+        // another is never released while the CSP blocks Verify's frame.
+        const sent = this.requests.then(() => provider.request({ method, params }, chain));
+        this.requests = sent.then(() => undefined, () => undefined);
+        return sent;
       },
     };
   }

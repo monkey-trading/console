@@ -24,15 +24,21 @@ export interface Wallet {
   label: string;
   /** Resolves with a 65-byte signature as `0x` hex, `v` 27 or 28. Rejects when the user declines. */
   sign(request: SignRequest): Promise<string>;
-  /** Approves the vault for `amount` USDC if needed, deposits it to this account, and resolves with the deposit's transaction hash. */
-  deposit(amount: Fixed): Promise<string>;
-  /** Claims a signed withdrawal authorization on the vault and resolves with the transaction hash. */
-  claim(withdrawal: SignedWithdrawal): Promise<string>;
+  /**
+   * Approves the vault for `amount` USDC if needed, deposits it to this account, and resolves with the
+   * deposit's transaction hash; `progress` hears what each step waits for.
+   */
+  deposit(amount: Fixed, progress?: Progress): Promise<string>;
+  /** Claims a signed withdrawal authorization on the vault and resolves with the transaction hash; `progress` as for `deposit`. */
+  claim(withdrawal: SignedWithdrawal, progress?: Progress): Promise<string>;
   /** Whether the vault has paid this account's payout `nonce`. */
   claimed(nonce: number): Promise<boolean>;
   /** Ends the wallet's connection, such as a WalletConnect session, when the user disconnects; absent when there is nothing to end. */
   disconnect?(): Promise<void>;
 }
+
+/** Told, as a sentence for the user, what a wallet's transaction waits for: the user's confirmation, then the chain. */
+export type Progress = (waitingFor: string) => void;
 
 export interface WalletConnector {
   options: readonly WalletOption[];

@@ -68,7 +68,7 @@ describe("claims", () => {
     await claim(store, 1);
     expect(provider.sent).toHaveLength(1);
     expect(store.getSnapshot()).toMatchObject({ paid: [1], busy: false, prompt: null });
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The vault paid 10.00 USDC to your wallet.");
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The vault paid 10 USDC to your wallet.");
   });
 
   it("leaves a payout unpaid when its claim reverts", async () => {
@@ -87,7 +87,7 @@ describe("claims", () => {
     store.patch({ paid: [] });
     await claiming;
     expect(store.getSnapshot().paid).toEqual([]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe(`The vault paid 10.00 USDC to ${ACCOUNT}.`);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe(`The vault paid 10 USDC to ${ACCOUNT}.`);
   });
 });
 
@@ -158,6 +158,37 @@ describe("recovering a missed authorization", () => {
     await searching;
     expect(store.getSnapshot()).toMatchObject({ searching: null, authorizations: [signed(1, 2_000_000_000)] });
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The search of the log stopped before reaching its end, so a newer authorization may still be there. Search again to read on.");
+  });
+
+  it("reads on from where a search that stopped short got to", async () => {
+    const { client, store } = await connected();
+    store.patch({ approvals: [approved(1, 40)] });
+    client.complete = false;
+    client.reached = 900;
+    await findAuthorization(store, 1, 40);
+    expect(payoutsOf(store.getSnapshot())[0]?.searchFrom).toBe(900);
+  });
+
+  it("drops an approvals read that a later one overtook", async () => {
+    const { client, store } = await connected();
+    const slow = { events: [approved(1, 40)], next: null };
+    let release: () => void = () => undefined;
+    client.history = async () => { await new Promise<void>((resolve) => { release = resolve; }); return slow; };
+    const first = loadApprovals(store);
+    const holdFirst = release;
+    client.history = async () => ({ events: [approved(2, 50), approved(1, 40)], next: null });
+    await loadApprovals(store);
+    holdFirst();
+    await first;
+    expect(store.getSnapshot().approvals.map((e) => e.type === "withdrawal_approved" && e.nonce)).toEqual([2, 1]);
+  });
+
+  it("applies a reissue's answer only to the wallet that asked", async () => {
+    const { store } = await connected();
+    const asking = reissue(store, 3, 1_700_000_000, 40);
+    store.setWallet({ address: OTHER, label: "Other" });
+    await asking;
+    expect(store.getSnapshot().payoutHints).toEqual({});
   });
 
   it("keeps the cursor of older approvals past the page budget, and reads on from it", async () => {

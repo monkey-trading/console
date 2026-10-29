@@ -42,6 +42,7 @@ function refusal(status: number, text: string): EngineError {
   // The node names the region refusal in `reason`; the console's reject types mirror the engine's.
   if (status === 403 && typeof reason === "string") return new EngineError(status, message, { kind: "access", reason } as EngineError["reject"]);
   // A signed request whose nonce is not the account's next: the node names the one it expects.
+  // `Number.isSafeInteger` held, so `expected` is a number.
   if (status === 409 && Number.isSafeInteger(expected)) return new EngineError(status, message, { kind: "invalid_nonce", expected: expected as number });
   if (status === 401) return new EngineError(status, message, { kind: message === "missing signature" ? "missing_signature" : "invalid_signature" });
   return new EngineError(status, message);
