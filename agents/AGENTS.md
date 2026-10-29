@@ -49,7 +49,7 @@ matches the current action.
   manifests; `watch-wallet.ts` is the read-only account for `?account=`. `wire.ts`, `test-vectors.ts`,
   `test-kit.ts`, `live-setup.ts` and `wire-vectors.json` (the engine's known-answer vectors, replayed through the real
   verifier) pin and test the wire formats. `store/` holds the state, the store that follows the node's stream,
-  the user's actions (`actions.ts`), the quotes and authorizations the stream carries for the account (`funds.ts`), and the payouts to claim on the vault (`payouts.ts`). `mock/` is the in-browser node (state, orders, fills, close-out, funds and
+  the user's actions (`actions.ts`), the quotes and authorizations the stream carries for the account (`funds.ts`), the payouts to claim on the vault (`payouts.ts`), and `live-kit.ts`, the tests' live client and a store connected through the fixed-key wallet. `mock/` is the in-browser node (state, orders, fills, close-out, funds and
   the first-in first-out withdrawal queue, the clock step, the demo account's backstory in `demo.ts`, and the controls the mock build exposes).
 - **next.config.ts** — the security headers on every path (a CSP without nonces, with the node's origin in `connect-src` and `'wasm-unsafe-eval'` in `script-src` for a live build, and WalletConnect's relay in `connect-src` when the build sets a WalletConnect project id, nosniff, referrer,
   frame, opener, and permissions policies), `reactStrictMode`, `poweredByHeader: false`, the geo-block `beforeFiles` rewrite, and

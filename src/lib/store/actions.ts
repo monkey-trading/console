@@ -2,6 +2,7 @@
 
 import { signBlock } from "../engine/attestation";
 import { EngineError, type ActionResult } from "../engine/client";
+import { UntrustedError } from "../engine/trust";
 import { cancelTypedData, eligibilityTypedData, orderTypedData, requestDomain, STATEMENTS, withdrawalTypedData, type Terms, type TypedRequest } from "../engine/eip712";
 import type { EligibilityClass, OrderKind, RequestAuth, Side } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
@@ -98,12 +99,15 @@ async function signed(
   const wallet = usableWallet(store, "sign");
   if (!wallet) return { ok: false };
   store.patch({ busy: true });
+  /** Whether the request left the page: from then on it may have run, whatever comes back. */
+  let sent = false;
   try {
     const { next_nonce, time_ms } = await store.deps.client.nonce(wallet.address);
     const expiresAt = (time_ms ?? store.getSnapshot().now) + REQUEST_TTL_MS;
     const attempt = async (nonce: number) => {
       const typed = build({ nonce, expiresAt }, wallet.address);
       const signature = await prompting(store, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
+      sent = true;
       return send({ nonce, expires_at: expiresAt, signature }, wallet);
     };
     try {
@@ -115,9 +119,10 @@ async function signed(
     }
   } catch (error) {
     if (store.noteAccess(error)) return { ok: false };
-    // A request the node refused, or that went unanswered, may still have run from a copy: read the account first.
-    if (error instanceof EngineError) await store.refresh(true);
-    store.toast("error", errorText(error));
+    // A sent request the node refused, left unanswered, or answered unverifiably may still have run: read the account first.
+    if (sent) await store.refresh(true);
+    const unknown = sent && error instanceof UntrustedError ? " It may have run: check your positions, orders, withdrawals and history before trying again." : "";
+    store.toast("error", `${errorText(error)}${unknown}`);
     return { ok: false };
   } finally {
     store.patch({ busy: false });
@@ -220,7 +225,8 @@ export async function withdraw(store: ConsoleStore, amount: Fixed): Promise<bool
     return false;
   }
   if (out.result.events.some((e) => e.type === "withdrawal_queued")) store.toast("info", "Withdrawal queued. The vault pays the queue in order as it has liquidity.");
-  else store.toast("ok", "Withdrawal approved. Its authorization arrives once a checkpoint covers it; then claim it on the vault.");
+  // The mock pays an approved withdrawal itself; a live node's needs a claim on the vault.
+  else store.toast("ok", store.deps.client.signatures === "none" ? "Withdrawal approved." : "Withdrawal approved. Its authorization arrives once a checkpoint covers it; then claim it on the vault.");
   await store.refresh(true);
   return true;
 }

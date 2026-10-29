@@ -5,7 +5,7 @@
  * through the same provider, so nothing but the wallet's own chain provider sees them.
  */
 
-import { decodeFunctionResult, encodeFunctionData, getTypesForEIP712Domain, parseAbi, recoverTypedDataAddress, serializeTypedData, type Hex } from "viem";
+import { decodeFunctionResult, encodeFunctionData, getTypesForEIP712Domain, isHex, parseAbi, recoverTypedDataAddress, serializeTypedData, type Hex } from "viem";
 
 import { fixedFromWire, type Fixed } from "../fixed";
 import { isWholeUsdc, USDC_UNIT } from "../vault";
@@ -56,12 +56,18 @@ const RECEIPT_POLLS = 180;
 const NO_TRANSACTION = `0x${"0".repeat(64)}`;
 
 const hex = (n: number) => `0x${n.toString(16)}`;
-const errorCode = (error: unknown) => (typeof error === "object" && error !== null && "code" in error ? (error as { code: unknown }).code : undefined);
+const errorCode = (error: unknown) => (typeof error === "object" && error !== null && "code" in error ? error.code : undefined);
+
+/** `value` as `0x` hex, as viem's encoders take it. Error cases: it is not hex, which a wallet or the node answered wrongly. */
+function hexOf(value: unknown): Hex {
+  if (typeof value !== "string" || !isHex(value)) throw new Error(`Expected 0x hex, got ${String(value)}.`);
+  return value;
+}
 
 /** The error a wallet's refusal stands for, written for the user. */
 function walletError(error: unknown, action: string): Error {
   if (errorCode(error) === USER_REJECTED) return new Error(`You declined to ${action} in your wallet.`, { cause: error });
-  const detail = error instanceof Error ? error.message : typeof error === "object" && error !== null && "message" in error ? String((error as { message: unknown }).message) : String(error);
+  const detail = error instanceof Error ? error.message : typeof error === "object" && error !== null && "message" in error ? String(error.message) : String(error);
   return new Error(`Your wallet could not ${action}: ${detail}`, { cause: error });
 }
 
@@ -77,7 +83,7 @@ export function normaliseSignature(signature: string): Hex {
   const v = parseInt(signature.slice(130), 16);
   const fixed = v === 0 || v === 1 ? v + 27 : v;
   if (fixed !== 27 && fixed !== 28) throw new Error("The wallet returned a signature with an unknown recovery id.");
-  return `${signature.slice(0, 130)}${fixed.toString(16)}` as Hex;
+  return hexOf(`${signature.slice(0, 130)}${fixed.toString(16)}`);
 }
 
 export class ProviderWallet implements Wallet {
@@ -149,11 +155,12 @@ export class ProviderWallet implements Wallet {
     const usdc = this.chain.usdc;
     if (usdc === null) throw new Error("This build names no USDC token, so it cannot deposit.");
     await this.ensureChain();
-    const owner = this.address as Hex;
+    const owner = hexOf(this.address);
+    const vault = hexOf(this.chain.vault);
     const balance = await this.read(usdc, encodeFunctionData({ abi: ERC20, functionName: "balanceOf", args: [owner] }), "balanceOf");
     if (balance < units) throw new Error("Your wallet holds less USDC than that.");
-    const allowance = await this.read(usdc, encodeFunctionData({ abi: ERC20, functionName: "allowance", args: [owner, this.chain.vault as Hex] }), "allowance");
-    if (allowance < units) await this.send(usdc, encodeFunctionData({ abi: ERC20, functionName: "approve", args: [this.chain.vault as Hex, units] }), "approve the vault");
+    const allowance = await this.read(usdc, encodeFunctionData({ abi: ERC20, functionName: "allowance", args: [owner, vault] }), "allowance");
+    if (allowance < units) await this.send(usdc, encodeFunctionData({ abi: ERC20, functionName: "approve", args: [vault, units] }), "approve the vault");
     return this.send(this.chain.vault, encodeFunctionData({ abi: VAULT, functionName: "deposit", args: [units] }), "deposit");
   }
 
@@ -172,8 +179,8 @@ export class ProviderWallet implements Wallet {
     const data = encodeFunctionData({
       abi: VAULT, functionName: "withdraw",
       args: [
-        { account: this.address as Hex, amount: usdcUnits(fixedFromWire(withdrawal.amount)), nonce: BigInt(withdrawal.nonce), approvedSeq: BigInt(withdrawal.approved_seq), signerEpoch: BigInt(auth.signer_epoch), issuedAt: BigInt(auth.issued_at), expiresAt: BigInt(auth.expires_at) },
-        BigInt(auth.checkpoint_seq), auth.siblings as Hex[], withdrawal.signature as Hex,
+        { account: hexOf(this.address), amount: usdcUnits(fixedFromWire(withdrawal.amount)), nonce: BigInt(withdrawal.nonce), approvedSeq: BigInt(withdrawal.approved_seq), signerEpoch: BigInt(auth.signer_epoch), issuedAt: BigInt(auth.issued_at), expiresAt: BigInt(auth.expires_at) },
+        BigInt(auth.checkpoint_seq), auth.siblings.map(hexOf), hexOf(withdrawal.signature),
       ],
     });
     return this.send(this.chain.vault, data, "claim the withdrawal");
@@ -193,19 +200,21 @@ export class ProviderWallet implements Wallet {
   async claimed(nonce: number): Promise<boolean> {
     const current = Number(await this.provider.request({ method: "eth_chainId" }));
     if (current !== this.chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chain.chainId}`);
-    const data = encodeFunctionData({ abi: VAULT, functionName: "usedNonces", args: [this.address as Hex, BigInt(nonce)] });
-    const result = (await this.provider.request({ method: "eth_call", params: [{ to: this.chain.vault, data }, "latest"] })) as Hex;
+    const data = encodeFunctionData({ abi: VAULT, functionName: "usedNonces", args: [hexOf(this.address), BigInt(nonce)] });
+    const result = hexOf(await this.provider.request({ method: "eth_call", params: [{ to: this.chain.vault, data }, "latest"] }));
     return decodeFunctionResult({ abi: VAULT, functionName: "usedNonces", data: result });
   }
 
   private async read(to: string, data: Hex, functionName: "balanceOf" | "allowance"): Promise<bigint> {
-    const result = (await this.provider.request({ method: "eth_call", params: [{ to, data }, "latest"] })) as Hex;
+    const result = hexOf(await this.provider.request({ method: "eth_call", params: [{ to, data }, "latest"] }));
     return decodeFunctionResult({ abi: ERC20, functionName, data: result });
   }
 
   /**
-   * Sends a transaction from this account and waits for it to be mined successfully. A wallet that
-   * cannot return receipts is refused before anything is sent, so the console never leaves a sent
+   * Sends a transaction from this account on the deployment's chain and waits for it to be mined
+   * successfully. The wallet is put on the chain again right before the send, and the transaction
+   * names the chain, so a wallet that moved to another one meanwhile refuses it. A wallet that cannot
+   * return receipts is refused before anything is sent, so the console never leaves a sent
    * transaction unconfirmed for want of the read.
    */
   private async send(to: string, data: Hex, action: string): Promise<string> {
@@ -214,22 +223,25 @@ export class ProviderWallet implements Wallet {
     } catch (error) {
       throw walletError(error, `read transaction receipts, so the console did not ask it to ${action}`);
     }
+    await this.ensureChain();
     let hash: string;
     try {
-      hash = String(await this.provider.request({ method: "eth_sendTransaction", params: [{ from: this.address, to, data }] }));
+      hash = String(await this.provider.request({ method: "eth_sendTransaction", params: [{ from: this.address, to, data, chainId: hex(this.chain.chainId) }] }));
     } catch (error) {
       throw walletError(error, action);
     }
     const unconfirmed = (why: string) => new Error(`The transaction to ${action} was sent (${hash}) but ${why}. Check it in your wallet before trying again.`);
     for (let poll = 0; poll < RECEIPT_POLLS; poll++) {
-      let receipt: { status?: string } | null;
+      let receipt: unknown;
       try {
-        receipt = (await this.provider.request({ method: "eth_getTransactionReceipt", params: [hash] })) as { status?: string } | null;
+        receipt = await this.provider.request({ method: "eth_getTransactionReceipt", params: [hash] });
       } catch (error) {
         throw unconfirmed(`its receipt could not be read: ${error instanceof Error ? error.message : String(error)}`);
       }
-      if (receipt !== null && receipt.status !== undefined) {
-        if (Number(receipt.status) !== 1) throw new Error(`The transaction to ${action} failed on chain (${hash}).`);
+      // No receipt yet is null; a mined one carries its status.
+      const status = typeof receipt === "object" && receipt !== null && "status" in receipt ? receipt.status : undefined;
+      if (status !== undefined) {
+        if (Number(status) !== 1) throw new Error(`The transaction to ${action} failed on chain (${hash}).`);
         return hash;
       }
       await this.deps.wait(RECEIPT_POLL_MS);

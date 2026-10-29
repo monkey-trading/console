@@ -30,6 +30,14 @@ describe("approvals and paid payouts", () => {
     expect(store.getSnapshot().approvals).toEqual([]);
   });
 
+  it("follows every page of approvals the node returns", async () => {
+    const { client, store } = await connected();
+    client.historyPages = { "": { events: [approved(3, 60)], next: "60:0" }, "60:0": { events: [approved(2, 50)], next: "50:0" }, "50:0": { events: [approved(1, 40)], next: null } };
+    await loadApprovals(store);
+    expect(store.getSnapshot().approvals.map((e) => e.type === "withdrawal_approved" && e.nonce)).toEqual([3, 2, 1]);
+    expect(client.historyReads).toHaveLength(3);
+  });
+
   it("lists every unpaid payout and at most five paid ones", async () => {
     const { store } = await connected();
     store.patch({ approvals: Array.from({ length: 12 }, (_, i) => approved(12 - i, 100 - i)), paid: [12, 11, 10, 9, 8, 7, 6] });

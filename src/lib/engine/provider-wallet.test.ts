@@ -100,6 +100,21 @@ describe("deposits", () => {
     expect(deposit && decode(deposit.data)).toEqual({ functionName: "deposit", args: [1_000_000_000n] });
   });
 
+  it("names the chain on every transaction, and puts a wallet that moved to another chain back before sending", async () => {
+    const { provider, wallet: w } = wallet({ balance: 5_000_000_000n, allowance: 0n });
+    const request = provider.request.bind(provider);
+    provider.request = async (args) => {
+      const answer = await request(args);
+      // Another tab moves the wallet to chain 1 once the allowance has been read.
+      if (args.method === "eth_call" && provider.calls.filter((c) => c.method === "eth_call").length === 2) provider.chainId = 1;
+      return answer;
+    };
+    await w.deposit(fixedFromInt(1_000));
+    const methods = provider.calls.map((c) => c.method);
+    expect(methods.slice(methods.indexOf("eth_call") + 2, methods.indexOf("eth_sendTransaction"))).toEqual(["eth_getTransactionReceipt", "eth_chainId", "wallet_switchEthereumChain", "eth_chainId"]);
+    expect(provider.calls.filter((c) => c.method === "eth_sendTransaction").map((c) => (c.params[0] as { chainId: string }).chainId)).toEqual(["0x7a69", "0x7a69"]);
+  });
+
   it("deposits without an approval when the allowance covers the amount", async () => {
     const { provider, wallet: w } = wallet({ balance: 5_000_000_000n, allowance: 1_000_000_000n });
     await w.deposit(fixedFromInt(1_000));

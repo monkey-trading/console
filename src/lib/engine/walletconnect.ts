@@ -202,10 +202,14 @@ export class WalletConnectConnector implements WalletConnector {
    * closes the relay socket, so the relay sees nothing more from this page until the next connect.
    */
   private async end(provider: WcProvider, topic: string): Promise<void> {
-    if (this.live !== topic) return;
-    this.live = null;
-    if (provider.session?.topic === topic) await provider.disconnect();
-    await provider.client.core.relayer.transportClose();
+    try {
+      if (this.live === topic && provider.session?.topic === topic) await provider.disconnect();
+      // A session the SDK could not end stays marked, so the next connect ends it first.
+      if (this.live === topic) this.live = null;
+    } finally {
+      // Closed even when the wallet ended the session first, so the relay sees nothing more from the page.
+      await provider.client.core.relayer.transportClose();
+    }
   }
 
   /** Drops the unanswered pairing and closes the relay socket; the next connect opens it again. */

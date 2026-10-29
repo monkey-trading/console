@@ -33,12 +33,14 @@ function position(offset: string): [number, number] {
 const atOrPast = (a: [number, number], b: [number, number]) => a[0] > b[0] || (a[0] === b[0] && a[1] >= b[1]);
 
 /**
- * The latest authorization of `account`'s payout `nonce` after seq `fromSeq`, or null once the
- * read reaches the head a heartbeat names without one.
+ * The latest authorization of `account`'s payout `nonce` after seq `fromSeq`, or null once the read
+ * reaches the head a heartbeat names without one. One still unexpired at `nowSeconds` ends the read
+ * at once: the node signs a new one only after the last expires, so it is the latest. When the read
+ * fails or runs out of time after finding one, the latest found is the answer.
  * Error cases:
- * - a frame is out of order or does not verify, the connection fails, or the search takes over 30 s
+ * - with none found: a frame is out of order or does not verify, the connection fails, or the search takes over 30 s
  */
-export function scanForWithdrawal(deps: ScanDeps, account: Address, nonce: number, fromSeq: number): Promise<SignedWithdrawal | null> {
+export function scanForWithdrawal(deps: ScanDeps, account: Address, nonce: number, fromSeq: number, nowSeconds: number): Promise<SignedWithdrawal | null> {
   return new Promise((resolve, reject) => {
     const challenge = deps.challenge();
     const path = `/v1/stream?signed=1&challenge=${challenge}&from=${fromSeq}`;
@@ -54,7 +56,7 @@ export function scanForWithdrawal(deps: ScanDeps, account: Address, nonce: numbe
       deps.scheduler.clearTimeout(timer);
       socket.onmessage = socket.onclose = socket.onerror = null;
       socket.close();
-      if (error) reject(error);
+      if (error && found === null) reject(error);
       else resolve(found);
     };
     const timer = deps.scheduler.setTimeout(() => finish(new Error("Looking for the withdrawal's authorization in the log took too long.")), SCAN_TIMEOUT_MS);
@@ -75,7 +77,10 @@ export function scanForWithdrawal(deps: ScanDeps, account: Address, nonce: numbe
         return;
       }
       if ("offset" in message) last = position(message.offset);
-      if (message.type === "withdrawal" && message.account.toLowerCase() === account.toLowerCase() && message.nonce === nonce) found = message;
+      if (message.type === "withdrawal" && message.account.toLowerCase() === account.toLowerCase() && message.nonce === nonce) {
+        found = message;
+        if ((message.authorization?.expires_at ?? 0) > nowSeconds) finish(null);
+      }
     };
     socket.onclose = () => finish(new Error("The connection to the node closed while reading the log."));
     socket.onerror = () => finish(new Error("The connection to the node failed while reading the log."));

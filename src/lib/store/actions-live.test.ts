@@ -3,12 +3,15 @@
 import { describe, expect, it } from "vitest";
 
 import { EngineError } from "../engine/client";
+import { UntrustedError } from "../engine/trust";
 import vectors from "../engine/eip712-vectors.json";
 import { cancelTypedData, eligibilityTypedData, orderTypedData, requestDomain, withdrawalTypedData } from "../engine/eip712";
 import type { CancelRequest, EligibilityRequest, OrderRequest, WithdrawalRequest } from "../engine/types";
 import { ACCOUNT } from "../engine/wallet-kit";
 import { fixedFromInt, fixedFromWire } from "../fixed";
-import { attestEligibility, cancelOrder, deposit, placeOrder, REQUEST_TTL_MS, withdraw } from "./actions";
+import { settle } from "../engine/test-kit";
+import type { Wallet } from "../engine/wallet";
+import { attestEligibility, cancelOrder, connectWallet, deposit, disconnectWallet, placeOrder, REQUEST_TTL_MS, withdraw } from "./actions";
 import { connected, NODE_TIME, signerOf, VAULT } from "./live-kit";
 
 const DOMAIN = requestDomain(vectors.chain_id, VAULT);
@@ -75,6 +78,20 @@ describe("signed actions with a fixed-key wallet", () => {
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node did not answer.");
   });
 
+  it("reads the account and says a sent request may have run when its answer does not verify, but not for a failure before sending", async () => {
+    const { client, store } = await connected();
+    client.answer = () => { throw new UntrustedError("The node's answer (HTTP 200) was not signed by the attested enclave, so it was discarded."); };
+    const reads = client.marketReads;
+    await withdraw(store, fixedFromInt(10));
+    expect(client.marketReads).toBeGreaterThan(reads);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node's answer (HTTP 200) was not signed by the attested enclave, so it was discarded. It may have run: check your positions, orders, withdrawals and history before trying again.");
+    const before = client.marketReads;
+    client.nonce = async () => { throw new UntrustedError("The node is not verified."); };
+    await withdraw(store, fixedFromInt(10));
+    expect(client.marketReads).toBe(before);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node is not verified.");
+  });
+
   it("shows what the wallet is asked to sign while it waits, and clears it after", async () => {
     const { store } = await connected();
     const prompts: (string | null)[] = [];
@@ -99,5 +116,34 @@ describe("signed actions with a fixed-key wallet", () => {
     await withdraw(store, fixedFromInt(10));
     expect(client.posted).toEqual([]);
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("You declined to sign in your wallet.");
+  });
+});
+
+describe("a wallet change", () => {
+  it("clears everything read or streamed for the old account, and ends the old wallet's session, on disconnect or another connect", async () => {
+    const { store, wallet } = await connected();
+    let ended = 0;
+    wallet.disconnect = async () => void (ended += 1);
+    const filled = { quotes: { 1: { type: "quote" } }, quoteError: "x", quoted: [1], authorizations: [{ nonce: 1 }], approvals: [{ type: "withdrawal_approved" }], paid: [1], queue: [{ position: 1 }], history: [{ type: "fill" }] } as unknown as Partial<ReturnType<typeof store.getSnapshot>>;
+    const cleared = { account: null, eligibility: null, queue: [], history: [], quotes: {}, quoteError: null, quoted: [], authorizations: [], approvals: [], paid: [] };
+    store.patch(filled);
+    disconnectWallet(store);
+    expect(store.getSnapshot()).toMatchObject({ wallet: null, ...cleared });
+    expect(ended).toBe(1);
+    store.liveWallet = wallet;
+    store.patch(filled);
+    // Another wallet, such as a browser wallet after a WalletConnect one; only its address and label are read.
+    store.deps.wallets.connect = async () => ({ address: "0x00000000000000000000000000000000000000aa", label: "Other" }) as Wallet;
+    await connectWallet(store, "other");
+    expect(ended).toBe(2);
+    expect(store.getSnapshot()).toMatchObject({ quotes: {}, quoted: [], authorizations: [], approvals: [], paid: [] });
+  });
+
+  it("tells the user when the old wallet's session does not close", async () => {
+    const { store, wallet } = await connected();
+    wallet.disconnect = async () => { throw new Error("offline"); };
+    disconnectWallet(store);
+    await settle();
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The wallet's session did not close: offline");
   });
 });

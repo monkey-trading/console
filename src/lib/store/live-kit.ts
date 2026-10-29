@@ -29,6 +29,8 @@ export class ActionClient implements EngineClient {
   quoteRequests: (QuoteRequest | null)[] = [];
   historyReads: { kind?: string | undefined }[] = [];
   historyPage: HistoryPage = { events: [], next: null };
+  /** Pages by `before` cursor, when a test needs more than one; `historyPage` answers otherwise. */
+  historyPages: Record<string, HistoryPage> | null = null;
   found: SignedWithdrawal | null = null;
   answer: (posted: Posted) => ActionResult = () => ({ seq: 1, events: [] });
   async attestation(): Promise<never> { throw new Error("unused"); }
@@ -49,7 +51,10 @@ export class ActionClient implements EngineClient {
   async findWithdrawal() { return this.found; }
   quotes(request: QuoteRequest | null) { this.quoteRequests.push(request); }
   async withdrawalQueue() { return { seq: 1, queue: [], next: null }; }
-  async history(_address: string, params: { kind?: string }) { this.historyReads.push({ kind: params.kind }); return this.historyPage; }
+  async history(_address: string, params: { kind?: string; before?: string }) {
+    this.historyReads.push({ kind: params.kind });
+    return this.historyPages?.[params.before ?? ""] ?? this.historyPage;
+  }
   subscribe() { return () => {}; }
 }
 

@@ -1,7 +1,7 @@
 /** Follows what the node streams for the connected account besides its log: executable quotes and withdrawal authorizations. */
 
 import type { ClientEvent } from "../engine/client";
-import type { MarketQuote, SignedWithdrawal } from "../engine/types";
+import type { SignedWithdrawal } from "../engine/types";
 import { quoteMarkets } from "../quotes";
 import type { ConsoleState } from "./state";
 import type { ConsoleStore } from "./store";
@@ -41,11 +41,6 @@ export function syncQuotes(store: ConsoleStore): void {
   const kept = Object.fromEntries(Object.entries(quotes).filter(([market]) => markets.includes(Number(market))));
   store.patch({ quoted: markets, quotes: kept });
   store.deps.client.quotes(wallet === null ? null : { account: wallet.address, markets });
-}
-
-/** The quote for `market`, when the node has sent one for the connected account. */
-export function quoteFor(state: ConsoleState, market: number): MarketQuote | null {
-  return state.quotes[market] ?? null;
 }
 
 /** The connected account's authorization for payout `nonce`, when the stream or a search found it. */

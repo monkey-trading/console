@@ -14,6 +14,8 @@ import type { ConsoleStore } from "./store";
 
 /** The most approvals one read of the account's history returns: the node's page limit. */
 const APPROVALS_LIMIT = 200;
+/** The most pages of approvals read, so a node that keeps answering with more cannot keep the page reading. */
+const APPROVAL_PAGES = 20;
 /** Paid payouts shown beside the unpaid ones, newest first. */
 const PAID_SHOWN = 5;
 
@@ -53,13 +55,23 @@ export function payoutsOf(state: ConsoleState): Payout[] {
   return [...all.filter((p) => p.status.kind !== "paid"), ...all.filter((p) => p.status.kind === "paid").slice(0, PAID_SHOWN)];
 }
 
-/** Reads the connected account's approved withdrawals from its history, apart from the recent events, so an old unpaid one stays in reach. */
+/**
+ * Reads every approved withdrawal of the connected account from its history, page by page and apart
+ * from the recent events, so an old unpaid one stays in reach.
+ */
 export async function loadApprovals(store: ConsoleStore): Promise<void> {
   const address = store.getSnapshot().wallet?.address;
   if (address === undefined) return;
   try {
-    const { events } = await store.deps.client.history(address, { kind: "withdrawal_approved", limit: APPROVALS_LIMIT });
-    if (store.getSnapshot().wallet?.address === address) store.patch({ approvals: events });
+    const approvals = [];
+    let before: string | undefined;
+    for (let page = 0; page < APPROVAL_PAGES; page++) {
+      const { events, next } = await store.deps.client.history(address, { kind: "withdrawal_approved", limit: APPROVALS_LIMIT, ...(before === undefined ? {} : { before }) });
+      approvals.push(...events);
+      if (next === null) break;
+      before = next;
+    }
+    if (store.getSnapshot().wallet?.address === address) store.patch({ approvals });
   } catch (error) {
     store.toast("error", `Your approved withdrawals could not be read: ${errorText(error)}`);
   }
@@ -110,7 +122,7 @@ export async function findAuthorization(store: ConsoleStore, nonce: number, appr
   if (address === undefined) return;
   store.patch({ busy: true });
   try {
-    const found = await store.deps.client.findWithdrawal(address, nonce, approvedSeq);
+    const found = await store.deps.client.findWithdrawal(address, nonce, approvedSeq, store.getSnapshot().now);
     const state = store.getSnapshot();
     if (state.wallet?.address !== address) return;
     if (found === null || found.authorization === undefined) store.toast("info", "The log holds no authorization for this withdrawal yet. The node signs one once a checkpoint covering the approval is confirmed on chain; it then arrives here.");
@@ -134,7 +146,7 @@ export async function reissue(store: ConsoleStore, nonce: number, expiresAt: num
     await store.deps.client.reissue(wallet.address, nonce, { replaces_expires_at: expiresAt, signature });
     store.toast("ok", "Requested. The new authorization arrives here once the node signs it.");
   } catch (error) {
-    store.toast("error", errorText(error));
+    if (!store.noteAccess(error)) store.toast("error", errorText(error));
   } finally {
     store.patch({ busy: false });
   }

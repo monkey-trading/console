@@ -256,12 +256,27 @@ describe("the WalletConnect wallet", () => {
     ]);
   });
 
-  it("ends the session and closes the relay socket when the user disconnects, once", async () => {
+  it("ends the session once and closes the relay socket on each disconnect, even after the wallet ended it", async () => {
     const { wallet, fake } = await connected();
     await wallet.disconnect?.();
     await wallet.disconnect?.();
-    expect([fake.disconnects, fake.closes]).toEqual([1, 1]);
+    expect([fake.disconnects, fake.closes]).toEqual([1, 2]);
+    const ended = await connected();
+    ended.fake.deleteSession();
+    await ended.wallet.disconnect?.();
+    expect([ended.fake.disconnects, ended.fake.closes]).toEqual([0, 1]);
     await expect(wallet.sign({ summary: "", typed: TYPED })).rejects.toThrow("Your wallet ended the WalletConnect session");
+  });
+
+  it("closes the relay socket even when ending the session fails, and ends it on a later try", async () => {
+    const { wallet, fake } = await connected();
+    const disconnect = fake.disconnect.bind(fake);
+    fake.disconnect = async () => { throw new Error("offline"); };
+    await expect(wallet.disconnect?.()).rejects.toThrow("offline");
+    expect(fake.closes).toBe(1);
+    fake.disconnect = disconnect;
+    await wallet.disconnect?.();
+    expect([fake.disconnects, fake.closes]).toEqual([1, 2]);
   });
 
   it("fails its next request once the wallet ends the session", async () => {
