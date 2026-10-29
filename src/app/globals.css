@@ -33,12 +33,22 @@
 
   --shadow-platform: 0 24px 100px -40px color-mix(in oklab, var(--color-glow) 20%, transparent);
 
+  /* The phone's bar at the foot; PhoneNav sets --bar-height on the page to its real height. */
+  --spacing-bar: 3.5rem;
+
   --shadow-glow: 0 0 1.75rem -0.375rem var(--color-glow);
 }
 
 html {
   background: var(--color-ink);
   scroll-behavior: smooth;
+}
+
+/* A focused control scrolls clear of the phone's bar. */
+html {
+  @variant max-lg {
+    scroll-padding-bottom: calc(var(--bar-height, var(--spacing-bar)) + 0.5rem);
+  }
 }
 
 body {

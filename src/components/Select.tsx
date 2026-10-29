@@ -51,7 +51,11 @@ export function Select<T extends string>({ label, value, options, onChange }: Pr
     else if (event.key === "Enter" || event.key === " ") choose(active);
     else if (event.key === "Escape" || event.key === "Tab") {
       setOpen(false);
-      if (event.key === "Escape") root.current?.querySelector("button")?.focus();
+      if (event.key === "Escape") {
+        // Handled here: an enclosing popup that also listens for Escape stays open.
+        event.preventDefault();
+        root.current?.querySelector("button")?.focus();
+      }
       return;
     } else return;
     event.preventDefault();
@@ -70,7 +74,7 @@ export function Select<T extends string>({ label, value, options, onChange }: Pr
           setActive(Math.max(selected, 0));
           setOpen(!open);
         }}
-        className={`mt-1 flex w-full items-center justify-between gap-2 rounded border border-edge bg-ink px-2 py-2 text-left text-data text-fg hover:border-glow focus-visible:outline-2 focus-visible:outline-glow`}
+        className={`mt-1 flex min-h-11 w-full items-center justify-between gap-2 rounded border border-edge bg-ink px-2 py-2 text-left text-data text-fg hover:border-glow focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0`}
       >
         <span className="truncate">{options[selected]?.label ?? ""}</span>
         <span aria-hidden="true" className="text-fg-3">▾</span>
@@ -96,7 +100,7 @@ export function Select<T extends string>({ label, value, options, onChange }: Pr
               onClick={() => choose(index)}
               onKeyDown={onKey}
               onMouseEnter={() => setActive(index)}
-              className={`rounded px-2 py-2 text-data ${index === active ? "bg-glow/10 text-glow" : "text-fg-2"} ${option.value === value ? "font-medium" : ""}`}
+              className={`flex min-h-11 items-center rounded px-2 py-2 text-data lg:block lg:min-h-0 ${index === active ? "bg-glow/10 text-glow" : "text-fg-2"} ${option.value === value ? "font-medium" : ""}`}
             >
               {option.label}
             </div>

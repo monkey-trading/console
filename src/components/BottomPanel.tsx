@@ -36,12 +36,12 @@ export function BottomPanel() {
   const id = useId();
   const counts: Partial<Record<Tab, number>> = { positions: account?.positions.length, orders: account?.orders.length };
   return (
-    <section aria-label="Account activity" className="flex h-60 min-w-0 shrink-0 flex-col border-t border-line">
-      <div role="tablist" aria-label="Account panels" className="flex flex-wrap gap-x-1 border-b border-line px-2">
+    <section aria-label="Account activity" className="flex min-h-80 min-w-0 flex-1 shrink-0 flex-col border-t border-line lg:h-60 lg:min-h-0 lg:flex-none">
+      <div role="tablist" aria-label="Account panels" className="grid grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] border-b border-line lg:flex lg:flex-wrap lg:gap-x-1 lg:px-2">
         {TABS.map((t) => (
           <button key={t} type="button" role="tab" id={`${id}-${t}`} aria-selected={tab === t} aria-controls={`${id}-panel`} onClick={() => setTab(t)}
-            className={`border-b-2 px-3 py-3 text-label tracking-caps uppercase focus-visible:outline-2 focus-visible:outline-glow ${tab === t ? "border-glow text-glow" : "border-transparent text-fg-3 hover:text-fg-2"}`}>
-            {LABEL[t]}{counts[t] ? ` (${counts[t]})` : ""}
+            className={`min-h-11 border-b-2 px-1 py-3 text-center text-label max-lg:flex max-lg:flex-col max-lg:items-center max-lg:justify-center lg:min-h-0 lg:px-3 tracking-caps uppercase focus-visible:outline-2 focus-visible:outline-glow ${tab === t ? "border-glow text-glow" : "border-transparent text-fg-3 hover:text-fg-2"}`}>
+            {LABEL[t]}{counts[t] ? <span className="max-lg:block"> ({counts[t]})</span> : null}
           </button>
         ))}
       </div>

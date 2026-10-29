@@ -47,18 +47,18 @@ export function FundingDrawer() {
       ref={dialog}
       aria-labelledby="funding-title"
       onClose={() => store.setFundingOpen(false)}
-      className="m-0 ml-auto h-dvh max-h-dvh w-[min(30rem,100vw)] max-w-none overflow-y-auto border-l border-line-2 bg-ink-1 p-0 text-fg backdrop:bg-ink/70"
+      className="m-0 ml-auto h-dvh max-h-dvh w-full max-w-none overflow-y-auto max-lg:scroll-pt-16 border-line-2 lg:w-[min(30rem,100vw)] lg:border-l bg-ink-1 p-0 text-fg backdrop:bg-ink/70"
     >
-      <div className="flex items-center justify-between border-b border-line px-5 py-4">
+      <div className="flex items-center justify-between border-b border-line px-4 py-2 max-lg:sticky max-lg:top-0 max-lg:z-10 max-lg:bg-ink-1 lg:px-5 lg:py-4">
         <h2 id="funding-title" tabIndex={-1} className="text-label tracking-caps text-glow uppercase outline-none">Funding</h2>
-        <button type="button" onClick={() => store.setFundingOpen(false)} className="rounded border border-line-2 px-3 py-1.5 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Close</button>
+        <button type="button" onClick={() => store.setFundingOpen(false)} className="min-h-11 rounded border border-line-2 px-4 py-1.5 text-caption text-fg-2 lg:min-h-0 lg:px-3 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Close</button>
       </div>
       {/* The page behind a modal is inert, so the drawer announces results itself. */}
       <div role="status" aria-live="polite" className="sr-only">
         {/* Keyed by message, so a result whose text repeats the last is still announced. */}
         <p key={toasts[toasts.length - 1]?.id ?? 0}>{toasts[toasts.length - 1]?.text ?? ""}</p>
       </div>
-      <div className="space-y-5 p-5">
+      <div className="space-y-5 p-4 lg:p-5">
         <ToastList focusId="funding-title" />
         <AccountSummary />
         {!wallet && (

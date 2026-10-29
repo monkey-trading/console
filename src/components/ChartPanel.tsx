@@ -38,20 +38,20 @@ export function ChartPanel() {
   const shown = market.mark === null ? "—" : formatMark(market.mark, market.places);
   const [whole, decimals] = splitDecimals(shown);
   return (
-    <div className="flex min-h-[26rem] min-w-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
+    <div className="flex min-w-0 flex-1 flex-col lg:min-h-[26rem]">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-3 sm:px-6 lg:py-4">
         <div>
-          <h2 className="text-sm font-medium">{market.symbol.replace("-", " / ")} <span className="ml-2 text-caption font-normal text-fg-3">{market.name}</span></h2>
-          <p className="mt-2 text-2xl tracking-tight">
+          <h2 id="market-title" tabIndex={-1} className="text-sm font-medium outline-none">{market.symbol.replace("-", " / ")} <span className="ml-2 text-caption font-normal text-fg-3">{market.name}</span> <span className={`ml-2 text-label font-normal ${market.open ? "text-glow" : "text-ember"} lg:hidden`}>{market.open ? "Open" : "Closed"}</span></h2>
+          <p className="mt-1 text-2xl tracking-tight lg:mt-2">
             <span aria-hidden="true">{whole}<span className="text-fg-3">{decimals}</span></span>{" "}
             <span aria-hidden="true" className={`text-caption ${change < 0 ? "text-ember" : "text-glow"}`}>{formatMovePercent(change)}</span>
             <span className="sr-only">{market.symbol} index price {shown === "—" ? "unavailable" : shown}</span>
           </p>
         </div>
-        <div role="group" aria-label="Timeframe" className="flex gap-1">
+        <div role="group" aria-label="Timeframe" className="grid w-full grid-cols-5 gap-1 sm:w-auto lg:flex">
           {TIMEFRAMES.map((tf) => (
             <button key={tf.id} type="button" aria-pressed={state.timeframe === tf.id} onClick={() => store.setTimeframe(tf.id)}
-              className={`rounded border px-2 py-1 text-label focus-visible:outline-2 focus-visible:outline-glow ${state.timeframe === tf.id ? "border-glow bg-glow/10 text-glow" : "border-line-2 text-fg-2 hover:text-fg"}`}>
+              className={`min-h-11 rounded border px-2 py-1 text-label sm:min-w-14 lg:min-h-0 lg:min-w-0 focus-visible:outline-2 focus-visible:outline-glow ${state.timeframe === tf.id ? "border-glow bg-glow/10 text-glow" : "border-line-2 text-fg-2 hover:text-fg"}`}>
               {tf.id}
             </button>
           ))}

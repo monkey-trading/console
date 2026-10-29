@@ -8,13 +8,14 @@ import { moveBps } from "@/lib/fixed";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 
-export function Watchlist() {
+/** `onPick` runs after a market is chosen, so the phone can move on to its chart. */
+export function Watchlist({ onPick }: { onPick?: () => void }) {
   const { markets, selected } = useConsole();
   const { store } = useSession();
   return (
-    <div className="border-b border-line lg:border-r lg:border-b-0 lg:h-full">
+    <div className="lg:h-full lg:border-r lg:border-line">
       <h2 className="border-b border-line px-4 py-3 text-label tracking-caps text-fg-3 uppercase">Global watchlist</h2>
-      <ul className="grid sm:grid-cols-5 lg:block">
+      <ul>
         {markets.map((m) => {
           const change = m.mark !== null && m.reference !== null ? moveBps(m.reference, m.mark) : 0;
           const active = m.id === selected;
@@ -24,7 +25,7 @@ export function Watchlist() {
                 type="button"
                 aria-pressed={active}
                 aria-label={`${m.symbol}, ${m.open ? "open" : "closed"}`}
-                onClick={() => store.select(m.id)}
+                onClick={() => { store.select(m.id); onPick?.(); }}
                 className={`block w-full px-4 py-4 text-left focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow ${active ? "border-l-2 border-l-glow bg-glow/5" : "border-l-2 border-l-transparent hover:bg-glow/5"}`}
               >
                 <span aria-hidden="true" className="flex flex-wrap justify-between gap-1 text-caption">

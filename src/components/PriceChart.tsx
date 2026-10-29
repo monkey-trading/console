@@ -83,6 +83,8 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
         },
         rightPriceScale: { borderColor: token("line-2") },
         timeScale: { borderColor: token("line-2"), timeVisible: true, secondsVisible: false },
+        // A finger dragging up or down scrolls the page; one dragging sideways pans the chart.
+        handleScroll: { vertTouchDrag: false },
       });
       const series = chart.addSeries(CandlestickSeries, {
         upColor: token("glow"), borderUpColor: token("glow"), wickUpColor: token("glow"),
@@ -146,8 +148,8 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
 
   const shown = hovered ?? bars[bars.length - 1] ?? null;
   return (
-    <div className="relative h-80 min-h-64 w-full lg:h-auto lg:min-h-64 lg:flex-1">
-      <div ref={host} role="group" aria-label={`${symbol} candlestick chart`} className="absolute inset-0" />
+    <div className="relative h-[min(28rem,55svh)] min-h-64 w-full lg:h-auto lg:flex-1">
+      <div ref={host} role="group" aria-label={`${symbol} candlestick chart`} className="absolute inset-0 max-lg:[&_a]:after:absolute max-lg:[&_a]:after:-inset-3.5 max-lg:[&_a]:after:content-['']" />
       {failed && <p role="alert" className="absolute inset-0 z-10 flex items-center justify-center text-caption text-ember">The chart could not load. Reload the page to try again.</p>}
       <p className="sr-only">
         {symbol} candlestick chart. {shown ? `Latest bar: open ${formatPrice(shown.open, places)}, high ${formatPrice(shown.high, places)}, low ${formatPrice(shown.low, places)}, close ${formatPrice(shown.close, places)}.` : "No bars yet."}

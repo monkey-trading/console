@@ -29,13 +29,13 @@ export function EligibilityCard() {
           <fieldset className="mt-4 space-y-2">
             <legend className="sr-only">Client class</legend>
             {CLASSES.map((cls) => (
-              <label key={cls} className="flex items-start gap-3 rounded border border-line-2 px-3 py-3 text-caption text-fg-2 has-checked:border-glow has-checked:text-fg">
+              <label key={cls} className="flex min-h-11 items-start gap-3 lg:min-h-0 rounded border border-line-2 px-3 py-3 text-caption text-fg-2 has-checked:border-glow has-checked:text-fg">
                 <input type="radio" name={name} checked={choice === cls} onChange={() => setChoice(cls)} className="mt-0.5 accent-glow" />
                 {STATEMENTS[cls]}
               </label>
             ))}
           </fieldset>
-          <button type="submit" aria-disabled={!wallet || busy || !maySign(attestation)} className="mt-4 rounded border border-glow bg-glow/10 px-4 py-2.5 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3">
+          <button type="submit" aria-disabled={!wallet || busy || !maySign(attestation)} className="mt-4 min-h-11 rounded border border-glow bg-glow/10 px-4 py-2.5 lg:min-h-0 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3">
             {busy ? "Signing…" : "Sign the declaration"}
           </button>
           {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet first.</p>}

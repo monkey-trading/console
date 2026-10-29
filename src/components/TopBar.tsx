@@ -11,7 +11,7 @@ import { MockControls } from "./MockControls";
 import { WalletButton } from "./WalletButton";
 
 const usd = (value: Fixed) => `$${formatFixedPlaces(value, 2)}`;
-const BUTTON = "rounded border border-edge px-3 py-2 text-caption text-fg hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
+const BUTTON = "min-h-11 rounded border border-edge px-2.5 py-2 sm:px-3 lg:min-h-0 text-caption text-fg hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
 
 export function TopBar() {
   const { account, now, paused, blocked } = useConsole();
@@ -37,7 +37,7 @@ export function TopBar() {
           </div>
         ))}
       </dl>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
         <span className="hidden text-label tracking-caps text-fg-3 uppercase xl:inline">
           Node clock <span aria-hidden="true" className="text-fg-2">{formatClock(now)} UTC</span>
         </span>

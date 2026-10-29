@@ -2,7 +2,7 @@
 
 /** The mock build's controls: push the simulated node into each state the screens must handle. */
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { fixedFromInt } from "@/lib/fixed";
 import type { Region } from "@/lib/mock/state";
@@ -20,7 +20,7 @@ const ATTESTATIONS = [
   { value: "mock", label: "Mock quote (accepted in this build)" },
   { value: "unverifiable", label: "Hardware quote (cannot be verified)" },
 ] as const;
-const BUTTON = "rounded border border-line-2 px-2 py-1.5 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
+const BUTTON = "min-h-11 min-w-11 rounded border border-line-2 px-2 py-1.5 lg:min-h-0 lg:min-w-0 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
 
 export function MockControls() {
   const { node, store } = useSession();
@@ -28,6 +28,20 @@ export function MockControls() {
   const [open, setOpen] = useState(false);
   const [region, setRegion] = useState<Region>("allowed");
   const id = useId();
+  const toggle = useRef<HTMLButtonElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      // Only an Escape from inside the panel (or its toggle) counts, so a drawer opened over it keeps its own.
+      if (event.key !== "Escape" || event.defaultPrevented || !(event.target instanceof Node && root.current?.contains(event.target))) return;
+      event.preventDefault();
+      setOpen(false);
+      toggle.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
   const market = markets.find((m) => m.id === selected);
   const { controls } = node;
   const haltedNow = market ? node.client.state.markets.get(market.id)?.halted === true : false;
@@ -42,12 +56,13 @@ export function MockControls() {
     void store.checkNode();
   };
   return (
-    <div className="relative">
-      <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} className="rounded border border-amber/60 px-3 py-2 text-label tracking-caps text-amber uppercase focus-visible:outline-2 focus-visible:outline-glow">
-        Mock controls
+    <div ref={root} className="relative">
+      <button ref={toggle} type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} className="min-h-11 rounded border border-amber/60 px-2.5 py-2 sm:px-3 lg:min-h-0 text-label tracking-caps text-amber uppercase focus-visible:outline-2 focus-visible:outline-glow">
+        Mock<span className="max-sm:sr-only"> controls</span>
       </button>
       {open && (
-        <div id={id} className="fixed inset-x-4 top-24 z-50 max-h-[calc(100dvh-7rem)] space-y-4 overflow-y-auto sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-80 rounded border border-line-2 bg-ink-2 p-4 text-caption shadow-platform">
+        <div id={id} className="fixed inset-x-4 bottom-4 z-50 max-h-[calc(100dvh-2rem)] space-y-4 overflow-y-auto sm:absolute sm:inset-x-auto sm:right-0 sm:bottom-auto sm:mt-2 sm:max-h-[calc(100dvh-7rem)] sm:w-80 rounded border border-line-2 bg-ink-2 p-4 text-caption shadow-platform">
+          <button type="button" onClick={() => { setOpen(false); toggle.current?.focus(); }} className={`${BUTTON} w-full sm:hidden`}>Close mock controls</button>
           <p className="text-label leading-relaxed text-fg-3">Simulated node only. These change the node in your browser to show how the screens behave.{paused && <span className="text-amber"> The simulation is paused, so price shocks and stress changes apply when you press Play.</span>}</p>
           <Select label="Where the node sees you" value={region} options={REGIONS} onChange={changeRegion} />
           <div>

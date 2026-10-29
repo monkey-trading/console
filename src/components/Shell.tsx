@@ -12,7 +12,7 @@ import { TopBar } from "./TopBar";
 /** Fills the viewport on large screens and scrolls as one page on small ones. */
 export function Shell({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col bg-ink-1 lg:h-dvh lg:overflow-hidden">
+    <div className="flex min-h-dvh flex-col bg-ink-1 max-lg:has-[[data-phone-nav]]:pb-(--bar-height,var(--spacing-bar)) lg:h-dvh lg:overflow-hidden">
       <a href="#main" className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2 focus-visible:z-50 focus-visible:rounded focus-visible:border focus-visible:border-glow focus-visible:bg-ink focus-visible:px-3 focus-visible:py-2 focus-visible:text-caption">
         Skip to content
       </a>
