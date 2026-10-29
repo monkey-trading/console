@@ -37,7 +37,7 @@ export function Toasts() {
       <div role="log" aria-live="polite" aria-label="Notifications" className="sr-only">
         {toasts.map((toast) => <p key={toast.id}>{toast.text}</p>)}
       </div>
-      <div ref={popover} popover="manual" className="fixed inset-auto bottom-[4.5rem] left-1/2 lg:bottom-12 m-0 w-[min(26rem,calc(100vw-2rem))] -translate-x-1/2 overflow-visible border-0 bg-transparent p-0">
+      <div ref={popover} popover="manual" className="fixed inset-auto bottom-[calc(var(--bar-height,var(--spacing-bar))+1rem)] left-1/2 lg:bottom-12 m-0 w-[min(26rem,calc(100vw-2rem))] -translate-x-1/2 overflow-visible border-0 bg-transparent p-0">
         <ToastList focusId="main" />
       </div>
     </>

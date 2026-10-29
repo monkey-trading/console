@@ -24,6 +24,11 @@ export function TradeWorkspace() {
     if (focusMarket.current && pane === "chart") document.getElementById("market-title")?.focus();
     focusMarket.current = false;
   }, [pane]);
+  const choose = (next: PhonePane) => {
+    // Every pane starts at its top, not at the offset the last one was scrolled to.
+    if (next !== pane) window.scrollTo({ top: 0, behavior: "instant" });
+    setPane(next);
+  };
   const picked = () => {
     if (window.matchMedia("(width >= 64rem)").matches) return;
     focusMarket.current = true;
@@ -37,7 +42,7 @@ export function TradeWorkspace() {
         <div className={`flex shrink-0 flex-col ${hiddenUnless(pane, "account")}`}><BottomPanel /></div>
       </div>
       <div className={`min-h-0 border-line lg:overflow-y-auto lg:border-l ${hiddenUnless(pane, "trade")}`}><OrderTicket /></div>
-      <PhoneNav pane={pane} onChange={setPane} />
+      <PhoneNav pane={pane} onChange={choose} />
     </div>
   );
 }

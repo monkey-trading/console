@@ -32,7 +32,7 @@ export function MockControls() {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.defaultPrevented) return;
       setOpen(false);
       toggle.current?.focus();
     };

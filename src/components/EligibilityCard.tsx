@@ -29,7 +29,7 @@ export function EligibilityCard() {
           <fieldset className="mt-4 space-y-2">
             <legend className="sr-only">Client class</legend>
             {CLASSES.map((cls) => (
-              <label key={cls} className="flex min-h-11 items-start gap-3 rounded border border-line-2 px-3 py-3 text-caption text-fg-2 has-checked:border-glow has-checked:text-fg">
+              <label key={cls} className="flex min-h-11 items-start gap-3 lg:min-h-0 rounded border border-line-2 px-3 py-3 text-caption text-fg-2 has-checked:border-glow has-checked:text-fg">
                 <input type="radio" name={name} checked={choice === cls} onChange={() => setChoice(cls)} className="mt-0.5 accent-glow" />
                 {STATEMENTS[cls]}
               </label>

@@ -51,7 +51,11 @@ export function Select<T extends string>({ label, value, options, onChange }: Pr
     else if (event.key === "Enter" || event.key === " ") choose(active);
     else if (event.key === "Escape" || event.key === "Tab") {
       setOpen(false);
-      if (event.key === "Escape") root.current?.querySelector("button")?.focus();
+      if (event.key === "Escape") {
+        // Handled here: an enclosing popup that also listens for Escape stays open.
+        event.preventDefault();
+        root.current?.querySelector("button")?.focus();
+      }
       return;
     } else return;
     event.preventDefault();
