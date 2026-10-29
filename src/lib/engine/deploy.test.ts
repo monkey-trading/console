@@ -28,6 +28,14 @@ describe("parseDeploy", () => {
     expect(() => parseDeploy({ ...live, mode: "staging" })).toThrow("must be mock, live-dev or live");
   });
 
+  it("reads an optional RPC URL and WalletConnect project id, refusing malformed ones", () => {
+    expect(parseDeploy(live)).toMatchObject({ rpcUrl: null, walletConnectProjectId: null });
+    expect(parseDeploy({ ...live, rpcUrl: "http://127.0.0.1:8545", walletConnectProjectId: "0123456789abcdef0123456789abcdef" })).toMatchObject({ rpcUrl: "http://127.0.0.1:8545/", walletConnectProjectId: "0123456789abcdef0123456789abcdef" });
+    expect(() => parseDeploy({ ...live, rpcUrl: "ws://127.0.0.1:8545" })).toThrow("NEXT_PUBLIC_ENGINE_RPC_URL must be an http or https URL");
+    expect(() => parseDeploy({ ...live, rpcUrl: "nope" })).toThrow("NEXT_PUBLIC_ENGINE_RPC_URL is not a URL");
+    expect(() => parseDeploy({ ...live, walletConnectProjectId: "0123" })).toThrow("NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID must be 32 lowercase hex characters");
+  });
+
   it("allows only a bare https origin", () => {
     for (const origin of ["http://node.example", "https://node.example/v1", "https://node.example?x=1", "https://user@node.example", "wss://node.example", "node.example"]) {
       expect(() => parseDeploy({ ...live, origin, devOrigins: origin })).toThrow();

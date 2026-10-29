@@ -16,6 +16,7 @@ describe("WatchConnector", () => {
     const typed = cancelTypedData(requestDomain(31337, ADDRESS), { account: ADDRESS, order_id: 1 }, { nonce: 0, expiresAt: 0 });
     await expect(wallet.sign({ summary: "", typed })).rejects.toThrow("read-only");
     await expect(wallet.deposit(1n)).rejects.toThrow("read-only");
+    await expect(wallet.claimed(1)).resolves.toBe(false);
   });
 
   it("explains how to name an account when the page address has none or a bad one", async () => {

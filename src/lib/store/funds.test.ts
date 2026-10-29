@@ -1,0 +1,58 @@
+/** Tests for the quotes and withdrawal authorizations the store keeps for the connected account, and the payouts built from them. */
+
+import { describe, expect, it } from "vitest";
+
+import type { HistoryEvent, MarketQuote, SignedWithdrawal } from "../engine/types";
+import { fixedFromInt } from "../fixed";
+import { applyFeedEvent } from "./funds";
+import { payoutsOf } from "./payouts";
+import { initialState, type ConsoleState } from "./state";
+
+const ME = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
+const OTHER = "0x00000000000000000000000000000000000000aa";
+const base = (): ConsoleState => ({ ...initialState([], { cash: "0", nav: "0", gross_exposure: "0" }, 0, () => [], "checked"), wallet: { address: ME, label: "Test" } });
+const quote = (account: string, market = 1): MarketQuote => ({ type: "quote", account, market, open: true, reduce_only: false, stress_level: 0, mark: "1", ask: [], bid: [], close: null });
+const signed = (nonce: number, expiresAt: number, account = ME): SignedWithdrawal => ({
+  account, amount: "10", nonce, chain_id: 31337, vault: OTHER, signature: "0x22", approved_seq: 40,
+  authorization: { signer: OTHER, signer_epoch: 1, issued_at: expiresAt - 86_400, expires_at: expiresAt, checkpoint_seq: 64, checkpoint_root: "0x33", siblings: [] },
+});
+
+describe("applyFeedEvent", () => {
+  it("keeps the connected account's quote per market and clears a refusal, ignoring another account's", () => {
+    const state = { ...base(), quoteError: "uncredited" };
+    expect(applyFeedEvent(state, { type: "quote", quote: quote(ME.toUpperCase().replace("0X", "0x")) })).toEqual({ quotes: { 1: quote(ME.toUpperCase().replace("0X", "0x")) }, quoteError: null });
+    expect(applyFeedEvent(state, { type: "quote", quote: quote(OTHER) })).toBeNull();
+  });
+
+  it("drops every quote when the node refuses the request, and ignores a refusal with no wallet", () => {
+    const state = { ...base(), quotes: { 1: quote(ME) } };
+    expect(applyFeedEvent(state, { type: "quote_error", error: "uncredited" })).toEqual({ quotes: {}, quoteError: "uncredited" });
+    expect(applyFeedEvent({ ...state, wallet: null }, { type: "quote_error", error: "uncredited" })).toBeNull();
+  });
+
+  it("keeps the latest authorization per payout for the connected account, and none without a typed authorization", () => {
+    const state = { ...base(), authorizations: [signed(1, 100), signed(2, 100)] };
+    expect(applyFeedEvent(state, { type: "withdrawal", withdrawal: signed(1, 200) })).toEqual({ authorizations: [signed(2, 100), signed(1, 200)] });
+    expect(applyFeedEvent(state, { type: "withdrawal", withdrawal: signed(1, 200, OTHER) })).toBeNull();
+    expect(applyFeedEvent(state, { type: "withdrawal", withdrawal: { ...signed(3, 100), authorization: undefined } })).toBeNull();
+    expect(applyFeedEvent(state, { type: "feed", status: "live" })).toBeNull();
+  });
+});
+
+describe("payoutsOf", () => {
+  const approved = (nonce: number, seq: number): HistoryEvent => ({ type: "withdrawal_approved", account: ME, amount: "10", nonce, cursor: `${seq}:0`, ts: 0 });
+
+  it("says where each approval stands at node time: paid, claimable until it expires, expired, or waiting", () => {
+    const state: ConsoleState = {
+      ...base(), now: 1_000_000, paid: [1],
+      history: [approved(4, 70), approved(3, 60), approved(2, 50), approved(1, 40), { type: "deposited", account: ME, amount: "10", cursor: "30:0", ts: 0 }],
+      authorizations: [signed(1, 900), signed(2, 1_001), signed(3, 1_000)],
+    };
+    expect(payoutsOf(state).map(({ nonce, approvedSeq, status, amount }) => ({ nonce, approvedSeq, kind: status.kind, amount }))).toEqual([
+      { nonce: 4, approvedSeq: 70, kind: "waiting", amount: fixedFromInt(10) },
+      { nonce: 3, approvedSeq: 60, kind: "expired", amount: fixedFromInt(10) },
+      { nonce: 2, approvedSeq: 50, kind: "claimable", amount: fixedFromInt(10) },
+      { nonce: 1, approvedSeq: 40, kind: "paid", amount: fixedFromInt(10) },
+    ]);
+  });
+});
