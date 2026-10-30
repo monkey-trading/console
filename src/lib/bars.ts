@@ -81,15 +81,19 @@ export function barsFromMarks(marks: readonly { ts: number; mid: number }[], sec
 
 /**
  * Bars to publish when a history fetch lands. `fetched` covers the window up to the fetch's
- * cutoff; `current` may hold newer stream ticks, so the shared last bucket keeps the fetched open
- * with both ranges' extremes and the newest close, and buckets the stream opened after the
- * cutoff follow as they are.
+ * cutoff; `current` may hold newer stream ticks, and `pre` is the series as it stood when the
+ * fetch began. The shared last bucket keeps the fetched open: the fetched window holds every tick
+ * the stream had by the cutoff, so a bucket unchanged since the fetch began keeps the fetched
+ * close, while one the stream extended during the fetch takes the stream's close and the wider
+ * range. Buckets the stream opened after the cutoff follow as they are.
  */
-export function mergeFetchedBars(fetched: readonly Bar[], current: readonly Bar[]): Bar[] {
+export function mergeFetchedBars(fetched: readonly Bar[], current: readonly Bar[], pre: readonly Bar[] | null): Bar[] {
   const last = fetched[fetched.length - 1];
   if (last === undefined) return current.slice(-MAX_BARS);
   const at = current.find((bar) => bar.time === last.time);
-  const mergedLast = at === undefined ? last : { ...last, high: Math.max(last.high, at.high), low: Math.min(last.low, at.low), close: at.close };
+  const preAt = pre?.find((bar) => bar.time === last.time);
+  const mergedLast = at === undefined || at === preAt ? last
+    : { ...last, high: Math.max(last.high, at.high), low: Math.min(last.low, at.low), close: at.close };
   const tail = current.filter((bar) => bar.time > last.time);
   return [...fetched.slice(0, -1), mergedLast, ...tail].slice(-MAX_BARS);
 }

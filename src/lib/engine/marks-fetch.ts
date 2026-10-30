@@ -33,6 +33,8 @@ export function windowSecondsFor(timeframe: TimeframeId): number {
 
 /** The most pages one pass over a window reads before it keeps the partial span it reached. */
 export const MARKS_PAGE_LIMIT = 8;
+/** The most passes over a window, halving toward its recent edge, before the partial is kept. */
+export const MARKS_PASSES = 3;
 
 /** The bars folded from one window's marks. */
 export interface FetchedBars {
@@ -84,14 +86,16 @@ async function readWindow(client: EngineClient, market: number, timeframe: Timef
 /**
  * Fetches `[fromMs, toMs]` of `market`'s marks at `timeframe`'s resolution and folds them into
  * bars of `timeframe`'s size. A pass reads pages by `next_from_ms` until a page names none or the
- * page budget is spent; when the budget cuts a pass, one more pass reads the newest span of what
- * the first reached, so the bars kept end at the window's recent edge.
+ * page budget is spent. When the budget cuts a pass, the next pass reads the newest half of the
+ * span it reached, which needs fewer pages; a window denser near its recent edge still ends near
+ * `toMs` within the pass cap.
  * Error cases:
  * - as `EngineClient.marks`: the node's refusal or an unverifiable answer rejects, and no bars are returned
  */
 export async function fetchBarsHistory(client: EngineClient, market: number, timeframe: TimeframeId, fromMs: number, toMs: number): Promise<FetchedBars> {
-  const first = await readWindow(client, market, timeframe, fromMs, toMs);
-  if (first.result.complete || !first.retryable || first.fetchedMs <= 0) return first.result;
-  const retry = await readWindow(client, market, timeframe, toMs - first.fetchedMs, toMs);
-  return retry.result;
+  let read = await readWindow(client, market, timeframe, fromMs, toMs);
+  for (let pass = 1; pass < MARKS_PASSES && !read.result.complete && read.retryable && read.fetchedMs > 1; pass++) {
+    read = await readWindow(client, market, timeframe, toMs - Math.floor(read.fetchedMs / 2), toMs);
+  }
+  return read.result;
 }

@@ -78,19 +78,27 @@ describe("mergeFetchedBars", () => {
 
   it("keeps the current series when the fetch found no marks", () => {
     const current = [bar(60, 1, 1, 1, 1)];
-    expect(mergeFetchedBars([], current)).toEqual(current);
+    expect(mergeFetchedBars([], current, null)).toEqual(current);
   });
 
-  it("appends the buckets the stream opened after the fetched window, and merges the shared last bucket's range", () => {
-    const fetched = [bar(0, 100, 110, 90, 105), bar(60, 105, 106, 104, 106)];
+  it("appends the buckets the stream opened after the fetched window, and takes the shared bucket's newer range", () => {
+    const lastFetched = bar(60, 105, 106, 104, 106);
+    const fetched = [bar(0, 100, 110, 90, 105), lastFetched];
     const current = [bar(60, 105, 120, 100, 118), bar(120, 118, 130, 115, 116)];
-    expect(mergeFetchedBars(fetched, current)).toEqual([bar(0, 100, 110, 90, 105), bar(60, 105, 120, 100, 118), bar(120, 118, 130, 115, 116)]);
+    expect(mergeFetchedBars(fetched, current, [lastFetched])).toEqual([bar(0, 100, 110, 90, 105), bar(60, 105, 120, 100, 118), bar(120, 118, 130, 115, 116)]);
+  });
+
+  it("keeps the fetched close when the shared bucket gained no ticks during the fetch", () => {
+    const stale = bar(60, 100, 105, 95, 100); // what the stream held when the fetch began, and still holds
+    const lastFetched = bar(60, 100, 110, 90, 108); // the log's fuller picture of the same bucket
+    const merged = mergeFetchedBars([bar(0, 1, 1, 1, 1), lastFetched], [stale, bar(120, 108, 109, 107, 107)], [stale]);
+    expect(merged[1]).toEqual(lastFetched);
   });
 
   it("drops current buckets inside the fetched window and bounds the series", () => {
     const fetched = Array.from({ length: MAX_BARS }, (_, i) => bar(i * MIN, 1, 1, 1, 1));
     const current = [bar(0, 9, 9, 9, 9), bar((MAX_BARS - 1) * MIN, 1, 2, 1, 2), bar(MAX_BARS * MIN, 3, 3, 3, 3)];
-    const merged = mergeFetchedBars(fetched, current);
+    const merged = mergeFetchedBars(fetched, current, null);
     expect(merged).toHaveLength(MAX_BARS);
     expect(merged[0]?.time).toBe(MIN);
     expect(merged[MAX_BARS - 2]).toEqual(bar((MAX_BARS - 1) * MIN, 1, 2, 1, 2));

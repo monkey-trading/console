@@ -30,7 +30,7 @@ matches the current action.
   types, `SHA256SUMS`), whose hashes `src/lib/engine/wasm-pin.json` pins.
 - **src/lib/** — pure TypeScript with no React or DOM. Logic modules have adjacent `*.test.ts`:
   `site.ts` holds identity and `siteUrl()`, the server's one environment-variable reader (`engine/deploy.ts` reads the `NEXT_PUBLIC_ENGINE_*` values the browser needs); `geo-block.ts` holds the restricted countries (a placeholder until counsel's list) and builds the geo-block rewrite from them; `fixed.ts` is the
-  engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `quotes.ts` (the node's executable quotes: the markets asked for, and the price a ticket shows and sends), `qr.ts` (a pairing link as a QR path), `bars.ts` (marks into bars per timeframe, and the chart's view when the oldest bar rolls off) and
+  engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `quotes.ts` (the node's executable quotes: the markets asked for, and the price a ticket shows and sends), `qr.ts` (a pairing link as a QR path), `bars.ts` (marks into bars per timeframe, a fetched history merged with the ticks the stream delivered during the fetch, and the chart's view when the oldest bar rolls off) and
   `vault.ts` (deposit bounds, the withdrawable amount) and `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `escape.ts` says which Escape presses close a popup; `panes.ts` picks the workspace pane that keeps the user's focus when the layout narrows; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
   margin and market-hours rules and the ticket preview; `models.ts` and `messages.ts` decode and
   describe engine data.

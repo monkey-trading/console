@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { FakeClient } from "../store/live-fake";
 import type { MarkEntry, MarkProvenance } from "./types";
-import { fetchBarsHistory, MARKS_PAGE_LIMIT, resolutionFor, windowSecondsFor } from "./marks-fetch";
+import { fetchBarsHistory, MARKS_PAGE_LIMIT, MARKS_PASSES, resolutionFor, windowSecondsFor } from "./marks-fetch";
 
 const entry = (tMs: number, provenance: MarkProvenance = "log_derived"): MarkEntry => ({ t_ms: tMs, mid: "100", provenance });
 
@@ -51,7 +51,7 @@ describe("fetchBarsHistory", () => {
     expect(got.bars).toHaveLength(1);
   });
 
-  it("reads the window's newest span again when the budget cuts a pass, so the kept bars reach to_ms", async () => {
+  it("halves toward the recent edge when the budget cuts a pass, so the kept bars reach to_ms", async () => {
     class PagingClient extends FakeClient {
       override async marks(market: number, resolution: "1s" | "1m" | "1h" | "1d", fromMs: number, toMs: number) {
         this.marksReads.push({ market, resolution, fromMs, toMs });
@@ -62,26 +62,23 @@ describe("fetchBarsHistory", () => {
     const client = new PagingClient();
     const toMs = (MARKS_PAGE_LIMIT + 1) * 1_000;
     const got = await fetchBarsHistory(client, 1, "1m", 0, toMs);
-    // The budget cut the first pass one page short, so the window is read again over its newest span.
-    expect(client.marksReads).toHaveLength(2 * MARKS_PAGE_LIMIT);
-    expect(client.marksReads[MARKS_PAGE_LIMIT]?.fromMs).toBe(toMs - MARKS_PAGE_LIMIT * 1_000);
+    // The budget cut the first pass one page short; the next pass reads the newest half of its span and completes.
+    expect(client.marksReads.map((read) => read.fromMs)).toEqual([0, 1_000, 2_000, 3_000, 4_000, 5_000, 6_000, 7_000, 5_000, 6_000, 7_000, 8_000]);
     expect(got.complete).toBe(true);
     expect(got.bars).toHaveLength(1);
   });
 
-  it("keeps the newest span even when the retry hits the budget again", async () => {
-    class DenseTailClient extends FakeClient {
+  it("keeps halving, bounded by the pass cap, when a window is denser near its recent edge", async () => {
+    class EndlessClient extends FakeClient {
       override async marks(market: number, resolution: "1s" | "1m" | "1h" | "1d", fromMs: number, toMs: number) {
         this.marksReads.push({ market, resolution, fromMs, toMs });
-        const step = fromMs >= 5_000 ? 500 : 1_000;
-        return { entries: [entry(fromMs + 1)], next_from_ms: fromMs + step < toMs ? fromMs + step : null };
+        // Densest at the recent edge: every pass spends its budget, whatever span it covers.
+        return { entries: [entry(fromMs + 1)], next_from_ms: fromMs + 100 };
       }
     }
-    const client = new DenseTailClient();
+    const client = new EndlessClient();
     const got = await fetchBarsHistory(client, 1, "1m", 0, 10_000);
-    // The budget stopped the first pass at 6500 ms; the retry reads the newest 6500 ms and stops on the budget too.
-    expect(client.marksReads).toHaveLength(2 * MARKS_PAGE_LIMIT);
-    expect(client.marksReads[MARKS_PAGE_LIMIT]?.fromMs).toBe(3_500);
+    expect(client.marksReads).toHaveLength(MARKS_PASSES * MARKS_PAGE_LIMIT);
     expect(got.complete).toBe(false);
   });
 

@@ -18,6 +18,8 @@ const SEED_ATTEMPTS = 3;
 export class BarsSeed {
   /** The market/timeframe series a fetch finished, so each is seeded once per page load. */
   private readonly seeded = new Set<string>();
+  /** The market/timeframe series a fetch is reading, so overlapping triggers start one fetch. */
+  private readonly pending = new Set<string>();
   /** Attempts per series, so a transient failure retries and a persistent one stops. */
   private readonly attempts = new Map<string, number>();
   /** The series whose failure was already reported, so it is reported once. */
@@ -37,9 +39,10 @@ export class BarsSeed {
   seed(marketId: MarketId, timeframe: TimeframeId): void {
     if (this.store.deps.client.signatures !== "checked" || this.unavailable || this.store.getSnapshot().now === 0) return;
     const key = `${marketId}:${timeframe}`;
-    if (this.seeded.has(key)) return;
+    if (this.seeded.has(key) || this.pending.has(key)) return;
     const attempt = (this.attempts.get(key) ?? 0) + 1;
     this.attempts.set(key, attempt);
+    this.pending.add(key);
     void this.fetch(key, marketId, timeframe, attempt);
   }
 
@@ -52,6 +55,7 @@ export class BarsSeed {
   private async fetch(key: string, marketId: MarketId, timeframe: TimeframeId, attempt: number): Promise<void> {
     try {
       const toMs = this.store.getSnapshot().now;
+      const pre = this.store.getSnapshot().bars[marketId]?.[timeframe] ?? null;
       const fetched = await fetchBarsHistory(this.store.deps.client, marketId, timeframe, toMs - windowSecondsFor(timeframe) * 1000, toMs);
       // No marks for the window is the node's honest answer, not a failure: do not retry it.
       if (fetched.bars.length === 0) {
@@ -60,7 +64,7 @@ export class BarsSeed {
       }
       const before = this.store.getSnapshot().bars;
       const current = before[marketId]?.[timeframe] ?? [];
-      const series = mergeFetchedBars(fetched.bars, current);
+      const series = mergeFetchedBars(fetched.bars, current, pre);
       const per = before[marketId];
       // `fromEntries` loses the key type; the keys are exactly the timeframes `TIMEFRAMES` lists.
       const nextPer = Object.fromEntries(TIMEFRAMES.map((tf) => [tf.id, tf.id === timeframe ? series : (per?.[tf.id] ?? [])])) as Record<TimeframeId, Bar[]>;
@@ -76,12 +80,14 @@ export class BarsSeed {
         return;
       }
       // A transient failure retries on the next trigger; the last one reports once and stops.
-      if (attempt >= SEED_ATTEMPTS && !this.reported.has(key)) {
+      if (attempt >= SEED_ATTEMPTS && !this.seeded.has(key) && !this.reported.has(key)) {
         this.reported.add(key);
         this.seeded.add(key);
         const reason = error instanceof Error ? error.message : "The node did not answer.";
         this.store.toast("error", `Chart history unavailable: ${reason}`);
       }
+    } finally {
+      this.pending.delete(key);
     }
   }
 

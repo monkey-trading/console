@@ -11,7 +11,7 @@ import { BTC, setup } from "./live-fake";
 
 const NOW = Date.UTC(2026, 9, 30, 12, 0, 0);
 const entry = (tMs: number, provenance: MarkProvenance = "log_derived") => ({ t_ms: tMs, mid: "100000", provenance });
-const tick = (ts: number): StreamMessage => ({ offset: "1:0", type: "command", seq: 1, ts, cmd: { type: "tick" } as StreamMessage["cmd"], events: [] });
+const tick = (ts: number): StreamMessage => ({ offset: "1:0", type: "command", seq: 1, ts, cmd: { type: "tick" }, events: [] });
 /** The one-bar series the stream's read builds at the current mark and time. */
 const streamBar = (seconds: number, at = NOW) => ({ time: Math.floor(at / 1000 / seconds) * seconds, open: 100_000, high: 100_000, low: 100_000, close: 100_000 });
 
@@ -60,22 +60,42 @@ describe("seeding the chart from the marks endpoint", () => {
     expect(client.marksReads).toHaveLength(1);
   });
 
-  it("keeps the ticks the stream delivered while the fetch ran", async () => {
+  it("merges the ticks the stream delivered during the fetch into the fetched window's last bucket", async () => {
     const { client, store } = setup();
     let release: ((page: MarkPage) => void) | undefined;
     client.marks = () => new Promise<MarkPage>((resolve) => { release = resolve; });
-    store.start(NOW);
+    // The fetch's cutoff lands inside the bucket the stream is building, so the last fetched
+    // bucket and the stream's current bar are one.
+    store.start(NOW + 10_000);
     await settle();
     client.markets = async () => [{ ...BTC, mark: "200000" }];
-    client.onMessage?.(tick(NOW + 30_000));
+    client.onMessage?.(tick(NOW + 20_000));
     await settle();
-    release?.({ entries: [entry(NOW - 120_000), entry(NOW - 60_000)], next_from_ms: null });
+    release?.({ entries: [entry(NOW - 60_000), { t_ms: NOW + 5_000, mid: "150000", provenance: "log_derived" }], next_from_ms: null });
     await settle();
     expect(store.getSnapshot().bars[1]?.["1m"]).toEqual([
-      { time: (NOW - 120_000) / 1000, open: 100_000, high: 100_000, low: 100_000, close: 100_000 },
       { time: (NOW - 60_000) / 1000, open: 100_000, high: 100_000, low: 100_000, close: 100_000 },
       { time: NOW / 1000, open: 100_000, high: 200_000, low: 100_000, close: 200_000 },
     ]);
+  });
+
+  it("starts one fetch when triggers arrive while a fetch is pending", async () => {
+    const { client, store } = setup();
+    let release: ((page: MarkPage) => void) | undefined;
+    let calls = 0;
+    client.marks = () => {
+      calls++;
+      return new Promise<MarkPage>((resolve) => { release = resolve; });
+    };
+    store.start(NOW);
+    await settle();
+    client.onMessage?.(tick(NOW + 60_000));
+    client.onMessage?.(tick(NOW + 120_000));
+    await settle();
+    expect(calls).toBe(1);
+    release?.({ entries: [entry(NOW - 60_000)], next_from_ms: null });
+    await settle();
+    expect(store.getSnapshot().bars[1]?.["1m"]?.[0]).toMatchObject({ time: (NOW - 60_000) / 1000 });
   });
 
   it("retries a transiently failing fetch and recovers the history", async () => {
@@ -133,9 +153,8 @@ describe("seeding the chart from the marks endpoint", () => {
     };
     store.start(NOW);
     await settle();
-    // The budget cut the first pass and the retry re-read the newest span: one seeded bar,
-    // with the stream's current bar merged after it.
-    expect(client.marksReads).toHaveLength(2 * MARKS_PAGE_LIMIT);
+    // The budget cut the first pass; the halved pass re-read the newest span in four pages.
+    expect(client.marksReads).toHaveLength(MARKS_PAGE_LIMIT + 4);
     expect(store.getSnapshot().bars[1]?.["1m"]).toEqual([
       { time: (NOW - 60_000) / 1000, open: 100_000, high: 100_000, low: 100_000, close: 100_000 },
       streamBar(60),
