@@ -1,0 +1,103 @@
+/** Tests for the marks endpoint's window fetch: timeframe mapping, pagination, budget, and provenance. */
+
+import { describe, expect, it } from "vitest";
+
+import { FakeClient } from "../store/live-fake";
+import type { MarkEntry, MarkProvenance } from "./types";
+import { fetchBarsHistory, MARKS_PAGE_LIMIT, resolutionFor, windowSecondsFor } from "./marks-fetch";
+
+const entry = (tMs: number, provenance: MarkProvenance = "log_derived"): MarkEntry => ({ t_ms: tMs, mid: "100", provenance });
+
+describe("resolutionFor", () => {
+  it("maps each timeframe to the resolution that fills its chart window", () => {
+    expect(resolutionFor("1m")).toBe("1s");
+    expect(resolutionFor("5m")).toBe("1m");
+    expect(resolutionFor("15m")).toBe("1m");
+    expect(resolutionFor("1h")).toBe("1h");
+    expect(resolutionFor("1D")).toBe("1d");
+  });
+});
+
+describe("windowSecondsFor", () => {
+  it("covers the most bars the chart keeps, at each timeframe's size", () => {
+    expect(windowSecondsFor("1m")).toBe(60 * 500);
+    expect(windowSecondsFor("5m")).toBe(300 * 500);
+    expect(windowSecondsFor("1D")).toBe(86_400 * 500);
+  });
+});
+
+describe("fetchBarsHistory", () => {
+  it("fetches one page for the market, resolution, and window, and folds it into bars", async () => {
+    const client = new FakeClient();
+    client.marksPages = [{ entries: [entry(60_000), entry(61_000), entry(62_000), entry(120_000)], next_from_ms: null }];
+    const got = await fetchBarsHistory(client, 1, "1m", 0, 120_000);
+    expect(client.marksReads).toEqual([{ market: 1, resolution: "1s", fromMs: 0, toMs: 120_000 }]);
+    expect(got.complete).toBe(true);
+    expect(got.bars).toEqual([
+      { time: 60, open: 100, high: 100, low: 100, close: 100 },
+      { time: 120, open: 100, high: 100, low: 100, close: 100 },
+    ]);
+  });
+
+  it("follows next_from_ms, asking each page from the last page's cursor, until a page names none", async () => {
+    const client = new FakeClient();
+    client.marksPages = [
+      { entries: [entry(10), entry(20)], next_from_ms: 30 },
+      { entries: [entry(30)], next_from_ms: null },
+    ];
+    const got = await fetchBarsHistory(client, 1, "1m", 0, 100);
+    expect(client.marksReads.map((read) => read.fromMs)).toEqual([0, 30]);
+    expect(got.complete).toBe(true);
+    expect(got.bars).toHaveLength(1);
+  });
+
+  it("stops at the page budget and says the window is partial", async () => {
+    class PagingClient extends FakeClient {
+      override async marks(market: number, resolution: "1s" | "1m" | "1h" | "1d", fromMs: number, toMs: number) {
+        this.marksReads.push({ market, resolution, fromMs, toMs });
+        // The window takes one page more than the budget allows.
+        return { entries: [entry(fromMs + 1)], next_from_ms: fromMs + 1_000 < toMs ? fromMs + 1_000 : null };
+      }
+    }
+    const client = new PagingClient();
+    const got = await fetchBarsHistory(client, 1, "1m", 0, (MARKS_PAGE_LIMIT + 1) * 1_000);
+    expect(client.marksReads).toHaveLength(MARKS_PAGE_LIMIT);
+    expect(got.complete).toBe(false);
+    expect(got.bars).toHaveLength(1);
+  });
+
+  it("stops when a page names a next page without entries, instead of paging forever", async () => {
+    const client = new FakeClient();
+    client.marksPages = [
+      { entries: [entry(5)], next_from_ms: 50 },
+      { entries: [], next_from_ms: 60 },
+    ];
+    const got = await fetchBarsHistory(client, 1, "1m", 0, 100);
+    expect(client.marksReads).toHaveLength(2);
+    expect(got.complete).toBe(false);
+  });
+
+  it("reports log_derived when every fetched entry says so", async () => {
+    const client = new FakeClient();
+    client.marksPages = [{ entries: [entry(5), entry(6)], next_from_ms: null }];
+    const got = await fetchBarsHistory(client, 1, "1m", 0, 100);
+    expect(got.provenance).toBe("log_derived");
+  });
+
+  it("reports seeded_from_provider when any fetched entry is provider-seeded, even across pages", async () => {
+    const client = new FakeClient();
+    client.marksPages = [
+      { entries: [entry(5, "log_derived")], next_from_ms: 10 },
+      { entries: [entry(10, "seeded_from_provider")], next_from_ms: null },
+    ];
+    const got = await fetchBarsHistory(client, 1, "1m", 0, 100);
+    expect(got.provenance).toBe("seeded_from_provider");
+  });
+
+  it("names no provenance for an empty window", async () => {
+    const client = new FakeClient();
+    const got = await fetchBarsHistory(client, 1, "1m", 0, 100);
+    expect(got.provenance).toBeNull();
+    expect(got.bars).toEqual([]);
+  });
+});

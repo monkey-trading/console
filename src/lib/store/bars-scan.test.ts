@@ -9,7 +9,7 @@ describe("the chart's history scan", () => {
   it("scans the log back from the head after the first markets read and seeds every timeframe's bars with the marks", async () => {
     const client = new FakeClient();
     client.headSeq = 500_000;
-    client.marks = [
+    client.scanned = [
       { market: 1, ts: T - 86_400_000, mid: 90 },
       { market: 1, ts: T - 3_600_000, mid: 95 },
       { market: 1, ts: T - 60_000, mid: 100 },
@@ -74,7 +74,7 @@ describe("the chart's history scan", () => {
 
   it("does not scan before the node has named a log head, and scans on the read that first names one", async () => {
     const client = new FakeClient();
-    client.marks = MARKS;
+    client.scanned = MARKS;
     const store = storeOver(client);
     store.start(0);
     await flush();
@@ -96,7 +96,7 @@ describe("the chart's history scan", () => {
       contracts: [{ contract: "ESZ6", from: "2026-09-18T00:00:00Z" }],
     };
     client.marketList = [BTC, US500];
-    client.marks = MARKS;
+    client.scanned = MARKS;
     const store = storeOver(client);
     store.start(0);
     await flush();
@@ -111,7 +111,7 @@ describe("the chart's history scan", () => {
     client.headSeq = 500_000;
     const EU_INDEX: typeof BTC = { ...BTC, id: 2, symbol: "DE40", quote_currency: { currency: "eur", fx_market: 3 } };
     client.marketList = [BTC, EU_INDEX];
-    client.marks = MARKS;
+    client.scanned = MARKS;
     const store = storeOver(client);
     store.start(0);
     await flush();
@@ -183,7 +183,7 @@ describe("the chart's history scan", () => {
     client.headSeq = 500_000;
     const SHARE: typeof BTC = { ...BTC, id: 2, symbol: "ACME", asset_class: "equity" };
     client.marketList = [BTC, SHARE];
-    client.marks = MARKS;
+    client.scanned = MARKS;
     const store = storeOver(client);
     store.start(0);
     await flush();

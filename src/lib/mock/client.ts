@@ -4,7 +4,7 @@ import { checkAttestation, type AttestationStatus } from "../engine/attestation"
 import { EngineError, type ActionResult, type EngineClient, type SignatureChecks, type Unsubscribe } from "../engine/client";
 import type {
   EligibilityClass,
-  AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView,
+  AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, MarkPage,
   MarketView, OrderRequest, StreamMessage, WithdrawalPage, WithdrawalRequest,
 } from "../engine/types";
 import { fixedToWire } from "../fixed";
@@ -176,6 +176,14 @@ export class MockEngineClient implements EngineClient {
   /** The mock seeds its own chart history; there is no log scan to run. */
   async scanMarks() {
     return [];
+  }
+
+  /**
+   * The mock's charts seed from its own history, not from a marks read, so it serves none; the
+   * store asks only a signature-checking client for history this way.
+   */
+  async marks(): Promise<MarkPage> {
+    return { entries: [], next_from_ms: null };
   }
 
   /** The mock streams no executable quotes; the ticket shows its own estimate. */

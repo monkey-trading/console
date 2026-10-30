@@ -72,7 +72,7 @@ export function seedBars(seed: number, endMs: number, endPrice: number, seconds:
   });
 }
 
-/** Bars of `seconds` built from chronological marks, for the chart's history scan. */
+/** Bars of `seconds` built from chronological marks, for the chart's history read. */
 export function barsFromMarks(marks: readonly { ts: number; mid: number }[], seconds: number): Bar[] {
   let out: Bar[] = [];
   for (const mark of marks) out = pushTick(out, mark.ts, mark.mid, seconds);

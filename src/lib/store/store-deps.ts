@@ -3,7 +3,9 @@
 import type { EngineClient } from "../engine/client";
 import type { AccountView, EligibilityClass, HistoryEvent, HouseView, MarketView, QueuedWithdrawal, StreamMessage } from "../engine/types";
 import type { WalletConnector } from "../engine/wallet";
+import type { MarketModel } from "../models";
 import type { ScanClock } from "./bars-scan";
+import type { ConsoleStore } from "./store";
 import type { HistorySource } from "./state";
 
 export interface StoreDeps {
@@ -13,6 +15,12 @@ export interface StoreDeps {
   drive?: (ms: number) => void;
   /** What the chart-history scan's backoff waits on; a test substitutes one without real timers. */
   scanClock?: ScanClock;
+  /**
+   * Starts the archive-scan fallback that seeds the chart for a node without the marks endpoint
+   * (a 404 there asks for it once). False when the node has not named a log head yet, so the next
+   * read asks again. The live session wires `scanBarsHistory`.
+   */
+  historyScan?: (store: ConsoleStore, markets: readonly MarketModel[]) => boolean;
   initial: { markets: MarketView[]; house: HouseView; startMs: number; recent?: StreamMessage[]; /** The account whose events the activity log shows before a wallet connects. */ viewer?: string;
     /** A wallet already connected when the page loads, with what the node holds for it. */
     session?: { wallet: { address: string; label: string; readOnly?: boolean }; account: AccountView | null; eligibility: EligibilityClass | null; queue: QueuedWithdrawal[]; history: HistoryEvent[] };

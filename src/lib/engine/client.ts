@@ -14,6 +14,9 @@ import type {
   EligibilityView,
   HistoryPage,
   HouseView,
+  MarkPage,
+  MarkResolution,
+  MarketId,
   MarketQuote,
   MarketView,
   OrderRequest,
@@ -112,12 +115,18 @@ export interface EngineClient {
   /** Payout `nonce`'s latest authorization in the log after seq `fromSeq`, and whether the read reached the head. */
   findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<ScanResult>;
   /**
-   * Reads the log from seq `fromSeq` for the index marks the chart backfills with, stopping at the
-   * head or `budget`, and resolving with the marks kept even when the read stopped short. `sessions`
-   * holds each market's session rule, which drops quotes the engine rejects outside an open session.
-   * A client whose node holds no log to scan answers none.
+   * Reads the log from seq `fromSeq` for the index marks the chart's archive scan backfills with,
+   * stopping at the head or `budget`, and resolving with the marks kept even when the read stopped
+   * short. `sessions` holds each market's session rule, which drops quotes the engine rejects
+   * outside an open session. A client whose node holds no log to scan answers none.
    */
   scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>, dead?: () => boolean): Promise<ScannedMark[]>;
+  /**
+   * One page of the market's index-mark history for `resolution` in `[fromMs, toMs]`, as
+   * `GET /v1/markets/{id}/marks` serves it: the chart's primary history, which a 404 — a node that
+   * predates the route — replaces with the archive scan.
+   */
+  marks(market: MarketId, resolution: MarkResolution, fromMs: number, toMs: number): Promise<MarkPage>;
   /** Asks for the account's executable quotes in up to four markets, or for none; they arrive through `watch`. */
   quotes(request: QuoteRequest | null): void;
   withdrawalQueue(address: Address): Promise<WithdrawalPage>;
