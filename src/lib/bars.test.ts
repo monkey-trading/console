@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { type Bar, barsFromMarks, MAX_BARS, pushTick, rolledRange, secondsOf, seedBars, TIMEFRAMES } from "./bars";
+import { type Bar, barsFromMarks, MAX_BARS, mergeFetchedBars, pushTick, rolledRange, secondsOf, seedBars, TIMEFRAMES } from "./bars";
 
 const MIN = 60;
 const at = (seconds: number) => seconds * 1000;
@@ -70,6 +70,31 @@ describe("barsFromMarks", () => {
     ];
     expect(barsFromMarks(marks, MIN)).toEqual([{ time: 120, open: 100, high: 103, low: 98, close: 98 }]);
     expect(barsFromMarks([{ ts: at(125), mid: 100 }], 300)).toEqual([{ time: 0, open: 100, high: 100, low: 100, close: 100 }]);
+  });
+});
+
+describe("mergeFetchedBars", () => {
+  const bar = (time: number, o: number, h: number, l: number, c: number): Bar => ({ time, open: o, high: h, low: l, close: c });
+
+  it("keeps the current series when the fetch found no marks", () => {
+    const current = [bar(60, 1, 1, 1, 1)];
+    expect(mergeFetchedBars([], current)).toEqual(current);
+  });
+
+  it("appends the buckets the stream opened after the fetched window, and merges the shared last bucket's range", () => {
+    const fetched = [bar(0, 100, 110, 90, 105), bar(60, 105, 106, 104, 106)];
+    const current = [bar(60, 105, 120, 100, 118), bar(120, 118, 130, 115, 116)];
+    expect(mergeFetchedBars(fetched, current)).toEqual([bar(0, 100, 110, 90, 105), bar(60, 105, 120, 100, 118), bar(120, 118, 130, 115, 116)]);
+  });
+
+  it("drops current buckets inside the fetched window and bounds the series", () => {
+    const fetched = Array.from({ length: MAX_BARS }, (_, i) => bar(i * MIN, 1, 1, 1, 1));
+    const current = [bar(0, 9, 9, 9, 9), bar((MAX_BARS - 1) * MIN, 1, 2, 1, 2), bar(MAX_BARS * MIN, 3, 3, 3, 3)];
+    const merged = mergeFetchedBars(fetched, current);
+    expect(merged).toHaveLength(MAX_BARS);
+    expect(merged[0]?.time).toBe(MIN);
+    expect(merged[MAX_BARS - 2]).toEqual(bar((MAX_BARS - 1) * MIN, 1, 2, 1, 2));
+    expect(merged[MAX_BARS - 1]).toEqual(bar(MAX_BARS * MIN, 3, 3, 3, 3));
   });
 });
 

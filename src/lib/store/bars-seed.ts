@@ -1,68 +1,93 @@
 /**
  * The chart's bars from the node's marks endpoint: seeded once per market and timeframe, replacing
- * the stream-built series, with the stream keeping the seeded series current from then on. A node
- * that 404s the endpoint is an older node: the archive scan seeds the chart instead, asked for
- * through the store's `historyScan` dependency.
+ * the stream-built series, with the stream's ticks that arrived during the fetch merged back in
+ * and the stream keeping the series current from then on. A node that 404s the endpoint is an
+ * older node: the archive scan seeds the chart instead, asked for through the store's
+ * `historyScan` dependency.
  */
 
+import { mergeFetchedBars, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
 import { EngineError } from "../engine/client";
 import { fetchBarsHistory, windowSecondsFor } from "../engine/marks-fetch";
 import type { MarketId } from "../engine/types";
-import type { TimeframeId } from "../bars";
 import type { ConsoleStore } from "./store";
 
+/** The most tries one series gets before its fetch gives up and reports. */
+const SEED_ATTEMPTS = 3;
+
 export class BarsSeed {
-  /** The market/timeframe series already seeded, so each is fetched once per page load. */
+  /** The market/timeframe series a fetch finished, so each is seeded once per page load. */
   private readonly seeded = new Set<string>();
+  /** Attempts per series, so a transient failure retries and a persistent one stops. */
+  private readonly attempts = new Map<string, number>();
+  /** The series whose failure was already reported, so it is reported once. */
+  private readonly reported = new Set<string>();
   /** Whether the node 404'd the marks endpoint; it is an older node, so the archive scan seeds instead. */
   private unavailable = false;
-  /** Whether the archive-scan fallback has been asked for; a false answer (no log head yet) asks again. */
+  /** Whether the archive-scan fallback has started; a false start (no log head yet) is asked again. */
   private scanAsked = false;
 
   constructor(private readonly store: ConsoleStore) {}
 
   /**
    * Seeds (market, timeframe)'s bars from the marks endpoint. Runs only for a signature-checking
-   * client with node time and bars the stream already started.
+   * client with node time; a market the stream has no bars for yet, such as one first seen
+   * closed, is seeded from the fetch alone.
    */
   seed(marketId: MarketId, timeframe: TimeframeId): void {
-    if (this.store.deps.client.signatures !== "checked" || this.unavailable) return;
+    if (this.store.deps.client.signatures !== "checked" || this.unavailable || this.store.getSnapshot().now === 0) return;
     const key = `${marketId}:${timeframe}`;
-    const bars = this.store.getSnapshot().bars;
-    if (this.seeded.has(key) || bars[marketId] === undefined || this.store.getSnapshot().now === 0) return;
-    this.seeded.add(key);
-    void this.fetch(marketId, timeframe);
+    if (this.seeded.has(key)) return;
+    const attempt = (this.attempts.get(key) ?? 0) + 1;
+    this.attempts.set(key, attempt);
+    void this.fetch(key, marketId, timeframe, attempt);
   }
 
-  /** Asks for the archive scan once a node without the endpoint is read again, until it names a log head. */
+  /** Asks for the archive scan once a node without the endpoint is read again, until it starts. */
   askScan(): void {
     if (this.unavailable) this.askHistoryScan();
   }
 
   /** Reads one timeframe's window of marks and folds it into that series; a 404 turns to the archive scan. */
-  private async fetch(marketId: MarketId, timeframe: TimeframeId): Promise<void> {
+  private async fetch(key: string, marketId: MarketId, timeframe: TimeframeId, attempt: number): Promise<void> {
     try {
       const toMs = this.store.getSnapshot().now;
       const fetched = await fetchBarsHistory(this.store.deps.client, marketId, timeframe, toMs - windowSecondsFor(timeframe) * 1000, toMs);
-      const bars = this.store.getSnapshot().bars;
-      if (fetched.bars.length === 0 || bars[marketId] === undefined) return;
-      const next = { ...bars, [marketId]: { ...bars[marketId], [timeframe]: fetched.bars } };
+      // No marks for the window is the node's honest answer, not a failure: do not retry it.
+      if (fetched.bars.length === 0) {
+        this.seeded.add(key);
+        return;
+      }
+      const before = this.store.getSnapshot().bars;
+      const current = before[marketId]?.[timeframe] ?? [];
+      const series = mergeFetchedBars(fetched.bars, current);
+      const per = before[marketId];
+      // `fromEntries` loses the key type; the keys are exactly the timeframes `TIMEFRAMES` lists.
+      const nextPer = Object.fromEntries(TIMEFRAMES.map((tf) => [tf.id, tf.id === timeframe ? series : (per?.[tf.id] ?? [])])) as Record<TimeframeId, Bar[]>;
+      const bars = { ...before, [marketId]: nextPer };
       const barProvenance = fetched.provenance === null ? this.store.getSnapshot().barProvenance
         : { ...this.store.getSnapshot().barProvenance, [marketId]: { ...this.store.getSnapshot().barProvenance[marketId], [timeframe]: fetched.provenance } };
-      this.store.patch({ bars: next, barProvenance });
+      this.seeded.add(key);
+      this.store.patch({ bars, barProvenance });
     } catch (error) {
       if (error instanceof EngineError && error.status === 404) {
         this.unavailable = true;
         this.askHistoryScan();
         return;
       }
-      // Any other failure keeps the stream-built bars; the chart is no worse than without the fetch.
+      // A transient failure retries on the next trigger; the last one reports once and stops.
+      if (attempt >= SEED_ATTEMPTS && !this.reported.has(key)) {
+        this.reported.add(key);
+        this.seeded.add(key);
+        const reason = error instanceof Error ? error.message : "The node did not answer.";
+        this.store.toast("error", `Chart history unavailable: ${reason}`);
+      }
     }
   }
 
-  /** Asks the archive-scan fallback once; an unwired or not-yet-startable scan is asked again on the next read. */
+  /** Starts the archive-scan fallback; un-wired or not-yet-startable answers are asked again on the next read. */
   private askHistoryScan(): void {
     if (this.scanAsked) return;
-    this.scanAsked = this.store.deps.historyScan?.(this.store, this.store.getSnapshot().markets) ?? true;
+    this.scanAsked = this.store.deps.historyScan ? this.store.deps.historyScan(this.store, this.store.getSnapshot().markets) : false;
   }
 }

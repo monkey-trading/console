@@ -1,8 +1,9 @@
 /**
  * The chart's history from the node's marks endpoint: one window per market and timeframe, read in
- * signed pages until the window is covered or the page budget is spent, and folded into bars. This
- * replaces replaying the log for history; a node without the route is read by the archive scan
- * instead (store/bars-seed.ts).
+ * signed pages until the window is covered or the page budget is spent, and folded into bars. A
+ * window the budget cuts is read again over the newest span of what was fetched, so the bars kept
+ * always end at the window's recent edge. This replaces replaying the log for history; a node
+ * without the route is read by the archive scan instead (store/bars-seed.ts).
  */
 
 import { barsFromMarks, MAX_BARS, secondsOf, type Bar, type TimeframeId } from "../bars";
@@ -30,7 +31,7 @@ export function windowSecondsFor(timeframe: TimeframeId): number {
   return secondsOf(timeframe) * MAX_BARS;
 }
 
-/** The most pages a window's fetch reads before it keeps the partial window it has. */
+/** The most pages one pass over a window reads before it keeps the partial span it reached. */
 export const MARKS_PAGE_LIMIT = 8;
 
 /** The bars folded from one window's marks. */
@@ -42,34 +43,55 @@ export interface FetchedBars {
    * `log_derived` when all fetched entries say so, null when the window held no entries.
    */
   provenance: MarkProvenance | null;
-  /** False when the page budget cut the fetch off before the window's start. */
+  /** False when the page budget cut the read off before the window's start. */
   complete: boolean;
 }
 
-/**
- * Fetches `[fromMs, toMs]` of `market`'s marks at `timeframe`'s resolution and folds them into
- * bars of `timeframe`'s size. Pages are followed by `next_from_ms` until the page names none or
- * the page budget is spent; `complete` says which.
- * Error cases:
- * - as `EngineClient.marks`: the node's refusal or an unverifiable answer rejects, and no bars are returned
- */
-export async function fetchBarsHistory(client: EngineClient, market: number, timeframe: TimeframeId, fromMs: number, toMs: number): Promise<FetchedBars> {
+interface WindowRead {
+  result: FetchedBars;
+  /** The window span the pass covered, `toMs - fromMs`, for the newest-span retry. */
+  fetchedMs: number;
+  /** True when the pass stopped on the page budget (rather than stalling or covering). */
+  retryable: boolean;
+}
+
+/** One pass over `[fromMs, toMs]`, following `next_from_ms` until none, the budget, or a stall. */
+async function readWindow(client: EngineClient, market: number, timeframe: TimeframeId, fromMs: number, toMs: number): Promise<WindowRead> {
   const marks: { ts: number; mid: number }[] = [];
   let provenance: MarkProvenance | null = null;
   let cursor = fromMs;
   let complete = true;
+  let retryable = false;
   for (let page = 0; ; page++) {
     const answer = await client.marks(market, resolutionFor(timeframe), cursor, toMs);
     for (const entry of answer.entries) marks.push({ ts: entry.t_ms, mid: fixedToNumber(fixedFromWire(entry.mid)) });
     if (answer.entries.some((entry) => entry.provenance === "seeded_from_provider")) provenance = "seeded_from_provider";
-    else if (answer.entries.length > 0) provenance = "log_derived";
+    else if (provenance === null && answer.entries.length > 0) provenance = "log_derived";
     if (answer.next_from_ms === null) break;
     // A node that keeps naming a next page without entries or progress would page forever.
     if (page + 1 >= MARKS_PAGE_LIMIT || answer.entries.length === 0 || answer.next_from_ms <= cursor) {
       complete = false;
+      retryable = page + 1 >= MARKS_PAGE_LIMIT && answer.entries.length > 0 && answer.next_from_ms > cursor;
+      // The span the budget reached is what a retry can reread: its next page's start included.
+      if (retryable) cursor = answer.next_from_ms;
       break;
     }
     cursor = answer.next_from_ms;
   }
-  return { bars: barsFromMarks(marks, secondsOf(timeframe)), provenance, complete };
+  return { result: { bars: barsFromMarks(marks, secondsOf(timeframe)), provenance, complete }, fetchedMs: cursor - fromMs, retryable };
+}
+
+/**
+ * Fetches `[fromMs, toMs]` of `market`'s marks at `timeframe`'s resolution and folds them into
+ * bars of `timeframe`'s size. A pass reads pages by `next_from_ms` until a page names none or the
+ * page budget is spent; when the budget cuts a pass, one more pass reads the newest span of what
+ * the first reached, so the bars kept end at the window's recent edge.
+ * Error cases:
+ * - as `EngineClient.marks`: the node's refusal or an unverifiable answer rejects, and no bars are returned
+ */
+export async function fetchBarsHistory(client: EngineClient, market: number, timeframe: TimeframeId, fromMs: number, toMs: number): Promise<FetchedBars> {
+  const first = await readWindow(client, market, timeframe, fromMs, toMs);
+  if (first.result.complete || !first.retryable || first.fetchedMs <= 0) return first.result;
+  const retry = await readWindow(client, market, timeframe, toMs - first.fetchedMs, toMs);
+  return retry.result;
 }
