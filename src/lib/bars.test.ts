@@ -95,10 +95,29 @@ describe("mergeFetchedBars", () => {
     expect(merged[1]).toEqual(bar(60, 100, 120, 80, 108));
   });
 
-  it("reopens the first tail bucket at the published close, which the stream opened at the old one", () => {
+  it("reopens the first tail bucket at the published close, keeping only extrema its ticks set", () => {
     const live = pushTick(pushTick([], at(60), 100, MIN), at(121), 107, MIN);
     const fetched = [bar(0, 1, 1, 1, 1), bar(60, 100, 108, 99, 108)];
-    expect(mergeFetchedBars(fetched, live, live)).toEqual([bar(0, 1, 1, 1, 1), bar(60, 100, 108, 99, 108), bar(120, 108, 108, 100, 107)]);
+    // The stream opened the next bucket at 100 and saw one tick, 107; the corrected open is 108.
+    expect(mergeFetchedBars(fetched, live, live)).toEqual([bar(0, 1, 1, 1, 1), bar(60, 100, 108, 99, 108), bar(120, 108, 108, 107, 107)]);
+  });
+
+  it("drops the obsolete synthetic open's high when reopening the tail bucket lower", () => {
+    const live = pushTick(pushTick([], at(60), 100, MIN), at(121), 95, MIN);
+    const fetched = [bar(0, 1, 1, 1, 1), bar(60, 100, 100, 90, 90)];
+    expect(mergeFetchedBars(fetched, live, live)).toEqual([bar(0, 1, 1, 1, 1), bar(60, 100, 100, 90, 90), bar(120, 90, 95, 90, 95)]);
+  });
+
+  it("preserves the stream's extremes in every overlapping bucket, not only the last", () => {
+    const fetched = [bar(0, 100, 105, 95, 102), bar(60, 102, 108, 100, 106)];
+    const current = [bar(0, 100, 110, 90, 102), bar(60, 102, 108, 100, 106)];
+    expect(mergeFetchedBars(fetched, current, current)[0]).toEqual(bar(0, 100, 110, 90, 102));
+  });
+
+  it("keeps a stream bar for a bucket the fetched window has no marks for", () => {
+    const fetched = [bar(0, 1, 1, 1, 1), bar(120, 2, 2, 2, 2)];
+    const current = [bar(0, 1, 1, 1, 1), bar(60, 5, 7, 4, 6), bar(120, 2, 2, 2, 2)];
+    expect(mergeFetchedBars(fetched, current, current)[1]).toEqual(bar(60, 5, 7, 4, 6));
   });
 
   it("drops current buckets inside the fetched window and bounds the series", () => {
