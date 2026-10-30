@@ -88,14 +88,18 @@ async function readWindow(client: EngineClient, market: number, timeframe: Timef
  * bars of `timeframe`'s size. A pass reads pages by `next_from_ms` until a page names none or the
  * page budget is spent. When the budget cuts a pass, the next pass reads the newest half of the
  * span it reached, which needs fewer pages; a window denser near its recent edge still ends near
- * `toMs` within the pass cap.
+ * `toMs` within the pass cap. A narrowed pass that finds no marks — a market closed through that
+ * span, say — keeps the last span read rather than emptying the result.
  * Error cases:
  * - as `EngineClient.marks`: the node's refusal or an unverifiable answer rejects, and no bars are returned
  */
 export async function fetchBarsHistory(client: EngineClient, market: number, timeframe: TimeframeId, fromMs: number, toMs: number): Promise<FetchedBars> {
   let read = await readWindow(client, market, timeframe, fromMs, toMs);
+  let kept = read.result;
   for (let pass = 1; pass < MARKS_PASSES && !read.result.complete && read.retryable && read.fetchedMs > 1; pass++) {
     read = await readWindow(client, market, timeframe, toMs - Math.floor(read.fetchedMs / 2), toMs);
+    // A narrowed window can fall entirely inside a closure; its empty page keeps the span already read.
+    if (read.result.bars.length > 0) kept = read.result;
   }
-  return read.result;
+  return kept;
 }

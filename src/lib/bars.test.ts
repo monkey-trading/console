@@ -88,11 +88,17 @@ describe("mergeFetchedBars", () => {
     expect(mergeFetchedBars(fetched, current, [lastFetched])).toEqual([bar(0, 100, 110, 90, 105), bar(60, 105, 120, 100, 118), bar(120, 118, 130, 115, 116)]);
   });
 
-  it("keeps the fetched close when the shared bucket gained no ticks during the fetch", () => {
-    const stale = bar(60, 100, 105, 95, 100); // what the stream held when the fetch began, and still holds
-    const lastFetched = bar(60, 100, 110, 90, 108); // the log's fuller picture of the same bucket
+  it("keeps the stream's extremes when the shared bucket gained no ticks during the fetch", () => {
+    const stale = bar(60, 100, 120, 80, 100); // the stream's bar: a spike the sampled marks missed
+    const lastFetched = bar(60, 100, 110, 90, 108); // the same bucket, closed later in the log
     const merged = mergeFetchedBars([bar(0, 1, 1, 1, 1), lastFetched], [stale, bar(120, 108, 109, 107, 107)], [stale]);
-    expect(merged[1]).toEqual(lastFetched);
+    expect(merged[1]).toEqual(bar(60, 100, 120, 80, 108));
+  });
+
+  it("reopens the first tail bucket at the published close, which the stream opened at the old one", () => {
+    const live = pushTick(pushTick([], at(60), 100, MIN), at(121), 107, MIN);
+    const fetched = [bar(0, 1, 1, 1, 1), bar(60, 100, 108, 99, 108)];
+    expect(mergeFetchedBars(fetched, live, live)).toEqual([bar(0, 1, 1, 1, 1), bar(60, 100, 108, 99, 108), bar(120, 108, 108, 100, 107)]);
   });
 
   it("drops current buckets inside the fetched window and bounds the series", () => {
@@ -102,7 +108,7 @@ describe("mergeFetchedBars", () => {
     expect(merged).toHaveLength(MAX_BARS);
     expect(merged[0]?.time).toBe(MIN);
     expect(merged[MAX_BARS - 2]).toEqual(bar((MAX_BARS - 1) * MIN, 1, 2, 1, 2));
-    expect(merged[MAX_BARS - 1]).toEqual(bar(MAX_BARS * MIN, 3, 3, 3, 3));
+    expect(merged[MAX_BARS - 1]).toEqual(bar(MAX_BARS * MIN, 2, 3, 2, 3));
   });
 });
 

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { FakeClient } from "../store/live-fake";
 import type { MarkEntry, MarkProvenance } from "./types";
-import { fetchBarsHistory, MARKS_PAGE_LIMIT, MARKS_PASSES, resolutionFor, windowSecondsFor } from "./marks-fetch";
+import { fetchBarsHistory, MARKS_PAGE_LIMIT, resolutionFor, windowSecondsFor } from "./marks-fetch";
 
 const entry = (tMs: number, provenance: MarkProvenance = "log_derived"): MarkEntry => ({ t_ms: tMs, mid: "100", provenance });
 
@@ -69,17 +69,36 @@ describe("fetchBarsHistory", () => {
   });
 
   it("keeps halving, bounded by the pass cap, when a window is denser near its recent edge", async () => {
-    class EndlessClient extends FakeClient {
+    class DenseTailClient extends FakeClient {
       override async marks(market: number, resolution: "1s" | "1m" | "1h" | "1d", fromMs: number, toMs: number) {
         this.marksReads.push({ market, resolution, fromMs, toMs });
-        // Densest at the recent edge: every pass spends its budget, whatever span it covers.
-        return { entries: [entry(fromMs + 1)], next_from_ms: fromMs + 100 };
+        // Every mark sits inside the requested window; the recent edge is denser.
+        const step = fromMs >= 8_000 ? 50 : 1_000;
+        return { entries: [entry(fromMs + 1)], next_from_ms: fromMs + step < toMs ? fromMs + step : null };
       }
     }
-    const client = new EndlessClient();
+    const client = new DenseTailClient();
     const got = await fetchBarsHistory(client, 1, "1m", 0, 10_000);
-    expect(client.marksReads).toHaveLength(MARKS_PASSES * MARKS_PAGE_LIMIT);
+    expect(client.marksReads.map((read) => read.fromMs)).toEqual([
+      0, 1_000, 2_000, 3_000, 4_000, 5_000, 6_000, 7_000,
+      6_000, 7_000, 8_000, 8_050, 8_100, 8_150, 8_200, 8_250,
+      8_850, 8_900, 8_950, 9_000, 9_050, 9_100, 9_150, 9_200,
+    ]);
     expect(got.complete).toBe(false);
+    expect(got.bars).toHaveLength(1);
+  });
+
+  it("keeps the last span read when a narrowed pass finds the window empty, as in a closure", async () => {
+    const client = new FakeClient();
+    client.marksPages = [
+      ...Array.from({ length: MARKS_PAGE_LIMIT }, (_, i) => ({ entries: [entry(i * 1_000)], next_from_ms: (i + 1) * 1_000 })),
+      { entries: [], next_from_ms: null },
+    ];
+    const got = await fetchBarsHistory(client, 1, "1m", 0, (MARKS_PAGE_LIMIT + 1) * 1_000);
+    // The first pass spent its budget on the window's history; the narrowed pass read the closure at its recent edge.
+    expect(client.marksReads).toHaveLength(MARKS_PAGE_LIMIT + 1);
+    expect(got.complete).toBe(false);
+    expect(got.bars).toHaveLength(1);
   });
 
   it("stops when a page names a next page without entries, instead of paging forever", async () => {
