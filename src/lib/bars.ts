@@ -14,13 +14,21 @@ export type TimeframeId = (typeof TIMEFRAMES)[number]["id"];
 
 export const DEFAULT_TIMEFRAME: TimeframeId = "1m";
 
-/** One bar: `time` is the start of its bucket in UTC seconds. */
+/**
+ * One bar: `time` is the start of its bucket in UTC seconds. `observedHigh`/`observedLow` are the
+ * extremes the bucket's actual observations saw — stream ticks or fetched mark samples. The
+ * synthetic open a bucket carries from the previous close is not an observation, so a history
+ * merge that reopens the bucket at a corrected close can drop it from the extrema without losing
+ * a price a tick or mark really printed.
+ */
 export interface Bar {
   time: number;
   open: number;
   high: number;
   low: number;
   close: number;
+  observedHigh: number;
+  observedLow: number;
 }
 
 /** The most bars kept per series. */
@@ -43,11 +51,26 @@ export function pushTick(series: readonly Bar[], tMs: number, price: number, sec
   const last = series[series.length - 1];
   if (last && time < last.time) return series.slice();
   if (last && time === last.time) {
-    const next = { ...last, high: Math.max(last.high, price), low: Math.min(last.low, price), close: price };
+    const next = {
+      ...last,
+      high: Math.max(last.high, price),
+      low: Math.min(last.low, price),
+      close: price,
+      observedHigh: Math.max(last.observedHigh, price),
+      observedLow: Math.min(last.observedLow, price),
+    };
     return [...series.slice(0, -1), next];
   }
   const open = last ? last.close : price;
-  const bar = { time, open, high: Math.max(open, price), low: Math.min(open, price), close: price };
+  const bar = {
+    time,
+    open,
+    high: Math.max(open, price),
+    low: Math.min(open, price),
+    close: price,
+    observedHigh: price,
+    observedLow: price,
+  };
   return [...series, bar].slice(-MAX_BARS);
 }
 
@@ -68,7 +91,10 @@ export function seedBars(seed: number, endMs: number, endPrice: number, seconds:
   return closes.map((close, i) => {
     const open = closes[i - 1] ?? close;
     const wick = close * sigma * 0.6 * rand();
-    return { time: end - (closes.length - 1 - i) * seconds, open, close, high: Math.max(open, close) + wick, low: Math.min(open, close) - wick };
+    const high = Math.max(open, close) + wick;
+    const low = Math.min(open, close) - wick;
+    // Every seeded value is a drawn observation, so the observed extrema are the bar's own.
+    return { time: end - (closes.length - 1 - i) * seconds, open, close, high, low, observedHigh: high, observedLow: low };
   });
 }
 
@@ -87,9 +113,10 @@ export function barsFromMarks(marks: readonly { ts: number; mid: number }[], sec
  * stream's bar. The last bucket's close comes from the stream only when it extended the bucket
  * during the fetch (bar objects are immutable, so a changed object at the same time marks ticks
  * past the cutoff); earlier buckets keep the fetched close, the fuller log's sample. Buckets the
- * stream opened after the cutoff follow as they are, the first reopened at the published close,
- * keeping only extrema the ticks set: a synthetic open the stream carried forward may lie outside
- * the range its ticks observed.
+ * stream opened after the cutoff follow as they are, the first reopened at the published close:
+ * its high and low are the corrected open set against the extrema the bucket's ticks actually
+ * observed (`observedHigh`/`observedLow`), never the synthetic open the stream carried forward —
+ * that open may lie outside the range its ticks saw, and a tick extreme can coincide with it.
  */
 export function mergeFetchedBars(fetched: readonly Bar[], current: readonly Bar[], pre: readonly Bar[] | null): Bar[] {
   const last = fetched[fetched.length - 1];
@@ -101,7 +128,13 @@ export function mergeFetchedBars(fetched: readonly Bar[], current: readonly Bar[
     const live = liveByTime.get(bar.time);
     liveByTime.delete(bar.time);
     if (live === undefined) return bar;
-    const wider = { ...bar, high: Math.max(bar.high, live.high), low: Math.min(bar.low, live.low) };
+    const wider = {
+      ...bar,
+      high: Math.max(bar.high, live.high),
+      low: Math.min(bar.low, live.low),
+      observedHigh: Math.max(bar.observedHigh, live.observedHigh),
+      observedLow: Math.min(bar.observedLow, live.observedLow),
+    };
     return bar === last && live !== preAt ? { ...wider, close: live.close } : wider;
   });
   const streamOnly = [...liveByTime.values()];
@@ -111,8 +144,8 @@ export function mergeFetchedBars(fetched: readonly Bar[], current: readonly Bar[
   const rebuilt = first === undefined ? [] : [{
     ...first,
     open: mergedLast.close,
-    high: Math.max(mergedLast.close, first.high > first.open ? first.high : first.close),
-    low: Math.min(mergedLast.close, first.low < first.open ? first.low : first.close),
+    high: Math.max(mergedLast.close, first.observedHigh),
+    low: Math.min(mergedLast.close, first.observedLow),
   }, ...tail.slice(1)];
   return [...body, ...streamOnly, ...rebuilt].sort((a, b) => a.time - b.time).slice(-MAX_BARS);
 }

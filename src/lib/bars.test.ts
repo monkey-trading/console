@@ -13,7 +13,7 @@ describe("pushTick", () => {
     bars = pushTick(bars, at(130), 103, MIN);
     bars = pushTick(bars, at(150), 98, MIN);
     bars = pushTick(bars, at(179), 101, MIN);
-    expect(bars).toEqual([{ time: 120, open: 100, high: 103, low: 98, close: 101 }]);
+    expect(bars).toEqual([{ time: 120, open: 100, high: 103, low: 98, close: 101, observedHigh: 103, observedLow: 98 }]);
   });
 
   it("opens the next bar at the previous close, and fills no empty bucket for a gap", () => {
@@ -21,7 +21,8 @@ describe("pushTick", () => {
     bars = pushTick(bars, at(125), 104, MIN);
     bars = pushTick(bars, at(125 + 5 * MIN), 90, MIN);
     expect(bars).toHaveLength(2);
-    expect(bars[1]).toEqual({ time: 420, open: 104, high: 104, low: 90, close: 90 });
+    // The carried open 104 is no observation of the new bucket: only the tick at 90 is.
+    expect(bars[1]).toEqual({ time: 420, open: 104, high: 104, low: 90, close: 90, observedHigh: 90, observedLow: 90 });
   });
 
   it("ignores a mark older than the last bar and does not mutate its input", () => {
@@ -68,13 +69,23 @@ describe("barsFromMarks", () => {
       { ts: at(60), mid: 50 }, // before the first bar: ignored
       { ts: at(150), mid: 98 },
     ];
-    expect(barsFromMarks(marks, MIN)).toEqual([{ time: 120, open: 100, high: 103, low: 98, close: 98 }]);
-    expect(barsFromMarks([{ ts: at(125), mid: 100 }], 300)).toEqual([{ time: 0, open: 100, high: 100, low: 100, close: 100 }]);
+    expect(barsFromMarks(marks, MIN)).toEqual([{ time: 120, open: 100, high: 103, low: 98, close: 98, observedHigh: 103, observedLow: 98 }]);
+    expect(barsFromMarks([{ ts: at(125), mid: 100 }], 300)).toEqual([{ time: 0, open: 100, high: 100, low: 100, close: 100, observedHigh: 100, observedLow: 100 }]);
   });
 });
 
 describe("mergeFetchedBars", () => {
-  const bar = (time: number, o: number, h: number, l: number, c: number): Bar => ({ time, open: o, high: h, low: l, close: c });
+  const bar = (time: number, o: number, h: number, l: number, c: number): Bar => ({
+    time,
+    open: o,
+    high: h,
+    low: l,
+    close: c,
+    // A hand-built bar stands in for one folded from marks or ticks: its extrema are its own
+    // observations unless a test says the open was carried.
+    observedHigh: h,
+    observedLow: l,
+  });
 
   it("keeps the current series when the fetch found no marks", () => {
     const current = [bar(60, 1, 1, 1, 1)];
@@ -99,13 +110,40 @@ describe("mergeFetchedBars", () => {
     const live = pushTick(pushTick([], at(60), 100, MIN), at(121), 107, MIN);
     const fetched = [bar(0, 1, 1, 1, 1), bar(60, 100, 108, 99, 108)];
     // The stream opened the next bucket at 100 and saw one tick, 107; the corrected open is 108.
-    expect(mergeFetchedBars(fetched, live, live)).toEqual([bar(0, 1, 1, 1, 1), bar(60, 100, 108, 99, 108), bar(120, 108, 108, 107, 107)]);
+    expect(mergeFetchedBars(fetched, live, live)).toEqual([
+      bar(0, 1, 1, 1, 1),
+      bar(60, 100, 108, 99, 108),
+      { time: 120, open: 108, high: 108, low: 107, close: 107, observedHigh: 107, observedLow: 107 },
+    ]);
   });
 
   it("drops the obsolete synthetic open's high when reopening the tail bucket lower", () => {
     const live = pushTick(pushTick([], at(60), 100, MIN), at(121), 95, MIN);
     const fetched = [bar(0, 1, 1, 1, 1), bar(60, 100, 100, 90, 90)];
-    expect(mergeFetchedBars(fetched, live, live)).toEqual([bar(0, 1, 1, 1, 1), bar(60, 100, 100, 90, 90), bar(120, 90, 95, 90, 95)]);
+    expect(mergeFetchedBars(fetched, live, live)).toEqual([
+      bar(0, 1, 1, 1, 1),
+      bar(60, 100, 100, 90, 90),
+      { time: 120, open: 90, high: 95, low: 90, close: 95, observedHigh: 95, observedLow: 95 },
+    ]);
+  });
+
+  it("keeps a tail-bucket tick low that coincides with the superseded synthetic open", () => {
+    // The previous bucket closes at 100 and the next opens there synthetically; its ticks print
+    // 105 then 107, so the bar's low of 100 is the carried open, not an observation. The fetched
+    // history corrects the close to 108; the reopen must keep the observed tick low 105.
+    const live = pushTick(pushTick(pushTick([], at(60), 100, MIN), at(121), 105, MIN), at(140), 107, MIN);
+    const fetched = [bar(0, 1, 1, 1, 1), bar(60, 100, 108, 99, 108)];
+    const merged = mergeFetchedBars(fetched, live, live);
+    expect(merged[2]).toEqual({ time: 120, open: 108, high: 108, low: 105, close: 107, observedHigh: 107, observedLow: 105 });
+  });
+
+  it("keeps a tail-bucket tick high that coincides with the superseded synthetic open", () => {
+    // The symmetric case: ticks print 98 then 95 under a synthetic open of 100, so the bar's high
+    // of 100 is the carried open. A correction down to 90 must not drop the observed tick high 98.
+    const live = pushTick(pushTick(pushTick([], at(60), 100, MIN), at(121), 98, MIN), at(140), 95, MIN);
+    const fetched = [bar(0, 1, 1, 1, 1), bar(60, 100, 100, 90, 90)];
+    const merged = mergeFetchedBars(fetched, live, live);
+    expect(merged[2]).toEqual({ time: 120, open: 90, high: 98, low: 90, close: 95, observedHigh: 98, observedLow: 95 });
   });
 
   it("preserves the stream's extremes in every overlapping bucket, not only the last", () => {
@@ -127,13 +165,13 @@ describe("mergeFetchedBars", () => {
     expect(merged).toHaveLength(MAX_BARS);
     expect(merged[0]?.time).toBe(MIN);
     expect(merged[MAX_BARS - 2]).toEqual(bar((MAX_BARS - 1) * MIN, 1, 2, 1, 2));
-    expect(merged[MAX_BARS - 1]).toEqual(bar(MAX_BARS * MIN, 2, 3, 2, 3));
+    expect(merged[MAX_BARS - 1]).toEqual({ time: MAX_BARS * MIN, open: 2, high: 3, low: 2, close: 3, observedHigh: 3, observedLow: 3 });
   });
 });
 
 describe("rolledRange", () => {
   const series = (firstTime: number, count: number): Bar[] =>
-    Array.from({ length: count }, (_, i) => ({ time: firstTime + i * MIN, open: 1, high: 1, low: 1, close: 1 }));
+    Array.from({ length: count }, (_, i) => ({ time: firstTime + i * MIN, open: 1, high: 1, low: 1, close: 1, observedHigh: 1, observedLow: 1 }));
   const before = series(0, MAX_BARS);
   const lastTime = before[MAX_BARS - 1]?.time ?? 0;
   // The oldest bar rolled off and one opened: the same count, every bar one index lower.

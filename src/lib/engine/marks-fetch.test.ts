@@ -34,8 +34,8 @@ describe("fetchBarsHistory", () => {
     expect(client.marksReads).toEqual([{ market: 1, resolution: "1s", fromMs: 0, toMs: 120_000 }]);
     expect(got.complete).toBe(true);
     expect(got.bars).toEqual([
-      { time: 60, open: 100, high: 100, low: 100, close: 100 },
-      { time: 120, open: 100, high: 100, low: 100, close: 100 },
+      { time: 60, open: 100, high: 100, low: 100, close: 100, observedHigh: 100, observedLow: 100 },
+      { time: 120, open: 100, high: 100, low: 100, close: 100, observedHigh: 100, observedLow: 100 },
     ]);
   });
 

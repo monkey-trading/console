@@ -15,7 +15,15 @@ const NOW = Date.UTC(2026, 9, 30, 12, 0, 0);
 const entry = (tMs: number, provenance: MarkProvenance = "log_derived") => ({ t_ms: tMs, mid: "100000", provenance });
 const tick = (ts: number): StreamMessage => ({ offset: "1:0", type: "command", seq: 1, ts, cmd: { type: "tick" }, events: [] });
 /** The one-bar series the stream's read builds at the current mark and time. */
-const streamBar = (seconds: number, at = NOW) => ({ time: Math.floor(at / 1000 / seconds) * seconds, open: 100_000, high: 100_000, low: 100_000, close: 100_000 });
+const streamBar = (seconds: number, at = NOW) => ({
+  time: Math.floor(at / 1000 / seconds) * seconds,
+  open: 100_000,
+  high: 100_000,
+  low: 100_000,
+  close: 100_000,
+  observedHigh: 100_000,
+  observedLow: 100_000,
+});
 
 describe("seeding the chart from the marks endpoint", () => {
   it("replaces the selected market's active timeframe after the first live read, merging the stream's current bar", async () => {
@@ -76,8 +84,8 @@ describe("seeding the chart from the marks endpoint", () => {
     release?.({ entries: [entry(NOW - 60_000), { t_ms: NOW + 5_000, mid: "150000", provenance: "log_derived" }], next_from_ms: null });
     await settle();
     expect(store.getSnapshot().bars[1]?.["1m"]).toEqual([
-      { time: (NOW - 60_000) / 1000, open: 100_000, high: 100_000, low: 100_000, close: 100_000 },
-      { time: NOW / 1000, open: 100_000, high: 200_000, low: 100_000, close: 200_000 },
+      { time: (NOW - 60_000) / 1000, open: 100_000, high: 100_000, low: 100_000, close: 100_000, observedHigh: 100_000, observedLow: 100_000 },
+      { time: NOW / 1000, open: 100_000, high: 200_000, low: 100_000, close: 200_000, observedHigh: 200_000, observedLow: 100_000 },
     ]);
   });
 
@@ -158,7 +166,7 @@ describe("seeding the chart from the marks endpoint", () => {
     // The budget cut the first pass; the halved pass re-read the newest span in four pages.
     expect(client.marksReads).toHaveLength(MARKS_PAGE_LIMIT + 4);
     expect(store.getSnapshot().bars[1]?.["1m"]).toEqual([
-      { time: (NOW - 60_000) / 1000, open: 100_000, high: 100_000, low: 100_000, close: 100_000 },
+      { time: (NOW - 60_000) / 1000, open: 100_000, high: 100_000, low: 100_000, close: 100_000, observedHigh: 100_000, observedLow: 100_000 },
       streamBar(60),
     ]);
     expect(store.getSnapshot().barProvenance[1]?.["1m"]).toBe("log_derived");

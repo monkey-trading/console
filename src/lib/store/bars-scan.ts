@@ -111,7 +111,8 @@ function lastMarkAt(series: readonly { ts: number }[], seconds: number): Map<num
  * takes the scanned open, the extrema of both, and the later observation's close: the scanned one
  * for a bucket the log completed, the live one for the bucket still forming. A live candle that
  * follows the scanned prefix opens at the prefix's close — `pushTick`'s convention for every
- * candle after another — and carries it in its extrema.
+ * candle after another — bound against the extremes the bucket's ticks and mark samples actually
+ * observed (`observedHigh`/`observedLow`).
  */
 /** When a bucket of the market's bars was last ticked, for choosing the later observation at a merge. */
 function liveTickedAt(store: ConsoleStore, market: number, tf: TimeframeId, seconds: number): (bucket: number) => number {
@@ -140,21 +141,27 @@ function mergeHistory(scanned: readonly Bar[], live: readonly Bar[], seconds: nu
       high: Math.max(have.high, bar.high),
       low: Math.min(have.low, bar.low),
       close: complete ? have.close : bar.close,
+      observedHigh: Math.max(have.observedHigh, bar.observedHigh),
+      observedLow: Math.min(have.observedLow, bar.observedLow),
     });
   }
   const merged = [...byTime.values()].sort((a, b) => a.time - b.time);
   // A merge can move a candle's close; every candle after another then opens at that close, as
-  // `pushTick` opens each candle at the previous one — scanned successors included. An extreme
-  // that came solely from the obsolete carried open is a price no observation in this bucket
-  // touched: bound it by the corrected open and the close instead.
+  // `pushTick` opens each candle at the previous one — scanned successors included. The reopened
+  // candle's extrema are the corrected open set against what the bucket actually observed, never
+  // the open it carried: that open may lie outside the observed range, and an observed extreme can
+  // coincide with it.
   for (let i = 1; i < merged.length; i++) {
     const prev = merged[i - 1];
     const bar = merged[i];
     if (prev !== undefined && bar !== undefined && bar.open !== prev.close) {
       const open = prev.close;
-      const high = bar.high === bar.open ? Math.max(open, bar.close) : Math.max(bar.high, open);
-      const low = bar.low === bar.open ? Math.min(open, bar.close) : Math.min(bar.low, open);
-      merged[i] = { time: bar.time, open, high, low, close: bar.close };
+      merged[i] = {
+        ...bar,
+        open,
+        high: Math.max(open, bar.observedHigh),
+        low: Math.min(open, bar.observedLow),
+      };
     }
   }
   return merged;

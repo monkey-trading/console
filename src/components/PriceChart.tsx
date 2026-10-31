@@ -96,7 +96,17 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
       });
       chart.subscribeCrosshairMove((param) => {
         const point = param.seriesData.get(series);
-        setHovered(point && "open" in point ? { time: Number(point.time), open: point.open, high: point.high, low: point.low, close: point.close } : null);
+        // The series holds our bars (`toData` spreads them), so the observed extrema ride along;
+        // a foreign data shape falls back to the bar's own high and low.
+        setHovered(point && "open" in point ? {
+          time: Number(point.time),
+          open: point.open,
+          high: point.high,
+          low: point.low,
+          close: point.close,
+          observedHigh: "observedHigh" in point && typeof point.observedHigh === "number" ? point.observedHigh : point.high,
+          observedLow: "observedLow" in point && typeof point.observedLow === "number" ? point.observedLow : point.low,
+        } : null);
       });
       // The attribution link opens another site in a new tab; it gets the same rel as every other such link.
       for (const link of el.querySelectorAll("a")) link.rel = "noopener noreferrer";
