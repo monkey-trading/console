@@ -62,10 +62,14 @@ export class BarsSeed {
 
   /** Reads one timeframe's window of marks and folds it into that series; a 404 turns to the archive scan. */
   private async fetch(key: string, marketId: MarketId, timeframe: TimeframeId, attempt: number): Promise<void> {
+    // A restart (StrictMode re-runs the effect) abandons this cycle's work, as the scan's stale check does.
+    const epoch = this.store.scanEpoch;
+    const stale = () => this.store.stopped || this.store.scanEpoch !== epoch;
     try {
       const toMs = this.store.getSnapshot().now;
       const pre = this.store.getSnapshot().bars[marketId]?.[timeframe] ?? null;
       const fetched = await fetchBarsHistory(this.store.deps.client, marketId, timeframe, toMs - windowSecondsFor(timeframe) * 1000, toMs);
+      if (stale()) return;
       // No marks for the window is the node's honest answer, not a failure: do not retry it.
       if (fetched.bars.length === 0) {
         this.seeded.add(key);
@@ -83,6 +87,7 @@ export class BarsSeed {
       this.seeded.add(key);
       this.store.patch({ bars, barProvenance });
     } catch (error) {
+      if (stale()) return;
       if (error instanceof EngineError && error.status === 404) {
         this.unavailable = true;
         this.askHistoryScan();
@@ -96,7 +101,8 @@ export class BarsSeed {
         this.store.toast("error", `Chart history unavailable: ${reason}`);
       }
     } finally {
-      this.pending.delete(key);
+      // A stale request never clears the flag a newer cycle set for the same series.
+      if (!stale()) this.pending.delete(key);
     }
   }
 

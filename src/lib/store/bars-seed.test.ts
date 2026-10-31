@@ -173,7 +173,54 @@ describe("seeding the chart from the marks endpoint", () => {
   });
 });
 
+describe("restarts", () => {
+  it("discards an abandoned cycle's late answer, so the restarted store still retries the series", async () => {
+    const { client, store } = setup();
+    const gates: { resolve: (page: MarkPage) => void; reject: (error: Error) => void }[] = [];
+    let calls = 0;
+    client.marks = () => {
+      calls++;
+      return new Promise<MarkPage>((resolve, reject) => { gates.push({ resolve, reject }); });
+    };
+    store.start(NOW);
+    await settle();
+    store.start(NOW + 60_000); // the effect re-runs: the first fetch belongs to the abandoned cycle
+    await store.refresh(false); // the markets read that follows a start
+    await settle();
+    expect(calls).toBe(2);
+    gates[0]?.resolve({ entries: [], next_from_ms: null }); // the abandoned cycle's late empty answer
+    await settle();
+    gates[1]?.reject(new Error("The node did not answer.")); // the current cycle's fetch fails
+    await settle();
+    client.onMessage?.(tick(NOW + 120_000)); // the series is unsealed, so the next trigger retries it
+    await settle();
+    expect(calls).toBe(3);
+    expect(store.getSnapshot().toasts.filter((t) => t.text.startsWith("Chart history unavailable"))).toHaveLength(0);
+  });
+});
+
 describe("the archive-scan fallback", () => {
+  it("leaves the scan idle while the endpoint answers or fails short of a 404", async () => {
+    const { client, store } = setup({ historyScan: scanBarsHistory });
+    client.headSeq = 500_000; // a scan would start, if the fallback were asked
+    client.marksPages = [{ entries: [entry(NOW - 60_000)], next_from_ms: null }];
+    store.start(NOW);
+    await settle();
+    store.setTimeframe("1h");
+    await settle();
+    expect(client.scans).toHaveLength(0);
+    // A failure that is not a 404 retries the endpoint and never asks the scan.
+    let calls = 0;
+    client.marks = async (market, resolution, fromMs, toMs) => { client.marksReads.push({ market, resolution, fromMs, toMs }); calls++; throw new Error("The node did not answer."); };
+    store.setTimeframe("5m");
+    await settle();
+    client.onMessage?.(tick(NOW + 60_000));
+    await settle();
+    expect(calls).toBe(2);
+    expect(client.scans).toHaveLength(0);
+    expect(store.getSnapshot().toasts.filter((t) => t.text.startsWith("Chart history unavailable"))).toHaveLength(0);
+  });
+
   it("seeds every timeframe from the wired scan when the node 404s the endpoint", async () => {
     const { client, store } = setup({ historyScan: scanBarsHistory });
     client.headSeq = 500_000;
