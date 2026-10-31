@@ -6,7 +6,7 @@ import { FakeClient } from "../store/live-fake";
 import type { MarkEntry, MarkProvenance } from "./mark-types";
 import { fetchBarsHistory, MARKS_PAGE_LIMIT, resolutionFor, windowSecondsFor } from "./marks-fetch";
 
-const entry = (tMs: number, provenance: MarkProvenance = "log_derived"): MarkEntry => ({ t_ms: tMs, mid: "100", provenance });
+const entry = (tMs: number, provenance: MarkProvenance = "log_derived"): MarkEntry => ({ ts: tMs, open: "100", high: "100", low: "100", close: "100", provenance });
 
 describe("resolutionFor", () => {
   it("maps each timeframe to the resolution that fills its chart window", () => {
@@ -29,7 +29,7 @@ describe("windowSecondsFor", () => {
 describe("fetchBarsHistory", () => {
   it("fetches one page for the market, resolution, and window, and folds it into bars", async () => {
     const client = new FakeClient();
-    client.marksPages = [{ entries: [entry(60_000), entry(61_000), entry(62_000), entry(120_000)], next_from_ms: null }];
+    client.marksPages = [{ entries: [entry(60_000), entry(61_000), entry(62_000), entry(120_000)], next: null }];
     const got = await fetchBarsHistory(client, 1, "1m", 0, 120_000);
     expect(client.marksReads).toEqual([{ market: 1, resolution: "1s", fromMs: 0, toMs: 120_000 }]);
     expect(got.complete).toBe(true);
@@ -39,11 +39,11 @@ describe("fetchBarsHistory", () => {
     ]);
   });
 
-  it("follows next_from_ms, asking each page from the last page's cursor, until a page names none", async () => {
+  it("follows next, asking each page from the last page's cursor, until a page names none", async () => {
     const client = new FakeClient();
     client.marksPages = [
-      { entries: [entry(10), entry(20)], next_from_ms: 30 },
-      { entries: [entry(30)], next_from_ms: null },
+      { entries: [entry(10), entry(20)], next: 30 },
+      { entries: [entry(30)], next: null },
     ];
     const got = await fetchBarsHistory(client, 1, "1m", 0, 100);
     expect(client.marksReads.map((read) => read.fromMs)).toEqual([0, 30]);
@@ -56,7 +56,7 @@ describe("fetchBarsHistory", () => {
       override async marks(market: number, resolution: "1s" | "1m" | "1h" | "1d", fromMs: number, toMs: number) {
         this.marksReads.push({ market, resolution, fromMs, toMs });
         // The window takes one page more than the budget allows.
-        return { entries: [entry(fromMs + 1)], next_from_ms: fromMs + 1_000 < toMs ? fromMs + 1_000 : null };
+        return { entries: [entry(fromMs + 1)], next: fromMs + 1_000 < toMs ? fromMs + 1_000 : null };
       }
     }
     const client = new PagingClient();
@@ -74,7 +74,7 @@ describe("fetchBarsHistory", () => {
         this.marksReads.push({ market, resolution, fromMs, toMs });
         // Every mark sits inside the requested window; the recent edge is denser.
         const step = fromMs >= 8_000 ? 50 : 1_000;
-        return { entries: [entry(fromMs + 1)], next_from_ms: fromMs + step < toMs ? fromMs + step : null };
+        return { entries: [entry(fromMs + 1)], next: fromMs + step < toMs ? fromMs + step : null };
       }
     }
     const client = new DenseTailClient();
@@ -91,8 +91,8 @@ describe("fetchBarsHistory", () => {
   it("keeps the last span read when a narrowed pass finds the window empty, as in a closure", async () => {
     const client = new FakeClient();
     client.marksPages = [
-      ...Array.from({ length: MARKS_PAGE_LIMIT }, (_, i) => ({ entries: [entry(i * 1_000)], next_from_ms: (i + 1) * 1_000 })),
-      { entries: [], next_from_ms: null },
+      ...Array.from({ length: MARKS_PAGE_LIMIT }, (_, i) => ({ entries: [entry(i * 1_000)], next: (i + 1) * 1_000 })),
+      { entries: [], next: null },
     ];
     const got = await fetchBarsHistory(client, 1, "1m", 0, (MARKS_PAGE_LIMIT + 1) * 1_000);
     // The first pass spent its budget on the window's history; the narrowed pass read the closure at its recent edge.
@@ -104,8 +104,8 @@ describe("fetchBarsHistory", () => {
   it("stops when a page names a next page without entries, instead of paging forever", async () => {
     const client = new FakeClient();
     client.marksPages = [
-      { entries: [entry(5)], next_from_ms: 50 },
-      { entries: [], next_from_ms: 60 },
+      { entries: [entry(5)], next: 50 },
+      { entries: [], next: 60 },
     ];
     const got = await fetchBarsHistory(client, 1, "1m", 0, 100);
     expect(client.marksReads).toHaveLength(2);
@@ -114,7 +114,7 @@ describe("fetchBarsHistory", () => {
 
   it("reports log_derived when every fetched entry says so", async () => {
     const client = new FakeClient();
-    client.marksPages = [{ entries: [entry(5), entry(6)], next_from_ms: null }];
+    client.marksPages = [{ entries: [entry(5), entry(6)], next: null }];
     const got = await fetchBarsHistory(client, 1, "1m", 0, 100);
     expect(got.provenance).toBe("log_derived");
   });
@@ -122,15 +122,15 @@ describe("fetchBarsHistory", () => {
   it("reports seeded_from_provider when any fetched entry is provider-seeded, in either page order", async () => {
     const client = new FakeClient();
     client.marksPages = [
-      { entries: [entry(5, "log_derived")], next_from_ms: 10 },
-      { entries: [entry(10, "seeded_from_provider")], next_from_ms: null },
+      { entries: [entry(5, "log_derived")], next: 10 },
+      { entries: [entry(10, "seeded_from_provider")], next: null },
     ];
     const forward = await fetchBarsHistory(client, 1, "1m", 0, 100);
     expect(forward.provenance).toBe("seeded_from_provider");
     const back = new FakeClient();
     back.marksPages = [
-      { entries: [entry(5, "seeded_from_provider")], next_from_ms: 10 },
-      { entries: [entry(10, "log_derived")], next_from_ms: null },
+      { entries: [entry(5, "seeded_from_provider")], next: 10 },
+      { entries: [entry(10, "log_derived")], next: null },
     ];
     const backward = await fetchBarsHistory(back, 1, "1m", 0, 100);
     expect(backward.provenance).toBe("seeded_from_provider");

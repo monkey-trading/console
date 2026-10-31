@@ -105,6 +105,43 @@ export function barsFromMarks(marks: readonly { ts: number; mid: number }[], sec
   return out;
 }
 
+/** One OHLC candle: `ts` is the bucket start in Unix milliseconds. */
+export interface Candle {
+  ts: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+/**
+ * Bars of `seconds` built from chronological OHLC candles, for the chart's marks-endpoint history.
+ * Like `pushTick`, a candle older than the last bar's start is ignored, so out-of-order delivery
+ * never rewrites history; a candle finer than the bar extends its range and sets its close.
+ */
+export function barsFromCandles(candles: readonly Candle[], seconds: number): Bar[] {
+  const out: Bar[] = [];
+  for (const candle of candles) {
+    const time = Math.floor(candle.ts / 1000 / seconds) * seconds;
+    const last = out[out.length - 1];
+    if (last && time < last.time) continue;
+    if (last && time === last.time) {
+      out[out.length - 1] = {
+        time,
+        open: last.open,
+        high: Math.max(last.high, candle.high),
+        low: Math.min(last.low, candle.low),
+        close: candle.close,
+        observedHigh: Math.max(last.observedHigh, candle.high),
+        observedLow: Math.min(last.observedLow, candle.low),
+      };
+    } else {
+      out.push({ time, open: candle.open, high: candle.high, low: candle.low, close: candle.close, observedHigh: candle.high, observedLow: candle.low });
+    }
+  }
+  return out.slice(-MAX_BARS);
+}
+
 /**
  * Bars to publish when a history fetch lands. `fetched` covers the window up to the fetch's
  * cutoff; `current` may hold newer stream ticks, and `pre` is the series as it stood when the

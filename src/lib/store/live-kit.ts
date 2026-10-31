@@ -59,7 +59,7 @@ export class ActionClient implements EngineClient {
   complete = true;
   reached: number | null = null;
   /** The page every marks read answers; a test replaces it. */
-  marksPage: MarkPage = { entries: [], next_from_ms: null };
+  marksPage: MarkPage = { entries: [], next: null };
   marksReads: number[] = [];
   async marks(market: number) { this.marksReads.push(market); return this.marksPage; }
   quotes(request: QuoteRequest | null) { this.quoteRequests.push(request); }

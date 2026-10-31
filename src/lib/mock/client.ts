@@ -180,7 +180,7 @@ export class MockEngineClient implements EngineClient {
    * store asks only a signature-checking client for history this way.
    */
   async marks(): Promise<MarkPage> {
-    return { entries: [], next_from_ms: null };
+    return { entries: [], next: null };
   }
 
   /** The mock streams no executable quotes; the ticket shows its own estimate. */

@@ -12,7 +12,7 @@ import { scanBarsHistory } from "./bars-scan";
 import { BTC, setup } from "./live-fake";
 
 const NOW = Date.UTC(2026, 9, 30, 12, 0, 0);
-const entry = (tMs: number, provenance: MarkProvenance = "log_derived") => ({ t_ms: tMs, mid: "100000", provenance });
+const entry = (tMs: number, provenance: MarkProvenance = "log_derived") => ({ ts: tMs, open: "100000", high: "100000", low: "100000", close: "100000", provenance });
 const tick = (ts: number): StreamMessage => ({ offset: "1:0", type: "command", seq: 1, ts, cmd: { type: "tick" }, events: [] });
 /** The one-bar series the stream's read builds at the current mark and time. */
 const streamBar = (seconds: number, at = NOW) => ({
@@ -28,7 +28,7 @@ const streamBar = (seconds: number, at = NOW) => ({
 describe("seeding the chart from the marks endpoint", () => {
   it("replaces the selected market's active timeframe after the first live read, merging the stream's current bar", async () => {
     const { client, store } = setup();
-    client.marksPages = [{ entries: [entry(NOW - 60_000), entry(NOW - 30_000), entry(NOW - 5_000)], next_from_ms: null }];
+    client.marksPages = [{ entries: [entry(NOW - 60_000), entry(NOW - 30_000), entry(NOW - 5_000)], next: null }];
     store.start(NOW);
     await settle();
     const marks = [{ ts: NOW - 60_000, mid: 100_000 }, { ts: NOW - 30_000, mid: 100_000 }, { ts: NOW - 5_000, mid: 100_000 }];
@@ -42,8 +42,8 @@ describe("seeding the chart from the marks endpoint", () => {
   it("fetches the new timeframe's resolution on a switch, and seeds each series once", async () => {
     const { client, store } = setup();
     client.marksPages = [
-      { entries: [entry(NOW - 60_000)], next_from_ms: null },
-      { entries: [entry(NOW - 3_600_000), entry(NOW - 5_000)], next_from_ms: null },
+      { entries: [entry(NOW - 60_000)], next: null },
+      { entries: [entry(NOW - 3_600_000), entry(NOW - 5_000)], next: null },
     ];
     store.start(NOW);
     await settle();
@@ -62,7 +62,7 @@ describe("seeding the chart from the marks endpoint", () => {
   it("seeds a market the stream has no bars for yet, such as one first seen closed", async () => {
     const { client, store } = setup();
     client.markets = async () => [{ ...BTC, open: false, mark: null }];
-    client.marksPages = [{ entries: [entry(NOW - 60_000), entry(NOW - 5_000)], next_from_ms: null }];
+    client.marksPages = [{ entries: [entry(NOW - 60_000), entry(NOW - 5_000)], next: null }];
     store.start(NOW);
     await settle();
     const marks = [{ ts: NOW - 60_000, mid: 100_000 }, { ts: NOW - 5_000, mid: 100_000 }];
@@ -81,11 +81,11 @@ describe("seeding the chart from the marks endpoint", () => {
     client.markets = async () => [{ ...BTC, mark: "200000" }];
     client.onMessage?.(tick(NOW + 20_000));
     await settle();
-    release?.({ entries: [entry(NOW - 60_000), { t_ms: NOW + 5_000, mid: "150000", provenance: "log_derived" }], next_from_ms: null });
+    release?.({ entries: [entry(NOW - 60_000), { ts: NOW + 5_000, open: "150000", high: "150000", low: "150000", close: "150000", provenance: "log_derived" }], next: null });
     await settle();
     expect(store.getSnapshot().bars[1]?.["1m"]).toEqual([
       { time: (NOW - 60_000) / 1000, open: 100_000, high: 100_000, low: 100_000, close: 100_000, observedHigh: 100_000, observedLow: 100_000 },
-      { time: NOW / 1000, open: 100_000, high: 200_000, low: 100_000, close: 200_000, observedHigh: 200_000, observedLow: 100_000 },
+      { time: NOW / 1000, open: 150_000, high: 200_000, low: 100_000, close: 200_000, observedHigh: 200_000, observedLow: 100_000 },
     ]);
   });
 
@@ -103,7 +103,7 @@ describe("seeding the chart from the marks endpoint", () => {
     client.onMessage?.(tick(NOW + 120_000));
     await settle();
     expect(calls).toBe(1);
-    release?.({ entries: [entry(NOW - 60_000)], next_from_ms: null });
+    release?.({ entries: [entry(NOW - 60_000)], next: null });
     await settle();
     expect(store.getSnapshot().bars[1]?.["1m"]?.[0]).toMatchObject({ time: (NOW - 60_000) / 1000 });
   });
@@ -113,7 +113,7 @@ describe("seeding the chart from the marks endpoint", () => {
     let failures = 2;
     client.marks = async () => {
       if (failures-- > 0) throw new Error("The node did not answer.");
-      return { entries: [entry(NOW - 60_000)], next_from_ms: null };
+      return { entries: [entry(NOW - 60_000)], next: null };
     };
     store.start(NOW);
     await settle();
@@ -148,7 +148,7 @@ describe("seeding the chart from the marks endpoint", () => {
 
   it("keeps the provenance flag in the state: log_derived for log-derived marks, provider-seeded for seeded ones", async () => {
     const { client, store } = setup();
-    client.marksPages = [{ entries: [entry(NOW - 60_000), entry(NOW - 30_000, "seeded_from_provider")], next_from_ms: null }];
+    client.marksPages = [{ entries: [entry(NOW - 60_000), entry(NOW - 30_000, "seeded_from_provider")], next: null }];
     store.start(NOW);
     await settle();
     expect(store.getSnapshot().barProvenance[1]?.["1m"]).toBe("seeded_from_provider");
@@ -159,7 +159,7 @@ describe("seeding the chart from the marks endpoint", () => {
     const { client, store } = setup();
     client.marks = async (market, resolution, fromMs, toMs) => {
       client.marksReads.push({ market, resolution, fromMs, toMs });
-      return { entries: [entry(fromMs + 1)], next_from_ms: fromMs + 1_000 < toMs ? fromMs + 1_000 : null };
+      return { entries: [entry(fromMs + 1)], next: fromMs + 1_000 < toMs ? fromMs + 1_000 : null };
     };
     store.start(NOW);
     await settle();
@@ -196,7 +196,7 @@ describe("restarts", () => {
     await store.refresh(false); // the markets read that follows a start
     await settle();
     expect(calls).toBe(2);
-    gates[0]?.resolve({ entries: [], next_from_ms: null }); // the abandoned cycle's late empty answer
+    gates[0]?.resolve({ entries: [], next: null }); // the abandoned cycle's late empty answer
     await settle();
     gates[1]?.reject(new Error("The node did not answer.")); // the current cycle's fetch fails
     await settle();
@@ -211,7 +211,7 @@ describe("the archive-scan fallback", () => {
   it("leaves the scan idle while the endpoint answers or fails short of a 404", async () => {
     const { client, store } = setup({ historyScan: scanBarsHistory });
     client.headSeq = 500_000; // a scan would start, if the fallback were asked
-    client.marksPages = [{ entries: [entry(NOW - 60_000)], next_from_ms: null }];
+    client.marksPages = [{ entries: [entry(NOW - 60_000)], next: null }];
     store.start(NOW);
     await settle();
     store.setTimeframe("1h");
