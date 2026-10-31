@@ -3,7 +3,8 @@
 import { DEFAULT_TIMEFRAME, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
 import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { SignatureChecks } from "../engine/client";
-import type { HistoryEvent, MarketId, MarketQuote, MarketView, HouseView, QueuedWithdrawal, SignedWithdrawal } from "../engine/types";
+import type { HistoryEvent, HouseView, QueuedWithdrawal, SignedWithdrawal, MarketId, MarketQuote, MarketView } from "../engine/types";
+import type { MarkProvenance } from "../engine/mark-types";
 import { fixedToNumber } from "../fixed";
 import { decodeHouse, decodeMarket, type AccountModel, type Eligibility, type HouseModel, type MarketModel } from "../models";
 
@@ -46,6 +47,12 @@ export interface ConsoleState {
   markets: MarketModel[];
   /** Bars per market and timeframe, built from the node's marks. */
   bars: Record<MarketId, Record<TimeframeId, Bar[]>>;
+  /**
+   * Where a seeded series came from, per market and timeframe: `seeded_from_provider` is provider
+   * history the node fetched for day one, `log_derived` history the node derived from its log.
+   * Absent while a series is only the stream's own ticks; the chart shows both the same today.
+   */
+  barProvenance: Record<MarketId, Partial<Record<TimeframeId, MarkProvenance>>>;
   timeframe: TimeframeId;
   selected: MarketId;
   house: HouseModel;
@@ -115,6 +122,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     blocked: null,
     markets: models,
     bars: seedAllBars(models, startMs, history),
+    barProvenance: {},
     timeframe: DEFAULT_TIMEFRAME,
     selected: models[0]?.id ?? 1,
     house: decodeHouse(house),

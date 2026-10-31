@@ -7,7 +7,7 @@ import type { MarketId, StreamMessage } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
 import { fixedToNumber } from "../fixed";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
-import { scanBarsHistory } from "./bars-scan";
+import { BarsSeed } from "./bars-seed";
 import { FEED_LIMIT, feedFrom, isMine } from "./feed";
 import { initialState, seedAllBars, type BlockReason, type ConsoleState, type ToastMessage } from "./state";
 import type { StoreDeps } from "./store-deps";
@@ -28,8 +28,8 @@ export class ConsoleStore {
   private rerun: { accountChanged: boolean } | null = null;
   private unsubscribe: (() => void) | null = null;
   private unwatch: (() => void) | null = null;
-  /** Whether the chart-history scan ran; it runs once, after the first live markets read. */
-  private barsScanned = false;
+  /** Seeds the chart's bars from the marks endpoint once per market and timeframe. */
+  readonly barsSeed = new BarsSeed(this);
   /** When each market's bar bucket was last ticked from the node's mark, so a history merge can tell a stale live candle from a fresh one. Not part of the snapshot: derived bookkeeping. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
   /** Set when the store stops following the node, so pending history work stands down. Not part of the snapshot. */
@@ -87,6 +87,7 @@ export class ConsoleStore {
 
   select(id: MarketId): void {
     this.patch({ selected: id });
+    this.barsSeed.seed(id, this.snapshot.timeframe);
   }
 
   /** Sets the connected wallet (or none) and drops activity lines that belong to another account. */
@@ -102,6 +103,7 @@ export class ConsoleStore {
 
   setTimeframe(timeframe: TimeframeId): void {
     this.patch({ timeframe });
+    this.barsSeed.seed(this.snapshot.selected, timeframe);
   }
 
   setFundingOpen(open: boolean): void {
@@ -129,7 +131,7 @@ export class ConsoleStore {
     // history work and scans anew: its results were discarded when the cycle stopped.
     this.stopped = false;
     this.scanEpoch += 1;
-    this.barsScanned = false;
+    this.barsSeed.reset();
     this.deps.drive?.(nowMs);
     this.patch({ now: nowMs, bars: seedAllBars(this.snapshot.markets, nowMs, this.deps.history) });
     this.unwatch = this.deps.client.watch((event) => this.onClientEvent(event));
@@ -259,10 +261,10 @@ export class ConsoleStore {
       }
       const selected = markets.some((m) => m.id === this.snapshot.selected) ? this.snapshot.selected : (markets[0]?.id ?? this.snapshot.selected);
       this.patch({ markets, bars, selected, house: decodeHouse(house) });
-      // A live node's chart history is not in any of its reads; one bounded scan of the log seeds it.
-      // The flag takes the scan's answer: false when the node has not named a log head yet, so the
-      // next read tries again; retries and the failure report live in bars-scan.ts.
-      if (!this.barsScanned && this.deps.client.signatures === "checked") this.barsScanned = scanBarsHistory(this, markets, this.deps.scanClock);
+      // The chart's history comes from the marks endpoint once a live node's list has arrived; a
+      // node that 404s it keeps asking for the archive scan until it names a log head.
+      this.barsSeed.seed(selected, this.snapshot.timeframe);
+      this.barsSeed.askScan();
       if (this.snapshot.wallet) await this.loadAccount(accountChanged);
       this.lastReadError = null;
     } catch (error) {

@@ -72,11 +72,49 @@ export function seedBars(seed: number, endMs: number, endPrice: number, seconds:
   });
 }
 
-/** Bars of `seconds` built from chronological marks, for the chart's history scan. */
+/** Bars of `seconds` built from chronological marks, for the chart's history read. */
 export function barsFromMarks(marks: readonly { ts: number; mid: number }[], seconds: number): Bar[] {
   let out: Bar[] = [];
   for (const mark of marks) out = pushTick(out, mark.ts, mark.mid, seconds);
   return out;
+}
+
+/**
+ * Bars to publish when a history fetch lands. `fetched` covers the window up to the fetch's
+ * cutoff; `current` may hold newer stream ticks, and `pre` is the series as it stood when the
+ * fetch began. Every overlapping bucket keeps the wider of the two observed ranges — sampled
+ * marks can miss spikes the ticks saw — and a bucket the fetch has no marks for keeps the
+ * stream's bar. The last bucket's close comes from the stream only when it extended the bucket
+ * during the fetch (bar objects are immutable, so a changed object at the same time marks ticks
+ * past the cutoff); earlier buckets keep the fetched close, the fuller log's sample. Buckets the
+ * stream opened after the cutoff follow as they are, the first reopened at the published close,
+ * keeping only extrema the ticks set: a synthetic open the stream carried forward may lie outside
+ * the range its ticks observed.
+ */
+export function mergeFetchedBars(fetched: readonly Bar[], current: readonly Bar[], pre: readonly Bar[] | null): Bar[] {
+  const last = fetched[fetched.length - 1];
+  if (last === undefined) return current.slice(-MAX_BARS);
+  const preAt = pre?.find((bar) => bar.time === last.time);
+  const liveByTime = new Map<number, Bar>();
+  for (const bar of current) if (bar.time <= last.time) liveByTime.set(bar.time, bar);
+  const body = fetched.map((bar) => {
+    const live = liveByTime.get(bar.time);
+    liveByTime.delete(bar.time);
+    if (live === undefined) return bar;
+    const wider = { ...bar, high: Math.max(bar.high, live.high), low: Math.min(bar.low, live.low) };
+    return bar === last && live !== preAt ? { ...wider, close: live.close } : wider;
+  });
+  const streamOnly = [...liveByTime.values()];
+  const mergedLast = body[body.length - 1] ?? last;
+  const tail = current.filter((bar) => bar.time > last.time);
+  const first = tail[0];
+  const rebuilt = first === undefined ? [] : [{
+    ...first,
+    open: mergedLast.close,
+    high: Math.max(mergedLast.close, first.high > first.open ? first.high : first.close),
+    low: Math.min(mergedLast.close, first.low < first.open ? first.low : first.close),
+  }, ...tail.slice(1)];
+  return [...body, ...streamOnly, ...rebuilt].sort((a, b) => a.time - b.time).slice(-MAX_BARS);
 }
 
 /** A range of bar indices, as the chart reports its visible window; the ends may be fractional. */

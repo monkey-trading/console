@@ -297,3 +297,4 @@ export interface MarketQuote {
   /** The price of closing the account's whole position, if it holds one. */
   close: { side: Side; qty: string; price: string } | null;
 }
+

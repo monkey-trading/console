@@ -136,6 +136,22 @@ describe("the other reads", () => {
 
 });
 
+describe("the marks history route", () => {
+  it("requests the window's page with its query and returns the parsed marks", async () => {
+    const { node, client } = setup({ verifier: acceptAll });
+    const page = { entries: [{ t_ms: 1_000, mid: "100", provenance: "log_derived" }, { t_ms: 2_000, mid: "101", provenance: "seeded_from_provider" }], next_from_ms: 3_000 };
+    node.signed("/v1/markets/7/marks?resolution=1m&from_ms=0&to_ms=5000", () => ({ status: 200, body: JSON.stringify(page), signature: "0x", timeMs: markets.time_ms, seq: 1 }));
+    await expect(client.marks(7, "1m", 0, 5_000)).resolves.toEqual(page);
+    expect(node.requests.map((r) => r.path)).toContain("/v1/markets/7/marks?resolution=1m&from_ms=0&to_ms=5000");
+  });
+
+  it("propagates a signed 404, which turns the chart to its archive-scan fallback", async () => {
+    const { node, client } = setup({ verifier: acceptAll });
+    node.signed("/v1/markets/7/marks?resolution=1s&from_ms=0&to_ms=5000", () => ({ status: 404, body: '{"error":"not found"}', signature: "0x", timeMs: markets.time_ms, seq: 1 }));
+    await expect(client.marks(7, "1s", 0, 5_000)).rejects.toMatchObject({ status: 404 });
+  });
+});
+
 describe("a stream replaced while the node is being verified", () => {
   it("leaves exactly one live socket when a subscriber leaves and another arrives", async () => {
     const node = new FakeNode();

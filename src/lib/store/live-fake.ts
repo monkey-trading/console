@@ -1,10 +1,12 @@
 /** Tests only: a live client with canned reads, and a store over it. */
 
-import { EngineError, type ClientEvent, type EngineClient } from "../engine/client";
+import { EngineError, type ClientEvent, type EngineClient, type SignatureChecks } from "../engine/client";
 import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
-import type { MarketView, PriceRules, StreamMessage } from "../engine/types";
+import type { PriceRules, StreamMessage, MarketView } from "../engine/types";
+import type { MarkPage } from "../engine/mark-types";
 import { WatchConnector } from "../engine/watch-wallet";
+import type { StoreDeps } from "./store-deps";
 import { ConsoleStore } from "./store";
 
 export const BTC: MarketView = {
@@ -16,16 +18,20 @@ export const ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 
 /** A client with canned reads and a handle to push its events and stream messages. */
 export class FakeClient implements EngineClient {
-  signatures = "checked" as const;
+  signatures: SignatureChecks = "checked";
   deployment = { chainId: 31337, vault: "0x5fbdb2315678afecb367f032d93f642f64180aa3" };
   /** The log head signed reads answer at, or null before any; a test may set it. */
   headSeq: number | null = null;
-  marks: ScannedMark[] = [];
+  /** The index marks `scanMarks` answers with; a test may set it. */
+  scanned: ScannedMark[] = [];
   scans: { fromSeq: number; budget: ScanBudget; rules: Readonly<Record<number, PriceRules>>; sessions: Readonly<Record<number, SessionRule>> }[] = [];
   listener: ((event: ClientEvent) => void) | null = null;
   onMessage: ((message: StreamMessage) => void) | null = null;
   marketReads = 0;
   accountError: Error | null = null;
+  /** Pages each marks read draws from, in order; the last one repeats. */
+  marksPages: MarkPage[] = [{ entries: [], next_from_ms: null }];
+  marksReads: { market: number; resolution: string; fromMs: number; toMs: number }[] = [];
   status: Awaited<ReturnType<EngineClient["verify"]>> = { kind: "mock" };
   async attestation(): Promise<never> { throw new Error("unused"); }
   async verify() { return this.status; }
@@ -43,18 +49,25 @@ export class FakeClient implements EngineClient {
   async withdraw(): Promise<never> { throw new EngineError(501, "no"); }
   async reissue(): Promise<never> { throw new EngineError(501, "no"); }
   async findWithdrawal() { return { withdrawal: null, complete: true, reached: null }; }
-  async scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>) { this.scans.push({ fromSeq, budget, rules, sessions }); return this.marks; }
+  async scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>) { this.scans.push({ fromSeq, budget, rules, sessions }); return this.scanned; }
+  async marks(market: number, resolution: "1s" | "1m" | "1h" | "1d", fromMs: number, toMs: number) {
+    this.marksReads.push({ market, resolution, fromMs, toMs });
+    const page = this.marksPages[Math.min(this.marksReads.length - 1, this.marksPages.length - 1)];
+    if (page === undefined) throw new Error("no marks page canned");
+    return page;
+  }
   quotes() {}
   async withdrawalQueue() { return { seq: 1, queue: [], next: null }; }
   async history() { return { events: [], next: null }; }
   subscribe(onMessage: (message: StreamMessage) => void) { this.onMessage = onMessage; return () => { this.onMessage = null; }; }
 }
 
-export function setup() {
+export function setup(extra: Partial<StoreDeps> = {}) {
   const client = new FakeClient();
   const store = new ConsoleStore({
     client, wallets: new WatchConnector(() => `?account=${ACCOUNT}`), history: () => [],
     initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 },
+    ...extra,
   });
   return { client, store };
 }

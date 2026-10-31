@@ -8,7 +8,8 @@ import type { TypedRequest } from "../engine/eip712";
 import type { QuoteRequest } from "../engine/live-stream";
 import { ProviderWallet } from "../engine/provider-wallet";
 import { settle } from "../engine/test-kit";
-import type { CancelRequest, EligibilityRequest, HistoryPage, MarketView, OrderRequest, SignedWithdrawal, WithdrawalRequest } from "../engine/types";
+import type { CancelRequest, EligibilityRequest, HistoryPage, OrderRequest, SignedWithdrawal, WithdrawalRequest, MarketView } from "../engine/types";
+import type { MarkPage } from "../engine/mark-types";
 import { ACCOUNT, StubProvider, type StubOptions } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
 import { ConsoleStore } from "./store";
@@ -57,6 +58,10 @@ export class ActionClient implements EngineClient {
   async scanMarks() { return []; }
   complete = true;
   reached: number | null = null;
+  /** The page every marks read answers; a test replaces it. */
+  marksPage: MarkPage = { entries: [], next_from_ms: null };
+  marksReads: number[] = [];
+  async marks(market: number) { this.marksReads.push(market); return this.marksPage; }
   quotes(request: QuoteRequest | null) { this.quoteRequests.push(request); }
   async withdrawalQueue() { return { seq: this.head, queue: [], next: null }; }
   async history(_address: string, params: { kind?: string; before?: string }) {

@@ -9,14 +9,14 @@ describe("the chart's history scan", () => {
   it("scans the log back from the head after the first markets read and seeds every timeframe's bars with the marks", async () => {
     const client = new FakeClient();
     client.headSeq = 500_000;
-    client.marks = [
+    client.scanned = [
       { market: 1, ts: T - 86_400_000, mid: 90 },
       { market: 1, ts: T - 3_600_000, mid: 95 },
       { market: 1, ts: T - 60_000, mid: 100 },
       { market: 1, ts: T, mid: 101 },
     ];
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     expect(client.scans).toHaveLength(1);
     expect(client.scans[0]?.fromSeq).toBe(440_000);
@@ -47,7 +47,7 @@ describe("the chart's history scan", () => {
     };
     const waits: number[] = [];
     const store = storeOver(client, { wait: async (ms) => void waits.push(ms) });
-    store.start(0);
+    store.start(T);
     await flush();
     expect(attempts).toBe(3);
     expect(waits).toEqual([3_000, 3_000]);
@@ -62,7 +62,7 @@ describe("the chart's history scan", () => {
     client.scanMarks = async () => { attempts++; throw new Error("The node's archive answered HTTP 503."); };
     const waits: number[] = [];
     const store = storeOver(client, { wait: async (ms) => void waits.push(ms) });
-    store.start(0);
+    store.start(T);
     await flush();
     expect(attempts).toBe(3);
     expect(waits).toEqual([3_000, 3_000]);
@@ -74,9 +74,9 @@ describe("the chart's history scan", () => {
 
   it("does not scan before the node has named a log head, and scans on the read that first names one", async () => {
     const client = new FakeClient();
-    client.marks = MARKS;
+    client.scanned = MARKS;
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     expect(client.scans).toHaveLength(0);
     client.headSeq = 500_000;
@@ -96,13 +96,13 @@ describe("the chart's history scan", () => {
       contracts: [{ contract: "ESZ6", from: "2026-09-18T00:00:00Z" }],
     };
     client.marketList = [BTC, US500];
-    client.marks = MARKS;
+    client.scanned = MARKS;
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     expect(Object.keys(client.scans[0]?.rules ?? {})).toEqual(["1"]);
-    // The markets read frames every listed market; the scan seeds nothing for the futures market.
-    expect(store.getSnapshot().bars[2]?.["1m"]).toHaveLength(0);
+    // The markets read frames every listed market with its current bar; the scan seeds nothing for the futures market.
+    expect(store.getSnapshot().bars[2]?.["1m"]?.map((bar) => bar.close)).toEqual([100_000]);
     expect(store.getSnapshot().bars[1]?.["1m"]).toHaveLength(2);
   });
 
@@ -111,12 +111,12 @@ describe("the chart's history scan", () => {
     client.headSeq = 500_000;
     const EU_INDEX: typeof BTC = { ...BTC, id: 2, symbol: "DE40", quote_currency: { currency: "eur", fx_market: 3 } };
     client.marketList = [BTC, EU_INDEX];
-    client.marks = MARKS;
+    client.scanned = MARKS;
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     expect(Object.keys(client.scans[0]?.rules ?? {})).toEqual(["1"]);
-    expect(store.getSnapshot().bars[2]?.["1m"]).toHaveLength(0);
+    expect(store.getSnapshot().bars[2]?.["1m"]?.map((bar) => bar.close)).toEqual([100_000]);
     expect(store.getSnapshot().bars[1]?.["1m"]).toHaveLength(2);
   });
 
@@ -126,18 +126,18 @@ describe("the chart's history scan", () => {
     const pending: ((marks: typeof MARKS) => void)[] = [];
     client.scanMarks = () => new Promise((resolve) => { pending.push(resolve); });
     const store = storeOver(client);
-    const stopFirst = store.start(0);
+    const stopFirst = store.start(T);
     await flush();
     expect(pending).toHaveLength(1);
     stopFirst();
     // React StrictMode re-runs the effect: the same store starts again.
-    store.start(0);
+    store.start(T);
     await store.refresh(false); // the markets read that follows a start is what starts the scan
     await flush();
     expect(pending).toHaveLength(2);
     pending[0]?.(MARKS); // the abandoned cycle's late result is discarded
     await flush();
-    expect(store.getSnapshot().bars[1]?.["1m"] ?? []).toHaveLength(0);
+    expect(store.getSnapshot().bars[1]?.["1m"]?.map((bar) => bar.close)).toEqual([100_000]); // only the restarted store's stream bar
     pending[1]?.(MARKS); // the current cycle's scan seeds the bars
     await flush();
     expect(store.getSnapshot().bars[1]?.["1m"]).toHaveLength(2);
@@ -154,7 +154,7 @@ describe("the chart's history scan", () => {
     let releaseWait: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => { releaseWait = resolve; });
     const store = storeOver(client, { wait: async () => gate });
-    const stop = store.start(0);
+    const stop = store.start(T);
     await flush();
     expect(attempts).toBe(1); // the first attempt failed and is waiting to retry
     stop();
@@ -170,12 +170,13 @@ describe("the chart's history scan", () => {
     let resolveScan: ((marks: typeof MARKS) => void) | undefined;
     client.scanMarks = () => new Promise((resolve) => { resolveScan = resolve; });
     const store = storeOver(client);
-    const stop = store.start(0);
+    const stop = store.start(T);
     await flush();
     stop();
     resolveScan?.(MARKS);
     await flush();
-    expect(store.getSnapshot().bars[1]?.["1m"] ?? []).toHaveLength(0);
+    // Only the stream's current bar stands: the stopped store seeded nothing from the late scan.
+    expect(store.getSnapshot().bars[1]?.["1m"]?.map((bar) => bar.close)).toEqual([100_000]);
   });
 
   it("does not scan equities either, whose quotes a failed corporate action can block without state the scan replays", async () => {
@@ -183,12 +184,12 @@ describe("the chart's history scan", () => {
     client.headSeq = 500_000;
     const SHARE: typeof BTC = { ...BTC, id: 2, symbol: "ACME", asset_class: "equity" };
     client.marketList = [BTC, SHARE];
-    client.marks = MARKS;
+    client.scanned = MARKS;
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     expect(Object.keys(client.scans[0]?.rules ?? {})).toEqual(["1"]);
-    expect(store.getSnapshot().bars[2]?.["1m"]).toHaveLength(0);
+    expect(store.getSnapshot().bars[2]?.["1m"]?.map((bar) => bar.close)).toEqual([100_000]);
     expect(store.getSnapshot().bars[1]?.["1m"]).toHaveLength(2);
   });
 });

@@ -8,10 +8,8 @@ import { scanForWithdrawal, type ScanResult } from "./live-scan";
 import { LiveStream, type QuoteRequest, type Scheduler, type Socket } from "./live-stream";
 import { SignedTransport } from "./transport";
 import { NodeTrust } from "./trust";
-import type {
-  AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, MarketView, OrderRequest,
-  PriceRules, StreamMessage, WithdrawalPage, WithdrawalRequest,
-} from "./types";
+import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PriceRules, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
+import type { MarkPage, MarkResolution } from "./mark-types";
 import type { Verifier } from "./verifier";
 import { newChallenge } from "./wire";
 
@@ -221,6 +219,12 @@ export class LiveEngineClient implements EngineClient {
     // The backfill reads the signed log only: every mark the console plots derives from an enclave-signed frame.
     const signer = await this.trust.signer();
     return scanForMarks({ ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) }, fromSeq, budget, rules, sessions, dead);
+  }
+
+  /** The market's index-mark history, one signed page; the enclave signs the shape, as every answer. */
+  async marks(market: MarketId, resolution: MarkResolution, fromMs: number, toMs: number): Promise<MarkPage> {
+    const query = new URLSearchParams({ resolution, from_ms: String(fromMs), to_ms: String(toMs) });
+    return (await this.transport.get(`/v1/markets/${market}/marks?${query}`)) as MarkPage;
   }
 
   quotes(request: QuoteRequest | null): void {
