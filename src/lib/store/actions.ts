@@ -27,6 +27,15 @@ function release(store: ConsoleStore, wallet: Wallet | null): void {
   wallet?.disconnect?.().catch((error: unknown) => store.toast("error", `The wallet's session did not close: ${errorText(error)}`));
 }
 
+/** Offers to add the deployment's USDC to the wallet that just connected; one small toast when the wallet adds it, silence on a decline or a wallet that cannot. */
+function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
+  if (wallet.readOnly || wallet.suggestUsdc === undefined) return;
+  void wallet.suggestUsdc().then(
+    (added) => { if (added) store.toast("info", "USDC was added to your wallet, so its balance shows there."); },
+    () => undefined,
+  );
+}
+
 export async function connectWallet(store: ConsoleStore, optionId: string, quiet = false): Promise<void> {
   try {
     const wallet = await store.deps.wallets.connect(optionId);
@@ -35,6 +44,7 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     store.liveWallet = wallet;
     store.patch(NO_ACCOUNT);
     store.setWallet({ address: wallet.address, label: wallet.label, ...(wallet.readOnly ? { readOnly: true } : {}) });
+    offerUsdcImport(store, wallet);
     await store.loadAccount(true);
     if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);
   } catch (error) {

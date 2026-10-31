@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { type Bar, MAX_BARS, pushTick, rolledRange, secondsOf, seedBars, TIMEFRAMES } from "./bars";
+import { type Bar, barsFromMarks, MAX_BARS, pushTick, rolledRange, secondsOf, seedBars, TIMEFRAMES } from "./bars";
 
 const MIN = 60;
 const at = (seconds: number) => seconds * 1000;
@@ -57,6 +57,19 @@ describe("seedBars", () => {
     const live = pushTick(seeded, at(1_000_020), 101, 300);
     expect(live).toHaveLength(seeded.length);
     expect(live[live.length - 1]?.close).toBe(101);
+  });
+});
+
+describe("barsFromMarks", () => {
+  it("replays chronological marks into bars of the timeframe, ignoring out-of-order tails", () => {
+    const marks = [
+      { ts: at(120), mid: 100 },
+      { ts: at(130), mid: 103 },
+      { ts: at(60), mid: 50 }, // before the first bar: ignored
+      { ts: at(150), mid: 98 },
+    ];
+    expect(barsFromMarks(marks, MIN)).toEqual([{ time: 120, open: 100, high: 103, low: 98, close: 98 }]);
+    expect(barsFromMarks([{ ts: at(125), mid: 100 }], 300)).toEqual([{ time: 0, open: 100, high: 100, low: 100, close: 100 }]);
   });
 });
 

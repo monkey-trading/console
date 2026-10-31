@@ -35,7 +35,7 @@ export class FakeProvider implements WcProvider {
   session: WcSession | undefined = undefined;
   options: WcOptions | null = null;
   readonly connects: unknown[] = [];
-  readonly requests: { method: string; params: readonly unknown[] | undefined; chain: string }[] = [];
+  readonly requests: { method: string; params: readonly unknown[] | object | undefined; chain: string }[] = [];
   readonly cleanups: unknown[] = [];
   disconnects = 0;
   closes = 0;
@@ -58,7 +58,7 @@ export class FakeProvider implements WcProvider {
     return approved;
   }
 
-  async request(args: { method: string; params?: readonly unknown[] | undefined }, chain: string): Promise<unknown> {
+  async request(args: { method: string; params?: readonly unknown[] | object }, chain: string): Promise<unknown> {
     this.requests.push({ method: args.method, params: args.params, chain });
     return this.answers.shift();
   }

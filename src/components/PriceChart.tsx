@@ -44,6 +44,8 @@ interface Live {
   first: number;
   /** The time of the last bar loaded, which anchors the user's view when the oldest bar rolls off. */
   last: number;
+  /** The bars last loaded, so a change to a candle before the last one reloads the series. */
+  bars: readonly Bar[] | null;
 }
 
 const VISIBLE_BARS = 100;
@@ -98,7 +100,7 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
       });
       // The attribution link opens another site in a new tab; it gets the same rel as every other such link.
       for (const link of el.querySelectorAll("a")) link.rel = "noopener noreferrer";
-      live.current = { chart, series, lineStyle: LineStyle, lines: [], key: "", count: 0, first: 0, last: 0 };
+      live.current = { chart, series, lineStyle: LineStyle, lines: [], key: "", count: 0, first: 0, last: 0, bars: null };
       dispose = () => chart.remove();
       setReady((n) => n + 1);
     }).catch(() => {
@@ -121,6 +123,7 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
       c.series.setData([]);
       c.key = "";
       c.count = c.first = c.last = 0;
+      c.bars = null;
       return;
     }
     c.series.applyOptions({ priceFormat: { type: "price", precision: places, minMove: 1 / 10 ** places } });
@@ -136,12 +139,27 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
       const next = logical && rolledRange(logical, c.count, c.last, bars);
       if (next) scale.setVisibleLogicalRange(next);
     } else {
-      c.series.update(toData(last));
+      // The store builds bars immutably, so an unchanged candle keeps its identity: when only the
+      // last bar changed the chart updates it in place, but a backfill that rewrote an earlier
+      // candle reloads the series, keeping the user's pan and zoom.
+      const previous = c.bars;
+      const onlyLastChanged = previous !== null && previous.length === bars.length
+        && bars.every((bar, i) => i === bars.length - 1 || bar === previous[i]);
+      if (onlyLastChanged) {
+        c.series.update(toData(last));
+      } else {
+        const scale = c.chart.timeScale();
+        const logical = scale.getVisibleLogicalRange();
+        c.series.setData(bars.map(toData));
+        const next = logical && rolledRange(logical, c.count, c.last, bars);
+        if (next) scale.setVisibleLogicalRange(next);
+      }
     }
     c.key = seriesKey;
     c.count = bars.length;
     c.first = bars[0]?.time ?? 0;
     c.last = last.time;
+    c.bars = bars;
   }, [ready, bars, seriesKey, places]);
 
   useEffect(() => {

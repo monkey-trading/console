@@ -1,7 +1,7 @@
 /** The console's decoded view models: engine wire shapes with amounts parsed into `Fixed`. */
 
 import { metaFor } from "./engine/meta";
-import type { AccountView, EligibilityClass, HouseView, MarketId, MarketView, RestingOrder } from "./engine/types";
+import type { AccountView, EligibilityClass, HouseView, MarketId, MarketView, PriceRules, RestingOrder } from "./engine/types";
 import { fixedFromWire, type Fixed } from "./fixed";
 
 export interface MarketModel {
@@ -11,6 +11,8 @@ export interface MarketModel {
   name: string;
   places: number;
   baseSpreadBps: number;
+  /** The market's index rules, for the chart's log scan; what the engine prices from. */
+  priceRules: PriceRules;
   open: boolean;
   reduceOnly: boolean;
   stress: number;
@@ -29,6 +31,7 @@ export function decodeMarket(view: MarketView, previous: MarketModel | undefined
   const mark = view.mark === null ? null : fixedFromWire(view.mark);
   return {
     view, id: view.id, symbol: view.symbol, name: meta.name, places: meta.places, baseSpreadBps: simulated ? meta.baseSpreadBps : 0,
+    priceRules: view.price_rules,
     open: view.open, reduceOnly: view.reduce_only, stress: view.stress_level, mark,
     reference: previous?.reference ?? mark,
   };

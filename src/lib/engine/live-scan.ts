@@ -25,12 +25,12 @@ export interface ScanDeps {
 }
 
 /** A log offset `<seq>:<index>` as a pair that orders like the log. */
-function position(offset: string): [number, number] {
+export function position(offset: string): [number, number] {
   const [seq = "", index = ""] = offset.split(":");
   return [Number(seq), Number(index)];
 }
 
-const atOrPast = (a: [number, number], b: [number, number]) => a[0] > b[0] || (a[0] === b[0] && a[1] >= b[1]);
+export const atOrPast = (a: [number, number], b: [number, number]) => a[0] > b[0] || (a[0] === b[0] && a[1] >= b[1]);
 
 /** What a search of the log found, and whether it read to the head, so nothing later can be missing. */
 export interface ScanResult {

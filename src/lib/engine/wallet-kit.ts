@@ -42,11 +42,13 @@ export interface StubOptions {
   pendingReceipts?: number;
   /** Answers a method with an error, such as `{ code: 4001 }` for a declined request. */
   fail?: Partial<Record<string, { code: number; message: string }>>;
+  /** What `wallet_watchAsset` resolves; true by default. */
+  watchAsset?: boolean;
 }
 
 /** A provider over a fixed key: it records each request, signs typed data, and mines every transaction at once. */
 export class StubProvider implements Eip1193Provider {
-  readonly calls: { method: string; params: readonly unknown[] }[] = [];
+  readonly calls: { method: string; params: readonly unknown[] | { type: string; options: Record<string, unknown> } }[] = [];
   chainId: number;
   private receiptPolls = 0;
 
@@ -56,11 +58,15 @@ export class StubProvider implements Eip1193Provider {
 
   /** The transactions sent, in order. */
   get sent(): { to: string; data: Hex }[] {
-    return this.calls.filter((c) => c.method === "eth_sendTransaction").map((c) => c.params[0] as { to: string; data: Hex });
+    return this.calls.flatMap((c) => {
+      if (c.method !== "eth_sendTransaction" || !Array.isArray(c.params)) return [];
+      return [c.params[0] as { to: string; data: Hex }];
+    });
   }
 
-  async request({ method, params = [] }: { method: string; params?: readonly unknown[] }): Promise<unknown> {
+  async request({ method, params = [] }: { method: string; params?: readonly unknown[] | { type: string; options: Record<string, unknown> } }): Promise<unknown> {
     this.calls.push({ method, params });
+    const list: readonly unknown[] = Array.isArray(params) ? params : [];
     const failure = this.options.fail?.[method];
     if (failure) throw Object.assign(new Error(failure.message), { code: failure.code });
     switch (method) {
@@ -68,16 +74,21 @@ export class StubProvider implements Eip1193Provider {
       case "eth_chainId": return `0x${this.chainId.toString(16)}`;
       case "wallet_switchEthereumChain":
       case "wallet_addEthereumChain":
-        this.chainId = Number((params[0] as { chainId: string }).chainId);
+        this.chainId = Number((list[0] as { chainId: string }).chainId);
         return null;
-      case "eth_signTypedData_v4": return privateKeyToAccount(this.options.key ?? KEY).signTypedData(parseTyped(String(params[1])));
+      case "eth_signTypedData_v4": return privateKeyToAccount(this.options.key ?? KEY).signTypedData(parseTyped(String(list[1])));
       case "eth_sendTransaction": return `0x${String(this.sent.length).padStart(64, "0")}`;
       case "eth_getTransactionReceipt": {
         // The zero hash is the wallet's check that it can read receipts at all.
-        const pending = String(params[0]) !== `0x${"0".repeat(64)}` && this.receiptPolls++ < (this.options.pendingReceipts ?? 0);
+        const pending = String(list[0]) !== `0x${"0".repeat(64)}` && this.receiptPolls++ < (this.options.pendingReceipts ?? 0);
         return pending ? null : { status: this.options.receiptStatus ?? "0x1" };
       }
-      case "eth_call": return this.call((params[0] as { data: Hex }).data);
+      case "eth_call": return this.call((list[0] as { data: Hex }).data);
+      case "wallet_watchAsset": {
+        // The request contract is the asset object itself; an array-wrapped param is refused.
+        if (typeof params !== "object" || params === null || Array.isArray(params)) throw new Error("wallet_watchAsset takes the asset object as its param");
+        return this.options.watchAsset ?? true;
+      }
       default: throw new Error(`stub provider has no ${method}`);
     }
   }

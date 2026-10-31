@@ -26,6 +26,10 @@ function wallet(options: StubOptions = {}, chain: WalletChain = CHAIN) {
   return { provider, wallet: new ProviderWallet(ACCOUNT, "Test wallet", provider, chain, { wait: async () => {} }) };
 }
 
+/** The first entry of a recorded call's array params; undefined for an object param such as watchAsset's. */
+const firstParam = (call: { params: readonly unknown[] | object } | undefined): unknown =>
+  call !== undefined && Array.isArray(call.params) ? call.params[0] : undefined;
+
 const order = vectors.requests[0];
 if (!order) throw new Error("no order vector");
 const typed = orderTypedData(requestDomain(vectors.chain_id, VAULT), order.body as unknown as OrderRequest, { nonce: order.nonce, expiresAt: order.expires_at });
@@ -35,7 +39,7 @@ describe("signing", () => {
   it("signs through eth_signTypedData_v4 to exactly the engine's vector signature", async () => {
     const { provider, wallet: w } = wallet();
     expect(await w.sign({ summary: "buy", typed })).toBe(order.signature);
-    expect(provider.calls.find((c) => c.method === "eth_signTypedData_v4")?.params[0]).toBe(ACCOUNT);
+    expect(firstParam(provider.calls.find((c) => c.method === "eth_signTypedData_v4"))).toBe(ACCOUNT);
   });
 
   it("refuses a request for another chain or vault without asking the wallet", async () => {
@@ -77,8 +81,30 @@ describe("the chain", () => {
     const unknown = { fail: { wallet_switchEthereumChain: { code: 4902, message: "Unrecognized chain" } }, chainId: 1 };
     const { provider, wallet: w } = wallet(unknown);
     await w.ensureChain();
-    expect(provider.calls.find((c) => c.method === "wallet_addEthereumChain")?.params[0]).toMatchObject({ chainId: "0x7a69", rpcUrls: ["http://127.0.0.1:8545/"] });
+    expect(firstParam(provider.calls.find((c) => c.method === "wallet_addEthereumChain"))).toMatchObject({ chainId: "0x7a69", rpcUrls: ["http://127.0.0.1:8545/"] });
     await expect(wallet(unknown, { ...CHAIN, add: null }).wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337");
+  });
+
+  it("offers to add the chain when a wallet answers an unknown chain as a -32603 server error", async () => {
+    const serverError = { fail: { wallet_switchEthereumChain: { code: -32603, message: "Unrecognized chain ID 31337" } }, chainId: 1 };
+    const { provider, wallet: w } = wallet(serverError);
+    await w.ensureChain();
+    const methods = provider.calls.map((c) => c.method);
+    expect(methods).toEqual(["eth_chainId", "wallet_switchEthereumChain", "wallet_addEthereumChain", "wallet_switchEthereumChain", "eth_chainId"]);
+    expect(provider.chainId).toBe(31337);
+    // A server error that names nothing about a chain is a refusal, not an unknown chain.
+    const other = { fail: { wallet_switchEthereumChain: { code: -32603, message: "internal error" } }, chainId: 1 };
+    await expect(wallet(other).wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337: internal error");
+    // A server error that names a chain without reporting it unknown is a refusal, not an unknown chain.
+    const unavailable = { fail: { wallet_switchEthereumChain: { code: -32603, message: "Chain RPC is unavailable" } }, chainId: 1 };
+    const tried = wallet(unavailable);
+    await expect(tried.wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337: Chain RPC is unavailable");
+    expect(tried.provider.calls.some((c) => c.method === "wallet_addEthereumChain")).toBe(false);
+    // A generic failure that says neither is a refusal, not an unknown chain.
+    const generic = { fail: { wallet_switchEthereumChain: { code: -32603, message: "Unknown error" } }, chainId: 1 };
+    const genericTried = wallet(generic);
+    await expect(genericTried.wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337: Unknown error");
+    expect(genericTried.provider.calls.some((c) => c.method === "wallet_addEthereumChain")).toBe(false);
   });
 
   it("refuses to go on when the wallet stays on another chain", async () => {
@@ -112,7 +138,7 @@ describe("deposits", () => {
     await w.deposit(fixedFromInt(1_000));
     const methods = provider.calls.map((c) => c.method);
     expect(methods.slice(methods.indexOf("eth_call") + 2, methods.indexOf("eth_sendTransaction"))).toEqual(["eth_getTransactionReceipt", "eth_chainId", "wallet_switchEthereumChain", "eth_chainId"]);
-    expect(provider.calls.filter((c) => c.method === "eth_sendTransaction").map((c) => (c.params[0] as { chainId: string }).chainId)).toEqual(["0x7a69", "0x7a69"]);
+    expect(provider.calls.filter((c) => c.method === "eth_sendTransaction").map((c) => (firstParam(c) as { chainId: string }).chainId)).toEqual(["0x7a69", "0x7a69"]);
   });
 
   it("says what each transaction waits for: the user's confirmation, then the chain", async () => {
@@ -158,7 +184,7 @@ describe("deposits", () => {
     const w = new ProviderWallet(ACCOUNT, "Test wallet", provider, CHAIN, { wait: async (ms) => void waits.push(ms) });
     await w.deposit(fixedFromInt(10));
     expect(waits).toEqual([1_000, 1_000, 1_000]);
-    expect(provider.calls.filter((c) => c.method === "eth_getTransactionReceipt" && c.params[0] !== `0x${"0".repeat(64)}`)).toHaveLength(4);
+    expect(provider.calls.filter((c) => c.method === "eth_getTransactionReceipt" && firstParam(c) !== `0x${"0".repeat(64)}`)).toHaveLength(4);
   });
 
   it("says a transaction is sent but not confirmed once it stays pending through every poll", async () => {
@@ -217,6 +243,41 @@ describe("claims", () => {
     await w.disconnect();
     expect(ended).toBe(1);
     await expect(wallet().wallet.disconnect()).resolves.toBeUndefined();
+  });
+});
+
+describe("suggesting the vault's USDC", () => {
+  it("asks the wallet to watch the token with the asset object as the param, on the deployment's chain, and resolves true when added", async () => {
+    const { provider, wallet: w } = wallet({ chainId: 1 });
+    await expect(w.suggestUsdc()).resolves.toBe(true);
+    const watchAt = provider.calls.findIndex((c) => c.method === "wallet_watchAsset");
+    const movedAt = provider.calls.findIndex((c) => c.method === "wallet_switchEthereumChain");
+    // The wallet is put on the deployment's chain before the import is offered.
+    expect(provider.chainId).toBe(31337);
+    expect(movedAt).toBeGreaterThanOrEqual(0);
+    expect(watchAt).toBeGreaterThan(movedAt);
+    expect(provider.calls[watchAt]?.params).toEqual({ type: "ERC20", options: { address: USDC, symbol: "USDC", decimals: 6 } });
+  });
+
+  it("resolves false when the wallet answers that it did not add the token", async () => {
+    const { provider, wallet: w } = wallet({ chainId: 1, watchAsset: false });
+    await expect(w.suggestUsdc()).resolves.toBe(false);
+    expect(provider.calls.some((c) => c.method === "wallet_watchAsset")).toBe(true);
+  });
+
+  it("resolves false without asking when the build names no USDC, and when the wallet refuses or cannot watch assets", async () => {
+    const noToken = wallet({}, { ...CHAIN, usdc: null });
+    await expect(noToken.wallet.suggestUsdc()).resolves.toBe(false);
+    expect(noToken.provider.calls).toEqual([]);
+    const declined = wallet({ fail: { wallet_watchAsset: { code: 4001, message: "User rejected" } } });
+    await expect(declined.wallet.suggestUsdc()).resolves.toBe(false);
+    const unsupported = wallet({ fail: { wallet_watchAsset: { code: -32601, message: "the method wallet_watchAsset does not exist" } } });
+    await expect(unsupported.wallet.suggestUsdc()).resolves.toBe(false);
+  });
+
+  it("refuses an array-wrapped watchAsset param, so the request shape cannot regress", async () => {
+    const { provider } = wallet({ chainId: 1 });
+    await expect(provider.request({ method: "wallet_watchAsset", params: [{ type: "ERC20", options: {} }] })).rejects.toThrow("asset object");
   });
 });
 

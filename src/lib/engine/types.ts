@@ -4,6 +4,9 @@
  * identifiers numbers, and every enum is snake_case.
  */
 
+import type { EngineEvent } from "./event-types";
+export type { EngineEvent } from "./event-types";
+
 export type Address = string;
 export type MarketId = number;
 export type OrderId = number;
@@ -16,14 +19,18 @@ export interface Tier {
   bps: number;
 }
 
-export interface Window {
-  open: string;
-  close: string;
-}
+import type { Schedule } from "./schedule-types";
+export type { LocalPeriod, Schedule, Window } from "./schedule-types";
 
-export type Schedule =
-  | { kind: "always_open" }
-  | { kind: "weekly"; tz: string; windows: Window[]; closed_dates: string[] };
+/** A futures contract a market prices from, in roll order; `from` is when the index rolls onto it, as the wire's RFC 3339 timestamp. */
+export interface FuturesContract { contract: string; from: string }
+
+/** A market's index rules, as `GET /v1/markets` lists them (`engine_core::market::PriceRules`). */
+export interface PriceRules {
+  max_age_ms: number;
+  max_divergence_bps: number;
+  min_sources: number;
+}
 
 /** One row of `GET /v1/markets`: the market's spec with its live state. */
 export interface MarketView {
@@ -33,6 +40,11 @@ export interface MarketView {
   schedule: Schedule;
   margin_tiers: Tier[];
   spread_tiers: Tier[];
+  price_rules: PriceRules;
+  /** From V21, the futures contracts the market prices from, in roll order; absent for a market priced from spot quotes. */
+  contracts?: FuturesContract[];
+  /** Unless USD, the quote currency and the FX market whose index converts it; absent for USD listings. */
+  quote_currency?: { currency: "eur" | "gbp" | "jpy"; fx_market: MarketId };
   max_slippage_bps: number;
   house_cap_bps: number;
   min_order_notional: string;
@@ -161,37 +173,33 @@ export interface Fill {
   liquidation: boolean;
 }
 
-/** The events the console reads from the log, tagged by `type`. */
-export type EngineEvent =
-  | { type: "eligibility_attested"; account: Address; class: EligibilityClass }
-  | { type: "deposited"; account: Address; amount: string }
-  | { type: "order_accepted"; account: Address; client_id: number; order_id: OrderId }
-  | { type: "order_rejected"; account: Address; client_id: number; reason: Reject }
-  | { type: "order_cancelled"; account: Address; order_id: OrderId; reason: "client" | "unfillable" }
-  | ({ type: "fill" } & Fill)
-  | { type: "close_out"; account: Address; equity: string; margin: string }
-  | { type: "withdrawal_approved"; account: Address; amount: string; nonce: number }
-  | { type: "withdrawal_queued"; account: Address; amount: string; requested_seq: number }
-  | { type: "withdrawal_queue_updated"; account: Address; requested_seq: number; remaining: string }
-  | { type: "withdrawal_rejected"; account: Address; amount: string; reason: Reject }
-  | { type: "financing"; account: Address; market: MarketId; amount: string }
-  | { type: "bad_debt"; account: Address; amount: string }
-  | { type: "eligibility_rejected"; account: Address; reason: Reject }
-  | { type: "market_opened"; market: MarketId }
-  | { type: "market_closed"; market: MarketId }
-  | { type: "stress_changed"; market: MarketId; level: number };
+/** The listing fields of an `AdminCommand::UpsertMarket` as the log serializes them; the optional ones are absent in entries older than the fields. */
+export interface UpsertMarket {
+  id?: MarketId;
+  price_rules?: PriceRules;
+  schedule?: Schedule;
+  /** From V21; a non-empty list prices the market from futures. */
+  contracts?: FuturesContract[];
+  asset_class?: string;
+  /** Unless USD, the quote currency, which makes the market FX-dependent. */
+  quote_currency?: { currency: "eur" | "gbp" | "jpy"; fx_market: MarketId };
+}
 
 export interface SourceQuote {
   source: string;
   mid: string;
   ts: number;
+  /** From V21, the futures contract quoted; absent for a spot market's quotes. */
+  contract?: string;
 }
 
 /** A sequenced command, tagged by `type` as the engine's `Command` is; only the ones the console reads. */
 export type EngineCommand =
   | { type: "prices"; market: MarketId; quotes: SourceQuote[] }
   | { type: "tick" }
-  | { type: "place_order" | "cancel_order" | "withdraw" | "deposit" | "attest_eligibility" | "admin" };
+  | ({ type: "admin"; action?: string } & UpsertMarket)
+  | { type: "signed_admin"; command?: { action?: string } & UpsertMarket }
+  | { type: "place_order" | "cancel_order" | "withdraw" | "deposit" | "attest_eligibility" };
 
 /** One message of the WebSocket stream at `/v1/stream`: a sequenced command with its events. */
 export interface StreamMessage {

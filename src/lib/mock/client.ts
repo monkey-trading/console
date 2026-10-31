@@ -37,6 +37,10 @@ export class MockEngineClient implements EngineClient {
   readonly signatures: SignatureChecks = "none";
   /** A stand-in deployment: the mock checks no signature, so nothing binds to it. */
   readonly deployment = { chainId: 31337, vault: `0x${mockHex("vault", 20)}` };
+  /** The mock keeps its whole log in memory, so its head seq is always known. */
+  get headSeq(): number | null {
+    return this.state.log[this.state.log.length - 1]?.seq ?? null;
+  }
   attestationMode: AttestationMode = "mock";
 
   constructor(readonly state: MockState) {}
@@ -167,6 +171,11 @@ export class MockEngineClient implements EngineClient {
 
   async findWithdrawal(): Promise<{ withdrawal: null; complete: true; reached: null }> {
     return { withdrawal: null, complete: true, reached: null };
+  }
+
+  /** The mock seeds its own chart history; there is no log scan to run. */
+  async scanMarks() {
+    return [];
   }
 
   /** The mock streams no executable quotes; the ticket shows its own estimate. */

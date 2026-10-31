@@ -72,6 +72,13 @@ export function seedBars(seed: number, endMs: number, endPrice: number, seconds:
   });
 }
 
+/** Bars of `seconds` built from chronological marks, for the chart's history scan. */
+export function barsFromMarks(marks: readonly { ts: number; mid: number }[], seconds: number): Bar[] {
+  let out: Bar[] = [];
+  for (const mark of marks) out = pushTick(out, mark.ts, mark.mid, seconds);
+  return out;
+}
+
 /** A range of bar indices, as the chart reports its visible window; the ends may be fractional. */
 export interface LogicalRange {
   from: number;
