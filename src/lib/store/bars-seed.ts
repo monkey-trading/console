@@ -51,6 +51,15 @@ export class BarsSeed {
     if (this.unavailable) this.askHistoryScan();
   }
 
+  /** Forgets the seeds and the scan's ask, so a restarted store (StrictMode re-runs the effect) works anew. */
+  reset(): void {
+    this.seeded.clear();
+    this.pending.clear();
+    this.attempts.clear();
+    this.reported.clear();
+    this.scanAsked = false;
+  }
+
   /** Reads one timeframe's window of marks and folds it into that series; a 404 turns to the archive scan. */
   private async fetch(key: string, marketId: MarketId, timeframe: TimeframeId, attempt: number): Promise<void> {
     try {

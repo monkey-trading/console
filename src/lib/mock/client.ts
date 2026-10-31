@@ -2,11 +2,8 @@
 
 import { checkAttestation, type AttestationStatus } from "../engine/attestation";
 import { EngineError, type ActionResult, type EngineClient, type SignatureChecks, type Unsubscribe } from "../engine/client";
-import type {
-  EligibilityClass,
-  AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, MarkPage,
-  MarketView, OrderRequest, StreamMessage, WithdrawalPage, WithdrawalRequest,
-} from "../engine/types";
+import type { EligibilityClass, AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
+import type { MarkPage } from "../engine/mark-types";
 import { fixedToWire } from "../fixed";
 import { equityOf, houseGross, houseNav, marginOf } from "./accounts";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";

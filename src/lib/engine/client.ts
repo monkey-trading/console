@@ -5,28 +5,8 @@ import type { ScanBudget, ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import type { ScanResult } from "./live-scan";
 import type { QuoteRequest } from "./live-stream";
-import type {
-  AccountView,
-  Address,
-  Attestation,
-  CancelRequest,
-  EligibilityRequest,
-  EligibilityView,
-  HistoryPage,
-  HouseView,
-  MarkPage,
-  MarkResolution,
-  MarketId,
-  MarketQuote,
-  MarketView,
-  OrderRequest,
-  PriceRules,
-  Reject,
-  SignedWithdrawal,
-  StreamMessage,
-  WithdrawalPage,
-  WithdrawalRequest,
-} from "./types";
+import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PriceRules, Reject, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
+import type { MarkPage, MarkResolution } from "./mark-types";
 
 /**
  * An error response from the node: the HTTP status and the `{ "error": … }` message, plus the typed

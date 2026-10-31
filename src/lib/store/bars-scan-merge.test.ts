@@ -16,7 +16,7 @@ describe("merging scanned history with live bars", () => {
       return new Promise((resolve) => { resolveScan = resolve; });
     };
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     expect(scanStarted).toBe(true);
     // While the scan runs, a refresh places the live candle from the market's mark.
@@ -50,7 +50,7 @@ describe("merging scanned history with live bars", () => {
     let resolveScan: ((marks: typeof MARKS) => void) | undefined;
     client.scanMarks = () => new Promise((resolve) => { resolveScan = resolve; });
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     store.patch({ now: T });
     await store.refresh(false);
@@ -74,7 +74,7 @@ describe("merging scanned history with live bars", () => {
     let resolveScan: ((marks: typeof MARKS) => void) | undefined;
     client.scanMarks = () => new Promise((resolve) => { resolveScan = resolve; });
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     store.patch({ now: T });
     await store.refresh(false);
@@ -95,7 +95,7 @@ describe("merging scanned history with live bars", () => {
     let resolveScan: ((marks: typeof MARKS) => void) | undefined;
     client.scanMarks = () => new Promise((resolve) => { resolveScan = resolve; });
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     store.patch({ now: T });
     await store.refresh(false);
@@ -123,7 +123,7 @@ describe("merging scanned history with live bars", () => {
     let resolveScan: ((marks: typeof MARKS) => void) | undefined;
     client.scanMarks = () => new Promise((resolve) => { resolveScan = resolve; });
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     store.patch({ now: T });
     await store.refresh(false);
@@ -145,7 +145,7 @@ describe("merging scanned history with live bars", () => {
     let resolveScan: ((marks: typeof MARKS) => void) | undefined;
     client.scanMarks = () => new Promise((resolve) => { resolveScan = resolve; });
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     // The live candle captures the bucket's price at T+30 s.
     store.patch({ now: T + 30_000 });
@@ -175,7 +175,7 @@ describe("merging scanned history with live bars", () => {
     let resolveScan: ((marks: typeof MARKS) => void) | undefined;
     client.scanMarks = () => new Promise((resolve) => { resolveScan = resolve; });
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     store.patch({ now: T });
     await store.refresh(false);
@@ -195,7 +195,7 @@ describe("merging scanned history with live bars", () => {
     let resolveScan: ((marks: typeof MARKS) => void) | undefined;
     client.scanMarks = () => new Promise((resolve) => { resolveScan = resolve; });
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     // The live candle of the bucket ticks at T+55 s; the next bucket ticks at T+61 s.
     store.patch({ now: T + 55_000 });
@@ -220,7 +220,7 @@ describe("merging scanned history with live bars", () => {
     let resolveScan: ((marks: typeof MARKS) => void) | undefined;
     client.scanMarks = () => new Promise((resolve) => { resolveScan = resolve; });
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     store.patch({ now: T });
     await store.refresh(false);
@@ -251,7 +251,7 @@ describe("merging scanned history with live bars", () => {
     let resolveScan: ((marks: typeof MARKS) => void) | undefined;
     client.scanMarks = () => new Promise((resolve) => { resolveScan = resolve; });
     const store = storeOver(client);
-    store.start(0);
+    store.start(T);
     await flush();
     store.patch({ now: T });
     await store.refresh(false);

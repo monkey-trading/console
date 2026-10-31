@@ -131,7 +131,7 @@ export class ConsoleStore {
     // history work and scans anew: its results were discarded when the cycle stopped.
     this.stopped = false;
     this.scanEpoch += 1;
-    this.barsScanned = false;
+    this.barsSeed.reset();
     this.deps.drive?.(nowMs);
     this.patch({ now: nowMs, bars: seedAllBars(this.snapshot.markets, nowMs, this.deps.history) });
     this.unwatch = this.deps.client.watch((event) => this.onClientEvent(event));

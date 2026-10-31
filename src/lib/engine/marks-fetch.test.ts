@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { FakeClient } from "../store/live-fake";
-import type { MarkEntry, MarkProvenance } from "./types";
+import type { MarkEntry, MarkProvenance } from "./mark-types";
 import { fetchBarsHistory, MARKS_PAGE_LIMIT, resolutionFor, windowSecondsFor } from "./marks-fetch";
 
 const entry = (tMs: number, provenance: MarkProvenance = "log_derived"): MarkEntry => ({ t_ms: tMs, mid: "100", provenance });

@@ -6,7 +6,9 @@ import { barsFromMarks } from "../bars";
 import { EngineError } from "../engine/client";
 import { MARKS_PAGE_LIMIT } from "../engine/marks-fetch";
 import { settle } from "../engine/test-kit";
-import type { MarkPage, MarkProvenance, StreamMessage } from "../engine/types";
+import type { StreamMessage } from "../engine/types";
+import type { MarkPage, MarkProvenance } from "../engine/mark-types";
+import { scanBarsHistory } from "./bars-scan";
 import { BTC, setup } from "./live-fake";
 
 const NOW = Date.UTC(2026, 9, 30, 12, 0, 0);
@@ -172,6 +174,27 @@ describe("seeding the chart from the marks endpoint", () => {
 });
 
 describe("the archive-scan fallback", () => {
+  it("seeds every timeframe from the wired scan when the node 404s the endpoint", async () => {
+    const { client, store } = setup({ historyScan: scanBarsHistory });
+    client.headSeq = 500_000;
+    client.scanned = [
+      { market: 1, ts: NOW - 86_400_000, mid: 90 },
+      { market: 1, ts: NOW - 3_600_000, mid: 95 },
+      { market: 1, ts: NOW - 60_000, mid: 100 },
+      { market: 1, ts: NOW, mid: 101 },
+    ];
+    client.marks = async () => { throw new EngineError(404, "not found"); };
+    store.start(NOW);
+    await settle();
+    // The seam started the real scan, whose marks seeded the chart ahead of the stream's current bar.
+    expect(client.scans).toHaveLength(1);
+    expect(store.getSnapshot().bars[1]?.["1m"]?.slice(0, 4).map((bar) => bar.close)).toEqual([90, 95, 100, 101]);
+    expect(store.getSnapshot().bars[1]?.["1h"]?.[0]?.close).toBe(90);
+    store.setTimeframe("5m");
+    await settle();
+    expect(client.scans).toHaveLength(1);
+  });
+
   it("runs the scan once when the node 404s the marks endpoint, and never asks the endpoint again", async () => {
     let asks = 0;
     const { client, store } = setup({ historyScan: () => { asks++; return true; } });

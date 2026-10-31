@@ -3,7 +3,8 @@
 import { DEFAULT_TIMEFRAME, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
 import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { SignatureChecks } from "../engine/client";
-import type { HistoryEvent, MarketId, MarketQuote, MarketView, HouseView, QueuedWithdrawal, SignedWithdrawal, MarkProvenance } from "../engine/types";
+import type { HistoryEvent, HouseView, QueuedWithdrawal, SignedWithdrawal, MarketId, MarketQuote, MarketView } from "../engine/types";
+import type { MarkProvenance } from "../engine/mark-types";
 import { fixedToNumber } from "../fixed";
 import { decodeHouse, decodeMarket, type AccountModel, type Eligibility, type HouseModel, type MarketModel } from "../models";
 

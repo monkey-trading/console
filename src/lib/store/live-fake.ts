@@ -3,7 +3,8 @@
 import { EngineError, type ClientEvent, type EngineClient, type SignatureChecks } from "../engine/client";
 import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
-import type { MarkPage, MarketView, PriceRules, StreamMessage } from "../engine/types";
+import type { PriceRules, StreamMessage, MarketView } from "../engine/types";
+import type { MarkPage } from "../engine/mark-types";
 import { WatchConnector } from "../engine/watch-wallet";
 import type { StoreDeps } from "./store-deps";
 import { ConsoleStore } from "./store";

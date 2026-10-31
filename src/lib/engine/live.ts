@@ -8,10 +8,8 @@ import { scanForWithdrawal, type ScanResult } from "./live-scan";
 import { LiveStream, type QuoteRequest, type Scheduler, type Socket } from "./live-stream";
 import { SignedTransport } from "./transport";
 import { NodeTrust } from "./trust";
-import type {
-  AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, MarkPage, MarkResolution, MarketId, MarketView, OrderRequest,
-  PriceRules, StreamMessage, WithdrawalPage, WithdrawalRequest,
-} from "./types";
+import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PriceRules, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
+import type { MarkPage, MarkResolution } from "./mark-types";
 import type { Verifier } from "./verifier";
 import { newChallenge } from "./wire";
 
