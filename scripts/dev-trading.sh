@@ -19,8 +19,11 @@ engine_dir="$(cd "${ENGINE_DIR:?ENGINE_DIR is the engine checkout}" && pwd)"
 if [[ -n "${ENGINE_BIN:-}" ]]; then
   engine_bin="$(cd "$(dirname "$ENGINE_BIN")" && pwd)/$(basename "$ENGINE_BIN")"
 else
-  # One resolved path serves the node, the tests' admin CLI, and the example beside it.
-  engine_bin="${CARGO_TARGET_DIR:-$engine_dir/target}/debug/engine"
+  # One resolved path serves the node, the tests' admin CLI, and the example beside it. Cargo runs
+  # in the engine checkout, so a relative CARGO_TARGET_DIR is read against it, never the work dir.
+  target_dir="${CARGO_TARGET_DIR:-$engine_dir/target}"
+  [[ "$target_dir" = /* ]] || target_dir="$engine_dir/$target_dir"
+  engine_bin="$target_dir/debug/engine"
 fi
 access_source="$(dirname "$engine_bin")/examples/access_source"
 api_port="${TRADING_API_PORT:-18080}"
@@ -94,7 +97,7 @@ node_config="$work/node.toml"
 
 # The node writes data/dev under its working directory.
 cd "$work"
-if [[ ! -x "$engine_bin" ]]; then
+if [[ -z "${ENGINE_BIN:-}" && ( ! -x "$engine_bin" || ! -x "$access_source" ) ]]; then
   # shellcheck disable=SC2086
   (cd "$engine_dir" && ${CARGO_CMD:-} cargo build -p engine-node --bin engine --example access_source >&2)
 fi

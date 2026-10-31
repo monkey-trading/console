@@ -17,7 +17,7 @@ import { realVerifier } from "../../src/lib/engine/test-vectors";
 import type { OrderRequest } from "../../src/lib/engine/types";
 import { ACCOUNT, StubProvider } from "../../src/lib/engine/wallet-kit";
 import { fixedFromWire, fixedToWire, parseFixed } from "../../src/lib/fixed";
-import { closingPrice, executablePrice, ticketPrices } from "../../src/lib/quotes";
+import { closingPrice, ticketPrices } from "../../src/lib/quotes";
 import { previewTicket, slippageBound } from "../../src/lib/ticket";
 import { attestEligibility, cancelOrder, placeOrder } from "../../src/lib/store/actions";
 import { followAccountFeeds, syncQuotes } from "../../src/lib/store/funds";
@@ -181,11 +181,12 @@ describe("trading against a dev node", () => {
   it("fills a market order at the streamed quote, sent as the quoted price with the slippage bound", async () => {
     await until(() => snapshot().quotes[BTC] !== undefined);
     const { price, qty, slippage } = ticketPrice();
-    // The expected price comes straight from the streamed ladder, independent of the ticket's own pricing.
+    // The expected price is the qualifying raw step of the streamed ladder, read without the
+    // ticket's own pricing helpers.
     const quote = snapshot().quotes[BTC];
-    const step = quote === undefined ? null : executablePrice(quote, "buy", qty);
-    if (step === null) throw new Error("the streamed quote has no step for this size");
-    expect(step.price).toBe(price);
+    const step = quote?.ask.find((s) => fixedFromWire(s.qty) >= qty);
+    if (step === undefined) throw new Error("the streamed quote has no step for this size");
+    expect(step.price).toBe(fixedToWire(price));
     await placeOrder(store, { market: BTC, side: "buy", qty, kind: { kind: "market", quoted: price, slippageBps: slippage }, reduceOnly: false });
     const wire = posted.at(-1)?.body;
     if (wire === undefined) throw new Error("no order was posted");
@@ -217,6 +218,10 @@ describe("trading against a dev node", () => {
     const qty = position.qty > 0n ? position.qty : -position.qty;
     const price = closingPrice(quote, "sell", qty);
     if (price === null) throw new Error("no closing price");
+    // The expected closing price is the quote's raw close instruction, not the helper's result.
+    const close = quote.close;
+    if (close === null || close.side !== "sell" || fixedFromWire(close.qty) !== qty) throw new Error("no raw close instruction");
+    expect(close.price).toBe(fixedToWire(price));
     const sent = posted.length;
     await placeOrder(store, { market: BTC, side: "sell", qty, kind: { kind: "market", quoted: price, slippageBps: slippageBound(SLIPPAGE_BPS, btcMarket()) }, reduceOnly: true });
     const wire = posted.at(-1)?.body;
