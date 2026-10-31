@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { type Bar, barsFromMarks, MAX_BARS, mergeFetchedBars, pushTick, rolledRange, secondsOf, seedBars, TIMEFRAMES } from "./bars";
+import { type Bar, barsFromCandles, barsFromMarks, MAX_BARS, mergeFetchedBars, pushTick, rolledRange, secondsOf, seedBars, TIMEFRAMES } from "./bars";
 
 const MIN = 60;
 const at = (seconds: number) => seconds * 1000;
@@ -71,6 +71,32 @@ describe("barsFromMarks", () => {
     ];
     expect(barsFromMarks(marks, MIN)).toEqual([{ time: 120, open: 100, high: 103, low: 98, close: 98, observedHigh: 103, observedLow: 98 }]);
     expect(barsFromMarks([{ ts: at(125), mid: 100 }], 300)).toEqual([{ time: 0, open: 100, high: 100, low: 100, close: 100, observedHigh: 100, observedLow: 100 }]);
+  });
+});
+
+describe("barsFromCandles", () => {
+  const candle = (seconds: number, open: number, high: number, low: number, close: number) => ({ ts: at(seconds), open, high, low, close });
+
+  it("opens each bar at its first candle's open, widens the range with the candles in the bucket, and closes at the last", () => {
+    const candles = [candle(60, 100, 104, 98, 102), candle(90, 102, 110, 101, 108), candle(130, 107, 109, 96, 97)];
+    expect(barsFromCandles(candles, MIN)).toEqual([
+      { time: 60, open: 100, high: 110, low: 98, close: 108, observedHigh: 110, observedLow: 98 },
+      { time: 120, open: 107, high: 109, low: 96, close: 97, observedHigh: 109, observedLow: 96 },
+    ]);
+  });
+
+  it("ignores a candle older than the last bar and does not mutate its input", () => {
+    const candles = [candle(60, 100, 100, 100, 100), candle(30, 50, 50, 50, 50)];
+    expect(barsFromCandles(candles, MIN)).toEqual([{ time: 60, open: 100, high: 100, low: 100, close: 100, observedHigh: 100, observedLow: 100 }]);
+    expect(candles[1]).toEqual(candle(30, 50, 50, 50, 50));
+  });
+
+  it("aligns buckets to each timeframe and bounds the series", () => {
+    const candles = Array.from({ length: MAX_BARS + 10 }, (_, i) => candle(i * MIN, 100, 100, 100, 100));
+    const bars = barsFromCandles(candles, MIN);
+    expect(bars).toHaveLength(MAX_BARS);
+    expect(bars[0]?.time).toBe(10 * MIN);
+    expect(barsFromCandles([candle(125, 100, 100, 100, 100)], 300)).toEqual([{ time: 0, open: 100, high: 100, low: 100, close: 100, observedHigh: 100, observedLow: 100 }]);
   });
 });
 

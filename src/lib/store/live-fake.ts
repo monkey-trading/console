@@ -30,7 +30,7 @@ export class FakeClient implements EngineClient {
   marketReads = 0;
   accountError: Error | null = null;
   /** Pages each marks read draws from, in order; the last one repeats. */
-  marksPages: MarkPage[] = [{ entries: [], next_from_ms: null }];
+  marksPages: MarkPage[] = [{ entries: [], next: null }];
   marksReads: { market: number; resolution: string; fromMs: number; toMs: number }[] = [];
   status: Awaited<ReturnType<EngineClient["verify"]>> = { kind: "mock" };
   async attestation(): Promise<never> { throw new Error("unused"); }
