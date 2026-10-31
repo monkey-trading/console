@@ -60,12 +60,12 @@ matches the current action.
   non-null assertions. `npm run lint` allows no warnings.
 - **tsconfig.json** — `strict` and `noUncheckedIndexedAccess`; `@/*` maps to `src/*`.
 - **vitest.config.ts** — runs `src/**/*.test.ts` in the Node environment.
-- **vitest.live.config.ts** — runs `scripts/live/*.live.test.ts`, which need a running engine node, for `scripts/dev-live-client.sh`.
+- **vitest.live.config.ts** — runs `scripts/live/*.live.test.ts`, which need a running engine node, for `scripts/dev-live-client.sh` and `scripts/dev-trading.sh`.
 - **postcss.config.mjs** — Tailwind CSS 4 through `@tailwindcss/postcss`.
 - **scripts/** — `check-docs.py`, run by CI's `docs` job: every relative Markdown link under
   `agents/` and in the root `*.md` files resolves to a file or directory in the repository, and the
   root `AGENTS.md` and `CLAUDE.md`, when present, are symlinks to `agents/AGENTS.md`; its test is
-  `check-docs.test.py`; and `check-wasm-pin.mjs`, run before every build, which fails when the verifier's `.wasm` or glue is not the pinned one; `dev-live-client.sh`, the live client's dev scenario against an engine dev node through a tampering proxy (`live/`, run by `vitest.live.config.ts`); `dev-local-stack.sh`, the one-command local stack (Anvil with the vault and mock USDC, a funded dev wallet, an engine node on Anvil custody with live crypto venues and checkpoints, and the console in live-dev mode); and `check-geo-block.sh`, run by CI's `geo-block` job, which serves a
+  `check-docs.test.py`; and `check-wasm-pin.mjs`, run before every build, which fails when the verifier's `.wasm` or glue is not the pinned one; `dev-live-client.sh`, the live client's dev scenario against an engine dev node through a tampering proxy (`live/`, run by `vitest.live.config.ts`); `dev-trading.sh`, the trading dev scenario: a private dev node on mock custody with EIP-712 client auth, traded against through the console's store and actions, ending in a close-out the operator forces by raising the market's margin tier (run by `vitest.live.config.ts`); `dev-local-stack.sh`, the one-command local stack (Anvil with the vault and mock USDC, a funded dev wallet, an engine node on Anvil custody with live crypto venues and checkpoints, and the console in live-dev mode); and `check-geo-block.sh`, run by CI's `geo-block` job, which serves a
   production build and checks that a restricted, an allowed, and an unknown country each get the
   right page, that every page is `noindex`, and that `robots.txt` is never rewritten. The review-delta
   helper and its test sit with the review skill, in `agents/skills/agent-code-review/scripts/`
@@ -110,6 +110,11 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
 - Live client dev scenario: `ENGINE_DIR=<engine checkout> ENGINE_BIN=<built engine binary> scripts/dev-live-client.sh`
   (Node, `curl`; starts a dev node on private data and ends `PASS: signed reads verify; tamper, replay, gap
   and mock-in-production are refused`)
+- Trading dev scenario: `ENGINE_DIR=<engine checkout> ENGINE_BIN=<built engine binary> scripts/dev-trading.sh`
+  (Node, `curl`, python3 3.11 or later, and the internet for the node's Roughtime servers; with `ENGINE_BIN`,
+  the `access_source` example must be built beside it; starts a private dev node on mock custody
+  with EIP-712 client auth and ends `PASS: funded, declared, filled at the streamed quote with the slippage
+  bound, rested and cancelled, closed reduce only, and traded through a close-out`)
 - Lint: `npm run lint`
 - Typecheck: `npm run typecheck` (`next typegen`, then `tsc --noEmit`)
 - Unit tests: `npm test`; one file: `npm test -- src/lib/site.test.ts`

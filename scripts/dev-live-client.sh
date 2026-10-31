@@ -42,5 +42,5 @@ done
 
 cd "$root"
 # The dev node's certificate is self-signed.
-NODE_TLS_REJECT_UNAUTHORIZED=0 ENGINE_NODE_URL=https://127.0.0.1:8080 nice -n 10 npx vitest run --config vitest.live.config.ts
+NODE_TLS_REJECT_UNAUTHORIZED=0 ENGINE_NODE_URL=https://127.0.0.1:8080 nice -n 10 npx vitest run --config vitest.live.config.ts scripts/live/dev-live-client.live.test.ts
 echo "PASS: signed reads verify; tamper, replay, gap and mock-in-production are refused"
