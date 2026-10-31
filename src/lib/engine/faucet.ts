@@ -61,7 +61,8 @@ function toQuantity(n: bigint): string {
 /** The JSON-RPC error shape, when the answer carries one. */
 function rpcError(body: unknown): { code: number; message: string } | null {
   if (typeof body !== "object" || body === null || !("error" in body) || typeof body.error !== "object" || body.error === null) return null;
-  const { code, message } = body.error as { code?: unknown; message?: unknown };
+  if (!("code" in body.error) || !("message" in body.error)) return null;
+  const { code, message } = body.error;
   if (typeof code !== "number" || typeof message !== "string") return null;
   return { code, message };
 }
@@ -73,9 +74,13 @@ async function rpc(post: JsonRpcPost, url: string, body: unknown): Promise<unkno
   return out.result;
 }
 
-/** The answer's `result` and error as values, so a caller can classify a refusal itself. Error cases: the answer is not a JSON-RPC response. */
+/** The answer's `result` and error as values, so a caller can classify a refusal itself. An error answer carries no `result` key, so either field admits the response; an `error` member that is not a well-formed JSON-RPC error means the answer is not a JSON-RPC response. Error cases: the answer is not a JSON-RPC response. */
 async function rpcAllow(post: JsonRpcPost, url: string, body: unknown): Promise<{ result: unknown; error: { code: number; message: string } | null }> {
   const response = await post(url, body);
-  if (typeof response !== "object" || response === null || !("result" in response)) throw new Error(`The chain's RPC answered without a result: ${String(response)}.`);
-  return { result: response.result, error: rpcError(response) };
+  if (typeof response !== "object" || response === null || (!("result" in response) && !("error" in response))) {
+    throw new Error(`The chain's RPC answered without a result: ${String(response)}.`);
+  }
+  const error = rpcError(response);
+  if ("error" in response && error === null) throw new Error(`The chain's RPC answered with a malformed error: ${String(response)}.`);
+  return { result: "result" in response ? response.result : null, error };
 }

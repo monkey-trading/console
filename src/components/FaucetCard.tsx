@@ -12,7 +12,8 @@ export function FaucetCard() {
   const { store, deploy } = useSession();
   const { wallet, busy } = useConsole();
   if (!faucetAvailable(deploy)) return null;
-  const able = wallet !== null && !busy;
+  const readOnly = wallet?.readOnly === true;
+  const able = wallet !== null && !readOnly && !busy;
   return (
     <section aria-labelledby="faucet-title" className="rounded-xl border border-line-2 bg-ink-1 p-5">
       <h2 id="faucet-title" className="text-label tracking-caps text-fg-3 uppercase">Dev faucet</h2>
@@ -28,6 +29,7 @@ export function FaucetCard() {
         Fund with Anvil
       </button>
       {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet first.</p>}
+      {readOnly && <p className="mt-2 text-label text-fg-3">The watched account is read-only, so the faucet cannot fund it.</p>}
     </section>
   );
 }

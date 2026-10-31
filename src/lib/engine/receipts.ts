@@ -1,8 +1,8 @@
 /** Waiting for a sent transaction: polling its receipt through the provider until the chain mines it. */
 
 /** How often, and how many times, a transaction's receipt is polled. */
-export const RECEIPT_POLL_MS = 1_000;
-export const RECEIPT_POLLS = 180;
+const RECEIPT_POLL_MS = 1_000;
+const RECEIPT_POLLS = 180;
 
 /**
  * Polls `receiptOf` for `hash` until the chain answers a receipt, and refuses one that reverted. The

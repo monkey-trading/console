@@ -64,7 +64,8 @@ describe("fundWithAnvil", () => {
   it("refuses on a non-Anvil RPC before minting anything, naming the reason", async () => {
     stubRpc({
       eth_getBalance: { result: "0x0" },
-      anvil_setBalance: { result: null, error: { code: -32601, message: "the method anvil_setBalance does not exist" } },
+      // A JSON-RPC error answer carries no `result` key, as a real node's does.
+      anvil_setBalance: { error: { code: -32601, message: "the method anvil_setBalance does not exist" } },
     });
     const { provider, store } = await connected();
     await fundWithAnvil(store, parseDeploy(LIVE_DEV));
@@ -87,5 +88,36 @@ describe("fundWithAnvil", () => {
     store.liveWallet = { address: wallet.address, label: wallet.label, sign: wallet.sign, deposit: wallet.deposit, claim: wallet.claim };
     await fundWithAnvil(store, parseDeploy(LIVE_DEV));
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("This build's faucet is not available for the connected wallet.");
+  });
+
+  it("reports a balance read the RPC refuses, mints nothing, and settles busy and prompt", async () => {
+    stubRpc({ eth_getBalance: { error: { code: -32000, message: "missing trie node" } } });
+    const { provider, store } = await connected();
+    await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    expect(provider.sent).toEqual([]);
+    const toasts = store.getSnapshot().toasts;
+    expect(toasts.at(-1)?.text).toBe("The chain's RPC answered with -32000: missing trie node.");
+    expect(toasts.some((t) => t.text.includes("minted"))).toBe(false);
+    expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
+  });
+
+  it("reports a declined mint after the gas top-up, and settles busy and prompt", async () => {
+    stubRpc({ eth_getBalance: { result: "0x0" }, anvil_setBalance: { result: null } });
+    const { store } = await connected({ fail: { eth_sendTransaction: { code: 4001, message: "User rejected" } } });
+    await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("You declined to mint USDC in your wallet.");
+    expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
+  });
+
+  it("refuses a read-only watched account once, with the console's own reason and no faucet toast", async () => {
+    stubRpc({ eth_getBalance: { result: "0x0" }, anvil_setBalance: { result: null } });
+    const { provider, store, wallet } = await connected();
+    store.liveWallet = { ...wallet, readOnly: true };
+    store.patch({ wallet: { address: wallet.address, label: wallet.label, readOnly: true } });
+    await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    expect(provider.sent).toEqual([]);
+    const toasts = store.getSnapshot().toasts;
+    expect(toasts.at(-1)?.text).toBe("The console will not fund the wallet: this account is read-only, so nothing can be signed for it.");
+    expect(toasts.filter((t) => t.text.includes("faucet is not available"))).toEqual([]);
   });
 });

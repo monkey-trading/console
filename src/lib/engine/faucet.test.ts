@@ -64,7 +64,8 @@ describe("topUpGas", () => {
     const post: JsonRpcPost = async (_url, body) =>
       (body as { method?: unknown }).method === "eth_getBalance"
         ? { result: "0x0" }
-        : { result: null, error: { code: -32601, message: "the method anvil_setBalance does not exist" } };
+        // A JSON-RPC error answer carries no `result` key, as a real node's does.
+        : { error: { code: -32601, message: "the method anvil_setBalance does not exist" } };
     await expect(topUpGas(RPC, ACCOUNT, post)).resolves.toEqual({
       ok: false,
       notAnvil: true,
@@ -76,7 +77,7 @@ describe("topUpGas", () => {
     const post: JsonRpcPost = async (_url, body) =>
       (body as { method?: unknown }).method === "eth_getBalance"
         ? { result: "0x0" }
-        : { result: null, error: { code: -32000, message: "missing trie node" } };
+        : { error: { code: -32000, message: "missing trie node" } };
     await expect(topUpGas(RPC, ACCOUNT, post)).resolves.toEqual({ ok: false, notAnvil: false, detail: "missing trie node" });
   });
 
@@ -88,6 +89,14 @@ describe("topUpGas", () => {
   it("throws when the RPC answer is not a JSON-RPC response", async () => {
     const post: JsonRpcPost = async () => "not json";
     await expect(topUpGas(RPC, ACCOUNT, post)).rejects.toThrow("without a result");
+  });
+
+  it("throws when the RPC's error member is not a well-formed JSON-RPC error, rather than reading it as success", async () => {
+    const post: JsonRpcPost = async (_url, body) =>
+      (body as { method?: unknown }).method === "eth_getBalance"
+        ? { result: "0x0" }
+        : { error: { code: "-32601", message: "method missing" } };
+    await expect(topUpGas(RPC, ACCOUNT, post)).rejects.toThrow("malformed error");
   });
 });
 

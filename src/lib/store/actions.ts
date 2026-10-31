@@ -190,9 +190,11 @@ export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void>
  */
 export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy): Promise<void> {
   if (!faucetAvailable(deploy)) return;
+  // usableWallet toasts its own reason when it refuses; only an able wallet that cannot mint reaches the toast below.
   const wallet = usableWallet(store, "fund the wallet");
+  if (!wallet) return;
   const rpcUrl = deploy.rpcUrl;
-  if (!wallet || wallet.fund === undefined || rpcUrl === null) {
+  if (wallet.fund === undefined || rpcUrl === null) {
     store.toast("error", "This build's faucet is not available for the connected wallet.");
     return;
   }
