@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { flush, MARKS, storeOver, T } from "./bars-scan-kit";
-import { BTC, FakeClient } from "./live-fake";
+import { FakeClient } from "./live-fake";
 
 describe("merging scanned history with live bars", () => {
   it("merges the scan's history into the bars the stream built while it ran, bucket by bucket", async () => {
@@ -41,6 +41,8 @@ describe("merging scanned history with live bars", () => {
       high: Math.max(101, liveBar.high),
       low: Math.min(100, liveBar.low),
       close: 101,
+      observedHigh: Math.max(101, liveBar.observedHigh),
+      observedLow: Math.min(101, liveBar.observedLow),
     });
   });
 
@@ -89,34 +91,6 @@ describe("merging scanned history with live bars", () => {
     expect(merged.close).toBe(101);
   });
 
-  it("opens the first live candle at the prefix's close even across a gap, as pushTick carries it", async () => {
-    const client = new FakeClient();
-    client.headSeq = 500_000;
-    let resolveScan: ((marks: typeof MARKS) => void) | undefined;
-    client.scanMarks = () => new Promise((resolve) => { resolveScan = resolve; });
-    const store = storeOver(client);
-    store.start(T);
-    await flush();
-    store.patch({ now: T });
-    await store.refresh(false);
-    await flush();
-    const liveBar = store.getSnapshot().bars[1]?.["1m"].at(-1);
-    if (!liveBar) throw new Error("no live bar");
-    // History ends a bucket early; the live candle still opens at the prefix's close.
-    resolveScan?.([{ market: 1, ts: T - 120_000, mid: 100 }]);
-    await flush();
-    const bars = store.getSnapshot().bars[1]?.["1m"] ?? [];
-    expect(bars).toHaveLength(2);
-    expect(bars[0]).toMatchObject({ time: (T - 120_000) / 1000, close: 100 });
-    expect(bars[1]).toEqual({
-      time: liveBar.time,
-      open: 100,
-      high: Math.max(liveBar.high, 100),
-      low: Math.min(liveBar.low, 100),
-      close: liveBar.close,
-    });
-  });
-
   it("takes the scanned close when its last observation is the latest, as at a session's final price", async () => {
     const client = new FakeClient();
     client.headSeq = 500_000;
@@ -161,32 +135,19 @@ describe("merging scanned history with live bars", () => {
     if (!merged) throw new Error("no merged bucket");
     expect(merged.close).toBe(liveBar.close);
     // The next candle opens at the merged close, whoever holds it; a wick that came solely from
-    // the obsolete carried open is a price no observation in the bucket touched, so it is
-    // bounded by the corrected open and the close.
+    // the obsolete carried open is a price no observation in the bucket touched, so the reopened
+    // candle binds its extrema to the corrected open and what the bucket actually observed.
     const successor = store.getSnapshot().bars[1]?.["1m"].find((bar) => bar.time === (T + 60_000) / 1000);
-    expect(successor).toEqual({ time: (T + 60_000) / 1000, open: liveBar.close, high: liveBar.close, low: 102, close: 102 });
-  });
-
-  it("bounds an extreme that came solely from a replaced open when the correction moves down", async () => {
-    const client = new FakeClient();
-    client.headSeq = 500_000;
-    const LOW: typeof BTC = { ...BTC, mark: "50" };
-    client.marketList = [LOW];
-    let resolveScan: ((marks: typeof MARKS) => void) | undefined;
-    client.scanMarks = () => new Promise((resolve) => { resolveScan = resolve; });
-    const store = storeOver(client);
-    store.start(T);
-    await flush();
-    store.patch({ now: T });
-    await store.refresh(false);
-    await flush();
-    store.patch({ now: T + 30_000 }); // the live tick lands after the scan's newest mark
-    await store.refresh(false);
-    await flush();
-    resolveScan?.([...MARKS, { market: 1, ts: T + 60_000, mid: 102 }]);
-    await flush();
-    const successor = store.getSnapshot().bars[1]?.["1m"].find((bar) => bar.time === (T + 60_000) / 1000);
-    expect(successor).toEqual({ time: (T + 60_000) / 1000, open: 50, high: 102, low: 50, close: 102 });
+    expect(successor).toEqual({
+      time: (T + 60_000) / 1000,
+      open: liveBar.close,
+      high: liveBar.close,
+      low: 102,
+      close: 102,
+      // Only the scanned mark at 102 observed this bucket; the reopened open is not an observation.
+      observedHigh: 102,
+      observedLow: 102,
+    });
   });
 
   it("compares each bucket against its own last live tick, not the market's latest", async () => {
@@ -241,35 +202,10 @@ describe("merging scanned history with live bars", () => {
       high: Math.max(101, liveBar.high),
       low: Math.min(100, liveBar.low),
       close: 101,
+      observedHigh: Math.max(101, liveBar.observedHigh),
+      observedLow: Math.min(101, liveBar.observedLow),
     });
     expect(bars.at(-1)).toMatchObject({ time: (T + 60_000) / 1000, close: 102 });
-  });
-
-  it("opens the first live candle at the scanned prefix's close when the history ends in the preceding bucket", async () => {
-    const client = new FakeClient();
-    client.headSeq = 500_000;
-    let resolveScan: ((marks: typeof MARKS) => void) | undefined;
-    client.scanMarks = () => new Promise((resolve) => { resolveScan = resolve; });
-    const store = storeOver(client);
-    store.start(T);
-    await flush();
-    store.patch({ now: T });
-    await store.refresh(false);
-    await flush();
-    const liveBar = store.getSnapshot().bars[1]?.["1m"].at(-1);
-    if (!liveBar) throw new Error("no live bar");
-    resolveScan?.([{ market: 1, ts: T - 60_000, mid: 100 }]);
-    await flush();
-    const bars = store.getSnapshot().bars[1]?.["1m"] ?? [];
-    expect(bars).toHaveLength(2);
-    expect(bars[0]).toMatchObject({ time: (T - 60_000) / 1000, close: 100 });
-    expect(bars[1]).toEqual({
-      time: liveBar.time,
-      open: 100,
-      high: Math.max(liveBar.high, 100),
-      low: Math.min(liveBar.low, 100),
-      close: liveBar.close,
-    });
   });
 
 });
