@@ -24,6 +24,8 @@ import type { ConsoleState } from "@/lib/store/state";
 
 interface Session {
   store: ConsoleStore;
+  /** The deployment this build pins; what the faucet gates on, among the rest. */
+  deploy: Deploy;
   /** The in-browser node; null when the console talks to a live one. */
   node: MockNode | null;
   /** The WalletConnect connector, whose pairing link the pairing dialog shows; null when the build has none. */
@@ -68,7 +70,7 @@ function createLiveSession(deploy: Deploy): Session {
   const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, { wait }), ...(walletConnect === null ? [] : [walletConnect]), new WatchConnector(() => window.location.search)]);
   // A node without the marks endpoint 404s it; the chart's archive scan then seeds its history.
   const store = new ConsoleStore({ client, wallets, history: () => [], historyScan: (store, markets) => scanBarsHistory(store, markets, store.deps.scanClock), initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
-  return { store, node: null, walletConnect };
+  return { store, deploy, node: null, walletConnect };
 }
 
 function createSession(): Session {
@@ -90,7 +92,7 @@ function createSession(): Session {
       },
     },
   });
-  return { store, node, walletConnect: null };
+  return { store, deploy, node, walletConnect: null };
 }
 
 /** The most simulated time one tick may add, so a stalled timer does not jump the prices. */

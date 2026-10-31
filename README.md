@@ -84,7 +84,7 @@ A live build is configured by environment variables at build time, all pinned in
 | `NEXT_PUBLIC_ENGINE_ORIGIN` | The node's bare `https://` origin; the stream is the same host over `wss` |
 | `NEXT_PUBLIC_ENGINE_CHAIN_ID`, `NEXT_PUBLIC_ENGINE_VAULT` | The deployment every signature must name |
 | `NEXT_PUBLIC_ENGINE_USDC` | The USDC the vault takes; without it the build cannot deposit |
-| `NEXT_PUBLIC_ENGINE_RPC_URL` | Optional RPC URL a wallet that does not know the chain is offered, such as a local Anvil chain's |
+| `NEXT_PUBLIC_ENGINE_RPC_URL` | Optional RPC URL a wallet that does not know the chain is offered, such as a local Anvil chain's; in a `live-dev` build the Funding drawer's faucet also tops gas up through it |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional WalletConnect project id (32 lowercase hex characters); without it the build offers no WalletConnect |
 | `NEXT_PUBLIC_ENGINE_HEARTBEAT_MS` | The node's `[api] heartbeat_interval`, in milliseconds (default 5000) |
 | `NEXT_PUBLIC_ENGINE_DEV_ORIGINS` | Comma-separated node origins a `live-dev` build may accept a mock attestation from |
@@ -93,7 +93,9 @@ The node's origin is added to the Content Security Policy's `connect-src` (with 
 `'wasm-unsafe-eval'` to `script-src`; a build with a WalletConnect project id also adds WalletConnect's relay,
 `wss://relay.walletconnect.org`, to `connect-src`, and its Verify service, `https://verify.walletconnect.org`, to
 `frame-src`. Chain reads go through the user's wallet, never to an RPC of the console's
-own. `/notices` says what leaves the browser. A `live` build refuses a mock attestation, and the console's wrapper of the verifier does
+own; the one exception is the `live-dev` build's dev faucet, which tops the wallet's gas up with
+`anvil_setBalance` on the build's pinned `NEXT_PUBLIC_ENGINE_RPC_URL` (its `connect-src` only in that
+build) while the USDC mint still goes through the wallet. `/notices` says what leaves the browser. A `live` build refuses a mock attestation, and the console's wrapper of the verifier does
 not expose the mock entry point there (the served package still exports it); with no release manifests pinned yet
 (`src/lib/engine/manifests.ts`), it trusts no hardware node either.
 

@@ -33,6 +33,12 @@ export interface Wallet {
   deposit(amount: Fixed, progress?: Progress): Promise<string>;
   /** Claims a signed withdrawal authorization on the vault and resolves with the transaction hash; `progress` as for `deposit`. */
   claim(withdrawal: SignedWithdrawal, progress?: Progress): Promise<string>;
+  /**
+   * Dev-only, live-dev builds: mints `amount` of the deployment's mock USDC to this account through
+   * the wallet and resolves with the transaction hash; `progress` as for `deposit`. Absent on
+   * wallets with nothing to mint from, such as the mock's own.
+   */
+  fund?(amount: Fixed, progress?: Progress): Promise<string>;
   /** Whether the vault has paid this account's payout `nonce`; absent from a wallet that reads no chain, such as a watched account's. */
   claimed?(nonce: number): Promise<boolean>;
   /**

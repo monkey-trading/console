@@ -1,30 +1,17 @@
 /** Tests for the wallet over an EIP-1193 provider: chain, signatures against the engine's vectors, deposits and claims. */
 
-import { decodeFunctionData, parseAbi, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "../fixed";
 import vectors from "./eip712-vectors.json";
 import { orderTypedData, requestDomain } from "./eip712";
 import { InjectedConnector } from "./injected";
-import { normaliseSignature, ProviderWallet, type WalletChain } from "./provider-wallet";
+import { normaliseSignature, ProviderWallet } from "./provider-wallet";
+import { CHAIN, decode, USDC, wallet } from "./provider-wallet-fixtures";
 import type { OrderRequest, SignedWithdrawal } from "./types";
-import { ACCOUNT, StubProvider, type StubOptions } from "./wallet-kit";
+import { ACCOUNT, StubProvider } from "./wallet-kit";
 
 const VAULT = vectors.vault;
-const USDC = "0x00000000000000000000000000000000000000cc";
-const CHAIN: WalletChain = { chainId: vectors.chain_id, vault: VAULT, usdc: USDC, add: { name: "Anvil", rpcUrl: "http://127.0.0.1:8545/" } };
-const ABI = parseAbi([
-  "function approve(address spender, uint256 amount) returns (bool)",
-  "function deposit(uint256 amount) returns (uint256)",
-  "struct Withdrawal { address account; uint256 amount; uint64 nonce; uint64 approvedSeq; uint64 signerEpoch; uint64 issuedAt; uint64 expiresAt; }",
-  "function withdraw(Withdrawal withdrawal, uint64 checkpointSeq, bytes32[] siblings, bytes signature)",
-]);
-
-function wallet(options: StubOptions = {}, chain: WalletChain = CHAIN) {
-  const provider = new StubProvider(options);
-  return { provider, wallet: new ProviderWallet(ACCOUNT, "Test wallet", provider, chain, { wait: async () => {} }) };
-}
 
 /** The first entry of a recorded call's array params; undefined for an object param such as watchAsset's. */
 const firstParam = (call: { params: readonly unknown[] | object } | undefined): unknown =>
@@ -33,7 +20,6 @@ const firstParam = (call: { params: readonly unknown[] | object } | undefined): 
 const order = vectors.requests[0];
 if (!order) throw new Error("no order vector");
 const typed = orderTypedData(requestDomain(vectors.chain_id, VAULT), order.body as unknown as OrderRequest, { nonce: order.nonce, expiresAt: order.expires_at });
-const decode = (data: Hex) => decodeFunctionData({ abi: ABI, data });
 
 describe("signing", () => {
   it("signs through eth_signTypedData_v4 to exactly the engine's vector signature", async () => {

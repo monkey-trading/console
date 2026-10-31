@@ -2,6 +2,8 @@
 
 import { signBlock } from "../engine/attestation";
 import { EngineError, type ActionResult } from "../engine/client";
+import type { Deploy } from "../engine/deploy";
+import { FAUCET_USDC, faucetAvailable, topUpGas } from "../engine/faucet";
 import { UntrustedError } from "../engine/trust";
 import { cancelTypedData, eligibilityTypedData, orderTypedData, requestDomain, STATEMENTS, withdrawalTypedData, type Terms, type TypedRequest } from "../engine/eip712";
 import type { EligibilityClass, OrderKind, RequestAuth, Side } from "../engine/types";
@@ -180,6 +182,48 @@ export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void>
     store.patch({ busy: false });
   }
 }
+
+/**
+ * The dev-only faucet (monkey-trading/console#44): tops the wallet's gas up to 1 ETH through
+ * `anvil_setBalance` on the build's pinned RPC, then mints 10,000 mock USDC to it through the
+ * wallet. A pinned RPC that is not Anvil is named, not guessed at, and nothing is minted then.
+ */
+export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy): Promise<void> {
+  if (!faucetAvailable(deploy)) return;
+  // usableWallet toasts its own reason when it refuses; only an able wallet that cannot mint reaches the toast below.
+  const wallet = usableWallet(store, "fund the wallet");
+  if (!wallet) return;
+  const rpcUrl = deploy.rpcUrl;
+  if (wallet.fund === undefined || rpcUrl === null) {
+    store.toast("error", "This build's faucet is not available for the connected wallet.");
+    return;
+  }
+  // Bound to the wallet: calling the method without a receiver unbinds `this` in the provider wallet.
+  const fund = wallet.fund.bind(wallet);
+  store.patch({ busy: true });
+  try {
+    const gas = await topUpGas(rpcUrl, wallet.address, postJsonRpc);
+    if (!gas.ok) {
+      store.toast("error", gas.notAnvil
+        ? `The build's RPC is not an Anvil node (${gas.detail}), so the faucet cannot fund this wallet.`
+        : `The faucet could not top up gas: ${gas.detail}.`);
+      return;
+    }
+    await prompting(store, `Confirm in your wallet: mint ${formatUsdc(FAUCET_USDC)} from the Anvil faucet.`, () => fund(FAUCET_USDC, (waitingFor) => store.patch({ prompt: waitingFor })));
+    store.toast("ok", `${formatUsdc(FAUCET_USDC)} minted${gas.toppedUp ? " and the wallet holds 1 ETH for gas" : ""}. Deposit into the vault to trade it.`);
+  } catch (error) {
+    if (!store.noteAccess(error)) store.toast("error", errorText(error));
+  } finally {
+    store.patch({ busy: false });
+  }
+}
+
+/** POSTs one JSON-RPC request to the chain's RPC and resolves with the decoded body. Error cases: the RPC answers not-OK. */
+const postJsonRpc = async (url: string, body: unknown): Promise<unknown> => {
+  const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!response.ok) throw new Error(`the chain's RPC answered HTTP ${response.status}`);
+  return response.json() as Promise<unknown>;
+};
 
 export interface OrderParams {
   market: number;
