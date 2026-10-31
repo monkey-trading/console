@@ -10,7 +10,7 @@ const entry = (tMs: number, provenance: MarkProvenance = "log_derived"): MarkEnt
 
 describe("resolutionFor", () => {
   it("maps each timeframe to the resolution that fills its chart window", () => {
-    expect(resolutionFor("1m")).toBe("1s");
+    expect(resolutionFor("1m")).toBe("1m");
     expect(resolutionFor("5m")).toBe("1m");
     expect(resolutionFor("15m")).toBe("1m");
     expect(resolutionFor("1h")).toBe("1h");
@@ -31,7 +31,7 @@ describe("fetchBarsHistory", () => {
     const client = new FakeClient();
     client.marksPages = [{ entries: [entry(60_000), entry(61_000), entry(62_000), entry(120_000)], next: null }];
     const got = await fetchBarsHistory(client, 1, "1m", 0, 120_000);
-    expect(client.marksReads).toEqual([{ market: 1, resolution: "1s", fromMs: 0, toMs: 120_000 }]);
+    expect(client.marksReads).toEqual([{ market: 1, resolution: "1m", fromMs: 0, toMs: 120_000 }]);
     expect(got.complete).toBe(true);
     expect(got.bars).toEqual([
       { time: 60, open: 100, high: 100, low: 100, close: 100, observedHigh: 100, observedLow: 100 },

@@ -12,13 +12,14 @@ import type { EngineClient } from "./client";
 import type { MarkProvenance, MarkResolution } from "./mark-types";
 
 /**
- * The marks resolution a timeframe fetches. Sub-hour timeframes read 1m marks (60 days of
- * retention fill every sub-hour window at a fraction of the 1s series' size); the 1m timeframe
- * reads 1s marks, since bars built from marks of their own size would hold no intrabar range.
+ * The marks resolution a timeframe fetches. Every timeframe reads marks of its own size or finer:
+ * candles carry their bucket's range, so a timeframe loses nothing by reading same-size marks, and
+ * the seeded depths (60 days of 1m, 2y of 1h/1d) then fill every timeframe's window. The 1s series
+ * has no seeded depth — no venue serves 1s candles — so it fills nothing the 1m candles don't.
  */
 export function resolutionFor(timeframe: TimeframeId): MarkResolution {
   switch (timeframe) {
-    case "1m": return "1s";
+    case "1m":
     case "5m":
     case "15m": return "1m";
     case "1h": return "1h";

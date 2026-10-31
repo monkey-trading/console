@@ -36,7 +36,7 @@ describe("seeding the chart from the marks endpoint", () => {
     // The 5m series is the one the stream's tick built at the current mark, not the endpoint's.
     expect(store.getSnapshot().bars[1]?.["5m"]).toEqual([streamBar(300)]);
     expect(client.marksReads).toHaveLength(1);
-    expect(client.marksReads[0]).toMatchObject({ market: 1, resolution: "1s", toMs: NOW });
+    expect(client.marksReads[0]).toMatchObject({ market: 1, resolution: "1m", toMs: NOW });
   });
 
   it("fetches the new timeframe's resolution on a switch, and seeds each series once", async () => {
