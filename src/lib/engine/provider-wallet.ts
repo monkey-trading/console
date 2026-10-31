@@ -10,6 +10,7 @@ import { decodeFunctionResult, encodeFunctionData, getTypesForEIP712Domain, isHe
 import { fixedFromWire, type Fixed } from "../fixed";
 import { isWholeUsdc, USDC_UNIT } from "../vault";
 import type { TypedRequest } from "./eip712";
+import { waitMined } from "./receipts";
 import type { Address, SignedWithdrawal } from "./types";
 import type { Progress, SignRequest, Wallet } from "./wallet";
 
@@ -39,6 +40,8 @@ const ERC20 = parseAbi([
   "function allowance(address owner, address spender) view returns (uint256)",
   "function balanceOf(address owner) view returns (uint256)",
   "function approve(address spender, uint256 amount) returns (bool)",
+  // The local stack's MockUSDC (engine contracts/test/mocks/MockUSDC.sol) mints to anyone; the faucet is the one caller (monkey-trading/console#44).
+  "function mint(address to, uint256 amount)",
 ]);
 const VAULT = parseAbi([
   "function deposit(uint256 amount) returns (uint256)",
@@ -52,9 +55,6 @@ const USER_REJECTED = 4001;
 const UNKNOWN_CHAIN = 4902;
 /** Some wallets answer an unknown chain as a JSON-RPC server error instead of EIP-3085's 4902. */
 const SERVER_ERROR = -32603;
-/** How often, and how many times, the wallet polls for a transaction's receipt. */
-const RECEIPT_POLL_MS = 1_000;
-const RECEIPT_POLLS = 180;
 const NO_TRANSACTION = `0x${"0".repeat(64)}`;
 
 const hex = (n: number) => `0x${n.toString(16)}`;
@@ -197,6 +197,19 @@ export class ProviderWallet implements Wallet {
 
   /**
    * Error cases:
+   * - the build names no USDC token, or the amount is not a positive whole number of USDC base units
+   * - the user declines the transaction, or it reverts or is not confirmed after 180 receipt polls a second apart
+   */
+  async fund(amount: Fixed, progress: Progress = () => undefined): Promise<string> {
+    const units = usdcUnits(amount);
+    const usdc = this.chain.usdc;
+    if (usdc === null) throw new Error("This build names no USDC token, so it cannot mint one.");
+    await this.ensureChain();
+    return this.send(usdc, encodeFunctionData({ abi: ERC20, functionName: "mint", args: [hexOf(this.address), units] }), "mint USDC", progress);
+  }
+
+  /**
+   * Error cases:
    * - the authorization is for another account or deployment, or has no typed authorization
    * - the user declines, or the transaction reverts or is not confirmed after 180 receipt polls a second apart
    */
@@ -263,23 +276,8 @@ export class ProviderWallet implements Wallet {
       throw walletError(error, action);
     }
     progress(`Waiting for the transaction to ${action} to be mined.`);
-    const unconfirmed = (why: string) => new Error(`The transaction to ${action} was sent (${hash}) but ${why}. Check it in your wallet before trying again.`);
-    for (let poll = 0; poll < RECEIPT_POLLS; poll++) {
-      let receipt: unknown;
-      try {
-        receipt = await this.provider.request({ method: "eth_getTransactionReceipt", params: [hash] });
-      } catch (error) {
-        throw unconfirmed(`its receipt could not be read: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      // No receipt yet is null; a mined one carries its status.
-      const status = typeof receipt === "object" && receipt !== null && "status" in receipt ? receipt.status : undefined;
-      if (status !== undefined) {
-        if (Number(status) !== 1) throw new Error(`The transaction to ${action} failed on chain (${hash}).`);
-        return hash;
-      }
-      await this.deps.wait(RECEIPT_POLL_MS);
-    }
-    throw unconfirmed("is not confirmed yet");
+    await waitMined(async (txHash) => this.provider.request({ method: "eth_getTransactionReceipt", params: [txHash] }), hash, action, this.deps.wait);
+    return hash;
   }
 }
 

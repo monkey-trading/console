@@ -8,6 +8,7 @@ import { AccountSummary } from "./AccountSummary";
 import { useConsole, useSession } from "./ConsoleProvider";
 import { EligibilityCard } from "./EligibilityCard";
 import { DepositForm } from "./DepositForm";
+import { FaucetCard } from "./FaucetCard";
 import { Payouts } from "./Payouts";
 import { SigningFor } from "./SigningFor";
 import { ToastList } from "./ToastList";
@@ -71,6 +72,7 @@ export function FundingDrawer() {
         )}
         {/* The engine takes a first declaration once a deposit is pending; the mock asks for it before the deposit. */}
         {signatures === "checked" ? <><DepositForm step={1} /><EligibilityCard step={2} /></> : <><EligibilityCard step={1} /><DepositForm step={2} /></>}
+        <FaucetCard />
         <WithdrawForm />
         <WithdrawalQueue />
         {signatures === "checked" && <Payouts />}

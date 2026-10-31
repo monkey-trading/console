@@ -13,16 +13,20 @@ const nodeOrigins = deploy.origin === null ? [] : [deploy.origin, streamOrigin(d
 // service (owner approval recorded in monkey-trading/console#27), and nothing else of WalletConnect's.
 const walletConnect = deploy.walletConnectProjectId !== null;
 const relayOrigins = walletConnect ? [WALLETCONNECT_RELAY] : [];
+// A live-dev build funds the wallet through Anvil's own RPC, the build's pinned endpoint (monkey-trading/console#44);
+// no other build talks to it, so its origin joins connect-src only there.
+const faucetRpcOrigins = deploy.mode === "live-dev" && deploy.rpcUrl !== null ? [new URL(deploy.rpcUrl).origin] : [];
 
 // The page is statically rendered, so its inline bootstrap scripts cannot carry a nonce; the policy
-// allows inline scripts and styles but nothing from another origin but the pinned node's, the relay, and Verify's frame. Dev mode also needs eval.
+// allows inline scripts and styles but nothing from another origin but the pinned node's, the relay, Verify's frame,
+// and, in a live-dev build, the pinned Anvil RPC. Dev mode also needs eval.
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${deploy.origin === null ? "" : " 'wasm-unsafe-eval'"}${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
-  ["connect-src 'self'", ...nodeOrigins, ...relayOrigins].join(" "),
+  ["connect-src 'self'", ...nodeOrigins, ...relayOrigins, ...faucetRpcOrigins].join(" "),
   // Without this directive frames fall back to default-src 'self', which stays allowed.
   ...(walletConnect ? [`frame-src 'self' ${WALLETCONNECT_VERIFY}`] : []),
   "object-src 'none'",
