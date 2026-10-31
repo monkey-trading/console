@@ -111,7 +111,8 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   (Node, `curl`; starts a dev node on private data and ends `PASS: signed reads verify; tamper, replay, gap
   and mock-in-production are refused`)
 - Trading dev scenario: `ENGINE_DIR=<engine checkout> ENGINE_BIN=<built engine binary> scripts/dev-trading.sh`
-  (Node, `curl`, and the internet for the node's Roughtime servers; starts a private dev node on mock custody
+  (Node, `curl`, python3 3.11 or later, and the internet for the node's Roughtime servers; with `ENGINE_BIN`,
+  the `access_source` example must be built beside it; starts a private dev node on mock custody
   with EIP-712 client auth and ends `PASS: funded, declared, filled at the streamed quote with the slippage
   bound, rested and cancelled, closed reduce only, and traded through a close-out`)
 - Lint: `npm run lint`

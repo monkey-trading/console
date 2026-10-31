@@ -100,8 +100,9 @@ not expose the mock entry point there (the served package still exports it); wit
 `scripts/dev-live-client.sh` (Node, `curl`, and `ENGINE_DIR`, the engine checkout, with `ENGINE_BIN`
 or Cargo) starts a dev node and runs the live client in Node against it through a tampering proxy,
 checking that a flipped byte, a replayed response, a dropped stream frame and a mock attestation in
-a production build are each refused. `scripts/dev-trading.sh` (the same needs, and the internet for
-the node's Roughtime servers) starts a private dev node on mock custody with EIP-712 client auth
+a production build are each refused. `scripts/dev-trading.sh` (the same needs, plus python3 3.11 or
+later and the internet for the node's Roughtime servers; with `ENGINE_BIN`, the `access_source`
+example built beside it) starts a private dev node on mock custody with EIP-712 client auth
 and trades against it through the console's store and actions: it funds a fixed-key wallet through
 the mock-custody dev endpoint, declares eligibility, fills a market order at the streamed
 executable quote sent as the quoted price with a slippage bound, rests and cancels a limit order,

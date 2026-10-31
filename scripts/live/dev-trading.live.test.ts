@@ -17,7 +17,7 @@ import { realVerifier } from "../../src/lib/engine/test-vectors";
 import type { OrderRequest } from "../../src/lib/engine/types";
 import { ACCOUNT, StubProvider } from "../../src/lib/engine/wallet-kit";
 import { fixedFromWire, fixedToWire, parseFixed } from "../../src/lib/fixed";
-import { closingPrice, ticketPrices } from "../../src/lib/quotes";
+import { closingPrice, executablePrice, ticketPrices } from "../../src/lib/quotes";
 import { previewTicket, slippageBound } from "../../src/lib/ticket";
 import { attestEligibility, cancelOrder, placeOrder } from "../../src/lib/store/actions";
 import { followAccountFeeds, syncQuotes } from "../../src/lib/store/funds";
@@ -153,7 +153,11 @@ beforeAll(async () => {
   store.liveWallet = wallet;
   store.setWallet({ address: wallet.address, label: wallet.label });
   await store.loadAccount(true);
-  await until(() => snapshot().attestation.kind === "mock" && snapshot().markets.length > 0, 60_000, "the node's attestation and markets");
+  // Signing waits for a live stream, so readiness waits for one too.
+  await until(() => {
+    const state = snapshot();
+    return state.attestation.kind === "mock" && state.markets.length > 0 && state.stream === "live";
+  }, 60_000, "the node's attestation, markets and stream");
 }, 60_000);
 
 afterAll(async () => {
@@ -177,6 +181,11 @@ describe("trading against a dev node", () => {
   it("fills a market order at the streamed quote, sent as the quoted price with the slippage bound", async () => {
     await until(() => snapshot().quotes[BTC] !== undefined);
     const { price, qty, slippage } = ticketPrice();
+    // The expected price comes straight from the streamed ladder, independent of the ticket's own pricing.
+    const quote = snapshot().quotes[BTC];
+    const step = quote === undefined ? null : executablePrice(quote, "buy", qty);
+    if (step === null) throw new Error("the streamed quote has no step for this size");
+    expect(step.price).toBe(price);
     await placeOrder(store, { market: BTC, side: "buy", qty, kind: { kind: "market", quoted: price, slippageBps: slippage }, reduceOnly: false });
     const wire = posted.at(-1)?.body;
     if (wire === undefined) throw new Error("no order was posted");
@@ -208,7 +217,14 @@ describe("trading against a dev node", () => {
     const qty = position.qty > 0n ? position.qty : -position.qty;
     const price = closingPrice(quote, "sell", qty);
     if (price === null) throw new Error("no closing price");
+    const sent = posted.length;
     await placeOrder(store, { market: BTC, side: "sell", qty, kind: { kind: "market", quoted: price, slippageBps: slippageBound(SLIPPAGE_BPS, btcMarket()) }, reduceOnly: true });
+    const wire = posted.at(-1)?.body;
+    if (posted.length !== sent + 1 || wire === undefined) throw new Error("no close order was posted");
+    expect(wire.side).toBe("sell");
+    expect(wire.qty).toBe(fixedToWire(qty));
+    expect(wire.reduce_only).toBe(true);
+    expect(wire.kind).toEqual({ kind: "market", quoted: fixedToWire(price), max_slippage_bps: slippageBound(SLIPPAGE_BPS, btcMarket()) });
     await until(() => (btcPosition()?.qty ?? 0n) === 0n);
   });
 
