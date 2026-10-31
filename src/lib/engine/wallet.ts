@@ -35,6 +35,11 @@ export interface Wallet {
   claim(withdrawal: SignedWithdrawal, progress?: Progress): Promise<string>;
   /** Whether the vault has paid this account's payout `nonce`; absent from a wallet that reads no chain, such as a watched account's. */
   claimed?(nonce: number): Promise<boolean>;
+  /**
+   * Offers to add the deployment's USDC token to the wallet so its balance shows there; resolves
+   * true when the wallet added it. Absent from a wallet with no token to suggest, such as the mock's.
+   */
+  suggestUsdc?(): Promise<boolean>;
   /** Ends the wallet's connection, such as a WalletConnect session, when the user disconnects; absent when there is nothing to end. */
   disconnect?(): Promise<void>;
 }

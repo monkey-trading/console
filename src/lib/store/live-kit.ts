@@ -23,6 +23,8 @@ export type Posted = { route: string; body: OrderRequest | CancelRequest | Withd
 export class ActionClient implements EngineClient {
   signatures = "checked" as const;
   deployment = { chainId: vectors.chain_id, vault: VAULT };
+  /** The log head signed reads answer at; a test may set it, as the node's answers do. */
+  headSeq: number | null = null;
   posted: Posted[] = [];
   nonceReads = 0;
   marketReads = 0;
@@ -52,6 +54,7 @@ export class ActionClient implements EngineClient {
   async reissue(_account: string, nonce: number, body: { replaces_expires_at: number; signature: string }) { await this.act(`reissue ${nonce}`, body); this.head += 2; }
   searches: number[] = [];
   async findWithdrawal(_account: string, _nonce: number, fromSeq: number) { this.searches.push(fromSeq); return { withdrawal: this.found, complete: this.complete, reached: this.complete ? null : this.reached }; }
+  async scanMarks() { return []; }
   complete = true;
   reached: number | null = null;
   quotes(request: QuoteRequest | null) { this.quoteRequests.push(request); }

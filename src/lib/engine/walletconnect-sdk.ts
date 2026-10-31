@@ -24,7 +24,7 @@ export interface WcProvider {
   };
   connect(params: { optionalNamespaces: Record<string, { chains: string[]; methods: string[]; events: string[] }> }): Promise<WcSession | undefined>;
   /** Routes a method the session approved to the wallet over the relay, and any other to an HTTP RPC. */
-  request(args: { method: string; params?: readonly unknown[] | undefined }, chain: string): Promise<unknown>;
+  request(args: { method: string; params?: readonly unknown[] | object }, chain: string): Promise<unknown>;
   disconnect(): Promise<void>;
   cleanupPendingPairings(opts: { deletePairings: boolean }): Promise<void>;
   on(event: WcEvent, listener: (payload: unknown) => void): void;

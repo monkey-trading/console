@@ -74,6 +74,9 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
     case "order_rejected": return `Order refused: ${describeReject(event.reason)}`;
     case "withdrawal_rejected": return `Withdrawal refused: ${describeReject(event.reason)}`;
     case "order_accepted": return null;
+    // Operator housekeeping is not the viewer's activity.
+    case "admin_applied": return null;
+    case "admin_rejected": return null;
   }
   // Events the engine adds later stay out of the log until they get a case above.
   return unnamedEvent(event);

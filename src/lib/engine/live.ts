@@ -2,13 +2,15 @@
 
 import type { AttestationStatus, FeedStatus } from "./attestation";
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks, type Unsubscribe } from "./client";
+import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
+import type { SessionRule } from "./mark-session";
 import { scanForWithdrawal, type ScanResult } from "./live-scan";
 import { LiveStream, type QuoteRequest, type Scheduler, type Socket } from "./live-stream";
 import { SignedTransport } from "./transport";
 import { NodeTrust } from "./trust";
 import type {
   AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, MarketView, OrderRequest,
-  StreamMessage, WithdrawalPage, WithdrawalRequest,
+  PriceRules, StreamMessage, WithdrawalPage, WithdrawalRequest,
 } from "./types";
 import type { Verifier } from "./verifier";
 import { newChallenge } from "./wire";
@@ -50,6 +52,8 @@ export class LiveEngineClient implements EngineClient {
   private stream: LiveStream | null = null;
   /** The quotes the page wants, kept for a stream opened later. */
   private quoteRequest: QuoteRequest | null = null;
+  /** The log head seq of the last signed answer that named one; null before the first. */
+  headSeq: number | null = null;
   readonly deployment: { chainId: number; vault: string };
 
   constructor(private readonly deps: LiveDeps) {
@@ -141,7 +145,9 @@ export class LiveEngineClient implements EngineClient {
 
   // The routes' bodies are signed by the attested enclave, so their shape is the engine's.
   async markets(): Promise<MarketView[]> {
-    return (await this.transport.get("/v1/markets")) as MarketView[];
+    const answer = await this.transport.getSigned("/v1/markets");
+    this.headSeq = answer.seq;
+    return answer.body as MarketView[];
   }
 
   async house(): Promise<HouseView> {
@@ -209,6 +215,12 @@ export class LiveEngineClient implements EngineClient {
   async findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<ScanResult> {
     const signer = await this.trust.signer();
     return scanForWithdrawal({ ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) }, account, nonce, fromSeq);
+  }
+
+  async scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>, dead?: () => boolean): Promise<ScannedMark[]> {
+    // The backfill reads the signed log only: every mark the console plots derives from an enclave-signed frame.
+    const signer = await this.trust.signer();
+    return scanForMarks({ ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) }, fromSeq, budget, rules, sessions, dead);
   }
 
   quotes(request: QuoteRequest | null): void {

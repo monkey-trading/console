@@ -215,6 +215,11 @@ anvil = tomllib.loads(Path(config, "anvil.toml").read_text())
 # withdrawal authorization, comes every few seconds.
 cfg["node"].update(listen=f"127.0.0.1:{api}", log_dir=f"{work}/log", auth="eip712", checkpoint_every=100)
 cfg["api"]["allowed_origins"] = [f"http://localhost:{console}"]
+# One operator's browser with the first-party console is the whole user base here:
+# raise the per-IP and per-account buckets far above the production defaults so a
+# connected wallet's read loop is never throttled on localhost.
+cfg["api"]["per_ip"] = {"per_second": 500, "burst": 1000}
+cfg["api"]["per_account"] = {"per_second": 120, "burst": 240}
 cfg["history"]["dir"] = f"{work}/history"
 cfg["metrics"]["listen"] = f"127.0.0.1:{metrics}"
 cfg["alerts"]["outbox"]["dir"] = f"{work}/alerts"
@@ -295,8 +300,11 @@ governance="$(create --private-key "$house_key" \
   --constructor-args 1 "[$deployer]" '[0x0000000000000000000000000000000000000000]' \
   0x0000000000000000000000000000000000000000)"
 # The MONKEY period budget, 1 MONKEY, is a development value, not an approved production parameter.
+# The exit period, claim window, and deposit staleness are thirty days each, past anything this
+# waits for, and past the timelock's one-second delay as the vault's constructor requires.
 deployed_vault="$(create --private-key "$deployer_key" src/Vault.sol:Vault \
-  --constructor-args "$deployed_usdc" "$enclave" "$governance" 1000000000000000000)"
+  --constructor-args "$deployed_usdc" "$enclave" "$governance" "$governance" 1000000000000000000 \
+  2592000 2592000 2592000)"
 lower() { tr '[:upper:]' '[:lower:]' <<<"$1"; }
 [[ "$(lower "$deployed_usdc")" == "$usdc" ]] || die "the mock USDC deployed at $deployed_usdc, not at $usdc as config/anvil.toml names"
 [[ "$(lower "$deployed_vault")" == "$vault" ]] || die "the vault deployed at $deployed_vault, not at $vault as config/anvil.toml names"

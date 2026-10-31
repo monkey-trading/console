@@ -52,7 +52,7 @@ function createLiveSession(deploy: Deploy): Session {
     loadGlue: () => import(/* webpackIgnore: true */ /* turbopackIgnore: true */ GLUE_PATH) as Promise<VerifierModule>,
   });
   if (deploy.chainId === null || deploy.vault === null) throw new Error("A live session needs the deployment's chain id and vault.");
-  const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, add: deploy.rpcUrl === null ? null : { name: `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
+  const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, add: deploy.rpcUrl === null ? null : { name: deploy.chainId === 31337 ? "Anvil (local)" : `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   // The SDK is a separate chunk, loaded when the user picks WalletConnect.
   // When the wallet app ends the session, the console shows the wallet disconnected rather than failing every action.

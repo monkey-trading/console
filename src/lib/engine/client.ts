@@ -1,6 +1,8 @@
 /** The interface the console talks to an engine node through: the in-browser mock or the live client. */
 
 import type { AttestationStatus, FeedStatus } from "./attestation";
+import type { ScanBudget, ScannedMark } from "./live-marks";
+import type { SessionRule } from "./mark-session";
 import type { ScanResult } from "./live-scan";
 import type { QuoteRequest } from "./live-stream";
 import type {
@@ -15,6 +17,7 @@ import type {
   MarketQuote,
   MarketView,
   OrderRequest,
+  PriceRules,
   Reject,
   SignedWithdrawal,
   StreamMessage,
@@ -80,6 +83,8 @@ export interface EngineClient {
   readonly signatures: SignatureChecks;
   /** The custody chain and vault every signature names. */
   readonly deployment: { chainId: number; vault: string };
+  /** The log head seq of the node's last signed answer; null before the first answer that names one. */
+  readonly headSeq: number | null;
   attestation(): Promise<Attestation>;
   /** Judges the node's attestation; a live client does so again whenever the enclave changes. */
   verify(): Promise<AttestationStatus>;
@@ -106,6 +111,13 @@ export interface EngineClient {
   reissue(account: Address, nonce: number, body: { replaces_expires_at: number; signature: string }): Promise<void>;
   /** Payout `nonce`'s latest authorization in the log after seq `fromSeq`, and whether the read reached the head. */
   findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<ScanResult>;
+  /**
+   * Reads the log from seq `fromSeq` for the index marks the chart backfills with, stopping at the
+   * head or `budget`, and resolving with the marks kept even when the read stopped short. `sessions`
+   * holds each market's session rule, which drops quotes the engine rejects outside an open session.
+   * A client whose node holds no log to scan answers none.
+   */
+  scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>, dead?: () => boolean): Promise<ScannedMark[]>;
   /** Asks for the account's executable quotes in up to four markets, or for none; they arrive through `watch`. */
   quotes(request: QuoteRequest | null): void;
   withdrawalQueue(address: Address): Promise<WithdrawalPage>;

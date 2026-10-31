@@ -26,7 +26,7 @@ const MARGIN_MAJOR = tiers([[500_000, 100], [2_000_000, 300], [null, 800]]);
 const MARGIN_INDEX = tiers([[250_000, 200], [1_000_000, 500], [null, 1_000]]);
 const SPREAD_BANDS = tiers([[250_000, 0], [1_000_000, 3], [null, 8]]);
 
-const COMMON = { house_cap_bps: 500, max_slippage_bps: 50, min_order_notional: "100" } as const;
+const COMMON = { house_cap_bps: 500, max_slippage_bps: 50, min_order_notional: "100", price_rules: { max_age_ms: 5_000, max_divergence_bps: 50, min_sources: 1 } } as const;
 
 export const MARKETS: readonly ListedMarket[] = [
   {

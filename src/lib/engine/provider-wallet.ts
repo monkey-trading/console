@@ -13,9 +13,9 @@ import type { TypedRequest } from "./eip712";
 import type { Address, SignedWithdrawal } from "./types";
 import type { Progress, SignRequest, Wallet } from "./wallet";
 
-/** The part of an EIP-1193 provider the wallet uses. */
+/** The part of an EIP-1193 provider the wallet uses. Most methods take an array; `wallet_watchAsset` takes its `{ type, options }` object directly. */
 export interface Eip1193Provider {
-  request(args: { method: string; params?: readonly unknown[] }): Promise<unknown>;
+  request(args: { method: string; params?: readonly unknown[] | { type: string; options: Record<string, unknown> } }): Promise<unknown>;
 }
 
 /** The deployment the wallet acts on. */
@@ -50,6 +50,8 @@ const VAULT = parseAbi([
 /** EIP-1193's code for a request the user rejected, and EIP-3085's for a chain the wallet does not know. */
 const USER_REJECTED = 4001;
 const UNKNOWN_CHAIN = 4902;
+/** Some wallets answer an unknown chain as a JSON-RPC server error instead of EIP-3085's 4902. */
+const SERVER_ERROR = -32603;
 /** How often, and how many times, the wallet polls for a transaction's receipt. */
 const RECEIPT_POLL_MS = 1_000;
 const RECEIPT_POLLS = 180;
@@ -69,6 +71,15 @@ function walletError(error: unknown, action: string): Error {
   if (errorCode(error) === USER_REJECTED) return new Error(`You declined to ${action} in your wallet.`, { cause: error });
   const detail = error instanceof Error ? error.message : typeof error === "object" && error !== null && "message" in error ? String(error.message) : String(error);
   return new Error(`Your wallet could not ${action}: ${detail}`, { cause: error });
+}
+
+/** Whether a chain-switch refusal says the wallet does not know the chain: EIP-3085's 4902, or a -32603 whose message names the chain and reports it unrecognized or unknown, which some wallets answer instead. A generic failure that says neither is a refusal, not an unknown chain. */
+function unknownChain(error: unknown): boolean {
+  const code = errorCode(error);
+  if (code === UNKNOWN_CHAIN) return true;
+  if (code !== SERVER_ERROR) return false;
+  const detail = error instanceof Error ? error.message : typeof error === "object" && error !== null && "message" in error ? String(error.message) : "";
+  return /chain/i.test(detail) && /unrecognized|unknown/i.test(detail);
 }
 
 /** USDC base units for `amount`, which must be a whole number of them. */
@@ -97,7 +108,8 @@ export class ProviderWallet implements Wallet {
 
   /**
    * Puts the wallet on the deployment's chain, offering to add a chain it does not know when the
-   * build names its RPC URL.
+   * build names its RPC URL. A wallet that answers an unknown chain with a plain server error (-32603)
+   * is offered the chain the same way as one that answers EIP-3085's 4902.
    * Error cases:
    * - the user declines, or the wallet stays on another chain
    */
@@ -108,16 +120,35 @@ export class ProviderWallet implements Wallet {
     try {
       await this.provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] });
     } catch (error) {
-      if (errorCode(error) !== UNKNOWN_CHAIN || this.chain.add === null) throw walletError(error, `switch to chain ${this.chain.chainId}`);
+      if (!unknownChain(error) || this.chain.add === null) throw walletError(error, `switch to chain ${this.chain.chainId}`);
       const { name, rpcUrl } = this.chain.add;
       try {
         await this.provider.request({ method: "wallet_addEthereumChain", params: [{ chainId, chainName: name, rpcUrls: [rpcUrl], nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 } }] });
       } catch (cause) {
         throw walletError(cause, `add chain ${this.chain.chainId}`);
       }
+      // Adding a chain does not always move the wallet onto it; the chain read below decides.
+      await this.provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] }).catch(() => undefined);
     }
     const after = Number(await this.provider.request({ method: "eth_chainId" }));
     if (after !== this.chain.chainId) throw new Error(`Your wallet is on chain ${after}; switch it to chain ${this.chain.chainId} to continue.`);
+  }
+
+  /**
+   * Offers to add the vault's USDC token to the wallet so its balance shows there; resolves true
+   * only when the wallet added it. Best-effort: a wallet without `wallet_watchAsset`, a user who
+   * declines, or a wallet that answers false resolves false and nothing else changes.
+   */
+  async suggestUsdc(): Promise<boolean> {
+    const usdc = this.chain.usdc;
+    if (usdc === null) return false;
+    await this.ensureChain();
+    try {
+      const added: unknown = await this.provider.request({ method: "wallet_watchAsset", params: { type: "ERC20", options: { address: usdc, symbol: "USDC", decimals: 6 } } });
+      return added === true;
+    } catch {
+      return false;
+    }
   }
 
   /**

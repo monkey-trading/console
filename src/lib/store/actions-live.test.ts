@@ -12,7 +12,8 @@ import { fixedFromInt, fixedFromWire } from "../fixed";
 import { settle } from "../engine/test-kit";
 import type { Wallet } from "../engine/wallet";
 import { attestEligibility, cancelOrder, connectWallet, deposit, disconnectWallet, placeOrder, REQUEST_TTL_MS, withdraw } from "./actions";
-import { connected, NODE_TIME, signerOf, VAULT } from "./live-kit";
+import { connected, NODE_TIME, signerOf, VAULT, ActionClient, BTC } from "./live-kit";
+import { ConsoleStore } from "./store";
 
 const DOMAIN = requestDomain(vectors.chain_id, VAULT);
 
@@ -145,5 +146,22 @@ describe("a wallet change", () => {
     disconnectWallet(store);
     await settle();
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The wallet's session did not close: offline");
+  });
+
+  it("offers to add the deployment's USDC once connected, toasting only when the wallet adds it", async () => {
+    const stub = (suggestUsdc: () => Promise<boolean>): Wallet => ({ address: ACCOUNT, label: "Test wallet", suggestUsdc, sign: async () => "0x", deposit: async () => "0x0", claim: async () => "0x0" });
+    const offering = (suggestUsdc: () => Promise<boolean>) =>
+      new ConsoleStore({
+        client: new ActionClient(), wallets: { options: [], connect: async () => stub(suggestUsdc) }, history: () => [],
+        initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 },
+      });
+    const store = offering(async (): Promise<boolean> => true);
+    await connectWallet(store, "browser");
+    await settle();
+    expect(store.getSnapshot().toasts).toContainEqual({ id: expect.any(Number), tone: "info", text: "USDC was added to your wallet, so its balance shows there." });
+    const declined = offering(async (): Promise<boolean> => false);
+    await connectWallet(declined, "browser");
+    await settle();
+    expect(declined.getSnapshot().toasts.some((t) => t.text.includes("USDC"))).toBe(false);
   });
 });
