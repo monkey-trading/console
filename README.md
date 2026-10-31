@@ -100,9 +100,15 @@ not expose the mock entry point there (the served package still exports it); wit
 `scripts/dev-live-client.sh` (Node, `curl`, and `ENGINE_DIR`, the engine checkout, with `ENGINE_BIN`
 or Cargo) starts a dev node and runs the live client in Node against it through a tampering proxy,
 checking that a flipped byte, a replayed response, a dropped stream frame and a mock attestation in
-a production build are each refused. It does not exercise the browser build: how the page loads the
-verifier, and its Content Security Policy, are checked by running `npm run dev:live`, or a
-production build with the same variables, against a node.
+a production build are each refused. `scripts/dev-trading.sh` (the same needs, and the internet for
+the node's Roughtime servers) starts a private dev node on mock custody with EIP-712 client auth
+and trades against it through the console's store and actions: it funds a fixed-key wallet through
+the mock-custody dev endpoint, declares eligibility, fills a market order at the streamed
+executable quote sent as the quoted price with a slippage bound, rests and cancels a limit order,
+closes a position reduce only at the streamed closing price, and is closed out when the operator's
+upsert-market raises the margin tier past its equity. It does not exercise the browser build: how
+the page loads the verifier, and its Content Security Policy, are checked by running `npm run
+dev:live`, or a production build with the same variables, against a node.
 
 ### Updating the verifier
 
