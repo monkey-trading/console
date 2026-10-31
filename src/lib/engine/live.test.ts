@@ -139,7 +139,7 @@ describe("the other reads", () => {
 describe("the marks history route", () => {
   it("requests the window's page with its query and returns the parsed marks", async () => {
     const { node, client } = setup({ verifier: acceptAll });
-    const page = { entries: [{ t_ms: 1_000, mid: "100", provenance: "log_derived" }, { t_ms: 2_000, mid: "101", provenance: "seeded_from_provider" }], next_from_ms: 3_000 };
+    const page = { entries: [{ ts: 1_000, open: "100", high: "102", low: "99", close: "101", provenance: "log_derived" }, { ts: 2_000, open: "101", high: "103", low: "100", close: "102", provenance: "seeded_from_provider" }], next: 3_000 };
     node.signed("/v1/markets/7/marks?resolution=1m&from_ms=0&to_ms=5000", () => ({ status: 200, body: JSON.stringify(page), signature: "0x", timeMs: markets.time_ms, seq: 1 }));
     await expect(client.marks(7, "1m", 0, 5_000)).resolves.toEqual(page);
     expect(node.requests.map((r) => r.path)).toContain("/v1/markets/7/marks?resolution=1m&from_ms=0&to_ms=5000");

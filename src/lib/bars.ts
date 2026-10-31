@@ -98,7 +98,11 @@ export function seedBars(seed: number, endMs: number, endPrice: number, seconds:
   });
 }
 
-/** Bars of `seconds` built from chronological marks, for the chart's history read. */
+/**
+ * Bars of `seconds` built from chronological marks, for the chart's archive-scan history: the scan
+ * reads `{ts, mid}` marks from the signed log, while the marks endpoint's OHLC candles fold through
+ * `barsFromCandles` below.
+ */
 export function barsFromMarks(marks: readonly { ts: number; mid: number }[], seconds: number): Bar[] {
   let out: Bar[] = [];
   for (const mark of marks) out = pushTick(out, mark.ts, mark.mid, seconds);
