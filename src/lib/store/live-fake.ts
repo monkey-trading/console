@@ -55,6 +55,9 @@ export class FakeClient implements EngineClient {
   /** When set, the queue totals read rejects with it, as a failing node answers. */
   totalsError: Error | null = null;
   async houseParams() { return this.params; }
+  /** What the store told the client about the log read, oldest first. */
+  houseLogOpen: boolean[] = [];
+  setHouseLogOpen(open: boolean) { this.houseLogOpen.push(open); }
   async latestCheckpoint() { return this.checkpoint; }
   logStatus: "current" | "reading" | "failed" = "reading";
   async houseLogStatus() { return this.logStatus; }

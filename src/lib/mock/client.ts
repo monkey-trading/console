@@ -125,6 +125,8 @@ export class MockEngineClient implements EngineClient {
   }
 
   /** The solvency parameters in force, as the mock's launch genesis set them. */
+  setHouseLogOpen(): void {}
+
   async houseParams(): Promise<HouseParams> {
     return this.state.params;
   }

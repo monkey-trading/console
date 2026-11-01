@@ -6,10 +6,13 @@
  * figure from an answer the node's enclave signed, refreshed on the stream's cadence.
  */
 
+import { useEffect } from "react";
+
 import { signBlock } from "@/lib/engine/attestation";
 import { formatRate } from "@/lib/format";
 import { formatUsd } from "@/lib/fixed";
 import { capFor, utilBps, type HouseParams } from "@/lib/house";
+import { openHousePanel } from "@/lib/store/house";
 
 import { HouseCaps } from "./HouseCaps";
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -49,7 +52,9 @@ function freshnessNote(params: HouseParams): string {
 /** The House solvency screen. */
 export function HousePage() {
   const state = useConsole();
-  const { signatures } = useSession().store.deps.client;
+  const { store } = useSession();
+  const { signatures } = store.deps.client;
+  useEffect(() => openHousePanel(store), [store]);
   const block = signBlock(state.attestation, state.stream);
   const ready = block === null && state.houseReady;
   const house = state.house;

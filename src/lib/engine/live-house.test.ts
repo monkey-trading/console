@@ -193,3 +193,59 @@ describe("the house log fold", () => {
     expect(log.params?.profitFeeBps).toBe(1000);
   });
 });
+
+describe("pausing the house log", () => {
+  const stuck = () => {
+    const runs: { from: number; finish: (result: Awaited<ReturnType<ConstructorParameters<typeof HouseLog>[0]>>) => void }[] = [];
+    const log = new HouseLog((from) => new Promise((resolve) => { runs.push({ from, finish: resolve }); }), () => 0);
+    return { log, runs };
+  };
+  const chunk = (seq: number) => ({ params: null, paramsSeq: null, checkpoint: null, complete: false, last: [seq, 0] as [number, number] });
+
+  it("starts no read while paused", async () => {
+    const { log, runs } = stuck();
+    log.pause();
+    log.kick();
+    await settle();
+    expect(runs).toHaveLength(0);
+  });
+
+  it("stands a running read down at its chunk's end, and resumes from the last position it kept", async () => {
+    const { log, runs } = stuck();
+    log.kick();
+    await settle();
+    runs[0]?.finish(chunk(500));
+    await settle();
+    expect(runs.map((r) => r.from)).toEqual([0, 500]);
+    log.pause();
+    runs[1]?.finish(chunk(900));
+    await settle();
+    expect(runs).toHaveLength(2); // no chunk after the pause
+    log.resume();
+    log.kick();
+    await settle();
+    expect(runs.map((r) => r.from)).toEqual([0, 500, 500]); // a stood-down chunk's reach is not trusted
+  });
+
+  it("does not restart on a stream reconnect while paused", async () => {
+    const { log, runs } = stuck();
+    log.kick();
+    await settle();
+    log.pause();
+    log.uncaught();
+    runs[0]?.finish(chunk(500));
+    await settle();
+    expect(runs).toHaveLength(1);
+  });
+
+  it("starts the next read when resumed while a stood-down chunk is still finishing", async () => {
+    const { log, runs } = stuck();
+    log.kick();
+    await settle();
+    log.pause();
+    log.resume();
+    runs[0]?.finish(chunk(500));
+    await settle();
+    expect(runs).toHaveLength(2);
+  });
+});
