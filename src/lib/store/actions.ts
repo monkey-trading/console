@@ -11,7 +11,7 @@ import { fixedToWire, formatFixedPlaces, parseFixed, type Fixed } from "../fixed
 import { formatUsdc } from "../vault";
 import { describeReject } from "../messages";
 import { loadAccount } from "./account";
-import { loginSession, revokeSession, sessionSigned } from "./session";
+import { ensureLogin, revokeSession, sessionSigned } from "./session";
 import { domainOf, errorText, prompting, REQUEST_TTL_MS, signed, usableWallet } from "./signing";
 import type { ConsoleStore } from "./store";
 
@@ -50,9 +50,10 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     const choice = wallet.topic !== undefined ? { kind: "walletconnect" as const, topic: wallet.topic } : optionId === "injected" ? { kind: "injected" as const } : null;
     if (store.deps.persistence !== undefined && choice !== null) saveChoice(store.deps.persistence, choice);
     await loadAccount(store, true);
-    // The one-signature login (console#68): trading signs with the ephemeral key it authorizes; a
-    // decline leaves the wallet connected for deposits, and the first order asks again.
-    if (!wallet.readOnly) await loginSession(store);
+    // The one-signature login (console#68): trading signs with the ephemeral key it authorizes. A
+    // fresh account is not credited yet — the registration refuses silently, and its first deposit's
+    // event runs the login when trading becomes possible.
+    if (!wallet.readOnly) await ensureLogin(store);
     if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);
     return true;
   } catch (error) {

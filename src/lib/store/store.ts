@@ -13,6 +13,7 @@ import { BarsSeed } from "./bars-seed";
 import { FEED_LIMIT, feedFrom, isMine } from "./feed";
 import { initialState, seedAllBars, type ConsoleState, type ToastMessage } from "./state";
 import { readHousePanelSoon } from "./house";
+import { loginOnCredit } from "./session";
 import { noteAccess } from "./signing";
 import type { StoreDeps } from "./store-deps";
 
@@ -23,6 +24,8 @@ export class ConsoleStore {
   /** The ephemeral in-browser key trading signs with after the one-signature login (console#68), and its registration's expiry by the node's clock; the private key never enters the snapshot. */
   sessionKey: SessionKeySigner | null = null;
   sessionKeyExpiresAt = 0;
+  /** The login in flight, so concurrent callers share one attempt and one wallet prompt. */
+  sessionLogin: Promise<boolean> | null = null;
   /** Bookkeeping for the background vault reads: `paidCheck`/`emissionsCheck` name the wallet each runs for, `lastEmissionsReadAt` throttles the MONKEY record's retries, `lastEmissionsReadError` dedupes its repeated failures. */
   paidCheck: Wallet | null = null;
   emissionsCheck: Wallet | null = null;
@@ -40,7 +43,7 @@ export class ConsoleStore {
   private unwatch: (() => void) | null = null;
   /** Seeds the chart's bars from the marks endpoint once per market and timeframe. */
   readonly barsSeed = new BarsSeed(this);
-  /** When each market's bar bucket was last ticked from the node's mark, so a history merge can tell a stale live candle from a fresh one; derived bookkeeping, not part of the snapshot. */
+  /** When each market's bar bucket was last ticked from the node's mark, so a history merge can tell a stale live candle from a fresh one; not part of the snapshot. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
   /** Stand-down flags for pending history work, bumped on each start so an earlier cycle's scans stand down (StrictMode re-runs the effect); not part of the snapshot. */
   stopped = false;
@@ -135,10 +138,7 @@ export class ConsoleStore {
     return noteAccess(this, error);
   }
 
-  /**
-   * Starts following the node at `nowMs`: checks its attestation and access, redraws the charts
-   * from that instant, and subscribes to the stream.
-   */
+  /** Starts following the node at `nowMs`: checks its attestation and access, redraws the charts, and subscribes to the stream. */
   start(nowMs: number): () => void {
     // A restart (React StrictMode re-runs the effect) cancels the previous cycle's pending
     // history work and scans anew: its results were discarded when the cycle stopped.
@@ -228,15 +228,14 @@ export class ConsoleStore {
     // An event for the connected account, from any command, may have changed its history too.
     const mine = this.snapshot.wallet?.address.toLowerCase();
     const own = mine !== undefined && message.events.some((e) => "account" in e && e.account.toLowerCase() === mine);
-    if (own) void this.refresh(true);
-    else if (message.cmd.type === "tick") void this.refresh(message.events.some((e) => "account" in e));
+    if (own) {
+      // A deposit or declaration that credits the account is the moment its one-signature login may run.
+      loginOnCredit(this, message.events, mine);
+      void this.refresh(true);
+    } else if (message.cmd.type === "tick") void this.refresh(message.events.some((e) => "account" in e));
   }
 
-  /**
-   * Re-reads markets, house, and the connected account. A call made while one runs waits for it and
-   * then reads again, since the running read may predate the change that prompted the call. The house
-   * panel's reads are not part of the lock: `readHousePanelSoon` runs them aside.
-   */
+  /** Re-reads markets, house, and the connected account; a call made while one runs waits, then reads again. */
   refresh(accountChanged: boolean): Promise<void> {
     if (this.inflight) {
       this.rerun = { accountChanged: accountChanged || (this.rerun?.accountChanged ?? false) };

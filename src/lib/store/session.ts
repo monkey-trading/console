@@ -8,7 +8,7 @@
 import { EngineError, type ActionResult } from "../engine/client";
 import { registerSessionKeyTypedData, revokeSessionKeyTypedData, type Terms, type TypedRequest } from "../engine/eip712";
 import { SessionKeySigner, sessionKeyExpiry } from "../engine/session-key";
-import type { RequestAuth } from "../engine/types";
+import type { RequestAuth, StreamMessage } from "../engine/types";
 import { UntrustedError } from "../engine/trust";
 import type { Wallet } from "../engine/wallet";
 import { formatStamp } from "../time";
@@ -28,7 +28,8 @@ export function liveSessionKey(store: ConsoleStore): SessionKeySigner | null {
 /**
  * Runs the login once: generates an ephemeral key, asks the wallet for the one `RegisterSessionKey`
  * signature, and posts the registration. False leaves the wallet connected but trading unsigned,
- * with the reason already shown.
+ * with the reason already shown — except for a never-credited account, where the registration is
+ * expected to refuse until the first deposit credits; the login runs then, on the deposit's event.
  */
 export async function loginSession(store: ConsoleStore): Promise<boolean> {
   const wallet = usableWallet(store, "authorize trading");
@@ -64,11 +65,35 @@ export async function loginSession(store: ConsoleStore): Promise<boolean> {
     store.sessionKeyExpiresAt = sessionExpiresAt;
     return true;
   } catch (error) {
+    if (error instanceof EngineError && error.status === 403 && error.message === "account has never been credited") return false; // expected before the first deposit credits; the deposit's event retries
     if (!store.noteAccess(error)) store.toast("error", errorText(error));
     return false;
   } finally {
     store.patch({ busy: false });
   }
+}
+
+/**
+ * The login a caller may kick freely: concurrent calls share one attempt, so two actions at once
+ * never open two wallet prompts. `force` re-runs the login even when a key is live — the node said
+ * the key died, whatever the store's clock thinks.
+ */
+export function ensureLogin(store: ConsoleStore, force = false): Promise<boolean> {
+  if (!force && liveSessionKey(store) !== null) return Promise.resolve(true);
+  store.sessionLogin ??= loginSession(store).finally(() => {
+    store.sessionLogin = null;
+  });
+  return store.sessionLogin;
+}
+
+/**
+ * Runs the login when one of the account's events says it has become credited — its first deposit
+ * or its eligibility declaration — so a fresh account is asked for the one signature at the moment
+ * trading becomes possible, not at every connect.
+ */
+export function loginOnCredit(store: ConsoleStore, events: StreamMessage["events"], mine: string | undefined): void {
+  if (mine === undefined || store.liveWallet === null || store.liveWallet.readOnly === true || liveSessionKey(store) !== null) return;
+  if (events.some((e) => (e.type === "deposited" || e.type === "eligibility_attested") && e.account.toLowerCase() === mine)) void ensureLogin(store);
 }
 
 /**
@@ -110,7 +135,7 @@ export async function sessionSigned(
 ): Promise<Outcome> {
   const wallet = usableWallet(store, "sign");
   if (!wallet) return { ok: false };
-  if (liveSessionKey(store) === null && !(await loginSession(store))) return { ok: false };
+  if (liveSessionKey(store) === null && !(await ensureLogin(store))) return { ok: false };
   const key = liveSessionKey(store);
   if (key === null) return { ok: false };
   store.patch({ busy: true });
@@ -134,7 +159,7 @@ export async function sessionSigned(
         throw new EngineError(error.status, `The node had already used nonce ${next_nonce} for this account, so it did not take this request as sent. If it was sent twice it may have run: check your positions, orders, withdrawals and history before trying again.`);
       }
       // A key the node no longer admits (revoked, expired, or unknown after a restart) re-runs the login once.
-      if (keyDied(error) && (await loginSession(store))) {
+      if (keyDied(error) && (await ensureLogin(store, true))) {
         const fresh = liveSessionKey(store);
         if (fresh !== null) return { ok: true, result: await attempt(fresh, (await store.deps.client.nonce(fresh.address)).next_nonce) };
       }
