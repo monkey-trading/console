@@ -50,14 +50,14 @@ describe("approvals and paid payouts", () => {
     ]);
   });
 
-  it("reads the vault's record only for payouts the page holds an authorization for, once each, and says when the wallet is on another chain", async () => {
+  it("reads the vault's record of every listed approval, once each, and says when the wallet is on another chain", async () => {
     const paid = await connected({ paid: true });
     paid.store.patch({ approvals: [approved(2, 50), approved(1, 40)], authorizations: [signed(1, 2_000_000_000)] });
     await checkPaid(paid.store);
-    expect(paid.store.getSnapshot()).toMatchObject({ paid: [1], unpaid: [] });
-    expect(paid.provider.calls.filter((c) => c.method === "eth_call")).toHaveLength(1);
+    expect(paid.store.getSnapshot()).toMatchObject({ paid: [2, 1], unpaid: [] });
+    expect(paid.provider.calls.filter((c) => c.method === "eth_call")).toHaveLength(2);
     await checkPaid(paid.store);
-    expect(paid.provider.calls.filter((c) => c.method === "eth_call")).toHaveLength(1);
+    expect(paid.provider.calls.filter((c) => c.method === "eth_call")).toHaveLength(2);
     const unpaid = await connected({ paid: false });
     unpaid.store.patch({ approvals: [approved(1, 40)], authorizations: [signed(1, 2_000_000_000)] });
     await checkPaid(unpaid.store);
@@ -73,18 +73,18 @@ describe("approvals and paid payouts", () => {
 
   it("reads each payout once in one run at a time, however often the page asks again, including one that arrives during the run", async () => {
     const { provider, store } = await connected();
-    store.patch({ approvals: [approved(4, 70), approved(3, 60), approved(2, 50), approved(1, 40)], authorizations: [signed(1, 2_000_000_000), signed(2, 2_000_000_000), signed(3, 2_000_000_000)] });
+    store.patch({ approvals: [approved(3, 60), approved(2, 50), approved(1, 40)], authorizations: [signed(1, 2_000_000_000)] });
     // The claims section asks again whenever the unread payouts change; here on every change.
     const stop = store.subscribe(() => {
       const state = store.getSnapshot();
-      if (state.unpaid.length === 1 && state.authorizations.length === 3) store.patch({ authorizations: [...state.authorizations, signed(4, 2_000_000_000)] });
+      if (state.unpaid.length === 1 && state.approvals.length === 3) store.patch({ approvals: [approved(4, 70), ...state.approvals] });
       void checkPaid(store);
     });
     await checkPaid(store);
     await settle();
     stop();
     expect(provider.calls.filter((c) => c.method === "eth_call")).toHaveLength(4);
-    expect(store.getSnapshot().unpaid).toEqual([1, 2, 3, 4]);
+    expect(store.getSnapshot().unpaid).toEqual([3, 4, 2, 1]);
   });
 
   it("reads nothing and reports nothing for a watched account, whose payouts stay unread rather than unpaid", async () => {
@@ -95,6 +95,45 @@ describe("approvals and paid payouts", () => {
     await checkPaid(store);
     expect(store.getSnapshot().toasts).toHaveLength(toasts);
     expect(payoutsOf(store.getSnapshot())[0]).toMatchObject({ read: false, status: { kind: "expired" } });
+  });
+});
+
+describe("payouts after a reload, with no authorization held", () => {
+  it("shows a payout the vault has paid as paid, and one it has not as waiting once that is read", async () => {
+    const paid = await connected({ paid: true });
+    paid.store.patch({ approvals: [approved(1, 40)] });
+    expect(unreadPayouts(paid.store.getSnapshot())).toEqual([1]);
+    expect(payoutsOf(paid.store.getSnapshot())[0]).toMatchObject({ read: false, status: { kind: "waiting" } });
+    await checkPaid(paid.store);
+    expect(payoutsOf(paid.store.getSnapshot())[0]).toMatchObject({ read: true, status: { kind: "paid" } });
+    const unpaid = await connected({ paid: false });
+    unpaid.store.patch({ approvals: [approved(1, 40)] });
+    await checkPaid(unpaid.store);
+    expect(payoutsOf(unpaid.store.getSnapshot())[0]).toMatchObject({ read: true, status: { kind: "waiting" } });
+  });
+
+  it("reads the newest approval first, one read at a time, and reads a nonce again once a failed claim clears it", async () => {
+    const { provider, store } = await connected({ paid: false });
+    store.patch({ approvals: [approved(3, 60), approved(2, 50), approved(1, 40)] });
+    await checkPaid(store);
+    expect(provider.calls.filter((c) => c.method === "eth_call")).toHaveLength(3);
+    // `unpaid` fills in the order the reads settled.
+    expect(store.getSnapshot().unpaid).toEqual([3, 2, 1]);
+    store.patch({ unpaid: [3, 1] });
+    expect(unreadPayouts(store.getSnapshot())).toEqual([2]);
+  });
+
+  it("settles neither way when the vault cannot be read", async () => {
+    const elsewhere = await connected({ paid: true, chainId: 1 });
+    elsewhere.store.patch({ approvals: [approved(1, 40)] });
+    await checkPaid(elsewhere.store);
+    expect(elsewhere.store.getSnapshot()).toMatchObject({ paid: [], unpaid: [] });
+    expect(payoutsOf(elsewhere.store.getSnapshot())[0]).toMatchObject({ read: false, status: { kind: "waiting" } });
+    const watched = await connected();
+    watched.store.liveWallet = await new WatchConnector(() => `?account=${ACCOUNT}`).connect();
+    watched.store.patch({ approvals: [approved(1, 40)] });
+    await checkPaid(watched.store);
+    expect(payoutsOf(watched.store.getSnapshot())[0]).toMatchObject({ read: false, status: { kind: "waiting" } });
   });
 });
 
