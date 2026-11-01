@@ -156,10 +156,13 @@ export class HouseLog {
 
   /**
    * Marks the fold not-current: a new stream connection starts at the live end and can miss log
-   * entries, so the next read resumes catch-up from the last position read and re-reads to the head.
+   * entries, so the next read resumes catch-up from the last position read and re-reads to the
+   * head. A read in flight stands down without claiming completion, since the entries it missed
+   * while the stream reconnects are exactly what it cannot have seen.
    */
   uncaught(): void {
     this.caughtUp = false;
+    this.generation += 1;
   }
 
   /** Stops a running catch-up: its chunks stand down as they finish; the folds are kept. */
@@ -210,8 +213,9 @@ export class HouseLog {
    * passes. A chunk resumes at the last position read, so a sequence's later entries — a command's
    * checkpoint among them — are never skipped. A chunk that fails where the last made no progress
    * is a poisoned position: after a few tries the read gives up, marks itself failed, and waits
-   * before retrying, instead of looping on the node. `cancel` stands the loop down after the chunk
-   * in flight applies what it read.
+   * before retrying, instead of looping on the node. `cancel` and `uncaught` bump a generation the
+   * loop checks between chunks: a read in flight stands down without claiming completion, and the
+   * next read resumes from the cursor.
    * Error cases:
    * - a chunk fails where the read has made no progress, three chunks in a row
    */
@@ -220,6 +224,7 @@ export class HouseLog {
     for (;;) {
       const from = this.last?.[0] ?? 0;
       const result = await this.scanFrom(from, this.last ?? undefined);
+      if (generation !== this.generation) return; // invalidated or cancelled mid-read: the next read resumes from `last`
       if (result.params !== null && result.paramsSeq !== null) this.foldParams(result.paramsSeq, result.params);
       if (result.checkpoint !== null) this.foldCheckpoint(result.checkpoint);
       if (result.complete) {
@@ -229,7 +234,9 @@ export class HouseLog {
         this.caughtUp = true;
         return;
       }
-      const advanced = result.last !== null && (this.last === null || !atOrPast(result.last, this.last));
+      // Strictly forward: `result.last` must be past, not at or before, the cursor — the chunk
+      // resumes at the cursor's sequence, so its first entry repeats it.
+      const advanced = result.last !== null && (this.last === null || !atOrPast(this.last, result.last));
       if (!advanced) {
         if (++this.stallFailures >= 3) throw new Error("Reading the log kept failing at one position.");
       } else {
@@ -237,7 +244,6 @@ export class HouseLog {
         this.stallFailures = 0;
         this.last = result.last;
       }
-      if (generation !== this.generation) return; // cancelled: what the chunk read is kept, and the loop stands down
     }
   }
 }

@@ -50,6 +50,8 @@ export class FakeClient implements EngineClient {
   totalsError: Error | null = null;
   async houseParams() { return this.params; }
   async latestCheckpoint() { return this.checkpoint; }
+  logStatus: "current" | "reading" | "failed" = "reading";
+  async houseLogStatus() { return this.logStatus; }
   async withdrawalTotals() { if (this.totalsError !== null) throw this.totalsError; return this.totals; }
   async account(): Promise<never> { throw this.accountError ?? new EngineError(404, "not found"); }
   async accessProbe() {}

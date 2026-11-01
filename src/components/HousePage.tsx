@@ -91,7 +91,10 @@ export function HousePage() {
             <section aria-labelledby="cap" className={CARD}>
               <h2 id="cap" className={H2}>Exposure against the cap</h2>
               {params === null ? (
-                <p className={P}>The cap&apos;s parameters are read from the node&apos;s public log; that read has not finished.</p>
+                <p className={P}>
+                  The cap&apos;s parameters are read from the node&apos;s public log; that read{" "}
+                  {state.houseStatus === "failed" ? "keeps failing before any have been read." : "has not finished."}
+                </p>
               ) : used === null || totalCap === null ? (
                 <p className={P}>The cap is not positive at the current net asset value, so no utilisation can be stated.</p>
               ) : (
@@ -120,7 +123,7 @@ export function HousePage() {
                 <p className={P}>The queue changed while it was read, so these figures are approximate.</p>
               )}
               <p className={P}>
-                Withdrawals are paid in the order they are asked, each up to the collateral the vault holds; one the vault cannot
+                Withdrawals are paid in the order they are asked, each up to the collateral the vault holds; one that the vault cannot
                 cover yet waits in a public first-in-first-out queue. The node signs no flag that pauses withdrawals:
                 custody-side pauses are the vault contract&apos;s own state, on chain, outside the node&apos;s signed answers.
               </p>
@@ -137,7 +140,10 @@ export function HousePage() {
             <section aria-labelledby="parameters" className={CARD}>
               <h2 id="parameters" className={H2}>Parameters</h2>
               {params === null ? (
-                <p className={P}>The parameters are read from the node&apos;s public log; that read has not finished.</p>
+                <p className={P}>
+                  The parameters are read from the node&apos;s public log; that read{" "}
+                  {state.houseStatus === "failed" ? "keeps failing before any have been read." : "has not finished."}
+                </p>
               ) : (
                 <>
                   <dl className="grid grid-cols-2 gap-4">
@@ -157,7 +163,11 @@ export function HousePage() {
             <section aria-labelledby="checkpoints" className={CARD}>
               <h2 id="checkpoints" className={H2}>Checkpoints</h2>
               {state.checkpoint === null ? (
-                <p className={P}>No checkpoint has been read from the log yet.</p>
+                <p className={P}>
+                  {state.houseStatus === "failed"
+                    ? "The log read keeps failing before any checkpoint has been read."
+                    : "No checkpoint has been read from the log yet."}
+                </p>
               ) : (
                 <>
                   <dl className="grid grid-cols-2 gap-4">

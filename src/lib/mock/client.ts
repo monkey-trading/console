@@ -150,6 +150,11 @@ export class MockEngineClient implements EngineClient {
     return mockCheckpoint(this.headSeq ?? 0);
   }
 
+  /** The mock answers from its state, so its log read is always current. */
+  async houseLogStatus(): Promise<"current" | "reading" | "failed"> {
+    return "current";
+  }
+
   /** The public queue's size, summed from its entries. */
   async withdrawalTotals(): Promise<QueueTotals> {
     return mockTotals(this.state);

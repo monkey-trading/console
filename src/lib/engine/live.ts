@@ -167,6 +167,12 @@ export class LiveEngineClient implements EngineClient {
     return this.houseLog.checkpoint;
   }
 
+  /** The state of the log read feeding the fold. */
+  async houseLogStatus(): Promise<"current" | "reading" | "failed"> {
+    this.houseLog.kick();
+    return this.houseLog.freshness;
+  }
+
 
   async account(address: Address): Promise<AccountView> {
     return (await this.transport.get(`/v1/accounts/${address}`)) as AccountView;
@@ -184,8 +190,6 @@ export class LiveEngineClient implements EngineClient {
   async eligibility(address: Address): Promise<EligibilityView> {
     return (await this.transport.get(`/v1/accounts/${address}/eligibility`)) as EligibilityView;
   }
-
-  /** The engine holds no entitlement for an account it has never allocated one to: a 404, read as null. */
 
   async withdrawalQueue(address: Address): Promise<WithdrawalPage> {
     return (await this.transport.get(`/v1/accounts/${address}/withdrawals`)) as WithdrawalPage;

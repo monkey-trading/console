@@ -44,6 +44,7 @@ export class ActionClient implements EngineClient {
   async house() { return { cash: "0", nav: "0", gross_exposure: "0" }; }
   async houseParams() { return null; }
   async latestCheckpoint() { return null; }
+  async houseLogStatus() { return "reading" as const; }
   async withdrawalTotals() { return { count: 0, remaining: 0n, seq: null, complete: true, stable: true }; }
   async account(): Promise<never> { throw new EngineError(404, "not found"); }
   async accessProbe() {}

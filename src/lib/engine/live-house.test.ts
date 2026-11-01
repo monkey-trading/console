@@ -1,135 +1,12 @@
-/** Tests for the one-off signed log scan that reads the house's parameters and the latest checkpoint from the log, and the live client's folds of them. */
+/** Tests for the house log fold's lifecycle and the live client's folds of it. */
 
 import { describe, expect, it } from "vitest";
 
 import { LiveEngineClient } from "./live";
-import { HouseLog, scanHouse, type HouseScanBudget } from "./live-house";
+import { HouseLog, scanHouse } from "./live-house";
+import { checkpoint, command, conflict, frame, PARAMS_FIELDS, SET_PARAMS } from "./live-house-kit";
 import { acceptAll, FakeNode, FakeScheduler, FakeSocket, settle } from "./test-kit";
 import { VECTORS, vectorResponse } from "./test-vectors";
-
-const conflict = vectorResponse("nonce conflict");
-const frame = (n: number, msg: object) => JSON.stringify({ v: 1, n, time: 1_000, msg: JSON.stringify(msg), sig: "0x00" });
-
-const SET_PARAMS = { action: "set_params", profit_fee_bps: 1000, closeout_level_bps: 5000, house_total_cap_bps: 20000, house_total_cap_floor: "2000000" };
-const PARAMS_FIELDS = { profit_fee_bps: 1000, closeout_level_bps: 5000, house_total_cap_bps: 20000, house_total_cap_floor: "2000000" };
-
-const command = (seq: number, cmd: object, events: object[] = []) => ({ offset: `${seq}:0`, type: "command", seq, ts: 1_000, cmd, events });
-const checkpoint = (seq: number, index = 1) => ({ type: "checkpoint", offset: `${seq}:${index}`, seq, root: `0x${"ab".repeat(32)}` });
-
-const BUDGET: HouseScanBudget = { maxMessages: 100, maxMs: 30_000 };
-
-function scanning(sockets: FakeSocket[]) {
-  const scheduler = new FakeScheduler();
-  const deps = {
-    origin: "wss://node.test", chainId: 31337, vault: conflict.vault, signer: VECTORS.signer, verifier: acceptAll,
-    openSocket: (url: string) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
-    scheduler, challenge: () => "ab".repeat(32),
-  };
-  const run = (fromSeq: number, budget: HouseScanBudget = BUDGET, skipPast?: [number, number]) => scanHouse(deps, fromSeq, budget, skipPast);
-  return { run, scheduler };
-}
-
-describe("scanning the log for the house's state", () => {
-  it("opens from the seq given, folds the latest applied set_params of either log shape and the latest checkpoint, and ends at the head a heartbeat names", async () => {
-    const sockets: FakeSocket[] = [];
-    const { run } = scanning(sockets);
-    const found = run(40);
-    await Promise.resolve();
-    const socket = sockets[0];
-    if (!socket) throw new Error("no socket");
-    expect(socket.url).toBe(`wss://node.test/v1/stream?signed=1&challenge=${"ab".repeat(32)}&from=40`);
-    socket.receive(frame(0, { type: "heartbeat", head: "45:0" }));
-    socket.receive(frame(1, command(40, { type: "admin", ...SET_PARAMS, profit_fee_bps: 1500 })));
-    socket.receive(frame(2, checkpoint(41)));
-    socket.receive(frame(3, command(42, { type: "signed_admin", command: SET_PARAMS })));
-    socket.receive(frame(4, checkpoint(43)));
-    let settled = false;
-    void found.then(() => { settled = true; });
-    await Promise.resolve();
-    expect(settled).toBe(false);
-    socket.receive(frame(5, command(45, { type: "tick" })));
-    socket.receive(frame(6, { type: "heartbeat", head: "45:0" }));
-    await expect(found).resolves.toEqual({
-      params: PARAMS_FIELDS,
-      paramsSeq: 42,
-      checkpoint: checkpoint(43),
-      complete: true,
-      last: [45, 0],
-    });
-    expect(socket.closed).toBe(true);
-  });
-
-  it("ignores a set_params the engine rejected, whose values never applied", async () => {
-    const sockets: FakeSocket[] = [];
-    const { run } = scanning(sockets);
-    const found = run(40);
-    await Promise.resolve();
-    const socket = sockets[0];
-    if (!socket) throw new Error("no socket");
-    socket.receive(frame(0, command(40, { type: "admin", ...SET_PARAMS, profit_fee_bps: 1500 })));
-    socket.receive(frame(1, command(41, { type: "signed_admin", command: SET_PARAMS }, [{ type: "admin_rejected", reason: "out of bounds" }])));
-    socket.receive(frame(2, { type: "heartbeat", head: "41:0" }));
-    await expect(found).resolves.toMatchObject({ params: { ...PARAMS_FIELDS, profit_fee_bps: 1500 }, paramsSeq: 40, complete: true });
-  });
-
-  it("stops at the message budget and answers with what it found, marked incomplete from the last entry read", async () => {
-    const sockets: FakeSocket[] = [];
-    const { run } = scanning(sockets);
-    const found = run(40, { ...BUDGET, maxMessages: 2 });
-    await Promise.resolve();
-    sockets[0]?.receive(frame(0, command(40, { type: "admin", ...SET_PARAMS })));
-    sockets[0]?.receive(frame(1, checkpoint(41)));
-    sockets[0]?.receive(frame(2, command(42, { type: "tick" })));
-    await expect(found).resolves.toEqual({
-      params: PARAMS_FIELDS,
-      paramsSeq: 40,
-      checkpoint: checkpoint(41),
-      complete: false,
-      last: [41, 1],
-    });
-  });
-
-  it("resuming at the last sequence with skipPast re-reads it but folds only what follows, so a command's checkpoint is never skipped", async () => {
-    const sockets: FakeSocket[] = [];
-    const { run } = scanning(sockets);
-    const first = run(40, { ...BUDGET, maxMessages: 1 });
-    await Promise.resolve();
-    sockets[0]?.receive(frame(0, command(40, { type: "tick" })));
-    sockets[0]?.receive(frame(1, command(41, { type: "tick" })));
-    await expect(first).resolves.toMatchObject({ complete: false, last: [40, 0] });
-    const second = run(40, BUDGET, [40, 0]);
-    await Promise.resolve();
-    sockets[1]?.receive(frame(0, command(40, { type: "tick" })));
-    sockets[1]?.receive(frame(1, command(41, { type: "admin", ...SET_PARAMS })));
-    sockets[1]?.receive(frame(2, checkpoint(41, 1)));
-    sockets[1]?.receive(frame(3, { type: "heartbeat", head: "41:1" }));
-    await expect(second).resolves.toEqual({ params: PARAMS_FIELDS, paramsSeq: 41, checkpoint: checkpoint(41, 1), complete: true, last: [41, 1] });
-  });
-
-  it("rejects an out-of-order frame, and gives up when the budget's time runs out", async () => {
-    const sockets: FakeSocket[] = [];
-    const { run, scheduler } = scanning(sockets);
-    const broken = run(40);
-    await Promise.resolve();
-    sockets[0]?.receive(frame(1, { type: "heartbeat", head: "45:0" }));
-    await expect(broken).rejects.toThrow("skipped");
-    const slow = run(40);
-    await Promise.resolve();
-    sockets[1]?.receive(frame(0, command(40, { type: "admin", ...SET_PARAMS })));
-    sockets[1]?.receive(frame(1, checkpoint(41)));
-    scheduler.advance(30_000);
-    await expect(slow).resolves.toEqual({ params: PARAMS_FIELDS, paramsSeq: 40, checkpoint: checkpoint(41), complete: false, last: [41, 1] });
-  });
-
-  it("rejects a frame whose checkpoint or command the console does not know", async () => {
-    const sockets: FakeSocket[] = [];
-    const { run } = scanning(sockets);
-    const found = run(40);
-    await Promise.resolve();
-    sockets[0]?.receive(frame(0, { type: "mystery", offset: "40:0" }));
-    await expect(found).rejects.toThrow("does not know");
-  });
-});
 
 describe("the house log fold", () => {
   it("reads in chunks to the head, then stops kicking: a completed catch-up is not restarted by the next read", async () => {
@@ -203,7 +80,65 @@ describe("the house log fold", () => {
     expect(log.params?.fresh).toBe("failed");
   });
 
-  it("stands a running catch-up down when cancelled, keeping what it read and where it stopped", async () => {
+  it("advances the cursor on every incomplete chunk that made progress, across many chunks", async () => {
+    const sockets: FakeSocket[] = [];
+    const scheduler = new FakeScheduler();
+    const log = new HouseLog((fromSeq, skipPast) =>
+      scanHouse({
+        origin: "wss://node.test", chainId: 31337, vault: conflict.vault, signer: VECTORS.signer, verifier: acceptAll,
+        openSocket: (url: string) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
+        scheduler, challenge: () => "ab".repeat(32),
+      }, fromSeq, { maxMessages: 2, maxMs: 30_000 }, skipPast),
+      () => 0,
+    );
+    log.kick();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    // Three advancing chunks: each re-reads the cursor's entry, reads one past it, then its budget cuts it short.
+    sockets[0]?.receive(frame(0, command(0, { type: "admin", ...SET_PARAMS, profit_fee_bps: 500 })));
+    sockets[0]?.receive(frame(1, command(1, { type: "tick" })));
+    sockets[0]?.receive(frame(2, command(2, { type: "tick" })));
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    sockets[1]?.receive(frame(0, command(1, { type: "tick" })));
+    sockets[1]?.receive(frame(1, command(2, { type: "tick" })));
+    sockets[1]?.receive(frame(2, command(3, { type: "tick" })));
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(sockets).toHaveLength(3);
+    sockets[2]?.receive(frame(0, command(2, { type: "tick" })));
+    sockets[2]?.receive(frame(1, command(3, { type: "admin", ...SET_PARAMS, profit_fee_bps: 750 })));
+    sockets[2]?.receive(frame(2, { type: "heartbeat", head: "3:0" }));
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(log.params?.fresh).toBe("current");
+    expect(log.params?.profitFeeBps).toBe(750);
+  });
+
+  it("an uncaught during a read keeps the fold not-current: the read in flight cannot claim completion", async () => {
+    const sockets: FakeSocket[] = [];
+    const scheduler = new FakeScheduler();
+    const log = new HouseLog((fromSeq, skipPast) =>
+      scanHouse({
+        origin: "wss://node.test", chainId: 31337, vault: conflict.vault, signer: VECTORS.signer, verifier: acceptAll,
+        openSocket: (url: string) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
+        scheduler, challenge: () => "ab".repeat(32),
+      }, fromSeq, { maxMessages: 50, maxMs: 30_000 }, skipPast),
+      () => 0,
+    );
+    log.kick();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    sockets[0]?.receive(frame(0, command(0, { type: "admin", ...SET_PARAMS })));
+    log.uncaught(); // as a stream failure does: the chunk in flight must not restore "current"
+    sockets[0]?.receive(frame(1, { type: "heartbeat", head: "0:0" }));
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(log.freshness).toBe("reading");
+    // The next read resumes catch-up and only then counts the fold current.
+    log.kick();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    sockets[1]?.receive(frame(0, command(0, { type: "admin", ...SET_PARAMS })));
+    sockets[1]?.receive(frame(1, { type: "heartbeat", head: "0:0" }));
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(log.params?.fresh).toBe("current");
+  });
+
+  it("stands a running catch-up down when cancelled: the read in flight claims nothing, and the next read resumes it", async () => {
     const sockets: FakeSocket[] = [];
     const scheduler = new FakeScheduler();
     const log = new HouseLog((fromSeq, skipPast) =>
@@ -224,11 +159,15 @@ describe("the house log fold", () => {
     for (let i = 0; i < 20; i++) await Promise.resolve();
     expect(sockets[0]?.closed).toBe(true);
     expect(sockets).toHaveLength(1);
-    // The fold keeps what the chunk read, and the loop stands down until the next read resumes it.
-    expect(log.params?.profitFeeBps).toBe(1000);
+    // The cancelled chunk claimed nothing; the next read resumes from where the read stood.
+    expect(log.params).toBeNull();
     log.kick();
     for (let i = 0; i < 20; i++) await Promise.resolve();
     expect(sockets).toHaveLength(2);
+    sockets[1]?.receive(frame(0, command(0, { type: "admin", ...SET_PARAMS })));
+    sockets[1]?.receive(frame(1, { type: "heartbeat", head: "0:0" }));
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(log.params?.profitFeeBps).toBe(1000);
   });
 });
 

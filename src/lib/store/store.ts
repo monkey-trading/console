@@ -44,10 +44,14 @@ export class ConsoleStore {
   private trustLost = false;
   /** The last read failure shown, so a failure that repeats on every tick is shown once. */
   private lastReadError: string | null = null;
-  /** The house panel read in flight, so a slow queue walk never queues behind another. Not part of the snapshot. */
+  /** The house panel's log read in flight, so a slow read never queues behind another. Not part of the snapshot. */
   houseRead: Promise<void> | null = null;
-  /** The last house panel read failure shown, deduplicated like the main read's. Not part of the snapshot. */
+  /** The house panel's queue walk in flight, guarded apart from the log reads. Not part of the snapshot. */
+  queueRead: Promise<void> | null = null;
+  /** The last log read failure shown, deduplicated like the main read's. Not part of the snapshot. */
   lastHouseReadError: string | null = null;
+  /** The last queue walk failure shown, deduplicated like the main read's. Not part of the snapshot. */
+  lastQueueReadError: string | null = null;
 
   constructor(deps: StoreDeps) {
     this.deps = deps;

@@ -50,6 +50,15 @@ describe("the store's house panel state", () => {
     expect(store.getSnapshot().houseParams).toEqual(PARAMS);
   });
 
+  it("publishes the log read's failure state before any parameters have been read", async () => {
+    const { client, store } = setup();
+    client.logStatus = "failed";
+    store.start(0);
+    await settle();
+    expect(store.getSnapshot().houseStatus).toBe("failed");
+    expect(store.getSnapshot().houseParams).toBeNull();
+  });
+
   it("publishes the parameters and checkpoint when the queue walk fails", async () => {
     const { client, store } = setup();
     client.params = PARAMS;

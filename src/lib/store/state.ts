@@ -66,6 +66,8 @@ export interface ConsoleState {
   houseParams: HouseParams | null;
   /** The latest checkpoint the log records; null before one has been read. */
   checkpoint: CheckpointEntry | null;
+  /** The state of the log read the parameters and checkpoint come from. */
+  houseStatus: "current" | "reading" | "failed";
   /** The public FIFO withdrawal queue's size; null before the first read. */
   withdrawalTotals: QueueTotals | null;
   wallet: { address: string; label: string; readOnly?: boolean } | null;
@@ -147,6 +149,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     houseReady: signatures === "none",
     houseParams: housePanel?.params ?? null,
     checkpoint: housePanel?.checkpoint ?? null,
+    houseStatus: signatures === "none" ? "current" : "reading",
     withdrawalTotals: housePanel?.totals ?? null,
     wallet: null,
     eligibility: null,
