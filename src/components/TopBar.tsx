@@ -1,6 +1,9 @@
 "use client";
 
-/** The workspace's top strip: brand, account summary, funding, wallet, node clock and mock controls. */
+/** The workspace's top strip: brand, account summary, funding, the house page, wallet, node clock and mock controls. */
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 import { formatFixedPlaces, type Fixed } from "@/lib/fixed";
 import { formatMonkey } from "@/lib/format";
@@ -17,6 +20,7 @@ const BUTTON = "min-h-11 rounded border border-edge px-2.5 py-2 sm:px-3 lg:min-h
 export function TopBar() {
   const { account, now, paused, blocked, entitlement } = useConsole();
   const { store, node } = useSession();
+  const pathname = usePathname();
   const free = account ? account.equity - account.margin : 0n;
   const stats: [string, string, string][] = [
     ["Equity", account ? usd(account.equity) : "—", ""],
@@ -44,6 +48,7 @@ export function TopBar() {
           Node clock <span aria-hidden="true" className="text-fg-2">{now === 0 ? "—" : `${formatClock(now)} UTC`}</span>
         </span>
         {node && <button type="button" onClick={() => store.setPaused(!paused)} className={BUTTON}>{paused ? "Play" : "Pause"}<span className="sr-only"> the simulation</span></button>}
+        <Link href="/house" aria-current={pathname === "/house" ? "page" : undefined} className={`${BUTTON} inline-block`}>House</Link>
         <button type="button" disabled={blocked !== null} onClick={() => store.setFundingOpen(true)} className={`${BUTTON} disabled:opacity-40`}>Funding</button>
         <WalletButton />
         <MockControls />

@@ -58,11 +58,13 @@ export interface QuoteError {
 /** A signed withdrawal entry of the log, at its offset. */
 export type WithdrawalEntry = SignedWithdrawal & { type: "withdrawal"; offset: string };
 
-/** A signed checkpoint entry of the log; the console reads only where it sits. */
+/** A signed checkpoint entry of the log; the console reads where it sits and the root it commits to. */
 export interface CheckpointEntry {
   type: "checkpoint";
   offset: string;
   seq: number;
+  /** The 0x-prefixed keccak-256 state root the enclave signed at `seq`. */
+  root: string;
 }
 
 export type FrameMessage = StreamMessage | Heartbeat | MarketQuote | QuoteError | WithdrawalEntry | CheckpointEntry;

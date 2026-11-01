@@ -5,9 +5,12 @@ import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { SignatureChecks } from "../engine/client";
 import type { EntitlementProof } from "../engine/emissions";
 import type { HistoryEvent, HouseView, QueuedWithdrawal, SignedWithdrawal, MarketId, MarketQuote, MarketView } from "../engine/types";
+import type { CheckpointEntry } from "../engine/wire";
+import type { HouseParams, QueueTotals } from "../house";
 import type { MarkProvenance } from "../engine/mark-types";
 import { fixedToNumber } from "../fixed";
 import { decodeHouse, decodeMarket, type AccountModel, type Eligibility, type HouseModel, type MarketModel } from "../models";
+import type { HousePanelInit } from "./store-deps";
 
 export type BlockReason = "united_states" | "sanctioned_jurisdiction";
 
@@ -57,6 +60,14 @@ export interface ConsoleState {
   timeframe: TimeframeId;
   selected: MarketId;
   house: HouseModel;
+  /** Whether a verified house answer has been read; false for a live node before its first read, so no placeholder renders as a figure. */
+  houseReady: boolean;
+  /** The latest `set_params` the log records, from a bounded read of the signed log; null before one has been found. */
+  houseParams: HouseParams | null;
+  /** The latest checkpoint the log records; null before one has been read. */
+  checkpoint: CheckpointEntry | null;
+  /** The public FIFO withdrawal queue's size; null before the first read. */
+  withdrawalTotals: QueueTotals | null;
   wallet: { address: string; label: string; readOnly?: boolean } | null;
   eligibility: Eligibility;
   account: AccountModel | null;
@@ -116,12 +127,14 @@ export function seedAllBars(markets: readonly MarketModel[], startMs: number, hi
   return out;
 }
 
-/** The state before anything has loaded, from the first `GET /v1/markets` and `/v1/house`. */
-export function initialState(markets: MarketView[], house: HouseView, startMs: number, history: HistorySource, signatures: SignatureChecks): ConsoleState {
+/** The state before anything has loaded, from the first `GET /v1/markets` and `/v1/house`; `housePanel` seeds the House page's state where the session read it synchronously (the mock). */
+export function initialState(markets: MarketView[], house: HouseView, startMs: number, history: HistorySource, signatures: SignatureChecks, housePanel?: HousePanelInit): ConsoleState {
   const models = markets.map((view) => decodeMarket(view, undefined, signatures === "none"));
   return {
     now: startMs,
-    attestation: { kind: "checking" },
+    // A mock build always accepts the mock's own quote, so the session starts attested; a live
+    // node starts unchecked, and nothing renders until its check passes.
+    attestation: signatures === "none" ? { kind: "mock" } : { kind: "checking" },
     stream: signatures === "none" ? "live" : "connecting",
     signatures,
     blocked: null,
@@ -131,6 +144,10 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     timeframe: DEFAULT_TIMEFRAME,
     selected: models[0]?.id ?? 1,
     house: decodeHouse(house),
+    houseReady: signatures === "none",
+    houseParams: housePanel?.params ?? null,
+    checkpoint: housePanel?.checkpoint ?? null,
+    withdrawalTotals: housePanel?.totals ?? null,
     wallet: null,
     eligibility: null,
     account: null,

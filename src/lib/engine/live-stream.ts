@@ -5,7 +5,7 @@ import { CLOCK_TOLERANCE_MS } from "./transport";
 import type { NodeTrust } from "./trust";
 import type { Address, MarketId, MarketQuote, SignedWithdrawal, StreamMessage } from "./types";
 import type { Verifier } from "./verifier";
-import { parseFrameMessage, parseSignedFrame } from "./wire";
+import { parseFrameMessage, parseSignedFrame, type CheckpointEntry } from "./wire";
 
 /** The feed is stale after this many heartbeat intervals without a valid frame. */
 export const STALE_AFTER_INTERVALS = 3;
@@ -46,6 +46,8 @@ export interface StreamDeps {
   onQuoteError(error: string): void;
   /** A signed withdrawal authorization, for any account. */
   onWithdrawal(withdrawal: SignedWithdrawal): void;
+  /** A signed checkpoint the stream carried: the state root the enclave committed at `seq`. */
+  onCheckpoint(checkpoint: CheckpointEntry): void;
   /** `time` is the signed time of the frame that made the feed live. */
   onFeed(status: FeedStatus, time?: number): void;
   /** Why a connection was dropped, for the log of what the user is told. */
@@ -175,6 +177,7 @@ export class LiveStream {
       if (message.type === "command") this.deps.onMessage(message);
       else if (message.type === "quote") this.deps.onQuote(message);
       else if (message.type === "withdrawal") this.deps.onWithdrawal(message);
+      else if (message.type === "checkpoint") this.deps.onCheckpoint(message);
       else if (message.type === "quote_error") {
         this.deps.onQuoteError(message.error);
         if (this.sent !== null) {

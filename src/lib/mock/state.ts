@@ -1,6 +1,7 @@
 /** The mock node's state: markets, accounts, the vault's queue, and the log it streams. */
 
 import { fixedFromInt, type Fixed } from "../fixed";
+import type { HouseParams } from "../house";
 import { mulberry32, SEED } from "../prng";
 import type {
   EligibilityClass,
@@ -78,7 +79,22 @@ export type Listener = (message: StreamMessage) => void;
 export const HOUSE_CAPITAL = fixedFromInt(20_000_000);
 /** How long a deposit is unfinalised before the node credits it, in milliseconds. */
 export const FINALITY_MS = 6_000;
+/**
+ * The mock's checkpoint cadence: one checkpoint per this many sequenced commands, mirroring the
+ * node's `checkpoint_every`. The mock compresses days into seconds, so the cadence is compressed
+ * too; the engine's own is its config's.
+ */
+export const CHECKPOINT_EVERY = 50;
 const LOG_LIMIT = 1_000;
+
+/** The launch solvency parameters the mock mirrors from the engine's dev genesis (`config/dev.toml`). */
+const LAUNCH_PARAMS: HouseParams = {
+  profitFeeBps: 1000,
+  closeoutLevelBps: 5000,
+  totalCapBps: 20000,
+  totalCapFloor: fixedFromInt(2_000_000),
+  seq: null,
+};
 
 export class MockState {
   now: number;
@@ -89,6 +105,8 @@ export class MockState {
   quietPrices = false;
   houseCash: Fixed = HOUSE_CAPITAL;
   vaultLiquidity: Fixed = 0n;
+  /** The solvency parameters in force; the mock changes none, as the operator's key signs none here. */
+  readonly params: HouseParams = LAUNCH_PARAMS;
   readonly markets = new Map<MarketId, MarketRuntime>();
   readonly accounts = new Map<string, AccountState>();
   readonly queue: QueueEntry[] = [];

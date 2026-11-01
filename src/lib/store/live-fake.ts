@@ -6,6 +6,8 @@ import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
 import type { PriceRules, StreamMessage, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
+import type { CheckpointEntry } from "../engine/wire";
+import type { HouseParams, QueueTotals } from "../house";
 import { WatchConnector } from "../engine/watch-wallet";
 import type { StoreDeps } from "./store-deps";
 import { ConsoleStore } from "./store";
@@ -40,6 +42,13 @@ export class FakeClient implements EngineClient {
   async markets() { this.marketReads++; return this.marketList; }
   marketList: MarketView[] = [BTC];
   async house() { return { cash: "5", nav: "5", gross_exposure: "0" }; }
+  /** Canned house-state reads, patched by a test; nulls answer "not read yet". */
+  params: HouseParams | null = null;
+  checkpoint: CheckpointEntry | null = null;
+  totals: QueueTotals = { count: 0, remaining: 0n, seq: null, truncated: false };
+  async houseParams() { return this.params; }
+  async latestCheckpoint() { return this.checkpoint; }
+  async withdrawalTotals() { return this.totals; }
   async account(): Promise<never> { throw this.accountError ?? new EngineError(404, "not found"); }
   async accessProbe() {}
   async nonce() { return { next_nonce: 0 }; }

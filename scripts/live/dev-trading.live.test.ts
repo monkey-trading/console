@@ -21,6 +21,7 @@ import type { MarketModel } from "../../src/lib/models";
 import { closingPrice, ticketPrices } from "../../src/lib/quotes";
 import { previewTicket, slippageBound } from "../../src/lib/ticket";
 import { attestEligibility, cancelOrder, placeOrder } from "../../src/lib/store/actions";
+import { loadAccount } from "../../src/lib/store/account";
 import { followAccountFeeds, syncQuotes } from "../../src/lib/store/funds";
 import { ConsoleStore } from "../../src/lib/store/store";
 import { startProxy, type Proxy } from "./tamper-proxy";
@@ -158,7 +159,7 @@ beforeAll(async () => {
   };
   store.liveWallet = wallet;
   store.setWallet({ address: wallet.address, label: wallet.label });
-  await store.loadAccount(true);
+  await loadAccount(store, true);
   // Signing waits for a live stream, so readiness waits for one too.
   await until(() => {
     const state = snapshot();

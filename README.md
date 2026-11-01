@@ -3,7 +3,9 @@
 The Monkey Trading web app, to be served at console.monkey.trading: the client for the open-source CFD
 engine in [monkey-trading/engine](https://github.com/monkey-trading/engine). One full-view trading
 terminal with a watchlist, a candlestick chart, a deal ticket that sends the quote you saw with your
-slippage bound, positions, orders, history, and a funding drawer.
+slippage bound, positions, orders, history, and a funding drawer — and a House page that shows the
+house's solvency from the node's signed answers: its net asset value, cash and exposure against its
+caps, the withdrawal queue's size, and the signed checkpoint roots the figures stand on.
 
 By default this build runs against a simulated node inside the browser. Prices, fills and funds are
 simulated, and the app says so on screen. It opens on a demo account with positions, resting orders,

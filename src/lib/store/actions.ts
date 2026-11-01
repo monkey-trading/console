@@ -11,6 +11,7 @@ import type { Wallet } from "../engine/wallet";
 import { fixedToWire, formatFixedPlaces, parseFixed, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
 import { describeReject } from "../messages";
+import { loadAccount } from "./account";
 import type { ConsoleStore } from "./store";
 
 export { STATEMENTS };
@@ -47,7 +48,7 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     store.patch(NO_ACCOUNT);
     store.setWallet({ address: wallet.address, label: wallet.label, ...(wallet.readOnly ? { readOnly: true } : {}) });
     offerUsdcImport(store, wallet);
-    await store.loadAccount(true);
+    await loadAccount(store, true);
     if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);
   } catch (error) {
     // A node that cannot be trusted is reported by the attestation banner and the stream, once; the account read waiting on the same check does not repeat it.

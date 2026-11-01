@@ -7,9 +7,11 @@ import type { MarketId, StreamMessage } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
 import { fixedToNumber } from "../fixed";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
+import { loadAccount } from "./account";
 import { BarsSeed } from "./bars-seed";
 import { FEED_LIMIT, feedFrom, isMine } from "./feed";
 import { initialState, seedAllBars, type BlockReason, type ConsoleState, type ToastMessage } from "./state";
+import { readHousePanel } from "./house";
 import type { StoreDeps } from "./store-deps";
 
 export class ConsoleStore {
@@ -46,7 +48,7 @@ export class ConsoleStore {
   constructor(deps: StoreDeps) {
     this.deps = deps;
     this.viewer = deps.initial.viewer;
-    const state = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs, deps.history, deps.client.signatures);
+    const state = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs, deps.history, deps.client.signatures, deps.initial.housePanel);
     const session = deps.initial.session;
     this.snapshot = {
       ...state,
@@ -260,12 +262,13 @@ export class ConsoleStore {
         })) as typeof frames);
       }
       const selected = markets.some((m) => m.id === this.snapshot.selected) ? this.snapshot.selected : (markets[0]?.id ?? this.snapshot.selected);
-      this.patch({ markets, bars, selected, house: decodeHouse(house) });
+      this.patch({ markets, bars, selected, house: decodeHouse(house), houseReady: true });
       // The chart's history comes from the marks endpoint once a live node's list has arrived; a
       // node that 404s it keeps asking for the archive scan until it names a log head.
       this.barsSeed.seed(selected, this.snapshot.timeframe);
       this.barsSeed.askScan();
-      if (this.snapshot.wallet) await this.loadAccount(accountChanged);
+      if (this.snapshot.wallet) await loadAccount(this, accountChanged);
+      await readHousePanel(this);
       this.lastReadError = null;
     } catch (error) {
       const message = error instanceof Error ? error.message : "The node did not answer.";
@@ -275,26 +278,5 @@ export class ConsoleStore {
     const again = this.rerun;
     this.rerun = null;
     if (again) await this.readAll(again.accountChanged);
-  }
-
-  /** Reads the connected account's state; a never-credited account is an empty one. */
-  async loadAccount(withHistory: boolean): Promise<void> {
-    const wallet = this.snapshot.wallet;
-    if (!wallet) return;
-    const { client } = this.deps;
-    const [eligibility, queue, entitlement] = await Promise.all([client.eligibility(wallet.address), client.withdrawalQueue(wallet.address), client.emissions(wallet.address)]);
-    let account = null;
-    try {
-      account = decodeAccount(await client.account(wallet.address));
-    } catch (error) {
-      if (!(error instanceof EngineError && error.status === 404)) throw error;
-    }
-    // The wallet may have changed while the reads ran; an answer for another account is dropped.
-    if (this.snapshot.wallet?.address !== wallet.address) return;
-    this.patch({ eligibility: eligibility.class, queue: queue.queue, account, entitlement });
-    if (withHistory || this.snapshot.history.length === 0) {
-      const history = (await client.history(wallet.address, { limit: 100 })).events;
-      if (this.snapshot.wallet?.address === wallet.address) this.patch({ history });
-    }
   }
 }

@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { formatMonkey, formatMovePercent, groupThousands, MONKEY_UNIT, shortHex } from "./format";
+import { formatMonkey, formatMovePercent, formatRate, groupThousands, MONKEY_UNIT, shortHex } from "./format";
 
 describe("format", () => {
   it("shortens long hex and leaves short hex alone", () => {
@@ -33,5 +33,15 @@ describe("formatMonkey", () => {
     expect(formatMonkey(1_234n * MONKEY_UNIT + 567_890n * MONKEY_UNIT / 1_000_000n)).toBe("1,234.56 MONKEY");
     // The third place is truncated, never rounded, as the engine's fixed point truncates.
     expect(formatMonkey(1_009n * MONKEY_UNIT / 1_000n)).toBe("1 MONKEY");
+  });
+});
+
+describe("formatRate", () => {
+  it("prints a rate in basis points as an unsigned percentage with two places", () => {
+    expect(formatRate(1000)).toBe("10.00%");
+    expect(formatRate(25)).toBe("0.25%");
+    expect(formatRate(0)).toBe("0.00%");
+  });
+});
   });
 });

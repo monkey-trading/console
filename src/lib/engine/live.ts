@@ -3,6 +3,8 @@
 import type { AttestationStatus, FeedStatus } from "./attestation";
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks, type Unsubscribe } from "./client";
 import type { EntitlementProof } from "./emissions";
+import { setParamsOf, type HouseParams, type QueueTotals } from "../house";
+import { HouseLog, HOUSE_SCAN_CHUNK, scanHouse, withdrawalTotals } from "./live-house";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import { scanForWithdrawal, type ScanResult } from "./live-scan";
@@ -12,7 +14,7 @@ import { NodeTrust } from "./trust";
 import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PriceRules, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 import type { Verifier } from "./verifier";
-import { newChallenge } from "./wire";
+import { newChallenge, type CheckpointEntry } from "./wire";
 
 export interface LiveDeps {
   /** The node's `https://` origin. */
@@ -54,6 +56,8 @@ export class LiveEngineClient implements EngineClient {
   /** The log head seq of the last signed answer that named one; null before the first. */
   headSeq: number | null = null;
   readonly deployment: { chainId: number; vault: string };
+  /** The fold of the log's house state: the latest `set_params` and checkpoint, kept fresh by the stream. */
+  private readonly houseLog: HouseLog;
 
   constructor(private readonly deps: LiveDeps) {
     this.deployment = { chainId: deps.chainId, vault: deps.vault };
@@ -66,6 +70,10 @@ export class LiveEngineClient implements EngineClient {
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
     });
     this.transport = new SignedTransport({ ...deps, verifier: () => this.requireVerifier(), trust: this.trust, challenge, signal: this.signal });
+    this.houseLog = new HouseLog(async (fromSeq) => {
+      const signer = await this.trust.signer();
+      return scanHouse({ ...deps, origin: deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge }, fromSeq, HOUSE_SCAN_CHUNK);
+    });
   }
 
   private emit(event: ClientEvent): void {
@@ -151,6 +159,23 @@ export class LiveEngineClient implements EngineClient {
 
   async house(): Promise<HouseView> {
     return (await this.transport.get("/v1/house")) as HouseView;
+  }
+
+  /** The latest `set_params` folded so far; the catch-up read runs behind the answer when it is not done. */
+  async houseParams(): Promise<HouseParams | null> {
+    this.houseLog.kick();
+    return this.houseLog.params;
+  }
+
+  /** The latest checkpoint folded so far. */
+  async latestCheckpoint(): Promise<CheckpointEntry | null> {
+    this.houseLog.kick();
+    return this.houseLog.checkpoint;
+  }
+
+  /** Walks the public withdrawal queue's signed pages to its end, or to the page cap as a lower bound. */
+  async withdrawalTotals(): Promise<QueueTotals> {
+    return withdrawalTotals(this.transport);
   }
 
   async account(address: Address): Promise<AccountView> {
@@ -248,10 +273,17 @@ export class LiveEngineClient implements EngineClient {
     if (this.stream === null) {
       const stream = new LiveStream({
         ...this.deps, verifier: () => this.requireVerifier(), origin: this.deps.streamOrigin, trust: this.trust, challenge: this.deps.challenge ?? (() => newChallenge()),
-        onMessage: (message) => { for (const subscriber of this.subscribers) subscriber(message); },
+        onMessage: (message) => {
+          // The stream starts at the live end, so a `set_params` it carries is the latest the log
+          // records; the catch-up read folds what predates the connection the same way.
+          const entry = setParamsOf(message.cmd);
+          if (entry !== null) this.houseLog.foldParams(message.seq, entry);
+          for (const subscriber of this.subscribers) subscriber(message);
+        },
         onQuote: (quote) => this.emit({ type: "quote", quote }),
         onQuoteError: (error) => this.emit({ type: "quote_error", error }),
         onWithdrawal: (withdrawal) => this.emit({ type: "withdrawal", withdrawal }),
+        onCheckpoint: (checkpoint) => this.houseLog.foldCheckpoint(checkpoint),
         onFeed: (status: FeedStatus, time?: number) => this.emit(time === undefined ? { type: "feed", status } : { type: "feed", status, time }),
         onProblem: (reason) => this.emit({ type: "problem", reason }),
       });
