@@ -11,7 +11,7 @@ import { ACCOUNT } from "../engine/wallet-kit";
 import { fixedFromInt, fixedFromWire } from "../fixed";
 import { disconnectWallet, placeOrder, REQUEST_TTL_MS } from "./actions";
 import { connected, NODE_TIME, signerOf, VAULT, ActionClient } from "./live-kit";
-import { liveSessionKey, loginSession } from "./session";
+import { liveSessionKey, loginOnCredit, loginSession } from "./session";
 import { settle } from "../engine/test-kit";
 
 const DOMAIN = requestDomain(vectors.chain_id, VAULT);
@@ -55,6 +55,28 @@ describe("the session-key login", () => {
     expect(await loginSession(store)).toBe(false);
     expect(store.sessionKey).toBeNull();
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("This node does not support session keys yet.");
+  });
+
+  it("treats a never-credited account's refused registration as expected: no key, no error shown", async () => {
+    const { client, store } = await connected();
+    client.answer = () => { throw new EngineError(403, "account has never been credited"); };
+    expect(await loginSession(store)).toBe(false);
+    expect(store.sessionKey).toBeNull();
+    expect(store.getSnapshot().toasts).toEqual([]);
+  });
+
+  it("runs the login when one of the account's events says it is credited", async () => {
+    const { provider, store } = await connected(); // connected() already holds the wallet
+    expect(liveSessionKey(store)).toBeNull();
+    loginOnCredit(store, [{ type: "deposited", account: ACCOUNT, amount: "1000" }], ACCOUNT);
+    await settle();
+    expect(liveSessionKey(store)).not.toBeNull();
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(1);
+    // Already logged in, or the event is not the account's: nothing more is asked.
+    loginOnCredit(store, [{ type: "deposited", account: ACCOUNT, amount: "1000" }], ACCOUNT);
+    loginOnCredit(store, [{ type: "deposited", account: "0x0000000000000000000000000000000000000abc", amount: "1" }], ACCOUNT);
+    await settle();
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(1);
   });
 
   it("tells the user when they decline the login signature, and keeps no key", async () => {
