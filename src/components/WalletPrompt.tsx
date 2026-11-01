@@ -4,6 +4,7 @@
 
 import { useConsole } from "./ConsoleProvider";
 
+/** The status line over the page, empty unless the wallet is waiting. */
 export function WalletPrompt() {
   const { prompt } = useConsole();
   return (

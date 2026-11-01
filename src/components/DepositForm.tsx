@@ -13,8 +13,8 @@ import { useSignGate } from "./SignGate";
 const INPUT = "min-h-11 w-full min-w-0 rounded border border-edge bg-ink px-2 py-2 text-base text-fg lg:min-h-0 lg:text-data focus-visible:outline-2 focus-visible:outline-glow";
 const SUBMIT = "min-h-11 shrink-0 rounded border border-glow bg-glow/10 px-4 py-2.5 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 lg:min-h-0";
 
-/** Deposits come from the wallet to the vault; the node credits them once final. `step` is the section's place in the Deposit tab. */
-export function DepositForm({ step }: { step: number }) {
+/** Deposits come from the wallet to the vault; the node credits them once final. `step` is the section's place in the Deposit tab, absent when it is the only one. */
+export function DepositForm({ step }: { step?: number }) {
   const { wallet, eligibility, busy, signatures } = useConsole();
   const { store } = useSession();
   const [amount, setAmount] = useState("1000");
@@ -26,7 +26,7 @@ export function DepositForm({ step }: { step: number }) {
   const declareFirst = signatures === "none" && eligibility === null;
   return (
     <section aria-labelledby="deposit-title" className="p-4">
-      <h4 id="deposit-title" className="text-label tracking-caps text-fg-3 uppercase">{step} · Deposit USDC</h4>
+      <h4 id="deposit-title" tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">{step === undefined ? "" : `${step} · `}Deposit USDC</h4>
       <form onSubmit={(event) => { event.preventDefault(); if (valid && value && !busy && wallet && !declareFirst && !gate.blocked) void deposit(store, value); }}>
         <label htmlFor={id} className="mt-3 block text-caption text-fg-2">Amount (USDC)</label>
         <div className="mt-1 flex flex-col gap-2 sm:flex-row">

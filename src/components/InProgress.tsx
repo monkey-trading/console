@@ -6,6 +6,7 @@ import { useConsole } from "./ConsoleProvider";
 import { Payouts } from "./Payouts";
 import { WithdrawalQueue } from "./WithdrawalQueue";
 
+/** The In progress column: claims, then the queue. */
 export function InProgress() {
   const { signatures } = useConsole();
   return (

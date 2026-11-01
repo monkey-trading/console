@@ -22,11 +22,11 @@ export function AccountSummary() {
   ];
   return (
     <section aria-label="Account summary" className="overflow-hidden rounded-xl border border-line-2 bg-line">
-      <dl className="grid grid-cols-2 gap-px sm:grid-cols-5">
+      <dl className="grid grid-cols-2 gap-px lg:grid-cols-5">
         {cells.map(([label, value], index) => (
-          <div key={label} className={`bg-ink-1 px-4 py-3 ${index === cells.length - 1 ? "max-sm:col-span-2" : ""}`}>
+          <div key={label} className={`bg-ink-1 px-4 py-3 ${index === cells.length - 1 ? "max-lg:col-span-2" : ""}`}>
             <dt className="text-label tracking-caps text-fg-3 uppercase">{label}</dt>
-            <dd className="mt-1 text-data text-fg">{value}</dd>
+            <dd className="mt-1 break-all text-data text-fg">{value}</dd>
           </div>
         ))}
       </dl>

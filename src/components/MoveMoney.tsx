@@ -4,6 +4,7 @@
 
 import { useId, useState } from "react";
 
+import { depositSteps } from "@/lib/deposit-steps";
 import { tabAfterKey } from "@/lib/tabs";
 
 import { useConsole } from "./ConsoleProvider";
@@ -20,7 +21,8 @@ type Tab = (typeof TABS)[number]["id"];
 
 /** Both forms stay mounted, so an amount typed in one survives a look at the other. */
 export function MoveMoney() {
-  const { signatures } = useConsole();
+  const { signatures, eligibility } = useConsole();
+  const steps = depositSteps(signatures, eligibility !== null);
   const [tab, setTab] = useState<Tab>("deposit");
   const id = useId();
   const onKeyDown = (event: React.KeyboardEvent) => {
@@ -43,8 +45,10 @@ export function MoveMoney() {
         ))}
       </div>
       <div role="tabpanel" id={`${id}-deposit-panel`} aria-labelledby={`${id}-deposit`} hidden={tab !== "deposit"} className="divide-y divide-line">
-        {/* The engine takes a first declaration once a deposit is pending; the mock asks for it before the deposit. */}
-        {signatures === "checked" ? <><DepositForm step={1} /><EligibilityCard step={2} /></> : <><EligibilityCard step={1} /><DepositForm step={2} /></>}
+        {steps.map((name, index) => {
+          const step = steps.length > 1 ? index + 1 : undefined;
+          return name === "deposit" ? <DepositForm key={name} step={step} /> : <EligibilityCard key={name} step={index + 1} />;
+        })}
         <FaucetCard />
       </div>
       <div role="tabpanel" id={`${id}-withdraw-panel`} aria-labelledby={`${id}-withdraw`} hidden={tab !== "withdraw"}>
