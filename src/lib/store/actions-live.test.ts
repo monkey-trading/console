@@ -204,23 +204,33 @@ describe("a wallet change", () => {
     expect(await connectWallet(store, "walletconnect", true)).toBe(false);
   });
 
-  it("a quiet connect never replaces a wallet that connected while it waited", async () => {
+  it("a quiet connect never replaces a wallet that connected while it waited, and persists nothing for the refused one", async () => {
     const { store } = await connected();
     disconnectWallet(store); // no wallet connected when the quiet reconnect left its request pending
+    const held = new Map<string, string>();
+    const persistence: ChoiceStorage = {
+      getItem: (key) => held.get(key) ?? null,
+      setItem: (key, value) => void held.set(key, value),
+      removeItem: (key) => void held.delete(key),
+    };
+    store.deps.persistence = persistence;
     const newer: Wallet = { address: "0x00000000000000000000000000000000000000bb", label: "Newer", sign: async () => "0x", deposit: async () => "0x", claim: async () => "0x" };
     let released = 0;
-    const stale: Wallet = { ...WALLET_STUB, disconnect: async () => { released += 1; } };
+    // The approved WalletConnect session a quiet reconnect left pending: its topic must not persist, its session ends.
+    const stale: Wallet = { ...WALLET_STUB, topic: "stale-topic", disconnect: async () => { released += 1; } };
     store.liveWallet = newer;
     store.setWallet({ address: newer.address, label: newer.label });
-    store.deps.wallets.connect = async () => stale; // the approved request a quiet reconnect left pending
-    expect(await connectWallet(store, "injected", true)).toBe(false);
+    store.deps.wallets.connect = async () => stale;
+    expect(await connectWallet(store, "walletconnect", true)).toBe(false);
     expect(store.liveWallet).toBe(newer); // the newer wallet stays
     expect(store.getSnapshot().wallet?.address).toBe(newer.address); // the stale connect adopted nothing
     expect(released).toBe(1); // its session was ended
-    // A connect the visitor started is not quiet and still replaces.
+    expect(held.size).toBe(0); // and its topic was not persisted over the newer connection
+    // A connect the visitor started is not quiet and still replaces, adopting its topic as the choice.
     store.liveWallet = null;
     store.deps.wallets.connect = async () => newer;
     expect(await connectWallet(store, "injected")).toBe(true);
     expect(store.liveWallet).toBe(newer);
+    expect(loadChoice(persistence)).toEqual({ kind: "injected" });
   });
 });

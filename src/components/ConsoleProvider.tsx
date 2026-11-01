@@ -10,7 +10,7 @@ import { InjectedConnector } from "@/lib/engine/injected";
 import { createLiveClient, GLUE_PATH } from "@/lib/engine/live-session";
 import type { Eip1193Provider } from "@/lib/engine/provider-wallet";
 import { WalletConnectConnector } from "@/lib/engine/walletconnect";
-import { saveChoice, clearChoice, type ChoiceStorage } from "@/lib/engine/wallet-persist";
+import { clearChoice, type ChoiceStorage } from "@/lib/engine/wallet-persist";
 import type { VerifierModule } from "@/lib/engine/wasm-verifier";
 import { WatchConnector } from "@/lib/engine/watch-wallet";
 import { DEMO_ADDRESS } from "@/lib/mock/demo";
@@ -76,7 +76,6 @@ function createLiveSession(deploy: Deploy): Session {
   };
   const walletConnect = deploy.walletConnectProjectId === null ? null : new WalletConnectConnector(
     { projectId: deploy.walletConnectProjectId, url: () => window.location.origin }, chain, { wait }, () => import("@walletconnect/universal-provider"), ended,
-    (topic) => saveChoice(persistence, { kind: "walletconnect", topic }),
   );
   const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, { wait }), ...(walletConnect === null ? [] : [walletConnect]), new WatchConnector(() => window.location.search)]);
   // A node without the marks endpoint 404s it; the chart's archive scan then seeds its history.

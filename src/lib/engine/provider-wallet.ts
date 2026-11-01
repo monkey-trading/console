@@ -100,6 +100,9 @@ export function normaliseSignature(signature: string): Hex {
 }
 
 export class ProviderWallet implements Wallet {
+  /** The WalletConnect session topic, set by that connector's wallet so the console can persist the connection choice on adoption. */
+  topic?: string;
+
   constructor(
     readonly address: Address,
     readonly label: string,

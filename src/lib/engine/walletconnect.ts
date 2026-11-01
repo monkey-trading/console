@@ -77,8 +77,6 @@ export class WalletConnectConnector implements WalletConnector {
     private readonly load: () => Promise<WcModule>,
     /** Told when the wallet app ends the live session, so the console can show it disconnected. */
     private readonly onEnded: () => void = () => undefined,
-    /** Told the topic of each session a connect or resume establishes, so the console can persist the choice (monkey-trading/console#82). */
-    private readonly onPaired: (topic: string) => void = () => undefined,
   ) {}
 
   /** Calls `listener` whenever the pairing state changes; returns the unsubscribe. */
@@ -182,9 +180,10 @@ export class WalletConnectConnector implements WalletConnector {
       throw new Error(refused);
     }
     this.live = session.topic;
-    this.onPaired(session.topic);
     const topic = session.topic;
-    return new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, topic) });
+    const wallet = new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, topic) });
+    wallet.topic = topic; // the console persists it as the connection choice only if it adopts this wallet
+    return wallet;
   }
 
   /**
@@ -201,8 +200,9 @@ export class WalletConnectConnector implements WalletConnector {
     const { address, methods } = sessionScope(session, this.chain.chainId);
     if (address === null || !methods.has(SIGN)) return null;
     this.live = session.topic;
-    this.onPaired(session.topic);
-    return new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, session.topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, session.topic) });
+    const wallet = new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, session.topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, session.topic) });
+    wallet.topic = session.topic;
+    return wallet;
   }
 
   /** Whether nothing uses the relay socket now: no pairing open and no live session. */

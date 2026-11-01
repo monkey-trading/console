@@ -33,27 +33,20 @@ describe("WalletConnectConnector.connect", () => {
     expect(storage).toBeInstanceOf(MemoryStorage);
   });
 
-  it("reports the topic of the session a connect establishes", async () => {
-    const paired: string[] = [];
-    const env = setup(undefined, (topic) => paired.push(topic));
-    const connecting = env.connector.connect();
-    await env.fake.called.promise;
-    env.fake.pending.resolve(session("topic-1"));
-    await connecting;
-    expect(paired).toEqual(["topic-1"]);
+  it("carries the session topic on the wallet it returns, for the console to persist on adoption", async () => {
+    const { wallet } = await connected();
+    expect(wallet.topic).toBe("topic-1");
   });
 
-  it("refuses a session with no account on the deployment's chain, or without typed-data signing, and ends it without remembering it", async () => {
+  it("refuses a session with no account on the deployment's chain, or without typed-data signing, and ends it", async () => {
     for (const approved of [session("t", ALL, "eip155:1"), session("t", ["eth_sendTransaction"])]) {
-      const paired: string[] = [];
-      const env = setup(undefined, (topic) => paired.push(topic));
+      const env = setup();
       const connecting = env.connector.connect();
       await env.fake.called.promise;
       env.fake.pending.resolve(approved);
       await expect(connecting).rejects.toThrow("did not approve signing on chain 31337");
       expect([env.fake.disconnects, env.fake.closes]).toEqual([1, 1]);
       expect(env.connector.pairing()).toEqual({ status: "idle" });
-      expect(paired).toEqual([]); // a refused session is not persisted as the connection choice
     }
   });
 
@@ -190,14 +183,13 @@ describe("the WalletConnect wallet", () => {
 });
 
 describe("WalletConnectConnector.resume", () => {
-  it("re-attaches a live session for the stored topic without opening a new pairing, and reports the pairing", async () => {
-    const paired: string[] = [];
-    const { connector, fake } = setup(undefined, (topic) => paired.push(topic));
+  it("re-attaches a live session for the stored topic without opening a new pairing, its wallet carrying the topic", async () => {
+    const { connector, fake } = setup();
     fake.session = session("topic-1");
     const wallet = await connector.resume("topic-1");
     expect(wallet?.address).toBe(ADDRESS.toLowerCase());
     expect(wallet?.label).toBe("WalletConnect");
-    expect(paired).toEqual(["topic-1"]);
+    expect(wallet?.topic).toBe("topic-1");
     expect(fake.connects).toHaveLength(0);
     // The resumed session is the live one: its disconnect ends it through the SDK.
     await wallet?.disconnect?.();
