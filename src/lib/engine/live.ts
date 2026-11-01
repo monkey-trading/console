@@ -6,7 +6,7 @@ import type { EntitlementProof } from "./emissions";
 import { setParamsOf, type HouseParams, type QueueTotals } from "../house";
 import { HouseLog, HOUSE_SCAN_CHUNK, scanHouse } from "./live-house";
 import { QueueTotalsWalk } from "./live-queue";
-import { collateral, plainText } from "./live-plain";
+import { collateral, plainText, READ_TIMEOUT_MS } from "./live-plain";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import { scanForWithdrawal, type ScanResult } from "./live-scan";
@@ -39,8 +39,6 @@ export interface LiveDeps {
   signal?: () => AbortSignal;
 }
 
-/** How long a read of the node may take, in milliseconds. */
-const READ_TIMEOUT_MS = 10_000;
 /** How long loading the verifier may take, in milliseconds. */
 const VERIFIER_LOAD_TIMEOUT_MS = 20_000;
 

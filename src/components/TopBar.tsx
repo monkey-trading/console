@@ -32,7 +32,7 @@ export function TopBar() {
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-4 py-2 sm:px-6">
       <h1 className="text-caption font-normal">
-        <Link href="/" aria-label="Monkey Trading console, back to the trading terminal" className="flex items-center gap-3 text-fg focus-visible:outline-2 focus-visible:outline-glow">
+        <Link href="/" aria-current={pathname === "/" ? "page" : undefined} aria-label="Monkey Trading console, back to the trading terminal" className="flex items-center gap-3 text-fg focus-visible:outline-2 focus-visible:outline-glow">
           <LogoMark className="size-8" />
           <span>MONKEY TRADING <span className="hidden text-fg-3 sm:inline">/ CONSOLE</span></span>
         </Link>

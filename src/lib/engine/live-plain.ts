@@ -3,6 +3,9 @@
 import { EngineError } from "./client";
 import type { LiveDeps } from "./live";
 
+/** How long a read of the node may take, in milliseconds. */
+export const READ_TIMEOUT_MS = 10_000;
+
 /**
  * An unsigned read of a route the attestation itself authenticates: its status, and its body as
  * text when 200.
@@ -11,7 +14,7 @@ import type { LiveDeps } from "./live";
  */
 export async function plain(deps: LiveDeps, path: string): Promise<{ status: number; text: string }> {
   try {
-    const response = await deps.fetch(deps.origin + path, { cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal: deps.signal?.() ?? AbortSignal.timeout(10_000) });
+    const response = await deps.fetch(deps.origin + path, { cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal: deps.signal?.() ?? AbortSignal.timeout(READ_TIMEOUT_MS) });
     return { status: response.status, text: response.status === 200 ? await response.text() : "" };
   } catch (cause) {
     throw new EngineError(0, "The node did not answer.", null, { cause });
