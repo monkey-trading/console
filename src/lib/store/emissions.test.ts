@@ -99,7 +99,8 @@ describe("checkEmissionsClaimed", () => {
     expect(shown()).toBe(2);
   });
 
-  it("ignores a failure that lands after the wallet it ran for was replaced", async () => {    const { store, wallet } = await connected();
+  it("ignores a failure that lands after the wallet it ran for was replaced", async () => {
+    const { store, wallet } = await connected();
     let fail!: (error: Error) => void;
     const pending = new Promise<{ claimed: bigint; latestSeq: number }>((_, reject) => { fail = reject; });
     const away: Wallet = {
