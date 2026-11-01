@@ -166,10 +166,7 @@ export class LiveEngineClient implements EngineClient {
     return this.houseLog.checkpoint;
   }
 
-  setHouseLogOpen(open: boolean): void {
-    if (open) this.houseLog.resume();
-    else this.houseLog.pause();
-  }
+  setHouseLogOpen(open: boolean): void { if (open) this.houseLog.resume(); else this.houseLog.pause(); }
 
   /** The state of the log read feeding the fold. */
   async houseLogStatus(): Promise<"current" | "reading" | "failed"> {
