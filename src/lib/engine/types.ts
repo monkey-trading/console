@@ -53,6 +53,8 @@ export interface MarketView {
   open: boolean;
   reduce_only: boolean;
   mark: string | null;
+  /** The FX index a market quoted in another currency is valued at; null or absent for USD markets and before its first price. */
+  fx_mark?: string | null;
   stress_level: number;
 }
 

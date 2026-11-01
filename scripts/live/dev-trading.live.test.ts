@@ -19,7 +19,7 @@ import { ACCOUNT, StubProvider } from "../../src/lib/engine/wallet-kit";
 import { fixedFromWire, fixedToWire, parseFixed } from "../../src/lib/fixed";
 import type { MarketModel } from "../../src/lib/models";
 import { closingPrice, ticketPrices } from "../../src/lib/quotes";
-import { previewTicket, slippageBound } from "../../src/lib/ticket";
+import { parseSize, previewTicket, slippageBound } from "../../src/lib/ticket";
 import { attestEligibility, cancelOrder, placeOrder } from "../../src/lib/store/actions";
 import { loadAccount } from "../../src/lib/store/account";
 import { followAccountFeeds, syncQuotes } from "../../src/lib/store/funds";
@@ -34,8 +34,8 @@ const VAULT = "0x0000000000000000000000000000000000000000";
 const BTC = 1;
 /** Whole USDC the mock-custody dev endpoint credits. */
 const FUND = "20000";
-/** The position each opening leg aims for, in dollars of notional. */
-const OPEN_NOTIONAL = "60000";
+/** The size each opening leg orders, in contracts: about $60,000 at the dev feed's BTC price. */
+const OPEN_SIZE = "0.6";
 /** The user's slippage bound for market orders, within the market's own 25 bps cap. */
 const SLIPPAGE_BPS = 25;
 
@@ -79,10 +79,10 @@ function ticketPrice(): { price: bigint; qty: bigint; slippage: number } {
   const state = snapshot();
   const market = btcMarket();
   const quote = state.quotes[BTC];
-  const notional = parseFixed(OPEN_NOTIONAL);
-  if (quote === undefined || notional === null) throw new Error("no quote or size");
+  const size = parseSize(OPEN_SIZE);
+  if (quote === undefined || size.kind !== "qty") throw new Error("no quote or size");
   const slippage = slippageBound(SLIPPAGE_BPS, market);
-  const preview = previewTicket({ market, side: "buy", notional, slippageBps: slippage, account: state.account, houseNav: state.house.nav, estimates: false });
+  const preview = previewTicket({ market, side: "buy", qty: size.qty, slippageBps: slippage, account: state.account, houseNav: state.house.nav, estimates: false });
   const prices = ticketPrices({ live: true, quote, quoteError: state.quoteError, preview, side: "buy", mark: market.mark });
   if (prices.price === null) throw new Error(`the node quotes no price: ${prices.problem ?? "unknown"}`);
   return { price: prices.price, qty: preview.qty, slippage };

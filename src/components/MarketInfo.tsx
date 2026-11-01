@@ -25,11 +25,11 @@ function UseBar({ bps }: { bps: number }) {
 }
 
 /** `price` is the price a market order on `side` would be sent at, with the worst price `slippageBps` allows; null shows neither. */
-export function MarketInfo({ market, preview, notional, side, price, slippageBps }: { market: MarketModel; preview: TicketPreview; notional: Fixed; side: Side; price: Fixed | null; slippageBps: number }) {
+export function MarketInfo({ market, preview, side, price, slippageBps }: { market: MarketModel; preview: TicketPreview; side: Side; price: Fixed | null; slippageBps: number }) {
   const worst = price === null ? null : side === "buy" ? price + bpsOf(price, slippageBps) : price - bpsOf(price, slippageBps);
   const useBps = preview.marginUseBps;
-  const filled = preview.houseCap > 0n ? Math.min(8, Math.ceil(Number((notional * 8n) / preview.houseCap) || 0)) : 0;
-  const capShare = preview.houseCap > 0n ? Number((notional * 100n) / preview.houseCap) : 0;
+  const filled = preview.houseCap > 0n ? Math.min(8, Math.ceil(Number((preview.markNotional * 8n) / preview.houseCap) || 0)) : 0;
+  const capShare = preview.houseCap > 0n ? Number((preview.markNotional * 100n) / preview.houseCap) : 0;
   const stress = STRESS_NAMES[market.stress] ?? "Normal";
   return (
     <details className="group border-t border-line">

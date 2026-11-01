@@ -1,12 +1,56 @@
 /** What an order ticket shows before the user places the order: the quote, the margin it uses, the limits. */
 
-import { absFixed, bpsOf, divFixed, fixedFromWire, mulFixed, SCALE, type Fixed } from "./fixed";
-import type { Side } from "./engine/types";
+import { absFixed, bpsOf, divFixed, fixedFromWire, mulFixed, parseFixed, type Fixed } from "./fixed";
+import type { MarketView, Side } from "./engine/types";
 import type { AccountModel, MarketModel } from "./models";
-import { executionCost, growthOf, notionalOf, quoteOrder, slicedBps, tieredMargin, type Quote } from "./pricing";
+import { executionCost, growthOf, quoteOrder, slicedBps, tieredMargin, type Quote } from "./pricing";
 
-/** The smallest step of a quantity: a millionth of a unit. */
-const QTY_STEP: Fixed = SCALE / 1_000_000n;
+/** The decimal places of a size: a millionth of a unit is the smallest step. */
+export const QTY_PLACES = 6;
+
+/** The ticket's own refusal of an order it cannot value in USD, which the node would decline for want of an FX price. */
+export const NO_FX_PRICE = "No FX price yet, so this order's value in USD is unknown.";
+
+/** What the size field holds: nothing yet, a quantity, or text the ticket refuses with the reason. */
+export type SizeInput = { kind: "empty" } | { kind: "qty"; qty: Fixed } | { kind: "refused"; message: string };
+
+/**
+ * Reads the size field as the order's quantity, exactly as typed: a size finer than `QTY_PLACES`
+ * decimal places is refused, never rounded. Trailing zeros past the step change no value and pass.
+ */
+export function parseSize(text: string): SizeInput {
+  const trimmed = text.trim();
+  if (trimmed === "") return { kind: "empty" };
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(trimmed);
+  if (match === null) return { kind: "refused", message: "Enter the size in digits, such as 0.5 or 2.25." };
+  const [, whole = "0", places = ""] = match;
+  const fraction = places.replace(/0+$/, "");
+  if (fraction.length > QTY_PLACES) return { kind: "refused", message: `A size has at most ${QTY_PLACES} decimal places.` };
+  const qty = parseFixed(fraction === "" ? whole : `${whole}.${fraction}`);
+  // The pattern admits only digits and at most nine places, so a parse failure is a broken invariant.
+  if (qty === null) throw new Error(`size ${trimmed} matched the size pattern but did not parse`);
+  return { kind: "qty", qty };
+}
+
+/** What one contract is: a unit of the market's base asset, or of the instrument itself when it has none. */
+export function contractUnit(market: MarketModel): string {
+  const [base = market.symbol, quote] = market.symbol.split("-");
+  return quote === undefined ? `${base} unit` : base;
+}
+
+/**
+ * `qty` units at `price` in USD, rounded down as the engine's check is (`execution/validation.rs`,
+ * `execution/mod.rs`). A market quoted in another currency converts through its FX mark, the pair's
+ * own listing (USD-JPY) at `price` itself; null when that mark is missing.
+ */
+function usdValue(view: MarketView, qty: Fixed, price: Fixed): Fixed | null {
+  const amount = mulFixed(qty, price);
+  const currency = view.quote_currency;
+  if (currency === undefined) return amount;
+  const fx = currency.fx_market === view.id ? price : view.fx_mark == null ? null : fixedFromWire(view.fx_mark);
+  if (fx === null || fx <= 0n) return null;
+  return currency.currency === "jpy" ? divFixed(amount, fx) : mulFixed(amount, fx);
+}
 
 /** The ticket's own margin refusal, which a live build leaves to the node's executable quote. */
 export const MARGIN_SHORT = "Not enough equity for the margin this needs.";
@@ -22,8 +66,8 @@ export function slippageBound(chosenBps: number, market: MarketModel): number {
 export interface TicketInput {
   market: MarketModel;
   side: Side;
-  /** The size the user entered, in dollars. */
-  notional: Fixed;
+  /** The order's quantity in units of the market, exactly as entered. */
+  qty: Fixed;
   slippageBps: number;
   /** A limit or stop order, admitted without the margin and capacity checks that run when it triggers. */
   resting?: boolean;
@@ -36,8 +80,12 @@ export interface TicketInput {
 }
 
 export interface TicketPreview {
-  /** Units of the market, truncated to the quantity step. */
+  /** The order's quantity, as given. */
   qty: Fixed;
+  /** The order's value in USD at the price the minimum is checked at (the trigger price of a resting order, else the mark); null with no price or no FX price. */
+  notional: Fixed | null;
+  /** The order's value in USD at the mark, which margin and the house's cap are measured on. */
+  markNotional: Fixed;
   /** The price the order would fill at now; this is sent as the order's quoted price. */
   quote: Quote | null;
   /** The best offer and bid for this size, and the spread between them in basis points of the index. */
@@ -72,20 +120,21 @@ function held(account: AccountModel | null, id: number): Fixed {
  * Error cases: none; every refusal is listed in `problems`.
  */
 export function previewTicket(input: TicketInput): TicketPreview {
-  const { market, side, notional, account } = input;
+  const { market, side, qty, account } = input;
   const spec = market.view;
   const mark = market.mark;
   const problems: string[] = [];
   const houseCap = bpsOf(input.houseNav, spec.house_cap_bps);
-  const rate = slicedBps(spec.margin_tiers, 0n, notional);
   if (mark === null || mark <= 0n) {
     return {
-      qty: 0n, quote: null, offer: null, bid: null, spreadBps: 0, worstPrice: null, marginAfter: account?.margin ?? 0n, marginAdded: 0n,
-      marginUseBps: null, marginRateBps: rate, impliedLeverage: null, houseCap, problems: ["No price yet."],
+      qty, notional: null, markNotional: 0n, quote: null, offer: null, bid: null, spreadBps: 0, worstPrice: null, marginAfter: account?.margin ?? 0n, marginAdded: 0n,
+      marginUseBps: null, marginRateBps: 0, impliedLeverage: null, houseCap, problems: ["No price yet."],
     };
   }
-  // Rounded up to the step, so the order is never a hair under the size the user entered (and its minimum).
-  const qty = ((divFixed(notional, mark) + QTY_STEP - 1n) / QTY_STEP) * QTY_STEP;
+  const markNotional = mulFixed(qty, mark);
+  const rate = slicedBps(spec.margin_tiers, 0n, markNotional);
+  // The minimum is checked at the trigger price for a resting order and at the index for a fill.
+  const notional = usdValue(spec, qty, input.resting && input.triggerPrice ? input.triggerPrice : mark);
   const current = held(account, market.id);
   const quoteSide = (s: Side) =>
     quoteOrder({ index: mark, side: s, baseSpreadBps: market.baseSpreadBps, spreadTiers: spec.spread_tiers, stress: market.stress, held: current, qty });
@@ -109,13 +158,14 @@ export function previewTicket(input: TicketInput): TicketPreview {
   if (!market.open && !input.resting) problems.push("This market is closed.");
   if (market.reduceOnly && grows) problems.push("This market only accepts orders that reduce a position.");
   if (qty <= 0n) problems.push("Enter a size.");
-  else if (grows && notionalOf(qty, input.resting && input.triggerPrice ? input.triggerPrice : mark) < fixedFromWire(spec.min_order_notional)) problems.push(`Minimum order is ${spec.min_order_notional} USD.`);
+  else if (grows && notional === null) problems.push(NO_FX_PRICE);
+  else if (grows && notional !== null && notional < fixedFromWire(spec.min_order_notional)) problems.push(`Minimum order is ${spec.min_order_notional} USD.`);
   if (grows && !input.resting) {
     if (equity <= 0n) problems.push("Fund your account to trade.");
     else if (marginAfter > afterCost) problems.push(MARGIN_SHORT);
   }
   return {
-    qty, quote, offer: offer.price, bid: bid.price, spreadBps: Number(((offer.price - bid.price) * 10_000n) / mark), worstPrice: input.resting ? null : quote.price + worst,
+    qty, notional, markNotional, quote, offer: offer.price, bid: bid.price, spreadBps: Number(((offer.price - bid.price) * 10_000n) / mark), worstPrice: input.resting ? null : quote.price + worst,
     marginAfter, marginAdded: after - before, marginUseBps: input.estimates === false ? null : useBps, marginRateBps: positionRate,
     impliedLeverage: after > 0n ? Number((resulting * 100n) / after) / 100 : null, houseCap, problems,
   };

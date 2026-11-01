@@ -30,7 +30,6 @@ export function PositionsView() {
     const market = markets.find((m) => m.id === p.market);
     // An unpriced market shows no mark and no profit, not the entry price as if it were the mark.
     const known = market?.mark ?? null;
-    const mark = known ?? p.entry;
     const pnl = known === null ? null : mulFixed(p.qty, known - p.entry);
     const places = market?.places ?? 2;
     const side = p.qty > 0n ? "sell" : "buy";
@@ -39,7 +38,7 @@ export function PositionsView() {
     const quote = quotes[p.market];
     const quoted = signatures === "checked"
       ? (quote === undefined ? null : closingPrice(quote, side, qty))
-      : market === undefined ? null : (previewTicket({ market, side, notional: absFixed(mulFixed(p.qty, mark)), slippageBps: CLOSE_SLIPPAGE_BPS, account, houseNav: house.nav }).quote?.price ?? null);
+      : market === undefined ? null : (previewTicket({ market, side, qty, slippageBps: CLOSE_SLIPPAGE_BPS, account, houseNav: house.nav }).quote?.price ?? null);
     const slippageBps = Math.min(CLOSE_SLIPPAGE_BPS, market?.view.max_slippage_bps ?? CLOSE_SLIPPAGE_BPS);
     const close = (event: { currentTarget: HTMLElement }) => {
       if (quoted === null) return;
