@@ -63,7 +63,7 @@ export function saveChoice(storage: ChoiceStorage, choice: WalletChoice): void {
   }
 }
 
-/** Drops the choice, on an explicit disconnect; best-effort like `saveChoice`. */
+/** Drops the choice when the remembered connection ends; best-effort like `saveChoice`. */
 export function clearChoice(storage: ChoiceStorage): void {
   try {
     storage.removeItem(WALLET_CHOICE_KEY);

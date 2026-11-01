@@ -56,7 +56,7 @@ export class WalletConnectConnector implements WalletConnector {
   private state: PairingState = IDLE;
   private readonly listeners = new Set<() => void>();
   private attempt: Attempt | null = null;
-  /** The SDK's provider, started on the first connect and kept for the page's life, as the SDK keeps its core. */
+  /** The SDK's provider, started on the first use and kept for the page's life, as the SDK keeps its core. */
   private starting: Promise<WcProvider> | null = null;
   private started: WcProvider | null = null;
   /** The topic of the session the last connect returned, until it ends. */
@@ -77,7 +77,7 @@ export class WalletConnectConnector implements WalletConnector {
     private readonly load: () => Promise<WcModule>,
     /** Told when the wallet app ends the live session, so the console can show it disconnected. */
     private readonly onEnded: () => void = () => undefined,
-    /** Told the topic of each session a connect establishes, so the console can persist the choice (monkey-trading/console#82). */
+    /** Told the topic of each session a connect or resume establishes, so the console can persist the choice (monkey-trading/console#82). */
     private readonly onPaired: (topic: string) => void = () => undefined,
   ) {}
 
@@ -210,7 +210,7 @@ export class WalletConnectConnector implements WalletConnector {
     return this.attempt === null && this.live === null;
   }
 
-  /** The SDK's provider, loaded and started once; a failed start is tried again on the next connect. */
+  /** The SDK's provider, loaded and started once; a failed start is tried again on the next use. */
   private provider(): Promise<WcProvider> {
     this.starting ??= this.start().catch((cause: unknown) => {
       this.starting = null;

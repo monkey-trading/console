@@ -43,15 +43,17 @@ describe("WalletConnectConnector.connect", () => {
     expect(paired).toEqual(["topic-1"]);
   });
 
-  it("refuses a session with no account on the deployment's chain, or without typed-data signing, and ends it", async () => {
+  it("refuses a session with no account on the deployment's chain, or without typed-data signing, and ends it without remembering it", async () => {
     for (const approved of [session("t", ALL, "eip155:1"), session("t", ["eth_sendTransaction"])]) {
-      const env = setup();
+      const paired: string[] = [];
+      const env = setup(undefined, (topic) => paired.push(topic));
       const connecting = env.connector.connect();
       await env.fake.called.promise;
       env.fake.pending.resolve(approved);
       await expect(connecting).rejects.toThrow("did not approve signing on chain 31337");
       expect([env.fake.disconnects, env.fake.closes]).toEqual([1, 1]);
       expect(env.connector.pairing()).toEqual({ status: "idle" });
+      expect(paired).toEqual([]); // a refused session is not persisted as the connection choice
     }
   });
 

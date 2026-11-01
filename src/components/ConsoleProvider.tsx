@@ -10,7 +10,7 @@ import { InjectedConnector } from "@/lib/engine/injected";
 import { createLiveClient, GLUE_PATH } from "@/lib/engine/live-session";
 import type { Eip1193Provider } from "@/lib/engine/provider-wallet";
 import { WalletConnectConnector } from "@/lib/engine/walletconnect";
-import { loadChoice, saveChoice, clearChoice, type ChoiceStorage } from "@/lib/engine/wallet-persist";
+import { saveChoice, clearChoice, type ChoiceStorage } from "@/lib/engine/wallet-persist";
 import type { VerifierModule } from "@/lib/engine/wasm-verifier";
 import { WatchConnector } from "@/lib/engine/watch-wallet";
 import { DEMO_ADDRESS } from "@/lib/mock/demo";
@@ -18,6 +18,7 @@ import { queuePage } from "@/lib/mock/funds";
 import { mockHistory } from "@/lib/mock/history";
 import { createMockNode, SIM_EPOCH_MS, type MockNode } from "@/lib/mock";
 import { connectWallet, disconnectWallet } from "@/lib/store/actions";
+import { reconnectWallet } from "@/lib/store/reconnect";
 import { scanBarsHistory } from "@/lib/store/bars-scan";
 import { followAccountFeeds, quoteSyncKey, syncQuotes } from "@/lib/store/funds";
 import { ConsoleStore } from "@/lib/store/store";
@@ -31,8 +32,6 @@ interface Session {
   node: MockNode | null;
   /** The WalletConnect connector, whose pairing link the pairing dialog shows; null when the build has none. */
   walletConnect: WalletConnectConnector | null;
-  /** Where the wallet connection choice persists across page loads; null in the mock session, which keeps nothing. */
-  persistence: ChoiceStorage | null;
 }
 
 const SessionContext = createContext<Session | null>(null);
@@ -82,7 +81,7 @@ function createLiveSession(deploy: Deploy): Session {
   const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, { wait }), ...(walletConnect === null ? [] : [walletConnect]), new WatchConnector(() => window.location.search)]);
   // A node without the marks endpoint 404s it; the chart's archive scan then seeds its history.
   const store = new ConsoleStore({ client, wallets, persistence, history: () => [], historyScan: (store, markets) => scanBarsHistory(store, markets, store.deps.scanClock), initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
-  return { store, deploy, node: null, walletConnect, persistence };
+  return { store, deploy, node: null, walletConnect };
 }
 
 function createSession(): Session {
@@ -104,24 +103,11 @@ function createSession(): Session {
       },
     },
   });
-  return { store, deploy, node, walletConnect: null, persistence: null };
+  return { store, deploy, node, walletConnect: null };
 }
 
 /** The most simulated time one tick may add, so a stalled timer does not jump the prices. */
 const MAX_TICK_MS = 5_000;
-
-/**
- * Reconnects a wallet connection a previous page load stored (monkey-trading/console#82). An
- * injected wallet reconnects through the existing provider flow; a WalletConnect session cannot
- * survive a reload in the SDK's memory, so a dead session falls back to the pairing dialog. A
- * reconnect the visitor cancels or that fails forgets the choice, so it does not repeat on the
- * next load.
- */
-async function resumeWallet(store: ConsoleStore, persistence: ChoiceStorage, walletConnect: WalletConnectConnector, topic: string): Promise<void> {
-  const wallet = await walletConnect.resume(topic).catch(() => null);
-  const connected = wallet === null ? await connectWallet(store, "walletconnect", true) : await connectWallet(store, "walletconnect", true, wallet);
-  if (!connected) clearChoice(persistence);
-}
 
 /**
  * Provides the console's session to every screen. A live node sets its own clock with its
@@ -144,12 +130,7 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       if (new URLSearchParams(window.location.search).has("account")) void connectWallet(store, "watch", true);
       else if (!reconnected.current) {
         reconnected.current = true;
-        const choice = session.persistence === null ? null : loadChoice(session.persistence);
-        if (choice?.kind === "injected") {
-          void connectWallet(store, "injected", true).then((connected) => { if (!connected && session.persistence !== null) clearChoice(session.persistence); });
-        } else if (choice?.kind === "walletconnect" && session.walletConnect !== null && session.persistence !== null) {
-          void resumeWallet(store, session.persistence, session.walletConnect, choice.topic);
-        }
+        void reconnectWallet(store, session.walletConnect, () => injectedProvider() !== undefined);
       }
       return () => {
         stopFeeds();

@@ -178,7 +178,8 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   requests, or embeds without the owner's approval; fonts are bundled at build time. The one
   approved exception (monkey-trading/console#82): the wallet connection choice — the connector
   kind and, for WalletConnect, the session topic — persists in `localStorage` across page loads,
-  cleared on explicit disconnect, disclosed on /notices. The engine
+  cleared when the connection ends (Disconnect, the wallet app ending the session, or a failed
+  reconnect), disclosed on /notices. The engine
   node's origin is the one cross-origin destination the app exists for, approved in
   monkey-trading/engine#292 (rule 6): the build's pinned origin, and no other, is in the CSP
   `connect-src` with its `https:` and `wss:` schemes, and every answer from it is shown only if

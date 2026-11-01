@@ -9,14 +9,16 @@ import { cancelTypedData, eligibilityTypedData, orderTypedData, requestDomain, w
 import type { CancelRequest, EligibilityRequest, OrderRequest, WithdrawalRequest } from "../engine/types";
 import { ACCOUNT } from "../engine/wallet-kit";
 import { loadChoice, type ChoiceStorage } from "../engine/wallet-persist";
-import { fixedFromInt, fixedFromWire } from "../fixed";
-import { settle } from "../engine/test-kit";
+import { fixedFromInt, fixedFromWire } from "../fixed";import { settle } from "../engine/test-kit";
 import type { Wallet } from "../engine/wallet";
 import { attestEligibility, cancelOrder, connectWallet, deposit, disconnectWallet, placeOrder, REQUEST_TTL_MS, withdraw } from "./actions";
 import { connected, NODE_TIME, signerOf, VAULT, ActionClient, BTC } from "./live-kit";
 import { ConsoleStore } from "./store";
 
 const DOMAIN = requestDomain(vectors.chain_id, VAULT);
+
+/** A connected-wallet shape for connect tests that only count what the wallet was asked. */
+const WALLET_STUB: Wallet = { address: ACCOUNT, label: "Test wallet", sign: async () => "0x", deposit: async () => "0x0", claim: async () => "0x0" };
 
 describe("signed actions with a fixed-key wallet", () => {
   it("signs an order with the node's nonce and an expiry two minutes past its signed time, carrying the price shown and the bound", async () => {
@@ -181,6 +183,15 @@ describe("a wallet change", () => {
     held.clear();
     expect(await connectWallet(store, "watch", true)).toBe(true);
     expect(loadChoice(persistence)).toBeNull();
+  });
+
+  it("offers USDC only on a connect the visitor started, not a quiet reconnect", async () => {
+    const offered: boolean[] = [];
+    const { store } = await connected();
+    store.deps.wallets.connect = async () => ({ ...WALLET_STUB, suggestUsdc: async () => { offered.push(true); return false; } });
+    await connectWallet(store, "injected", true); // a stored choice's reconnect: quiet
+    await connectWallet(store, "injected"); // the visitor picking the wallet: not quiet
+    expect(offered).toEqual([true]);
   });
 
   it("adopts an already-established wallet without asking the connector, and reports failure as false", async () => {

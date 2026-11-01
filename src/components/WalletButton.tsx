@@ -15,7 +15,7 @@ const BUTTON = "min-h-11 rounded border border-edge px-2.5 py-2 sm:px-3 lg:min-h
 
 export function WalletButton() {
   const { wallet } = useConsole();
-  const { store, persistence } = useSession();
+  const { store } = useSession();
   const [open, setOpen] = useState(false);
   const menu = useId();
   const primary = useRef<HTMLButtonElement>(null);
@@ -34,7 +34,7 @@ export function WalletButton() {
     return (
       <div className="flex items-center gap-2">
         <span className="hidden rounded border border-line-2 px-2 py-2.5 text-caption text-fg-2 sm:inline lg:py-2" title={wallet.address}>{shortHex(wallet.address)}</span>
-        <button ref={primary} type="button" onClick={() => { moved.current = true; if (persistence !== null && wallet.readOnly !== true) clearChoice(persistence); disconnectWallet(store); }} className={BUTTON}>Disconnect</button>
+        <button ref={primary} type="button" onClick={() => { moved.current = true; if (store.deps.persistence !== undefined && wallet.readOnly !== true) clearChoice(store.deps.persistence); disconnectWallet(store); }} className={BUTTON}>Disconnect</button>
       </div>
     );
   }

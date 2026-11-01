@@ -43,13 +43,13 @@ function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
 export async function connectWallet(store: ConsoleStore, optionId: string, quiet = false, connected?: Wallet): Promise<boolean> {
   try {
     const wallet = connected ?? (await store.deps.wallets.connect(optionId));
-    if (store.liveWallet !== wallet) release(store, store.liveWallet);
+    if (store.liveWallet !== wallet) release(store, store.liveWallet); // the wallet this one replaces keeps no session open
     store.liveWallet = wallet;
     store.patch(NO_ACCOUNT);
     store.setWallet({ address: wallet.address, label: wallet.label, ...(wallet.readOnly ? { readOnly: true } : {}) });
+    if (!quiet) offerUsdcImport(store, wallet);
     if (store.deps.persistence !== undefined && optionId === "injected") saveChoice(store.deps.persistence, { kind: "injected" });
     await loadAccount(store, true);
-    if (!quiet) offerUsdcImport(store, wallet);
     if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);
     return true;
   } catch (error) {
