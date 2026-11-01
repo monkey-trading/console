@@ -121,8 +121,9 @@ describe("checkEmissionsClaimed", () => {
 
 describe("claimEmissions", () => {
   it("sends the vault's claimEmissions for the gap the proof proves and settles the line after", async () => {
-    const { provider, store } = await connected({ emissionsClaimed: 2n * MONKEY_UNIT, latestSeq: 40 });
+    const { client, provider, store } = await connected({ emissionsClaimed: 2n * MONKEY_UNIT, latestSeq: 40 });
     const at = proof(5n * MONKEY_UNIT);
+    client.entitlement = at;
     store.patch({ entitlement: at });
     await checkEmissionsClaimed(store); // reads the record and warms the read window
     expect(store.lastEmissionsReadAt).toBe(0);
@@ -139,27 +140,82 @@ describe("claimEmissions", () => {
     expect(store.getSnapshot().busy).toBe(false);
   });
 
+  it("re-fetches the proof at the vault's latest seq and claims against it when the stored pair is stale", async () => {
+    const { client, provider, store } = await connected({ emissionsClaimed: 2n * MONKEY_UNIT, latestSeq: 40 });
+    // The page holds a stale pair: the vault moved past the stored proof's seq. The node now
+    // serves a proof against the vault's latest checkpoint, and the claim must use that pair.
+    const stale = proof(5n * MONKEY_UNIT, 40);
+    const fresh = proof(8n * MONKEY_UNIT, 41);
+    client.entitlement = fresh;
+    store.patch({ entitlement: stale, emissionsVault: { claimed: 2n * MONKEY_UNIT, latestSeq: 41 } });
+    provider.vault.latestSeq = 41;
+    await claimEmissions(store);
+    const tx = provider.sent.at(-1);
+    expect(tx?.to).toBe(VAULT);
+    const decoded = decodeFunctionData({ abi: VAULT_ABI, data: tx?.data ?? "0x" });
+    expect(decoded.functionName).toBe("claimEmissions");
+    // The fresh proof's cumulative entitlement, less the fresh record's claimed: 8 - 2.
+    expect(decoded.args.slice(1)).toEqual([8n * MONKEY_UNIT, []]);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The vault minted 6 MONKEY to your wallet.");
+  });
+
+  it("keeps the waiting state after a bounded number of attempts when the pair never meets", async () => {
+    const { client, provider, store } = await connected({ emissionsClaimed: 0n, latestSeq: 39 });
+    const at = proof(5n * MONKEY_UNIT, 40);
+    client.entitlement = at;
+    store.patch({ entitlement: at });
+    let proofReads = 0;
+    const original = client.emissions.bind(client);
+    client.emissions = async () => { proofReads++; return original(); };
+    await claimEmissions(store);
+    expect(provider.sent).toHaveLength(0);
+    expect(proofReads).toBe(3); // bounded: the claim does not spin on a pair that never meets
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The vault's latest checkpoint and the node's latest proof have not met yet; the claim unlocks once they do.");
+    // A node that now holds no proof at all says so instead of blaming the lag.
+    client.emissions = original;
+    client.entitlement = null;
+    await claimEmissions(store);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node holds no entitlement proof for this account right now.");
+  });
+
   it("refuses a claim without a wallet or with a proof for another account, and sends nothing", async () => {
     const bare = await connected();
+    bare.client.entitlement = proof(5n * MONKEY_UNIT);
     bare.store.patch({ entitlement: proof(5n * MONKEY_UNIT), emissionsVault: { claimed: 0n, latestSeq: 40 } });
     bare.store.liveWallet = null;
     await claimEmissions(bare.store);
     expect(bare.store.getSnapshot().toasts.at(-1)?.text).toBe("Connect a wallet first.");
     const other = await connected();
-    other.store.patch({ entitlement: { ...proof(5n * MONKEY_UNIT), account: "0x00000000000000000000000000000000000000aa" }, emissionsVault: { claimed: 0n, latestSeq: 40 } });
+    other.client.entitlement = { ...proof(5n * MONKEY_UNIT), account: "0x00000000000000000000000000000000000000aa" };
+    other.provider.vault.latestSeq = 40;
     await claimEmissions(other.store);
     expect(other.store.getSnapshot().toasts.at(-1)?.text).toBe("The entitlement proof is for another account.");
     expect(other.provider.sent).toHaveLength(0);
   });
 
-  it("sends nothing while the checkpoint is waiting or superseded, or the vault record is unread", async () => {
-    const { provider, store } = await connected();
-    store.patch({ entitlement: proof(5n * MONKEY_UNIT), emissionsVault: { claimed: 0n, latestSeq: 39 } });
+  it("sends nothing when the checkpoint never meets the proof, and reports nothing due once it does", async () => {
+    const { client, provider, store } = await connected({ emissionsClaimed: 5n * MONKEY_UNIT, latestSeq: 40 });
+    // The vault is behind the proof: waiting.
+    client.entitlement = proof(5n * MONKEY_UNIT, 40);
+    provider.vault.latestSeq = 39;
     await claimEmissions(store);
-    store.patch({ entitlement: proof(5n * MONKEY_UNIT), emissionsVault: { claimed: 0n, latestSeq: 41 } });
+    expect(provider.sent).toHaveLength(0);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("have not met yet");
+    // The pair meets but the vault already minted it all: nothing is due.
+    provider.vault.latestSeq = 40;
     await claimEmissions(store);
-    store.patch({ entitlement: proof(5n * MONKEY_UNIT), emissionsVault: null });
-    await claimEmissions(store);
+    expect(provider.sent).toHaveLength(0);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("All accrued MONKEY is claimed.");
+  });
+
+  it("stands down when the wallet changes while the fresh reads run", async () => {
+    const { client, provider, store } = await connected({ emissionsClaimed: 0n, latestSeq: 40 });
+    let release!: (proof: EntitlementProof | null) => void;
+    client.emissions = () => new Promise<EntitlementProof | null>((resolve) => { release = resolve; });
+    const claiming = claimEmissions(store);
+    store.liveWallet = null; // disconnected while the node's answer was in flight
+    release(proof(5n * MONKEY_UNIT, 40));
+    await claiming;
     expect(provider.sent).toHaveLength(0);
   });
 });

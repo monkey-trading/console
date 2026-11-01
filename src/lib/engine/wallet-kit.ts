@@ -57,9 +57,12 @@ export class StubProvider implements Eip1193Provider {
   readonly calls: { method: string; params: readonly unknown[] | { type: string; options: Record<string, unknown> } }[] = [];
   chainId: number;
   private receiptPolls = 0;
+  /** The vault's MONKEY record, read on each call; a test may move it between reads. */
+  readonly vault: { claimed: bigint; latestSeq: number };
 
   constructor(private readonly options: StubOptions = {}) {
     this.chainId = options.chainId ?? 31337;
+    this.vault = { claimed: options.emissionsClaimed ?? 0n, latestSeq: options.latestSeq ?? 0 };
   }
 
   /** The transactions sent, in order. */
@@ -102,8 +105,8 @@ export class StubProvider implements Eip1193Provider {
   private call(data: Hex): Hex {
     const { functionName } = decodeFunctionData({ abi: ABI, data });
     if (functionName === "usedNonces") return encodeAbiParameters([{ type: "bool" }], [this.options.paid ?? false]);
-    if (functionName === "latestSeq") return encodeAbiParameters([{ type: "uint64" }], [BigInt(this.options.latestSeq ?? 0)]);
-    if (functionName === "emissionsClaimed") return encodeAbiParameters([{ type: "uint256" }], [this.options.emissionsClaimed ?? 0n]);
+    if (functionName === "latestSeq") return encodeAbiParameters([{ type: "uint64" }], [BigInt(this.vault.latestSeq)]);
+    if (functionName === "emissionsClaimed") return encodeAbiParameters([{ type: "uint256" }], [this.vault.claimed]);
     return encodeAbiParameters([{ type: "uint256" }], [functionName === "balanceOf" ? (this.options.balance ?? 0n) : (this.options.allowance ?? 0n)]);
   }
 }
