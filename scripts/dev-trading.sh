@@ -97,7 +97,9 @@ node_config="$work/node.toml"
 
 # The node writes data/dev under its working directory.
 cd "$work"
-if [[ -z "${ENGINE_BIN:-}" && ( ! -x "$engine_bin" || ! -x "$access_source" ) ]]; then
+# Cargo builds whenever ENGINE_BIN is unset: its incremental checks make the no-op case cheap,
+# and this never reports PASS against binaries that predate the source in ENGINE_DIR.
+if [[ -z "${ENGINE_BIN:-}" ]]; then
   # shellcheck disable=SC2086
   (cd "$engine_dir" && ${CARGO_CMD:-} cargo build -p engine-node --bin engine --example access_source >&2)
 fi
