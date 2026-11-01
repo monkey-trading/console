@@ -2,10 +2,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import { fixedToWire, parseFixed } from "../fixed";
+import { fixedFromInt, fixedToWire, parseFixed } from "../fixed";
 import { MAX_SESSION_KEY_EXPIRY_MS } from "./session-keys";
 import { createMockNode } from "./index";
-import { auth, funded, ME, order, types } from "./test-helpers";
+import { auth, funded, ME, order, START, types } from "./test-helpers";
 
 const KEY = "0xdef0000000000000000000000000000000000002";
 const OTHER_KEY = "0xdef0000000000000000000000000000000000003";
@@ -103,6 +103,15 @@ describe("session keys", () => {
     const first = `0x${String(0).padStart(2, "0")}f00000000000000000000000000000000000001`;
     const renewed = await register(node, first, now + 120_000);
     expect(types(renewed.events)).toEqual(["session_key_registered"]);
+  });
+
+  it("refuses a never-credited account's registration, as the node does, and admits it after a deposit", async () => {
+    const node = createMockNode(START);
+    await expect(register(node, KEY, node.client.state.now + 60_000)).rejects.toMatchObject({ status: 403, message: "account has never been credited" });
+    await node.client.attestEligibility({ account: ME, class: "professional", auth: auth(node) });
+    node.controls.deposit(ME, fixedFromInt(1_000));
+    const out = await register(node, KEY, node.client.state.now + 60_000);
+    expect(types(out.events)).toEqual(["session_key_registered"]);
   });
 
   it("refuses a registration naming the account itself, and a revocation of a key never registered", async () => {

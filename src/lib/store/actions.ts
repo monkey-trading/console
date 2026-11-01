@@ -11,7 +11,7 @@ import { fixedToWire, formatFixedPlaces, parseFixed, type Fixed } from "../fixed
 import { formatUsdc } from "../vault";
 import { describeReject } from "../messages";
 import { loadAccount } from "./account";
-import { ensureLogin, revokeSession, sessionSigned } from "./session";
+import { ensureLogin, liveSessionKey, revokeSession, sessionSigned } from "./session";
 import { domainOf, errorText, prompting, REQUEST_TTL_MS, signed, usableWallet } from "./signing";
 import type { ConsoleStore } from "./store";
 
@@ -36,6 +36,13 @@ function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
 
 export async function connectWallet(store: ConsoleStore, optionId: string, quiet = false, connected?: Wallet): Promise<boolean> {
   try {
+    // A previous disconnect's revocation and release run to the end before a new wallet adopts the
+    // store, so a WalletConnect relay is never closed under a fresh pairing.
+    if (store.walletCleanup !== null) {
+      const cleanup = store.walletCleanup;
+      store.walletCleanup = null;
+      await cleanup;
+    }
     const wallet = connected ?? (await store.deps.wallets.connect(optionId));
     if (quiet && store.liveWallet !== null && store.liveWallet !== wallet) {
       release(store, wallet); // a quiet connect never replaces a wallet that connected while it waited; the stale one ends
@@ -51,9 +58,9 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     if (store.deps.persistence !== undefined && choice !== null) saveChoice(store.deps.persistence, choice);
     await loadAccount(store, true);
     // The one-signature login (console#68): trading signs with the ephemeral key it authorizes. A
-    // fresh account is not credited yet — the registration refuses silently, and its first deposit's
-    // event runs the login when trading becomes possible.
-    if (!wallet.readOnly) await ensureLogin(store);
+    // not-yet-credited account skips it (the engine refuses until the first deposit credits, and the
+    // deposit's event runs the login then); the first order asks if the account still is not credited.
+    if (!wallet.readOnly && store.getSnapshot().account !== null) await ensureLogin(store);
     if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);
     return true;
   } catch (error) {
@@ -71,14 +78,14 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
  */
 export function disconnectWallet(store: ConsoleStore, revoke = true): void {
   const wallet = store.liveWallet;
-  const key = store.sessionKey;
+  const key = liveSessionKey(store);
   store.liveWallet = null;
   store.sessionKey = null;
   store.sessionKeyExpiresAt = 0;
+  store.sessionLogin = null; // a login in flight installs nothing: its wallet no longer matches
   store.setWallet(null);
   store.patch(NO_ACCOUNT);
-  if (revoke && wallet && !wallet.readOnly && key !== null) void revokeThenRelease(store, wallet, key);
-  else release(store, wallet);
+  store.walletCleanup = revoke && wallet && !wallet.readOnly && key !== null ? revokeThenRelease(store, wallet, key) : Promise.resolve(release(store, wallet));
 }
 
 /** Revokes the session key, then ends the wallet's session; the wallet is gone either way. */

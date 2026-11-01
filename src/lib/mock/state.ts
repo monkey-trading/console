@@ -116,6 +116,8 @@ export class MockState {
   readonly params: HouseParams = LAUNCH_PARAMS;
   readonly markets = new Map<MarketId, MarketRuntime>();
   readonly accounts = new Map<string, AccountState>();
+  /** Every account a deposit has credited, as the engine's `accounts` map membership means: referenced accounts are not credited. */
+  readonly credited = new Set<string>();
   /** Every account's session keys by lowercase address, as `engine_core::session_keys` holds them. */
   readonly sessionKeys = new Map<string, Map<string, MockSessionKey>>();
   /** Every session key's next request nonce, spent for good as the engine's `request_nonces` holds it. */

@@ -5,6 +5,7 @@
  * funds request. The keypair lives only in the store, never in the snapshot or browser storage.
  */
 
+import { signBlock } from "../engine/attestation";
 import { EngineError, type ActionResult } from "../engine/client";
 import { registerSessionKeyTypedData, revokeSessionKeyTypedData, type Terms, type TypedRequest } from "../engine/eip712";
 import { SessionKeySigner, sessionKeyExpiry } from "../engine/session-key";
@@ -26,16 +27,17 @@ export function liveSessionKey(store: ConsoleStore): SessionKeySigner | null {
 }
 
 /**
- * Runs the login once: generates an ephemeral key, asks the wallet for the one `RegisterSessionKey`
- * signature, and posts the registration. False leaves the wallet connected but trading unsigned,
- * with the reason already shown — except for a never-credited account, where the registration is
- * expected to refuse until the first deposit credits; the login runs then, on the deposit's event.
+ * Runs the login once: asks the wallet for the one `RegisterSessionKey` signature over the
+ * connection's candidate key and posts the registration. False leaves the wallet connected but
+ * trading unsigned, with the reason already shown — except for a never-credited account, where the
+ * registration is expected to refuse until the first deposit credits; the login runs then, on the
+ * deposit's event. One candidate keypair serves every attempt of a connection, as the engine's
+ * client contract settles it: re-registering a known key never counts against the caps.
  */
 export async function loginSession(store: ConsoleStore): Promise<boolean> {
   const wallet = usableWallet(store, "authorize trading");
   if (!wallet) return false;
-  store.patch({ busy: true });
-  const key = SessionKeySigner.generate();
+  const key = (store.sessionKey ??= SessionKeySigner.generate());
   try {
     const { next_nonce, time_ms } = await store.deps.client.nonce(wallet.address);
     const now = time_ms ?? store.getSnapshot().now;
@@ -61,15 +63,16 @@ export async function loginSession(store: ConsoleStore): Promise<boolean> {
       return false;
     }
     if (!result.events.some((e) => e.type === "session_key_registered")) throw new Error("The node did not register the session key.");
-    store.sessionKey = key;
+    // The wallet may have disconnected (or another connected) while the prompt waited: only this
+    // connection's wallet may install the key.
+    if (store.liveWallet !== wallet) return false;
     store.sessionKeyExpiresAt = sessionExpiresAt;
     return true;
   } catch (error) {
+    if (store.liveWallet !== wallet) return false; // disconnected mid-login: nothing to report
     if (error instanceof EngineError && error.status === 403 && error.message === "account has never been credited") return false; // expected before the first deposit credits; the deposit's event retries
     if (!store.noteAccess(error)) store.toast("error", errorText(error));
     return false;
-  } finally {
-    store.patch({ busy: false });
   }
 }
 
@@ -87,13 +90,12 @@ export function ensureLogin(store: ConsoleStore, force = false): Promise<boolean
 }
 
 /**
- * Runs the login when one of the account's events says it has become credited — its first deposit
- * or its eligibility declaration — so a fresh account is asked for the one signature at the moment
- * trading becomes possible, not at every connect.
+ * Runs the login when one of the account's deposits credits it, so a fresh account is asked for the
+ * one signature at the moment trading becomes possible, not at every connect.
  */
 export function loginOnCredit(store: ConsoleStore, events: StreamMessage["events"], mine: string | undefined): void {
   if (mine === undefined || store.liveWallet === null || store.liveWallet.readOnly === true || liveSessionKey(store) !== null) return;
-  if (events.some((e) => (e.type === "deposited" || e.type === "eligibility_attested") && e.account.toLowerCase() === mine)) void ensureLogin(store);
+  if (events.some((e) => e.type === "deposited" && e.account.toLowerCase() === mine)) void ensureLogin(store);
 }
 
 /**
@@ -103,6 +105,8 @@ export function loginOnCredit(store: ConsoleStore, events: StreamMessage["events
  */
 export async function revokeSession(store: ConsoleStore, wallet: Wallet, key: SessionKeySigner): Promise<void> {
   try {
+    const blocked = signBlock(store.getSnapshot().attestation, store.getSnapshot().stream, false);
+    if (blocked !== null) throw new Error(`signing is blocked: ${blocked}`);
     const { next_nonce, time_ms } = await store.deps.client.nonce(wallet.address);
     const expiresAt = (time_ms ?? store.getSnapshot().now) + REQUEST_TTL_MS;
     const typed = revokeSessionKeyTypedData(domainOf(store), wallet.address, key.address, { nonce: next_nonce, expiresAt });
@@ -136,6 +140,8 @@ export async function sessionSigned(
   const wallet = usableWallet(store, "sign");
   if (!wallet) return { ok: false };
   if (liveSessionKey(store) === null && !(await ensureLogin(store))) return { ok: false };
+  // The login waited on the wallet: this connection must still be the one that asked.
+  if (store.liveWallet !== wallet) return { ok: false };
   const key = liveSessionKey(store);
   if (key === null) return { ok: false };
   store.patch({ busy: true });
@@ -144,24 +150,29 @@ export async function sessionSigned(
   try {
     const { next_nonce, time_ms } = await store.deps.client.nonce(key.address);
     const expiresAt = (time_ms ?? store.getSnapshot().now) + REQUEST_TTL_MS;
-    const attempt = async (withKey: SessionKeySigner, nonce: number) => {
-      const typed = build({ nonce, expiresAt }, wallet.address);
+    const attempt = async (withKey: SessionKeySigner, nonce: number, validUntil: number) => {
+      const typed = build({ nonce, expiresAt: validUntil }, wallet.address);
       const signature = await withKey.sign(typed);
       sent = true;
-      return send({ nonce, expires_at: expiresAt, signature }, wallet);
+      return send({ nonce, expires_at: validUntil, signature }, wallet);
     };
     try {
-      return { ok: true, result: await attempt(key, next_nonce) };
+      return { ok: true, result: await attempt(key, next_nonce, expiresAt) };
     } catch (error) {
       if (error instanceof EngineError && error.reject?.kind === "invalid_nonce") {
         // As `signed`: a cancel is re-signed with the nonce the node names; an order is reported, since a copy may have run.
-        if (onNonceTaken === "sign-again") return { ok: true, result: await attempt(key, error.reject.expected) };
+        if (onNonceTaken === "sign-again") return { ok: true, result: await attempt(key, error.reject.expected, expiresAt) };
         throw new EngineError(error.status, `The node had already used nonce ${next_nonce} for this account, so it did not take this request as sent. If it was sent twice it may have run: check your positions, orders, withdrawals and history before trying again.`);
       }
       // A key the node no longer admits (revoked, expired, or unknown after a restart) re-runs the login once.
-      if (keyDied(error) && (await ensureLogin(store, true))) {
+      if (keyDied(error) && (await ensureLogin(store, true)) && store.liveWallet === wallet) {
         const fresh = liveSessionKey(store);
-        if (fresh !== null) return { ok: true, result: await attempt(fresh, (await store.deps.client.nonce(fresh.address)).next_nonce) };
+        if (fresh !== null) {
+          // Fresh terms from the answer after the re-login: the first expiry may already be past.
+          const terms = await store.deps.client.nonce(fresh.address);
+          const freshExpiry = (terms.time_ms ?? store.getSnapshot().now) + REQUEST_TTL_MS;
+          return { ok: true, result: await attempt(fresh, terms.next_nonce, freshExpiry) };
+        }
       }
       throw error;
     }

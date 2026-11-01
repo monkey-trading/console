@@ -26,6 +26,8 @@ export class ConsoleStore {
   sessionKeyExpiresAt = 0;
   /** The login in flight, so concurrent callers share one attempt and one wallet prompt. */
   sessionLogin: Promise<boolean> | null = null;
+  /** The previous disconnect's revocation and release, awaited before the next connect adopts. */
+  walletCleanup: Promise<void> | null = null;
   /** Bookkeeping for the background vault reads: `paidCheck`/`emissionsCheck` name the wallet each runs for, `lastEmissionsReadAt` throttles the MONKEY record's retries, `lastEmissionsReadError` dedupes its repeated failures. */
   paidCheck: Wallet | null = null;
   emissionsCheck: Wallet | null = null;

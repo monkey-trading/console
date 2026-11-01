@@ -52,7 +52,10 @@ export class MockControls {
   resetAccount(address: string): void {
     const { state } = this.client;
     const key = address.toLowerCase();
+    const keys = state.sessionKeys.get(key);
+    if (keys) for (const sessionKey of keys.keys()) state.sessionKeyNonces.delete(sessionKey);
     state.accounts.delete(key);
+    state.credited.delete(key);
     state.history.delete(key);
     state.sessionKeys.delete(key);
     state.entitledMonkey.delete(key);

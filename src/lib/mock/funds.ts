@@ -25,6 +25,7 @@ export function chainDeposit(state: MockState, address: string, amount: Fixed): 
   if (amount !== wholeUsdc(amount)) throw new EngineError(400, "USDC has six decimal places");
   account.pending.push({ amount, readyAt: state.now + FINALITY_MS });
   account.balance += amount;
+  state.credited.add(address.toLowerCase());
   state.emit({ type: "deposit" }, [{ type: "deposited", account: address, amount: fixedToWire(amount) }]);
 }
 

@@ -41,10 +41,10 @@ function rejected(state: MockState, cmd: "register_session_key" | "revoke_sessio
  */
 export function registerSessionKey(state: MockState, req: SessionKeyRequest): ActionResult {
   checkAccess(state);
+  // As the node's authorise refuses any account-signed request for a never-credited account.
+  if (!state.credited.has(req.account.toLowerCase())) throw new EngineError(403, "account has never been credited");
   const account = state.account(req.account);
   checkAuth(state, account, req.auth);
-  // As the node's authorise refuses any account-signed request for a never-credited account.
-  if (!state.accounts.has(req.account.toLowerCase())) throw new EngineError(403, "account has never been credited");
   const accountKey = req.account.toLowerCase();
   const sessionKey = req.session_key.toLowerCase();
   if (sessionKey === accountKey) return rejected(state, "register_session_key", req, { kind: "invalid_session_key" });
