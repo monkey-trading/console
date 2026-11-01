@@ -47,7 +47,7 @@ export interface HouseScanResult {
  * Error cases:
  * - before any entry: a frame is out of order or does not verify, or the connection fails
  */
-export function scanHouse(deps: ScanDeps, fromSeq: number, budget: HouseScanBudget, skipPast?: [number, number]): Promise<HouseScanResult> {
+export function scanHouse(deps: ScanDeps, fromSeq: number, budget: HouseScanBudget, skipPast?: [number, number], dead?: () => boolean): Promise<HouseScanResult> {
   return new Promise((resolve, reject) => {
     const challenge = deps.challenge();
     const path = `/v1/stream?signed=1&challenge=${challenge}&from=${fromSeq}`;
@@ -71,6 +71,9 @@ export function scanHouse(deps: ScanDeps, fromSeq: number, budget: HouseScanBudg
     };
     const timer = deps.scheduler.setTimeout(() => finish(new Error("Reading the log for the house's parameters took too long.")), budget.maxMs);
     socket.onmessage = (event) => {
+      // A stale chunk stands down as soon as the fold moves on, so a reconnect's re-read need not
+      // wait out the budget it would otherwise spend.
+      if (dead?.()) return finish(new Error("The read was superseded by a newer one."));
       const text = typeof event.data === "string" ? event.data : null;
       const frame = text === null ? null : parseSignedFrame(text);
       if (text === null || frame === null || frame.n !== expected) return finish(new Error("The node's log stream skipped or sent an unsigned frame."));
@@ -135,12 +138,14 @@ export class HouseLog {
   private catchUp: Promise<void> | null = null;
   /** Bumped to cancel a running catch-up when the session stops; a cancelled run keeps its folds. */
   private generation = 0;
+  /** Set when a read in flight is superseded and a fresh one must start the moment it settles. */
+  private restart = false;
   /** The most consecutive chunks that failed without advancing the read, before the read gives up. */
   private stallFailures = 0;
   /** The clock's time before which a failed read is not retried. */
   private retryAt = 0;
 
-  constructor(private readonly scanFrom: (fromSeq: number, skipPast?: [number, number]) => Promise<HouseScanResult>, private readonly nowMs: () => number) {}
+  constructor(private readonly scanFrom: (fromSeq: number, skipPast?: [number, number], dead?: () => boolean) => Promise<HouseScanResult>, private readonly nowMs: () => number) {}
 
   /** The state of the log read feeding the fold. */
   get freshness(): "current" | "reading" | "failed" {
@@ -166,11 +171,13 @@ export class HouseLog {
   uncaught(): void {
     this.caughtUp = false;
     this.generation += 1;
+    this.restart = true; // a read in flight is superseded: start its successor the moment it settles
   }
 
   /** Stops a running catch-up: its chunks stand down as they finish; the folds are kept. */
   cancel(): void {
     this.generation += 1;
+    this.restart = false; // no one reads the fold after a stop: nothing restarts
   }
 
   /** Applies a `set_params` read at `seq` when it is newer than the fold, whatever stream it came from. */
@@ -194,19 +201,39 @@ export class HouseLog {
     this.checkpointFold = entry;
   }
 
-  /** Starts the catch-up read if none runs, none has reached the head, and no recent failure is still waiting to retry. */
+  /**
+   * Starts the catch-up read if none runs, none has reached the head, and no recent failure is
+   * still waiting to retry. A read already in flight blocks only while it is current: one a
+   * reconnect or stop has superseded settles on its own, and the fresh read starts the moment it
+   * does.
+   */
   kick(): void {
-    if (this.catchUp !== null || this.caughtUp || this.nowMs() < this.retryAt) return;
+    if (this.caughtUp || this.nowMs() < this.retryAt) return;
+    if (this.catchUp !== null) return;
+    this.startRun();
+  }
+
+  /** Runs the catch-up loop; a restart pending when it settles starts the fresh read. */
+  private startRun(): void {
     this.stallFailures = 0;
+    this.restart = false;
     this.catchUp = this.run().then(
       () => {
         this.catchUp = null;
+        if (this.restart) {
+          this.restart = false;
+          this.kick();
+        }
       },
       () => {
         // What the chunks folded is kept; the next read continues from where the read stopped.
         this.failed = true;
         this.retryAt = this.nowMs() + RETRY_AFTER_FAILURE_MS;
         this.catchUp = null;
+        if (this.restart) {
+          this.restart = false;
+          this.kick();
+        }
       },
     );
   }
@@ -226,7 +253,7 @@ export class HouseLog {
     const generation = this.generation;
     for (;;) {
       const from = this.last?.[0] ?? 0;
-      const result = await this.scanFrom(from, this.last ?? undefined);
+      const result = await this.scanFrom(from, this.last ?? undefined, () => generation !== this.generation);
       if (generation !== this.generation) return; // invalidated or cancelled mid-read: the next read resumes from `last`
       if (result.params !== null && result.paramsSeq !== null) this.foldParams(result.paramsSeq, result.params);
       if (result.checkpoint !== null) this.foldCheckpoint(result.checkpoint);

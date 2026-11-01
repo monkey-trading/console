@@ -46,12 +46,13 @@ describe("setParamsOf", () => {
     for (const cmd of [upsert, tick, signedUpsert]) expect(setParamsOf(cmd, [])).toBeNull();
   });
 
-  it("answers null for a floor an older protocol version carries none of, or a malformed one", () => {
-    const legacy = {
+  it("reads a floor the encoding leaves out as zero, and refuses a malformed one", () => {
+    // The engine omits a zero floor from the wire; production's launch params carry none.
+    const noFloor = {
       type: "admin", action: "set_params", profit_fee_bps: 1000, closeout_level_bps: 5000, house_total_cap_bps: 20000,
     } as unknown as EngineCommand;
     const malformed = { type: "admin", ...SET_PARAMS, house_total_cap_floor: "not a decimal" } as unknown as EngineCommand;
-    expect(setParamsOf(legacy, [])).toBeNull();
+    expect(setParamsOf(noFloor, [])).toEqual({ ...PARAMS_FIELDS, house_total_cap_floor: "0" });
     expect(setParamsOf(malformed, [])).toBeNull();
   });
 });

@@ -78,9 +78,9 @@ export class LiveEngineClient implements EngineClient {
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
     });
     this.transport = new SignedTransport({ ...deps, verifier: () => this.requireVerifier(), trust: this.trust, challenge, signal: this.signal });
-    this.houseLog = new HouseLog(async (fromSeq, skipPast) => {
+    this.houseLog = new HouseLog(async (fromSeq, skipPast, dead) => {
       const signer = await this.trust.signer();
-      return scanHouse({ ...deps, origin: deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge }, fromSeq, HOUSE_SCAN_CHUNK, skipPast);
+      return scanHouse({ ...deps, origin: deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge }, fromSeq, HOUSE_SCAN_CHUNK, skipPast, dead);
     }, deps.nowMs);
     this.totalsWalk = new QueueTotalsWalk(this.transport, deps.nowMs);
     this.withdrawalTotals = () => this.totalsWalk.totals();

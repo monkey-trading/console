@@ -130,6 +130,7 @@ describe("the house log fold", () => {
     sockets[0]?.receive(frame(1, { type: "heartbeat", head: "0:0" }));
     for (let i = 0; i < 20; i++) await Promise.resolve();
     expect(log.freshness).toBe("reading");
+    expect(sockets[0]?.closed).toBe(true); // the superseded chunk's socket closed instead of idling to its budget
     // The next read resumes catch-up and only then counts the fold current.
     log.kick();
     for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -241,5 +242,30 @@ describe("the live client's house folds", () => {
     now = 15_000;
     await live.withdrawalTotals();
     expect(walkRequests()).toHaveLength(walked + 1);
+  });
+
+  it("keeps failing through the backoff instead of serving an expired cache as success", async () => {
+    const markets = vectorResponse("markets");
+    const node = new FakeNode();
+    node.attestation(() => VECTORS.signer);
+    let now = 0;
+    let fail = true;
+    node.signed("/v1/withdrawals?limit=200", () =>
+      fail
+        ? { status: 500, body: '{"error":"queue down"}', signature: "0x", timeMs: now, seq: 1 }
+        : { status: 200, body: JSON.stringify({ seq: 1, queue: [], next: null }), signature: "0x", timeMs: now, seq: 1 },
+    );
+    const live = new LiveEngineClient({
+      origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000,
+      loadVerifier: async () => acceptAll, manifests: [], acceptsMock: true, fetch: node.fetch,
+      openSocket: (url) => new FakeSocket(url), scheduler: new FakeScheduler(), nowMs: () => now, challenge: () => "ab".repeat(32),
+    });
+    await expect(live.withdrawalTotals()).rejects.toThrow("queue down");
+    now = 1_000; // within the backoff: the walk still fails, so a retained answer keeps its failure warning
+    await expect(live.withdrawalTotals()).rejects.toThrow("waiting to retry");
+    expect(node.requests.filter((r) => r.path.startsWith("/v1/withdrawals?limit=200"))).toHaveLength(1);
+    now = 31_000; // past the backoff: the next read walks again
+    fail = false;
+    await expect(live.withdrawalTotals()).resolves.toEqual({ count: 0, remaining: 0n, seq: 1, complete: true, stable: true });
   });
 });

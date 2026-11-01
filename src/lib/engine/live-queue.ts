@@ -27,10 +27,9 @@ export class QueueTotalsWalk {
   async totals(): Promise<QueueTotals> {
     const cached = this.cache;
     if (cached !== null && this.nowMs() - cached.at < TOTALS_TTL_MS) return cached.totals;
-    if (this.nowMs() < this.retryAt) {
-      if (cached !== null) return cached.totals;
-      throw new Error("The queue read failed and is waiting to retry.");
-    }
+    // During backoff the walk keeps failing, so the store's retained figures keep their failure
+    // warning; only a fresh cache (no failure yet) is served without walking.
+    if (this.nowMs() < this.retryAt) throw new Error("The queue read failed and is waiting to retry.");
     try {
       const totals = await this.walk();
       this.cache = { at: this.nowMs(), totals };

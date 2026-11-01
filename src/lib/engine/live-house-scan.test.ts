@@ -79,10 +79,10 @@ describe("scanning the log for the house's state", () => {
     const second = run(40, BUDGET, [40, 0]);
     await Promise.resolve();
     sockets[1]?.receive(frame(0, command(40, { type: "tick" })));
-    sockets[1]?.receive(frame(1, command(41, { type: "admin", ...SET_PARAMS })));
-    sockets[1]?.receive(frame(2, checkpoint(41, 1)));
-    sockets[1]?.receive(frame(3, { type: "heartbeat", head: "41:1" }));
-    await expect(second).resolves.toEqual({ params: PARAMS_FIELDS, paramsSeq: 41, checkpoint: checkpoint(41, 1), complete: true, last: [41, 1] });
+    sockets[1]?.receive(frame(1, checkpoint(40, 1)));
+    sockets[1]?.receive(frame(2, command(41, { type: "admin", ...SET_PARAMS })));
+    sockets[1]?.receive(frame(3, { type: "heartbeat", head: "41:0" }));
+    await expect(second).resolves.toEqual({ params: PARAMS_FIELDS, paramsSeq: 41, checkpoint: checkpoint(40, 1), complete: true, last: [41, 0] });
   });
 
   it("rejects an out-of-order frame, and gives up when the budget's time runs out", async () => {

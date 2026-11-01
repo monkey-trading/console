@@ -50,6 +50,20 @@ describe("the store's house panel state", () => {
     expect(store.getSnapshot().houseParams).toEqual(PARAMS);
   });
 
+  it("starts no house reads once the session has stopped", async () => {
+    const { client, store } = setup();
+    let reads = 0;
+    const original = client.houseParams.bind(client);
+    client.houseParams = async () => {
+      reads++;
+      return original();
+    };
+    const stop = store.start(0);
+    stop();
+    await settle();
+    expect(reads).toBe(0);
+  });
+
   it("publishes the log read's failure state before any parameters have been read", async () => {
     const { client, store } = setup();
     client.logStatus = "failed";

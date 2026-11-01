@@ -25,6 +25,8 @@ export function readHouseLog(store: ConsoleStore): Promise<boolean> {
         return false;
       },
     );
+  // The shipped clients resolve these reads from folds that never reject; the handlers guard
+  // implementations that do, so the page's panels degrade the way the queue walk's can.
   return Promise.all([
     publish("houseParams", client.houseParams()),
     publish("checkpoint", client.latestCheckpoint()),
@@ -55,6 +57,7 @@ export function readHouseQueue(store: ConsoleStore): Promise<boolean> {
  * refresh is shown once.
  */
 export function readHousePanelSoon(store: ConsoleStore): void {
+  if (store.stopped) return;
   if (store.houseRead === null) {
     store.houseRead = readHouseLog(store).then((ok) => {
       if (ok) store.lastHouseReadError = null;
