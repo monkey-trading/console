@@ -4,8 +4,8 @@
 #      names, the vault signed for by the node's published mock enclave key;
 #   2. the house's capital deposited into the vault, and mock USDC minted to a dev wallet;
 #   3. an engine node on EVM custody that prices BTC-USD and ETH-USD from live crypto venues,
-#      screens through the local synthetic access source, and posts checkpoints on-chain, so
-#      withdrawals are authorized and claimable on the vault;
+#      screens through the local synthetic access source, initialises MONKEY emissions, and posts
+#      checkpoints on-chain, so withdrawals are authorized and claimable on the vault;
 #   4. the console in live-dev mode against that node.
 # It prints what to add to the wallet, then runs until Ctrl-C, which stops everything it started.
 #
@@ -357,6 +357,36 @@ node_up() {
 poll 120 node_up || die "the node did not report healthy on $api/v1/health"
 attested="$(curl -sk --max-time 5 "$api/v1/attestation" | jq -r '.enclave_address // empty')"
 [[ "$(lower "$attested")" == "$(lower "$enclave")" ]] || die "the node attests enclave ${attested:-none}, not the vault's signer $enclave"
+
+step "Initialise MONKEY emissions"
+step_log="$work/init-emissions.log"
+# The engine queues genesis until its first trusted time sample and refuses every command until
+# then, so wait for the sequenced markets before sending the operator's schedule.
+genesis_applied() {
+  alive "$node_pid" || die "the node exited"
+  [[ "$(curl -sk --max-time 2 "$api/v1/markets" 2>/dev/null)" != "[]" ]]
+}
+poll 120 genesis_applied || die "genesis did not apply within two minutes"
+# The operator's signed schedule, taken once by a fresh log: period 0 at the next whole minute
+# with the period budget the vault deployed with, which the node reconciles against the MONKEY
+# cap before it sequences this (a budget the cap was not derived from is refused). The operator
+# key is the published local test key 0x4242...42 (config/test-keys.toml).
+tls_pin="$(curl -sk --max-time 5 "$api/v1/attestation" | jq -r '.tls_public_key_sha256')"
+printf '%s\n' "4242424242424242424242424242424242424242424242424242424242424242" >"$work/operator.key"
+# The engine refuses a start before its sequenced time, so a local clock behind the node's
+# trusted one can need a later start: retry a bounded few times, each with the next minute.
+emissions_applied=""
+for _attempt in 1 2 3; do
+  emissions_start="$(python3 -c 'import time; print(time.strftime("%Y-%m-%dT%H:%M:00Z", time.gmtime((int(time.time()) // 60 + 1) * 60)))')"
+  if "$engine" admin --config "$work/node.toml" --node "$api" --pin "$tls_pin" --key-file "$work/operator.key" \
+    init-emissions --start "$emissions_start" --period-budget 1000000000000000000 >>"$step_log" 2>&1; then
+    emissions_applied=yes
+    break
+  fi
+  sleep 2
+done
+[[ -n "$emissions_applied" ]] || die "the node did not sequence init-emissions (see $step_log)"
+
 # Every market a configured venue quotes, BTC-USD among them.
 venues_priced() {
   alive "$node_pid" || die "the node exited"
@@ -451,6 +481,8 @@ Deposits           Approve the vault and deposit from the console. The node sees
                    eligibility declaration, then it is credited.
 Withdrawals        The engine approves a withdrawal; the next checkpoint (every 100 commands, a few
                    seconds) is posted to the vault, and the console then claims it on the vault.
+MONKEY             Emissions run from $emissions_start: ten-minute budgets accrue to each period's
+                   net realised losses and show in the console once a losing trade closes.
 
 Node log           $work/node.log
 Metrics            $metrics_url
