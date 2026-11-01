@@ -101,12 +101,15 @@ export function quoteOrder(args: {
   stress: number;
   held: Fixed;
   qty: Fixed;
+  /** Converts an amount in the market's quote currency to USD, which the spread tiers are in; omitted for a USD market. */
+  toUsd?: (amount: Fixed) => Fixed;
 }): Quote & { grows: boolean } {
   const growth = growthOf(args.held, args.side === "buy" ? args.qty : -args.qty);
+  const usd = args.toUsd ?? ((amount: Fixed) => amount);
   const quote = quoteFor({
     index: args.index, side: args.side, baseSpreadBps: args.baseSpreadBps, spreadTiers: args.spreadTiers, stress: args.stress,
-    heldNotional: mulFixed(growth.fromQty, args.index), orderNotional: mulFixed(growth.toQty - growth.fromQty, args.index),
-    executedNotional: mulFixed(args.qty, args.index),
+    heldNotional: usd(mulFixed(growth.fromQty, args.index)), orderNotional: usd(mulFixed(growth.toQty - growth.fromQty, args.index)),
+    executedNotional: usd(mulFixed(args.qty, args.index)),
   });
   return { ...quote, grows: growth.grows };
 }

@@ -13,7 +13,7 @@ import { useReadOnlyNote } from "./SignGate";
 
 const BUTTON = "mt-3 min-h-11 w-full rounded border border-glow bg-glow/10 px-3 py-2 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 lg:min-h-0";
 
-/** The claims section of the funding drawer, for a live node. */
+/** The claims section of the Funding page's In progress column, for a live node. */
 export function Payouts() {
   const state = useConsole();
   const { store } = useSession();
@@ -38,13 +38,13 @@ export function Payouts() {
   };
   const idle = !state.busy && state.searching === null;
   return (
-    <section aria-labelledby="payouts-title" className="rounded-xl border border-line-2 bg-ink-1 p-5">
-      <h2 ref={heading} id="payouts-title" tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">Claims on the vault</h2>
+    <section aria-labelledby="payouts-title" className="p-4">
+      <h4 ref={heading} id="payouts-title" tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">Claims on the vault</h4>
       {readOnly.note}
       {payouts.length === 0 ? (
-        <p className="mt-4 text-caption text-fg-3">{state.wallet ? "No approved withdrawals yet." : "Connect a wallet to see your withdrawals."}</p>
+        <p className="mt-3 text-caption text-fg-3">{state.wallet ? "No approved withdrawals yet." : "Connect a wallet to see your withdrawals."}</p>
       ) : (
-        <ul className="mt-4 space-y-3">
+        <ul className="mt-3 space-y-2">
           {payouts.map((payout) => <PayoutRow key={payout.nonce} payout={payout} idle={idle} signs={!readOnly.readOnly} describedBy={readOnly.describedBy} searching={state.searching === payout.nonce} act={act} />)}
         </ul>
       )}
@@ -88,9 +88,12 @@ function PayoutRow({ payout, idle, signs, describedBy, searching, act }: { payou
           {search("Look for a newer one in the log")}
         </>
       )}
-      {status.kind === "waiting" && (
+      {status.kind === "waiting" && !payout.read && (
+        <p className="mt-2 text-fg-3">{signs ? "Checking the vault…" : "The vault's record of this withdrawal could not be read for a read-only account."}</p>
+      )}
+      {status.kind === "waiting" && payout.read && (
         <>
-          <p className="mt-2 text-fg-3">This page has not received its authorization. The node signs one once a checkpoint covering the approval is confirmed on chain; if the vault has paid it already, its record says so once the authorization is found.</p>
+          <p className="mt-2 text-fg-3">This page has not received its authorization. The node signs one once a checkpoint covering the approval is confirmed on chain; the vault's record says it is unpaid.</p>
           {search("Look for it in the log")}
         </>
       )}

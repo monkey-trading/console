@@ -131,10 +131,6 @@ export class ConsoleStore {
     this.barsSeed.seed(this.snapshot.selected, timeframe);
   }
 
-  setFundingOpen(open: boolean): void {
-    this.patch({ fundingOpen: open });
-  }
-
   /** Marks the caller as refused when `error` is an access refusal; true if it was. */
   noteAccess(error: unknown): boolean {
     return noteAccess(this, error);

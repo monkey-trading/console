@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fixedFromInt, parseFixed } from "../fixed";
 import { createMockNode, SIM_EPOCH_MS } from "../mock";
 import { resetVault } from "../mock/test-helpers";
-import { previewTicket } from "../ticket";
+import { parseSize, previewTicket } from "../ticket";
 import { mockHistory } from "../mock/history";
 import { attestEligibility, cancelOrder, connectWallet, deposit, placeOrder, withdraw } from "./actions";
 import { ConsoleStore } from "./store";
@@ -36,13 +36,28 @@ async function funded() {
   return ctx;
 }
 
-/** Buys `notional` dollars of market 1 as the ticket does: its size and, for a market order, the price it shows. */
-function buy(store: ConsoleStore, notional: number, kind?: { kind: "limit"; price: bigint }) {
+/** Orders `size` contracts of market 1 as the ticket does: the typed quantity and, for a market order, the price it shows. */
+function order(store: ConsoleStore, side: "buy" | "sell", size: string, kind?: { kind: "limit"; price: bigint }) {
   const state = store.getSnapshot();
   const market = state.markets.find((m) => m.id === 1);
-  if (!market) throw new Error("no market 1");
-  const preview = previewTicket({ market, side: "buy", notional: fixedFromInt(notional), slippageBps: 10, resting: kind !== undefined, account: state.account, houseNav: state.house.nav });
-  return placeOrder(store, { market: 1, side: "buy", qty: preview.qty, kind: kind ?? { kind: "market", quoted: preview.quote?.price ?? 0n, slippageBps: 10 }, reduceOnly: false });
+  const parsed = parseSize(size);
+  if (!market || parsed.kind !== "qty") throw new Error("no market 1, or a size the ticket refuses");
+  const preview = previewTicket({ market, side, qty: parsed.qty, slippageBps: 10, resting: kind !== undefined, account: state.account, houseNav: state.house.nav });
+  return placeOrder(store, { market: 1, side, qty: preview.qty, kind: kind ?? { kind: "market", quoted: preview.quote?.price ?? 0n, slippageBps: 10 }, reduceOnly: false });
+}
+
+const buy = (store: ConsoleStore, size: string, kind?: { kind: "limit"; price: bigint }) => order(store, "buy", size, kind);
+
+/** Closes market 1's whole position as the Positions tab does: its exact quantity, reduce only. */
+function closePosition(store: ConsoleStore) {
+  const state = store.getSnapshot();
+  const market = state.markets.find((m) => m.id === 1);
+  const position = state.account?.positions.find((p) => p.market === 1);
+  if (!market || !position) throw new Error("no market 1, or no position in it");
+  const side = position.qty > 0n ? "sell" : "buy";
+  const qty = position.qty < 0n ? -position.qty : position.qty;
+  const preview = previewTicket({ market, side, qty, slippageBps: 25, account: state.account, houseNav: state.house.nav });
+  return placeOrder(store, { market: 1, side, qty, kind: { kind: "market", quoted: preview.quote?.price ?? 0n, slippageBps: 25 }, reduceOnly: true });
 }
 
 describe("the user's path", () => {
@@ -52,10 +67,25 @@ describe("the user's path", () => {
     expect(state.attestation.kind).toBe("mock");
     expect(state.eligibility).toBe("professional");
     expect(state.account?.balance).toBe(fixedFromInt(50_000));
-    await buy(store, 20_000);
+    await buy(store, "0.25");
     expect(store.getSnapshot().account?.positions).toHaveLength(1);
     expect(store.getSnapshot().toasts.at(-1)?.text).toContain("Filled");
     expect(store.getSnapshot().history[0]?.type).toBe("fill");
+  });
+
+  it("fills the exact quantity typed, long or short, and closes exactly that quantity", async () => {
+    const { store } = await funded();
+    const mine = () => store.getSnapshot().account?.positions.find((p) => p.market === 1)?.qty;
+    await buy(store, "0.5");
+    expect(mine()).toBe(parseFixed("0.5"));
+    await closePosition(store);
+    expect(mine()).toBeUndefined();
+    // A size no notional rounds to, and a short closed by a buy of the same quantity.
+    await order(store, "sell", "0.123457");
+    expect(mine()).toBe(parseFixed("-0.123457"));
+    await closePosition(store);
+    expect(mine()).toBeUndefined();
+    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("Filled");
   });
 
   it("refuses to sign for a node whose attestation it cannot verify", async () => {
@@ -81,9 +111,9 @@ describe("the user's path", () => {
 
   it("explains a refused order and cancels a resting one", async () => {
     const { store } = await funded();
-    await buy(store, 5_000_000);
+    await buy(store, "74");
     expect(store.getSnapshot().toasts.at(-1)?.text).toMatch(/equity|house|too|Not enough/i);
-    await buy(store, 10_000, { kind: "limit", price: parseFixed("1000") ?? 0n });
+    await buy(store, "0.2", { kind: "limit", price: parseFixed("1000") ?? 0n });
     const order = store.getSnapshot().account?.orders[0];
     expect(order).toBeDefined();
     await cancelOrder(store, order?.order_id ?? 0);

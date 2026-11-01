@@ -13,17 +13,21 @@ import type { ConsoleState } from "@/lib/store/state";
 import { useConsole, useSession } from "./ConsoleProvider";
 import { PriceChart, type PriceMarker } from "./PriceChart";
 
-/** The lines drawn across the chart: the open position's entry and close-out price, and resting orders. */
-function markersFor(state: ConsoleState, market: MarketModel): PriceMarker[] {
+/**
+ * The lines drawn across the chart: the open position's entry and close-out price, and resting orders.
+ * Each line's colour follows its direction: a buy order or a long's entry is green, a sell order or a
+ * short's entry is red. The close-out is red too, and dashed.
+ */
+export function markersFor(state: ConsoleState, market: MarketModel): PriceMarker[] {
   const out: PriceMarker[] = [];
   const position = state.account?.positions.find((p) => p.market === market.id);
   if (state.account && position) {
-    out.push({ price: fixedToNumber(position.entry), tone: "glow", style: "dotted", title: `${position.qty > 0n ? "Long" : "Short"} entry` });
+    out.push({ price: fixedToNumber(position.entry), tone: position.qty > 0n ? "glow" : "ember", style: "dotted", title: `${position.qty > 0n ? "Long" : "Short"} entry` });
     const liq = closeOutMarker(state.signatures, state.account, market, state.markets);
     if (liq !== null) out.push({ price: fixedToNumber(liq), tone: "ember", style: "dashed", title: "Close-out (est.)" });
   }
   for (const order of state.account?.orders ?? []) {
-    if (order.market === market.id && order.kind.kind !== "market") out.push({ price: Number(order.kind.price), tone: "amber", style: "dotted", title: `${order.kind.kind} ${order.side}` });
+    if (order.market === market.id && order.kind.kind !== "market") out.push({ price: Number(order.kind.price), tone: order.side === "buy" ? "glow" : "ember", style: "dotted", title: `${order.kind.kind} ${order.side}` });
   }
   return out;
 }

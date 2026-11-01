@@ -4,9 +4,9 @@
  */
 
 import type { MarketId, MarketQuote, Reject, Side } from "./engine/types";
-import { fixedFromWire, formatUsd, mulFixed, type Fixed } from "./fixed";
+import { fixedFromWire, fixedToWire, type Fixed } from "./fixed";
 import { describeReject } from "./messages";
-import type { TicketPreview } from "./ticket";
+import { truncateToStep, type TicketPreview } from "./ticket";
 
 /** The most markets one connection may ask quotes for: the node's `api.quote_max_markets` default. */
 export const MAX_QUOTED_MARKETS = 4;
@@ -54,6 +54,8 @@ export interface TicketPrices {
   spreadBps: number | null;
   /** Why a market order cannot be sent at a price now; null when it can. */
   problem: string | null;
+  /** Whether that problem is about the order's size, so it belongs under the size field. */
+  problemIsSize: boolean;
 }
 
 /**
@@ -64,9 +66,9 @@ export interface TicketPrices {
 export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; quoteError: string | null; preview: TicketPreview; side: Side; mark: Fixed | null }): TicketPrices {
   const { preview, side } = input;
   if (!input.live) {
-    return { bid: preview.bid, offer: preview.offer, price: preview.quote?.price ?? null, spreadBps: preview.spreadBps, problem: null };
+    return { bid: preview.bid, offer: preview.offer, price: preview.quote?.price ?? null, spreadBps: preview.spreadBps, problem: null, problemIsSize: false };
   }
-  const none = (problem: string): TicketPrices => ({ bid: null, offer: null, price: null, spreadBps: null, problem });
+  const none = (problem: string): TicketPrices => ({ bid: null, offer: null, price: null, spreadBps: null, problem, problemIsSize: false });
   const { quote } = input;
   if (quote === null) {
     if (input.quoteError === null) return none("Waiting for the node's executable quote.");
@@ -77,8 +79,10 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
   const bid = executablePrice(quote, "sell", preview.qty);
   const mine = side === "buy" ? ask : bid;
   const spreadBps = ask !== null && bid !== null && input.mark !== null && input.mark > 0n ? Number(((ask.price - bid.price) * 10_000n) / input.mark) : null;
-  const problem = mine === null ? "The node would not open an order this large. Try a smaller size." : mine.declined === null ? null : declinedProblem(quote, side, input.mark, mine.declined);
-  return { bid: bid?.price ?? null, offer: ask?.price ?? null, price: mine?.price ?? null, spreadBps, problem };
+  const problem = mine === null ? "The node would not open an order this large. Try a smaller size." : mine.declined === null ? null : declinedProblem(quote, side, mine.declined);
+  // The node declining for margin or the house's capacity, or having no step this large, is a matter of the size.
+  const problemIsSize = mine === null || (mine.declined !== null && (mine.declined.kind === "insufficient_margin" || mine.declined.kind === "house_capacity"));
+  return { bid: bid?.price ?? null, offer: ask?.price ?? null, price: mine?.price ?? null, spreadBps, problem, problemIsSize };
 }
 
 /**
@@ -87,10 +91,13 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
  * (the ladder's steps sit at spread-tier tops, monkey-trading/engine#290), so they cannot be shown
  * as the order's; the largest step that still fills is the size the account can open.
  */
-function declinedProblem(quote: MarketQuote, side: Side, mark: Fixed | null, declined: Reject): string {
+function declinedProblem(quote: MarketQuote, side: Side, declined: Reject): string {
   if (declined.kind !== "insufficient_margin") return describeReject(declined);
   const steps = side === "buy" ? quote.ask : quote.bid;
   const fitting = [...steps].reverse().find((s) => s.declined === undefined);
-  if (fitting === undefined || mark === null) return "Not enough equity to open a position here.";
-  return `The largest position your equity opens here is ≈ ${formatUsd(mulFixed(fixedFromWire(fitting.qty), mark))}. Try a smaller size.`;
+  // In contracts, cut to the size field's step so it can be typed as it reads; a smaller size still fits.
+  const largest = fitting === undefined ? 0n : truncateToStep(fixedFromWire(fitting.qty));
+  if (largest <= 0n) return "Not enough equity to open a position here.";
+  const text = fixedToWire(largest);
+  return `The largest size your equity opens here is ≈ ${text} ${text === "1" ? "contract" : "contracts"}. Try a smaller size.`;
 }

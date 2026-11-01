@@ -95,7 +95,7 @@ export class FakeProvider implements WcProvider {
 }
 
 /** A connector over a fresh fake, the number of SDK loads, and the pairing states it published. */
-export function setup(onEnded?: () => void) {
+export function setup(onEnded?: (topic: string) => void) {
   const fake = new FakeProvider();
   const loads = { count: 0 };
   const sdk: WcModule = {

@@ -6,7 +6,7 @@
 
 import { EngineError } from "../engine/client";
 import { reissueTypedData } from "../engine/eip712";
-import type { SignedWithdrawal } from "../engine/types";
+import type { HistoryEvent, SignedWithdrawal } from "../engine/types";
 import { fixedFromWire, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
 import { domainOf, errorText, prompting, usableWallet } from "./signing";
@@ -55,12 +55,16 @@ function statusOf(state: ConsoleState, nonce: number, nowSeconds: number): Payou
   return held > nowSeconds ? { kind: "claimable", withdrawal: signed, expiresAt: held } : { kind: "expired", expiresAt: held };
 }
 
+/** The approvals the page lists, newest first: the recent history has the newest even when the separate read of them failed or lags. */
+function approvalsListed(state: ConsoleState): HistoryEvent[] {
+  const recent = state.history.filter((e) => e.type === "withdrawal_approved" && !state.approvals.some((a) => a.type === "withdrawal_approved" && a.nonce === e.nonce));
+  return [...recent, ...state.approvals];
+}
+
 /** Every unpaid payout of the account's approvals and recent history, newest first, then its newest paid ones, with where each stands at node time. */
 export function payoutsOf(state: ConsoleState): Payout[] {
   const nowSeconds = Math.floor(state.now / 1000);
-  // The recent history has the newest approvals even when the separate read of them failed or lags.
-  const recent = state.history.filter((e) => e.type === "withdrawal_approved" && !state.approvals.some((a) => a.type === "withdrawal_approved" && a.nonce === e.nonce));
-  const all = [...recent, ...state.approvals].flatMap((event) => {
+  const all = approvalsListed(state).flatMap((event) => {
     if (event.type !== "withdrawal_approved") return [];
     const approvedSeq = Number(event.cursor.split(":")[0]);
     const searchFrom = Math.max(approvedSeq, state.payoutHints[event.nonce]?.searchFrom ?? 0);
@@ -98,9 +102,15 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
   }
 }
 
-/** The payouts the page holds an authorization for, which a claim or a reissue acts on, whose payment the vault has not been asked about. */
+/**
+ * The payouts whose payment the vault has not been asked about: every approval the page lists, newest
+ * first, with or without an authorization (a reload leaves none, as only the stream carries them),
+ * then any authorization held for an approval not listed.
+ */
 export function unreadPayouts(state: ConsoleState): number[] {
-  return state.authorizations.map((w) => w.nonce).filter((nonce) => !state.paid.includes(nonce) && !state.unpaid.includes(nonce));
+  const listed = approvalsListed(state).flatMap((e) => (e.type === "withdrawal_approved" ? [e.nonce] : []));
+  const nonces = [...new Set([...listed, ...state.authorizations.map((w) => w.nonce)])];
+  return nonces.filter((nonce) => !state.paid.includes(nonce) && !state.unpaid.includes(nonce));
 }
 
 /**

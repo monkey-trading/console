@@ -106,7 +106,7 @@ export function noteAccess(store: ConsoleStore, error: unknown): boolean {
   if (error instanceof EngineError && error.reject?.kind === "access") {
     const reason = error.reject.reason;
     if (reason === "united_states" || reason === "sanctioned_jurisdiction") {
-      store.patch({ blocked: reason satisfies BlockReason, fundingOpen: false });
+      store.patch({ blocked: reason satisfies BlockReason });
       return true;
     }
   }

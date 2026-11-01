@@ -244,9 +244,11 @@ describe("a wallet change", () => {
   it("offers USDC only on a connect the visitor started, not a quiet reconnect", async () => {
     const offered: boolean[] = [];
     const { store } = await connected();
+    disconnectWallet(store); // a page load has no wallet yet; a live one would end the quiet connect at its replacement guard, before the offer
     store.deps.wallets.connect = async () => ({ ...WALLET_STUB, suggestUsdc: async () => { offered.push(true); return false; } });
-    await connectWallet(store, "injected", true); // a stored choice's reconnect: quiet
-    await connectWallet(store, "injected"); // the visitor picking the wallet: not quiet
+    expect(await connectWallet(store, "injected", true)).toBe(true); // a stored choice's reconnect: quiet, adopted
+    expect(offered).toEqual([]);
+    expect(await connectWallet(store, "injected")).toBe(true); // the visitor picking the wallet: not quiet
     expect(offered).toEqual([true]);
   });
 

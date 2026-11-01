@@ -30,3 +30,11 @@ export function withdrawableNow(balance: Fixed, equity: Fixed, margin: Fixed, lo
   const most = cash < free ? cash : free;
   return most > 0n ? most : 0n;
 }
+
+/** What holds a withdrawal below the balance: `unfinal` when deposits still counting down lock cash, `margin` when equity above margin is the smaller, or null when neither. */
+export function withdrawLimitCause(balance: Fixed, equity: Fixed, margin: Fixed, locked: Fixed): "unfinal" | "margin" | null {
+  const cash = balance - locked;
+  const free = equity - margin;
+  if (locked > 0n && cash <= free) return "unfinal";
+  return free < cash && margin > 0n ? "margin" : null;
+}

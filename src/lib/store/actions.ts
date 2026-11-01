@@ -11,19 +11,13 @@ import { fixedToWire, formatFixedPlaces, parseFixed, type Fixed } from "../fixed
 import { formatUsdc } from "../vault";
 import { describeReject } from "../messages";
 import { loadAccount } from "./account";
-import { ensureLogin, liveSessionKey, revokeSession, sessionSigned } from "./session";
+import { ensureLogin, sessionSigned } from "./session";
 import { domainOf, errorText, prompting, REQUEST_TTL_MS, signed, usableWallet } from "./signing";
 import type { ConsoleStore } from "./store";
+import { NO_ACCOUNT, release } from "./wallet-session";
 
 export { REQUEST_TTL_MS, STATEMENTS };
-
-/** The state a wallet change clears: everything read or streamed for the account before. */
-const NO_ACCOUNT = { account: null, eligibility: null, queue: [], history: [], quotes: {}, quoteError: null, quoted: [], authorizations: [], approvals: [], approvalsNext: null, payoutHints: {}, searching: null, paid: [], unpaid: [], entitlement: null, emissionsVault: null };
-
-/** Ends a wallet's connection in the background, telling the user if that fails. */
-function release(store: ConsoleStore, wallet: Wallet | null): void {
-  wallet?.disconnect?.().catch((error: unknown) => store.toast("error", `The wallet's session did not close: ${errorText(error)}`));
-}
+export { disconnectWallet, walletSessionEnded } from "./wallet-session";
 
 /** Offers to add the deployment's USDC to the wallet that just connected; one small toast when the wallet adds it, silence on a decline or a wallet that cannot. */
 function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
@@ -71,28 +65,6 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
   }
 }
 
-/**
- * Disconnects the wallet. A session key the login authorized is revoked first, best effort, while
- * the wallet's session can still sign; a disconnect from an already-ended WalletConnect session
- * (`revoke: false`) skips that, and the registration expires on its own.
- */
-export function disconnectWallet(store: ConsoleStore, revoke = true): void {
-  const wallet = store.liveWallet;
-  const key = liveSessionKey(store);
-  store.liveWallet = null;
-  store.sessionKey = null;
-  store.sessionKeyExpiresAt = 0;
-  store.sessionLogin = null; // a login in flight installs nothing: its wallet no longer matches
-  store.setWallet(null);
-  store.patch(NO_ACCOUNT);
-  store.walletCleanup = revoke && wallet && !wallet.readOnly && key !== null ? revokeThenRelease(store, wallet, key) : Promise.resolve(release(store, wallet));
-}
-
-/** Revokes the session key, then ends the wallet's session; the wallet is gone either way. */
-async function revokeThenRelease(store: ConsoleStore, wallet: Wallet, key: NonNullable<ConsoleStore["sessionKey"]>): Promise<void> {
-  await revokeSession(store, wallet, key);
-  release(store, wallet);
-}
 
 /** The connected wallet when the console may use it now; otherwise tells the user why not and returns null. */
 export async function attestEligibility(store: ConsoleStore, cls: EligibilityClass): Promise<void> {
@@ -176,10 +148,13 @@ export interface OrderParams {
   reduceOnly: boolean;
 }
 
-/** Places an order. A market order carries the quote shown to the user and their slippage bound. */
-export async function placeOrder(store: ConsoleStore, params: OrderParams): Promise<void> {
+/**
+ * Places an order. A market order carries the quote shown to the user and their slippage bound.
+ * True when the order filled or rests; false when it was refused, cancelled unfilled, or never reached the node.
+ */
+export async function placeOrder(store: ConsoleStore, params: OrderParams): Promise<boolean> {
   const market = store.getSnapshot().markets.find((m) => m.id === params.market);
-  if (!market || params.qty <= 0n) return;
+  if (!market || params.qty <= 0n) return false;
   const qty = fixedToWire(params.qty);
   const kind: OrderKind =
     params.kind.kind === "market"
@@ -191,13 +166,16 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams): Prom
   const out = await sessionSigned(store, summary, (t, account) => orderTypedData(domainOf(store), { ...order, account }, t), (auth, wallet) =>
     store.deps.client.placeOrder({ ...order, account: wallet.address, auth }), "report",
   );
-  if (!out.ok) return;
+  if (!out.ok) return false;
   const rejected = out.result.events.find((e) => e.type === "order_rejected");
+  const filled = out.result.events.some((e) => e.type === "fill");
+  const cancelled = out.result.events.some((e) => e.type === "order_cancelled");
   if (rejected && rejected.type === "order_rejected") store.toast("error", describeReject(rejected.reason));
-  else if (out.result.events.some((e) => e.type === "fill")) store.toast("ok", `Filled: ${summary}.`);
-  else if (out.result.events.some((e) => e.type === "order_cancelled")) store.toast("error", "The order was accepted but could not be filled, so it was cancelled.");
+  else if (filled) store.toast("ok", `Filled: ${summary}.`);
+  else if (cancelled) store.toast("error", "The order was accepted but could not be filled, so it was cancelled.");
   else store.toast("ok", "Order placed and resting.");
   await store.refresh(true);
+  return rejected === undefined && (filled || !cancelled);
 }
 
 export async function cancelOrder(store: ConsoleStore, orderId: number): Promise<void> {

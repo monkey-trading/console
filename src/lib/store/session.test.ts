@@ -13,7 +13,7 @@ import { disconnectWallet, placeOrder, REQUEST_TTL_MS } from "./actions";
 import { connected, NODE_TIME, signerOf, VAULT, ActionClient, BTC } from "./live-kit";
 import { ProviderWallet } from "../engine/provider-wallet";
 import { StubProvider } from "../engine/wallet-kit";
-import { attestEligibility, connectWallet } from "./actions";
+import { attestEligibility, connectWallet, walletSessionEnded } from "./actions";
 import { ConsoleStore } from "./store";
 import type { Wallet } from "../engine/wallet";
 import { liveSessionKey, loginOnCredit, loginSession } from "./session";
@@ -113,12 +113,14 @@ describe("the session-key login", () => {
   });
 
   it("skips the revocation prompt when the wallet app already ended the session", async () => {
-    const { client, provider, store } = await connected();
+    const { client, store } = await connected();
+    store.liveWallet = { address: ACCOUNT, label: "WalletConnect", sign: async () => "0x", deposit: async () => "0x0", claim: async () => "0x0" };
     await loginSession(store);
-    disconnectWallet(store, false); // as the WalletConnect-ended path does
+    expect(liveSessionKey(store)).not.toBeNull(); // the login signed once
+    walletSessionEnded(store, "topic-1"); // as the WalletConnect-ended path does
     await settle();
     expect(client.posted.some((p) => p.route === "session_key_revoke")).toBe(false);
-    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(1);
+    expect(store.sessionKey).toBeNull();
   });
 
   it("revokes best effort: a declined revocation still disconnects, and says the key expires on its own", async () => {
