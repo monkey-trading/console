@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixedFromWire } from "../fixed";
 import { settle } from "../engine/test-kit";
-import { setup } from "./live-fake";
+import { ACCOUNT, setup } from "./live-fake";
 
 const PARAMS = { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, totalCapFloor: fixedFromWire("2000000"), seq: 7, fresh: "current" as const };
 const CHECKPOINT = { type: "checkpoint" as const, offset: "1200:1", seq: 1200, root: `0x${"ab".repeat(32)}` };
@@ -63,6 +63,34 @@ describe("the store's house panel state", () => {
     await store.refresh(false);
     await settle();
     expect(store.getSnapshot().houseFresh).toBe(true);
+  });
+
+  it("leaves fresh figures fresh when an account read fails, reporting the failure once", async () => {
+    const { client, store } = setup();
+    store.start(0);
+    await settle();
+    expect(store.getSnapshot().houseFresh).toBe(true);
+    store.setWallet({ address: ACCOUNT, label: "Test wallet" });
+    client.accountError = new Error("account unavailable");
+    await store.refresh(false);
+    await settle();
+    // The account failure cannot stale the figures the markets and house reads just refreshed.
+    expect(store.getSnapshot().houseFresh).toBe(true);
+    expect(store.getSnapshot().toasts.some((t) => t.text === "account unavailable")).toBe(true);
+    // The same failure on the next refresh is not shown twice.
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot().toasts.filter((t) => t.text === "account unavailable")).toHaveLength(1);
+    // Recovery clears the latch: a different failure shows again.
+    client.accountError = new Error("account still unavailable");
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot().toasts.some((t) => t.text === "account still unavailable")).toBe(true);
+    // A new wallet's identical failure is reported: the latch does not carry over.
+    store.setWallet({ address: "0x00000000000000000000000000000000000000bb", label: "Other" });
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot().toasts.filter((t) => t.text === "account still unavailable")).toHaveLength(2);
   });
 
   it("starts no house reads once the session has stopped", async () => {
