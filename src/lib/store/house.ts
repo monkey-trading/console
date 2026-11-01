@@ -1,5 +1,6 @@
 /** The House page's reads: the log's latest `set_params`, checkpoint, and read status, and the public withdrawal queue's size. */
 
+import { QueueTotalsRetrying } from "../engine/live-queue";
 import type { ConsoleState } from "./state";
 import type { ConsoleStore } from "./store";
 
@@ -75,9 +76,11 @@ export function readHousePanelSoon(store: ConsoleStore): void {
 /**
  * Reports one house panel read failure, deduplicated so a failure that repeats on every refresh is
  * shown once. The log reads and the queue walk keep their own latches, cleared only when that read
- * recovers.
+ * recovers. A backoff wait is not a new failure: the walk's original rejection stays latched, so a
+ * persistent outage toasts once and the wait's own message never alternates with it.
  */
 function report(store: ConsoleStore, error: unknown, which: "log" | "queue"): void {
+  if (error instanceof QueueTotalsRetrying) return;
   const message = error instanceof Error ? error.message : "The node did not answer the house panel's reads.";
   const latch = which === "log" ? "lastHouseReadError" : "lastQueueReadError";
   if (!store.noteAccess(error) && message !== store[latch]) store.toast("error", message);
