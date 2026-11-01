@@ -225,10 +225,13 @@ export interface OrderParams {
   reduceOnly: boolean;
 }
 
-/** Places an order. A market order carries the quote shown to the user and their slippage bound. */
-export async function placeOrder(store: ConsoleStore, params: OrderParams): Promise<void> {
+/**
+ * Places an order. A market order carries the quote shown to the user and their slippage bound.
+ * True when the order filled or rests; false when it was refused, cancelled unfilled, or never reached the node.
+ */
+export async function placeOrder(store: ConsoleStore, params: OrderParams): Promise<boolean> {
   const market = store.getSnapshot().markets.find((m) => m.id === params.market);
-  if (!market || params.qty <= 0n) return;
+  if (!market || params.qty <= 0n) return false;
   const qty = fixedToWire(params.qty);
   const kind: OrderKind =
     params.kind.kind === "market"
@@ -240,13 +243,16 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams): Prom
   const out = await signed(store, summary, (t, account) => orderTypedData(domainOf(store), { ...order, account }, t), (auth, wallet) =>
     store.deps.client.placeOrder({ ...order, account: wallet.address, auth }), "report",
   );
-  if (!out.ok) return;
+  if (!out.ok) return false;
   const rejected = out.result.events.find((e) => e.type === "order_rejected");
+  const filled = out.result.events.some((e) => e.type === "fill");
+  const cancelled = out.result.events.some((e) => e.type === "order_cancelled");
   if (rejected && rejected.type === "order_rejected") store.toast("error", describeReject(rejected.reason));
-  else if (out.result.events.some((e) => e.type === "fill")) store.toast("ok", `Filled: ${summary}.`);
-  else if (out.result.events.some((e) => e.type === "order_cancelled")) store.toast("error", "The order was accepted but could not be filled, so it was cancelled.");
+  else if (filled) store.toast("ok", `Filled: ${summary}.`);
+  else if (cancelled) store.toast("error", "The order was accepted but could not be filled, so it was cancelled.");
   else store.toast("ok", "Order placed and resting.");
   await store.refresh(true);
+  return rejected === undefined && (filled || !cancelled);
 }
 
 export async function cancelOrder(store: ConsoleStore, orderId: number): Promise<void> {

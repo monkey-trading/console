@@ -70,9 +70,15 @@ export function DealTicket() {
   const show = (value: bigint | null) => (value === null ? "—" : formatMark(value, places));
   const submit = () => {
     const base = { market: market.id, side, qty: preview.qty, reduceOnly: false };
+    // Only what was sent clears: a value the trader changed while the wallet was asking stays.
+    const clearSent = (placed: boolean) => {
+      if (!placed) return;
+      setTypedSize((now) => (now === typedSize ? null : now));
+      setPrice((now) => (now === price ? "" : now));
+    };
     // A market order is sent at exactly the price the ticket shows for its side.
-    if (kind === "market" && prices.price !== null) void placeOrder(store, { ...base, kind: { kind: "market", quoted: prices.price, slippageBps: slippage } });
-    else if (kind !== "market" && triggerPrice !== null) void placeOrder(store, { ...base, kind: { kind, price: triggerPrice } });
+    if (kind === "market" && prices.price !== null) void placeOrder(store, { ...base, kind: { kind: "market", quoted: prices.price, slippageBps: slippage } }).then(clearSent);
+    else if (kind !== "market" && triggerPrice !== null) void placeOrder(store, { ...base, kind: { kind, price: triggerPrice } }).then(clearSent);
   };
   return (
     <>
