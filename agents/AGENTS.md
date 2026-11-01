@@ -27,7 +27,7 @@ matches the current action.
 - **src/components/** — the terminal. `ConsoleProvider` creates the session, connects the demo account
   and drives the clock, and reconnects a wallet connection a previous page load stored; `Shell`, `TopBar`, `AttestationBanner`, `RiskStrip`, `Toasts` and `ToastList` frame it;
   `TradeWorkspace` lays out, from 1024 px, `Watchlist`, `ChartPanel` (with `PriceChart`, which loads Lightweight
-  Charts in the browser), `OrderTicket` (which remounts `DealTicket` per market: order type, side, best bid and offer, size,
+  Charts in the browser), `OrderTicket` (which remounts `DealTicket` per market: order type, side, best bid and offer, size in contracts with its computed USD notional,
   Advanced, and `MarketInfo`) and `BottomPanel` (`PositionsView`, `OrdersView`, `HistoryList`, activity) side by side, and below 1024 px shows one of them at a time, chosen from `PhoneNav`'s bar at the foot (positions and orders are cards there); `FundingPage` lays out
   `AccountSummary` (the strip of balance, equity, margin, free and withdrawable now), `MoveMoney` (the Deposit and Withdraw tabs, both forms kept mounted: `DepositForm` and `EligibilityCard` (only until the declaration is recorded) in the engine's order for the build, then `FaucetCard`; `WithdrawForm`), `InProgress` (`Payouts` first, then `WithdrawalQueue`),
   `EmissionsCard` (the account's MONKEY emissions: accrued from the entitlement proof the node's
@@ -42,7 +42,7 @@ matches the current action.
   `site.ts` holds identity and `siteUrl()`, the server's one environment-variable reader (`engine/deploy.ts` reads the `NEXT_PUBLIC_ENGINE_*` values the browser needs); `geo-block.ts` holds the restricted countries (a placeholder until counsel's list) and builds the geo-block rewrite from them; `fixed.ts` is the
   engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `quotes.ts` (the node's executable quotes: the markets asked for, and the price a ticket shows and sends), `qr.ts` (a pairing link as a QR path), `bars.ts` (marks into bars per timeframe, a fetched history merged with the ticks the stream delivered during the fetch, and the chart's view when the oldest bar rolls off) and
   `vault.ts` (deposit bounds, the withdrawable amount) and `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `escape.ts` says which Escape presses close a popup; `tabs.ts` moves along a tab list by key; `deposit-steps.ts` orders the Deposit tab's steps; `panes.ts` picks the workspace pane that keeps the user's focus when the layout narrows; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
-  margin and market-hours rules and the ticket preview; `models.ts` and `messages.ts` decode and
+  margin and market-hours rules and the ticket preview (`ticket.ts` reads the size field as the exact order quantity, six decimal places at most, and measures the minimum order, margin, spread tiers and the house's cap in USD through the market's FX mark as the engine does); `models.ts` and `messages.ts` decode and
   describe engine data; `nav.ts` holds the top bar's page links and which one is current; `house.ts` holds the House page's figures: the latest `set_params` as house
   parameters, caps from the engine's rule (the larger of a NAV share and a floor), utilisation, and the
   withdrawal queue's totals.

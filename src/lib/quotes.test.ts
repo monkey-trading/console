@@ -63,7 +63,7 @@ describe("ticketPrices", () => {
     expect(live("1", "buy", null, "unknown market 9").problem).toBe("The node will not quote this market: unknown market 9.");
     expect(live("1", "buy", { ...QUOTE, unavailable: { kind: "market_closed" }, ask: [], bid: [] })).toMatchObject({ price: null, problem: "The market is closed." });
     expect(live("6", "sell")).toMatchObject({ price: null, offer: f("100.5"), problem: "The node would not open an order this large. Try a smaller size." });
-    expect(live("6", "buy")).toMatchObject({ price: f("100.5"), problem: "The largest position your equity opens here is ≈ $500.00. Try a smaller size." });
+    expect(live("6", "buy")).toMatchObject({ price: f("100.5"), problem: "The largest size your equity opens here is ≈ 5 contracts. Try a smaller size." });
   });
 
   it("shows the mock's own estimate, which needs no quote", () => {
@@ -88,8 +88,16 @@ describe("a covering step the node's ladder declines", () => {
 
   it("shows the largest size the account can open, never the probe's equity or margin", () => {
     const result = live("0.128865", "buy", btcLadder, null, BTC_MARK);
-    expect(result.problem).toBe("The largest position your equity opens here is ≈ $9,999.53. Try a smaller size.");
+    expect(result.problem).toBe("The largest size your equity opens here is ≈ 0.12886 contracts. Try a smaller size.");
     expect(result.price).toBe(f("77900"));
+  });
+
+  it("names the largest size at the size field's six places, and in the singular for one contract", () => {
+    const margin = { kind: "insufficient_margin" as const, equity: "1", required: "9" };
+    const ladder = (fitting: string): MarketQuote => ({ ...QUOTE, ask: [{ qty: fitting, price: "100.1" }, { qty: "30", price: "100.5", declined: margin }] });
+    expect(live("29", "buy", ladder("25.773195876")).problem).toBe("The largest size your equity opens here is ≈ 25.773195 contracts. Try a smaller size.");
+    expect(live("29", "buy", ladder("1")).problem).toBe("The largest size your equity opens here is ≈ 1 contract. Try a smaller size.");
+    expect(live("29", "buy", ladder("0.0000005")).problem).toBe("Not enough equity to open a position here.");
   });
 
   it("keeps a decline whose message carries no probe figures, and refuses no-size accounts without figures", () => {

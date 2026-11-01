@@ -10,7 +10,7 @@ import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { formatMark } from "@/lib/price-format";
 import { ticketPrices } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
-import { MARGIN_SHORT, previewTicket, SLIPPAGE_CHOICES, slippageBound } from "@/lib/ticket";
+import { contractUnit, MARGIN_SHORT, NO_SIZE, parseSize, previewTicket, SLIPPAGE_CHOICES, slippageBound } from "@/lib/ticket";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { MarketInfo } from "./MarketInfo";
@@ -37,22 +37,24 @@ export function DealTicket() {
   const id = useId();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [kind, setKind] = useState<Kind>("market");
-  const [size, setSize] = useState("10000");
+  const [size, setSize] = useState("");
   const [price, setPrice] = useState("");
   const [chosenSlippage, setSlippage] = useState<number>(10);
   const market = state.markets.find((m) => m.id === state.selected);
   if (!market) return null;
   const slippage = slippageBound(chosenSlippage, market);
-  const notional = parseFixed(size) ?? 0n;
+  const parsedSize = parseSize(size);
+  const qty = parsedSize.kind === "qty" ? parsedSize.qty : 0n;
   const triggerPrice = parseFixed(price);
   const live = state.signatures === "checked";
   // The margin use after the order comes from the console's own quote model, which does not know a live node's toxicity spread, so it is shown only for the in-browser node.
-  const preview = previewTicket({ market, side, notional, slippageBps: slippage, resting: kind !== "market", triggerPrice, account: state.account, houseNav: state.house.nav, estimates: !live });
+  const preview = previewTicket({ market, side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice, account: state.account, houseNav: state.house.nav, estimates: !live });
   const prices = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview, side, mark: market.mark });
   // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
-  const problems = preview.problems.filter((p) => !live || p !== MARGIN_SHORT);
+  // A size the field refuses says why, so the generic "Enter a size." would only repeat it.
+  const problems = preview.problems.filter((p) => (!live || p !== MARGIN_SHORT) && (parsedSize.kind !== "refused" || p !== NO_SIZE));
   if (kind === "market" && prices.problem !== null) problems.push(prices.problem);
-  if (size.trim() !== "" && parseFixed(size) === null) problems.push("Enter the size in digits, such as 10000 or 2500.50.");
+  if (parsedSize.kind === "refused") problems.push(parsedSize.message);
   if (kind !== "market" && triggerPrice === null) problems.push(price.trim() === "" ? "Enter a trigger price." : "Enter the trigger price in digits, such as 61250.50.");
   const blockSentence = (why: string | null) => (why === null ? null : `Trading is paused: ${why}.`);
   // A read-only account is named as the cause before eligibility, which it could not attest.
@@ -92,9 +94,11 @@ export function DealTicket() {
           </p>
         </div>
         <div className="mt-4">
-          <label htmlFor={`${id}-size`} className="block text-caption text-fg-2">Position size (USD)</label>
-          <input id={`${id}-size`} value={size} inputMode="decimal" maxLength={24} onChange={(event) => setSize(event.target.value)} className={INPUT} />
-          <p className="mt-1 text-label text-fg-3">≈ {formatFixedPlaces(preview.qty, 6)} {market.symbol.split("-")[0]} · ${formatFixedPlaces(notional, 2)}</p>
+          <label htmlFor={`${id}-size`} className="block text-caption text-fg-2">Size (contracts)</label>
+          <input id={`${id}-size`} value={size} inputMode="decimal" maxLength={24} aria-describedby={`${id}-size-note`} onChange={(event) => setSize(event.target.value)} className={INPUT} />
+          <p id={`${id}-size-note`} className="mt-1 text-label text-fg-3">
+            1 contract = 1 {contractUnit(market)} · {preview.notional === null || qty === 0n ? "Notional —" : `Notional ≈ $${formatFixedPlaces(preview.notional, 2)}`}{preview.notional !== null && qty > 0n && kind !== "market" && triggerPrice !== null && triggerPrice > 0n ? " at the trigger price" : ""}
+          </p>
         </div>
         <details className="mt-4 rounded border border-line-2">
           <summary className="px-3 py-3.5 text-caption lg:py-2 text-fg-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-glow">Advanced</summary>
@@ -118,7 +122,7 @@ export function DealTicket() {
           {!gate && problems.map((p) => <p key={p}>{p}{p === "Fund your account to trade." && <> <FundingLink /></>}</p>)}
         </div>
       </form>
-      <MarketInfo market={market} preview={preview} notional={notional} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} />
+      <MarketInfo market={market} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} />
     </>
   );
 }

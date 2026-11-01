@@ -25,11 +25,11 @@ function UseBar({ bps }: { bps: number }) {
 }
 
 /** `price` is the price a market order on `side` would be sent at, with the worst price `slippageBps` allows; null shows neither. */
-export function MarketInfo({ market, preview, notional, side, price, slippageBps }: { market: MarketModel; preview: TicketPreview; notional: Fixed; side: Side; price: Fixed | null; slippageBps: number }) {
+export function MarketInfo({ market, preview, side, price, slippageBps }: { market: MarketModel; preview: TicketPreview; side: Side; price: Fixed | null; slippageBps: number }) {
   const worst = price === null ? null : side === "buy" ? price + bpsOf(price, slippageBps) : price - bpsOf(price, slippageBps);
   const useBps = preview.marginUseBps;
-  const filled = preview.houseCap > 0n ? Math.min(8, Math.ceil(Number((notional * 8n) / preview.houseCap) || 0)) : 0;
-  const capShare = preview.houseCap > 0n ? Number((notional * 100n) / preview.houseCap) : 0;
+  const filled = preview.houseCap > 0n ? Math.min(8, Math.ceil(Number((preview.markNotional * 8n) / preview.houseCap) || 0)) : 0;
+  const capShare = preview.houseCap > 0n ? Number((preview.markNotional * 100n) / preview.houseCap) : 0;
   const stress = STRESS_NAMES[market.stress] ?? "Normal";
   return (
     <details className="group border-t border-line">
@@ -40,7 +40,7 @@ export function MarketInfo({ market, preview, notional, side, price, slippageBps
         <dl className="space-y-3">
           <div className={ROW}><dt className="text-fg-3">Market hours</dt><dd className={market.open ? "text-glow" : "text-ember"}>{market.open ? "Open" : "Closed"} · {describeSchedule(market.view.schedule)}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Stress level</dt><dd className={STRESS_TONE[market.stress] ?? ""}>{market.stress} · {stress}{market.stress > 0 ? ` (+${STRESS_SPREAD_BPS[market.stress]} bps)` : ""}</dd></div>
-          <div className={ROW}><dt className="text-fg-3">Margin rate</dt><dd>{formatMovePercent(preview.marginRateBps).replace("+", "")} of the resulting position</dd></div>
+          <div className={ROW}><dt className="text-fg-3">Margin rate</dt><dd>{preview.marginRateBps === null ? "—" : `${formatMovePercent(preview.marginRateBps).replace("+", "")} of the resulting position`}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Required margin</dt><dd>{usd(preview.marginAdded)}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Implied leverage</dt><dd>{preview.impliedLeverage === null ? "—" : `${preview.impliedLeverage}×`}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Quoted price</dt><dd>{price === null ? "—" : formatMark(price, market.places)}</dd></div>
