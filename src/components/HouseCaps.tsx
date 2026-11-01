@@ -61,9 +61,10 @@ export function HouseCaps({ markets, nav }: { markets: readonly MarketModel[]; n
           </tbody>
         </table>
       </div>
-      <dl className="space-y-3 sm:hidden">
+      <div className="sm:hidden">
         <p className="sr-only">Each market&apos;s house exposure cap: its share of the house&apos;s net asset value, its dollar floor, and the cap those give at the current net asset value.</p>
-        {markets.map((market) => {
+        <dl className="space-y-3">
+          {markets.map((market) => {
           const r = row(market);
           return (
             <div key={market.id} className="space-y-1 border-b border-line-2 pb-3">
@@ -73,8 +74,9 @@ export function HouseCaps({ markets, nav }: { markets: readonly MarketModel[]; n
               <dd className={CELL}>Cap at current NAV: {r.cap}</dd>
             </div>
           );
-        })}
-      </dl>
+          })}
+        </dl>
+      </div>
     </>
   );
 }
