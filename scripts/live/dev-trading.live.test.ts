@@ -17,6 +17,7 @@ import { realVerifier } from "../../src/lib/engine/test-vectors";
 import type { OrderRequest } from "../../src/lib/engine/types";
 import { ACCOUNT, StubProvider } from "../../src/lib/engine/wallet-kit";
 import { fixedFromWire, fixedToWire, parseFixed } from "../../src/lib/fixed";
+import type { MarketModel } from "../../src/lib/models";
 import { closingPrice, ticketPrices } from "../../src/lib/quotes";
 import { previewTicket, slippageBound } from "../../src/lib/ticket";
 import { attestEligibility, cancelOrder, placeOrder } from "../../src/lib/store/actions";
@@ -84,6 +85,11 @@ function ticketPrice(): { price: bigint; qty: bigint; slippage: number } {
   const prices = ticketPrices({ live: true, quote, quoteError: state.quoteError, preview, side: "buy", mark: market.mark });
   if (prices.price === null) throw new Error(`the node quotes no price: ${prices.problem ?? "unknown"}`);
   return { price: prices.price, qty: preview.qty, slippage };
+}
+
+/** The slippage bound the wire must carry: the fixture's choice, never past the market's own cap, computed without the ticket's slippageBound() so a regression there cannot move the expectation and the request together. */
+function expectedSlippageBps(market: MarketModel): number {
+  return Math.min(SLIPPAGE_BPS, market.view.max_slippage_bps);
 }
 
 /** The operator's admin command raising BTC-USD's margin tier to 100%, under-margining every open position. */
@@ -190,7 +196,8 @@ describe("trading against a dev node", () => {
     await placeOrder(store, { market: BTC, side: "buy", qty, kind: { kind: "market", quoted: price, slippageBps: slippage }, reduceOnly: false });
     const wire = posted.at(-1)?.body;
     if (wire === undefined) throw new Error("no order was posted");
-    expect(wire.kind).toEqual({ kind: "market", quoted: fixedToWire(price), max_slippage_bps: slippage });
+    // The expected bound is the fixture's choice under the market's cap, computed without the ticket helper.
+    expect(wire.kind).toEqual({ kind: "market", quoted: fixedToWire(price), max_slippage_bps: expectedSlippageBps(btcMarket()) });
     await until(() => (btcPosition()?.qty ?? 0n) > 0n);
   });
 
@@ -229,7 +236,7 @@ describe("trading against a dev node", () => {
     expect(wire.side).toBe("sell");
     expect(wire.qty).toBe(fixedToWire(qty));
     expect(wire.reduce_only).toBe(true);
-    expect(wire.kind).toEqual({ kind: "market", quoted: fixedToWire(price), max_slippage_bps: slippageBound(SLIPPAGE_BPS, btcMarket()) });
+    expect(wire.kind).toEqual({ kind: "market", quoted: fixedToWire(price), max_slippage_bps: expectedSlippageBps(btcMarket()) });
     await until(() => (btcPosition()?.qty ?? 0n) === 0n);
   });
 
