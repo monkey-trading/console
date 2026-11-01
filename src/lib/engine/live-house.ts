@@ -217,7 +217,8 @@ export class HouseLog {
   private startRun(): void {
     this.stallFailures = 0;
     this.restart = false;
-    this.catchUp = this.run().then(
+    const generation = this.generation;
+    this.catchUp = this.run(generation).then(
       () => {
         this.catchUp = null;
         if (this.restart) {
@@ -226,10 +227,13 @@ export class HouseLog {
         }
       },
       () => {
-        // What the chunks folded is kept; the next read continues from where the read stopped.
-        this.failed = true;
-        this.retryAt = this.nowMs() + RETRY_AFTER_FAILURE_MS;
         this.catchUp = null;
+        // A superseded run's rejection settles silently: its failure is the superseder's business,
+        // not the fold's. Only a current run's failure marks the fold and waits before retrying.
+        if (this.generation === generation) {
+          this.failed = true;
+          this.retryAt = this.nowMs() + RETRY_AFTER_FAILURE_MS;
+        }
         if (this.restart) {
           this.restart = false;
           this.kick();
@@ -249,8 +253,7 @@ export class HouseLog {
    * Error cases:
    * - a chunk fails where the read has made no progress, three chunks in a row
    */
-  private async run(): Promise<void> {
-    const generation = this.generation;
+  private async run(generation: number): Promise<void> {
     for (;;) {
       const from = this.last?.[0] ?? 0;
       const result = await this.scanFrom(from, this.last ?? undefined, () => generation !== this.generation);

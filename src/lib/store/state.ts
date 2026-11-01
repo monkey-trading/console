@@ -62,6 +62,8 @@ export interface ConsoleState {
   house: HouseModel;
   /** Whether a verified house answer has been read; false for a live node before its first read, so no placeholder renders as a figure. */
   houseReady: boolean;
+  /** Whether the markets and house figures come from a current read; false after a failed refresh, so retained figures say they may be behind. */
+  houseFresh: boolean;
   /** The latest `set_params` the log records, from a bounded read of the signed log; null before one has been found. */
   houseParams: HouseParams | null;
   /** The latest checkpoint the log records; null before one has been read. */
@@ -149,6 +151,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     selected: models[0]?.id ?? 1,
     house: decodeHouse(house),
     houseReady: signatures === "none",
+    houseFresh: true,
     houseParams: housePanel?.params ?? null,
     checkpoint: housePanel?.checkpoint ?? null,
     houseStatus: signatures === "none" ? "current" : "reading",

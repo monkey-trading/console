@@ -85,6 +85,7 @@ export function HousePage() {
                 The house&apos;s net asset value is {formatUsd(house.nav)}, its cash {formatUsd(house.cash)}, and its gross exposure{" "}
                 {formatUsd(house.grossExposure)}, refreshed from the node&apos;s signed answers.
               </p>
+              {state.houseFresh === false && <p className={P}>The node&apos;s answers have stopped refreshing, so these figures may be behind.</p>}
               <p className={P}>
                 Net asset value is the house&apos;s cash minus clients&apos; unrealised profit or loss at current marks. Gross exposure is
                 the sum of the house&apos;s absolute net exposure in each market, in dollars, so opposite positions do not cancel.

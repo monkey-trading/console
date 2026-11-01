@@ -271,7 +271,7 @@ export class ConsoleStore {
         })) as typeof frames);
       }
       const selected = markets.some((m) => m.id === this.snapshot.selected) ? this.snapshot.selected : (markets[0]?.id ?? this.snapshot.selected);
-      this.patch({ markets, bars, selected, house: decodeHouse(house), houseReady: true });
+      this.patch({ markets, bars, selected, house: decodeHouse(house), houseReady: true, houseFresh: true });
       // The chart's history comes from the marks endpoint once a live node's list has arrived; a
       // node that 404s it keeps asking for the archive scan until it names a log head.
       this.barsSeed.seed(selected, this.snapshot.timeframe);
@@ -286,6 +286,8 @@ export class ConsoleStore {
       const message = error instanceof Error ? error.message : "The node did not answer.";
       if (!this.noteAccess(error) && message !== this.lastReadError) this.toast("error", message);
       this.lastReadError = message;
+      // Retained figures stay, marked not fresh, until a refresh reads them again.
+      if (this.snapshot.houseReady) this.patch({ houseFresh: false });
     }
     const again = this.rerun;
     this.rerun = null;

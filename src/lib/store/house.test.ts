@@ -50,6 +50,21 @@ describe("the store's house panel state", () => {
     expect(store.getSnapshot().houseParams).toEqual(PARAMS);
   });
 
+  it("marks retained figures not fresh after a failed refresh, and fresh again on recovery", async () => {
+    const { client, store } = setup();
+    store.start(0);
+    await settle();
+    expect(store.getSnapshot().houseFresh).toBe(true);
+    client.marketError = new Error("markets down");
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot().houseFresh).toBe(false);
+    client.marketError = null;
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot().houseFresh).toBe(true);
+  });
+
   it("starts no house reads once the session has stopped", async () => {
     const { client, store } = setup();
     let reads = 0;

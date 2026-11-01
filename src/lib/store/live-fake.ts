@@ -39,7 +39,13 @@ export class FakeClient implements EngineClient {
   async attestation(): Promise<never> { throw new Error("unused"); }
   async verify() { return this.status; }
   watch(listener: (event: ClientEvent) => void) { this.listener = listener; return () => { this.listener = null; }; }
-  async markets() { this.marketReads++; return this.marketList; }
+  /** When set, the markets read rejects with it, as a failing node answers. */
+  marketError: Error | null = null;
+  async markets() {
+    this.marketReads++;
+    if (this.marketError !== null) throw this.marketError;
+    return this.marketList;
+  }
   marketList: MarketView[] = [BTC];
   async house() { return { cash: "5", nav: "5", gross_exposure: "0" }; }
   /** Canned house-state reads, patched by a test; nulls answer "not read yet". */
