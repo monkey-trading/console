@@ -43,5 +43,3 @@ describe("formatRate", () => {
     expect(formatRate(0)).toBe("0.00%");
   });
 });
-  });
-});

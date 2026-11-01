@@ -5,6 +5,7 @@ import { EngineError, type ActionResult, type ClientEvent, type EngineClient, ty
 import type { EntitlementProof } from "./emissions";
 import { setParamsOf, type HouseParams, type QueueTotals } from "../house";
 import { HouseLog, HOUSE_SCAN_CHUNK, QueueTotalsWalk, scanHouse } from "./live-house";
+import { collateral, plainText } from "./live-plain";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import { scanForWithdrawal, type ScanResult } from "./live-scan";
@@ -62,13 +63,15 @@ export class LiveEngineClient implements EngineClient {
   private readonly totalsWalk: QueueTotalsWalk;
   /** The public withdrawal queue's size, from the walk cached for its TTL. */
   readonly withdrawalTotals: () => Promise<QueueTotals>;
+  /** The account's MONKEY entitlement proof, or null before the node holds one. */
+  readonly emissions: (address: Address) => Promise<EntitlementProof | null>;
 
   constructor(private readonly deps: LiveDeps) {
     this.deployment = { chainId: deps.chainId, vault: deps.vault };
     const challenge = deps.challenge ?? (() => newChallenge());
     this.trust = new NodeTrust({
-      attestation: () => this.plainText("/v1/attestation"),
-      collateral: () => this.collateral(),
+      attestation: () => plainText(deps, "/v1/attestation"),
+      collateral: () => collateral(deps),
       verifier: () => this.verifier(), manifests: deps.manifests, acceptsMock: deps.acceptsMock, nowMs: deps.nowMs,
       onStatus: (status) => this.emit({ type: "attestation", status }),
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
@@ -80,6 +83,14 @@ export class LiveEngineClient implements EngineClient {
     }, deps.nowMs);
     this.totalsWalk = new QueueTotalsWalk(this.transport, deps.nowMs);
     this.withdrawalTotals = () => this.totalsWalk.totals();
+    this.emissions = (address) =>
+      this.transport.get(`/v1/accounts/${address}/emissions`).then(
+        (proof) => proof as EntitlementProof,
+        (error: unknown) => {
+          if (error instanceof EngineError && error.status === 404) return null;
+          throw error;
+        },
+      );
   }
 
   private emit(event: ClientEvent): void {
@@ -123,32 +134,9 @@ export class LiveEngineClient implements EngineClient {
     return this.loaded;
   }
 
-  /** An unsigned read of a route the attestation itself authenticates: its status, and its body as text when 200. */
-  private async plain(path: string): Promise<{ status: number; text: string }> {
-    try {
-      const response = await this.deps.fetch(this.deps.origin + path, { cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal: this.signal() });
-      return { status: response.status, text: response.status === 200 ? await response.text() : "" };
-    } catch (cause) {
-      throw new EngineError(0, "The node did not answer.", null, { cause });
-    }
-  }
-
-  private async plainText(path: string): Promise<string> {
-    const { status, text } = await this.plain(path);
-    if (status !== 200) throw new EngineError(status, `The node did not serve ${path} (HTTP ${status}).`);
-    return text;
-  }
-
   async attestation(): Promise<Attestation> {
     // The quote binds these fields and the verifier checks them; a wrong shape fails there.
-    return JSON.parse(await this.plainText("/v1/attestation")) as Attestation;
-  }
-
-  private async collateral(): Promise<string | null> {
-    const { status, text } = await this.plain("/v1/attestation/collateral");
-    if (status === 404) return null;
-    if (status !== 200) throw new EngineError(status, `The node did not serve the attestation's collateral (HTTP ${status}).`);
-    return text;
+    return JSON.parse(await plainText(this.deps, "/v1/attestation")) as Attestation;
   }
 
   async verify(): Promise<AttestationStatus> {
@@ -198,14 +186,6 @@ export class LiveEngineClient implements EngineClient {
   }
 
   /** The engine holds no entitlement for an account it has never allocated one to: a 404, read as null. */
-  async emissions(address: Address): Promise<EntitlementProof | null> {
-    try {
-      return (await this.transport.get(`/v1/accounts/${address}/emissions`)) as EntitlementProof;
-    } catch (error) {
-      if (error instanceof EngineError && error.status === 404) return null;
-      throw error;
-    }
-  }
 
   async withdrawalQueue(address: Address): Promise<WithdrawalPage> {
     return (await this.transport.get(`/v1/accounts/${address}/withdrawals`)) as WithdrawalPage;

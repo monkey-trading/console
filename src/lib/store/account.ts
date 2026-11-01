@@ -12,7 +12,7 @@ export async function loadAccount(store: ConsoleStore, withHistory: boolean): Pr
   const wallet = store.getSnapshot().wallet;
   if (!wallet) return;
   const { client } = store.deps;
-  const [eligibility, queue] = await Promise.all([client.eligibility(wallet.address), client.withdrawalQueue(wallet.address)]);
+  const [eligibility, queue, entitlement] = await Promise.all([client.eligibility(wallet.address), client.withdrawalQueue(wallet.address), client.emissions(wallet.address)]);
   let account = null;
   try {
     account = decodeAccount(await client.account(wallet.address));
@@ -20,7 +20,7 @@ export async function loadAccount(store: ConsoleStore, withHistory: boolean): Pr
     if (!(error instanceof EngineError && error.status === 404)) throw error;
   }
   if (store.getSnapshot().wallet?.address !== wallet.address) return;
-  store.patch({ eligibility: eligibility.class, queue: queue.queue, account });
+  store.patch({ eligibility: eligibility.class, queue: queue.queue, account, entitlement });
   if (withHistory || store.getSnapshot().history.length === 0) {
     const history = (await client.history(wallet.address, { limit: 100 })).events;
     if (store.getSnapshot().wallet?.address === wallet.address) store.patch({ history });
