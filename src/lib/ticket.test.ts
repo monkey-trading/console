@@ -2,76 +2,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { fixedFromInt, parseFixed } from "./fixed";
-import type { MarketView } from "./engine/types";
-import { decodeMarket, type AccountModel, type MarketModel } from "./models";
-import { createMockNode } from "./mock";
-import { contractUnit, NO_FX_PRICE, parseSize, previewTicket, slippageBound } from "./ticket";
-
-const START = Date.UTC(2026, 9, 28, 15, 0, 0);
-
-async function btc() {
-  const node = createMockNode(START);
-  const view = (await node.client.markets()).find((m) => m.symbol === "BTC-USD");
-  if (!view) throw new Error("BTC-USD is listed");
-  return decodeMarket(view, undefined, true);
-}
-
-const account = (equity: number, margin = 0): AccountModel => ({
-  balance: fixedFromInt(equity), unfinalised: 0n, equity: fixedFromInt(equity), margin: fixedFromInt(margin), positions: [], orders: [],
-});
-
-const q = (text: string) => parseFixed(text) ?? 0n;
-const NAV = fixedFromInt(20_000_000);
-
-/** BTC-USD at a round mark, so a quantity's value is easy to read. */
-async function btcAt(mark: number): Promise<MarketModel> {
-  return { ...(await btc()), mark: fixedFromInt(mark) };
-}
-
-/** A market quoted in another currency, listed as the node serves it: `fx_mark` converts it, $100 minimum. */
-async function quotedIn(currency: "eur" | "gbp" | "jpy", mark: number, fxMark: string | null, fxMarket = 3): Promise<MarketModel> {
-  const base = await btcAt(mark);
-  const view: MarketView = { ...base.view, id: 9, quote_currency: { currency, fx_market: fxMarket }, fx_mark: fxMark };
-  return { ...base, id: 9, view };
-}
-
-const heldIn = (market: MarketModel, qty: string): AccountModel => ({ ...account(10_000), positions: [{ market: market.id, qty: q(qty), entry: market.mark ?? 0n }] });
-
-describe("parseSize", () => {
-  it("reads a size exactly as typed, to six decimal places", () => {
-    expect(parseSize("0.5")).toEqual({ kind: "qty", qty: q("0.5") });
-    expect(parseSize(" 12 ")).toEqual({ kind: "qty", qty: fixedFromInt(12) });
-    expect(parseSize("0.123457")).toEqual({ kind: "qty", qty: 123_457_000n });
-    expect(parseSize("0.000001")).toEqual({ kind: "qty", qty: 1_000n });
-  });
-
-  it("is empty for blank text, and passes trailing zeros past the step, which change no value", () => {
-    expect(parseSize("")).toEqual({ kind: "empty" });
-    expect(parseSize("   ")).toEqual({ kind: "empty" });
-    expect(parseSize("0.5000000")).toEqual({ kind: "qty", qty: q("0.5") });
-  });
-
-  it("refuses more than six decimal places, saying so, rather than rounding", () => {
-    expect(parseSize("0.0000001")).toEqual({ kind: "refused", message: "A size has at most 6 decimal places." });
-    expect(parseSize("1.23456789")).toEqual({ kind: "refused", message: "A size has at most 6 decimal places." });
-    expect(parseSize("0.12345678901234")).toEqual({ kind: "refused", message: "A size has at most 6 decimal places." });
-  });
-
-  it("refuses text that is not a plain decimal", () => {
-    for (const text of ["abc", "-1", "+1", "1e3", "1,5", ".5", "1.", "0x10", "1 2"]) {
-      expect(parseSize(text), text).toEqual({ kind: "refused", message: "Enter the size in digits, such as 0.5 or 2.25." });
-    }
-  });
-});
-
-describe("contractUnit", () => {
-  it("names the base asset of a pair, and the instrument itself when it has no pair", async () => {
-    const market = await btc();
-    expect(contractUnit(market)).toBe("BTC");
-    expect(contractUnit({ ...market, symbol: "US500" })).toBe("US500 unit");
-  });
-});
+import { fixedFromInt } from "./fixed";
+import { NO_SIZE, previewTicket, slippageBound, TRIGGER_NOT_POSITIVE } from "./ticket";
+import { account, btc, btcAt, heldIn, NAV, q } from "./ticket-fixtures";
 
 describe("previewTicket", () => {
   it("signs exactly the quantity entered, never rounded to a step", async () => {
@@ -142,7 +75,7 @@ describe("previewTicket", () => {
     expect(unpriced.problems).toEqual(["No price yet."]);
     expect(unpriced.notional).toBeNull();
     expect(unpriced.qty).toBe(q("0.5"));
-    expect(previewTicket({ ...base, market, qty: 0n }).problems).toContain("Enter a size.");
+    expect(previewTicket({ ...base, market, qty: 0n }).problems).toContain(NO_SIZE);
     expect(previewTicket({ ...base, market: { ...market, reduceOnly: true }, qty: q("0.5") }).problems).toContain("This market only accepts orders that reduce a position.");
   });
 
@@ -175,50 +108,30 @@ describe("previewTicket", () => {
     expect(previewTicket({ ...small, qty: q("0.0005") }).problems).toContain("Minimum order is 100 USD.");
   });
 
-  it("values a market quoted in euros or pounds through its FX mark, rounded down", async () => {
-    const base = { side: "buy" as const, slippageBps: 10, account: account(100_000), houseNav: NAV };
-    const eur = await quotedIn("eur", 500, "1.1");
-    // 0.2 x 500 = 100 EUR = 110 USD, and 0.19 x 500 = 95 EUR = 104.5 USD: both clear $100, where 95 untranslated would not.
-    expect(previewTicket({ ...base, market: eur, qty: q("0.19") }).notional).toBe(q("104.5"));
-    expect(previewTicket({ ...base, market: eur, qty: q("0.19") }).problems).toEqual([]);
-    const short = previewTicket({ ...base, market: eur, qty: q("0.18") });
-    expect(short.notional).toBe(q("99"));
-    expect(short.problems).toContain("Minimum order is 100 USD.");
-    // A euro worth 0.9 dollars makes the same 100 EUR only 90 USD.
-    expect(previewTicket({ ...base, market: await quotedIn("eur", 500, "0.9"), qty: q("0.2") }).problems).toContain("Minimum order is 100 USD.");
-    expect(previewTicket({ ...base, market: await quotedIn("gbp", 500, "1.25"), qty: q("0.16") }).notional).toBe(fixedFromInt(100));
-    // The engine rounds the conversion down, so a hair under $100 is under.
-    expect(previewTicket({ ...base, market: await quotedIn("gbp", 500, "1.25"), qty: q("0.159999") }).problems).toContain("Minimum order is 100 USD.");
+  it("shows no margin rate before there is a size or a position, and the tier's rate once there is", async () => {
+    const market = await btcAt(100_000);
+    const base = { market, side: "buy" as const, slippageBps: 10, account: account(10_000), houseNav: NAV };
+    expect(previewTicket({ ...base, qty: 0n }).marginRateBps).toBeNull();
+    expect(previewTicket({ ...base, market: { ...market, mark: null }, qty: q("0.5") }).marginRateBps).toBeNull();
+    expect(previewTicket({ ...base, qty: q("0.5") }).marginRateBps).toBe(200);
+    // An existing position gives an empty ticket its resulting position's rate.
+    expect(previewTicket({ ...base, qty: 0n, account: heldIn(market, "0.5") }).marginRateBps).toBe(200);
+    // Closing the whole position leaves none, and the order's own rate stands.
+    expect(previewTicket({ ...base, side: "sell", qty: q("0.5"), account: heldIn(market, "0.5") }).marginRateBps).toBe(200);
   });
 
-  it("values a yen-quoted market by dividing by its FX mark, and the pair's own listing at the price it is valued at", async () => {
-    const base = { side: "buy" as const, slippageBps: 10, account: account(100_000), houseNav: NAV };
-    // 1 contract at 30,000 yen, with the dollar at 150 yen, is $200.
-    const nikkei = await quotedIn("jpy", 30_000, "150");
-    expect(previewTicket({ ...base, market: nikkei, qty: q("1") }).notional).toBe(fixedFromInt(200));
-    expect(previewTicket({ ...base, market: nikkei, qty: q("0.49") }).problems).toContain("Minimum order is 100 USD.");
-    // The dollar against the yen lists itself as its FX market: a contract is a dollar whatever the rate.
-    const pair = await quotedIn("jpy", 150, "150", 9);
-    expect(previewTicket({ ...base, market: pair, qty: q("100") }).notional).toBe(fixedFromInt(100));
-    expect(previewTicket({ ...base, market: pair, qty: q("99.999999") }).problems).toContain("Minimum order is 100 USD.");
-    // A resting order on the pair converts at its trigger price, not at the mark.
-    const resting = previewTicket({ ...base, market: pair, qty: q("100"), resting: true, triggerPrice: fixedFromInt(200) });
-    expect(resting.notional).toBe(fixedFromInt(100));
-    expect(resting.problems).toEqual([]);
-  });
-
-  it("says the order cannot be valued while an FX market has no mark, except for an order that only reduces", async () => {
-    const base = { slippageBps: 10, houseNav: NAV };
-    const eur = await quotedIn("eur", 500, null);
-    const open = previewTicket({ ...base, market: eur, side: "buy", qty: q("1"), account: account(100_000) });
-    expect(open.notional).toBeNull();
-    expect(open.problems).toContain(NO_FX_PRICE);
-    const close = previewTicket({ ...base, market: eur, side: "sell", qty: q("1"), account: heldIn(eur, "1") });
-    expect(close.problems).toEqual([]);
-    expect(close.quote).not.toBeNull();
-    const missing = { ...eur, view: { ...eur.view } };
-    delete missing.view.fx_mark;
-    expect(previewTicket({ ...base, market: missing, side: "buy", qty: q("1"), account: account(100_000) }).problems).toContain(NO_FX_PRICE);
+  it("refuses a resting order whose trigger price is not above zero, and never values it at one", async () => {
+    const market = await btcAt(100_000);
+    const base = { market, side: "buy" as const, slippageBps: 10, account: account(10_000), houseNav: NAV, resting: true, qty: q("0.5") };
+    for (const trigger of [0n, q("-100")]) {
+      const preview = previewTicket({ ...base, triggerPrice: trigger });
+      expect(preview.problems, String(trigger)).toContain(TRIGGER_NOT_POSITIVE);
+      expect(preview.notional).toBe(fixedFromInt(50_000)); // the mark values it, not the trigger
+    }
+    expect(previewTicket({ ...base, triggerPrice: q("0.000000001") }).problems).toContain("Minimum order is 100 USD.");
+    expect(previewTicket({ ...base, triggerPrice: null }).problems).toEqual([]);
+    // A market order ignores a trigger price left in the field.
+    expect(previewTicket({ ...base, resting: false, triggerPrice: 0n }).problems).toEqual([]);
   });
 
   it("shows the best bid and offer for the size, and the spread widens as the size grows", async () => {

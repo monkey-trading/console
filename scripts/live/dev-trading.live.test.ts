@@ -16,7 +16,7 @@ import { ProviderWallet } from "../../src/lib/engine/provider-wallet";
 import { realVerifier } from "../../src/lib/engine/test-vectors";
 import type { OrderRequest } from "../../src/lib/engine/types";
 import { ACCOUNT, StubProvider } from "../../src/lib/engine/wallet-kit";
-import { fixedFromWire, fixedToWire, parseFixed } from "../../src/lib/fixed";
+import { divFixed, fixedFromInt, fixedFromWire, fixedToWire, parseFixed } from "../../src/lib/fixed";
 import type { MarketModel } from "../../src/lib/models";
 import { closingPrice, ticketPrices } from "../../src/lib/quotes";
 import { parseSize, previewTicket, slippageBound } from "../../src/lib/ticket";
@@ -34,8 +34,8 @@ const VAULT = "0x0000000000000000000000000000000000000000";
 const BTC = 1;
 /** Whole USDC the mock-custody dev endpoint credits. */
 const FUND = "20000";
-/** The size each opening leg orders, in contracts: about $60,000 at the dev feed's BTC price. */
-const OPEN_SIZE = "0.6";
+/** The notional the opening leg aims for, in dollars; its size in contracts is worked out from the mark, so the scenario does not depend on the dev feed's price. */
+const OPEN_NOTIONAL = 60_000;
 /** The user's slippage bound for market orders, within the market's own 25 bps cap. */
 const SLIPPAGE_BPS = 25;
 
@@ -79,8 +79,10 @@ function ticketPrice(): { price: bigint; qty: bigint; slippage: number } {
   const state = snapshot();
   const market = btcMarket();
   const quote = state.quotes[BTC];
-  const size = parseSize(OPEN_SIZE);
-  if (quote === undefined || size.kind !== "qty") throw new Error("no quote or size");
+  if (quote === undefined || market.mark === null) throw new Error("no quote or mark");
+  // Whole contracts down to the six-place step, as a typed size is.
+  const size = parseSize(fixedToWire(divFixed(fixedFromInt(OPEN_NOTIONAL), market.mark)).replace(/(\.\d{6})\d*$/, "$1"));
+  if (size.kind !== "qty") throw new Error("no size");
   const slippage = slippageBound(SLIPPAGE_BPS, market);
   const preview = previewTicket({ market, side: "buy", qty: size.qty, slippageBps: slippage, account: state.account, houseNav: state.house.nav, estimates: false });
   const prices = ticketPrices({ live: true, quote, quoteError: state.quoteError, preview, side: "buy", mark: market.mark });

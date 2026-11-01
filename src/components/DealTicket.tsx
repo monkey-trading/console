@@ -10,7 +10,7 @@ import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { formatMark } from "@/lib/price-format";
 import { ticketPrices } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
-import { contractUnit, MARGIN_SHORT, parseSize, previewTicket, SLIPPAGE_CHOICES, slippageBound } from "@/lib/ticket";
+import { contractUnit, MARGIN_SHORT, NO_SIZE, parseSize, previewTicket, SLIPPAGE_CHOICES, slippageBound } from "@/lib/ticket";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { MarketInfo } from "./MarketInfo";
@@ -52,7 +52,7 @@ export function DealTicket() {
   const prices = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview, side, mark: market.mark });
   // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
   // A size the field refuses says why, so the generic "Enter a size." would only repeat it.
-  const problems = preview.problems.filter((p) => (!live || p !== MARGIN_SHORT) && (parsedSize.kind !== "refused" || p !== "Enter a size."));
+  const problems = preview.problems.filter((p) => (!live || p !== MARGIN_SHORT) && (parsedSize.kind !== "refused" || p !== NO_SIZE));
   if (kind === "market" && prices.problem !== null) problems.push(prices.problem);
   if (parsedSize.kind === "refused") problems.push(parsedSize.message);
   if (kind !== "market" && triggerPrice === null) problems.push(price.trim() === "" ? "Enter a trigger price." : "Enter the trigger price in digits, such as 61250.50.");
@@ -97,7 +97,7 @@ export function DealTicket() {
           <label htmlFor={`${id}-size`} className="block text-caption text-fg-2">Size (contracts)</label>
           <input id={`${id}-size`} value={size} inputMode="decimal" maxLength={24} aria-describedby={`${id}-size-note`} onChange={(event) => setSize(event.target.value)} className={INPUT} />
           <p id={`${id}-size-note`} className="mt-1 text-label text-fg-3">
-            1 contract = 1 {contractUnit(market)} · {preview.notional === null || qty === 0n ? "Notional —" : `Notional ≈ $${formatFixedPlaces(preview.notional, 2)}`}{preview.notional !== null && qty > 0n && kind !== "market" && triggerPrice !== null ? " at the trigger price" : ""}
+            1 contract = 1 {contractUnit(market)} · {preview.notional === null || qty === 0n ? "Notional —" : `Notional ≈ $${formatFixedPlaces(preview.notional, 2)}`}{preview.notional !== null && qty > 0n && kind !== "market" && triggerPrice !== null && triggerPrice > 0n ? " at the trigger price" : ""}
           </p>
         </div>
         <details className="mt-4 rounded border border-line-2">
