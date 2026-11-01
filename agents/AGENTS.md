@@ -18,7 +18,7 @@ matches the current action.
   CSS 4 `@theme` tokens shared with the website's design language, and the reduced-motion rule),
   and the icons.
 - **src/app/(console)/house/page.tsx** — the House solvency screen (the `HousePage` component), linked from the
-  top bar beside Funding: NAV, cash and gross exposure, the exposure cap's utilisation, the market caps, the
+  top bar's page links (Trade, House, Funding): NAV, cash and gross exposure, the exposure cap's utilisation, the market caps, the
   profit-fee and close-out parameters, the withdrawal queue's size, and the latest signed checkpoint root —
   every figure from an answer the node's enclave signed.
 - **src/components/** — the terminal. `ConsoleProvider` creates the session, connects the demo account
@@ -40,7 +40,7 @@ matches the current action.
   engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `quotes.ts` (the node's executable quotes: the markets asked for, and the price a ticket shows and sends), `qr.ts` (a pairing link as a QR path), `bars.ts` (marks into bars per timeframe, a fetched history merged with the ticks the stream delivered during the fetch, and the chart's view when the oldest bar rolls off) and
   `vault.ts` (deposit bounds, the withdrawable amount) and `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `escape.ts` says which Escape presses close a popup; `panes.ts` picks the workspace pane that keeps the user's focus when the layout narrows; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
   margin and market-hours rules and the ticket preview; `models.ts` and `messages.ts` decode and
-  describe engine data; `house.ts` holds the House page's figures: the latest `set_params` as house
+  describe engine data; `nav.ts` holds the top bar's page links and which one is current; `house.ts` holds the House page's figures: the latest `set_params` as house
   parameters, caps from the engine's rule (the larger of a NAV share and a floor), utilisation, and the
   withdrawal queue's totals.
   `engine/` holds the node's wire shapes (`types.ts`), the display facts the console keeps per
