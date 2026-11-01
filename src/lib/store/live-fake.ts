@@ -45,7 +45,7 @@ export class FakeClient implements EngineClient {
   /** Canned house-state reads, patched by a test; nulls answer "not read yet". */
   params: HouseParams | null = null;
   checkpoint: CheckpointEntry | null = null;
-  totals: QueueTotals = { count: 0, remaining: 0n, seq: null, truncated: false };
+  totals: QueueTotals = { count: 0, remaining: 0n, seq: null, complete: true, stable: true };
   async houseParams() { return this.params; }
   async latestCheckpoint() { return this.checkpoint; }
   async withdrawalTotals() { return this.totals; }

@@ -25,15 +25,18 @@ export function formatMonkey(units: bigint): string {
   return frac === 0n ? `${grouped} MONKEY` : `${grouped}.${frac.toString().padStart(2, "0").replace(/0+$/, "")} MONKEY`;
 }
 
+/** `abs` basis points as a percentage string with two places. */
+function formatPercentBps(abs: number): string {
+  return `${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}%`;
+}
+
 /** Formats a rate in basis points as an unsigned percentage: `1000` → `10.00%`. */
 export function formatRate(bps: number): string {
-  const abs = Math.abs(Math.trunc(bps));
-  return `${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}%`;
+  return formatPercentBps(Math.abs(Math.trunc(bps)));
 }
 
 /** Formats a move in basis points as a signed percentage: `(24, ...)` → `+0.24%`; zero has no sign. */
 export function formatMovePercent(bps: number): string {
-  const abs = Math.abs(Math.trunc(bps));
-  const text = `${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}%`;
+  const text = formatPercentBps(Math.abs(Math.trunc(bps)));
   return bps > 0 ? `+${text}` : bps < 0 ? `−${text}` : text;
 }

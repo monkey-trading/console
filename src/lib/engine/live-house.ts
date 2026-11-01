@@ -27,24 +27,26 @@ export const HOUSE_SCAN_CHUNK: HouseScanBudget = { maxMessages: 25_000, maxMs: 1
 
 /** What a chunk of the read found, and whether it read to the head. */
 export interface HouseScanResult {
-  /** The latest `set_params` the chunk passed, and its seq; null before the first. */
+  /** The latest applied `set_params` the chunk passed, and its seq; null before the first. */
   params: SetParams | null;
   paramsSeq: number | null;
   /** The latest checkpoint the chunk passed; null before the first. */
   checkpoint: CheckpointEntry | null;
   complete: boolean;
-  /** The seq of the last entry read, where a chunk that stopped short reads on from; null before any entry. */
-  reached: number | null;
+  /** The position of the last entry read, where a chunk that stopped short resumes; null before any entry. */
+  last: [number, number] | null;
 }
 
 /**
  * Reads the signed log from seq `fromSeq` for the latest `set_params` and checkpoint. A chunk that
  * fails or runs out of budget after reading any entry answers with what it found and how far it
- * got, marked incomplete.
+ * got, marked incomplete. `skipPast` drops entries at or before a position a previous chunk
+ * already folded, so a chunk may resume at the last sequence read without folding it twice; a
+ * sequence holds several entries, and the next chunk's first entries may repeat the last one's.
  * Error cases:
  * - before any entry: a frame is out of order or does not verify, or the connection fails
  */
-export function scanHouse(deps: ScanDeps, fromSeq: number, budget: HouseScanBudget): Promise<HouseScanResult> {
+export function scanHouse(deps: ScanDeps, fromSeq: number, budget: HouseScanBudget, skipPast?: [number, number]): Promise<HouseScanResult> {
   return new Promise((resolve, reject) => {
     const challenge = deps.challenge();
     const path = `/v1/stream?signed=1&challenge=${challenge}&from=${fromSeq}`;
@@ -64,7 +66,7 @@ export function scanHouse(deps: ScanDeps, fromSeq: number, budget: HouseScanBudg
       socket.onmessage = socket.onclose = socket.onerror = null;
       socket.close();
       if (error && last === null) reject(error);
-      else resolve({ params, paramsSeq, checkpoint, complete: error === null, reached: last?.[0] ?? null });
+      else resolve({ params, paramsSeq, checkpoint, complete: error === null, last });
     };
     const timer = deps.scheduler.setTimeout(() => finish(new Error("Reading the log for the house's parameters took too long.")), budget.maxMs);
     socket.onmessage = (event) => {
@@ -84,11 +86,14 @@ export function scanHouse(deps: ScanDeps, fromSeq: number, budget: HouseScanBudg
         return;
       }
       if ("offset" in message) {
-        if (++seen > budget.maxMessages) return finish(new Error("read enough"));
+        if (++seen > budget.maxMessages) return finish(new Error("The budget for one read of the log was spent."));
         last = position(message.offset);
       }
+      // Entries a previous chunk folded are read again and skipped; a rejected command is
+      // sequenced too, and its values never applied, so it folds nothing.
+      if (skipPast !== undefined && "offset" in message && atOrPast(skipPast, position(message.offset))) return;
       if (message.type === "command") {
-        const entry = setParamsOf(message.cmd);
+        const entry = setParamsOf(message.cmd, message.events);
         if (entry !== null) {
           params = entry;
           paramsSeq = message.seq;
@@ -115,15 +120,21 @@ export class HouseLog {
   private paramsSeq = -1;
   private checkpointFold: CheckpointEntry | null = null;
   private checkpointSeq = -1;
-  /** The seq the catch-up read has read through; the next chunk continues after it. */
-  private through = -1;
+  /** The position the catch-up read has read through; the next chunk resumes there. */
+  private last: [number, number] | null = null;
+  /** True once a catch-up read has reached the head; the live stream keeps the fold current after it. */
+  private caughtUp = false;
+  /** True after a catch-up read ended in failure; the next read's kick clears it. */
+  private failed = false;
   /** The catch-up read in flight; null when none runs. */
   private catchUp: Promise<void> | null = null;
 
-  constructor(private readonly scanFrom: (fromSeq: number) => Promise<HouseScanResult>) {}
+  constructor(private readonly scanFrom: (fromSeq: number, skipPast?: [number, number]) => Promise<HouseScanResult>) {}
 
+  /** The latest applied `set_params` folded so far, with the state of the log read feeding the fold. */
   get params(): HouseParams | null {
-    return this.paramsFold;
+    if (this.paramsFold === null) return null;
+    return { ...this.paramsFold, fresh: this.caughtUp ? "current" : this.failed ? "failed" : "reading" };
   }
 
   get checkpoint(): CheckpointEntry | null {
@@ -140,6 +151,7 @@ export class HouseLog {
       totalCapBps: entry.house_total_cap_bps,
       totalCapFloor: fixedFromWire(entry.house_total_cap_floor),
       seq,
+      fresh: "reading",
     };
   }
 
@@ -150,15 +162,17 @@ export class HouseLog {
     this.checkpointFold = entry;
   }
 
-  /** Starts the catch-up read if none runs; after a failure the next call starts a fresh chunk. */
+  /** Starts the catch-up read if none runs and none has reached the head; after a failure the next call starts a fresh chunk. */
   kick(): void {
-    if (this.catchUp !== null) return;
+    if (this.catchUp !== null || this.caughtUp) return;
+    this.failed = false;
     this.catchUp = this.run().then(
       () => {
         this.catchUp = null;
       },
       () => {
         // What the chunks folded is kept; the next read continues from where the read stopped.
+        this.failed = true;
         this.catchUp = null;
       },
     );
@@ -166,24 +180,22 @@ export class HouseLog {
 
   /**
    * Reads the log from where the last chunk ended until a chunk reaches the head, folding what it
-   * passes. Errors stop the read; the next `kick` starts a fresh chunk from where the read stopped.
+   * passes. A chunk resumes at the last position read, so a sequence's later entries — a command's
+   * checkpoint among them — are never skipped. A chunk that fails stops the read, and the next
+   * `kick` starts a fresh chunk from where the read stopped.
    * Error cases:
-   * - a chunk fails before reading any entry, twice in a row from the same seq
+   * - a chunk fails before reading any entry
    */
   private async run(): Promise<void> {
-    let idleFailures = 0;
     for (;;) {
-      const from = this.through + 1;
-      const result = await this.scanFrom(from);
+      const from = this.last?.[0] ?? 0;
+      const result = await this.scanFrom(from, this.last ?? undefined);
       if (result.params !== null && result.paramsSeq !== null) this.foldParams(result.paramsSeq, result.params);
       if (result.checkpoint !== null) this.foldCheckpoint(result.checkpoint);
-      if (result.complete) return;
-      if (result.reached === null) {
-        // The chunk failed before any entry: without a cursor there is nowhere to continue from.
-        if (++idleFailures >= 2) throw new Error("Reading the log for the house's parameters kept failing.");
-      } else {
-        idleFailures = 0;
-        this.through = result.reached;
+      if (result.last !== null) this.last = result.last;
+      if (result.complete) {
+        this.caughtUp = true;
+        return;
       }
     }
   }
@@ -195,13 +207,16 @@ const QUEUE_PAGE_CAP = 25;
 /** Walks the public withdrawal queue's signed pages to its end, or to the page cap as a lower bound. */
 export async function withdrawalTotals(transport: SignedTransport, pageCap: number = QUEUE_PAGE_CAP): Promise<QueueTotals> {
   const pages: WithdrawalPage[] = [];
+  // Each page is signed alone, so pages answered at different log seqs are not one snapshot of the
+  // queue; the totals then mix a changing queue's states, which the caller says so.
+  const finish = (complete: boolean) => queueTotals(pages, complete, pages.every((p) => p.seq === (pages[0]?.seq ?? null)));
   let after: number | null = null;
   for (let i = 0; i < pageCap; i++) {
     const suffix = after === null ? "" : `&after=${after}`;
     const page = (await transport.get(`/v1/withdrawals?limit=200${suffix}`)) as WithdrawalPage;
     pages.push(page);
-    if (page.next === null) return queueTotals(pages, false);
+    if (page.next === null) return finish(true);
     after = page.next;
   }
-  return queueTotals(pages, true);
+  return finish(false);
 }

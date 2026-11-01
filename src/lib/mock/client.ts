@@ -44,7 +44,7 @@ export function mockCheckpoint(headSeq: number): CheckpointEntry | null {
 export function mockTotals(state: MockState): QueueTotals {
   let remaining = 0n;
   for (const entry of state.queue) remaining += entry.remaining;
-  return { count: state.queue.length, remaining, seq: state.seq, truncated: false };
+  return { count: state.queue.length, remaining, seq: state.seq, complete: true, stable: true };
 }
 
 /** How the node's attestation presents: the node's own mock quote, or a hardware quote nothing here can verify. */

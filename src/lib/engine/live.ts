@@ -70,9 +70,9 @@ export class LiveEngineClient implements EngineClient {
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
     });
     this.transport = new SignedTransport({ ...deps, verifier: () => this.requireVerifier(), trust: this.trust, challenge, signal: this.signal });
-    this.houseLog = new HouseLog(async (fromSeq) => {
+    this.houseLog = new HouseLog(async (fromSeq, skipPast) => {
       const signer = await this.trust.signer();
-      return scanHouse({ ...deps, origin: deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge }, fromSeq, HOUSE_SCAN_CHUNK);
+      return scanHouse({ ...deps, origin: deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge }, fromSeq, HOUSE_SCAN_CHUNK, skipPast);
     });
   }
 
@@ -276,7 +276,7 @@ export class LiveEngineClient implements EngineClient {
         onMessage: (message) => {
           // The stream starts at the live end, so a `set_params` it carries is the latest the log
           // records; the catch-up read folds what predates the connection the same way.
-          const entry = setParamsOf(message.cmd);
+          const entry = setParamsOf(message.cmd, message.events);
           if (entry !== null) this.houseLog.foldParams(message.seq, entry);
           for (const subscriber of this.subscribers) subscriber(message);
         },

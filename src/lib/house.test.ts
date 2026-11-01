@@ -1,8 +1,8 @@
-/** Tests for the House page's figures: the latest set_params, caps from the engine's rule, utilisation, and queue totals. */
+/** Tests for the House page's figures: the latest applied set_params, caps from the engine's rule, utilisation, and queue totals. */
 
 import { describe, expect, it } from "vitest";
 
-import type { EngineCommand } from "./engine/types";
+import type { EngineCommand, EngineEvent } from "./engine/types";
 import { fixedFromInt } from "./fixed";
 import { capFor, queueTotals, setParamsOf, utilBps } from "./house";
 
@@ -21,27 +21,34 @@ const PARAMS_FIELDS = {
   house_total_cap_floor: "2000000",
 };
 
+const ADMIN_REJECTED: EngineEvent = { type: "admin_rejected", reason: "out of bounds" };
+
 describe("setParamsOf", () => {
   it("reads a genesis `admin` set_params", () => {
     const cmd = { type: "admin", ...SET_PARAMS } as unknown as EngineCommand;
-    expect(setParamsOf(cmd)).toEqual(PARAMS_FIELDS);
+    expect(setParamsOf(cmd, [])).toEqual(PARAMS_FIELDS);
   });
 
   it("reads a `signed_admin` set_params", () => {
     const cmd = { type: "signed_admin", command: { ...SET_PARAMS } } as unknown as EngineCommand;
-    expect(setParamsOf(cmd)).toEqual(PARAMS_FIELDS);
+    expect(setParamsOf(cmd, [])).toEqual(PARAMS_FIELDS);
+  });
+
+  it("ignores a set_params the engine rejected, whose values never applied", () => {
+    const cmd = { type: "signed_admin", command: { ...SET_PARAMS } } as unknown as EngineCommand;
+    expect(setParamsOf(cmd, [ADMIN_REJECTED])).toBeNull();
   });
 
   it("answers null for other commands", () => {
     const upsert = { type: "admin", action: "upsert_market", id: 1 } as unknown as EngineCommand;
     const tick = { type: "tick" } as EngineCommand;
     const signedUpsert = { type: "signed_admin", command: { action: "upsert_market" } } as unknown as EngineCommand;
-    for (const cmd of [upsert, tick, signedUpsert]) expect(setParamsOf(cmd)).toBeNull();
+    for (const cmd of [upsert, tick, signedUpsert]) expect(setParamsOf(cmd, [])).toBeNull();
   });
 
   it("throws on a malformed floor, which the engine never sends", () => {
     const cmd = { type: "admin", ...SET_PARAMS, house_total_cap_floor: "not a decimal" } as unknown as EngineCommand;
-    expect(() => setParamsOf(cmd)).toThrow("malformed total cap floor");
+    expect(() => setParamsOf(cmd, [])).toThrow("malformed total cap floor");
   });
 });
 
@@ -78,20 +85,23 @@ describe("utilBps", () => {
 });
 
 describe("queueTotals", () => {
+  const entry = (remaining: string) => ({ position: 1, account: "0x00a1", amount: "10", remaining, requested_seq: 2 });
+
   it("sums every entry across pages and keeps the last page's seq", () => {
     const pages = [
-      { seq: 10, queue: [{ remaining: "100.5" }, { remaining: "2" }] },
-      { seq: 12, queue: [{ remaining: "0.000000001" }] },
+      { seq: 10, queue: [entry("100.5"), entry("2")] },
+      { seq: 12, queue: [entry("0.000000001")] },
     ];
-    expect(queueTotals(pages, false)).toEqual({ count: 3, remaining: 102500000001n, seq: 12, truncated: false });
+    expect(queueTotals(pages, true, true)).toEqual({ count: 3, remaining: 102500000001n, seq: 12, complete: true, stable: true });
   });
 
-  it("marks a walk the page cap cut short", () => {
-    const pages = [{ seq: 10, queue: [{ remaining: "1" }] }];
-    expect(queueTotals(pages, true)).toEqual({ count: 1, remaining: 1_000_000_000n, seq: 10, truncated: true });
+  it("marks a walk the page cap cut short, and pages that mix a changing queue's seqs", () => {
+    const pages = [{ seq: 10, queue: [entry("1")] }];
+    expect(queueTotals(pages, false, true)).toEqual({ count: 1, remaining: 1_000_000_000n, seq: 10, complete: false, stable: true });
+    expect(queueTotals(pages, true, false)).toEqual({ count: 1, remaining: 1_000_000_000n, seq: 10, complete: true, stable: false });
   });
 
   it("throws on a malformed remainder, which the engine never sends", () => {
-    expect(() => queueTotals([{ seq: 10, queue: [{ remaining: "x" }] }], false)).toThrow("malformed queue remainder");
+    expect(() => queueTotals([{ seq: 10, queue: [entry("x")] }], true, true)).toThrow("malformed queue remainder");
   });
 });

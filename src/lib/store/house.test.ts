@@ -6,7 +6,7 @@ import { fixedFromWire } from "../fixed";
 import { settle } from "../engine/test-kit";
 import { setup } from "./live-fake";
 
-const PARAMS = { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, totalCapFloor: fixedFromWire("2000000"), seq: 7 };
+const PARAMS = { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, totalCapFloor: fixedFromWire("2000000"), seq: 7, fresh: "current" as const };
 const CHECKPOINT = { type: "checkpoint" as const, offset: "1200:1", seq: 1200, root: `0x${"ab".repeat(32)}` };
 
 describe("the store's house panel state", () => {
@@ -20,7 +20,7 @@ describe("the store's house panel state", () => {
     const { client, store } = setup();
     client.params = PARAMS;
     client.checkpoint = CHECKPOINT;
-    client.totals = { count: 2, remaining: fixedFromWire("30.5"), seq: 9, truncated: false };
+    client.totals = { count: 2, remaining: fixedFromWire("30.5"), seq: 9, complete: true, stable: true };
     store.start(0);
     await settle();
     const state = store.getSnapshot();
@@ -28,7 +28,7 @@ describe("the store's house panel state", () => {
     expect(state.house.cash).toBe(fixedFromWire("5"));
     expect(state.houseParams).toEqual(PARAMS);
     expect(state.checkpoint).toEqual(CHECKPOINT);
-    expect(state.withdrawalTotals).toEqual({ count: 2, remaining: fixedFromWire("30.5"), seq: 9, truncated: false });
+    expect(state.withdrawalTotals).toEqual({ count: 2, remaining: fixedFromWire("30.5"), seq: 9, complete: true, stable: true });
   });
 
   it("marks the house figures ready once a refresh has read them", async () => {

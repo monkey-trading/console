@@ -9,7 +9,7 @@
 import { signBlock } from "@/lib/engine/attestation";
 import { formatRate, shortHex } from "@/lib/format";
 import { formatUsd } from "@/lib/fixed";
-import { capFor, utilBps } from "@/lib/house";
+import { capFor, utilBps, type HouseParams } from "@/lib/house";
 
 import { HouseCaps } from "./HouseCaps";
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -19,11 +19,11 @@ const P = "text-data leading-relaxed text-fg-2";
 const LABEL = "text-label tracking-caps text-fg-3 uppercase";
 const CARD = "space-y-3 border border-line bg-ink-1 p-4";
 
-/** The utilisation bar for a share of a cap, announced as a named meter with its value as text. */
+/** The utilisation bar for a share of a cap; the geometry clamps, the announced value does not. */
 function Meter({ bps }: { bps: number }) {
   const clamped = Math.min(10_000, Math.max(0, bps));
   return (
-    <div role="meter" aria-label="Exposure against the cap" aria-valuemin={0} aria-valuemax={10_000} aria-valuenow={clamped} aria-valuetext={formatRate(clamped)} className="h-2 w-full border border-line-2 bg-ink-2">
+    <div role="meter" aria-label="Exposure against the cap" aria-valuemin={0} aria-valuemax={10_000} aria-valuenow={clamped} aria-valuetext={formatRate(bps)} className="h-2 w-full border border-line-2 bg-ink-2">
       <div className="h-full bg-glow" style={{ width: `${clamped / 100}%` }} />
     </div>
   );
@@ -37,6 +37,13 @@ function Figure({ label, value }: { label: string; value: string }) {
       <dd className="text-lead text-fg">{value}</dd>
     </div>
   );
+}
+
+/** The note a panel carries while the log read feeding its parameters is still running, or keeps failing. */
+function freshnessNote(params: HouseParams): string {
+  return params.fresh === "failed"
+    ? "The log read keeps failing, so these are the latest values it read, which may not be the latest the log records."
+    : "The log read is still catching up, so these are the latest values it read, which may not be the latest the log records.";
 }
 
 /** The House solvency screen. */
@@ -83,17 +90,24 @@ export function HousePage() {
             </section>
             <section aria-labelledby="cap" className={CARD}>
               <h2 id="cap" className={H2}>Exposure against the cap</h2>
-              {params !== null && totalCap !== null && used !== null ? (
+              {params === null ? (
+                <p className={P}>The cap&apos;s parameters are read from the node&apos;s public log; that read has not finished.</p>
+              ) : used === null || totalCap === null ? (
+                <p className={P}>The cap is not positive at the current net asset value, so no utilisation can be stated.</p>
+              ) : (
                 <>
                   <Meter bps={used} />
-                  <p className={P}>
+                  <p className={P} aria-hidden="true">
                     {formatRate(used)} of a {formatUsd(totalCap)} cap at the current net asset value — the larger of{" "}
                     {formatRate(params.totalCapBps)} of net asset value and a {formatUsd(params.totalCapFloor)} floor.
                   </p>
+                  <p className="sr-only">
+                    Exposure is {formatRate(used)} of a {formatUsd(totalCap)} cap at the current net asset value, refreshed from the
+                    node&apos;s signed answers.
+                  </p>
                 </>
-              ) : (
-                <p className={P}>The cap&apos;s parameters are read from the node&apos;s public log; that read has not finished.</p>
               )}
+              {params !== null && params.fresh !== "current" && <p className={P}>{freshnessNote(params)}</p>}
             </section>
             <section aria-labelledby="withdrawals" className={CARD}>
               <h2 id="withdrawals" className={H2}>Withdrawals</h2>
@@ -101,16 +115,20 @@ export function HousePage() {
                 <Figure label="Requests waiting" value={state.withdrawalTotals === null ? "—" : String(state.withdrawalTotals.count)} />
                 <Figure label="Queued" value={state.withdrawalTotals === null ? "—" : formatUsd(state.withdrawalTotals.remaining)} />
               </dl>
-              {state.withdrawalTotals?.truncated === true && <p className={P}>The queue&apos;s first pages only are counted here, so these are lower bounds.</p>}
+              {state.withdrawalTotals?.complete === false && <p className={P}>The queue&apos;s first pages only are counted here, so these are lower bounds.</p>}
+              {state.withdrawalTotals !== null && state.withdrawalTotals.stable === false && (
+                <p className={P}>The queue changed while it was read, so these figures are approximate.</p>
+              )}
               <p className={P}>
-                Withdrawals are paid in the order they are asked, up to what the house&apos;s cash covers; what it cannot cover yet
-                waits in a public first-in-first-out queue. The node signs no flag that pauses withdrawals: custody-side pauses
-                are the vault contract&apos;s own state, on chain, outside the node&apos;s signed answers.
+                Withdrawals are paid in the order they are asked, each up to the collateral the vault holds; one the vault cannot
+                cover yet waits in a public first-in-first-out queue. The node signs no flag that pauses withdrawals:
+                custody-side pauses are the vault contract&apos;s own state, on chain, outside the node&apos;s signed answers.
               </p>
             </section>
             <section aria-labelledby="caps" className={CARD}>
               <h2 id="caps" className={H2}>Market caps</h2>
               <HouseCaps markets={state.markets} nav={house.nav} />
+              <p className="sr-only">Each market&apos;s cap, its dollar floor, and the cap those give at the current net asset value, refreshed from the node&apos;s signed answers.</p>
               <p className={P}>
                 Each market&apos;s cap is the larger of its share of the house&apos;s net asset value and its dollar floor. The node&apos;s
                 public answers carry no per-market house exposure, so this table shows the caps; the house&apos;s total exposure
@@ -133,6 +151,7 @@ export function HousePage() {
                     within half of their launch values, and only after a public notice of at least seven days
                     {params.seq === null ? "." : `; the log records the current values at seq ${params.seq}.`}
                   </p>
+                  {params.fresh !== "current" && <p className={P}>{freshnessNote(params)}</p>}
                 </>
               )}
             </section>

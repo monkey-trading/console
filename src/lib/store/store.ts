@@ -11,7 +11,7 @@ import { loadAccount } from "./account";
 import { BarsSeed } from "./bars-seed";
 import { FEED_LIMIT, feedFrom, isMine } from "./feed";
 import { initialState, seedAllBars, type BlockReason, type ConsoleState, type ToastMessage } from "./state";
-import { readHousePanel } from "./house";
+import { readHousePanelSoon } from "./house";
 import type { StoreDeps } from "./store-deps";
 
 export class ConsoleStore {
@@ -44,6 +44,10 @@ export class ConsoleStore {
   private trustLost = false;
   /** The last read failure shown, so a failure that repeats on every tick is shown once. */
   private lastReadError: string | null = null;
+  /** The house panel read in flight, so a slow queue walk never queues behind another. Not part of the snapshot. */
+  houseRead: Promise<void> | null = null;
+  /** The last house panel read failure shown, deduplicated like the main read's. Not part of the snapshot. */
+  lastHouseReadError: string | null = null;
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
@@ -225,7 +229,8 @@ export class ConsoleStore {
 
   /**
    * Re-reads markets, house, and the connected account. A call made while one runs waits for it and
-   * then reads again, since the running read may predate the change that prompted the call.
+   * then reads again, since the running read may predate the change that prompted the call. The house
+   * panel's reads are not part of the lock: `readHousePanelSoon` runs them aside.
    */
   refresh(accountChanged: boolean): Promise<void> {
     if (this.inflight) {
@@ -268,7 +273,10 @@ export class ConsoleStore {
       this.barsSeed.seed(selected, this.snapshot.timeframe);
       this.barsSeed.askScan();
       if (this.snapshot.wallet) await loadAccount(this, accountChanged);
-      await readHousePanel(this);
+      // The house panel's reads run outside this refresh's lock and error handling: a slow walk of
+      // the withdrawal queue must not delay the next market or account read, nor toast as if the
+      // whole refresh failed.
+      readHousePanelSoon(this);
       this.lastReadError = null;
     } catch (error) {
       const message = error instanceof Error ? error.message : "The node did not answer.";
