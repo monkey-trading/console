@@ -5,7 +5,7 @@
 import { useEffect, useId, useRef } from "react";
 
 import { formatMonkey } from "@/lib/format";
-import { checkEmissionsClaimed, claimEmissions, emissionsPosition } from "@/lib/store/emissions";
+import { checkEmissionsClaimed, claimEmissions, emissionsPosition, emissionsRecordStale } from "@/lib/store/emissions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { useReadOnlyNote } from "./SignGate";
@@ -22,9 +22,10 @@ export function EmissionsCard() {
   const position = emissionsPosition(proof, state.emissionsVault);
   const address = state.wallet?.address;
   useEffect(() => {
-    // The vault's own record settles the claimed-versus-accrued line and whether the proof's checkpoint has posted.
-    if (address !== undefined && proof !== null && state.emissionsVault === null) void checkEmissionsClaimed(store);
-  }, [store, address, proof, state.emissionsVault]);
+    // The vault's own record settles the claimed-versus-accrued line and whether the proof's
+    // checkpoint has posted; it is read again when the proof advances past it (`emissionsRecordStale`).
+    if (address !== undefined && proof !== null && emissionsRecordStale(proof, state.emissionsVault, state.now, store.lastEmissionsReadAt)) void checkEmissionsClaimed(store);
+  }, [store, address, proof, state.emissionsVault, state.now]);
   const act = (run: () => Promise<void>) => {
     if (state.busy) return;
     void run().then(() => heading.current?.focus());
@@ -50,10 +51,13 @@ export function EmissionsCard() {
           {position.claimable > 0n && (
             <button type="button" aria-disabled={!idle || readOnly.readOnly} aria-describedby={readOnly.describedBy} onClick={() => !readOnly.readOnly && act(() => claimEmissions(store))} className={BUTTON}>Claim {formatMonkey(position.claimable)} on the vault</button>
           )}
-          {position.claimed !== null && !position.posted && position.accrued > position.claimed && (
+          {position.claimed !== null && position.checkpoint === "waiting" && position.accrued > (position.claimed ?? 0n) && (
             <p className="mt-2 text-fg-3">The vault has not posted a checkpoint covering this yet; the claim unlocks once one posts.</p>
           )}
-          {position.claimed !== null && position.posted && position.claimable === 0n && position.accrued > 0n && (
+          {position.claimed !== null && position.checkpoint === "superseded" && (
+            <p className="mt-2 text-fg-3">A newer checkpoint has posted on the vault; the claim unlocks once the node serves a proof against it.</p>
+          )}
+          {position.claimed !== null && position.checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && (
             <p className="mt-2 text-fg-3">All accrued MONKEY is claimed.</p>
           )}
         </div>

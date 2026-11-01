@@ -146,12 +146,11 @@ export class MockEngineClient implements EngineClient {
     return { class: given, statement: given ? statement : null };
   }
 
-  /** The account's cumulative MONKEY entitlement with its proof; null when no allocation has reached it, as the node's 404. */
+  /** The account's cumulative MONKEY entitlement with its proof, against the mock vault's latest posted checkpoint; null when no allocation has reached it, as the node's 404. */
   async emissions(address: Address): Promise<EntitlementProof | null> {
     const entitled = this.state.entitledMonkey.get(address.toLowerCase());
     if (entitled === undefined) return null;
-    // The mock posts a checkpoint with every command, so the proof is always against its latest root.
-    return { seq: this.headSeq ?? 0, root: `0x${mockHex("emission-root", 64)}`, account: address, entitled: entitled.toString(), siblings: [] };
+    return { seq: this.state.postedSeq, root: `0x${mockHex("emission-root", 64)}`, account: address, entitled: entitled.toString(), siblings: [] };
   }
 
   async attestEligibility(request: EligibilityRequest): Promise<ActionResult> {

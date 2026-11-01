@@ -16,9 +16,10 @@ export class ConsoleStore {
   readonly deps: StoreDeps;
   /** The connected wallet, which holds a signer and so is not part of the snapshot. */
   liveWallet: Wallet | null = null;
-  /** The wallet whose background vault reads are running, one at a time: paid payout nonces and the MONKEY record (`checkPaid`, `checkEmissionsClaimed`); `lastEmissionsReadError` dedupes the record's repeated failures. */
+  /** Bookkeeping for the background vault reads: `paidCheck`/`emissionsCheck` name the wallet each runs for, `lastEmissionsReadAt` throttles the MONKEY record's retries, `lastEmissionsReadError` dedupes its repeated failures. */
   paidCheck: Wallet | null = null;
   emissionsCheck: Wallet | null = null;
+  lastEmissionsReadAt = -1;
   lastEmissionsReadError: string | null = null;
   private snapshot: ConsoleState;
   private readonly listeners = new Set<() => void>();
@@ -34,9 +35,8 @@ export class ConsoleStore {
   readonly barsSeed = new BarsSeed(this);
   /** When each market's bar bucket was last ticked from the node's mark, so a history merge can tell a stale live candle from a fresh one; derived bookkeeping, not part of the snapshot. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
-  /** Set when the store stops following the node, so pending history work stands down. Not part of the snapshot. */
+  /** Set when the store stops following the node so pending history work stands down; bumped on each start so an earlier cycle's scans stand down (StrictMode re-runs the effect). Neither is part of the snapshot. */
   stopped = false;
-  /** Bumped on each start, so scans from an earlier cycle stand down when the store restarts (React StrictMode re-runs the effect). Not part of the snapshot. */
   scanEpoch = 0;
   /** Whether trust in the node was lost (a failed check or a wrong clock) and not yet regained. */
   private trustLost = false;

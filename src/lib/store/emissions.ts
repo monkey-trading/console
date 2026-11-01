@@ -15,20 +15,39 @@ export interface EmissionsPosition {
   accrued: bigint;
   /** What the vault has minted so far, or null before its record has been read. */
   claimed: bigint | null;
-  /** Whether the vault has posted a checkpoint at or past the proof's seq, which the claim needs. */
-  posted: boolean;
-  /** What a claim would mint now; zero while the record is unread, the checkpoint unposted, or nothing is due. */
+  /**
+   * Where the vault's latest posted checkpoint stands against the proof: `unknown` before its
+   * record is read, `waiting` while it has not reached the proof's seq, `posted` at it — the only
+   * state a claim works in, since the vault verifies a proof against its latest root — and
+   * `superseded` once a newer checkpoint has passed it.
+   */
+  checkpoint: "unknown" | "waiting" | "posted" | "superseded";
+  /** What a claim would mint now; zero unless the checkpoint is posted and something is due. */
   claimable: bigint;
 }
 
 /** The account's MONKEY position from what the page holds; nothing is claimable without a proof. */
 export function emissionsPosition(entitlement: EntitlementProof | null, vault: { claimed: bigint; latestSeq: number } | null): EmissionsPosition {
-  if (entitlement === null) return { accrued: 0n, claimed: vault?.claimed ?? null, posted: false, claimable: 0n };
+  if (entitlement === null) return { accrued: 0n, claimed: vault?.claimed ?? null, checkpoint: "unknown", claimable: 0n };
   const accrued = BigInt(entitlement.entitled);
   const claimed = vault?.claimed ?? null;
-  const posted = vault !== null && vault.latestSeq >= entitlement.seq;
-  const claimable = claimed !== null && posted ? (accrued > claimed ? accrued - claimed : 0n) : 0n;
-  return { accrued, claimed, posted, claimable };
+  const checkpoint = vault === null ? "unknown" : vault.latestSeq < entitlement.seq ? "waiting" : vault.latestSeq === entitlement.seq ? "posted" : "superseded";
+  const claimable = checkpoint === "posted" && claimed !== null ? (accrued > claimed ? accrued - claimed : 0n) : 0n;
+  return { accrued, claimed, checkpoint, claimable };
+}
+
+/** How long a stale vault record waits before it is read again, in milliseconds of the node's clock. */
+export const EMISSIONS_READ_RETRY_MS = 60_000;
+
+/**
+ * Whether the vault's record should be read now: always when it has not been read, and again when
+ * the proof's checkpoint has passed it — the vault posts checkpoints on its own, so a record
+ * behind the proof has simply not seen them yet. The retry waits out `EMISSIONS_READ_RETRY_MS` of
+ * node time so a checkpoint still posting does not spin the wallet's chain provider.
+ */
+export function emissionsRecordStale(entitlement: EntitlementProof, vault: { latestSeq: number } | null, nowMs: number, lastReadAtMs: number): boolean {
+  if (vault === null || vault.latestSeq < entitlement.seq) return lastReadAtMs < 0 || nowMs - lastReadAtMs >= EMISSIONS_READ_RETRY_MS;
+  return false;
 }
 
 /**
@@ -55,6 +74,8 @@ export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> 
       store.toast("error", `The vault's MONKEY record could not be read: ${message}`);
     }
   } finally {
+    // The throttle window runs from the read's end, whatever it answered.
+    store.lastEmissionsReadAt = store.getSnapshot().now;
     if (store.emissionsCheck === wallet) store.emissionsCheck = null;
   }
 }
@@ -78,7 +99,8 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
   try {
     await prompting(store, `Confirm in your wallet: claim ${amount} from the vault.`, () => claim(proof, (waitingFor) => store.patch({ prompt: waitingFor })));
     // The mint belongs to the account that claimed it, which may no longer be the one connected.
-    store.toast("ok", `The vault minted ${amount} to ${wallet.address === state.wallet?.address ? "your wallet" : wallet.address}.`);
+    const after = store.getSnapshot();
+    store.toast("ok", `The vault minted ${amount} to ${after.wallet?.address === wallet.address ? "your wallet" : wallet.address}.`);
     offerMonkeyImport(store, wallet);
   } catch (error) {
     store.toast("error", errorText(error));

@@ -40,7 +40,7 @@ export class MockWalletConnector implements WalletConnector {
         return `0x${mockHex(`monkey-${address}`, 32)}`;
       },
       async emissionsClaimed() {
-        return { claimed: controls.monkeyClaimed(address), latestSeq: controls.headSeq() };
+        return { claimed: controls.monkeyClaimed(address), latestSeq: controls.postedSeq() };
       },
       async claimed() {
         return true;

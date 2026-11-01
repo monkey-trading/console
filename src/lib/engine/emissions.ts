@@ -9,7 +9,7 @@ import type { Address } from "./types";
 
 /** `GET /v1/accounts/{address}/emissions`: the proof the vault's `claimEmissions` takes, against the root of the node's last posted checkpoint. */
 export interface EntitlementProof {
-  /** The seq of the last command applied when the root was computed; the claim works once the vault's `latestSeq` reaches it. */
+  /** The seq of the last command applied when the root was computed; a claim works only while the vault's `latestSeq` equals it, since the vault verifies a proof against its latest root. */
   seq: number;
   /** The root the proof was taken against. */
   root: string;

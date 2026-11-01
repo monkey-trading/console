@@ -6,7 +6,7 @@ import { decodeFunctionData, parseAbi } from "viem";
 import type { EntitlementProof } from "../engine/emissions";
 import { ACCOUNT } from "../engine/wallet-kit";
 import { MONKEY_UNIT } from "../format";
-import { checkEmissionsClaimed, claimEmissions, emissionsPosition } from "./emissions";
+import { checkEmissionsClaimed, claimEmissions, emissionsPosition, emissionsRecordStale } from "./emissions";
 import { connected, VAULT } from "./live-kit";
 
 const VAULT_ABI = parseAbi(["function claimEmissions(address account, uint256 entitled, bytes32[] siblings) returns (uint256)"]);
@@ -17,22 +17,42 @@ const proof = (entitled: bigint, seq = 40): EntitlementProof => ({
 
 describe("emissionsPosition", () => {
   it("names nothing claimable before the node holds a proof, whatever the vault record says", () => {
-    expect(emissionsPosition(null, null)).toEqual({ accrued: 0n, claimed: null, posted: false, claimable: 0n });
-    expect(emissionsPosition(null, { claimed: 5n, latestSeq: 40 })).toEqual({ accrued: 0n, claimed: 5n, posted: false, claimable: 0n });
+    expect(emissionsPosition(null, null)).toEqual({ accrued: 0n, claimed: null, checkpoint: "unknown", claimable: 0n });
+    expect(emissionsPosition(null, { claimed: 5n, latestSeq: 40 })).toEqual({ accrued: 0n, claimed: 5n, checkpoint: "unknown", claimable: 0n });
   });
 
-  it("counts nothing claimable until the vault's record is read and its checkpoint posts", () => {
+  it("reports the checkpoint waiting until the vault posts one at the proof's seq", () => {
     const at = proof(5n * MONKEY_UNIT);
-    expect(emissionsPosition(at, null)).toEqual({ accrued: 5n * MONKEY_UNIT, claimed: null, posted: false, claimable: 0n });
-    const early = emissionsPosition(at, { claimed: 0n, latestSeq: 39 });
-    expect(early).toEqual({ accrued: 5n * MONKEY_UNIT, claimed: 0n, posted: false, claimable: 0n });
+    expect(emissionsPosition(at, null).checkpoint).toBe("unknown");
+    expect(emissionsPosition(at, { claimed: 0n, latestSeq: 39 })).toEqual({ accrued: 5n * MONKEY_UNIT, claimed: 0n, checkpoint: "waiting", claimable: 0n });
+    expect(emissionsPosition(at, { claimed: 2n * MONKEY_UNIT, latestSeq: 40 }).checkpoint).toBe("posted");
   });
 
-  it("claims the accrued amount the vault has not minted, and nothing once it caught up or ran ahead", () => {
+  it("treats only a checkpoint exactly at the proof's seq as claimable, since the vault verifies against its latest root", () => {
     const at = proof(5n * MONKEY_UNIT);
     expect(emissionsPosition(at, { claimed: 2n * MONKEY_UNIT, latestSeq: 40 }).claimable).toBe(3n * MONKEY_UNIT);
-    expect(emissionsPosition(at, { claimed: 5n * MONKEY_UNIT, latestSeq: 41 }).claimable).toBe(0n);
-    expect(emissionsPosition(at, { claimed: 6n * MONKEY_UNIT, latestSeq: 41 }).claimable).toBe(0n);
+    // A newer checkpoint has superseded the proof: the claim would revert, so nothing is offered.
+    expect(emissionsPosition(at, { claimed: 0n, latestSeq: 41 })).toEqual({ accrued: 5n * MONKEY_UNIT, claimed: 0n, checkpoint: "superseded", claimable: 0n });
+    // The vault caught up: nothing is due.
+    expect(emissionsPosition(at, { claimed: 5n * MONKEY_UNIT, latestSeq: 40 }).claimable).toBe(0n);
+    // The vault record cannot run ahead of what it minted.
+    expect(emissionsPosition(at, { claimed: 6n * MONKEY_UNIT, latestSeq: 40 }).claimable).toBe(0n);
+  });
+});
+
+describe("emissionsRecordStale", () => {
+  const at = proof(5n * MONKEY_UNIT);
+
+  it("asks for an unread record at once, and a stale one only after the retry window", () => {
+    expect(emissionsRecordStale(at, null, 0, -1)).toBe(true);
+    expect(emissionsRecordStale(at, { latestSeq: 39 }, 0, -1)).toBe(true);
+    expect(emissionsRecordStale(at, { latestSeq: 39 }, 30_000, 0)).toBe(false);
+    expect(emissionsRecordStale(at, { latestSeq: 39 }, 60_000, 0)).toBe(true);
+  });
+
+  it("does not re-read a record that has reached the proof, whatever its age", () => {
+    expect(emissionsRecordStale(at, { latestSeq: 40 }, 0, -1)).toBe(false);
+    expect(emissionsRecordStale(at, { latestSeq: 41 }, 10_000_000, -1)).toBe(false);
   });
 });
 
@@ -44,7 +64,7 @@ describe("checkEmissionsClaimed", () => {
     expect(store.getSnapshot().emissionsVault).toEqual({ claimed: 7n * MONKEY_UNIT, latestSeq: 40 });
   });
 
-  it("refuses the read on another chain and reports it, leaving the record unread", async () => {
+  it("refuses the read on another chain and reports it once, leaving the record unread", async () => {
     const { store } = await connected({ chainId: 1, emissionsClaimed: 7n * MONKEY_UNIT, latestSeq: 40 });
     store.patch({ entitlement: proof(9n * MONKEY_UNIT) });
     await checkEmissionsClaimed(store);
@@ -54,7 +74,6 @@ describe("checkEmissionsClaimed", () => {
     await checkEmissionsClaimed(store);
     expect(store.getSnapshot().toasts.filter((t) => t.text.includes("MONKEY record could not be read"))).toHaveLength(1);
     // A wallet back on the chain reads cleanly and clears the latch.
-    store.liveWallet = null;
     const home = await connected({ emissionsClaimed: 7n * MONKEY_UNIT, latestSeq: 40 });
     home.store.patch({ entitlement: proof(9n * MONKEY_UNIT) });
     await checkEmissionsClaimed(home.store);
@@ -92,9 +111,11 @@ describe("claimEmissions", () => {
     expect(other.provider.sent).toHaveLength(0);
   });
 
-  it("sends nothing when the checkpoint has not posted or the vault record is unread", async () => {
+  it("sends nothing while the checkpoint is waiting or superseded, or the vault record is unread", async () => {
     const { provider, store } = await connected();
     store.patch({ entitlement: proof(5n * MONKEY_UNIT), emissionsVault: { claimed: 0n, latestSeq: 39 } });
+    await claimEmissions(store);
+    store.patch({ entitlement: proof(5n * MONKEY_UNIT), emissionsVault: { claimed: 0n, latestSeq: 41 } });
     await claimEmissions(store);
     store.patch({ entitlement: proof(5n * MONKEY_UNIT), emissionsVault: null });
     await claimEmissions(store);
