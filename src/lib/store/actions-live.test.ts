@@ -8,14 +8,17 @@ import vectors from "../engine/eip712-vectors.json";
 import { cancelTypedData, eligibilityTypedData, orderTypedData, requestDomain, withdrawalTypedData } from "../engine/eip712";
 import type { CancelRequest, EligibilityRequest, OrderRequest, WithdrawalRequest } from "../engine/types";
 import { ACCOUNT } from "../engine/wallet-kit";
-import { fixedFromInt, fixedFromWire } from "../fixed";
-import { settle } from "../engine/test-kit";
+import { loadChoice, type ChoiceStorage } from "../engine/wallet-persist";
+import { fixedFromInt, fixedFromWire } from "../fixed";import { settle } from "../engine/test-kit";
 import type { Wallet } from "../engine/wallet";
 import { attestEligibility, cancelOrder, connectWallet, deposit, disconnectWallet, placeOrder, REQUEST_TTL_MS, withdraw } from "./actions";
 import { connected, NODE_TIME, signerOf, VAULT, ActionClient, BTC } from "./live-kit";
 import { ConsoleStore } from "./store";
 
 const DOMAIN = requestDomain(vectors.chain_id, VAULT);
+
+/** A connected-wallet shape for connect tests that only count what the wallet was asked. */
+const WALLET_STUB: Wallet = { address: ACCOUNT, label: "Test wallet", sign: async () => "0x", deposit: async () => "0x0", claim: async () => "0x0" };
 
 describe("signed actions with a fixed-key wallet", () => {
   it("signs an order with the node's nonce and an expiry two minutes past its signed time, carrying the price shown and the bound", async () => {
@@ -163,5 +166,71 @@ describe("a wallet change", () => {
     await connectWallet(declined, "browser");
     await settle();
     expect(declined.getSnapshot().toasts.some((t) => t.text.includes("USDC"))).toBe(false);
+  });
+
+  it("persists the injected connector choice when the session has storage, and no other choice", async () => {
+    const held = new Map<string, string>();
+    const persistence: ChoiceStorage = {
+      getItem: (key) => held.get(key) ?? null,
+      setItem: (key, value) => void held.set(key, value),
+      removeItem: (key) => void held.delete(key),
+    };
+    const { store } = await connected();
+    store.deps.persistence = persistence;
+    expect(await connectWallet(store, "injected", true)).toBe(true);
+    expect(loadChoice(persistence)).toEqual({ kind: "injected" });
+    // A read-only watch account is not a connection the console persists.
+    held.clear();
+    expect(await connectWallet(store, "watch", true)).toBe(true);
+    expect(loadChoice(persistence)).toBeNull();
+  });
+
+  it("offers USDC only on a connect the visitor started, not a quiet reconnect", async () => {
+    const offered: boolean[] = [];
+    const { store } = await connected();
+    store.deps.wallets.connect = async () => ({ ...WALLET_STUB, suggestUsdc: async () => { offered.push(true); return false; } });
+    await connectWallet(store, "injected", true); // a stored choice's reconnect: quiet
+    await connectWallet(store, "injected"); // the visitor picking the wallet: not quiet
+    expect(offered).toEqual([true]);
+  });
+
+  it("adopts an already-established wallet without asking the connector, and reports failure as false", async () => {
+    const { store, wallet } = await connected();
+    let asked = 0;
+    store.deps.wallets.connect = async () => { asked += 1; throw new Error("must not be asked"); };
+    expect(await connectWallet(store, "walletconnect", true, wallet)).toBe(true);
+    expect(asked).toBe(0);
+    store.deps.wallets.connect = async () => { throw new Error("offline"); };
+    expect(await connectWallet(store, "walletconnect", true)).toBe(false);
+  });
+
+  it("a quiet connect never replaces a wallet that connected while it waited, and persists nothing for the refused one", async () => {
+    const { store } = await connected();
+    disconnectWallet(store); // no wallet connected when the quiet reconnect left its request pending
+    const held = new Map<string, string>();
+    const persistence: ChoiceStorage = {
+      getItem: (key) => held.get(key) ?? null,
+      setItem: (key, value) => void held.set(key, value),
+      removeItem: (key) => void held.delete(key),
+    };
+    store.deps.persistence = persistence;
+    const newer: Wallet = { address: "0x00000000000000000000000000000000000000bb", label: "Newer", sign: async () => "0x", deposit: async () => "0x", claim: async () => "0x" };
+    let released = 0;
+    // The approved WalletConnect session a quiet reconnect left pending: its topic must not persist, its session ends.
+    const stale: Wallet = { ...WALLET_STUB, topic: "stale-topic", disconnect: async () => { released += 1; } };
+    store.liveWallet = newer;
+    store.setWallet({ address: newer.address, label: newer.label });
+    store.deps.wallets.connect = async () => stale;
+    expect(await connectWallet(store, "walletconnect", true)).toBe(false);
+    expect(store.liveWallet).toBe(newer); // the newer wallet stays
+    expect(store.getSnapshot().wallet?.address).toBe(newer.address); // the stale connect adopted nothing
+    expect(released).toBe(1); // its session was ended
+    expect(held.size).toBe(0); // and its topic was not persisted over the newer connection
+    // A connect the visitor started is not quiet and still replaces, adopting its topic as the choice.
+    store.liveWallet = null;
+    store.deps.wallets.connect = async () => newer;
+    expect(await connectWallet(store, "injected")).toBe(true);
+    expect(store.liveWallet).toBe(newer);
+    expect(loadChoice(persistence)).toEqual({ kind: "injected" });
   });
 });

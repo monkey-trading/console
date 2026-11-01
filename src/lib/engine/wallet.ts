@@ -65,6 +65,8 @@ export interface Wallet {
   suggestUsdc?(): Promise<boolean>;
   /** Ends the wallet's connection, such as a WalletConnect session, when the user disconnects; absent when there is nothing to end. */
   disconnect?(): Promise<void>;
+  /** The WalletConnect session topic, when the wallet connects over one: persisted as the connection choice only once the wallet is adopted, never for a connect the console refused. */
+  topic?: string;
 }
 
 /** Told, as a sentence for the user, what a wallet's transaction waits for: the user's confirmation, then the chain. */

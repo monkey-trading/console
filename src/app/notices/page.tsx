@@ -21,8 +21,13 @@ export default function Page() {
       <section aria-labelledby="privacy" className="space-y-3">
         <h2 id="privacy" className={H2}>Privacy</h2>
         <p className={P}>
-          The console keeps nothing in your browser&apos;s storage, sets no cookies, and runs no analytics. Its fonts and
-          scripts come from its own address.
+          The console sets no cookies and runs no analytics. Its fonts and scripts come from its own
+          address. When you connect a wallet, the console remembers that connection in your
+          browser&apos;s storage — which kind of wallet it was, and the WalletConnect session&apos;s
+          topic when that is how you connected — so a later page load can reconnect you. It stores
+          nothing else — no keys, no addresses, no session secrets — and the stored choice is removed
+          when you disconnect in the console, when your wallet app ends the WalletConnect session
+          while a console page is open, or when a reconnect does not complete.
         </p>
         <p className={P}>
           What you do in the console leaves your browser only for the party that needs it. Your account&apos;s
@@ -42,7 +47,10 @@ export default function Page() {
           browser and operating system family, and an identifier for the session. Each pairing and request also loads
           a hidden page from WalletConnect&apos;s Verify service (<code>verify.walletconnect.org</code>), run by Reown,
           which tells your wallet that it comes from this page&apos;s domain; it sees your IP address, this page&apos;s
-          address, your browser, and an identifier for the request. A browser wallet uses neither.
+          address, your browser, and an identifier for the request. A browser wallet uses neither. A remembered
+          WalletConnect connection also reconnects on your next page load: no WalletConnect session
+          survives a reload, so that load fetches the WalletConnect SDK, contacts the relay, and asks
+          the wallet to pair again, until you disconnect.
         </p>
       </section>
       <section aria-labelledby="software" className="space-y-3">

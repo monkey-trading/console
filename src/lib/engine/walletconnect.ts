@@ -1,7 +1,7 @@
 /**
  * A wallet app paired through WalletConnect, as a `WalletConnector`. Every request goes to the wallet
  * over WalletConnect's relay, none to an HTTP RPC; the SDK keeps its keys and sessions in memory, sends
- * no telemetry, and loads only when the user picks WalletConnect.
+ * no telemetry, and loads only when the user picks WalletConnect or a stored choice reconnects (#82).
  */
 
 import { WALLETCONNECT_RELAY } from "./deploy";
@@ -56,7 +56,7 @@ export class WalletConnectConnector implements WalletConnector {
   private state: PairingState = IDLE;
   private readonly listeners = new Set<() => void>();
   private attempt: Attempt | null = null;
-  /** The SDK's provider, started on the first connect and kept for the page's life, as the SDK keeps its core. */
+  /** The SDK's provider, started on the first use and kept for the page's life, as the SDK keeps its core. */
   private starting: Promise<WcProvider> | null = null;
   private started: WcProvider | null = null;
   /** The topic of the session the last connect returned, until it ends. */
@@ -181,7 +181,28 @@ export class WalletConnectConnector implements WalletConnector {
     }
     this.live = session.topic;
     const topic = session.topic;
-    return new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, topic) });
+    const wallet = new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, topic) });
+    wallet.topic = topic; // the console persists it as the connection choice only if it adopts this wallet
+    return wallet;
+  }
+
+  /**
+   * Re-attaches the session a stored choice names (monkey-trading/console#82), returning its
+   * wallet, or null when the SDK holds no usable live session for the topic. The SDK keeps its
+   * sessions in memory, so after a reload none survives; the caller then runs the pairing dialog.
+   * Error cases:
+   * - the SDK does not start (the caller may still pair; the failure is the pairing dialog's to report)
+   */
+  async resume(topic: string): Promise<Wallet | null> {
+    const provider = await this.provider();
+    const session = provider.session;
+    if (session === undefined || session.topic !== topic) return null;
+    const { address, methods } = sessionScope(session, this.chain.chainId);
+    if (address === null || !methods.has(SIGN)) return null;
+    this.live = session.topic;
+    const wallet = new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, session.topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, session.topic) });
+    wallet.topic = session.topic;
+    return wallet;
   }
 
   /** Whether nothing uses the relay socket now: no pairing open and no live session. */
@@ -189,7 +210,7 @@ export class WalletConnectConnector implements WalletConnector {
     return this.attempt === null && this.live === null;
   }
 
-  /** The SDK's provider, loaded and started once; a failed start is tried again on the next connect. */
+  /** The SDK's provider, loaded and started once; a failed start is tried again on the next use. */
   private provider(): Promise<WcProvider> {
     this.starting ??= this.start().catch((cause: unknown) => {
       this.starting = null;

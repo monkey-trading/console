@@ -339,7 +339,11 @@ The bar is WCAG 2.2 AA; the [development checklist](../../rules/development-chec
 - No analytics (Vercel Web Analytics and Speed Insights included), cookies, `localStorage`,
   `sessionStorage`, IndexedDB, trackers, fingerprinting, third-party scripts, fonts, images,
   iframes, or embeds without the owner's explicit approval. A visitor's choices, such as the pause
-  switch, live in memory and end with the tab.
+  switch, live in memory and end with the tab. The one exception, approved by the owner in
+  monkey-trading/console#82: the wallet connection choice (the connector kind and, for
+  WalletConnect, the session topic — never keys, addresses, or session secrets) persists in
+  `localStorage` across page loads, is forgotten when the connection ends, and is disclosed on
+  /notices.
 - Every request the page makes is same-origin, but for the engine node's origin once the owner has
   approved it, and WalletConnect's relay and its Verify frame while a user pairs or uses a wallet app over
   it (approved in monkey-trading/console#7 and #27): the site serves its own fonts, images, and scripts. Check the production build's
@@ -395,7 +399,8 @@ rules; these are the conventions that keep copy checkable.
 - In use (non-exhaustive): `next`, `react`, `react-dom`, and `lightweight-charts` (TradingView, Apache-2.0,
   the owner-approved charting library; its `fancy-canvas` dependency is MIT), `viem` (MIT, typed data,
   ABI encoding and signature recovery for the wallet), `@walletconnect/universal-provider` (the
-  licence exception above, loaded only when the user picks WalletConnect) and `uqr` (MIT, the pairing
+  licence exception above, loaded when the user picks WalletConnect or a stored connection choice
+  reconnects) and `uqr` (MIT, the pairing
   QR code) at runtime;
   `typescript`, `@types/*`, `eslint`, `@eslint/js`, `typescript-eslint`,
   `eslint-plugin-react-hooks`, `eslint-plugin-jsx-a11y`, `tailwindcss`, `@tailwindcss/postcss`,
