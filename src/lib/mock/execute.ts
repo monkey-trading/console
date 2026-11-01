@@ -4,6 +4,7 @@ import { absFixed, bpsOf, fixedFromWire, fixedToWire, mulFixed, type Fixed } fro
 import { metaFor } from "../engine/meta";
 import type { EngineEvent, Fill, MarketId, Reject, Side } from "../engine/types";
 import { equityOf, houseNav, houseNetNotional, marginOf } from "./accounts";
+import { noteEmissionLoss } from "./emissions";
 import { adverseBps, executionCost, exceedsSlippage, notionalOf, PROFIT_FEE_BPS, quoteOrder, tieredMargin, type Quote } from "../pricing";
 import type { Holding, MockState } from "./state";
 
@@ -90,6 +91,8 @@ export function fillOrder(state: MockState, order: FillRequest): FillOutcome {
   const fee = pnl > 0n ? bpsOf(pnl, PROFIT_FEE_BPS) : 0n;
   account.balance += pnl - fee;
   state.houseCash += fee - pnl;
+  // A realised loss is eligible weight for the open emission period, as the engine weights it (emissions.rs).
+  if (pnl < 0n) noteEmissionLoss(state, req.address, -pnl);
   // As the engine does, a loss beyond the balance is written off against the house only once the account is flat.
   let badDebt = 0n;
   if (account.balance < 0n && account.positions.size === 0) {

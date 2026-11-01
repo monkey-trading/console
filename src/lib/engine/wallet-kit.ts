@@ -27,6 +27,8 @@ const ABI = parseAbi([
   "function balanceOf(address) view returns (uint256)",
   "function allowance(address, address) view returns (uint256)",
   "function usedNonces(address, uint64) view returns (bool)",
+  "function emissionsClaimed(address) view returns (uint256)",
+  "function latestSeq() view returns (uint64)",
 ]);
 
 export interface StubOptions {
@@ -36,6 +38,10 @@ export interface StubOptions {
   balance?: bigint;
   allowance?: bigint;
   paid?: boolean;
+  /** What the vault has minted to the account against its MONKEY entitlement. */
+  emissionsClaimed?: bigint;
+  /** The vault's latest posted checkpoint seq. */
+  latestSeq?: number;
   /** Each receipt's status, `0x1` by default. */
   receiptStatus?: string;
   /** How many times a sent transaction's receipt is not there yet (null) before it is mined. */
@@ -96,6 +102,8 @@ export class StubProvider implements Eip1193Provider {
   private call(data: Hex): Hex {
     const { functionName } = decodeFunctionData({ abi: ABI, data });
     if (functionName === "usedNonces") return encodeAbiParameters([{ type: "bool" }], [this.options.paid ?? false]);
+    if (functionName === "latestSeq") return encodeAbiParameters([{ type: "uint64" }], [BigInt(this.options.latestSeq ?? 0)]);
+    if (functionName === "emissionsClaimed") return encodeAbiParameters([{ type: "uint256" }], [this.options.emissionsClaimed ?? 0n]);
     return encodeAbiParameters([{ type: "uint256" }], [functionName === "balanceOf" ? (this.options.balance ?? 0n) : (this.options.allowance ?? 0n)]);
   }
 }

@@ -1,5 +1,6 @@
 /** A wallet that lives in the page: it connects, "signs" and deposits against the mock node. */
 
+import type { EntitlementProof } from "../engine/emissions";
 import type { Wallet, WalletConnector, WalletOption, SignRequest } from "../engine/wallet";
 import type { Fixed } from "../fixed";
 import { mockHex } from "./client";
@@ -33,6 +34,13 @@ export class MockWalletConnector implements WalletConnector {
       },
       async claim() {
         throw new Error("The simulated vault pays withdrawals itself; there is nothing to claim.");
+      },
+      async claimEmissions(proof: EntitlementProof) {
+        controls.claimEmissions(address, BigInt(proof.entitled));
+        return `0x${mockHex(`monkey-${address}`, 32)}`;
+      },
+      async emissionsClaimed() {
+        return { claimed: controls.monkeyClaimed(address), latestSeq: controls.headSeq() };
       },
       async claimed() {
         return true;

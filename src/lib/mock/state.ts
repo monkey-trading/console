@@ -12,6 +12,7 @@ import type {
   StreamMessage,
 } from "../engine/types";
 import { MARKETS, type ListedMarket } from "./markets";
+import { EMISSION_PERIOD_MS } from "./emissions";
 import { isOpen } from "../schedule";
 
 /** Where the node's real-peer screening places the caller. */
@@ -94,10 +95,19 @@ export class MockState {
   readonly log: StreamMessage[] = [];
   readonly history = new Map<string, HistoryItem[]>();
   readonly listeners = new Set<Listener>();
+  /**
+   * MONKEY emissions, as the engine and the vault hold them: the open period's eligible realised
+   * losses, each account's cumulative entitlement in base units, and what the simulated vault has
+   * minted (`emissionsClaimed`).
+   */
+  emission: { period: number; losses: Map<string, { address: string; loss: Fixed }>; total: Fixed };
+  readonly entitledMonkey = new Map<string, bigint>();
+  readonly claimedMonkey = new Map<string, bigint>();
 
   /** Starts at `startMs` with every market at its starting index; open per its schedule. */
   constructor(startMs: number) {
     this.now = startMs;
+    this.emission = { period: Math.floor(startMs / EMISSION_PERIOD_MS), losses: new Map(), total: 0n };
     for (const listed of MARKETS) {
       this.markets.set(listed.spec.id, {
         listed,

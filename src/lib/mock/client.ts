@@ -2,6 +2,7 @@
 
 import { checkAttestation, type AttestationStatus } from "../engine/attestation";
 import { EngineError, type ActionResult, type EngineClient, type SignatureChecks, type Unsubscribe } from "../engine/client";
+import type { EntitlementProof } from "../engine/emissions";
 import type { EligibilityClass, AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import { fixedToWire } from "../fixed";
@@ -143,6 +144,14 @@ export class MockEngineClient implements EngineClient {
     const given = this.state.accounts.get(address.toLowerCase())?.eligibility ?? null;
     const statement = given === "professional" ? "I attest that I am a professional client." : "I attest that I am an eligible client.";
     return { class: given, statement: given ? statement : null };
+  }
+
+  /** The account's cumulative MONKEY entitlement with its proof; null when no allocation has reached it, as the node's 404. */
+  async emissions(address: Address): Promise<EntitlementProof | null> {
+    const entitled = this.state.entitledMonkey.get(address.toLowerCase());
+    if (entitled === undefined) return null;
+    // The mock posts a checkpoint with every command, so the proof is always against its latest root.
+    return { seq: this.headSeq ?? 0, root: `0x${mockHex("emission-root", 64)}`, account: address, entitled: entitled.toString(), siblings: [] };
   }
 
   async attestEligibility(request: EligibilityRequest): Promise<ActionResult> {

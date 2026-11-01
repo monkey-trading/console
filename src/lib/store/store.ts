@@ -16,8 +16,9 @@ export class ConsoleStore {
   readonly deps: StoreDeps;
   /** The connected wallet, which holds a signer and so is not part of the snapshot. */
   liveWallet: Wallet | null = null;
-  /** The wallet whose reads of the vault's paid payouts are running, one at a time (`checkPaid`). */
+  /** The wallet whose background vault reads are running, one at a time: paid payout nonces and its MONKEY record (`checkPaid`, `checkEmissionsClaimed`). */
   paidCheck: Wallet | null = null;
+  emissionsCheck: Wallet | null = null;
   private snapshot: ConsoleState;
   private readonly listeners = new Set<() => void>();
   private nextId = 1;
@@ -30,7 +31,7 @@ export class ConsoleStore {
   private unwatch: (() => void) | null = null;
   /** Seeds the chart's bars from the marks endpoint once per market and timeframe. */
   readonly barsSeed = new BarsSeed(this);
-  /** When each market's bar bucket was last ticked from the node's mark, so a history merge can tell a stale live candle from a fresh one. Not part of the snapshot: derived bookkeeping. */
+  /** When each market's bar bucket was last ticked from the node's mark, so a history merge can tell a stale live candle from a fresh one; derived bookkeeping, not part of the snapshot. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
   /** Set when the store stops following the node, so pending history work stands down. Not part of the snapshot. */
   stopped = false;
@@ -228,9 +229,7 @@ export class ConsoleStore {
       this.rerun = { accountChanged: accountChanged || (this.rerun?.accountChanged ?? false) };
       return this.inflight;
     }
-    const run = this.readAll(accountChanged).finally(() => {
-      this.inflight = null;
-    });
+    const run = this.readAll(accountChanged).finally(() => { this.inflight = null; });
     this.inflight = run;
     return run;
   }
@@ -282,7 +281,7 @@ export class ConsoleStore {
     const wallet = this.snapshot.wallet;
     if (!wallet) return;
     const { client } = this.deps;
-    const [eligibility, queue] = await Promise.all([client.eligibility(wallet.address), client.withdrawalQueue(wallet.address)]);
+    const [eligibility, queue, entitlement] = await Promise.all([client.eligibility(wallet.address), client.withdrawalQueue(wallet.address), client.emissions(wallet.address)]);
     let account = null;
     try {
       account = decodeAccount(await client.account(wallet.address));
@@ -291,7 +290,7 @@ export class ConsoleStore {
     }
     // The wallet may have changed while the reads ran; an answer for another account is dropped.
     if (this.snapshot.wallet?.address !== wallet.address) return;
-    this.patch({ eligibility: eligibility.class, queue: queue.queue, account });
+    this.patch({ eligibility: eligibility.class, queue: queue.queue, account, entitlement });
     if (withHistory || this.snapshot.history.length === 0) {
       const history = (await client.history(wallet.address, { limit: 100 })).events;
       if (this.snapshot.wallet?.address === wallet.address) this.patch({ history });

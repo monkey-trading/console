@@ -3,6 +3,7 @@
 import { absFixed, bpsOf, fixedFromInt, fixedToWire, moveBps, mulFixed, type Fixed } from "../fixed";
 import type { EngineEvent, SourceQuote } from "../engine/types";
 import { closeOutUnderwater } from "./closeout";
+import { closeEmissionPeriods } from "./emissions";
 import { creditFinal, payQueue } from "./funds";
 import { triggerResting } from "./orders";
 import { MAX_STRESS } from "../pricing";
@@ -100,7 +101,7 @@ export function advance(state: MockState, ms: number, options: { liquidity?: boo
     events.push(...stepMarket(state, market, seconds));
     if (market.open && !state.quietPrices) state.emit({ type: "prices", market: market.listed.spec.id, quotes: venueQuotes(state, market.mid) }, []);
   }
-  events.push(...chargeFinancing(state, previous), ...triggerResting(state), ...closeOutUnderwater(state), ...creditFinal(state));
+  events.push(...chargeFinancing(state, previous), ...closeEmissionPeriods(state), ...triggerResting(state), ...closeOutUnderwater(state), ...creditFinal(state));
   const bucket = (t: number) => Math.floor(t / LIQUIDITY_EVERY_MS);
   events.push(...payQueue(state, options.liquidity !== false && bucket(ms) > bucket(previous) ? LIQUIDITY_STEP : 0n));
   state.emit({ type: "tick" }, events);

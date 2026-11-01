@@ -1,6 +1,7 @@
 /** The interface the console talks to an engine node through: the in-browser mock or the live client. */
 
 import type { AttestationStatus, FeedStatus } from "./attestation";
+import type { EntitlementProof } from "./emissions";
 import type { ScanBudget, ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import type { ScanResult } from "./live-scan";
@@ -86,6 +87,8 @@ export interface EngineClient {
   /** The account's next nonce, and the node's signed time of the answer where the client checks signatures. */
   nonce(address: Address): Promise<{ next_nonce: number; time_ms?: number }>;
   eligibility(address: Address): Promise<EligibilityView>;
+  /** The account's cumulative MONKEY entitlement with its proof against the node's last posted root; null when the engine holds none for it. */
+  emissions(address: Address): Promise<EntitlementProof | null>;
   attestEligibility(request: EligibilityRequest): Promise<ActionResult>;
   placeOrder(request: OrderRequest): Promise<ActionResult>;
   cancelOrder(request: CancelRequest): Promise<ActionResult>;

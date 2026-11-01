@@ -3,6 +3,7 @@
 /** The workspace's top strip: brand, account summary, funding, wallet, node clock and mock controls. */
 
 import { formatFixedPlaces, type Fixed } from "@/lib/fixed";
+import { formatMonkey } from "@/lib/format";
 import { formatClock } from "@/lib/time";
 
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -14,7 +15,7 @@ const usd = (value: Fixed) => `$${formatFixedPlaces(value, 2)}`;
 const BUTTON = "min-h-11 rounded border border-edge px-2.5 py-2 sm:px-3 lg:min-h-0 text-caption text-fg hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
 
 export function TopBar() {
-  const { account, now, paused, blocked } = useConsole();
+  const { account, now, paused, blocked, entitlement } = useConsole();
   const { store, node } = useSession();
   const free = account ? account.equity - account.margin : 0n;
   const stats: [string, string, string][] = [
@@ -22,6 +23,7 @@ export function TopBar() {
     ["Balance", account ? usd(account.balance) : "—", "hidden md:block"],
     ["Margin", account ? usd(account.margin) : "—", "hidden sm:block"],
     ["Free", account ? usd(free < 0n ? 0n : free) : "—", "hidden lg:block"],
+    ["MONKEY accrued", entitlement ? formatMonkey(BigInt(entitlement.entitled)) : "—", "hidden 2xl:block"],
   ];
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-4 py-2 sm:px-6">
