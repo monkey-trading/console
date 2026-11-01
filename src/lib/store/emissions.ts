@@ -43,9 +43,17 @@ export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> 
   try {
     const record = await wallet.emissionsClaimed();
     // The wallet may have changed while the read ran; another account's record is not shown.
-    if (store.liveWallet === wallet) store.patch({ emissionsVault: record });
+    if (store.liveWallet === wallet) {
+      store.lastEmissionsReadError = null;
+      store.patch({ emissionsVault: record });
+    }
   } catch (error) {
-    store.toast("error", `The vault's MONKEY record could not be read: ${errorText(error)}`);
+    // The read is asked again on the next refresh, so a failure that keeps repeating is shown once.
+    const message = errorText(error);
+    if (store.lastEmissionsReadError !== message) {
+      store.lastEmissionsReadError = message;
+      store.toast("error", `The vault's MONKEY record could not be read: ${message}`);
+    }
   } finally {
     if (store.emissionsCheck === wallet) store.emissionsCheck = null;
   }

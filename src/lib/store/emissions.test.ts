@@ -50,6 +50,15 @@ describe("checkEmissionsClaimed", () => {
     await checkEmissionsClaimed(store);
     expect(store.getSnapshot().emissionsVault).toBeNull();
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The vault's MONKEY record could not be read: your wallet is on chain 1, not chain 31337");
+    // The effect asks again on the next refresh; the same failure is not shown twice.
+    await checkEmissionsClaimed(store);
+    expect(store.getSnapshot().toasts.filter((t) => t.text.includes("MONKEY record could not be read"))).toHaveLength(1);
+    // A wallet back on the chain reads cleanly and clears the latch.
+    store.liveWallet = null;
+    const home = await connected({ emissionsClaimed: 7n * MONKEY_UNIT, latestSeq: 40 });
+    home.store.patch({ entitlement: proof(9n * MONKEY_UNIT) });
+    await checkEmissionsClaimed(home.store);
+    expect(home.store.getSnapshot().emissionsVault).toEqual({ claimed: 7n * MONKEY_UNIT, latestSeq: 40 });
   });
 });
 

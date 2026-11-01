@@ -16,9 +16,10 @@ export class ConsoleStore {
   readonly deps: StoreDeps;
   /** The connected wallet, which holds a signer and so is not part of the snapshot. */
   liveWallet: Wallet | null = null;
-  /** The wallet whose background vault reads are running, one at a time: paid payout nonces and its MONKEY record (`checkPaid`, `checkEmissionsClaimed`). */
+  /** The wallet whose background vault reads are running, one at a time: paid payout nonces and the MONKEY record (`checkPaid`, `checkEmissionsClaimed`); `lastEmissionsReadError` dedupes the record's repeated failures. */
   paidCheck: Wallet | null = null;
   emissionsCheck: Wallet | null = null;
+  lastEmissionsReadError: string | null = null;
   private snapshot: ConsoleState;
   private readonly listeners = new Set<() => void>();
   private nextId = 1;
