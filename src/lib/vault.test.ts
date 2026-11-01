@@ -34,6 +34,8 @@ describe("withdrawLimitCause", () => {
   it("names a deposit still counting down when its locked cash is what limits the withdrawal", () => {
     expect(withdrawLimitCause(usd(1_000), usd(1_000), 0n, usd(1_000))).toBe("unfinal");
     expect(withdrawLimitCause(usd(1_000), usd(1_000), 0n, usd(400))).toBe("unfinal");
+    // Locked cash and free equity tie: the locked deposit is still what a final deposit would release.
+    expect(withdrawLimitCause(usd(1_000), usd(600), 0n, usd(400))).toBe("unfinal");
   });
 
   it("names margin when equity above margin is the smaller of the two", () => {
