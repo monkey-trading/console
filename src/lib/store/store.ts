@@ -52,6 +52,8 @@ export class ConsoleStore {
   lastHouseReadError: string | null = null;
   /** The last queue walk failure shown, deduplicated like the main read's. Not part of the snapshot. */
   lastQueueReadError: string | null = null;
+  /** The last account read failure shown, deduplicated like the main read's. Not part of the snapshot. */
+  lastAccountError: string | null = null;
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
@@ -280,6 +282,8 @@ export class ConsoleStore {
       // account reads: a failing account endpoint or a slow queue walk must not starve them, and
       // they must not delay the next market or account read nor toast as if the whole refresh failed.
       readHousePanelSoon(this);
+      // loadAccount reports its own failure and never rejects: an account endpoint's failure
+      // cannot mark the markets and house figures this refresh just read as stale.
       if (this.snapshot.wallet) await loadAccount(this, accountChanged);
       this.lastReadError = null;
     } catch (error) {
