@@ -70,6 +70,8 @@ export interface ConsoleState {
   houseStatus: "current" | "reading" | "failed";
   /** The public FIFO withdrawal queue's size; null before the first read. */
   withdrawalTotals: QueueTotals | null;
+  /** Whether the queue read failed; true between a failed walk and its recovery. */
+  queueFailed: boolean;
   wallet: { address: string; label: string; readOnly?: boolean } | null;
   eligibility: Eligibility;
   account: AccountModel | null;
@@ -151,6 +153,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     checkpoint: housePanel?.checkpoint ?? null,
     houseStatus: signatures === "none" ? "current" : "reading",
     withdrawalTotals: housePanel?.totals ?? null,
+    queueFailed: false,
     wallet: null,
     eligibility: null,
     account: null,

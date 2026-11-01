@@ -121,6 +121,12 @@ export function HousePage() {
                 <Figure label="Requests waiting" value={state.withdrawalTotals === null ? "—" : String(state.withdrawalTotals.count)} />
                 <Figure label="Queued" value={state.withdrawalTotals === null ? "—" : formatUsd(state.withdrawalTotals.remaining)} />
               </dl>
+              {state.withdrawalTotals === null && (
+                <p className={P}>
+                  The queue&apos;s size is read from the node&apos;s signed answers; that read{" "}
+                  {state.queueFailed ? "keeps failing." : "has not finished."}
+                </p>
+              )}
               {state.withdrawalTotals?.complete === false && <p className={P}>The queue&apos;s first pages only are counted here, so these are lower bounds.</p>}
               {state.withdrawalTotals !== null && state.withdrawalTotals.stable === false && (
                 <p className={P}>The queue changed while it was read, so these figures are approximate.</p>
@@ -155,8 +161,8 @@ export function HousePage() {
                   </dl>
                   <p className={P}>
                     The profit fee is the share of a winning trade&apos;s realised profit the house keeps. The close-out level is the
-                    share of an account&apos;s margin requirement below which its positions close. From protocol V35 these move only
-                    within half of their launch values, and only after a public notice of at least seven days
+                    share of an account&apos;s margin requirement below which its positions close. These move only within half of their
+                    launch values, and only after a public notice of at least seven days
                     {params.seq === null ? "." : `; the log records the current values at seq ${params.seq}.`}
                   </p>
                   {params.fresh !== "current" && <p className={P}>{freshnessNote(params)}</p>}

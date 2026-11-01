@@ -173,7 +173,6 @@ export class LiveEngineClient implements EngineClient {
     return this.houseLog.freshness;
   }
 
-
   async account(address: Address): Promise<AccountView> {
     return (await this.transport.get(`/v1/accounts/${address}`)) as AccountView;
   }

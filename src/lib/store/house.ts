@@ -36,11 +36,12 @@ export function readHouseLog(store: ConsoleStore): Promise<boolean> {
 export function readHouseQueue(store: ConsoleStore): Promise<boolean> {
   return store.deps.client.withdrawalTotals().then(
     (totals) => {
-      store.patch({ withdrawalTotals: totals });
+      store.patch({ withdrawalTotals: totals, queueFailed: false });
       return true;
     },
     (error: unknown) => {
       report(store, error, "queue");
+      store.patch({ queueFailed: true });
       return false;
     },
   );
