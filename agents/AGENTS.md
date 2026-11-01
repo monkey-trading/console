@@ -4,7 +4,7 @@
 
 The Monkey Trading web app, to be served at console.monkey.trading: the client for the open-source CFD
 engine in `monkey-trading/engine`, whose deterministic core runs inside a TEE. One full-view trading
-terminal: watchlist, chart, order ticket, account panels, and a funding drawer, with the access rules
+terminal: watchlist, chart, order ticket, account panels, and a Funding page, with the access rules
 (geo-block, eligibility declaration) and a check of the node's attestation before it signs. It runs
 against a mock node in the browser that mirrors the engine node's REST and stream shapes, or, in a
 build that pins a node, against a live client that verifies the node's attestation and every answer
@@ -21,15 +21,18 @@ matches the current action.
   top bar's page links (Trade, House, Funding): NAV, cash and gross exposure, the exposure cap's utilisation, the market caps, the
   profit-fee and close-out parameters, the withdrawal queue's size, and the latest signed checkpoint root —
   every figure from an answer the node's enclave signed.
+- **src/app/(console)/funding/page.tsx** — the Funding screen (the `FundingPage` component), linked from the top bar
+  and the deal ticket's funding prompt: the account strip, one panel that moves money, what is in progress, the
+  MONKEY card, and what the wallet signs for.
 - **src/components/** — the terminal. `ConsoleProvider` creates the session, connects the demo account
   and drives the clock, and reconnects a wallet connection a previous page load stored; `Shell`, `TopBar`, `AttestationBanner`, `RiskStrip`, `Toasts` and `ToastList` frame it;
   `TradeWorkspace` lays out, from 1024 px, `Watchlist`, `ChartPanel` (with `PriceChart`, which loads Lightweight
   Charts in the browser), `OrderTicket` (which remounts `DealTicket` per market: order type, side, best bid and offer, size,
-  Advanced, and `MarketInfo`) and `BottomPanel` (`PositionsView`, `OrdersView`, `HistoryList`, activity) side by side, and below 1024 px shows one of them at a time, chosen from `PhoneNav`'s bar at the foot (positions and orders are cards there, and the funding drawer fills the screen); `FundingDrawer` holds
-  `EligibilityCard`, `DepositForm`, `WithdrawForm`, `WithdrawalQueue`, `AccountSummary`,
+  Advanced, and `MarketInfo`) and `BottomPanel` (`PositionsView`, `OrdersView`, `HistoryList`, activity) side by side, and below 1024 px shows one of them at a time, chosen from `PhoneNav`'s bar at the foot (positions and orders are cards there); `FundingPage` lays out
+  `AccountSummary` (the strip of balance, equity, margin, free and withdrawable now), `MoveMoney` (the Deposit and Withdraw tabs, both forms kept mounted: `DepositForm` and `EligibilityCard` in the engine's order for the build, then `FaucetCard`; `WithdrawForm`), `InProgress` (`Payouts` first, then `WithdrawalQueue`),
   `EmissionsCard` (the account's MONKEY emissions: accrued from the entitlement proof the node's
-  account route serves, the claimed-versus-accrued line, and the vault's `claimEmissions` send), and, for a live node, `Payouts` (each approved withdrawal's claim on the vault) and `SigningFor` (the chain and vault every signature names, also under the deal ticket), with the live steps in the engine's order, deposit then declare, and `FaucetCard`, a dev-only affordance in a `live-dev` build that funds the connected wallet from Anvil (`faucet.ts` in `src/lib/engine` gates it on the mode and names its amounts); `WalletPrompt` says what the wallet is being asked to sign or send while it waits; `WalletConnectPairing` is the WalletConnect pairing dialog (QR code, link, WalletConnect's logo);
-  `ToastLog` is the screen-reader log of results, used by `Toasts` and the drawer; `Select` is the console's accessible select; `keep-focus.ts` keeps focus on the tab panel when an action removes a button; `use-escape-close.ts` closes the wallet menu and mock panel on Escape, including after a Safari pointer click; `TradeWorkspace` remembers the pane that held focus and shows it when the layout narrows; `AccessGate` shows the geo-block; `WalletButton` and
+  account route serves, the claimed-versus-accrued line, and the vault's `claimEmissions` send), and, for a live node, `Payouts` (each approved withdrawal's claim on the vault) and `SigningFor` (the chain and vault every signature names, at the foot of the page and under the deal ticket), with the live steps in the engine's order, deposit then declare, and `FaucetCard`, a dev-only affordance in a `live-dev` build that funds the connected wallet from Anvil (`faucet.ts` in `src/lib/engine` gates it on the mode and names its amounts); `WalletPrompt` says what the wallet is being asked to sign or send while it waits; `WalletConnectPairing` is the WalletConnect pairing dialog (QR code, link, WalletConnect's logo);
+  `ToastLog` is the screen-reader log of results, used by `Toasts`; `Select` is the console's accessible select; `keep-focus.ts` keeps focus on the tab panel when an action removes a button; `use-escape-close.ts` closes the wallet menu and mock panel on Escape, including after a Safari pointer click; `TradeWorkspace` remembers the pane that held focus and shows it when the layout narrows; `AccessGate` shows the geo-block; `WalletButton` and
   `MockControls` drive the mock; `WalletButton`'s Disconnect clears the persisted connection choice. `HousePage` (with `HouseCaps`, its market-caps table) renders the House
   solvency screen from the store's house state, gated like the rest of the console on the attestation check.
 - **public/** — the supplied logo bitmap, served from the app's own origin; `Logo.tsx` frames it; `walletconnect/` (WalletConnect's logo and the copy of the WalletConnect Community License the console must ship); and
@@ -38,7 +41,7 @@ matches the current action.
 - **src/lib/** — pure TypeScript with no React or DOM. Logic modules have adjacent `*.test.ts`:
   `site.ts` holds identity and `siteUrl()`, the server's one environment-variable reader (`engine/deploy.ts` reads the `NEXT_PUBLIC_ENGINE_*` values the browser needs); `geo-block.ts` holds the restricted countries (a placeholder until counsel's list) and builds the geo-block rewrite from them; `fixed.ts` is the
   engine's nine-place fixed point as bigints; `format.ts`, `price-format.ts`, `time.ts`, `quotes.ts` (the node's executable quotes: the markets asked for, and the price a ticket shows and sends), `qr.ts` (a pairing link as a QR path), `bars.ts` (marks into bars per timeframe, a fetched history merged with the ticks the stream delivered during the fetch, and the chart's view when the oldest bar rolls off) and
-  `vault.ts` (deposit bounds, the withdrawable amount) and `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `escape.ts` says which Escape presses close a popup; `panes.ts` picks the workspace pane that keeps the user's focus when the layout narrows; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
+  `vault.ts` (deposit bounds, the withdrawable amount) and `prng.ts` format, aggregate and seed; `liquidation.ts` estimates the close-out price; `escape.ts` says which Escape presses close a popup; `tabs.ts` moves along a tab list by key; `panes.ts` picks the workspace pane that keeps the user's focus when the layout narrows; `pricing.ts`, `schedule.ts`, `stress.ts` and `ticket.ts` hold the quote,
   margin and market-hours rules and the ticket preview; `models.ts` and `messages.ts` decode and
   describe engine data; `nav.ts` holds the top bar's page links and which one is current; `house.ts` holds the House page's figures: the latest `set_params` as house
   parameters, caps from the engine's rule (the larger of a NAV share and a floor), utilisation, and the
@@ -56,7 +59,7 @@ matches the current action.
   `allowMock`) and `load-verifier.ts` checks the `.wasm` against `wasm-pin.json` before running it;
   `deploy.ts` parses the `NEXT_PUBLIC_ENGINE_*` values a build pins (the node's origin, chain, vault and
   mode) and decides whether a mock attestation is accepted; `faucet.ts` is the dev-only Anvil faucet a
-  `live-dev` build shows in the Funding drawer; `manifests.ts` holds the pinned release
+  `live-dev` build shows in the Funding page's Deposit tab; `manifests.ts` holds the pinned release
   manifests; `watch-wallet.ts` is the read-only account for `?account=`. `wire.ts`, `test-vectors.ts`,
   `test-kit.ts`, `live-setup.ts` and `wire-vectors.json` (the engine's known-answer vectors, replayed through the real
   verifier) pin and test the wire formats. `store/` holds the state, the store that follows the node's stream (with what it is built from in `store-deps.ts`),

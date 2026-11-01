@@ -2,6 +2,7 @@
 
 /** The right pane: order type, side, size, the best bid and offer, and Trade; the rest sits under Market info. */
 
+import Link from "next/link";
 import { useId, useState } from "react";
 
 import { signBlock } from "@/lib/engine/attestation";
@@ -24,10 +25,9 @@ const KINDS = [
 ] as const;
 const INPUT = "mt-1 min-h-11 w-full rounded border border-edge bg-ink px-2 py-2 text-base text-fg lg:min-h-0 lg:text-data focus-visible:outline-2 focus-visible:outline-glow";
 
-/** Opens the funding drawer. */
+/** Links to the Funding page. */
 function FundingLink() {
-  const { store } = useSession();
-  return <button type="button" onClick={() => store.setFundingOpen(true)} className="-my-3.5 inline-flex min-h-11 items-center text-glow underline focus-visible:outline-2 focus-visible:outline-glow lg:my-0 lg:min-h-0">Open funding</button>;
+  return <Link href="/funding" className="-my-3.5 inline-flex min-h-11 items-center text-glow underline focus-visible:outline-2 focus-visible:outline-glow lg:my-0 lg:min-h-0">Open funding</Link>;
 }
 
 /** The deal ticket for the selected market; `OrderTicket` remounts it per market so no typed value carries over. */

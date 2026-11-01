@@ -6,6 +6,7 @@ describe("isCurrentPage", () => {
   it("marks the page whose path matches, and only that one", () => {
     expect(PAGES.filter((p) => isCurrentPage("/", p.href)).map((p) => p.label)).toEqual(["Trade"]);
     expect(PAGES.filter((p) => isCurrentPage("/house", p.href)).map((p) => p.label)).toEqual(["House"]);
+    expect(PAGES.filter((p) => isCurrentPage("/funding", p.href)).map((p) => p.label)).toEqual(["Funding"]);
   });
 
   it("ignores a trailing slash", () => {

@@ -12,7 +12,7 @@ import { useSignGate } from "./SignGate";
 
 const CLASSES: readonly EligibilityClass[] = ["professional", "eligible_client"];
 
-/** `step` is the section's place in the drawer. */
+/** `step` is the section's place in the Deposit tab. */
 export function EligibilityCard({ step }: { step: number }) {
   const { wallet, eligibility, busy, signatures, account } = useConsole();
   const { store } = useSession();
@@ -21,12 +21,12 @@ export function EligibilityCard({ step }: { step: number }) {
   const gate = useSignGate(`${name}-gate`);
   const heading = useRef<HTMLHeadingElement>(null);
   return (
-    <section aria-labelledby="eligibility-title" className="rounded-xl border border-line-2 bg-ink-1 p-5">
-      <h2 ref={heading} id="eligibility-title" tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">{step} · Eligibility</h2>
+    <section aria-labelledby="eligibility-title" className="p-4">
+      <h4 ref={heading} id="eligibility-title" tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">{step} · Eligibility</h4>
       {eligibility ? (
-        <p className="mt-4 text-caption text-glow">Recorded: {STATEMENTS[eligibility]} {signatures === "none" ? "You can deposit." : "The node credits your deposits once its screening clears them."}</p>
+        <p className="mt-3 text-caption text-glow">Recorded: {STATEMENTS[eligibility]} {signatures === "none" ? "You can deposit." : "The node credits your deposits once its screening clears them."}</p>
       ) : (
-        <form className="mt-4" onSubmit={(event) => { event.preventDefault(); if (!wallet || busy || gate.blocked) return; void attestEligibility(store, choice).then(() => heading.current?.focus()); }}>
+        <form className="mt-3" onSubmit={(event) => { event.preventDefault(); if (!wallet || busy || gate.blocked) return; void attestEligibility(store, choice).then(() => heading.current?.focus()); }}>
           <p className="text-caption leading-relaxed text-fg-2">
             {signatures === "none"
               ? "Before your first deposit you declare, with your wallet, that you are a professional or eligible client."
