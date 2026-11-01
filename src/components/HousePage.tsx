@@ -7,7 +7,7 @@
  */
 
 import { signBlock } from "@/lib/engine/attestation";
-import { formatRate, shortHex } from "@/lib/format";
+import { formatRate } from "@/lib/format";
 import { formatUsd } from "@/lib/fixed";
 import { capFor, utilBps, type HouseParams } from "@/lib/house";
 
@@ -57,7 +57,10 @@ export function HousePage() {
   const totalCap = params === null ? null : capFor(house.nav, params.totalCapBps, params.totalCapFloor);
   const used = totalCap === null ? null : utilBps(house.grossExposure, totalCap);
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
+    // Keyboard scrolling needs a tab stop on the scroll container (the WAI-APG scrollable-region
+    // pattern); the panels below the fold hold no focusable element of their own.
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a labelled scroll region takes tabIndex 0 so keyboard users can scroll it
+    <div aria-label="House solvency details" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
       <div className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6">
         <header className="space-y-3">
           <h2 className="text-lead tracking-caps text-glow uppercase">House</h2>
@@ -172,13 +175,22 @@ export function HousePage() {
                 <>
                   <dl className="grid grid-cols-2 gap-4">
                     <Figure label="Latest checkpoint, seq" value={String(state.checkpoint.seq)} />
-                    <Figure label="State root" value={shortHex(state.checkpoint.root)} />
+                    <div className="col-span-2">
+                      <dt className={LABEL}>State root</dt>
+                      <dd className="text-data break-all text-fg">{state.checkpoint.root}</dd>
+                    </div>
                   </dl>
                   <p className={P}>
                     The enclave signs a root of its state as it sequences commands and posts it in the public log. Anyone may
                     replay the log to a checkpoint&apos;s sequence and check its root, and the vault stops taking deposits if the
                     enclave stops posting roots.
                   </p>
+                  {state.houseStatus !== "current" && (
+                    <p className={P}>
+                      The log read is still catching up, so a newer checkpoint may follow; replaying the log to this
+                      checkpoint&apos;s sequence still checks its root.
+                    </p>
+                  )}
                   {signatures === "none" && <p className={P}>This build runs the in-browser simulation: it signs nothing, and the roots above are the mock&apos;s stand-ins.</p>}
                 </>
               )}

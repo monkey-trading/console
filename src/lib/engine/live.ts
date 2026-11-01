@@ -276,7 +276,12 @@ export class LiveEngineClient implements EngineClient {
           this.houseLog.uncaught(); // the reconnection resumes at the live end: re-read the gap
           this.emit({ type: "problem", reason });
         },
-        onFeed: (status: FeedStatus, time?: number) => this.emit(time === undefined ? { type: "feed", status } : { type: "feed", status, time }),
+        // A connection starts at the live end and names its signed time only once live: anything
+        // sequenced between the last catch-up and this moment needs another catch-up read.
+        onFeed: (status: FeedStatus, time?: number) => {
+          if (status === "live") this.houseLog.uncaught();
+          this.emit(time === undefined ? { type: "feed", status } : { type: "feed", status, time });
+        },
       });
       this.stream = stream;
       stream.setQuotes(this.quoteRequest);

@@ -207,4 +207,38 @@ describe("the live client's house folds", () => {
     expect(node.requests.filter((r) => r.path.startsWith("/v1/withdrawals?limit=200"))).toHaveLength(2);
     stop();
   });
+
+  it("reports a lower bound at the walk's page cap, flags pages from different log seqs, and re-walks after the cache expires", async () => {
+    const markets = vectorResponse("markets");
+    const node = new FakeNode();
+    node.attestation(() => VECTORS.signer);
+    const entry = [{ position: 1, account: "0x00a1", amount: "1", remaining: "1", requested_seq: 1 }];
+    let now = 0;
+    let seq = 5;
+    const page = (next: number | null) => ({ status: 200, body: JSON.stringify({ seq: seq++, queue: entry, next }), signature: "0x", timeMs: 1, seq: 0 });
+    const walkRequests = () => node.requests.filter((r) => r.path.startsWith("/v1/withdrawals?limit=200"));
+    const live = new LiveEngineClient({
+      origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000,
+      loadVerifier: async () => acceptAll, manifests: [], acceptsMock: true, fetch: node.fetch,
+      openSocket: (url) => new FakeSocket(url), scheduler: new FakeScheduler(), nowMs: () => now, challenge: () => "ab".repeat(32),
+    });
+    // A queue longer than the walk's page cap reports a lower bound.
+    node.signed("/v1/withdrawals?limit=200", () => page(1));
+    for (let after = 1; after <= 24; after++) node.signed(`/v1/withdrawals?limit=200&after=${after}`, () => page(after + 1));
+    const capped = await live.withdrawalTotals();
+    expect(capped).toEqual({ count: 25, remaining: 25_000_000_000n, seq: 29, complete: false, stable: false });
+    // Pages answered at different log seqs are not one snapshot, which the walk says so.
+    expect(capped.stable).toBe(false);
+    expect(walkRequests()).toHaveLength(25);
+    // Within the cache's TTL the answer is reused; at its expiry the next read walks again.
+    node.routes.clear();
+    seq = 5;
+    node.signed("/v1/withdrawals?limit=200", () => page(null));
+    const walked = walkRequests().length;
+    await live.withdrawalTotals();
+    expect(walkRequests()).toHaveLength(walked);
+    now = 15_000;
+    await live.withdrawalTotals();
+    expect(walkRequests()).toHaveLength(walked + 1);
+  });
 });
