@@ -39,4 +39,28 @@ describe("the store's house panel state", () => {
     expect(store.getSnapshot().houseReady).toBe(true);
     expect(client.marketReads).toBe(1);
   });
+
+  it("still refreshes the house panel when an account read fails", async () => {
+    const { client, store } = setup();
+    client.params = PARAMS;
+    client.accountError = new Error("account unavailable");
+    store.start(0);
+    await settle();
+    // The house reads fire before the account reads and outside their error handling.
+    expect(store.getSnapshot().houseParams).toEqual(PARAMS);
+  });
+
+  it("publishes the parameters and checkpoint when the queue walk fails", async () => {
+    const { client, store } = setup();
+    client.params = PARAMS;
+    client.checkpoint = CHECKPOINT;
+    client.totalsError = new Error("queue unavailable");
+    store.start(0);
+    await settle();
+    const state = store.getSnapshot();
+    expect(state.houseParams).toEqual(PARAMS);
+    expect(state.checkpoint).toEqual(CHECKPOINT);
+    expect(state.withdrawalTotals).toBeNull();
+    expect(state.toasts.some((t) => t.text === "queue unavailable")).toBe(true);
+  });
 });

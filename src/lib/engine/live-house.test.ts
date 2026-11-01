@@ -141,6 +141,7 @@ describe("the house log fold", () => {
         openSocket: (url: string) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
         scheduler, challenge: () => "ab".repeat(32),
       }, fromSeq, { maxMessages: 2, maxMs: 30_000 }, skipPast),
+      () => 0,
     );
     log.kick();
     for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -162,21 +163,72 @@ describe("the house log fold", () => {
     expect(sockets).toHaveLength(2);
   });
 
+  it("gives up on a position that keeps failing, marks the fold failed, and waits before retrying", async () => {
+    let attempts = 0;
+    let now = 0;
+    const log = new HouseLog(async () => {
+      attempts++;
+      return { params: null, paramsSeq: null, checkpoint: null, complete: false, last: [0, 0] };
+    }, () => now);
+    log.kick();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(attempts).toBe(4); // the first read counts as progress; three stalled tries follow
+    expect(log.params).toBeNull();
+    expect(log.freshness).toBe("failed");
+    // The retry wait holds further kicks until the clock passes it.
+    log.kick();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(attempts).toBe(4);
+    now = 31_000;
+    log.kick();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(attempts).toBe(7);
+  });
+
   it("marks the parameters failed after a read that fails, and keeps what the stream folded", async () => {
     const sockets: FakeSocket[] = [];
     let attempts = 0;
     const log = new HouseLog(async () => {
       attempts++;
       throw new Error("refused");
-    });
+    }, () => 0);
     log.kick();
     for (let i = 0; i < 20; i++) await Promise.resolve();
     expect(attempts).toBe(1);
     expect(log.params).toBeNull();
+    expect(log.freshness).toBe("failed");
     expect(sockets).toHaveLength(0);
     // A fold from the live stream is still surfaced, marked failed since catch-up never completed.
     log.foldParams(1, PARAMS_FIELDS);
     expect(log.params?.fresh).toBe("failed");
+  });
+
+  it("stands a running catch-up down when cancelled, keeping what it read and where it stopped", async () => {
+    const sockets: FakeSocket[] = [];
+    const scheduler = new FakeScheduler();
+    const log = new HouseLog((fromSeq, skipPast) =>
+      scanHouse({
+        origin: "wss://node.test", chainId: 31337, vault: conflict.vault, signer: VECTORS.signer, verifier: acceptAll,
+        openSocket: (url: string) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
+        scheduler, challenge: () => "ab".repeat(32),
+      }, fromSeq, { maxMessages: 2, maxMs: 30_000 }, skipPast),
+      () => 0,
+    );
+    log.kick();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    sockets[0]?.receive(frame(0, command(0, { type: "admin", ...SET_PARAMS })));
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    log.cancel();
+    sockets[0]?.receive(frame(1, command(1, { type: "tick" })));
+    sockets[0]?.receive(frame(2, command(2, { type: "tick" }))); // the budget cut ends the chunk incomplete
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(sockets[0]?.closed).toBe(true);
+    expect(sockets).toHaveLength(1);
+    // The fold keeps what the chunk read, and the loop stands down until the next read resumes it.
+    expect(log.params?.profitFeeBps).toBe(1000);
+    log.kick();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(sockets).toHaveLength(2);
   });
 });
 

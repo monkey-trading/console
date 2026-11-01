@@ -14,7 +14,7 @@ matches the current action.
 ## Structure
 
 - **src/app/** — the App Router: `layout.tsx` (fonts through `next/font`, the `metadata` and
-  `viewport` exports, and the robots meta tag), `robots.ts` (disallow all) with its test, `restricted/page.tsx` (the static page the edge geo-block rewrites a restricted country's requests to), `notices/page.tsx` (the static privacy and third-party notices, which the risk line and the WalletConnect dialog link to), `(console)/` (the route group whose layout holds the provider and shell, and the one screen), `globals.css` (Tailwind
+  `viewport` exports, and the robots meta tag), `robots.ts` (disallow all) with its test, `restricted/page.tsx` (the static page the edge geo-block rewrites a restricted country's requests to), `notices/page.tsx` (the static privacy and third-party notices, which the risk line and the WalletConnect dialog link to), `(console)/` (the route group whose layout holds the provider and shell, and the trading and House screens), `globals.css` (Tailwind
   CSS 4 `@theme` tokens shared with the website's design language, and the reduced-motion rule),
   and the icons.
 - **src/app/(console)/house/page.tsx** — the House solvency screen (the `HousePage` component), linked from the

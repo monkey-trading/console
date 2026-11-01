@@ -46,9 +46,11 @@ export class FakeClient implements EngineClient {
   params: HouseParams | null = null;
   checkpoint: CheckpointEntry | null = null;
   totals: QueueTotals = { count: 0, remaining: 0n, seq: null, complete: true, stable: true };
+  /** When set, the queue totals read rejects with it, as a failing node answers. */
+  totalsError: Error | null = null;
   async houseParams() { return this.params; }
   async latestCheckpoint() { return this.checkpoint; }
-  async withdrawalTotals() { return this.totals; }
+  async withdrawalTotals() { if (this.totalsError !== null) throw this.totalsError; return this.totals; }
   async account(): Promise<never> { throw this.accountError ?? new EngineError(404, "not found"); }
   async accessProbe() {}
   async nonce() { return { next_nonce: 0 }; }

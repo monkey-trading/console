@@ -39,7 +39,7 @@ function Figure({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** The note a panel carries while the log read feeding its parameters is still running, or keeps failing. */
+/** The note the Parameters panel carries while the log read feeding its values is still running, or keeps failing. */
 function freshnessNote(params: HouseParams): string {
   return params.fresh === "failed"
     ? "The log read keeps failing, so these are the latest values it read, which may not be the latest the log records."
@@ -102,12 +102,12 @@ export function HousePage() {
                     {formatRate(params.totalCapBps)} of net asset value and a {formatUsd(params.totalCapFloor)} floor.
                   </p>
                   <p className="sr-only">
-                    Exposure is {formatRate(used)} of a {formatUsd(totalCap)} cap at the current net asset value, refreshed from the
-                    node&apos;s signed answers.
+                    Exposure is {formatRate(used)} of a {formatUsd(totalCap)} cap — the larger of {formatRate(params.totalCapBps)} of net
+                    asset value and a {formatUsd(params.totalCapFloor)} floor — at the current net asset value, refreshed from the node&apos;s
+                    signed answers.
                   </p>
                 </>
               )}
-              {params !== null && params.fresh !== "current" && <p className={P}>{freshnessNote(params)}</p>}
             </section>
             <section aria-labelledby="withdrawals" className={CARD}>
               <h2 id="withdrawals" className={H2}>Withdrawals</h2>
@@ -128,7 +128,6 @@ export function HousePage() {
             <section aria-labelledby="caps" className={CARD}>
               <h2 id="caps" className={H2}>Market caps</h2>
               <HouseCaps markets={state.markets} nav={house.nav} />
-              <p className="sr-only">Each market&apos;s cap, its dollar floor, and the cap those give at the current net asset value, refreshed from the node&apos;s signed answers.</p>
               <p className={P}>
                 Each market&apos;s cap is the larger of its share of the house&apos;s net asset value and its dollar floor. The node&apos;s
                 public answers carry no per-market house exposure, so this table shows the caps; the house&apos;s total exposure

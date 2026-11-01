@@ -272,11 +272,11 @@ export class ConsoleStore {
       // node that 404s it keeps asking for the archive scan until it names a log head.
       this.barsSeed.seed(selected, this.snapshot.timeframe);
       this.barsSeed.askScan();
-      if (this.snapshot.wallet) await loadAccount(this, accountChanged);
-      // The house panel's reads run outside this refresh's lock and error handling: a slow walk of
-      // the withdrawal queue must not delay the next market or account read, nor toast as if the
-      // whole refresh failed.
+      // The house panel's reads run outside this refresh's lock and error handling, before the
+      // account reads: a failing account endpoint or a slow queue walk must not starve them, and
+      // they must not delay the next market or account read nor toast as if the whole refresh failed.
       readHousePanelSoon(this);
+      if (this.snapshot.wallet) await loadAccount(this, accountChanged);
       this.lastReadError = null;
     } catch (error) {
       const message = error instanceof Error ? error.message : "The node did not answer.";

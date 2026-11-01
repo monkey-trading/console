@@ -4,7 +4,7 @@ import type { AttestationStatus, FeedStatus } from "./attestation";
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks, type Unsubscribe } from "./client";
 import type { EntitlementProof } from "./emissions";
 import { setParamsOf, type HouseParams, type QueueTotals } from "../house";
-import { HouseLog, HOUSE_SCAN_CHUNK, scanHouse, withdrawalTotals } from "./live-house";
+import { HouseLog, HOUSE_SCAN_CHUNK, QueueTotalsWalk, scanHouse } from "./live-house";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import { scanForWithdrawal, type ScanResult } from "./live-scan";
@@ -41,8 +41,6 @@ export interface LiveDeps {
 const READ_TIMEOUT_MS = 10_000;
 /** How long loading the verifier may take, in milliseconds. */
 const VERIFIER_LOAD_TIMEOUT_MS = 20_000;
-/** How long a withdrawal-queue walk's answer is reused before the next read walks it again. */
-const TOTALS_TTL_MS = 15_000;
 
 export class LiveEngineClient implements EngineClient {
   readonly signatures: SignatureChecks = "checked";
@@ -60,8 +58,10 @@ export class LiveEngineClient implements EngineClient {
   readonly deployment: { chainId: number; vault: string };
   /** The fold of the log's house state: the latest `set_params` and checkpoint, kept fresh by the stream. */
   private readonly houseLog: HouseLog;
-  /** The withdrawal queue's totals read most recently, so a tick's refresh reuses a fresh walk. */
-  private totalsCache: { at: number; totals: QueueTotals } | null = null;
+  /** The public withdrawal queue's size, walked within a page cap and cached for its TTL. */
+  private readonly totalsWalk: QueueTotalsWalk;
+  /** The public withdrawal queue's size, from the walk cached for its TTL. */
+  readonly withdrawalTotals: () => Promise<QueueTotals>;
 
   constructor(private readonly deps: LiveDeps) {
     this.deployment = { chainId: deps.chainId, vault: deps.vault };
@@ -77,7 +77,9 @@ export class LiveEngineClient implements EngineClient {
     this.houseLog = new HouseLog(async (fromSeq, skipPast) => {
       const signer = await this.trust.signer();
       return scanHouse({ ...deps, origin: deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge }, fromSeq, HOUSE_SCAN_CHUNK, skipPast);
-    });
+    }, deps.nowMs);
+    this.totalsWalk = new QueueTotalsWalk(this.transport, deps.nowMs);
+    this.withdrawalTotals = () => this.totalsWalk.totals();
   }
 
   private emit(event: ClientEvent): void {
@@ -177,14 +179,6 @@ export class LiveEngineClient implements EngineClient {
     return this.houseLog.checkpoint;
   }
 
-  /** Walks the public withdrawal queue's signed pages to its end, or to the page cap as a lower bound; a fresh walk is reused for its TTL. */
-  async withdrawalTotals(): Promise<QueueTotals> {
-    const cached = this.totalsCache;
-    if (cached !== null && this.deps.nowMs() - cached.at < TOTALS_TTL_MS) return cached.totals;
-    const totals = await withdrawalTotals(this.transport);
-    this.totalsCache = { at: this.deps.nowMs(), totals };
-    return totals;
-  }
 
   async account(address: Address): Promise<AccountView> {
     return (await this.transport.get(`/v1/accounts/${address}`)) as AccountView;
@@ -279,6 +273,8 @@ export class LiveEngineClient implements EngineClient {
   subscribe(onMessage: (message: StreamMessage) => void): Unsubscribe {
     this.subscribers.add(onMessage);
     if (this.stream === null) {
+      // A new connection starts at the live end and can miss log entries, so the fold re-reads to the head.
+      this.houseLog.uncaught();
       const stream = new LiveStream({
         ...this.deps, verifier: () => this.requireVerifier(), origin: this.deps.streamOrigin, trust: this.trust, challenge: this.deps.challenge ?? (() => newChallenge()),
         onMessage: (message) => {
@@ -292,8 +288,11 @@ export class LiveEngineClient implements EngineClient {
         onQuoteError: (error) => this.emit({ type: "quote_error", error }),
         onWithdrawal: (withdrawal) => this.emit({ type: "withdrawal", withdrawal }),
         onCheckpoint: (checkpoint) => this.houseLog.foldCheckpoint(checkpoint),
+        onProblem: (reason) => {
+          this.houseLog.uncaught(); // the reconnection resumes at the live end: re-read the gap
+          this.emit({ type: "problem", reason });
+        },
         onFeed: (status: FeedStatus, time?: number) => this.emit(time === undefined ? { type: "feed", status } : { type: "feed", status, time }),
-        onProblem: (reason) => this.emit({ type: "problem", reason }),
       });
       this.stream = stream;
       stream.setQuotes(this.quoteRequest);
@@ -304,6 +303,8 @@ export class LiveEngineClient implements EngineClient {
       if (this.subscribers.size === 0) {
         this.stream?.stop();
         this.stream = null;
+        // No one reads the fold now: stand the catch-up down instead of reading on for a stopped session.
+        this.houseLog.cancel();
       }
     };
   }

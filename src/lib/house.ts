@@ -35,21 +35,19 @@ export interface QueueTotals {
 
 /**
  * Reads a `set_params` from an admin command of either log shape: `admin` at genesis, `signed_admin`
- * after it. Null for any other command, and for one the engine rejected: a rejected command is
- * sequenced too, and its values never applied. The engine signs the log's frames, so past `action`
- * the payload's shape is the engine's; the admin command's listing fields are all optional, which
- * the type system cannot narrow to `SetParams` on `action` alone.
- * Error cases:
- * - the command names `set_params` but its floor is not a decimal: a broken invariant, the engine never sends one
+ * after it. Null for any other command, for one the engine rejected (a rejected command is
+ * sequenced too, and its values never applied), and for one the log's older protocol versions
+ * carry no total cap for, since a scan may read them. The engine signs the log's frames, so past
+ * `action` the payload's shape is the engine's; the admin command's listing fields are all
+ * optional, which the type system cannot narrow to `SetParams` on `action` alone.
  */
 export function setParamsOf(cmd: EngineCommand, events: readonly { type: string }[]): SetParams | null {
   if (events.some((event) => event.type === "admin_rejected")) return null;
   const payload = cmd.type === "admin" ? cmd : cmd.type === "signed_admin" ? cmd.command : undefined;
   if (payload === undefined || payload.action !== "set_params") return null;
-  
   const entry = payload as SetParams;
   const { profit_fee_bps, closeout_level_bps, house_total_cap_bps, house_total_cap_floor } = entry;
-  if (parseFixed(house_total_cap_floor) === null) throw new Error("engine sent a malformed total cap floor");
+  if (typeof house_total_cap_floor !== "string" || parseFixed(house_total_cap_floor) === null) return null;
   return { profit_fee_bps, closeout_level_bps, house_total_cap_bps, house_total_cap_floor };
 }
 

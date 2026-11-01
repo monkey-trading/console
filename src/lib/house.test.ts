@@ -46,9 +46,13 @@ describe("setParamsOf", () => {
     for (const cmd of [upsert, tick, signedUpsert]) expect(setParamsOf(cmd, [])).toBeNull();
   });
 
-  it("throws on a malformed floor, which the engine never sends", () => {
-    const cmd = { type: "admin", ...SET_PARAMS, house_total_cap_floor: "not a decimal" } as unknown as EngineCommand;
-    expect(() => setParamsOf(cmd, [])).toThrow("malformed total cap floor");
+  it("answers null for a floor an older protocol version carries none of, or a malformed one", () => {
+    const legacy = {
+      type: "admin", action: "set_params", profit_fee_bps: 1000, closeout_level_bps: 5000, house_total_cap_bps: 20000,
+    } as unknown as EngineCommand;
+    const malformed = { type: "admin", ...SET_PARAMS, house_total_cap_floor: "not a decimal" } as unknown as EngineCommand;
+    expect(setParamsOf(legacy, [])).toBeNull();
+    expect(setParamsOf(malformed, [])).toBeNull();
   });
 });
 

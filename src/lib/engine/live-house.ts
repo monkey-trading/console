@@ -24,6 +24,8 @@ export interface HouseScanBudget {
 
 /** One chunk of the catch-up read of the whole log. */
 export const HOUSE_SCAN_CHUNK: HouseScanBudget = { maxMessages: 25_000, maxMs: 15_000 };
+/** How long a failed catch-up waits before the next read retries it. */
+const RETRY_AFTER_FAILURE_MS = 30_000;
 
 /** What a chunk of the read found, and whether it read to the head. */
 export interface HouseScanResult {
@@ -124,21 +126,45 @@ export class HouseLog {
   private last: [number, number] | null = null;
   /** True once a catch-up read has reached the head; the live stream keeps the fold current after it. */
   private caughtUp = false;
-  /** True after a catch-up read ended in failure; the next read's kick clears it. */
+  /** True after a catch-up read ended in failure; cleared when a read makes progress or reaches the head. */
   private failed = false;
   /** The catch-up read in flight; null when none runs. */
   private catchUp: Promise<void> | null = null;
+  /** Bumped to cancel a running catch-up when the session stops; a cancelled run keeps its folds. */
+  private generation = 0;
+  /** The most consecutive chunks that failed without advancing the read, before the read gives up. */
+  private stallFailures = 0;
+  /** The clock's time before which a failed read is not retried. */
+  private retryAt = 0;
 
-  constructor(private readonly scanFrom: (fromSeq: number, skipPast?: [number, number]) => Promise<HouseScanResult>) {}
+  constructor(private readonly scanFrom: (fromSeq: number, skipPast?: [number, number]) => Promise<HouseScanResult>, private readonly nowMs: () => number) {}
+
+  /** The state of the log read feeding the fold. */
+  get freshness(): "current" | "reading" | "failed" {
+    return this.caughtUp ? "current" : this.failed ? "failed" : "reading";
+  }
 
   /** The latest applied `set_params` folded so far, with the state of the log read feeding the fold. */
   get params(): HouseParams | null {
     if (this.paramsFold === null) return null;
-    return { ...this.paramsFold, fresh: this.caughtUp ? "current" : this.failed ? "failed" : "reading" };
+    return { ...this.paramsFold, fresh: this.freshness };
   }
 
   get checkpoint(): CheckpointEntry | null {
     return this.checkpointFold;
+  }
+
+  /**
+   * Marks the fold not-current: a new stream connection starts at the live end and can miss log
+   * entries, so the next read resumes catch-up from the last position read and re-reads to the head.
+   */
+  uncaught(): void {
+    this.caughtUp = false;
+  }
+
+  /** Stops a running catch-up: its chunks stand down as they finish; the folds are kept. */
+  cancel(): void {
+    this.generation += 1;
   }
 
   /** Applies a `set_params` read at `seq` when it is newer than the fold, whatever stream it came from. */
@@ -162,10 +188,10 @@ export class HouseLog {
     this.checkpointFold = entry;
   }
 
-  /** Starts the catch-up read if none runs and none has reached the head; after a failure the next call starts a fresh chunk. */
+  /** Starts the catch-up read if none runs, none has reached the head, and no recent failure is still waiting to retry. */
   kick(): void {
-    if (this.catchUp !== null || this.caughtUp) return;
-    this.failed = false;
+    if (this.catchUp !== null || this.caughtUp || this.nowMs() < this.retryAt) return;
+    this.stallFailures = 0;
     this.catchUp = this.run().then(
       () => {
         this.catchUp = null;
@@ -173,6 +199,7 @@ export class HouseLog {
       () => {
         // What the chunks folded is kept; the next read continues from where the read stopped.
         this.failed = true;
+        this.retryAt = this.nowMs() + RETRY_AFTER_FAILURE_MS;
         this.catchUp = null;
       },
     );
@@ -181,42 +208,75 @@ export class HouseLog {
   /**
    * Reads the log from where the last chunk ended until a chunk reaches the head, folding what it
    * passes. A chunk resumes at the last position read, so a sequence's later entries — a command's
-   * checkpoint among them — are never skipped. A chunk that fails stops the read, and the next
-   * `kick` starts a fresh chunk from where the read stopped.
+   * checkpoint among them — are never skipped. A chunk that fails where the last made no progress
+   * is a poisoned position: after a few tries the read gives up, marks itself failed, and waits
+   * before retrying, instead of looping on the node. `cancel` stands the loop down after the chunk
+   * in flight applies what it read.
    * Error cases:
-   * - a chunk fails before reading any entry
+   * - a chunk fails where the read has made no progress, three chunks in a row
    */
   private async run(): Promise<void> {
+    const generation = this.generation;
     for (;;) {
       const from = this.last?.[0] ?? 0;
       const result = await this.scanFrom(from, this.last ?? undefined);
       if (result.params !== null && result.paramsSeq !== null) this.foldParams(result.paramsSeq, result.params);
       if (result.checkpoint !== null) this.foldCheckpoint(result.checkpoint);
-      if (result.last !== null) this.last = result.last;
       if (result.complete) {
+        this.failed = false;
+        this.stallFailures = 0;
+        if (result.last !== null) this.last = result.last;
         this.caughtUp = true;
         return;
       }
+      const advanced = result.last !== null && (this.last === null || !atOrPast(result.last, this.last));
+      if (!advanced) {
+        if (++this.stallFailures >= 3) throw new Error("Reading the log kept failing at one position.");
+      } else {
+        this.failed = false;
+        this.stallFailures = 0;
+        this.last = result.last;
+      }
+      if (generation !== this.generation) return; // cancelled: what the chunk read is kept, and the loop stands down
     }
   }
 }
 
 /** The most withdrawal-queue pages a totals walk reads before it reports a lower bound. */
 const QUEUE_PAGE_CAP = 25;
+/** How long a walk's answer is reused before the next read walks the queue again. */
+const TOTALS_TTL_MS = 15_000;
 
-/** Walks the public withdrawal queue's signed pages to its end, or to the page cap as a lower bound. */
-export async function withdrawalTotals(transport: SignedTransport, pageCap: number = QUEUE_PAGE_CAP): Promise<QueueTotals> {
-  const pages: WithdrawalPage[] = [];
-  // Each page is signed alone, so pages answered at different log seqs are not one snapshot of the
-  // queue; the totals then mix a changing queue's states, which the caller says so.
-  const finish = (complete: boolean) => queueTotals(pages, complete, pages.every((p) => p.seq === (pages[0]?.seq ?? null)));
-  let after: number | null = null;
-  for (let i = 0; i < pageCap; i++) {
-    const suffix = after === null ? "" : `&after=${after}`;
-    const page = (await transport.get(`/v1/withdrawals?limit=200${suffix}`)) as WithdrawalPage;
-    pages.push(page);
-    if (page.next === null) return finish(true);
-    after = page.next;
+/**
+ * Walks the public withdrawal queue's signed pages to its end, or to the page cap as a lower
+ * bound; a fresh walk's answer is reused for its TTL, so a tick's refresh does not re-walk an
+ * unchanged queue. Each page is signed alone, so pages answered at different log seqs are not one
+ * snapshot of the queue; the totals then mix a changing queue's states, which the caller says so.
+ */
+export class QueueTotalsWalk {
+  private cache: { at: number; totals: QueueTotals } | null = null;
+
+  constructor(private readonly transport: SignedTransport, private readonly nowMs: () => number) {}
+
+  async totals(): Promise<QueueTotals> {
+    const cached = this.cache;
+    if (cached !== null && this.nowMs() - cached.at < TOTALS_TTL_MS) return cached.totals;
+    const totals = await this.walk();
+    this.cache = { at: this.nowMs(), totals };
+    return totals;
   }
-  return finish(false);
+
+  private async walk(): Promise<QueueTotals> {
+    const pages: WithdrawalPage[] = [];
+    const finish = (complete: boolean) => queueTotals(pages, complete, pages.every((p) => p.seq === (pages[0]?.seq ?? null)));
+    let after: number | null = null;
+    for (let i = 0; i < QUEUE_PAGE_CAP; i++) {
+      const suffix = after === null ? "" : `&after=${after}`;
+      const page = (await this.transport.get(`/v1/withdrawals?limit=200${suffix}`)) as WithdrawalPage;
+      pages.push(page);
+      if (page.next === null) return finish(true);
+      after = page.next;
+    }
+    return finish(false);
+  }
 }
