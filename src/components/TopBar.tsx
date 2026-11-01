@@ -15,11 +15,10 @@ import { MockControls } from "./MockControls";
 import { WalletButton } from "./WalletButton";
 
 const usd = (value: Fixed) => `$${formatFixedPlaces(value, 2)}`;
-const SHAPE = "min-h-11 rounded border px-2.5 py-2 sm:px-3 lg:min-h-0 text-caption hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
-const BUTTON = `${SHAPE} border-edge text-fg`;
-const NAV_ITEM = `${SHAPE} inline-flex items-center border-edge text-fg`;
-/** The page the visitor is on: the glow colours a hovered link takes, held. */
-const NAV_CURRENT = `${SHAPE} inline-flex items-center border-glow text-glow`;
+const BUTTON = "min-h-11 rounded border border-edge px-2.5 py-2 sm:px-3 lg:min-h-0 text-caption text-fg hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
+const NAV_LINK = "inline-flex min-h-11 items-center px-1.5 text-caption uppercase focus-visible:outline-2 focus-visible:outline-glow lg:min-h-6";
+const NAV_ITEM = `${NAV_LINK} text-fg-3 hover:text-fg`;
+const NAV_CURRENT = `${NAV_LINK} text-glow`;
 
 export function TopBar() {
   const { account, now, paused, blocked } = useConsole();
@@ -34,14 +33,15 @@ export function TopBar() {
   ];
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-4 py-2 sm:px-6">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <h1 className="text-caption font-normal">
           <Link href="/" aria-label="Monkey Trading console, back to the trading terminal" className="flex min-h-11 items-center gap-3 text-fg focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0">
             <LogoMark className="size-8" />
             <span>MONKEY TRADING</span>
           </Link>
         </h1>
-        <nav aria-label="Pages" className="flex items-center gap-1.5 sm:gap-2">
+        <span aria-hidden="true" className="hidden text-caption text-fg-3 sm:inline">/</span>
+        <nav aria-label="Pages" className="flex items-center gap-1 sm:gap-2">
           {PAGES.map(({ href, label }) => {
             const current = isCurrentPage(pathname, href);
             return (
