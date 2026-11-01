@@ -40,6 +40,13 @@ export function emissionsPosition(entitlement: EntitlementProof | null, vault: {
 export const EMISSIONS_READ_RETRY_MS = 60_000;
 
 /**
+ * How many rounds a claim re-reads the vault record and the node's proof before it keeps the
+ * waiting state. Each round is a pair of network reads, and the pair meets within a few rounds
+ * once the vault posts the checkpoint the node's latest proof stands at.
+ */
+const CLAIM_PROOF_ATTEMPTS = 3;
+
+/**
  * Whether the vault's record should be read now: always when it has not been read, and again when
  * the proof's checkpoint has passed it — the vault posts checkpoints on its own, so a record
  * behind the proof has simply not seen them yet. The retry waits out `EMISSIONS_READ_RETRY_MS` of
@@ -86,31 +93,49 @@ export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> 
 
 /**
  * Claims the connected account's MONKEY emissions on the vault. A claim signs nothing for the
- * node, so it needs only the wallet, like a payout claim; the proof was verified when it was read.
+ * node, so it needs only the wallet, like a payout claim; each proof was verified when it was
+ * read.
  */
 export async function claimEmissions(store: ConsoleStore): Promise<void> {
-  const state = store.getSnapshot();
-  const proof = state.entitlement;
   const wallet = store.liveWallet;
   if (!wallet) return store.toast("error", "Connect a wallet first.");
   // Bound to the wallet: calling the method without a receiver unbinds `this` in the provider wallet.
   const claim = wallet.claimEmissions?.bind(wallet);
-  if (proof === null || claim === undefined) return store.toast("error", "This wallet cannot claim MONKEY.");
-  const claimable = emissionsPosition(proof, state.emissionsVault).claimable;
-  if (claimable === 0n) return;
-  const amount = formatMonkey(claimable);
+  const readRecord = wallet.emissionsClaimed?.bind(wallet);
+  if (claim === undefined || readRecord === undefined) return store.toast("error", "This wallet cannot claim MONKEY.");
   store.patch({ busy: true });
   try {
-    await prompting(store, `Confirm in your wallet: claim ${amount} from the vault.`, () => claim(proof, (waitingFor) => store.patch({ prompt: waitingFor })));
-    // The mint belongs to the account that claimed it, which may no longer be the one connected.
-    const after = store.getSnapshot();
-    store.toast("ok", `The vault minted ${amount} to ${after.wallet?.address === wallet.address ? "your wallet" : wallet.address}.`);
-    offerMonkeyImport(store, wallet);
+    // The vault claims against its current latest root, so the claim needs the proof for the
+    // vault's latest posted checkpoint, not the page's last-read pair: under a fast sequencer the
+    // vault and the node's newest proof pass each other between refreshes. Re-read both, bounded,
+    // and claim with the pair whose seqs meet.
+    for (let attempt = 1; ; attempt += 1) {
+      const [record, proof] = await Promise.all([readRecord(), store.deps.client.emissions(wallet.address)]);
+      if (store.liveWallet !== wallet) return; // the wallet changed while the reads ran; its claim is not this one's
+      store.patch({ entitlement: proof, emissionsVault: record });
+      if (proof === null) return store.toast("info", "The node holds no entitlement proof for this account right now.");
+      if (proof.seq === record.latestSeq) {
+        const due = BigInt(proof.entitled) - record.claimed;
+        if (due <= 0n) return store.toast("info", "All accrued MONKEY is claimed.");
+        const amount = formatMonkey(due);
+        await prompting(store, `Confirm in your wallet: claim ${amount} from the vault.`, () => claim(proof, (waitingFor) => store.patch({ prompt: waitingFor })));
+        // The mint belongs to the account that claimed it, which may no longer be the one connected.
+        const after = store.getSnapshot();
+        store.toast("ok", `The vault minted ${amount} to ${after.wallet?.address === wallet.address ? "your wallet" : wallet.address}.`);
+        offerMonkeyImport(store, wallet);
+        return;
+      }
+      if (attempt >= CLAIM_PROOF_ATTEMPTS) {
+        // Genuine lag: the card's waiting line stands; say why the claim did not fire.
+        return store.toast("info", "The vault's latest checkpoint and the node's latest proof have not met yet; the claim unlocks once they do.");
+      }
+    }
   } catch (error) {
     store.toast("error", errorText(error));
   } finally {
-    // The vault's record changed with the claim; a fresh read settles the claimed-versus-accrued
-    // line at once, so the record's invalidation resets the read window too.
+    // The vault's record changed with the claim, or the reads above refreshed it; a fresh read
+    // settles the claimed-versus-accrued line at once, so the record's invalidation resets the
+    // read window too.
     store.lastEmissionsReadAt = -1;
     store.patch({ busy: false, emissionsVault: null });
   }
