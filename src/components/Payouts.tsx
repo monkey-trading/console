@@ -88,9 +88,12 @@ function PayoutRow({ payout, idle, signs, describedBy, searching, act }: { payou
           {search("Look for a newer one in the log")}
         </>
       )}
-      {status.kind === "waiting" && (
+      {status.kind === "waiting" && !payout.read && (
+        <p className="mt-2 text-fg-3">{signs ? "Checking the vault…" : "The vault's record of this withdrawal could not be read for a read-only account."}</p>
+      )}
+      {status.kind === "waiting" && payout.read && (
         <>
-          <p className="mt-2 text-fg-3">This page has not received its authorization. The node signs one once a checkpoint covering the approval is confirmed on chain; if the vault has paid it already, its record says so once the authorization is found.</p>
+          <p className="mt-2 text-fg-3">This page has not received its authorization. The node signs one once a checkpoint covering the approval is confirmed on chain; the vault's record says it is unpaid.</p>
           {search("Look for it in the log")}
         </>
       )}
