@@ -223,7 +223,9 @@ describe("a live client that keeps failing its signature checks", () => {
     for (let i = 0; i < 20; i++) await settle();
     expect(node.requests.filter((r) => r.path === "/v1/markets")).toHaveLength(1);
     expect(store.getSnapshot().markets).toEqual([]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("did not verify");
+    // The house panel's reads fail the same check and report on their own latches, so the markets
+    // refusal is one of the toasts, not the last.
+    expect(store.getSnapshot().toasts.some((t) => t.text.includes("did not verify"))).toBe(true);
   });
 });
 

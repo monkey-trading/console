@@ -93,6 +93,28 @@ describe("the store's house panel state", () => {
     expect(store.getSnapshot().toasts.filter((t) => t.text === "account still unavailable")).toHaveLength(2);
   });
 
+  it("still refreshes the house panel when the markets read fails", async () => {
+    const { client, store } = setup();
+    store.start(0);
+    await settle();
+    expect(store.getSnapshot().houseFresh).toBe(true);
+    // Arm the panel's sources only after the first refresh: the failing refresh's reads are what
+    // this asserts.
+    client.params = PARAMS;
+    client.checkpoint = CHECKPOINT;
+    client.totals = { count: 2, remaining: fixedFromWire("30.5"), seq: 9, complete: true, stable: true };
+    client.marketError = new Error("markets down");
+    await store.refresh(false);
+    await settle();
+    // The house panel's reads have their own sources and schedule; the failed markets read must
+    // not stop them, and the retained figures stand marked not fresh.
+    const state = store.getSnapshot();
+    expect(state.houseParams).toEqual(PARAMS);
+    expect(state.checkpoint).toEqual(CHECKPOINT);
+    expect(state.withdrawalTotals).toEqual({ count: 2, remaining: fixedFromWire("30.5"), seq: 9, complete: true, stable: true });
+    expect(state.houseFresh).toBe(false);
+  });
+
   it("starts no house reads once the session has stopped", async () => {
     const { client, store } = setup();
     let reads = 0;
