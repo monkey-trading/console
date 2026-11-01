@@ -14,7 +14,7 @@ import { formatPrice } from "@/lib/price-format";
 import { formatStamp } from "@/lib/time";
 
 /** The theme token that colours a marker. */
-export type MarkerTone = "glow" | "ember" | "fg-2";
+export type MarkerTone = "glow" | "ember";
 
 /** A horizontal line across the chart, such as a position's entry. */
 export interface PriceMarker {

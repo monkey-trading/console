@@ -15,14 +15,14 @@ import { PriceChart, type PriceMarker } from "./PriceChart";
 
 /**
  * The lines drawn across the chart: the open position's entry and close-out price, and resting orders.
- * An order's line follows its side (buy green, sell red) and the entry is neutral on either side, so
- * the colour of a line says which way it trades, never which way the position points.
+ * Each line's colour follows its direction: a buy order or a long's entry is green, a sell order or a
+ * short's entry is red. The close-out is red too, and dashed.
  */
 export function markersFor(state: ConsoleState, market: MarketModel): PriceMarker[] {
   const out: PriceMarker[] = [];
   const position = state.account?.positions.find((p) => p.market === market.id);
   if (state.account && position) {
-    out.push({ price: fixedToNumber(position.entry), tone: "fg-2", style: "dotted", title: `${position.qty > 0n ? "Long" : "Short"} entry` });
+    out.push({ price: fixedToNumber(position.entry), tone: position.qty > 0n ? "glow" : "ember", style: "dotted", title: `${position.qty > 0n ? "Long" : "Short"} entry` });
     const liq = closeOutMarker(state.signatures, state.account, market, state.markets);
     if (liq !== null) out.push({ price: fixedToNumber(liq), tone: "ember", style: "dashed", title: "Close-out (est.)" });
   }
