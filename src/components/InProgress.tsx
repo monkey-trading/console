@@ -2,6 +2,8 @@
 
 /** What is under way: payouts to claim first, since they need the trader, then the withdrawal queue. */
 
+import { useId } from "react";
+
 import { useConsole } from "./ConsoleProvider";
 import { Payouts } from "./Payouts";
 import { WithdrawalQueue } from "./WithdrawalQueue";
@@ -9,9 +11,10 @@ import { WithdrawalQueue } from "./WithdrawalQueue";
 /** The In progress column: claims, then the queue. */
 export function InProgress() {
   const { signatures } = useConsole();
+  const id = useId();
   return (
-    <section aria-labelledby="progress-title" className="divide-y divide-line overflow-hidden rounded-xl border border-line-2 bg-ink-1">
-      <h3 id="progress-title" className="px-4 py-3 text-label tracking-caps text-glow uppercase">In progress</h3>
+    <section aria-labelledby={`${id}-title`} className="divide-y divide-line overflow-hidden rounded-xl border border-line-2 bg-ink-1">
+      <h3 id={`${id}-title`} className="px-4 py-3 text-label tracking-caps text-glow uppercase">In progress</h3>
       {signatures === "checked" && <Payouts />}
       <WithdrawalQueue />
     </section>

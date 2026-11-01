@@ -1,6 +1,6 @@
 "use client";
 
-/** Results of the user's actions: shown above everything, announced politely, dismissed on request. */
+/** The wallet's pending request and the results of the user's actions: shown above everything, announced politely, results dismissed on request. */
 
 import { useEffect, useRef } from "react";
 
@@ -12,17 +12,18 @@ import { ToastLog } from "./ToastLog";
 const TOAST_MS = 7_000;
 
 export function Toasts() {
-  const { toasts } = useConsole();
+  const { toasts, prompt } = useConsole();
   const { store } = useSession();
   const popover = useRef<HTMLDivElement>(null);
   const latest = toasts[toasts.length - 1]?.id ?? 0;
+  const prompting = prompt !== null;
   useEffect(() => {
     const el = popover.current;
     // Browsers without the Popover API still get the announcements below; the messages show in the page flow.
     if (!el || typeof el.showPopover !== "function") return;
     if (el.matches(":popover-open")) el.hidePopover();
-    if (latest !== 0) el.showPopover();
-  }, [latest]);
+    if (latest !== 0 || prompting) el.showPopover();
+  }, [latest, prompting]);
   useEffect(() => {
     if (latest === 0) return;
     const timer = setTimeout(() => {
@@ -36,7 +37,11 @@ export function Toasts() {
     <>
       <ToastLog toasts={toasts} />
       <div ref={popover} popover="manual" className="fixed inset-auto bottom-[calc(var(--bar-height,var(--spacing-bar))+1rem)] left-1/2 lg:bottom-12 m-0 w-[min(26rem,calc(100vw-2rem))] -translate-x-1/2 overflow-visible border-0 bg-transparent p-0">
-        <ToastList />
+        <div className="flex flex-col gap-2">
+          {/* The wallet's request sits above any result, so a toast never hides what the wallet is asking. */}
+          {prompting && <p aria-hidden="true" className="rounded border border-amber/60 bg-ink-2 px-3 py-3 text-caption text-amber shadow-platform">{prompt}</p>}
+          <ToastList />
+        </div>
       </div>
     </>
   );

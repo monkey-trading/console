@@ -12,7 +12,7 @@ import { useSignGate } from "./SignGate";
 
 const CLASSES: readonly EligibilityClass[] = ["professional", "eligible_client"];
 
-/** `step` is the section's place in the Deposit tab. Recording the declaration removes the section, so focus moves to the deposit's heading. */
+/** `step` is the section's place in the Deposit tab. Recording the declaration removes the section, so focus then moves to the deposit's heading; a refused or cancelled declaration leaves focus where it is. */
 export function EligibilityCard({ step }: { step: number }) {
   const { wallet, busy, signatures, account } = useConsole();
   const { store } = useSession();
@@ -22,7 +22,7 @@ export function EligibilityCard({ step }: { step: number }) {
   return (
     <section aria-labelledby="eligibility-title" className="p-4">
       <h4 id="eligibility-title" className="text-label tracking-caps text-fg-3 uppercase">{step} · Eligibility</h4>
-      <form className="mt-3" onSubmit={(event) => { event.preventDefault(); if (!wallet || busy || gate.blocked) return; void attestEligibility(store, choice).then(() => document.getElementById("deposit-title")?.focus()); }}>
+      <form className="mt-3" onSubmit={(event) => { event.preventDefault(); if (!wallet || busy || gate.blocked) return; void attestEligibility(store, choice).then(() => { if (store.getSnapshot().eligibility !== null) document.getElementById("deposit-title")?.focus(); }); }}>
         <p className="text-caption leading-relaxed text-fg-2">
           {signatures === "none"
             ? "Before your first deposit you declare, with your wallet, that you are a professional or eligible client."
