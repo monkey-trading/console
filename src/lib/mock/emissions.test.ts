@@ -88,6 +88,26 @@ describe("MONKEY emissions", () => {
     expect(allocations(node).some((e) => e.type === "emission_allocated")).toBe(false);
   });
 
+  it("judges weight before the tick's own effects: a 22:00 financing charge into negative cash does not forfeit it", () => {
+    // 21:59:30 UTC, half a minute before 22:00 — which is also a ten-minute emission boundary.
+    const late = Date.UTC(2026, 9, 28, 21, 59, 30);
+    const node = createMockNode(late);
+    const state = node.client.state;
+    const account = state.account(ME);
+    account.balance = 15_000_000n; // $0.015: positive cash at the cutoff, less than the tick's financing charge
+    const mid = state.markets.get(1)?.mid ?? fixedFromInt(100_000);
+    account.positions.set(1, { qty: fixedFromInt(1) / 100n, entry: mid }); // $1,000 of BTC at the index
+    recordEmissionResult(state, ME, fixedFromInt(-1_000), 0n);
+    node.client.tick(late + 60_000); // crosses 22:00 and the period boundary in one tick
+    const events = state.log.flatMap((m) => m.events.map((e) => e.type));
+    // The period closed before the financing charge in the tick's own events, and the charge then
+    // pushed the account's cash below zero (the close-out wrote it off) — the weight judged at the
+    // cutoff still earns.
+    expect(events.indexOf("emission_allocated")).toBeLessThan(events.indexOf("financing"));
+    expect(events).toContain("bad_debt");
+    expect(state.entitledMonkey.get(ME)).toBe(EMISSION_PERIOD_BUDGET);
+  });
+
   it("allocates the whole period budget to the account with the period's only loss", async () => {
     const node = await funded(10_000);
     await roundTrip(node, ME, "0.05", -300, 10);

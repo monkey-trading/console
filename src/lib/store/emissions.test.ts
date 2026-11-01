@@ -5,6 +5,7 @@ import { decodeFunctionData, parseAbi } from "viem";
 
 import type { EntitlementProof } from "../engine/emissions";
 import { ACCOUNT } from "../engine/wallet-kit";
+import type { Wallet } from "../engine/wallet";
 import { MONKEY_UNIT } from "../format";
 import { checkEmissionsClaimed, claimEmissions, emissionsPosition, emissionsRecordStale } from "./emissions";
 import { connected, VAULT } from "./live-kit";
@@ -64,8 +65,8 @@ describe("checkEmissionsClaimed", () => {
     expect(store.getSnapshot().emissionsVault).toEqual({ claimed: 7n * MONKEY_UNIT, latestSeq: 40 });
   });
 
-  it("refuses the read on another chain and reports it once, leaving the record unread", async () => {
-    const { store } = await connected({ chainId: 1, emissionsClaimed: 7n * MONKEY_UNIT, latestSeq: 40 });
+  it("refuses the read on another chain, reports it once, and clears the latch when that wallet reads cleanly", async () => {
+    const { provider, store } = await connected({ chainId: 1, emissionsClaimed: 7n * MONKEY_UNIT, latestSeq: 40 });
     store.patch({ entitlement: proof(9n * MONKEY_UNIT) });
     await checkEmissionsClaimed(store);
     expect(store.getSnapshot().emissionsVault).toBeNull();
@@ -73,19 +74,42 @@ describe("checkEmissionsClaimed", () => {
     // The effect asks again on the next refresh; the same failure is not shown twice.
     await checkEmissionsClaimed(store);
     expect(store.getSnapshot().toasts.filter((t) => t.text.includes("MONKEY record could not be read"))).toHaveLength(1);
-    // A wallet back on the chain reads cleanly and clears the latch.
-    const home = await connected({ emissionsClaimed: 7n * MONKEY_UNIT, latestSeq: 40 });
-    home.store.patch({ entitlement: proof(9n * MONKEY_UNIT) });
-    await checkEmissionsClaimed(home.store);
-    expect(home.store.getSnapshot().emissionsVault).toEqual({ claimed: 7n * MONKEY_UNIT, latestSeq: 40 });
+    // The same wallet back on the chain reads cleanly; the latch clears, so a later failure shows again.
+    provider.chainId = 31337;
+    await checkEmissionsClaimed(store);
+    expect(store.getSnapshot().emissionsVault).toEqual({ claimed: 7n * MONKEY_UNIT, latestSeq: 40 });
+    provider.chainId = 1;
+    await checkEmissionsClaimed(store);
+    expect(store.getSnapshot().toasts.filter((t) => t.text.includes("MONKEY record could not be read"))).toHaveLength(2);
+  });
+
+  it("ignores a failure that lands after the wallet it ran for was replaced", async () => {
+    const { store, wallet } = await connected();
+    let fail!: (error: Error) => void;
+    const pending = new Promise<{ claimed: bigint; latestSeq: number }>((_, reject) => { fail = reject; });
+    const away: Wallet = {
+      address: ACCOUNT, label: "Away",
+      sign: async () => "0x", deposit: async () => "0x", claim: async () => "0x",
+      emissionsClaimed: () => pending,
+    };
+    store.patch({ entitlement: proof(9n * MONKEY_UNIT) });
+    store.liveWallet = away;
+    const reading = checkEmissionsClaimed(store);
+    store.liveWallet = wallet; // replaced before the read settles
+    fail(new Error("your wallet is on chain 1, not chain 31337"));
+    await reading;
+    expect(store.getSnapshot().toasts.filter((t) => t.text.includes("MONKEY record could not be read"))).toHaveLength(0);
+    expect(store.lastEmissionsReadAt).toBe(-1);
   });
 });
 
 describe("claimEmissions", () => {
   it("sends the vault's claimEmissions for the gap the proof proves and settles the line after", async () => {
-    const { provider, store } = await connected();
+    const { provider, store } = await connected({ emissionsClaimed: 2n * MONKEY_UNIT, latestSeq: 40 });
     const at = proof(5n * MONKEY_UNIT);
-    store.patch({ entitlement: at, emissionsVault: { claimed: 2n * MONKEY_UNIT, latestSeq: 40 } });
+    store.patch({ entitlement: at });
+    await checkEmissionsClaimed(store); // reads the record and warms the read window
+    expect(store.lastEmissionsReadAt).toBe(0);
     await claimEmissions(store);
     const tx = provider.sent.at(-1);
     expect(tx?.to).toBe(VAULT);
@@ -95,6 +119,7 @@ describe("claimEmissions", () => {
     expect(decoded.args.slice(1)).toEqual([5n * MONKEY_UNIT, []]);
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The vault minted 3 MONKEY to your wallet.");
     expect(store.getSnapshot().emissionsVault).toBeNull();
+    expect(store.lastEmissionsReadAt).toBe(-1); // the record's invalidation resets the read window
     expect(store.getSnapshot().busy).toBe(false);
   });
 

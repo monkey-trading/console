@@ -71,9 +71,7 @@ export class ConsoleStore {
     for (const listener of this.listeners) listener();
   }
 
-  id(): number {
-    return this.nextId++;
-  }
+  id = (): number => this.nextId++;
 
   toast(tone: ToastMessage["tone"], text: string): void {
     this.patch({ toasts: [...this.snapshot.toasts.slice(-3), { id: this.id(), tone, text }] });
@@ -95,6 +93,8 @@ export class ConsoleStore {
   /** Sets the connected wallet (or none) and drops activity lines that belong to another account. */
   setWallet(wallet: { address: string; label: string; readOnly?: boolean } | null): void {
     this.viewer = undefined; // once a wallet has been connected or left, the starting viewer no longer applies
+    this.lastEmissionsReadError = null; // a new wallet's vault reads start fresh: no stale latch or retry window
+    this.lastEmissionsReadAt = -1;
     const mine = wallet?.address.toLowerCase();
     this.patch({ wallet, feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
   }

@@ -59,23 +59,27 @@ export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> 
   const wallet = store.liveWallet;
   if (!wallet?.emissionsClaimed || store.emissionsCheck === wallet) return;
   store.emissionsCheck = wallet;
+  const current = () => store.liveWallet === wallet;
   try {
     const record = await wallet.emissionsClaimed();
     // The wallet may have changed while the read ran; another account's record is not shown.
-    if (store.liveWallet === wallet) {
+    if (current()) {
       store.lastEmissionsReadError = null;
       store.patch({ emissionsVault: record });
     }
   } catch (error) {
-    // The read is asked again on the next refresh, so a failure that keeps repeating is shown once.
-    const message = errorText(error);
-    if (store.lastEmissionsReadError !== message) {
-      store.lastEmissionsReadError = message;
-      store.toast("error", `The vault's MONKEY record could not be read: ${message}`);
+    // A failure of a wallet that is no longer connected belongs to that wallet's session, not this one.
+    if (current()) {
+      // The read is asked again on the next refresh, so a failure that keeps repeating is shown once.
+      const message = errorText(error);
+      if (store.lastEmissionsReadError !== message) {
+        store.lastEmissionsReadError = message;
+        store.toast("error", `The vault's MONKEY record could not be read: ${message}`);
+      }
     }
   } finally {
-    // The throttle window runs from the read's end, whatever it answered.
-    store.lastEmissionsReadAt = store.getSnapshot().now;
+    // The throttle window runs from the read's end, whatever it answered, for the wallet it ran for.
+    if (current()) store.lastEmissionsReadAt = store.getSnapshot().now;
     if (store.emissionsCheck === wallet) store.emissionsCheck = null;
   }
 }
@@ -105,7 +109,9 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
   } catch (error) {
     store.toast("error", errorText(error));
   } finally {
-    // The vault's record changed with the claim; a fresh read settles the claimed-versus-accrued line.
+    // The vault's record changed with the claim; a fresh read settles the claimed-versus-accrued
+    // line at once, so the record's invalidation resets the read window too.
+    store.lastEmissionsReadAt = -1;
     store.patch({ busy: false, emissionsVault: null });
   }
 }

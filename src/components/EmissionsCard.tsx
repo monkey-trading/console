@@ -51,7 +51,7 @@ export function EmissionsCard() {
           {position.claimable > 0n && (
             <button type="button" aria-disabled={!idle || readOnly.readOnly} aria-describedby={readOnly.describedBy} onClick={() => !readOnly.readOnly && act(() => claimEmissions(store))} className={BUTTON}>Claim {formatMonkey(position.claimable)} on the vault</button>
           )}
-          {position.claimed !== null && position.checkpoint === "waiting" && position.accrued > (position.claimed ?? 0n) && (
+          {position.claimed !== null && position.checkpoint === "waiting" && position.accrued > position.claimed && (
             <p className="mt-2 text-fg-3">The vault has not posted a checkpoint covering this yet; the claim unlocks once one posts.</p>
           )}
           {position.claimed !== null && position.checkpoint === "superseded" && (
