@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromWire } from "../fixed";
+import { QueueTotalsRetrying } from "../engine/live-queue";
 import { settle } from "../engine/test-kit";
 import { ACCOUNT, setup } from "./live-fake";
 
@@ -113,6 +114,32 @@ describe("the store's house panel state", () => {
     expect(state.checkpoint).toEqual(CHECKPOINT);
     expect(state.withdrawalTotals).toEqual({ count: 2, remaining: fixedFromWire("30.5"), seq: 9, complete: true, stable: true });
     expect(state.houseFresh).toBe(false);
+  });
+
+  it("latches the queue walk's original failure through its backoff waits", async () => {
+    const { client, store } = setup();
+    client.totalsError = new Error("queue down");
+    store.start(0);
+    await settle();
+    expect(store.getSnapshot().toasts.filter((t) => t.text === "queue down")).toHaveLength(1);
+    // The backoff waits reject with their own marker: the original failure stays latched and the
+    // wait's message never toasts, however many refreshes the backoff spans.
+    client.totalsError = new QueueTotalsRetrying();
+    await store.refresh(false);
+    await settle();
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot().toasts.filter((t) => t.text === "queue down")).toHaveLength(1);
+    expect(store.getSnapshot().toasts.filter((t) => t.text.includes("waiting to retry"))).toHaveLength(0);
+    // Recovery clears the latch, so the next failure shows again.
+    client.totalsError = null;
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot().queueFailed).toBe(false);
+    client.totalsError = new Error("queue down");
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot().toasts.filter((t) => t.text === "queue down")).toHaveLength(2);
   });
 
   it("starts no house reads once the session has stopped", async () => {

@@ -12,6 +12,17 @@ const TOTALS_TTL_MS = 15_000;
 const TOTALS_RETRY_AFTER_FAILURE_MS = 30_000;
 
 /**
+ * The rejection a read gets while a failed walk's backoff runs. It marks the retry wait, not a
+ * fresh failure: a caller keeps the original failure latched until a walk succeeds, so the two
+ * messages never alternate.
+ */
+export class QueueTotalsRetrying extends Error {
+  constructor() {
+    super("The queue read failed and is waiting to retry.");
+  }
+}
+
+/**
  * Walks the public withdrawal queue's signed pages to its end, or to the page cap as a lower
  * bound; a fresh walk's answer is reused for its TTL, so a tick's refresh does not re-walk an
  * unchanged queue. Each page is signed alone, so pages answered at different log seqs are not one
@@ -29,7 +40,7 @@ export class QueueTotalsWalk {
     if (cached !== null && this.nowMs() - cached.at < TOTALS_TTL_MS) return cached.totals;
     // During backoff the walk keeps failing, so the store's retained figures keep their failure
     // warning; only a fresh cache (no failure yet) is served without walking.
-    if (this.nowMs() < this.retryAt) throw new Error("The queue read failed and is waiting to retry.");
+    if (this.nowMs() < this.retryAt) throw new QueueTotalsRetrying();
     try {
       const totals = await this.walk();
       this.cache = { at: this.nowMs(), totals };

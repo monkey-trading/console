@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { LiveEngineClient } from "./live";
+import { QueueTotalsRetrying } from "./live-queue";
 import { checkpoint, command, frame, SET_PARAMS } from "./live-house-kit";
 import { acceptAll, FakeNode, FakeScheduler, FakeSocket, settle } from "./test-kit";
 import { VECTORS, vectorResponse } from "./test-vectors";
@@ -106,6 +107,9 @@ describe("the live client's house folds", () => {
     fail = true;
     await expect(live.withdrawalTotals()).rejects.toThrow("queue down");
     now = 33_000;
+    // The backoff wait rejects with its own marker, not a fresh failure, so a caller can keep the
+    // original failure latched instead of alternating the two messages.
+    await expect(live.withdrawalTotals()).rejects.toBeInstanceOf(QueueTotalsRetrying);
     await expect(live.withdrawalTotals()).rejects.toThrow("waiting to retry");
     expect(walked()).toBe(3);
     // Past the backoff the next read walks again.
