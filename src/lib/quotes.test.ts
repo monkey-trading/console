@@ -16,8 +16,8 @@ const QUOTE: MarketQuote = {
 const f = fixedFromWire;
 // Only the fields `ticketPrices` reads; the rest of a preview does not reach it.
 const preview = (qty: string) => ({ qty: f(qty), bid: f("99"), offer: f("101"), quote: { price: f("101") }, spreadBps: 200 }) as unknown as TicketPreview;
-const live = (qty: string, side: "buy" | "sell", quote: MarketQuote | null = QUOTE, quoteError: string | null = null) =>
-  ticketPrices({ live: true, quote, quoteError, preview: preview(qty), side, mark: f("100") });
+const live = (qty: string, side: "buy" | "sell", quote: MarketQuote | null = QUOTE, quoteError: string | null = null, mark = "100") =>
+  ticketPrices({ live: true, quote, quoteError, preview: preview(qty), side, mark: f(mark) });
 
 describe("quoteMarkets", () => {
   it("asks for the selected market first, then the markets held, once each and at most four", () => {
@@ -63,10 +63,46 @@ describe("ticketPrices", () => {
     expect(live("1", "buy", null, "unknown market 9").problem).toBe("The node will not quote this market: unknown market 9.");
     expect(live("1", "buy", { ...QUOTE, unavailable: { kind: "market_closed" }, ask: [], bid: [] })).toMatchObject({ price: null, problem: "The market is closed." });
     expect(live("6", "sell")).toMatchObject({ price: null, offer: f("100.5"), problem: "The node would not open an order this large. Try a smaller size." });
-    expect(live("6", "buy")).toMatchObject({ price: f("100.5"), problem: "Not enough equity: you have $10.00 and the account needs $40.00 of margin." });
+    expect(live("6", "buy")).toMatchObject({ price: f("100.5"), problem: "The largest position your equity opens here is ≈ $500.00. Try a smaller size." });
   });
 
   it("shows the mock's own estimate, which needs no quote", () => {
     expect(ticketPrices({ live: false, quote: null, quoteError: null, preview: preview("1"), side: "buy", mark: f("100") })).toEqual({ bid: f("99"), offer: f("101"), price: f("101"), spreadBps: 200, problem: null });
+  });
+});
+
+describe("a covering step the node's ladder declines", () => {
+  // console#66: a $10,000 ticket on a $1,000 account rounded up to 0.128865 BTC, a hair past the
+  // largest openable 0.128860, and landed on the declined probe at the $2M tier top, whose margin
+  // figures ($299,999.99 for the probe, a negative probe equity) were shown as the order's.
+  const BTC_MARK = "77600";
+  const btcLadder: MarketQuote = {
+    ...QUOTE,
+    mark: BTC_MARK,
+    ask: [
+      { qty: "0.05", price: "77610" },
+      { qty: "0.12886", price: "77640" },
+      { qty: "25.75", price: "77900", declined: { kind: "insufficient_margin", equity: "1000", required: "299999.99" } },
+    ],
+  };
+
+  it("shows the largest size the account can open, never the probe's equity or margin", () => {
+    const result = live("0.128865", "buy", btcLadder, null, BTC_MARK);
+    expect(result.problem).toBe("The largest position your equity opens here is ≈ $9,999.53. Try a smaller size.");
+    expect(result.price).toBe(f("77900"));
+  });
+
+  it("keeps a decline whose message carries no probe figures, and refuses no-size accounts without figures", () => {
+    const capped: MarketQuote = {
+      ...QUOTE,
+      ask: [
+        { qty: "1", price: "100.1" },
+        { qty: "5", price: "100.3" },
+        { qty: "8", price: "100.5", declined: { kind: "house_capacity" } },
+      ],
+    };
+    expect(live("6", "buy", capped).problem).toBe("The house cannot take more in this market. Try a smaller size.");
+    const nothingFits: MarketQuote = { ...QUOTE, ask: [{ qty: "1", price: "100.1", declined: { kind: "insufficient_margin", equity: "0", required: "40" } }] };
+    expect(live("0.5", "buy", nothingFits).problem).toBe("Not enough equity to open a position here.");
   });
 });
