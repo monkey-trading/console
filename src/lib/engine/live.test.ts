@@ -128,10 +128,19 @@ describe("the other reads", () => {
     ok("/v1/accounts/0xabc/eligibility", { class: null, statement: null });
     ok("/v1/accounts/0xabc/withdrawals", { seq: 1, queue: [], next: null });
     ok("/v1/accounts/0xabc/history?limit=100&before=5%3A0", { events: [], next: null });
+    const proof = { seq: 40, root: `0x${"11".repeat(32)}`, account: "0xabc", entitled: "5000000000000000000", siblings: [`0x${"22".repeat(32)}`] };
+    ok("/v1/accounts/0xabc/emissions", proof);
     await expect(client.nonce("0xabc")).resolves.toEqual({ next_nonce: 3, time_ms: markets.time_ms });
     await expect(client.eligibility("0xabc")).resolves.toEqual({ class: null, statement: null });
     await expect(client.withdrawalQueue("0xabc")).resolves.toMatchObject({ queue: [] });
     await expect(client.history("0xabc", { limit: 100, before: "5:0" })).resolves.toEqual({ events: [], next: null });
+    await expect(client.emissions("0xabc")).resolves.toEqual(proof);
+  });
+
+  it("reads the engine holding no entitlement as null, not an error", async () => {
+    const { node, client } = setup({ verifier: acceptAll });
+    node.signed("/v1/accounts/0xabc/emissions", () => ({ status: 404, body: '{"error":"not found"}', signature: "0x", timeMs: markets.time_ms, seq: 1 }));
+    await expect(client.emissions("0xabc")).resolves.toBeNull();
   });
 
 });

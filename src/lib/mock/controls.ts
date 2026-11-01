@@ -54,7 +54,29 @@ export class MockControls {
     const key = address.toLowerCase();
     state.accounts.delete(key);
     state.history.delete(key);
+    state.entitledMonkey.delete(key);
+    state.claimedMonkey.delete(key);
+    state.emission.results.delete(key);
     for (let i = state.queue.length - 1; i >= 0; i--) if (state.queue[i]?.account === key) state.queue.splice(i, 1);
+  }
+
+  /** Stands in for the vault's `claimEmissions`, as the real wallet sends: records what the simulated vault minted. */
+  claimEmissions(address: string, entitled: bigint): void {
+    const { state } = this.client;
+    const key = address.toLowerCase();
+    const claimed = state.claimedMonkey.get(key) ?? 0n;
+    if (entitled <= claimed) throw new Error("The simulated vault has already minted at least that much to this account.");
+    state.claimedMonkey.set(key, entitled);
+  }
+
+  /** What the simulated vault has minted to `address` against its entitlement. */
+  monkeyClaimed(address: string): bigint {
+    return this.client.state.claimedMonkey.get(address.toLowerCase()) ?? 0n;
+  }
+
+  /** The simulated vault's latest posted checkpoint seq, which the mock's entitlement proofs are taken against. */
+  postedSeq(): number {
+    return this.client.state.postedSeq;
   }
 
   /** Stands in for a transaction to the vault, as the real wallet sends; see `chainDeposit`. */

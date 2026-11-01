@@ -1,6 +1,7 @@
 /** Tests only: a live client with canned reads, and a store over it. */
 
 import { EngineError, type ClientEvent, type EngineClient, type SignatureChecks } from "../engine/client";
+import type { EntitlementProof } from "../engine/emissions";
 import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
 import type { PriceRules, StreamMessage, MarketView } from "../engine/types";
@@ -43,6 +44,9 @@ export class FakeClient implements EngineClient {
   async accessProbe() {}
   async nonce() { return { next_nonce: 0 }; }
   async eligibility() { return { class: null, statement: null }; }
+  /** The account's entitlement proof; a test may set it. */
+  entitlement: EntitlementProof | null = null;
+  async emissions() { return this.entitlement; }
   async attestEligibility(): Promise<never> { throw new EngineError(501, "no"); }
   async placeOrder(): Promise<never> { throw new EngineError(501, "no"); }
   async cancelOrder(): Promise<never> { throw new EngineError(501, "no"); }

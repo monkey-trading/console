@@ -8,6 +8,7 @@ import { AccountSummary } from "./AccountSummary";
 import { useConsole, useSession } from "./ConsoleProvider";
 import { EligibilityCard } from "./EligibilityCard";
 import { DepositForm } from "./DepositForm";
+import { EmissionsCard } from "./EmissionsCard";
 import { FaucetCard } from "./FaucetCard";
 import { Payouts } from "./Payouts";
 import { SigningFor } from "./SigningFor";
@@ -75,6 +76,7 @@ export function FundingDrawer() {
         <FaucetCard />
         <WithdrawForm />
         <WithdrawalQueue />
+        <EmissionsCard />
         {signatures === "checked" && <Payouts />}
         {signatures === "checked" && <SigningFor />}
       </div>

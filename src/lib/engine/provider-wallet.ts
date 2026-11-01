@@ -9,7 +9,9 @@ import { decodeFunctionResult, encodeFunctionData, getTypesForEIP712Domain, isHe
 
 import { fixedFromWire, type Fixed } from "../fixed";
 import { isWholeUsdc, USDC_UNIT } from "../vault";
+import type { EntitlementProof } from "./emissions";
 import type { TypedRequest } from "./eip712";
+import { claimEmissionsTx, emissionsClaimedRead, suggestMonkeyToken, suggestTokenAsset } from "./provider-monkey";
 import { waitMined } from "./receipts";
 import type { Address, SignedWithdrawal } from "./types";
 import type { Progress, SignRequest, Wallet } from "./wallet";
@@ -61,7 +63,7 @@ const hex = (n: number) => `0x${n.toString(16)}`;
 const errorCode = (error: unknown) => (typeof error === "object" && error !== null && "code" in error ? error.code : undefined);
 
 /** `value` as `0x` hex, as viem's encoders take it. Error cases: it is not hex, which a wallet or the node answered wrongly. */
-function hexOf(value: unknown): Hex {
+export function hexOf(value: unknown): Hex {
   if (typeof value !== "string" || !isHex(value)) throw new Error(`Expected 0x hex, got ${String(value)}.`);
   return value;
 }
@@ -140,15 +142,22 @@ export class ProviderWallet implements Wallet {
    * declines, or a wallet that answers false resolves false and nothing else changes.
    */
   async suggestUsdc(): Promise<boolean> {
-    const usdc = this.chain.usdc;
-    if (usdc === null) return false;
-    await this.ensureChain();
-    try {
-      const added: unknown = await this.provider.request({ method: "wallet_watchAsset", params: { type: "ERC20", options: { address: usdc, symbol: "USDC", decimals: 6 } } });
-      return added === true;
-    } catch {
-      return false;
-    }
+    return suggestTokenAsset(() => this.ensureChain(), this.provider, this.chain.usdc, "USDC", 6);
+  }
+
+  /** Claims this account's MONKEY emissions for what the proof entitles it to; error cases as `claim`. */
+  async claimEmissions(proof: EntitlementProof, progress: Progress = () => undefined): Promise<string> {
+    return claimEmissionsTx(this.address, (data, action, p) => this.send(this.chain.vault, data, action, p), proof, progress);
+  }
+
+  /** The vault's record of this account's MONKEY; a background read, refused when the wallet sits on another chain. */
+  async emissionsClaimed(): Promise<{ claimed: bigint; latestSeq: number }> {
+    return emissionsClaimedRead(this.address, this.chain, this.provider);
+  }
+
+  /** Offers to add the vault's MONKEY token to the wallet; best-effort, as `suggestUsdc`. */
+  async suggestMonkey(): Promise<boolean> {
+    return suggestMonkeyToken(() => this.ensureChain(), this.chain, this.provider);
   }
 
   /**

@@ -2,6 +2,7 @@
 
 import type { AttestationStatus, FeedStatus } from "./attestation";
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks, type Unsubscribe } from "./client";
+import type { EntitlementProof } from "./emissions";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import { scanForWithdrawal, type ScanResult } from "./live-scan";
@@ -167,6 +168,16 @@ export class LiveEngineClient implements EngineClient {
 
   async eligibility(address: Address): Promise<EligibilityView> {
     return (await this.transport.get(`/v1/accounts/${address}/eligibility`)) as EligibilityView;
+  }
+
+  /** The engine holds no entitlement for an account it has never allocated one to: a 404, read as null. */
+  async emissions(address: Address): Promise<EntitlementProof | null> {
+    try {
+      return (await this.transport.get(`/v1/accounts/${address}/emissions`)) as EntitlementProof;
+    } catch (error) {
+      if (error instanceof EngineError && error.status === 404) return null;
+      throw error;
+    }
   }
 
   async withdrawalQueue(address: Address): Promise<WithdrawalPage> {

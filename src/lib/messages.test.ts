@@ -24,6 +24,12 @@ describe("describeEvent", () => {
     expect(describeEvent({ type: "market_closed", market: 1 }, symbol)).toBe("BTC-USD closed");
     expect(describeEvent({ type: "order_accepted", account: "0x1", client_id: 1, order_id: 1 }, symbol)).toBeNull();
   });
+
+  it("names an emission allocation and skips the period's housekeeping", () => {
+    const amount = (2n ** 64n).toString();
+    expect(describeEvent({ type: "emission_allocated", account: "0x1", period: 12, weight: "250.5", amount }, symbol)).toBe("MONKEY allocated: 18.44 MONKEY (period 12)");
+    expect(describeEvent({ type: "emission_period_closed", period: 12, budget: "1000", allocated: "999", cancelled: "1" }, symbol)).toBeNull();
+  });
 });
 
 describe("describeMockAttestation", () => {

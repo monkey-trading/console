@@ -4,6 +4,7 @@ import { recoverTypedDataAddress, type Hex } from "viem";
 
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient } from "../engine/client";
 import vectors from "../engine/eip712-vectors.json";
+import type { EntitlementProof } from "../engine/emissions";
 import type { TypedRequest } from "../engine/eip712";
 import type { QuoteRequest } from "../engine/live-stream";
 import { ProviderWallet } from "../engine/provider-wallet";
@@ -45,6 +46,9 @@ export class ActionClient implements EngineClient {
   async accessProbe() {}
   async nonce() { this.nonceReads++; return { next_nonce: 4, time_ms: NODE_TIME }; }
   async eligibility() { return { class: null, statement: null }; }
+  /** The account's entitlement proof; a test may set it. */
+  entitlement: EntitlementProof | null = null;
+  async emissions() { return this.entitlement; }
   private act(route: string, body: Posted["body"]) { const posted = { route, body }; this.posted.push(posted); return Promise.resolve().then(() => this.answer(posted)); }
   attestEligibility(body: EligibilityRequest) { return this.act("eligibility", body); }
   placeOrder(body: OrderRequest) { return this.act("order", body); }

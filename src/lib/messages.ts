@@ -2,6 +2,7 @@
 
 import type { EngineEvent, MarketId, Reject } from "./engine/types";
 import { fixedFromWire, formatFixedPlaces, formatUsd } from "./fixed";
+import { formatMonkey } from "./format";
 
 /** An engine decimal with at most `places` places, grouped in thousands. */
 function decimals(wire: string, places: number): string {
@@ -73,6 +74,9 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
     case "order_cancelled": return event.reason === "client" ? `Order ${event.order_id} cancelled` : `Order ${event.order_id} could not fill and was cancelled`;
     case "order_rejected": return `Order refused: ${describeReject(event.reason)}`;
     case "withdrawal_rejected": return `Withdrawal refused: ${describeReject(event.reason)}`;
+    case "emission_allocated": return `MONKEY allocated: ${formatMonkey(BigInt(event.amount))} (period ${event.period})`;
+    // Period housekeeping names no account; the allocations above are the viewer's lines.
+    case "emission_period_closed": return null;
     case "order_accepted": return null;
     // Operator housekeeping is not the viewer's activity.
     case "admin_applied": return null;

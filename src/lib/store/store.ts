@@ -16,8 +16,11 @@ export class ConsoleStore {
   readonly deps: StoreDeps;
   /** The connected wallet, which holds a signer and so is not part of the snapshot. */
   liveWallet: Wallet | null = null;
-  /** The wallet whose reads of the vault's paid payouts are running, one at a time (`checkPaid`). */
+  /** Bookkeeping for the background vault reads: `paidCheck`/`emissionsCheck` name the wallet each runs for, `lastEmissionsReadAt` throttles the MONKEY record's retries, `lastEmissionsReadError` dedupes its repeated failures. */
   paidCheck: Wallet | null = null;
+  emissionsCheck: Wallet | null = null;
+  lastEmissionsReadAt = -1;
+  lastEmissionsReadError: string | null = null;
   private snapshot: ConsoleState;
   private readonly listeners = new Set<() => void>();
   private nextId = 1;
@@ -30,11 +33,10 @@ export class ConsoleStore {
   private unwatch: (() => void) | null = null;
   /** Seeds the chart's bars from the marks endpoint once per market and timeframe. */
   readonly barsSeed = new BarsSeed(this);
-  /** When each market's bar bucket was last ticked from the node's mark, so a history merge can tell a stale live candle from a fresh one. Not part of the snapshot: derived bookkeeping. */
+  /** When each market's bar bucket was last ticked from the node's mark, so a history merge can tell a stale live candle from a fresh one; derived bookkeeping, not part of the snapshot. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
-  /** Set when the store stops following the node, so pending history work stands down. Not part of the snapshot. */
+  /** Set when the store stops following the node so pending history work stands down; bumped on each start so an earlier cycle's scans stand down (StrictMode re-runs the effect). Neither is part of the snapshot. */
   stopped = false;
-  /** Bumped on each start, so scans from an earlier cycle stand down when the store restarts (React StrictMode re-runs the effect). Not part of the snapshot. */
   scanEpoch = 0;
   /** Whether trust in the node was lost (a failed check or a wrong clock) and not yet regained. */
   private trustLost = false;
@@ -69,9 +71,7 @@ export class ConsoleStore {
     for (const listener of this.listeners) listener();
   }
 
-  id(): number {
-    return this.nextId++;
-  }
+  id = (): number => this.nextId++;
 
   toast(tone: ToastMessage["tone"], text: string): void {
     this.patch({ toasts: [...this.snapshot.toasts.slice(-3), { id: this.id(), tone, text }] });
@@ -93,6 +93,8 @@ export class ConsoleStore {
   /** Sets the connected wallet (or none) and drops activity lines that belong to another account. */
   setWallet(wallet: { address: string; label: string; readOnly?: boolean } | null): void {
     this.viewer = undefined; // once a wallet has been connected or left, the starting viewer no longer applies
+    this.lastEmissionsReadError = null; // a new wallet's vault reads start fresh: no stale latch or retry window
+    this.lastEmissionsReadAt = -1;
     const mine = wallet?.address.toLowerCase();
     this.patch({ wallet, feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
   }
@@ -228,9 +230,7 @@ export class ConsoleStore {
       this.rerun = { accountChanged: accountChanged || (this.rerun?.accountChanged ?? false) };
       return this.inflight;
     }
-    const run = this.readAll(accountChanged).finally(() => {
-      this.inflight = null;
-    });
+    const run = this.readAll(accountChanged).finally(() => { this.inflight = null; });
     this.inflight = run;
     return run;
   }
@@ -282,7 +282,7 @@ export class ConsoleStore {
     const wallet = this.snapshot.wallet;
     if (!wallet) return;
     const { client } = this.deps;
-    const [eligibility, queue] = await Promise.all([client.eligibility(wallet.address), client.withdrawalQueue(wallet.address)]);
+    const [eligibility, queue, entitlement] = await Promise.all([client.eligibility(wallet.address), client.withdrawalQueue(wallet.address), client.emissions(wallet.address)]);
     let account = null;
     try {
       account = decodeAccount(await client.account(wallet.address));
@@ -291,7 +291,7 @@ export class ConsoleStore {
     }
     // The wallet may have changed while the reads ran; an answer for another account is dropped.
     if (this.snapshot.wallet?.address !== wallet.address) return;
-    this.patch({ eligibility: eligibility.class, queue: queue.queue, account });
+    this.patch({ eligibility: eligibility.class, queue: queue.queue, account, entitlement });
     if (withHistory || this.snapshot.history.length === 0) {
       const history = (await client.history(wallet.address, { limit: 100 })).events;
       if (this.snapshot.wallet?.address === wallet.address) this.patch({ history });

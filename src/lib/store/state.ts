@@ -3,6 +3,7 @@
 import { DEFAULT_TIMEFRAME, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
 import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { SignatureChecks } from "../engine/client";
+import type { EntitlementProof } from "../engine/emissions";
 import type { HistoryEvent, HouseView, QueuedWithdrawal, SignedWithdrawal, MarketId, MarketQuote, MarketView } from "../engine/types";
 import type { MarkProvenance } from "../engine/mark-types";
 import { fixedToNumber } from "../fixed";
@@ -85,6 +86,10 @@ export interface ConsoleState {
   paid: number[];
   /** The payout nonces the vault had not paid when last read. */
   unpaid: number[];
+  /** The connected account's cumulative MONKEY entitlement with its proof, against the node's last posted root. */
+  entitlement: EntitlementProof | null;
+  /** The vault's record of the connected account's MONKEY: what it has minted and its latest posted checkpoint seq. */
+  emissionsVault: { claimed: bigint; latestSeq: number } | null;
   /** What the wallet is asked to sign or send now, shown while it waits for the user. */
   prompt: string | null;
   /** Whether a signed action is in flight. */
@@ -144,6 +149,8 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     approvalsGeneration: 0,
     paid: [],
     unpaid: [],
+    entitlement: null,
+    emissionsVault: null,
     prompt: null,
     busy: false,
     fundingOpen: false,

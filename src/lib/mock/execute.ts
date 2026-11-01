@@ -4,6 +4,7 @@ import { absFixed, bpsOf, fixedFromWire, fixedToWire, mulFixed, type Fixed } fro
 import { metaFor } from "../engine/meta";
 import type { EngineEvent, Fill, MarketId, Reject, Side } from "../engine/types";
 import { equityOf, houseNav, houseNetNotional, marginOf } from "./accounts";
+import { recordEmissionResult } from "./emissions";
 import { adverseBps, executionCost, exceedsSlippage, notionalOf, PROFIT_FEE_BPS, quoteOrder, tieredMargin, type Quote } from "../pricing";
 import type { Holding, MockState } from "./state";
 
@@ -97,6 +98,9 @@ export function fillOrder(state: MockState, order: FillRequest): FillOutcome {
     state.houseCash -= badDebt;
     account.balance = 0n;
   }
+  // The fill's net realised result and any write-off weight the account's share of the open
+  // emission period, as the engine records them (`record_period_result`, emissions.rs).
+  recordEmissionResult(state, req.address, pnl, badDebt);
   return {
     ok: true,
     badDebt,

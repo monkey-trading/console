@@ -15,6 +15,8 @@ export type EngineEvent =
   | { type: "withdrawal_queued"; account: Address; amount: string; requested_seq: number }
   | { type: "withdrawal_queue_updated"; account: Address; requested_seq: number; remaining: string }
   | { type: "withdrawal_rejected"; account: Address; amount: string; reason: Reject }
+  | { type: "emission_allocated"; account: Address; period: number; weight: string; amount: string }
+  | { type: "emission_period_closed"; period: number; budget: string; allocated: string; cancelled: string }
   | { type: "financing"; account: Address; market: MarketId; amount: string }
   | { type: "bad_debt"; account: Address; amount: string }
   | { type: "eligibility_rejected"; account: Address; reason: Reject }
