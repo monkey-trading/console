@@ -41,6 +41,8 @@ export interface LiveDeps {
 const READ_TIMEOUT_MS = 10_000;
 /** How long loading the verifier may take, in milliseconds. */
 const VERIFIER_LOAD_TIMEOUT_MS = 20_000;
+/** How long a withdrawal-queue walk's answer is reused before the next read walks it again. */
+const TOTALS_TTL_MS = 15_000;
 
 export class LiveEngineClient implements EngineClient {
   readonly signatures: SignatureChecks = "checked";
@@ -58,6 +60,8 @@ export class LiveEngineClient implements EngineClient {
   readonly deployment: { chainId: number; vault: string };
   /** The fold of the log's house state: the latest `set_params` and checkpoint, kept fresh by the stream. */
   private readonly houseLog: HouseLog;
+  /** The withdrawal queue's totals read most recently, so a tick's refresh reuses a fresh walk. */
+  private totalsCache: { at: number; totals: QueueTotals } | null = null;
 
   constructor(private readonly deps: LiveDeps) {
     this.deployment = { chainId: deps.chainId, vault: deps.vault };
@@ -173,9 +177,13 @@ export class LiveEngineClient implements EngineClient {
     return this.houseLog.checkpoint;
   }
 
-  /** Walks the public withdrawal queue's signed pages to its end, or to the page cap as a lower bound. */
+  /** Walks the public withdrawal queue's signed pages to its end, or to the page cap as a lower bound; a fresh walk is reused for its TTL. */
   async withdrawalTotals(): Promise<QueueTotals> {
-    return withdrawalTotals(this.transport);
+    const cached = this.totalsCache;
+    if (cached !== null && this.deps.nowMs() - cached.at < TOTALS_TTL_MS) return cached.totals;
+    const totals = await withdrawalTotals(this.transport);
+    this.totalsCache = { at: this.deps.nowMs(), totals };
+    return totals;
   }
 
   async account(address: Address): Promise<AccountView> {
