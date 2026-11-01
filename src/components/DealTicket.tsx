@@ -10,7 +10,7 @@ import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { formatMark } from "@/lib/price-format";
 import { ticketPrices } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
-import { contractUnit, MARGIN_SHORT, NO_SIZE, parseSize, previewTicket, SLIPPAGE_CHOICES, slippageBound } from "@/lib/ticket";
+import { belowMinimum, contractUnit, MARGIN_SHORT, NO_SIZE, parseSize, previewTicket, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { MarketInfo } from "./MarketInfo";
@@ -37,11 +37,13 @@ export function DealTicket() {
   const id = useId();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [kind, setKind] = useState<Kind>("market");
-  const [size, setSize] = useState("");
+  // Null until the trader edits the field, so the size follows the market's minimum as its mark moves; "" is a field they cleared.
+  const [typedSize, setTypedSize] = useState<string | null>(null);
   const [price, setPrice] = useState("");
   const [chosenSlippage, setSlippage] = useState<number>(10);
   const market = state.markets.find((m) => m.id === state.selected);
   if (!market) return null;
+  const size = sizeShown(typedSize, market);
   const slippage = slippageBound(chosenSlippage, market);
   const parsedSize = parseSize(size);
   const qty = parsedSize.kind === "qty" ? parsedSize.qty : 0n;
@@ -51,16 +53,19 @@ export function DealTicket() {
   const preview = previewTicket({ market, side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice, account: state.account, houseNav: state.house.nav, estimates: !live });
   const prices = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview, side, mark: market.mark });
   // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
-  // A size the field refuses says why, so the generic "Enter a size." would only repeat it.
-  const problems = preview.problems.filter((p) => (!live || p !== MARGIN_SHORT) && (parsedSize.kind !== "refused" || p !== NO_SIZE));
-  if (kind === "market" && prices.problem !== null) problems.push(prices.problem);
-  if (parsedSize.kind === "refused") problems.push(parsedSize.message);
+  // A size the field refuses says why, so the generic prompt would only repeat it.
+  const listed = preview.problems.filter((p) => (!live || p !== MARGIN_SHORT) && (parsedSize.kind !== "refused" || p !== NO_SIZE));
+  const sizeProblems = listed.filter((p) => p === belowMinimum(market.view.min_order_notional));
+  const problems = listed.filter((p) => p !== NO_SIZE && !sizeProblems.includes(p));
+  if (kind === "market" && prices.problem !== null) (prices.problemIsSize ? sizeProblems : problems).push(prices.problem);
+  if (parsedSize.kind === "refused") sizeProblems.push(parsedSize.message);
   if (kind !== "market" && triggerPrice === null) problems.push(price.trim() === "" ? "Enter a trigger price." : "Enter the trigger price in digits, such as 61250.50.");
+  const sizeMissing = parsedSize.kind === "empty" || (parsedSize.kind === "qty" && qty === 0n);
   const blockSentence = (why: string | null) => (why === null ? null : `Trading is paused: ${why}.`);
   // A read-only account is named as the cause before eligibility, which it could not attest.
   const readOnlyWhy = signBlock(state.attestation, state.stream, state.wallet?.readOnly === true);
   const gate = !state.wallet ? "Connect a wallet to trade." : state.wallet.readOnly ? blockSentence(readOnlyWhy) : state.eligibility === null ? "Attest your eligibility before trading." : blockSentence(readOnlyWhy);
-  const canPlace = gate === null && problems.length === 0 && !state.busy;
+  const canPlace = gate === null && problems.length === 0 && sizeProblems.length === 0 && !sizeMissing && !state.busy;
   const places = market.places;
   const show = (value: bigint | null) => (value === null ? "—" : formatMark(value, places));
   const submit = () => {
@@ -95,10 +100,14 @@ export function DealTicket() {
         </div>
         <div className="mt-4">
           <label htmlFor={`${id}-size`} className="block text-caption text-fg-2">Size (contracts)</label>
-          <input id={`${id}-size`} value={size} inputMode="decimal" maxLength={24} aria-describedby={`${id}-size-note`} onChange={(event) => setSize(event.target.value)} className={INPUT} />
+          <input id={`${id}-size`} value={size} inputMode="decimal" maxLength={24} aria-describedby={`${id}-size-note ${id}-size-problems`} onChange={(event) => setTypedSize(event.target.value)} className={INPUT} />
           <p id={`${id}-size-note`} className="mt-1 text-label text-fg-3">
             1 contract = 1 {contractUnit(market)} · {preview.notional === null || qty === 0n ? "Notional —" : `Notional ≈ $${formatFixedPlaces(preview.notional, 2)}`}{preview.notional !== null && qty > 0n && kind !== "market" && triggerPrice !== null && triggerPrice > 0n ? " at the trigger price" : ""}
           </p>
+          <div id={`${id}-size-problems`} aria-live="polite" className="space-y-1 text-label leading-relaxed text-ember">
+            {sizeMissing && <p className="mt-1 text-fg-3">{NO_SIZE}</p>}
+            {sizeProblems.map((p) => <p key={p} className="mt-1">{p}</p>)}
+          </div>
         </div>
         <details className="mt-4 rounded border border-line-2">
           <summary className="px-3 py-3.5 text-caption lg:py-2 text-fg-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-glow">Advanced</summary>

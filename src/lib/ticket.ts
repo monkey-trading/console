@@ -1,6 +1,6 @@
 /** What an order ticket shows before the user places the order: the quote, the margin it uses, the limits. */
 
-import { absFixed, bpsOf, divFixed, fixedFromWire, mulFixed, parseFixed, SCALE, type Fixed } from "./fixed";
+import { absFixed, bpsOf, divFixed, fixedFromWire, fixedToWire, mulFixed, parseFixed, SCALE, type Fixed } from "./fixed";
 import { capFor } from "./house";
 import type { MarketView, Side } from "./engine/types";
 import type { AccountModel, MarketModel } from "./models";
@@ -13,8 +13,11 @@ const QTY_STEP: Fixed = SCALE / 1_000_000n;
 /** The ticket's own refusal of an order it cannot value in USD, which the node would decline for want of an FX price. */
 export const NO_FX_PRICE = "No FX price yet, so this order's value in USD is unknown.";
 
-/** The refusal of an order with no size, which a size the field itself refuses does not repeat. */
-export const NO_SIZE = "Enter a size.";
+/** The note an order with no size gets, which a size the field itself refuses does not repeat: a prompt under the field, not an error. */
+export const NO_SIZE = "Enter a size";
+
+/** The refusal of a size under the market's minimum order value, given the spec's `min_order_notional`. */
+export const belowMinimum = (minOrderNotional: string) => `Minimum order is ${minOrderNotional} USD.`;
 
 /** The refusal of a resting order's trigger price that is not above zero. */
 export const TRIGGER_NOT_POSITIVE = "Enter a trigger price above zero.";
@@ -93,6 +96,39 @@ export function parseSize(text: string): SizeInput {
   // Digits and at most six places after the trailing zeros are dropped, which `parseFixed` always takes.
   if (qty === null) throw new Error(`size ${trimmed} matched the size pattern but did not parse`);
   return { kind: "qty", qty };
+}
+
+/**
+ * The size a new ticket starts at: the smallest quantity on the size field's step whose USD value at the
+ * mark, converted as `previewTicket`'s minimum check converts it, reaches the market's `min_order_notional`.
+ * A minimum of zero starts at one step. Null while the market has no mark or no FX price to value it at.
+ * Error cases: none; the value grows with the quantity, so one reaches the minimum, and the search gives up (null) only past 2^128 steps.
+ */
+export function startingSize(market: MarketModel): string | null {
+  const mark = market.mark;
+  if (mark === null || mark <= 0n) return null;
+  const toUsd = usdConverter(market.view, mark);
+  if (toUsd === null) return null;
+  const minimum = fixedFromWire(market.view.min_order_notional);
+  const reaches = (steps: bigint) => toUsd(mulFixed(steps * QTY_STEP, mark)) >= minimum;
+  // The value is non-decreasing in the quantity: double to a quantity that reaches the minimum, then bisect.
+  let high = 1n;
+  while (!reaches(high)) {
+    high *= 2n;
+    if (high > 1n << 128n) return null;
+  }
+  let low = 0n;
+  while (high - low > 1n) {
+    const mid = (low + high) / 2n;
+    if (reaches(mid)) high = mid;
+    else low = mid;
+  }
+  return fixedToWire(high * QTY_STEP);
+}
+
+/** What the size field shows: what the trader typed, even a cleared field (`""`), else the starting size while they have not touched it (`typed` null). */
+export function sizeShown(typed: string | null, market: MarketModel): string {
+  return typed ?? startingSize(market) ?? "";
 }
 
 /** `qty` cut down to the size field's step, so the size it names can be typed. */
@@ -188,7 +224,7 @@ export function previewTicket(input: TicketInput): TicketPreview {
   if (market.reduceOnly && grows) problems.push("This market only accepts orders that reduce a position.");
   if (input.resting && input.triggerPrice != null && input.triggerPrice <= 0n) problems.push(TRIGGER_NOT_POSITIVE);
   if (qty <= 0n) problems.push(NO_SIZE);
-  else if (grows && notional < fixedFromWire(spec.min_order_notional)) problems.push(`Minimum order is ${spec.min_order_notional} USD.`);
+  else if (grows && notional < fixedFromWire(spec.min_order_notional)) problems.push(belowMinimum(spec.min_order_notional));
   if (grows && !input.resting) {
     if (equity <= 0n) problems.push("Fund your account to trade.");
     else if (marginAfter > afterCost) problems.push(MARGIN_SHORT);

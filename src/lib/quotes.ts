@@ -54,6 +54,8 @@ export interface TicketPrices {
   spreadBps: number | null;
   /** Why a market order cannot be sent at a price now; null when it can. */
   problem: string | null;
+  /** Whether that problem is about the order's size, so it belongs under the size field. */
+  problemIsSize: boolean;
 }
 
 /**
@@ -64,9 +66,9 @@ export interface TicketPrices {
 export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; quoteError: string | null; preview: TicketPreview; side: Side; mark: Fixed | null }): TicketPrices {
   const { preview, side } = input;
   if (!input.live) {
-    return { bid: preview.bid, offer: preview.offer, price: preview.quote?.price ?? null, spreadBps: preview.spreadBps, problem: null };
+    return { bid: preview.bid, offer: preview.offer, price: preview.quote?.price ?? null, spreadBps: preview.spreadBps, problem: null, problemIsSize: false };
   }
-  const none = (problem: string): TicketPrices => ({ bid: null, offer: null, price: null, spreadBps: null, problem });
+  const none = (problem: string): TicketPrices => ({ bid: null, offer: null, price: null, spreadBps: null, problem, problemIsSize: false });
   const { quote } = input;
   if (quote === null) {
     if (input.quoteError === null) return none("Waiting for the node's executable quote.");
@@ -78,7 +80,9 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
   const mine = side === "buy" ? ask : bid;
   const spreadBps = ask !== null && bid !== null && input.mark !== null && input.mark > 0n ? Number(((ask.price - bid.price) * 10_000n) / input.mark) : null;
   const problem = mine === null ? "The node would not open an order this large. Try a smaller size." : mine.declined === null ? null : declinedProblem(quote, side, mine.declined);
-  return { bid: bid?.price ?? null, offer: ask?.price ?? null, price: mine?.price ?? null, spreadBps, problem };
+  // The node declining for margin or the house's capacity, or having no step this large, is a matter of the size.
+  const problemIsSize = mine === null || (mine.declined !== null && (mine.declined.kind === "insufficient_margin" || mine.declined.kind === "house_capacity"));
+  return { bid: bid?.price ?? null, offer: ask?.price ?? null, price: mine?.price ?? null, spreadBps, problem, problemIsSize };
 }
 
 /**
