@@ -23,14 +23,14 @@ describe("a WalletConnect session", () => {
   });
 
   it("tells the console when the wallet app ends the live session", async () => {
-    let ended = 0;
-    const env = setup(() => void (ended += 1));
+    const ended: string[] = [];
+    const env = setup((topic) => void ended.push(topic));
     const connecting = env.connector.connect();
     await env.fake.called.promise;
     env.fake.pending.resolve(session("topic-1"));
     await connecting;
     env.fake.deleteSession();
-    expect(ended).toBe(1);
+    expect(ended).toEqual(["topic-1"]); // once, naming the ended session
   });
 
   it("leaves a newer pairing's relay socket open when a cancelled one's link or approval comes late", async () => {

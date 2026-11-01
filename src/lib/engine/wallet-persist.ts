@@ -63,6 +63,16 @@ export function saveChoice(storage: ChoiceStorage, choice: WalletChoice): void {
   }
 }
 
+/**
+ * Drops the stored choice only while it is `expected`: a connection that ends or fails removes its
+ * own remembered choice, never a different one another tab or connect saved under the shared key.
+ * A stored choice that is absent, unreadable, or of another kind or topic (an injected choice has
+ * no topic to match) stays.
+ */
+export function clearChoiceIf(storage: ChoiceStorage, expected: WalletChoice): void {
+  if (JSON.stringify(loadChoice(storage)) === JSON.stringify(expected)) clearChoice(storage);
+}
+
 /** Drops the choice when the remembered connection ends; best-effort like `saveChoice`. */
 export function clearChoice(storage: ChoiceStorage): void {
   try {
