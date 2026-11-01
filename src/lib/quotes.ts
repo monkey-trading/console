@@ -4,7 +4,7 @@
  */
 
 import type { MarketId, MarketQuote, Reject, Side } from "./engine/types";
-import { fixedFromWire, type Fixed } from "./fixed";
+import { fixedFromWire, formatUsd, mulFixed, type Fixed } from "./fixed";
 import { describeReject } from "./messages";
 import type { TicketPreview } from "./ticket";
 
@@ -77,6 +77,20 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
   const bid = executablePrice(quote, "sell", preview.qty);
   const mine = side === "buy" ? ask : bid;
   const spreadBps = ask !== null && bid !== null && input.mark !== null && input.mark > 0n ? Number(((ask.price - bid.price) * 10_000n) / input.mark) : null;
-  const problem = mine === null ? "The node would not open an order this large. Try a smaller size." : mine.declined === null ? null : describeReject(mine.declined);
+  const problem = mine === null ? "The node would not open an order this large. Try a smaller size." : mine.declined === null ? null : declinedProblem(quote, side, input.mark, mine.declined);
   return { bid: bid?.price ?? null, offer: ask?.price ?? null, price: mine?.price ?? null, spreadBps, problem };
+}
+
+/**
+ * The message for a size the node's ladder declines. An `insufficient_margin` decline's equity and
+ * margin figures are computed for the probe at the declined step's top, not for the order's size
+ * (the ladder's steps sit at spread-tier tops, monkey-trading/engine#290), so they cannot be shown
+ * as the order's; the largest step that still fills is the size the account can open.
+ */
+function declinedProblem(quote: MarketQuote, side: Side, mark: Fixed | null, declined: Reject): string {
+  if (declined.kind !== "insufficient_margin") return describeReject(declined);
+  const steps = side === "buy" ? quote.ask : quote.bid;
+  const fitting = [...steps].reverse().find((s) => s.declined === undefined);
+  if (fitting === undefined || mark === null) return "Not enough equity to open a position here.";
+  return `The largest position your equity opens here is ≈ ${formatUsd(mulFixed(fixedFromWire(fitting.qty), mark))}. Try a smaller size.`;
 }
