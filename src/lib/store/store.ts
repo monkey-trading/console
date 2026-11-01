@@ -279,10 +279,6 @@ export class ConsoleStore {
       // node that 404s it keeps asking for the archive scan until it names a log head.
       this.barsSeed.seed(selected, this.snapshot.timeframe);
       this.barsSeed.askScan();
-      // The house panel's reads run outside this refresh's lock and error handling, before the
-      // account reads: a failing account endpoint or a slow queue walk must not starve them, and
-      // they must not delay the next market or account read nor toast as if the whole refresh failed.
-      readHousePanelSoon(this);
       // loadAccount reports its own failure and never rejects: an account failure cannot stale the figures above.
       if (this.snapshot.wallet) await loadAccount(this, accountChanged);
       this.lastReadError = null;
@@ -293,6 +289,10 @@ export class ConsoleStore {
       // Retained figures stay, marked not fresh, until a refresh reads them again.
       if (this.snapshot.houseReady) this.patch({ houseFresh: false });
     }
+    // The house panel's reads run on their own schedule, outside this refresh's lock and error
+    // handling: a failing markets or house read must not stop them, and they never delay the next
+    // market or account read nor toast as if the whole refresh failed.
+    readHousePanelSoon(this);
     const again = this.rerun;
     this.rerun = null;
     if (again) await this.readAll(again.accountChanged);
