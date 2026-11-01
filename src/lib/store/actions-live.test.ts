@@ -175,11 +175,21 @@ describe("a wallet change", () => {
     };
     const { store } = await connected();
     store.deps.persistence = persistence;
-    await connectWallet(store, "injected", true);
+    expect(await connectWallet(store, "injected", true)).toBe(true);
     expect(loadChoice(persistence)).toEqual({ kind: "injected" });
     // A read-only watch account is not a connection the console persists.
     held.clear();
-    await connectWallet(store, "watch", true);
+    expect(await connectWallet(store, "watch", true)).toBe(true);
     expect(loadChoice(persistence)).toBeNull();
+  });
+
+  it("adopts an already-established wallet without asking the connector, and reports failure as false", async () => {
+    const { store, wallet } = await connected();
+    let asked = 0;
+    store.deps.wallets.connect = async () => { asked += 1; throw new Error("must not be asked"); };
+    expect(await connectWallet(store, "walletconnect", true, wallet)).toBe(true);
+    expect(asked).toBe(0);
+    store.deps.wallets.connect = async () => { throw new Error("offline"); };
+    expect(await connectWallet(store, "walletconnect", true)).toBe(false);
   });
 });

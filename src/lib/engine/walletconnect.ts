@@ -1,7 +1,7 @@
 /**
  * A wallet app paired through WalletConnect, as a `WalletConnector`. Every request goes to the wallet
  * over WalletConnect's relay, none to an HTTP RPC; the SDK keeps its keys and sessions in memory, sends
- * no telemetry, and loads only when the user picks WalletConnect.
+ * no telemetry, and loads only when the user picks WalletConnect or a stored choice reconnects (#82).
  */
 
 import { WALLETCONNECT_RELAY } from "./deploy";

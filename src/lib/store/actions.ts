@@ -40,22 +40,23 @@ function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
   );
 }
 
-export async function connectWallet(store: ConsoleStore, optionId: string, quiet = false, connected?: Wallet): Promise<void> {
+export async function connectWallet(store: ConsoleStore, optionId: string, quiet = false, connected?: Wallet): Promise<boolean> {
   try {
     const wallet = connected ?? (await store.deps.wallets.connect(optionId));
-    // The wallet this one replaces keeps no session open.
     if (store.liveWallet !== wallet) release(store, store.liveWallet);
     store.liveWallet = wallet;
     store.patch(NO_ACCOUNT);
     store.setWallet({ address: wallet.address, label: wallet.label, ...(wallet.readOnly ? { readOnly: true } : {}) });
     if (store.deps.persistence !== undefined && optionId === "injected") saveChoice(store.deps.persistence, { kind: "injected" });
-    offerUsdcImport(store, wallet);
     await loadAccount(store, true);
+    if (!quiet) offerUsdcImport(store, wallet);
     if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);
+    return true;
   } catch (error) {
     // A node that cannot be trusted is reported by the attestation banner and the stream, once; the account read waiting on the same check does not repeat it.
     if (!store.noteAccess(error) && !(error instanceof UntrustedError)) store.toast("error", error instanceof Error ? error.message : "The wallet did not connect.");
     if (!store.getSnapshot().wallet) store.liveWallet = null;
+    return false;
   }
 }
 

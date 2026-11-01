@@ -2,7 +2,7 @@
 
 /** Creates the store once, over the in-browser mock node or a live node by the build's deployment, follows the node's clock, and shares them. */
 
-import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { MultiConnector } from "@/lib/engine/connectors";
 import { parseDeploy, rawDeploy, type Deploy } from "@/lib/engine/deploy";
@@ -10,7 +10,7 @@ import { InjectedConnector } from "@/lib/engine/injected";
 import { createLiveClient, GLUE_PATH } from "@/lib/engine/live-session";
 import type { Eip1193Provider } from "@/lib/engine/provider-wallet";
 import { WalletConnectConnector } from "@/lib/engine/walletconnect";
-import { loadChoice, saveChoice, type ChoiceStorage } from "@/lib/engine/wallet-persist";
+import { loadChoice, saveChoice, clearChoice, type ChoiceStorage } from "@/lib/engine/wallet-persist";
 import type { VerifierModule } from "@/lib/engine/wasm-verifier";
 import { WatchConnector } from "@/lib/engine/watch-wallet";
 import { DEMO_ADDRESS } from "@/lib/mock/demo";
@@ -60,11 +60,18 @@ function createLiveSession(deploy: Deploy): Session {
   if (deploy.chainId === null || deploy.vault === null) throw new Error("A live session needs the deployment's chain id and vault.");
   const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, add: deploy.rpcUrl === null ? null : { name: deploy.chainId === 31337 ? "Anvil (local)" : `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-  // The SDK is a separate chunk, loaded when the user picks WalletConnect.
-  // When the wallet app ends the session, the console shows the wallet disconnected rather than failing every action.
-  const persistence: ChoiceStorage = window.localStorage;
+  // The choice persists in localStorage, reached lazily: this function also runs on the server,
+  // where `window` does not exist, so the storage is touched only from effects and handlers.
+  const persistence: ChoiceStorage = {
+    getItem: (key) => window.localStorage.getItem(key),
+    setItem: (key, value) => window.localStorage.setItem(key, value),
+    removeItem: (key) => window.localStorage.removeItem(key),
+  };
+  // When the wallet app ends the session, the console shows the wallet disconnected rather than
+  // failing every action, and forgets the choice: the remembered connection has ended.
   const ended = () => {
     if (store.liveWallet?.label !== "WalletConnect") return;
+    clearChoice(persistence);
     disconnectWallet(store);
     store.toast("info", "Your wallet ended the WalletConnect session, so the console disconnected it.");
   };
@@ -104,14 +111,16 @@ function createSession(): Session {
 const MAX_TICK_MS = 5_000;
 
 /**
- * Reconnects a wallet connection a previous page load stored (monkey-trading/console#82). The
- * injected wallet re-asks its provider silently; a WalletConnect session cannot survive a reload
- * in the SDK's memory, so a dead session falls back to the pairing dialog.
+ * Reconnects a wallet connection a previous page load stored (monkey-trading/console#82). An
+ * injected wallet reconnects through the existing provider flow; a WalletConnect session cannot
+ * survive a reload in the SDK's memory, so a dead session falls back to the pairing dialog. A
+ * reconnect the visitor cancels or that fails forgets the choice, so it does not repeat on the
+ * next load.
  */
-async function resumeWallet(store: ConsoleStore, walletConnect: WalletConnectConnector, topic: string): Promise<void> {
+async function resumeWallet(store: ConsoleStore, persistence: ChoiceStorage, walletConnect: WalletConnectConnector, topic: string): Promise<void> {
   const wallet = await walletConnect.resume(topic).catch(() => null);
-  if (wallet === null) return connectWallet(store, "walletconnect", true);
-  await connectWallet(store, "walletconnect", true, wallet);
+  const connected = wallet === null ? await connectWallet(store, "walletconnect", true) : await connectWallet(store, "walletconnect", true, wallet);
+  if (!connected) clearChoice(persistence);
 }
 
 /**
@@ -123,15 +132,25 @@ async function resumeWallet(store: ConsoleStore, walletConnect: WalletConnectCon
 export function ConsoleProvider({ children }: { children: ReactNode }) {
   const [session] = useState(createSession);
   const { store } = session;
+  /** Set once a stored choice has been reconnected, so a repeated effect run (React StrictMode) does not start a second one. */
+  const reconnected = useRef(false);
   useEffect(() => {
     if (session.node === null) {
       // A live node sets the clock with its first message; the page follows it, and the account the address names.
       const stopLive = store.start(0);
       const stopFeeds = followAccountFeeds(store);
-      const choice = session.persistence === null ? null : loadChoice(session.persistence);
-      if (choice?.kind === "injected") void connectWallet(store, "injected", true);
-      else if (choice?.kind === "walletconnect" && session.walletConnect !== null) void resumeWallet(store, session.walletConnect, choice.topic);
+      // An address in the URL names the account to watch; it wins over a stored connection
+      // choice, which would otherwise replace the read-only view when its wallet answers.
       if (new URLSearchParams(window.location.search).has("account")) void connectWallet(store, "watch", true);
+      else if (!reconnected.current) {
+        reconnected.current = true;
+        const choice = session.persistence === null ? null : loadChoice(session.persistence);
+        if (choice?.kind === "injected") {
+          void connectWallet(store, "injected", true).then((connected) => { if (!connected && session.persistence !== null) clearChoice(session.persistence); });
+        } else if (choice?.kind === "walletconnect" && session.walletConnect !== null && session.persistence !== null) {
+          void resumeWallet(store, session.persistence, session.walletConnect, choice.topic);
+        }
+      }
       return () => {
         stopFeeds();
         stopLive();
@@ -170,7 +189,7 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       unsubscribe();
       stop();
     };
-  }, [store, session.node, session.persistence, session.walletConnect]);
+  }, [store, session]);
   useEffect(() => {
     if (session.node !== null) return;
     // The node's quote subscription follows the account, the selected market and the markets held; a

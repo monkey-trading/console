@@ -44,11 +44,22 @@ describe("the persisted wallet choice", () => {
     }
   });
 
-  it("clears the choice on an explicit disconnect", () => {
+  it("clearChoice drops the stored value", () => {
     const held = storage();
     saveChoice(held, { kind: "injected" });
     clearChoice(held);
     expect(loadChoice(held)).toBeNull();
     expect(held.held.has(WALLET_CHOICE_KEY)).toBe(false);
+  });
+
+  it("is best-effort: a denied or full storage reads as none and never throws", () => {
+    const denied: ChoiceStorage = {
+      getItem: () => { throw new Error("denied"); },
+      setItem: () => { throw new Error("denied"); },
+      removeItem: () => { throw new Error("denied"); },
+    };
+    expect(loadChoice(denied)).toBeNull();
+    expect(() => saveChoice(denied, { kind: "injected" })).not.toThrow();
+    expect(() => clearChoice(denied)).not.toThrow();
   });
 });

@@ -1,8 +1,8 @@
 /**
  * The wallet connection the console persists across page loads (monkey-trading/console#82,
  * approved by the owner there): the connector choice alone — "injected", or the WalletConnect
- * session topic — never keys, addresses, or session material. Cleared on explicit disconnect and
- * disclosed on /notices.
+ * session topic — never keys, addresses, or the session's secrets. Cleared when the remembered
+ * connection ends and disclosed on /notices.
  */
 
 /** The persisted choice: which connector reconnects on load. */
@@ -22,12 +22,18 @@ export const WALLET_CHOICE_KEY = "monkeytrading.wallet-choice";
 const TOPIC_MAX = 200;
 
 /**
- * Reads the persisted choice, or null when none is stored or the value is not one the console
- * wrote: what a visitor's browser already holds is untrusted input, parsed strictly and ignored,
- * never acted on, when it does not parse.
+ * Reads the persisted choice, or null when none is stored, the value is not one the console
+ * wrote, or the storage cannot be read: what a visitor's browser already holds is untrusted
+ * input, parsed strictly and ignored, never acted on, when it does not parse. Storage is
+ * best-effort throughout: a browser that denies site data loses the convenience, nothing else.
  */
 export function loadChoice(storage: ChoiceStorage): WalletChoice | null {
-  const raw = storage.getItem(WALLET_CHOICE_KEY);
+  let raw: string | null;
+  try {
+    raw = storage.getItem(WALLET_CHOICE_KEY);
+  } catch {
+    return null; // storage denied: nothing is remembered
+  }
   if (raw === null) return null;
   let parsed: unknown;
   try {
@@ -44,12 +50,24 @@ export function loadChoice(storage: ChoiceStorage): WalletChoice | null {
   return null;
 }
 
-/** Writes the choice; the only browser storage the console keeps, and the whole of what it keeps. */
+/**
+ * Writes the choice; the only browser storage the console keeps, and the whole of what it keeps.
+ * Best-effort: a quota or permission failure leaves nothing stored and never interrupts the
+ * wallet flow that asked for the write.
+ */
 export function saveChoice(storage: ChoiceStorage, choice: WalletChoice): void {
-  storage.setItem(WALLET_CHOICE_KEY, JSON.stringify(choice));
+  try {
+    storage.setItem(WALLET_CHOICE_KEY, JSON.stringify(choice));
+  } catch {
+    // storage denied or full: the connection simply is not remembered
+  }
 }
 
-/** Drops the choice, on an explicit disconnect. */
+/** Drops the choice, on an explicit disconnect; best-effort like `saveChoice`. */
 export function clearChoice(storage: ChoiceStorage): void {
-  storage.removeItem(WALLET_CHOICE_KEY);
+  try {
+    storage.removeItem(WALLET_CHOICE_KEY);
+  } catch {
+    // storage denied: nothing to drop anyway
+  }
 }

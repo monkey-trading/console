@@ -34,7 +34,7 @@ export function WalletButton() {
     return (
       <div className="flex items-center gap-2">
         <span className="hidden rounded border border-line-2 px-2 py-2.5 text-caption text-fg-2 sm:inline lg:py-2" title={wallet.address}>{shortHex(wallet.address)}</span>
-        <button ref={primary} type="button" onClick={() => { moved.current = true; if (persistence !== null) clearChoice(persistence); disconnectWallet(store); }} className={BUTTON}>Disconnect</button>
+        <button ref={primary} type="button" onClick={() => { moved.current = true; if (persistence !== null && wallet.readOnly !== true) clearChoice(persistence); disconnectWallet(store); }} className={BUTTON}>Disconnect</button>
       </div>
     );
   }
