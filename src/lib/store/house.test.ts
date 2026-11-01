@@ -86,6 +86,11 @@ describe("the store's house panel state", () => {
     await store.refresh(false);
     await settle();
     expect(store.getSnapshot().toasts.some((t) => t.text === "account still unavailable")).toBe(true);
+    // A new wallet's identical failure is reported: the latch does not carry over.
+    store.setWallet({ address: "0x00000000000000000000000000000000000000bb", label: "Other" });
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot().toasts.filter((t) => t.text === "account still unavailable")).toHaveLength(2);
   });
 
   it("starts no house reads once the session has stopped", async () => {

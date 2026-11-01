@@ -107,6 +107,7 @@ export class ConsoleStore {
     this.viewer = undefined; // once a wallet has been connected or left, the starting viewer no longer applies
     this.lastEmissionsReadError = null; // a new wallet's vault reads start fresh: no stale latch or retry window
     this.lastEmissionsReadAt = -1;
+    this.lastAccountError = null; // its account reads start fresh too: the same failure under a new wallet is reported
     const mine = wallet?.address.toLowerCase();
     this.patch({ wallet, feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
   }
@@ -282,8 +283,7 @@ export class ConsoleStore {
       // account reads: a failing account endpoint or a slow queue walk must not starve them, and
       // they must not delay the next market or account read nor toast as if the whole refresh failed.
       readHousePanelSoon(this);
-      // loadAccount reports its own failure and never rejects: an account endpoint's failure
-      // cannot mark the markets and house figures this refresh just read as stale.
+      // loadAccount reports its own failure and never rejects: an account failure cannot stale the figures above.
       if (this.snapshot.wallet) await loadAccount(this, accountChanged);
       this.lastReadError = null;
     } catch (error) {
