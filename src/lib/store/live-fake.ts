@@ -1,6 +1,6 @@
 /** Tests only: a live client with canned reads, and a store over it. */
 
-import { EngineError, type ClientEvent, type EngineClient, type SignatureChecks } from "../engine/client";
+import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks } from "../engine/client";
 import type { EntitlementProof } from "../engine/emissions";
 import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
@@ -70,6 +70,10 @@ export class FakeClient implements EngineClient {
   async placeOrder(): Promise<never> { throw new EngineError(501, "no"); }
   async cancelOrder(): Promise<never> { throw new EngineError(501, "no"); }
   async withdraw(): Promise<never> { throw new EngineError(501, "no"); }
+  /** Canned session-key registration and revocation answers; a test may replace them. */
+  sessionKeyResult: ActionResult = { seq: 1, events: [{ type: "session_key_registered", account: "0x0", session_key: "0x0", expires_at: 0 }] };
+  async registerSessionKey(): Promise<ActionResult> { return this.sessionKeyResult; }
+  async revokeSessionKey(): Promise<ActionResult> { return { seq: 1, events: [{ type: "session_key_revoked", account: "0x0", session_key: "0x0" }] }; }
   async reissue(): Promise<never> { throw new EngineError(501, "no"); }
   async findWithdrawal() { return { withdrawal: null, complete: true, reached: null }; }
   async scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>) { this.scans.push({ fromSeq, budget, rules, sessions }); return this.scanned; }

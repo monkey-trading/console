@@ -9,11 +9,11 @@ import { QueueTotalsWalk } from "./live-queue";
 import { collateral, plainText, READ_TIMEOUT_MS } from "./live-plain";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
-import { scanForWithdrawal, type ScanResult } from "./live-scan";
+import { scanForWithdrawal, type ScanDeps, type ScanResult } from "./live-scan";
 import { LiveStream, type QuoteRequest, type Scheduler, type Socket } from "./live-stream";
 import { SignedTransport } from "./transport";
 import { NodeTrust } from "./trust";
-import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PriceRules, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
+import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PriceRules, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 import type { Verifier } from "./verifier";
 import { newChallenge, type CheckpointEntry } from "./wire";
@@ -60,9 +60,7 @@ export class LiveEngineClient implements EngineClient {
   private readonly houseLog: HouseLog;
   /** The public withdrawal queue's size, walked within a page cap and cached for its TTL. */
   private readonly totalsWalk: QueueTotalsWalk;
-  /** The public withdrawal queue's size, from the walk cached for its TTL. */
   readonly withdrawalTotals: () => Promise<QueueTotals>;
-  /** The account's MONKEY entitlement proof, or null before the node holds one. */
   readonly emissions: (address: Address) => Promise<EntitlementProof | null>;
 
   constructor(private readonly deps: LiveDeps) {
@@ -75,11 +73,8 @@ export class LiveEngineClient implements EngineClient {
       onStatus: (status) => this.emit({ type: "attestation", status }),
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
     });
-    this.transport = new SignedTransport({ ...deps, verifier: () => this.requireVerifier(), trust: this.trust, challenge, signal: this.signal });
-    this.houseLog = new HouseLog(async (fromSeq, skipPast, dead) => {
-      const signer = await this.trust.signer();
-      return scanHouse({ ...deps, origin: deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge }, fromSeq, HOUSE_SCAN_CHUNK, skipPast, dead);
-    }, deps.nowMs);
+    this.transport = new SignedTransport({ ...deps, verifier: () => this.requireVerifier(), trust: this.trust, challenge, signal: () => this.deps.signal?.() ?? AbortSignal.timeout(READ_TIMEOUT_MS) });
+    this.houseLog = new HouseLog(async (fromSeq, skipPast, dead) => scanHouse(await this.scanDeps(await this.trust.signer()), fromSeq, HOUSE_SCAN_CHUNK, skipPast, dead), deps.nowMs);
     this.totalsWalk = new QueueTotalsWalk(this.transport, deps.nowMs);
     this.withdrawalTotals = () => this.totalsWalk.totals();
     this.emissions = (address) =>
@@ -102,8 +97,6 @@ export class LiveEngineClient implements EngineClient {
       this.listeners.delete(listener);
     };
   }
-
-  private readonly signal = (): AbortSignal => this.deps.signal?.() ?? AbortSignal.timeout(READ_TIMEOUT_MS);
 
   /** The verifier, loading it the first time. */
   private verifier(): Promise<Verifier> {
@@ -154,7 +147,7 @@ export class LiveEngineClient implements EngineClient {
     return (await this.transport.get("/v1/house")) as HouseView;
   }
 
-  /** The latest `set_params` folded so far; the catch-up read runs behind the answer when it is not done. */
+  /** The latest `set_params` folded so far; the catch-up read runs behind the answer when it is not. */
   async houseParams(): Promise<HouseParams | null> {
     this.houseLog.kick();
     return this.houseLog.params;
@@ -176,7 +169,7 @@ export class LiveEngineClient implements EngineClient {
     return (await this.transport.get(`/v1/accounts/${address}`)) as AccountView;
   }
 
-  /** The engine has no region route: it screens each action, so a live client learns of a refusal from the action. */
+  /** The engine has no region route: it screens each action, so a refusal reaches a live client as the action's. */
   async accessProbe(): Promise<void> {}
 
   async nonce(address: Address): Promise<{ next_nonce: number; time_ms: number }> {
@@ -202,28 +195,37 @@ export class LiveEngineClient implements EngineClient {
     return (await this.transport.get(`/v1/accounts/${address}/history${suffix}`)) as HistoryPage;
   }
 
-  /** Posts a signed action; the node answers with the events its command produced, signed for this request. */
-  private async action(path: string, body: unknown): Promise<ActionResult> {
-    const answer = await this.transport.post(path, body);
+  /** Sends a signed action — `POST`, or `DELETE` for the session-key revocation — and answers with the events its command produced, signed for this request. */
+  private async action(method: "POST" | "DELETE", path: string, body: unknown): Promise<ActionResult> {
+    const answer = method === "POST" ? await this.transport.post(path, body) : await this.transport.delete(path, body);
     if (!Array.isArray(answer.body)) throw new EngineError(0, "The node's signed answer to the action was not a list of events.");
     // The attested enclave signed this list for this request, so its events are the engine's.
     return { seq: answer.seq ?? 0, events: answer.body as ActionResult["events"] };
   }
 
   attestEligibility(request: EligibilityRequest): Promise<ActionResult> {
-    return this.action("/v1/eligibility", request);
+    return this.action("POST", "/v1/eligibility", request);
   }
 
   placeOrder(request: OrderRequest): Promise<ActionResult> {
-    return this.action("/v1/orders", request);
+    return this.action("POST", "/v1/orders", request);
   }
 
   cancelOrder(request: CancelRequest): Promise<ActionResult> {
-    return this.action("/v1/orders/cancel", request);
+    return this.action("POST", "/v1/orders/cancel", request);
   }
 
   withdraw(request: WithdrawalRequest): Promise<ActionResult> {
-    return this.action("/v1/withdrawals", request);
+    return this.action("POST", "/v1/withdrawals", request);
+  }
+
+  registerSessionKey(request: SessionKeyRequest): Promise<ActionResult> {
+    return this.action("POST", "/v1/session-keys", request);
+  }
+
+  /** The node's route is `DELETE` with the same signed body shape as the registration, minus the expiry. */
+  revokeSessionKey(request: SessionKeyRevocationRequest): Promise<ActionResult> {
+    return this.action("DELETE", "/v1/session-keys", request);
   }
 
   async reissue(account: Address, nonce: number, body: { replaces_expires_at: number; signature: string }): Promise<void> {
@@ -231,20 +233,22 @@ export class LiveEngineClient implements EngineClient {
   }
 
   async findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<ScanResult> {
-    const signer = await this.trust.signer();
-    return scanForWithdrawal({ ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) }, account, nonce, fromSeq);
+    return scanForWithdrawal(await this.scanDeps(await this.trust.signer()), account, nonce, fromSeq);
   }
 
   async scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>, dead?: () => boolean): Promise<ScannedMark[]> {
     // The backfill reads the signed log only: every mark the console plots derives from an enclave-signed frame.
-    const signer = await this.trust.signer();
-    return scanForMarks({ ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) }, fromSeq, budget, rules, sessions, dead);
+    return scanForMarks(await this.scanDeps(await this.trust.signer()), fromSeq, budget, rules, sessions, dead);
+  }
+
+  /** The deps a signed log scan takes: the stream origin, a verified signer, and a fresh challenge. */
+  private async scanDeps(signer: string): Promise<ScanDeps> {
+    return { ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) };
   }
 
   /** The market's index-mark history, one signed page; the enclave signs the shape, as every answer. */
   async marks(market: MarketId, resolution: MarkResolution, fromMs: number, toMs: number): Promise<MarkPage> {
-    const query = new URLSearchParams({ resolution, from_ms: String(fromMs), to_ms: String(toMs) });
-    return (await this.transport.get(`/v1/markets/${market}/marks?${query}`)) as MarkPage;
+    return (await this.transport.get(`/v1/markets/${market}/marks?${new URLSearchParams({ resolution, from_ms: String(fromMs), to_ms: String(toMs) })}`)) as MarkPage;
   }
 
   quotes(request: QuoteRequest | null): void {
@@ -260,8 +264,7 @@ export class LiveEngineClient implements EngineClient {
       const stream = new LiveStream({
         ...this.deps, verifier: () => this.requireVerifier(), origin: this.deps.streamOrigin, trust: this.trust, challenge: this.deps.challenge ?? (() => newChallenge()),
         onMessage: (message) => {
-          // The stream starts at the live end, so a `set_params` it carries is the latest the log
-          // records; the catch-up read folds what predates the connection the same way.
+          // The stream starts at the live end, so a `set_params` it carries is the latest the log records.
           const entry = setParamsOf(message.cmd, message.events);
           if (entry !== null) this.houseLog.foldParams(message.seq, entry);
           for (const subscriber of this.subscribers) subscriber(message);
@@ -274,8 +277,7 @@ export class LiveEngineClient implements EngineClient {
           this.houseLog.uncaught(); // the reconnection resumes at the live end: re-read the gap
           this.emit({ type: "problem", reason });
         },
-        // A connection starts at the live end and names its signed time only once live: anything
-        // sequenced between the last catch-up and this moment needs another catch-up read.
+        // The connection names its signed time only once live: anything sequenced since the last catch-up needs another.
         onFeed: (status: FeedStatus, time?: number) => {
           if (status === "live") this.houseLog.uncaught();
           this.emit(time === undefined ? { type: "feed", status } : { type: "feed", status, time });

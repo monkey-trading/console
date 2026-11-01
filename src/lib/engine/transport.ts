@@ -91,7 +91,12 @@ export class SignedTransport {
     return this.attempt("POST", path, JSON.stringify(body), await this.deps.trust.signer());
   }
 
-  private async attempt(method: "GET" | "POST", path: string, requestBody: string | null, signer: string): Promise<SignedAnswer> {
+  /** `DELETE path` with `body` as JSON, resolving with the signed answer of a 2xx; as `post`, never sent again after an answer that does not verify. */
+  async delete(path: string, body: unknown): Promise<SignedAnswer> {
+    return this.attempt("DELETE", path, JSON.stringify(body), await this.deps.trust.signer());
+  }
+
+  private async attempt(method: "GET" | "POST" | "DELETE", path: string, requestBody: string | null, signer: string): Promise<SignedAnswer> {
     const challenge = this.deps.challenge();
     let response: Response;
     let bytes: Uint8Array;

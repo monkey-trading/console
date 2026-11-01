@@ -6,7 +6,7 @@
 import type { EntitlementProof } from "../engine/emissions";
 import type { Wallet } from "../engine/wallet";
 import { formatMonkey } from "../format";
-import { errorText, prompting } from "./actions";
+import { errorText, prompting } from "./signing";
 import type { ConsoleStore } from "./store";
 
 /** Where the account's MONKEY stands: what the node's last posted root proves owed against what the vault has minted. */

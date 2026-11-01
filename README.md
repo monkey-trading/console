@@ -15,8 +15,9 @@ A build can instead talk to a real engine node: it checks the node's attestation
 attested enclave signed for the request, and follows the node's signed stream, which starts at the live end of the log and reconnects there, marking the feed stale
 (and disabling order entry) when it stops. With a browser wallet, or a wallet app over WalletConnect, it
 deposits USDC to the vault, signs the engine's typed requests (orders, cancels, withdrawals, the eligibility
-declaration) for a node whose attestation it accepts, trades at the executable quote the node streams for the
-account, and claims approved withdrawals on the vault. The checks run
+declaration) for a node whose attestation it accepts — orders and cancels with an ephemeral in-browser
+session key the wallet authorizes with one signature at connect, never the key itself —, trades at the
+executable quote the node streams for the account, and claims approved withdrawals on the vault. The checks run
 in the engine's own verifier, built for the browser (`public/engine-verify/`, pinned by SHA-256 in
 `src/lib/engine/wasm-pin.json`, which `npm run build` checks).
 

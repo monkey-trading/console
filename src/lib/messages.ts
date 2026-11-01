@@ -48,6 +48,12 @@ export function describeReject(reject: Reject): string {
     case "missing_signature": return "The request was not signed.";
     case "invalid_nonce": return "The request was out of order. Try again.";
     case "payout_unavailable": return "The node cannot pay withdrawals yet.";
+    case "session_key_scope": return "A session key can trade but never move funds; sign this with the wallet.";
+    case "invalid_session_key": return "The node refused this session key.";
+    case "session_key_unsupported": return "This node does not support session keys yet.";
+    case "expired": return "The request had already expired.";
+    case "expiry_too_far": return "The expiry was past the node's bound.";
+    case "too_many_session_keys": return "This account already holds the most session keys the node allows.";
   }
   // A refusal the engine adds later must get a case above; until then the user still sees that one happened.
   return unnamed(reject);
@@ -81,6 +87,10 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
     // Operator housekeeping is not the viewer's activity.
     case "admin_applied": return null;
     case "admin_rejected": return null;
+    // The login step reports itself; the log shows no line for key bookkeeping.
+    case "session_key_registered": return null;
+    case "session_key_revoked": return null;
+    case "session_key_rejected": return null;
   }
   // Events the engine adds later stay out of the log until they get a case above.
   return unnamedEvent(event);

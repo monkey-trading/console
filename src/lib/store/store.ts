@@ -2,7 +2,8 @@
 
 import { MAX_BARS, pushTick, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
 import { maySign } from "../engine/attestation";
-import { EngineError, type ClientEvent } from "../engine/client";
+import type { ClientEvent } from "../engine/client";
+import type { SessionKeySigner } from "../engine/session-key";
 import type { MarketId, StreamMessage } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
 import { fixedToNumber } from "../fixed";
@@ -10,14 +11,18 @@ import { decodeAccount, decodeHouse, decodeMarket } from "../models";
 import { loadAccount } from "./account";
 import { BarsSeed } from "./bars-seed";
 import { FEED_LIMIT, feedFrom, isMine } from "./feed";
-import { initialState, seedAllBars, type BlockReason, type ConsoleState, type ToastMessage } from "./state";
+import { initialState, seedAllBars, type ConsoleState, type ToastMessage } from "./state";
 import { readHousePanelSoon } from "./house";
+import { noteAccess } from "./signing";
 import type { StoreDeps } from "./store-deps";
 
 export class ConsoleStore {
   readonly deps: StoreDeps;
   /** The connected wallet, which holds a signer and so is not part of the snapshot. */
   liveWallet: Wallet | null = null;
+  /** The ephemeral in-browser key trading signs with after the one-signature login (console#68), and its registration's expiry by the node's clock; the private key never enters the snapshot. */
+  sessionKey: SessionKeySigner | null = null;
+  sessionKeyExpiresAt = 0;
   /** Bookkeeping for the background vault reads: `paidCheck`/`emissionsCheck` name the wallet each runs for, `lastEmissionsReadAt` throttles the MONKEY record's retries, `lastEmissionsReadError` dedupes its repeated failures. */
   paidCheck: Wallet | null = null;
   emissionsCheck: Wallet | null = null;
@@ -37,7 +42,7 @@ export class ConsoleStore {
   readonly barsSeed = new BarsSeed(this);
   /** When each market's bar bucket was last ticked from the node's mark, so a history merge can tell a stale live candle from a fresh one; derived bookkeeping, not part of the snapshot. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
-  /** Set when the store stops following the node so pending history work stands down; bumped on each start so an earlier cycle's scans stand down (StrictMode re-runs the effect). Neither is part of the snapshot. */
+  /** Stand-down flags for pending history work, bumped on each start so an earlier cycle's scans stand down (StrictMode re-runs the effect); not part of the snapshot. */
   stopped = false;
   scanEpoch = 0;
   /** Whether trust in the node was lost (a failed check or a wrong clock) and not yet regained. */
@@ -127,14 +132,7 @@ export class ConsoleStore {
 
   /** Marks the caller as refused when `error` is an access refusal; true if it was. */
   noteAccess(error: unknown): boolean {
-    if (error instanceof EngineError && error.reject?.kind === "access") {
-      const reason = error.reject.reason;
-      if (reason === "united_states" || reason === "sanctioned_jurisdiction") {
-        this.patch({ blocked: reason satisfies BlockReason, fundingOpen: false });
-        return true;
-      }
-    }
-    return false;
+    return noteAccess(this, error);
   }
 
   /**

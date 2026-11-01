@@ -30,6 +30,14 @@ export default function Page() {
           while a console page is open, or when a reconnect does not complete.
         </p>
         <p className={P}>
+          When your wallet connects, the console asks it for one signature that authorizes an ephemeral
+          key held only in this page&apos;s memory. From then on that key signs your orders and cancels, so
+          trading asks for no further wallet prompts; it can never move funds, so deposits, withdrawals
+          and claims still ask your wallet each time. The key is revoked, or expires within a day, when
+          the connection ends. It is never written to your browser&apos;s storage: a later page load
+          reconnects the wallet silently and asks for that one signature again.
+        </p>
+        <p className={P}>
           What you do in the console leaves your browser only for the party that needs it. Your account&apos;s
           address, your signed orders, cancels, withdrawals and eligibility declaration, and the reads of your
           account go to the engine node the console is built for. Deposits, claims and the chain reads around them go

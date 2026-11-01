@@ -125,6 +125,21 @@ export interface WithdrawalRequest {
   auth?: RequestAuth;
 }
 
+/** `POST /v1/session-keys`: the account's authorization of `session_key` to trade until `expires_at` (Unix ms). */
+export interface SessionKeyRequest {
+  account: Address;
+  session_key: Address;
+  expires_at: number;
+  auth: RequestAuth;
+}
+
+/** `DELETE /v1/session-keys`: the account's revocation of `session_key`. */
+export interface SessionKeyRevocationRequest {
+  account: Address;
+  session_key: Address;
+  auth: RequestAuth;
+}
+
 export type EligibilityClass = "professional" | "eligible_client";
 
 export interface EligibilityRequest {
@@ -158,7 +173,13 @@ export type Reject =
   | { kind: "invalid_signature" }
   | { kind: "missing_signature" }
   | { kind: "invalid_nonce"; expected: number }
-  | { kind: "payout_unavailable" };
+  | { kind: "payout_unavailable" }
+  | { kind: "session_key_scope" }
+  | { kind: "invalid_session_key" }
+  | { kind: "session_key_unsupported" }
+  | { kind: "expired"; expires_at: number }
+  | { kind: "expiry_too_far"; latest: number }
+  | { kind: "too_many_session_keys"; max: number };
 
 export interface Fill {
   account: Address;
@@ -201,7 +222,7 @@ export type EngineCommand =
   | { type: "tick" }
   | ({ type: "admin"; action?: string } & UpsertMarket)
   | { type: "signed_admin"; command?: { action?: string } & UpsertMarket }
-  | { type: "place_order" | "cancel_order" | "withdraw" | "deposit" | "attest_eligibility" };
+  | { type: "place_order" | "cancel_order" | "withdraw" | "deposit" | "attest_eligibility" | "register_session_key" | "revoke_session_key" };
 
 /** The `set_params` fields of an `AdminCommand::SetParams` as the log serializes them, flat beside `action`. */
 export interface SetParams {

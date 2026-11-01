@@ -3,7 +3,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
 
 import vectors from "./eip712-vectors.json";
-import { cancelTypedData, eligibilityTypedData, orderTypedData, requestDomain, reissueTypedData, withdrawalTypedData, type TypedRequest } from "./eip712";
+import { cancelTypedData, eligibilityTypedData, orderTypedData, registerSessionKeyTypedData, requestDomain, reissueTypedData, revokeSessionKeyTypedData, withdrawalTypedData, type TypedRequest } from "./eip712";
 import type { EligibilityClass, OrderRequest } from "./types";
 
 // The vectors are the engine's own fixtures: typed data a wallet signs, and the signature
@@ -27,6 +27,8 @@ function fromVector(request: (typeof vectors.requests)[number]): TypedRequest {
     case "order": return orderTypedData(domain, body as unknown as OrderRequest, terms);
     case "cancel": return cancelTypedData(domain, { account: String(body.account), order_id: Number(body.order_id) }, terms);
     case "withdrawal": return withdrawalTypedData(domain, String(body.account), String(body.amount), terms);
+    case "register_session_key": return registerSessionKeyTypedData(domain, String(body.account), String(body.session_key), Number(body.expires_at), terms);
+    case "revoke_session_key": return revokeSessionKeyTypedData(domain, String(body.account), String(body.session_key), terms);
     default: throw new Error(`unknown vector kind ${request.kind}`);
   }
 }

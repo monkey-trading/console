@@ -67,11 +67,12 @@ function createLiveSession(deploy: Deploy): Session {
     removeItem: (key) => window.localStorage.removeItem(key),
   };
   // When the wallet app ends the session, the console shows the wallet disconnected rather than
-  // failing every action, and forgets the choice: the remembered connection has ended.
+  // failing every action, and forgets the choice: the remembered connection has ended. The dead
+  // session cannot sign a revocation, so the session key's registration is left to expire.
   const ended = () => {
     if (store.liveWallet?.label !== "WalletConnect") return;
     clearChoice(persistence);
-    disconnectWallet(store);
+    disconnectWallet(store, false);
     store.toast("info", "Your wallet ended the WalletConnect session, so the console disconnected it.");
   };
   const walletConnect = deploy.walletConnectProjectId === null ? null : new WalletConnectConnector(

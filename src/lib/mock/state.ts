@@ -64,6 +64,12 @@ export interface QueueEntry {
   requestedSeq: number;
 }
 
+/** A session key registered for an account, as the engine's V41 rules hold it: live until `expiresAt`, dead once revoked. Its request-nonce sequence lives apart in `MockState.sessionKeyNonces`, so it stays spent whatever the registration does, as the engine's `request_nonces` does. */
+export interface MockSessionKey {
+  expiresAt: number;
+  revoked: boolean;
+}
+
 /** An event with its cursor: the command's seq and the event's index among that command's events. */
 export interface HistoryItem {
   cursor: string;
@@ -110,6 +116,10 @@ export class MockState {
   readonly params: HouseParams = LAUNCH_PARAMS;
   readonly markets = new Map<MarketId, MarketRuntime>();
   readonly accounts = new Map<string, AccountState>();
+  /** Every account's session keys by lowercase address, as `engine_core::session_keys` holds them. */
+  readonly sessionKeys = new Map<string, Map<string, MockSessionKey>>();
+  /** Every session key's next request nonce, spent for good as the engine's `request_nonces` holds it. */
+  readonly sessionKeyNonces = new Map<string, number>();
   readonly queue: QueueEntry[] = [];
   readonly log: StreamMessage[] = [];
   readonly history = new Map<string, HistoryItem[]>();

@@ -23,5 +23,8 @@ export type EngineEvent =
   | { type: "market_opened"; market: MarketId }
   | { type: "market_closed"; market: MarketId }
   | { type: "stress_changed"; market: MarketId; level: number }
+  | { type: "session_key_registered"; account: Address; session_key: Address; expires_at: number }
+  | { type: "session_key_revoked"; account: Address; session_key: Address }
+  | { type: "session_key_rejected"; account: Address; session_key: Address; reason: Reject }
   | { type: "admin_applied" }
   | { type: "admin_rejected"; reason: string };

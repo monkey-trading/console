@@ -54,6 +54,7 @@ export class MockControls {
     const key = address.toLowerCase();
     state.accounts.delete(key);
     state.history.delete(key);
+    state.sessionKeys.delete(key);
     state.entitledMonkey.delete(key);
     state.claimedMonkey.delete(key);
     state.emission.results.delete(key);

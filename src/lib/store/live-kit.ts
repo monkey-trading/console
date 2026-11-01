@@ -9,7 +9,7 @@ import type { TypedRequest } from "../engine/eip712";
 import type { QuoteRequest } from "../engine/live-stream";
 import { ProviderWallet } from "../engine/provider-wallet";
 import { settle } from "../engine/test-kit";
-import type { CancelRequest, EligibilityRequest, HistoryPage, OrderRequest, SignedWithdrawal, WithdrawalRequest, MarketView } from "../engine/types";
+import type { CancelRequest, EligibilityRequest, HistoryPage, OrderRequest, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import { ACCOUNT, StubProvider, type StubOptions } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
@@ -19,7 +19,7 @@ export const VAULT = vectors.vault;
 export const BTC = { id: 1, symbol: "BTC-USD", open: true, reduce_only: false, mark: "100000", stress_level: 0, max_slippage_bps: 25, min_order_notional: "10", margin_tiers: [], spread_tiers: [], house_cap_bps: 0, schedule: { kind: "always_open" }, asset_class: "crypto" } as unknown as MarketView;
 export const NODE_TIME = 1_792_540_800_000;
 
-export type Posted = { route: string; body: OrderRequest | CancelRequest | WithdrawalRequest | EligibilityRequest | { replaces_expires_at: number; signature: string } };
+export type Posted = { route: string; body: OrderRequest | CancelRequest | WithdrawalRequest | EligibilityRequest | SessionKeyRequest | SessionKeyRevocationRequest | { replaces_expires_at: number; signature: string } };
 
 /** A live client whose actions record what they were sent and answer as the test says. */
 export class ActionClient implements EngineClient {
@@ -36,7 +36,10 @@ export class ActionClient implements EngineClient {
   /** Pages by `before` cursor, when a test needs more than one; `historyPage` answers otherwise. */
   historyPages: Record<string, HistoryPage> | null = null;
   found: SignedWithdrawal | null = null;
-  answer: (posted: Posted) => ActionResult = () => ({ seq: 1, events: [] });
+  answer: (posted: Posted) => ActionResult = (posted) =>
+    posted.route === "session_key"
+      ? { seq: 1, events: [{ type: "session_key_registered", account: (posted.body as SessionKeyRequest).account, session_key: (posted.body as SessionKeyRequest).session_key, expires_at: (posted.body as SessionKeyRequest).expires_at }] }
+      : { seq: 1, events: [] };
   async attestation(): Promise<never> { throw new Error("unused"); }
   async verify() { return { kind: "mock" } as const; }
   watch(listener: (event: ClientEvent) => void) { listener({ type: "feed", status: "live" }); return () => {}; }
@@ -58,6 +61,8 @@ export class ActionClient implements EngineClient {
   placeOrder(body: OrderRequest) { return this.act("order", body); }
   cancelOrder(body: CancelRequest) { return this.act("cancel", body); }
   withdraw(body: WithdrawalRequest) { return this.act("withdraw", body); }
+  registerSessionKey(body: SessionKeyRequest) { return this.act("session_key", body); }
+  revokeSessionKey(body: SessionKeyRevocationRequest) { return this.act("session_key_revoke", body); }
   /** The log head signed reads answer at; a reissue the node takes moves it on, as the node logs the new authorization and more before it answers. */
   head = 77;
   async reissue(_account: string, nonce: number, body: { replaces_expires_at: number; signature: string }) { await this.act(`reissue ${nonce}`, body); this.head += 2; }
