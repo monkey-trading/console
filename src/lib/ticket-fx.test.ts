@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
-import { NO_FX_PRICE, previewTicket } from "./ticket";
+import { NO_FX_PRICE, previewTicket, unrealisedPnl } from "./ticket";
 import { account, btcAt, heldIn, NAV, q, quotedIn } from "./ticket-fixtures";
 
 describe("previewTicket for a market quoted in another currency", () => {
@@ -82,4 +82,17 @@ describe("previewTicket for a market quoted in another currency", () => {
     expect(previewTicket({ ...base, market: await quotedIn("eur", 500, "1.1"), qty: q("2") }).markNotional).toBe(fixedFromInt(1_100));
   });
 
+  it("shows a position's profit in USD, converted at the mark, for a market quoted in another currency", async () => {
+    // A long of 1 contract from 30,000 to 30,150 yen, with the dollar at 150 yen, is up 150 yen: a dollar.
+    const nikkei = await quotedIn("jpy", 30_150, "150");
+    expect(unrealisedPnl(nikkei.view, q("1"), q("30000"), q("30150"))).toBe(fixedFromInt(1));
+    expect(unrealisedPnl(nikkei.view, q("-2"), q("30000"), q("30150"))).toBe(fixedFromInt(-2));
+    // The pair's own listing converts at its mark: 100 contracts up 1.5 yen are 150 yen, a dollar.
+    const pair = await quotedIn("jpy", 150, "150", 9);
+    expect(unrealisedPnl(pair.view, q("100"), q("148.5"), q("150"))).toBe(fixedFromInt(1));
+    expect(unrealisedPnl((await quotedIn("eur", 500, "1.1")).view, q("2"), q("490"), q("500"))).toBe(fixedFromInt(22));
+    expect(unrealisedPnl((await quotedIn("eur", 500, null)).view, q("2"), q("490"), q("500"))).toBeNull();
+    // A dollar market is untouched.
+    expect(unrealisedPnl((await btcAt(100)).view, q("2"), q("90"), q("100"))).toBe(fixedFromInt(20));
+  });
 });

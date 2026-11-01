@@ -134,6 +134,16 @@ describe("previewTicket", () => {
     expect(previewTicket({ ...base, resting: false, triggerPrice: 0n }).problems).toEqual([]);
   });
 
+  it("measures the house's cap as the larger of its NAV share and its floor, as the engine does", async () => {
+    const market = await btcAt(100_000);
+    const base = { side: "buy" as const, slippageBps: 10, account: account(10_000), qty: q("0.5") };
+    const share = previewTicket({ ...base, market, houseNav: NAV });
+    expect(share.houseCap).toBe(NAV / 20n); // 5% of the NAV, with no floor listed
+    const floored = { ...market, view: { ...market.view, house_cap_floor: "300000" } };
+    expect(previewTicket({ ...base, market: floored, houseNav: fixedFromInt(20_000) }).houseCap).toBe(fixedFromInt(300_000));
+    expect(previewTicket({ ...base, market: floored, houseNav: NAV }).houseCap).toBe(NAV / 20n);
+  });
+
   it("shows the best bid and offer for the size, and the spread widens as the size grows", async () => {
     const market = await btcAt(100_000);
     const small = previewTicket({ market, side: "buy", qty: q("0.1"), slippageBps: 10, account: account(1_000_000), houseNav: NAV });

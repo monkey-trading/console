@@ -92,6 +92,14 @@ describe("a covering step the node's ladder declines", () => {
     expect(result.price).toBe(f("77900"));
   });
 
+  it("names the largest size at the size field's six places, and in the singular for one contract", () => {
+    const margin = { kind: "insufficient_margin" as const, equity: "1", required: "9" };
+    const ladder = (fitting: string): MarketQuote => ({ ...QUOTE, ask: [{ qty: fitting, price: "100.1" }, { qty: "30", price: "100.5", declined: margin }] });
+    expect(live("29", "buy", ladder("25.773195876")).problem).toBe("The largest size your equity opens here is ≈ 25.773195 contracts. Try a smaller size.");
+    expect(live("29", "buy", ladder("1")).problem).toBe("The largest size your equity opens here is ≈ 1 contract. Try a smaller size.");
+    expect(live("29", "buy", ladder("0.0000005")).problem).toBe("Not enough equity to open a position here.");
+  });
+
   it("keeps a decline whose message carries no probe figures, and refuses no-size accounts without figures", () => {
     const capped: MarketQuote = {
       ...QUOTE,

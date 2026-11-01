@@ -1,61 +1,20 @@
 /** What an order ticket shows before the user places the order: the quote, the margin it uses, the limits. */
 
-import { absFixed, bpsOf, divFixed, fixedFromWire, mulFixed, parseFixed, type Fixed } from "./fixed";
+import { absFixed, bpsOf, divFixed, fixedFromWire, mulFixed, parseFixed, SCALE, type Fixed } from "./fixed";
+import { capFor } from "./house";
 import type { MarketView, Side } from "./engine/types";
 import type { AccountModel, MarketModel } from "./models";
 import { executionCost, growthOf, quoteOrder, slicedBps, tieredMargin, type Quote } from "./pricing";
 
 /** The decimal places of a size: a millionth of a unit is the smallest step. */
 const QTY_PLACES = 6;
+const QTY_STEP: Fixed = SCALE / 1_000_000n;
 
 /** The ticket's own refusal of an order it cannot value in USD, which the node would decline for want of an FX price. */
 export const NO_FX_PRICE = "No FX price yet, so this order's value in USD is unknown.";
 
 /** The refusal of an order with no size, which a size the field itself refuses does not repeat. */
 export const NO_SIZE = "Enter a size.";
-
-/** What the size field holds: nothing yet, a quantity, or text the ticket refuses with the reason. */
-export type SizeInput = { kind: "empty" } | { kind: "qty"; qty: Fixed } | { kind: "refused"; message: string };
-
-/**
- * Reads the size field as the order's quantity, exactly as typed: a size finer than `QTY_PLACES`
- * decimal places is refused, never rounded. Trailing zeros past the step change no value and pass.
- * Error cases:
- * - the text matched the digit pattern but did not parse; the pattern admits only what `parseFixed` takes, so this is a broken invariant
- */
-export function parseSize(text: string): SizeInput {
-  const trimmed = text.trim();
-  if (trimmed === "") return { kind: "empty" };
-  const match = /^(\d+)(?:\.(\d+))?$/.exec(trimmed);
-  if (match === null) return { kind: "refused", message: "Enter the size in digits, such as 0.5 or 2.25." };
-  const [, whole = "0", places = ""] = match;
-  const fraction = places.replace(/0+$/, "");
-  if (fraction.length > QTY_PLACES) return { kind: "refused", message: `A size has at most ${QTY_PLACES} decimal places.` };
-  const qty = parseFixed(fraction === "" ? whole : `${whole}.${fraction}`);
-  // Digits and at most six places after the trailing zeros are dropped, which `parseFixed` always takes.
-  if (qty === null) throw new Error(`size ${trimmed} matched the size pattern but did not parse`);
-  return { kind: "qty", qty };
-}
-
-/** What one contract is: a unit of the market's base asset, or of the instrument itself when it has none. */
-export function contractUnit(market: MarketModel): string {
-  const [base = market.symbol, quote] = market.symbol.split("-");
-  return quote === undefined ? `${base} unit` : base;
-}
-
-/**
- * Converts an amount in the market's quote currency to USD, as the engine does (`QuoteCurrency::to_usd`,
- * truncated; the engine's margin and cap figures round up, a difference of a billionth the ticket's
- * estimates ignore): through the market's FX mark, the pair's own listing (USD-JPY) at `price`
- * itself. Null when the market has no FX price to convert at; the identity for a USD market.
- */
-function usdConverter(view: MarketView, price: Fixed): ((amount: Fixed) => Fixed) | null {
-  const currency = view.quote_currency;
-  if (currency === undefined) return (amount) => amount;
-  const fx = currency.fx_market === view.id ? price : view.fx_mark == null ? null : fixedFromWire(view.fx_mark);
-  if (fx === null || fx <= 0n) return null;
-  return currency.currency === "jpy" ? (amount) => divFixed(amount, fx) : (amount) => mulFixed(amount, fx);
-}
 
 /** The refusal of a resting order's trigger price that is not above zero. */
 export const TRIGGER_NOT_POSITIVE = "Enter a trigger price above zero.";
@@ -66,10 +25,8 @@ export const MARGIN_SHORT = "Not enough equity for the margin this needs.";
 /** The slippage bounds offered, in basis points. */
 export const SLIPPAGE_CHOICES = [5, 10, 25, 50] as const;
 
-/** The bound a market order is shown and signed with: the user's choice, never past the market's own, which the engine clamps to (`execution/mod.rs`). */
-export function slippageBound(chosenBps: number, market: MarketModel): number {
-  return Math.min(chosenBps, market.view.max_slippage_bps);
-}
+/** What the size field holds: nothing yet, a quantity, or text the ticket refuses with the reason. */
+export type SizeInput = { kind: "empty" } | { kind: "qty"; qty: Fixed } | { kind: "refused"; message: string };
 
 export interface TicketInput {
   market: MarketModel;
@@ -118,6 +75,62 @@ export interface TicketPreview {
   problems: string[];
 }
 
+/**
+ * Reads the size field as the order's quantity, exactly as typed: a size finer than `QTY_PLACES`
+ * decimal places is refused, never rounded. Trailing zeros past the step change no value and pass.
+ * Error cases:
+ * - the text matched the digit pattern but did not parse; the pattern admits only what `parseFixed` takes, so this is a broken invariant
+ */
+export function parseSize(text: string): SizeInput {
+  const trimmed = text.trim();
+  if (trimmed === "") return { kind: "empty" };
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(trimmed);
+  if (match === null) return { kind: "refused", message: "Enter the size in digits, such as 0.5 or 2.25." };
+  const [, whole = "0", places = ""] = match;
+  const fraction = places.replace(/0+$/, "");
+  if (fraction.length > QTY_PLACES) return { kind: "refused", message: `A size has at most ${QTY_PLACES} decimal places.` };
+  const qty = parseFixed(fraction === "" ? whole : `${whole}.${fraction}`);
+  // Digits and at most six places after the trailing zeros are dropped, which `parseFixed` always takes.
+  if (qty === null) throw new Error(`size ${trimmed} matched the size pattern but did not parse`);
+  return { kind: "qty", qty };
+}
+
+/** `qty` cut down to the size field's step, so the size it names can be typed. */
+export function truncateToStep(qty: Fixed): Fixed {
+  return qty - (qty % QTY_STEP);
+}
+
+/** A position's unrealised profit or loss in USD at `mark`; null when its FX market has no price. */
+export function unrealisedPnl(view: MarketView, qty: Fixed, entry: Fixed, mark: Fixed): Fixed | null {
+  const toUsd = usdConverter(view, mark);
+  return toUsd === null ? null : toUsd(mulFixed(qty, mark - entry));
+}
+
+/** What one contract is: a unit of the market's base asset, or of the instrument itself when it has none. */
+export function contractUnit(market: MarketModel): string {
+  const [base = market.symbol, quote] = market.symbol.split("-");
+  return quote === undefined ? `${base} unit` : base;
+}
+
+/**
+ * Converts an amount in the market's quote currency to USD, as the engine does (`QuoteCurrency::to_usd`,
+ * truncated; the engine's margin and cap figures round up, a difference of a billionth the ticket's
+ * estimates ignore): through the market's FX mark, the pair's own listing (USD-JPY) at `price`
+ * itself. Null when the market has no FX price to convert at; the identity for a USD market.
+ */
+export function usdConverter(view: MarketView, price: Fixed): ((amount: Fixed) => Fixed) | null {
+  const currency = view.quote_currency;
+  if (currency === undefined) return (amount) => amount;
+  const fx = currency.fx_market === view.id ? price : view.fx_mark == null ? null : fixedFromWire(view.fx_mark);
+  if (fx === null) return null;
+  return currency.currency === "jpy" ? (amount) => divFixed(amount, fx) : (amount) => mulFixed(amount, fx);
+}
+
+/** The bound a market order is shown and signed with: the user's choice, never past the market's own, which the engine clamps to (`execution/mod.rs`). */
+export function slippageBound(chosenBps: number, market: MarketModel): number {
+  return Math.min(chosenBps, market.view.max_slippage_bps);
+}
+
 /** The signed quantity the account holds in the market. */
 function held(account: AccountModel | null, id: number): Fixed {
   return account?.positions.find((p) => p.market === id)?.qty ?? 0n;
@@ -132,7 +145,7 @@ export function previewTicket(input: TicketInput): TicketPreview {
   const spec = market.view;
   const mark = market.mark;
   const problems: string[] = [];
-  const houseCap = bpsOf(input.houseNav, spec.house_cap_bps);
+  const houseCap = capFor(input.houseNav, spec.house_cap_bps, spec.house_cap_floor === undefined ? 0n : fixedFromWire(spec.house_cap_floor));
   const unpriced = (problem: string): TicketPreview => ({
     qty, notional: null, markNotional: 0n, quote: null, offer: null, bid: null, spreadBps: 0, worstPrice: null, marginAfter: account?.margin ?? 0n, marginAdded: 0n,
     marginUseBps: null, marginRateBps: null, impliedLeverage: null, houseCap, problems: [problem],
@@ -148,7 +161,9 @@ export function previewTicket(input: TicketInput): TicketPreview {
   // The minimum is checked at the trigger price for a resting order and at the index for a fill.
   const trigger = input.resting && input.triggerPrice != null && input.triggerPrice > 0n ? input.triggerPrice : null;
   const toUsdAtBasis = trigger === null ? toUsd : usdConverter(spec, trigger);
-  const notional = toUsdAtBasis === null ? null : toUsdAtBasis(mulFixed(qty, trigger ?? mark));
+  // A converter at a positive price is null only for want of an FX mark, which `toUsd` above already ruled out.
+  if (toUsdAtBasis === null) throw new Error(`no USD conversion at the trigger price ${trigger} for market ${market.id}, though one exists at the mark`);
+  const notional = toUsdAtBasis(mulFixed(qty, trigger ?? mark));
   const current = held(account, market.id);
   const quoteSide = (s: Side) =>
     quoteOrder({ index: mark, side: s, baseSpreadBps: market.baseSpreadBps, spreadTiers: spec.spread_tiers, stress: market.stress, held: current, qty, toUsd });
@@ -173,8 +188,7 @@ export function previewTicket(input: TicketInput): TicketPreview {
   if (market.reduceOnly && grows) problems.push("This market only accepts orders that reduce a position.");
   if (input.resting && input.triggerPrice != null && input.triggerPrice <= 0n) problems.push(TRIGGER_NOT_POSITIVE);
   if (qty <= 0n) problems.push(NO_SIZE);
-  else if (grows && notional === null) problems.push(NO_FX_PRICE);
-  else if (grows && notional !== null && notional < fixedFromWire(spec.min_order_notional)) problems.push(`Minimum order is ${spec.min_order_notional} USD.`);
+  else if (grows && notional < fixedFromWire(spec.min_order_notional)) problems.push(`Minimum order is ${spec.min_order_notional} USD.`);
   if (grows && !input.resting) {
     if (equity <= 0n) problems.push("Fund your account to trade.");
     else if (marginAfter > afterCost) problems.push(MARGIN_SHORT);

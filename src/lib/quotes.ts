@@ -6,7 +6,7 @@
 import type { MarketId, MarketQuote, Reject, Side } from "./engine/types";
 import { fixedFromWire, fixedToWire, type Fixed } from "./fixed";
 import { describeReject } from "./messages";
-import type { TicketPreview } from "./ticket";
+import { truncateToStep, type TicketPreview } from "./ticket";
 
 /** The most markets one connection may ask quotes for: the node's `api.quote_max_markets` default. */
 export const MAX_QUOTED_MARKETS = 4;
@@ -91,7 +91,9 @@ function declinedProblem(quote: MarketQuote, side: Side, declined: Reject): stri
   if (declined.kind !== "insufficient_margin") return describeReject(declined);
   const steps = side === "buy" ? quote.ask : quote.bid;
   const fitting = [...steps].reverse().find((s) => s.declined === undefined);
-  if (fitting === undefined) return "Not enough equity to open a position here.";
-  // In contracts, the unit the ticket's size is typed in, so it can be entered as it reads.
-  return `The largest size your equity opens here is ≈ ${fixedToWire(fixedFromWire(fitting.qty))} contracts. Try a smaller size.`;
+  // In contracts, cut to the size field's step so it can be typed as it reads; a smaller size still fits.
+  const largest = fitting === undefined ? 0n : truncateToStep(fixedFromWire(fitting.qty));
+  if (largest <= 0n) return "Not enough equity to open a position here.";
+  const text = fixedToWire(largest);
+  return `The largest size your equity opens here is ≈ ${text} ${text === "1" ? "contract" : "contracts"}. Try a smaller size.`;
 }

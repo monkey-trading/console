@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
-import { contractUnit, parseSize } from "./ticket";
+import { contractUnit, parseSize, truncateToStep } from "./ticket";
 import { btc, q } from "./ticket-fixtures";
 
 describe("parseSize", () => {
@@ -38,5 +38,15 @@ describe("contractUnit", () => {
     const market = await btc();
     expect(contractUnit(market)).toBe("BTC");
     expect(contractUnit({ ...market, symbol: "US500" })).toBe("US500 unit");
+  });
+});
+
+describe("truncateToStep", () => {
+  it("cuts a nine-place quantity down to the size field's step, so what it names can be typed", () => {
+    expect(truncateToStep(25_773_195_876n)).toBe(25_773_195_000n);
+    expect(truncateToStep(q("0.12886"))).toBe(q("0.12886"));
+    expect(truncateToStep(999n)).toBe(0n);
+    const typed = parseSize("25.773195");
+    expect(typed).toEqual({ kind: "qty", qty: truncateToStep(25_773_195_876n) });
   });
 });
