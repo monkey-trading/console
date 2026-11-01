@@ -19,7 +19,7 @@ export function useEscapeClose(open: boolean, root: RefObject<HTMLElement | null
         defaultPrevented: event.defaultPrevented,
         inside: event.target instanceof Node && el.contains(event.target),
         onBody: event.target === document.body,
-        // The funding drawer is a modal dialog; one that holds the popup (the wallet menu in it) does not count.
+        // A modal dialog that holds the popup does not count; another one, such as the WalletConnect pairing dialog, does.
         modalElsewhere: Array.from(document.querySelectorAll("dialog[open]")).some((dialog) => !dialog.contains(el)),
       };
       if (!closesOnEscape(press)) return;

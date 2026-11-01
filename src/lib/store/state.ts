@@ -111,8 +111,6 @@ export interface ConsoleState {
   prompt: string | null;
   /** Whether a signed action is in flight. */
   busy: boolean;
-  /** Whether the funding drawer is open. */
-  fundingOpen: boolean;
   /** Whether the simulation is paused: the node clock and every price stand still. */
   paused: boolean;
 }
@@ -179,7 +177,6 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     emissionsVault: null,
     prompt: null,
     busy: false,
-    fundingOpen: false,
     paused: false,
   };
 }

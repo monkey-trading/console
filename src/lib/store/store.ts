@@ -121,16 +121,12 @@ export class ConsoleStore {
     this.barsSeed.seed(this.snapshot.selected, timeframe);
   }
 
-  setFundingOpen(open: boolean): void {
-    this.patch({ fundingOpen: open });
-  }
-
   /** Marks the caller as refused when `error` is an access refusal; true if it was. */
   noteAccess(error: unknown): boolean {
     if (error instanceof EngineError && error.reject?.kind === "access") {
       const reason = error.reject.reason;
       if (reason === "united_states" || reason === "sanctioned_jurisdiction") {
-        this.patch({ blocked: reason satisfies BlockReason, fundingOpen: false });
+        this.patch({ blocked: reason satisfies BlockReason });
         return true;
       }
     }

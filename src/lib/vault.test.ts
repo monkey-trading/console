@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt, parseFixed } from "./fixed";
-import { formatUsdc, isWholeUsdc, withdrawableNow } from "./vault";
+import { formatUsdc, isWholeUsdc, withdrawableNow, withdrawLimitCause } from "./vault";
 
 describe("withdrawableNow", () => {
   it("is the smaller of unlocked cash and equity above margin, and never negative", () => {
@@ -26,5 +26,24 @@ describe("formatUsdc", () => {
     expect(formatUsdc(parseFixed("10.125") ?? 0n)).toBe("10.125 USDC");
     expect(formatUsdc(parseFixed("3.141592") ?? 0n)).toBe("3.141592 USDC");
     expect(formatUsdc(parseFixed("0.5") ?? 0n)).toBe("0.5 USDC");
+  });
+});
+
+describe("withdrawLimitCause", () => {
+  const usd = fixedFromInt;
+  it("names a deposit still counting down when its locked cash is what limits the withdrawal", () => {
+    expect(withdrawLimitCause(usd(1_000), usd(1_000), 0n, usd(1_000))).toBe("unfinal");
+    expect(withdrawLimitCause(usd(1_000), usd(1_000), 0n, usd(400))).toBe("unfinal");
+    // Locked cash and free equity tie: the locked deposit is still what a final deposit would release.
+    expect(withdrawLimitCause(usd(1_000), usd(600), 0n, usd(400))).toBe("unfinal");
+  });
+
+  it("names margin when equity above margin is the smaller of the two", () => {
+    expect(withdrawLimitCause(usd(1_000), usd(1_200), usd(900), 0n)).toBe("margin");
+    expect(withdrawLimitCause(usd(1_000), usd(1_200), usd(900), usd(50))).toBe("margin");
+  });
+
+  it("names neither when the whole balance can go", () => {
+    expect(withdrawLimitCause(usd(1_000), usd(1_000), 0n, 0n)).toBeNull();
   });
 });

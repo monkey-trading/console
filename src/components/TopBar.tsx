@@ -21,7 +21,7 @@ const NAV_ITEM = `${NAV_LINK} text-fg-3 hover:text-fg`;
 const NAV_CURRENT = `${NAV_LINK} text-glow`;
 
 export function TopBar() {
-  const { account, now, paused, blocked } = useConsole();
+  const { account, now, paused } = useConsole();
   const { store, node } = useSession();
   const pathname = usePathname();
   const free = account ? account.equity - account.margin : 0n;
@@ -48,7 +48,6 @@ export function TopBar() {
               <Link key={href} href={href} aria-current={current ? "page" : undefined} className={current ? NAV_CURRENT : NAV_ITEM}>{label}</Link>
             );
           })}
-          <button type="button" disabled={blocked !== null} onClick={() => store.setFundingOpen(true)} className={`${NAV_ITEM} disabled:opacity-40`}>Funding</button>
         </nav>
       </div>
       <div className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-2">

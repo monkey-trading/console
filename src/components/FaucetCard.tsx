@@ -7,7 +7,7 @@ import { fundWithAnvil } from "@/lib/store/actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 
-/** Shown by the Funding drawer only in a `live-dev` build; nothing renders in mock or production builds. */
+/** Shown in the Deposit tab only in a `live-dev` build; nothing renders in mock or production builds. */
 export function FaucetCard() {
   const { store, deploy } = useSession();
   const { wallet, busy } = useConsole();
@@ -15,9 +15,9 @@ export function FaucetCard() {
   const readOnly = wallet?.readOnly === true;
   const able = wallet !== null && !readOnly && !busy;
   return (
-    <section aria-labelledby="faucet-title" className="rounded-xl border border-line-2 bg-ink-1 p-5">
-      <h2 id="faucet-title" className="text-label tracking-caps text-fg-3 uppercase">Dev faucet</h2>
-      <p className="mt-4 text-caption text-fg-2">
+    <section aria-labelledby="faucet-title" className="p-4">
+      <h4 id="faucet-title" className="text-label tracking-caps text-fg-3 uppercase">Dev faucet</h4>
+      <p className="mt-3 text-caption text-fg-2">
         Mint 10,000 mock USDC to the connected wallet and top its gas up to 1 ETH, straight from the local Anvil chain. Dev builds only; the mint asks the wallet first.
       </p>
       <button

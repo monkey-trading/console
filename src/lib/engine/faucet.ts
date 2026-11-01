@@ -1,5 +1,5 @@
 /**
- * The dev-only faucet (monkey-trading/console#44): in a `live-dev` build the Funding drawer can fund
+ * The dev-only faucet (monkey-trading/console#44): in a `live-dev` build the Funding page can fund
  * the connected wallet from Anvil — `anvil_setBalance` on the build's pinned RPC tops up gas, and
  * the wallet itself sends the mock USDC's permissionless `mint`. Production and mock builds carry no
  * faucet at all. Nothing here touches the engine node; a non-Anvil RPC is reported, never guessed at.

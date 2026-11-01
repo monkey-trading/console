@@ -18,7 +18,7 @@ export function WalletConnectPairing() {
   return walletConnect === null ? null : <PairingDialog connector={walletConnect} />;
 }
 
-/** A modal dialog over the page, or over the funding drawer, open while the connector pairs; closing it cancels the pairing. */
+/** A modal dialog over the page, open while the connector pairs; closing it cancels the pairing. */
 function PairingDialog({ connector }: { connector: WalletConnectConnector }) {
   const state = useSyncExternalStore(connector.subscribe, connector.pairing, connector.pairing);
   const dialog = useRef<HTMLDialogElement>(null);
