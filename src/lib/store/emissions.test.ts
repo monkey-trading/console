@@ -83,8 +83,23 @@ describe("checkEmissionsClaimed", () => {
     expect(store.getSnapshot().toasts.filter((t) => t.text.includes("MONKEY record could not be read"))).toHaveLength(2);
   });
 
-  it("ignores a failure that lands after the wallet it ran for was replaced", async () => {
-    const { store, wallet } = await connected();
+  it("resets the read latches when the wallet changes, so a new wallet's identical failure is reported", async () => {
+    const { store } = await connected({ chainId: 1, emissionsClaimed: 7n * MONKEY_UNIT, latestSeq: 40 });
+    store.patch({ entitlement: proof(9n * MONKEY_UNIT) });
+    await checkEmissionsClaimed(store); // fails: warms the error latch and the retry window
+    expect(store.lastEmissionsReadError).not.toBeNull();
+    expect(store.lastEmissionsReadAt).toBe(0);
+    const shown = () => store.getSnapshot().toasts.filter((t) => t.text.includes("MONKEY record could not be read")).length;
+    expect(shown()).toBe(1);
+    // The wallet changes: neither latch may carry over, and the identical failure toasts anew.
+    store.setWallet({ address: "0x00000000000000000000000000000000000000bb", label: "Other" });
+    expect(store.lastEmissionsReadError).toBeNull();
+    expect(store.lastEmissionsReadAt).toBe(-1);
+    await checkEmissionsClaimed(store);
+    expect(shown()).toBe(2);
+  });
+
+  it("ignores a failure that lands after the wallet it ran for was replaced", async () => {    const { store, wallet } = await connected();
     let fail!: (error: Error) => void;
     const pending = new Promise<{ claimed: bigint; latestSeq: number }>((_, reject) => { fail = reject; });
     const away: Wallet = {

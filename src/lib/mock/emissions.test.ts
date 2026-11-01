@@ -96,7 +96,7 @@ describe("MONKEY emissions", () => {
     const account = state.account(ME);
     account.balance = 15_000_000n; // $0.015: positive cash at the cutoff, less than the tick's financing charge
     const mid = state.markets.get(1)?.mid ?? fixedFromInt(100_000);
-    account.positions.set(1, { qty: fixedFromInt(1) / 100n, entry: mid }); // $1,000 of BTC at the index
+    account.positions.set(1, { qty: fixedFromInt(1) / 100n, entry: mid }); // 0.01 BTC: ≈$674 at the mock's starting index, a ≈$0.135 charge
     recordEmissionResult(state, ME, fixedFromInt(-1_000), 0n);
     node.client.tick(late + 60_000); // crosses 22:00 and the period boundary in one tick
     const events = state.log.flatMap((m) => m.events.map((e) => e.type));
