@@ -3,6 +3,10 @@
 import type { AttestationStatus, FeedStatus } from "./attestation";
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks, type Unsubscribe } from "./client";
 import type { EntitlementProof } from "./emissions";
+import { setParamsOf, type HouseParams, type QueueTotals } from "../house";
+import { HouseLog, HOUSE_SCAN_CHUNK, scanHouse } from "./live-house";
+import { QueueTotalsWalk } from "./live-queue";
+import { collateral, plainText, READ_TIMEOUT_MS } from "./live-plain";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import { scanForWithdrawal, type ScanResult } from "./live-scan";
@@ -12,7 +16,7 @@ import { NodeTrust } from "./trust";
 import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PriceRules, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 import type { Verifier } from "./verifier";
-import { newChallenge } from "./wire";
+import { newChallenge, type CheckpointEntry } from "./wire";
 
 export interface LiveDeps {
   /** The node's `https://` origin. */
@@ -35,8 +39,6 @@ export interface LiveDeps {
   signal?: () => AbortSignal;
 }
 
-/** How long a read of the node may take, in milliseconds. */
-const READ_TIMEOUT_MS = 10_000;
 /** How long loading the verifier may take, in milliseconds. */
 const VERIFIER_LOAD_TIMEOUT_MS = 20_000;
 
@@ -54,18 +56,40 @@ export class LiveEngineClient implements EngineClient {
   /** The log head seq of the last signed answer that named one; null before the first. */
   headSeq: number | null = null;
   readonly deployment: { chainId: number; vault: string };
+  /** The fold of the log's house state: the latest `set_params` and checkpoint, kept fresh by the stream. */
+  private readonly houseLog: HouseLog;
+  /** The public withdrawal queue's size, walked within a page cap and cached for its TTL. */
+  private readonly totalsWalk: QueueTotalsWalk;
+  /** The public withdrawal queue's size, from the walk cached for its TTL. */
+  readonly withdrawalTotals: () => Promise<QueueTotals>;
+  /** The account's MONKEY entitlement proof, or null before the node holds one. */
+  readonly emissions: (address: Address) => Promise<EntitlementProof | null>;
 
   constructor(private readonly deps: LiveDeps) {
     this.deployment = { chainId: deps.chainId, vault: deps.vault };
     const challenge = deps.challenge ?? (() => newChallenge());
     this.trust = new NodeTrust({
-      attestation: () => this.plainText("/v1/attestation"),
-      collateral: () => this.collateral(),
+      attestation: () => plainText(deps, "/v1/attestation"),
+      collateral: () => collateral(deps),
       verifier: () => this.verifier(), manifests: deps.manifests, acceptsMock: deps.acceptsMock, nowMs: deps.nowMs,
       onStatus: (status) => this.emit({ type: "attestation", status }),
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
     });
     this.transport = new SignedTransport({ ...deps, verifier: () => this.requireVerifier(), trust: this.trust, challenge, signal: this.signal });
+    this.houseLog = new HouseLog(async (fromSeq, skipPast, dead) => {
+      const signer = await this.trust.signer();
+      return scanHouse({ ...deps, origin: deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge }, fromSeq, HOUSE_SCAN_CHUNK, skipPast, dead);
+    }, deps.nowMs);
+    this.totalsWalk = new QueueTotalsWalk(this.transport, deps.nowMs);
+    this.withdrawalTotals = () => this.totalsWalk.totals();
+    this.emissions = (address) =>
+      this.transport.get(`/v1/accounts/${address}/emissions`).then(
+        (proof) => proof as EntitlementProof,
+        (error: unknown) => {
+          if (error instanceof EngineError && error.status === 404) return null;
+          throw error;
+        },
+      );
   }
 
   private emit(event: ClientEvent): void {
@@ -109,32 +133,9 @@ export class LiveEngineClient implements EngineClient {
     return this.loaded;
   }
 
-  /** An unsigned read of a route the attestation itself authenticates: its status, and its body as text when 200. */
-  private async plain(path: string): Promise<{ status: number; text: string }> {
-    try {
-      const response = await this.deps.fetch(this.deps.origin + path, { cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal: this.signal() });
-      return { status: response.status, text: response.status === 200 ? await response.text() : "" };
-    } catch (cause) {
-      throw new EngineError(0, "The node did not answer.", null, { cause });
-    }
-  }
-
-  private async plainText(path: string): Promise<string> {
-    const { status, text } = await this.plain(path);
-    if (status !== 200) throw new EngineError(status, `The node did not serve ${path} (HTTP ${status}).`);
-    return text;
-  }
-
   async attestation(): Promise<Attestation> {
     // The quote binds these fields and the verifier checks them; a wrong shape fails there.
-    return JSON.parse(await this.plainText("/v1/attestation")) as Attestation;
-  }
-
-  private async collateral(): Promise<string | null> {
-    const { status, text } = await this.plain("/v1/attestation/collateral");
-    if (status === 404) return null;
-    if (status !== 200) throw new EngineError(status, `The node did not serve the attestation's collateral (HTTP ${status}).`);
-    return text;
+    return JSON.parse(await plainText(this.deps, "/v1/attestation")) as Attestation;
   }
 
   async verify(): Promise<AttestationStatus> {
@@ -153,6 +154,24 @@ export class LiveEngineClient implements EngineClient {
     return (await this.transport.get("/v1/house")) as HouseView;
   }
 
+  /** The latest `set_params` folded so far; the catch-up read runs behind the answer when it is not done. */
+  async houseParams(): Promise<HouseParams | null> {
+    this.houseLog.kick();
+    return this.houseLog.params;
+  }
+
+  /** The latest checkpoint folded so far. */
+  async latestCheckpoint(): Promise<CheckpointEntry | null> {
+    this.houseLog.kick();
+    return this.houseLog.checkpoint;
+  }
+
+  /** The state of the log read feeding the fold. */
+  async houseLogStatus(): Promise<"current" | "reading" | "failed"> {
+    this.houseLog.kick();
+    return this.houseLog.freshness;
+  }
+
   async account(address: Address): Promise<AccountView> {
     return (await this.transport.get(`/v1/accounts/${address}`)) as AccountView;
   }
@@ -168,16 +187,6 @@ export class LiveEngineClient implements EngineClient {
 
   async eligibility(address: Address): Promise<EligibilityView> {
     return (await this.transport.get(`/v1/accounts/${address}/eligibility`)) as EligibilityView;
-  }
-
-  /** The engine holds no entitlement for an account it has never allocated one to: a 404, read as null. */
-  async emissions(address: Address): Promise<EntitlementProof | null> {
-    try {
-      return (await this.transport.get(`/v1/accounts/${address}/emissions`)) as EntitlementProof;
-    } catch (error) {
-      if (error instanceof EngineError && error.status === 404) return null;
-      throw error;
-    }
   }
 
   async withdrawalQueue(address: Address): Promise<WithdrawalPage> {
@@ -246,14 +255,31 @@ export class LiveEngineClient implements EngineClient {
   subscribe(onMessage: (message: StreamMessage) => void): Unsubscribe {
     this.subscribers.add(onMessage);
     if (this.stream === null) {
+      // A new connection starts at the live end and can miss log entries, so the fold re-reads to the head.
+      this.houseLog.uncaught();
       const stream = new LiveStream({
         ...this.deps, verifier: () => this.requireVerifier(), origin: this.deps.streamOrigin, trust: this.trust, challenge: this.deps.challenge ?? (() => newChallenge()),
-        onMessage: (message) => { for (const subscriber of this.subscribers) subscriber(message); },
+        onMessage: (message) => {
+          // The stream starts at the live end, so a `set_params` it carries is the latest the log
+          // records; the catch-up read folds what predates the connection the same way.
+          const entry = setParamsOf(message.cmd, message.events);
+          if (entry !== null) this.houseLog.foldParams(message.seq, entry);
+          for (const subscriber of this.subscribers) subscriber(message);
+        },
         onQuote: (quote) => this.emit({ type: "quote", quote }),
         onQuoteError: (error) => this.emit({ type: "quote_error", error }),
         onWithdrawal: (withdrawal) => this.emit({ type: "withdrawal", withdrawal }),
-        onFeed: (status: FeedStatus, time?: number) => this.emit(time === undefined ? { type: "feed", status } : { type: "feed", status, time }),
-        onProblem: (reason) => this.emit({ type: "problem", reason }),
+        onCheckpoint: (checkpoint) => this.houseLog.foldCheckpoint(checkpoint),
+        onProblem: (reason) => {
+          this.houseLog.uncaught(); // the reconnection resumes at the live end: re-read the gap
+          this.emit({ type: "problem", reason });
+        },
+        // A connection starts at the live end and names its signed time only once live: anything
+        // sequenced between the last catch-up and this moment needs another catch-up read.
+        onFeed: (status: FeedStatus, time?: number) => {
+          if (status === "live") this.houseLog.uncaught();
+          this.emit(time === undefined ? { type: "feed", status } : { type: "feed", status, time });
+        },
       });
       this.stream = stream;
       stream.setQuotes(this.quoteRequest);
@@ -264,6 +290,8 @@ export class LiveEngineClient implements EngineClient {
       if (this.subscribers.size === 0) {
         this.stream?.stop();
         this.stream = null;
+        // No one reads the fold now: stand the catch-up down instead of reading on for a stopped session.
+        this.houseLog.cancel();
       }
     };
   }

@@ -82,7 +82,7 @@ function createSession(): Session {
     wallets: node.wallets,
     drive: (ms) => node.client.tick(ms),
     history: mockHistory,
-    initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS, recent: node.client.recentLog(1000), viewer: DEMO_ADDRESS,
+    initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS, recent: node.client.recentLog(1000), viewer: DEMO_ADDRESS, housePanel: node.client.housePanelSnapshot(),
       session: {
         wallet: { address: DEMO_ADDRESS, label: "Browser wallet" },
         account: node.client.accountView(DEMO_ADDRESS),

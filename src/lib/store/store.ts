@@ -7,9 +7,11 @@ import type { MarketId, StreamMessage } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
 import { fixedToNumber } from "../fixed";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
+import { loadAccount } from "./account";
 import { BarsSeed } from "./bars-seed";
 import { FEED_LIMIT, feedFrom, isMine } from "./feed";
 import { initialState, seedAllBars, type BlockReason, type ConsoleState, type ToastMessage } from "./state";
+import { readHousePanelSoon } from "./house";
 import type { StoreDeps } from "./store-deps";
 
 export class ConsoleStore {
@@ -42,11 +44,19 @@ export class ConsoleStore {
   private trustLost = false;
   /** The last read failure shown, so a failure that repeats on every tick is shown once. */
   private lastReadError: string | null = null;
+  /** The house panel's log read in flight, so a slow read never queues behind another. Not part of the snapshot. */
+  houseRead: Promise<void> | null = null;
+  /** The house panel's queue walk in flight, guarded apart from the log reads. Not part of the snapshot. */
+  queueRead: Promise<void> | null = null;
+  /** The last log read failure shown, deduplicated like the main read's. Not part of the snapshot. */
+  lastHouseReadError: string | null = null;
+  /** The last queue walk failure shown, deduplicated like the main read's. Not part of the snapshot. */
+  lastQueueReadError: string | null = null;
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
     this.viewer = deps.initial.viewer;
-    const state = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs, deps.history, deps.client.signatures);
+    const state = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs, deps.history, deps.client.signatures, deps.initial.housePanel);
     const session = deps.initial.session;
     this.snapshot = {
       ...state,
@@ -223,7 +233,8 @@ export class ConsoleStore {
 
   /**
    * Re-reads markets, house, and the connected account. A call made while one runs waits for it and
-   * then reads again, since the running read may predate the change that prompted the call.
+   * then reads again, since the running read may predate the change that prompted the call. The house
+   * panel's reads are not part of the lock: `readHousePanelSoon` runs them aside.
    */
   refresh(accountChanged: boolean): Promise<void> {
     if (this.inflight) {
@@ -260,41 +271,26 @@ export class ConsoleStore {
         })) as typeof frames);
       }
       const selected = markets.some((m) => m.id === this.snapshot.selected) ? this.snapshot.selected : (markets[0]?.id ?? this.snapshot.selected);
-      this.patch({ markets, bars, selected, house: decodeHouse(house) });
+      this.patch({ markets, bars, selected, house: decodeHouse(house), houseReady: true, houseFresh: true });
       // The chart's history comes from the marks endpoint once a live node's list has arrived; a
       // node that 404s it keeps asking for the archive scan until it names a log head.
       this.barsSeed.seed(selected, this.snapshot.timeframe);
       this.barsSeed.askScan();
-      if (this.snapshot.wallet) await this.loadAccount(accountChanged);
+      // The house panel's reads run outside this refresh's lock and error handling, before the
+      // account reads: a failing account endpoint or a slow queue walk must not starve them, and
+      // they must not delay the next market or account read nor toast as if the whole refresh failed.
+      readHousePanelSoon(this);
+      if (this.snapshot.wallet) await loadAccount(this, accountChanged);
       this.lastReadError = null;
     } catch (error) {
       const message = error instanceof Error ? error.message : "The node did not answer.";
       if (!this.noteAccess(error) && message !== this.lastReadError) this.toast("error", message);
       this.lastReadError = message;
+      // Retained figures stay, marked not fresh, until a refresh reads them again.
+      if (this.snapshot.houseReady) this.patch({ houseFresh: false });
     }
     const again = this.rerun;
     this.rerun = null;
     if (again) await this.readAll(again.accountChanged);
-  }
-
-  /** Reads the connected account's state; a never-credited account is an empty one. */
-  async loadAccount(withHistory: boolean): Promise<void> {
-    const wallet = this.snapshot.wallet;
-    if (!wallet) return;
-    const { client } = this.deps;
-    const [eligibility, queue, entitlement] = await Promise.all([client.eligibility(wallet.address), client.withdrawalQueue(wallet.address), client.emissions(wallet.address)]);
-    let account = null;
-    try {
-      account = decodeAccount(await client.account(wallet.address));
-    } catch (error) {
-      if (!(error instanceof EngineError && error.status === 404)) throw error;
-    }
-    // The wallet may have changed while the reads ran; an answer for another account is dropped.
-    if (this.snapshot.wallet?.address !== wallet.address) return;
-    this.patch({ eligibility: eligibility.class, queue: queue.queue, account, entitlement });
-    if (withHistory || this.snapshot.history.length === 0) {
-      const history = (await client.history(wallet.address, { limit: 100 })).events;
-      if (this.snapshot.wallet?.address === wallet.address) this.patch({ history });
-    }
   }
 }

@@ -5,12 +5,14 @@ import { EngineError, type ActionResult, type EngineClient, type SignatureChecks
 import type { EntitlementProof } from "../engine/emissions";
 import type { EligibilityClass, AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
+import type { CheckpointEntry } from "../engine/wire";
+import type { HouseParams, QueueTotals } from "../house";
 import { fixedToWire } from "../fixed";
 import { equityOf, houseGross, houseNav, marginOf } from "./accounts";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";
 import { queuePage, withdraw } from "./funds";
 import { advance } from "./step";
-import type { MockState } from "./state";
+import { CHECKPOINT_EVERY, type MockState } from "./state";
 
 const HEX = "0123456789abcdef";
 
@@ -27,6 +29,23 @@ export function mockHex(seed: string, bytes: number): string {
 
 const MOCK_QUOTE_PREFIX = "MOCK-ATTESTATION-NOT-A-TEE:";
 const toHex = (text: string) => Array.from(text, (c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+
+/**
+ * The latest checkpoint a log ending at `headSeq` would hold: one checkpoint per `CHECKPOINT_EVERY`
+ * sequenced commands, the mock's compressed stand-in for the node's `checkpoint_every` cadence.
+ */
+export function mockCheckpoint(headSeq: number): CheckpointEntry | null {
+  const seq = headSeq - (headSeq % CHECKPOINT_EVERY);
+  if (seq === 0) return null;
+  return { type: "checkpoint", offset: `${seq}:1`, seq, root: `0x${mockHex(`checkpoint:${seq}`, 32)}` };
+}
+
+/** The public withdrawal queue's size, summed from its entries. */
+export function mockTotals(state: MockState): QueueTotals {
+  let remaining = 0n;
+  for (const entry of state.queue) remaining += entry.remaining;
+  return { count: state.queue.length, remaining, seq: state.seq, complete: true, stable: true };
+}
 
 /** How the node's attestation presents: the node's own mock quote, or a hardware quote nothing here can verify. */
 export type AttestationMode = "mock" | "unverifiable";
@@ -103,6 +122,42 @@ export class MockEngineClient implements EngineClient {
 
   houseView(): HouseView {
     return { cash: fixedToWire(this.state.houseCash), nav: fixedToWire(houseNav(this.state)), gross_exposure: fixedToWire(houseGross(this.state)) };
+  }
+
+  /** The solvency parameters in force, as the mock's launch genesis set them. */
+  async houseParams(): Promise<HouseParams> {
+    return this.state.params;
+  }
+
+  /**
+   * The house panel's state now, without waiting; what the mock branch of the session passes as the
+   * store's initial state, so the page's first paint carries it.
+   */
+  housePanelSnapshot(): { params: HouseParams; checkpoint: CheckpointEntry | null; totals: QueueTotals } {
+    return {
+      params: this.state.params,
+      checkpoint: mockCheckpoint(this.headSeq ?? 0),
+      totals: mockTotals(this.state),
+    };
+  }
+
+  /**
+   * The latest checkpoint the mock's log would hold: its cadence is one checkpoint per
+   * `CHECKPOINT_EVERY` sequenced commands, as the node's `checkpoint_every` sets it. The root is a
+   * deterministic stand-in — the mock computes no Merkle roots.
+   */
+  async latestCheckpoint(): Promise<CheckpointEntry | null> {
+    return mockCheckpoint(this.headSeq ?? 0);
+  }
+
+  /** The mock answers from its state, so its log read is always current. */
+  async houseLogStatus(): Promise<"current" | "reading" | "failed"> {
+    return "current";
+  }
+
+  /** The public queue's size, summed from its entries. */
+  async withdrawalTotals(): Promise<QueueTotals> {
+    return mockTotals(this.state);
   }
 
   async account(address: Address): Promise<AccountView> {

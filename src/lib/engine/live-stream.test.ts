@@ -39,8 +39,8 @@ function setup(options: { address?: () => string; clockMs?: number; accept?: boo
     openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
     scheduler, nowMs: () => options.clockMs ?? connection.frames[0]?.time ?? 0, challenge: () => connection.challenge,
     onMessage: (m) => messages.push(m), onFeed: (f, time) => { feeds.push(f); feedTimes.push(time); }, onProblem: (p) => problems.push(p),
-    // Quotes and authorizations are tested through the live client in live-actions.test.ts.
-    onQuote: () => {}, onQuoteError: () => {}, onWithdrawal: () => {},
+    // Quotes, checkpoints and authorizations are tested through the live client in live-actions.test.ts.
+    onQuote: () => {}, onQuoteError: () => {}, onWithdrawal: () => {}, onCheckpoint: () => {},
   });
   return { stream, sockets, messages, feeds, feedTimes, problems, scheduler, opened };
 }

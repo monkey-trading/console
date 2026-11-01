@@ -6,6 +6,8 @@ import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
 import type { PriceRules, StreamMessage, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
+import type { CheckpointEntry } from "../engine/wire";
+import type { HouseParams, QueueTotals } from "../house";
 import { WatchConnector } from "../engine/watch-wallet";
 import type { StoreDeps } from "./store-deps";
 import { ConsoleStore } from "./store";
@@ -37,9 +39,26 @@ export class FakeClient implements EngineClient {
   async attestation(): Promise<never> { throw new Error("unused"); }
   async verify() { return this.status; }
   watch(listener: (event: ClientEvent) => void) { this.listener = listener; return () => { this.listener = null; }; }
-  async markets() { this.marketReads++; return this.marketList; }
+  /** When set, the markets read rejects with it, as a failing node answers. */
+  marketError: Error | null = null;
+  async markets() {
+    this.marketReads++;
+    if (this.marketError !== null) throw this.marketError;
+    return this.marketList;
+  }
   marketList: MarketView[] = [BTC];
   async house() { return { cash: "5", nav: "5", gross_exposure: "0" }; }
+  /** Canned house-state reads, patched by a test; nulls answer "not read yet". */
+  params: HouseParams | null = null;
+  checkpoint: CheckpointEntry | null = null;
+  totals: QueueTotals = { count: 0, remaining: 0n, seq: null, complete: true, stable: true };
+  /** When set, the queue totals read rejects with it, as a failing node answers. */
+  totalsError: Error | null = null;
+  async houseParams() { return this.params; }
+  async latestCheckpoint() { return this.checkpoint; }
+  logStatus: "current" | "reading" | "failed" = "reading";
+  async houseLogStatus() { return this.logStatus; }
+  async withdrawalTotals() { if (this.totalsError !== null) throw this.totalsError; return this.totals; }
   async account(): Promise<never> { throw this.accountError ?? new EngineError(404, "not found"); }
   async accessProbe() {}
   async nonce() { return { next_nonce: 0 }; }

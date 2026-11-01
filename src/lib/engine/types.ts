@@ -47,6 +47,8 @@ export interface MarketView {
   quote_currency?: { currency: "eur" | "gbp" | "jpy"; fx_market: MarketId };
   max_slippage_bps: number;
   house_cap_bps: number;
+  /** From V6, the least the market cap may be, in USD notional; absent on the wire when zero (`engine_core::market::MarketSpec`). */
+  house_cap_floor?: string;
   min_order_notional: string;
   open: boolean;
   reduce_only: boolean;
@@ -201,6 +203,15 @@ export type EngineCommand =
   | { type: "signed_admin"; command?: { action?: string } & UpsertMarket }
   | { type: "place_order" | "cancel_order" | "withdraw" | "deposit" | "attest_eligibility" };
 
+/** The `set_params` fields of an `AdminCommand::SetParams` as the log serializes them, flat beside `action`. */
+export interface SetParams {
+  profit_fee_bps: number;
+  closeout_level_bps: number;
+  house_total_cap_bps: number;
+  /** The total cap's dollar floor, a decimal string as every `Fixed` on the wire. */
+  house_total_cap_floor: string;
+}
+
 /** One message of the WebSocket stream at `/v1/stream`: a sequenced command with its events. */
 export interface StreamMessage {
   offset: string;
@@ -222,21 +233,6 @@ export interface Attestation {
   quote: string;
 }
 
-export interface QueuedWithdrawal {
-  position: number;
-  account: Address;
-  amount: string;
-  remaining: string;
-  requested_seq: number;
-}
-
-/** `GET /v1/accounts/{address}/withdrawals`. */
-export interface WithdrawalPage {
-  seq: number | null;
-  queue: QueuedWithdrawal[];
-  next: number | null;
-}
-
 /** An account event with where it sits in the log: `cursor` is `<seq>:<index>`, as the node serializes it. */
 export type HistoryEvent = EngineEvent & { cursor: string; ts: number };
 
@@ -246,30 +242,7 @@ export interface HistoryPage {
   next: string | null;
 }
 
-/** The vault's EIP-712 authorization of an approved payout, with its proof against a checkpoint root. */
-export interface WithdrawalAuthorization {
-  signer: Address;
-  signer_epoch: number;
-  /** Unix seconds; the vault accepts it until `expires_at`, 24 hours later. */
-  issued_at: number;
-  expires_at: number;
-  checkpoint_seq: number;
-  checkpoint_root: string;
-  siblings: string[];
-}
-
-/** A signed withdrawal as the stream carries it (`type: "withdrawal"`): what the account claims on the vault. */
-export interface SignedWithdrawal {
-  account: Address;
-  amount: string;
-  /** The payout nonce `withdrawal_approved` named. */
-  nonce: number;
-  chain_id: number;
-  vault: Address;
-  signature: string;
-  approved_seq?: number;
-  authorization?: WithdrawalAuthorization;
-}
+export type { QueuedWithdrawal, SignedWithdrawal, WithdrawalAuthorization, WithdrawalPage } from "./withdrawal-types";
 
 /** One step of an executable quote: the average price of an order of up to `qty`. */
 export interface QuoteStep {
