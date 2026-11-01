@@ -43,11 +43,11 @@ describe("markersFor", () => {
     expect(lines.every((l) => l.style === "dotted")).toBe(true);
   });
 
-  it("draws the entry neutral on a long and on a short", async () => {
+  it("draws a long's entry green and a short's entry red", async () => {
     const { market, base } = await fixture();
-    for (const [qty, title] of [[fixedFromInt(1), "Long entry"], [fixedFromInt(-1), "Short entry"]] as const) {
+    for (const [qty, title, tone] of [[fixedFromInt(1), "Long entry", "glow"], [fixedFromInt(-1), "Short entry", "ember"]] as const) {
       const entry = markersFor(withAccount(base, account(qty, [])), market).find((l) => l.title === title);
-      expect(entry).toMatchObject({ price: 60_000, tone: "fg-2", style: "dotted" });
+      expect(entry).toMatchObject({ price: 60_000, tone, style: "dotted" });
     }
   });
 
