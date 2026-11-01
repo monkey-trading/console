@@ -14,22 +14,16 @@ import { formatUsdc } from "../vault";
 import { describeReject } from "../messages";
 import { loadAccount } from "./account";
 import type { ConsoleStore } from "./store";
+import { NO_ACCOUNT, release } from "./wallet-session";
 
 export { STATEMENTS };
+export { disconnectWallet, walletSessionEnded } from "./wallet-session";
 
 /** A signed request stays valid this long past the node's signed time, within the engine's five-minute cap (`MAX_EXPIRY_AHEAD_MS`). */
 export const REQUEST_TTL_MS = 120_000;
 
 /** A refusal shown to the user, never thrown past an action. */
 type Outcome = { ok: true; result: ActionResult } | { ok: false };
-
-/** The state a wallet change clears: everything read or streamed for the account before. */
-const NO_ACCOUNT = { account: null, eligibility: null, queue: [], history: [], quotes: {}, quoteError: null, quoted: [], authorizations: [], approvals: [], approvalsNext: null, payoutHints: {}, searching: null, paid: [], unpaid: [], entitlement: null, emissionsVault: null };
-
-/** Ends a wallet's connection in the background, telling the user if that fails. */
-function release(store: ConsoleStore, wallet: Wallet | null): void {
-  wallet?.disconnect?.().catch((error: unknown) => store.toast("error", `The wallet's session did not close: ${errorText(error)}`));
-}
 
 /** Offers to add the deployment's USDC to the wallet that just connected; one small toast when the wallet adds it, silence on a decline or a wallet that cannot. */
 function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
@@ -64,13 +58,6 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     if (!store.getSnapshot().wallet) store.liveWallet = null;
     return false;
   }
-}
-
-export function disconnectWallet(store: ConsoleStore): void {
-  release(store, store.liveWallet);
-  store.liveWallet = null;
-  store.setWallet(null);
-  store.patch(NO_ACCOUNT);
 }
 
 /** The connected wallet when the console may use it now; otherwise tells the user why not and returns null. */

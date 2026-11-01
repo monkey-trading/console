@@ -10,14 +10,14 @@ import { InjectedConnector } from "@/lib/engine/injected";
 import { createLiveClient, GLUE_PATH } from "@/lib/engine/live-session";
 import type { Eip1193Provider } from "@/lib/engine/provider-wallet";
 import { WalletConnectConnector } from "@/lib/engine/walletconnect";
-import { clearChoice, type ChoiceStorage } from "@/lib/engine/wallet-persist";
+import type { ChoiceStorage } from "@/lib/engine/wallet-persist";
 import type { VerifierModule } from "@/lib/engine/wasm-verifier";
 import { WatchConnector } from "@/lib/engine/watch-wallet";
 import { DEMO_ADDRESS } from "@/lib/mock/demo";
 import { queuePage } from "@/lib/mock/funds";
 import { mockHistory } from "@/lib/mock/history";
 import { createMockNode, SIM_EPOCH_MS, type MockNode } from "@/lib/mock";
-import { connectWallet, disconnectWallet } from "@/lib/store/actions";
+import { connectWallet, walletSessionEnded } from "@/lib/store/actions";
 import { reconnectWallet } from "@/lib/store/reconnect";
 import { scanBarsHistory } from "@/lib/store/bars-scan";
 import { followAccountFeeds, quoteSyncKey, syncQuotes } from "@/lib/store/funds";
@@ -68,12 +68,7 @@ function createLiveSession(deploy: Deploy): Session {
   };
   // When the wallet app ends the session, the console shows the wallet disconnected rather than
   // failing every action, and forgets the choice: the remembered connection has ended.
-  const ended = () => {
-    if (store.liveWallet?.label !== "WalletConnect") return;
-    clearChoice(persistence);
-    disconnectWallet(store);
-    store.toast("info", "Your wallet ended the WalletConnect session, so the console disconnected it.");
-  };
+  const ended = (topic: string) => walletSessionEnded(store, topic);
   const walletConnect = deploy.walletConnectProjectId === null ? null : new WalletConnectConnector(
     { projectId: deploy.walletConnectProjectId, url: () => window.location.origin }, chain, { wait }, () => import("@walletconnect/universal-provider"), ended,
   );

@@ -7,7 +7,7 @@
  * connection's choice.
  */
 
-import { clearChoice, loadChoice, type WalletChoice } from "../engine/wallet-persist";
+import { clearChoiceIf, loadChoice, type WalletChoice } from "../engine/wallet-persist";
 import type { Wallet } from "../engine/wallet";
 import { connectWallet } from "./actions";
 import type { ConsoleStore } from "./store";
@@ -24,7 +24,7 @@ export interface ResumableConnector {
 function forgetChoice(store: ConsoleStore, expected: WalletChoice): void {
   const persistence = store.deps.persistence;
   if (persistence === undefined) return;
-  if (JSON.stringify(loadChoice(persistence)) === JSON.stringify(expected)) clearChoice(persistence);
+  clearChoiceIf(persistence, expected);
 }
 
 /**

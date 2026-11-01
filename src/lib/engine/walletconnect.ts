@@ -76,7 +76,7 @@ export class WalletConnectConnector implements WalletConnector {
     private readonly deps: ProviderWalletDeps,
     private readonly load: () => Promise<WcModule>,
     /** Told when the wallet app ends the live session, so the console can show it disconnected. */
-    private readonly onEnded: () => void = () => undefined,
+    private readonly onEnded: (topic: string) => void = () => undefined,
   ) {}
 
   /** Calls `listener` whenever the pairing state changes; returns the unsubscribe. */
@@ -236,9 +236,9 @@ export class WalletConnectConnector implements WalletConnector {
       logger: "silent",
     });
     provider.on("session_delete", (payload) => {
-      if (typeof payload !== "object" || payload === null || !("topic" in payload) || payload.topic !== this.live) return;
+      if (typeof payload !== "object" || payload === null || !("topic" in payload) || typeof payload.topic !== "string" || payload.topic !== this.live) return;
       this.live = null;
-      this.onEnded();
+      this.onEnded(payload.topic);
     });
     this.started = provider;
     return provider;
