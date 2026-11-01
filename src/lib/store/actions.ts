@@ -43,6 +43,10 @@ function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
 export async function connectWallet(store: ConsoleStore, optionId: string, quiet = false, connected?: Wallet): Promise<boolean> {
   try {
     const wallet = connected ?? (await store.deps.wallets.connect(optionId));
+    if (quiet && store.liveWallet !== null && store.liveWallet !== wallet) {
+      release(store, wallet); // a quiet connect never replaces a wallet that connected while it waited; the stale one ends
+      return false;
+    }
     if (store.liveWallet !== wallet) release(store, store.liveWallet); // the wallet this one replaces keeps no session open
     store.liveWallet = wallet;
     store.patch(NO_ACCOUNT);
@@ -93,19 +97,13 @@ export async function prompting<T>(store: ConsoleStore, prompt: string, step: ()
   }
 }
 
-/**
- * How a request answered 409 (its nonce already used) is handled. A cancel or a declaration is signed
- * once more with the nonce the node names, since running it twice does nothing more; an order or a
- * withdrawal is not, since a copy of it may have run first (the node's own README warns a man in the
- * middle can send a copy first and deliver the refusal of the second).
- */
+/** How a request answered 409 (its nonce already used) is handled: a cancel or declaration re-signs with the nonce the node names, since running it twice does nothing more; an order or withdrawal does not, since a copy of it may have run first. */
 type OnNonceTaken = "sign-again" | "report";
 
 /**
- * Signs and sends one request for a node whose attestation the console accepts. The nonce comes
- * from the node's signed answer, and the expiry from that answer's signed time. A refusal is shown
- * only after the account is read again under fresh challenges, so the screen holds what the node
- * holds when the user reads why, as the engine asks of a client.
+ * Signs and sends one request for a node whose attestation the console accepts: the nonce from
+ * its signed answer, the expiry from that answer's signed time. A refusal shows only after the
+ * account is read again, so the screen holds what the node holds when the user reads why.
  */
 async function signed(
   store: ConsoleStore,

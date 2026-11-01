@@ -203,4 +203,24 @@ describe("a wallet change", () => {
     store.deps.wallets.connect = async () => { throw new Error("offline"); };
     expect(await connectWallet(store, "walletconnect", true)).toBe(false);
   });
+
+  it("a quiet connect never replaces a wallet that connected while it waited", async () => {
+    const { store } = await connected();
+    disconnectWallet(store); // no wallet connected when the quiet reconnect left its request pending
+    const newer: Wallet = { address: "0x00000000000000000000000000000000000000bb", label: "Newer", sign: async () => "0x", deposit: async () => "0x", claim: async () => "0x" };
+    let released = 0;
+    const stale: Wallet = { ...WALLET_STUB, disconnect: async () => { released += 1; } };
+    store.liveWallet = newer;
+    store.setWallet({ address: newer.address, label: newer.label });
+    store.deps.wallets.connect = async () => stale; // the approved request a quiet reconnect left pending
+    expect(await connectWallet(store, "injected", true)).toBe(false);
+    expect(store.liveWallet).toBe(newer); // the newer wallet stays
+    expect(store.getSnapshot().wallet?.address).toBe(newer.address); // the stale connect adopted nothing
+    expect(released).toBe(1); // its session was ended
+    // A connect the visitor started is not quiet and still replaces.
+    store.liveWallet = null;
+    store.deps.wallets.connect = async () => newer;
+    expect(await connectWallet(store, "injected")).toBe(true);
+    expect(store.liveWallet).toBe(newer);
+  });
 });
