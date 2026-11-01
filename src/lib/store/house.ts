@@ -51,6 +51,21 @@ export function readHouseQueue(store: ConsoleStore): Promise<boolean> {
 }
 
 /**
+ * Marks the House page open, so refreshes run its reads, and returns what closes it. The reads are for
+ * that page alone: a live client's log read replays the whole signed log, which no other page should pay for.
+ */
+export function openHousePanel(store: ConsoleStore): () => void {
+  store.housePanelOpen = true;
+  store.deps.client.setHouseLogOpen(true);
+  // Before the first refresh the node is not trusted yet; that refresh runs them.
+  if (store.getSnapshot().houseReady) readHousePanelSoon(store);
+  return () => {
+    store.housePanelOpen = false;
+    store.deps.client.setHouseLogOpen(false);
+  };
+}
+
+/**
  * Starts the house panel's reads without awaiting them, so a slow queue walk never holds up the
  * next market or account read. The log reads and the queue walk guard themselves separately, so a
  * slow walk cannot delay newer parameters or checkpoints; at most one of each runs at a time. The
@@ -58,7 +73,7 @@ export function readHouseQueue(store: ConsoleStore): Promise<boolean> {
  * refresh is shown once.
  */
 export function readHousePanelSoon(store: ConsoleStore): void {
-  if (store.stopped) return;
+  if (store.stopped || !store.housePanelOpen) return;
   if (store.houseRead === null) {
     store.houseRead = readHouseLog(store).then((ok) => {
       if (ok) store.lastHouseReadError = null;

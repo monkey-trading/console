@@ -45,6 +45,8 @@ export class ConsoleStore {
   /** The last read failure shown, so a failure that repeats on every tick is shown once. */
   private lastReadError: string | null = null;
   /** The house panel's log read in flight, so a slow read never queues behind another. Not part of the snapshot. */
+  /** Whether the House page is on screen, the only time its reads run. */
+  housePanelOpen = false;
   houseRead: Promise<void> | null = null;
   /** The house panel's queue walk in flight, guarded apart from the log reads. Not part of the snapshot. */
   queueRead: Promise<void> | null = null;

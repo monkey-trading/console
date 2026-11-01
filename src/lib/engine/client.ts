@@ -88,6 +88,8 @@ export interface EngineClient {
   latestCheckpoint(): Promise<CheckpointEntry | null>;
   /** The state of the log read the parameters and checkpoint come from: `current` once a read has reached the head, `reading` while it catches up, `failed` after a read that keeps failing. */
   houseLogStatus(): Promise<"current" | "reading" | "failed">;
+  /** Whether anything shows the log read's result: a live client reads the log only while it does. */
+  setHouseLogOpen(open: boolean): void;
   /** The public FIFO withdrawal queue's size, walked to its end within a page cap. */
   withdrawalTotals(): Promise<QueueTotals>;
   /** Rejects with a 404 `EngineError` for an account the engine has never credited. */

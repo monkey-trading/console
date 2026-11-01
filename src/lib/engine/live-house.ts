@@ -140,6 +140,8 @@ export class HouseLog {
   private generation = 0;
   /** Set when a read in flight is superseded and a fresh one must start the moment it settles. */
   private restart = false;
+  /** True while nothing shows the fold, so no read runs and a reconnect starts none. */
+  private paused = false;
   /** The most consecutive chunks that failed without advancing the read, before the read gives up. */
   private stallFailures = 0;
   /** The clock's time before which a failed read is not retried. */
@@ -180,6 +182,18 @@ export class HouseLog {
     this.restart = false; // no one reads the fold after a stop: nothing restarts
   }
 
+  /** Stops reading until `resume`: a running chunk stands down as it finishes, and the folds and cursor are kept. */
+  pause(): void {
+    this.paused = true;
+    this.cancel();
+  }
+
+  /** Allows reads again; the next `kick`, or the end of a run standing down, resumes from the cursor. */
+  resume(): void {
+    this.paused = false;
+    if (this.catchUp !== null) this.restart = true;
+  }
+
   /** Applies a `set_params` read at `seq` when it is newer than the fold, whatever stream it came from. */
   foldParams(seq: number, entry: SetParams): void {
     if (seq <= this.paramsSeq) return;
@@ -208,7 +222,7 @@ export class HouseLog {
    * does.
    */
   kick(): void {
-    if (this.caughtUp || this.nowMs() < this.retryAt) return;
+    if (this.paused || this.caughtUp || this.nowMs() < this.retryAt) return;
     if (this.catchUp !== null) return;
     this.startRun();
   }
