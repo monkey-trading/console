@@ -14,7 +14,6 @@ import { belowMinimum, contractUnit, MARGIN_SHORT, NO_SIZE, parseSize, previewTi
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { MarketInfo } from "./MarketInfo";
-import { Select } from "./Select";
 import { SigningFor } from "./SigningFor";
 
 type Kind = "market" | "limit" | "stop";
@@ -84,9 +83,12 @@ export function DealTicket() {
     <>
       <form className="p-4 sm:p-5" onSubmit={(event) => { event.preventDefault(); if (canPlace) submit(); }}>
         <h2 className="text-label tracking-caps text-fg-3 uppercase">Deal ticket · {market.symbol}</h2>
-        <div className="mt-5">
-          <Select label="Order type" value={kind} options={KINDS} onChange={setKind} />
-        </div>
+        <fieldset className="mt-5 grid grid-cols-3 gap-2">
+          <legend className="sr-only">Order type</legend>
+          {KINDS.map(({ value, label }) => (
+            <button key={value} type="button" aria-pressed={kind === value} onClick={() => setKind(value)} className={`min-h-11 rounded border py-2.5 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow ${kind === value ? "border-glow bg-glow/10 text-glow" : "border-line-2 text-fg-2"}`}>{label}</button>
+          ))}
+        </fieldset>
         {kind !== "market" && (
           <label className="mt-4 block text-caption text-fg-2">Trigger price
             <input value={price} inputMode="decimal" maxLength={24} onChange={(event) => setPrice(event.target.value)} className={INPUT} />
