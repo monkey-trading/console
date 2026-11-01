@@ -8,6 +8,7 @@ import vectors from "../engine/eip712-vectors.json";
 import { cancelTypedData, eligibilityTypedData, orderTypedData, requestDomain, withdrawalTypedData } from "../engine/eip712";
 import type { CancelRequest, EligibilityRequest, OrderRequest, WithdrawalRequest } from "../engine/types";
 import { ACCOUNT } from "../engine/wallet-kit";
+import { loadChoice, type ChoiceStorage } from "../engine/wallet-persist";
 import { fixedFromInt, fixedFromWire } from "../fixed";
 import { settle } from "../engine/test-kit";
 import type { Wallet } from "../engine/wallet";
@@ -163,5 +164,22 @@ describe("a wallet change", () => {
     await connectWallet(declined, "browser");
     await settle();
     expect(declined.getSnapshot().toasts.some((t) => t.text.includes("USDC"))).toBe(false);
+  });
+
+  it("persists the injected connector choice when the session has storage, and no other choice", async () => {
+    const held = new Map<string, string>();
+    const persistence: ChoiceStorage = {
+      getItem: (key) => held.get(key) ?? null,
+      setItem: (key, value) => void held.set(key, value),
+      removeItem: (key) => void held.delete(key),
+    };
+    const { store } = await connected();
+    store.deps.persistence = persistence;
+    await connectWallet(store, "injected", true);
+    expect(loadChoice(persistence)).toEqual({ kind: "injected" });
+    // A read-only watch account is not a connection the console persists.
+    held.clear();
+    await connectWallet(store, "watch", true);
+    expect(loadChoice(persistence)).toBeNull();
   });
 });

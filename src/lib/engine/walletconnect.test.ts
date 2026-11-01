@@ -176,3 +176,33 @@ describe("the WalletConnect wallet", () => {
     expect(fake.requests).toEqual([]);
   });
 });
+
+describe("WalletConnectConnector.resume", () => {
+  it("re-attaches a live session for the stored topic without opening a new pairing, and reports the pairing", async () => {
+    const paired: string[] = [];
+    const { connector, fake } = setup(undefined, (topic) => paired.push(topic));
+    fake.session = session("topic-1");
+    const wallet = await connector.resume("topic-1");
+    expect(wallet?.address).toBe(ADDRESS.toLowerCase());
+    expect(wallet?.label).toBe("WalletConnect");
+    expect(paired).toEqual(["topic-1"]);
+    expect(fake.connects).toHaveLength(0);
+    // The resumed session is the live one: its disconnect ends it through the SDK.
+    await wallet?.disconnect?.();
+    expect([fake.disconnects, fake.closes]).toEqual([1, 1]);
+  });
+
+  it("answers null when the SDK holds no session, or one for another topic", async () => {
+    const { connector, fake } = setup();
+    expect(await connector.resume("topic-1")).toBeNull(); // the SDK's memory is empty after a reload
+    fake.session = session("topic-2");
+    expect(await connector.resume("topic-1")).toBeNull();
+    expect(fake.connects).toHaveLength(0);
+  });
+
+  it("answers null for a session that no longer signs on the deployment's chain", async () => {
+    const { connector, fake } = setup();
+    fake.session = session("topic-1", ["eth_sendTransaction"]);
+    expect(await connector.resume("topic-1")).toBeNull();
+  });
+});

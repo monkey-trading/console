@@ -77,6 +77,8 @@ export class WalletConnectConnector implements WalletConnector {
     private readonly load: () => Promise<WcModule>,
     /** Told when the wallet app ends the live session, so the console can show it disconnected. */
     private readonly onEnded: () => void = () => undefined,
+    /** Told the topic of each session a connect establishes, so the console can persist the choice (monkey-trading/console#82). */
+    private readonly onPaired: (topic: string) => void = () => undefined,
   ) {}
 
   /** Calls `listener` whenever the pairing state changes; returns the unsubscribe. */
@@ -180,8 +182,27 @@ export class WalletConnectConnector implements WalletConnector {
       throw new Error(refused);
     }
     this.live = session.topic;
+    this.onPaired(session.topic);
     const topic = session.topic;
     return new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, topic) });
+  }
+
+  /**
+   * Re-attaches the session a stored choice names (monkey-trading/console#82), returning its
+   * wallet, or null when the SDK holds no usable live session for the topic. The SDK keeps its
+   * sessions in memory, so after a reload none survives; the caller then runs the pairing dialog.
+   * Error cases:
+   * - the SDK does not start (the caller may still pair; the failure is the pairing dialog's to report)
+   */
+  async resume(topic: string): Promise<Wallet | null> {
+    const provider = await this.provider();
+    const session = provider.session;
+    if (session === undefined || session.topic !== topic) return null;
+    const { address, methods } = sessionScope(session, this.chain.chainId);
+    if (address === null || !methods.has(SIGN)) return null;
+    this.live = session.topic;
+    this.onPaired(session.topic);
+    return new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, session.topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, session.topic) });
   }
 
   /** Whether nothing uses the relay socket now: no pairing open and no live session. */

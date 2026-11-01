@@ -21,8 +21,12 @@ export default function Page() {
       <section aria-labelledby="privacy" className="space-y-3">
         <h2 id="privacy" className={H2}>Privacy</h2>
         <p className={P}>
-          The console keeps nothing in your browser&apos;s storage, sets no cookies, and runs no analytics. Its fonts and
-          scripts come from its own address.
+          The console sets no cookies and runs no analytics. Its fonts and scripts come from its own
+          address. When you connect a wallet, the console remembers that connection in your
+          browser&apos;s storage — which kind of wallet it was, and the WalletConnect session&apos;s
+          topic when that is how you connected — so a later page load can reconnect you. It stores
+          nothing else: no keys, no addresses, no session material, and the stored choice is removed
+          the moment you disconnect.
         </p>
         <p className={P}>
           What you do in the console leaves your browser only for the party that needs it. Your account&apos;s

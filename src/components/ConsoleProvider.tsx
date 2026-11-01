@@ -10,6 +10,7 @@ import { InjectedConnector } from "@/lib/engine/injected";
 import { createLiveClient, GLUE_PATH } from "@/lib/engine/live-session";
 import type { Eip1193Provider } from "@/lib/engine/provider-wallet";
 import { WalletConnectConnector } from "@/lib/engine/walletconnect";
+import { loadChoice, saveChoice, type ChoiceStorage } from "@/lib/engine/wallet-persist";
 import type { VerifierModule } from "@/lib/engine/wasm-verifier";
 import { WatchConnector } from "@/lib/engine/watch-wallet";
 import { DEMO_ADDRESS } from "@/lib/mock/demo";
@@ -30,6 +31,8 @@ interface Session {
   node: MockNode | null;
   /** The WalletConnect connector, whose pairing link the pairing dialog shows; null when the build has none. */
   walletConnect: WalletConnectConnector | null;
+  /** Where the wallet connection choice persists across page loads; null in the mock session, which keeps nothing. */
+  persistence: ChoiceStorage | null;
 }
 
 const SessionContext = createContext<Session | null>(null);
@@ -59,6 +62,7 @@ function createLiveSession(deploy: Deploy): Session {
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   // The SDK is a separate chunk, loaded when the user picks WalletConnect.
   // When the wallet app ends the session, the console shows the wallet disconnected rather than failing every action.
+  const persistence: ChoiceStorage = window.localStorage;
   const ended = () => {
     if (store.liveWallet?.label !== "WalletConnect") return;
     disconnectWallet(store);
@@ -66,11 +70,12 @@ function createLiveSession(deploy: Deploy): Session {
   };
   const walletConnect = deploy.walletConnectProjectId === null ? null : new WalletConnectConnector(
     { projectId: deploy.walletConnectProjectId, url: () => window.location.origin }, chain, { wait }, () => import("@walletconnect/universal-provider"), ended,
+    (topic) => saveChoice(persistence, { kind: "walletconnect", topic }),
   );
   const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, { wait }), ...(walletConnect === null ? [] : [walletConnect]), new WatchConnector(() => window.location.search)]);
   // A node without the marks endpoint 404s it; the chart's archive scan then seeds its history.
-  const store = new ConsoleStore({ client, wallets, history: () => [], historyScan: (store, markets) => scanBarsHistory(store, markets, store.deps.scanClock), initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
-  return { store, deploy, node: null, walletConnect };
+  const store = new ConsoleStore({ client, wallets, persistence, history: () => [], historyScan: (store, markets) => scanBarsHistory(store, markets, store.deps.scanClock), initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
+  return { store, deploy, node: null, walletConnect, persistence };
 }
 
 function createSession(): Session {
@@ -92,11 +97,22 @@ function createSession(): Session {
       },
     },
   });
-  return { store, deploy, node, walletConnect: null };
+  return { store, deploy, node, walletConnect: null, persistence: null };
 }
 
 /** The most simulated time one tick may add, so a stalled timer does not jump the prices. */
 const MAX_TICK_MS = 5_000;
+
+/**
+ * Reconnects a wallet connection a previous page load stored (monkey-trading/console#82). The
+ * injected wallet re-asks its provider silently; a WalletConnect session cannot survive a reload
+ * in the SDK's memory, so a dead session falls back to the pairing dialog.
+ */
+async function resumeWallet(store: ConsoleStore, walletConnect: WalletConnectConnector, topic: string): Promise<void> {
+  const wallet = await walletConnect.resume(topic).catch(() => null);
+  if (wallet === null) return connectWallet(store, "walletconnect", true);
+  await connectWallet(store, "walletconnect", true, wallet);
+}
 
 /**
  * Provides the console's session to every screen. A live node sets its own clock with its
@@ -112,6 +128,9 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       // A live node sets the clock with its first message; the page follows it, and the account the address names.
       const stopLive = store.start(0);
       const stopFeeds = followAccountFeeds(store);
+      const choice = session.persistence === null ? null : loadChoice(session.persistence);
+      if (choice?.kind === "injected") void connectWallet(store, "injected", true);
+      else if (choice?.kind === "walletconnect" && session.walletConnect !== null) void resumeWallet(store, session.walletConnect, choice.topic);
       if (new URLSearchParams(window.location.search).has("account")) void connectWallet(store, "watch", true);
       return () => {
         stopFeeds();
@@ -151,7 +170,7 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       unsubscribe();
       stop();
     };
-  }, [store, session.node]);
+  }, [store, session.node, session.persistence, session.walletConnect]);
   useEffect(() => {
     if (session.node !== null) return;
     // The node's quote subscription follows the account, the selected market and the markets held; a

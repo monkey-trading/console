@@ -8,6 +8,7 @@ import { UntrustedError } from "../engine/trust";
 import { cancelTypedData, eligibilityTypedData, orderTypedData, requestDomain, STATEMENTS, withdrawalTypedData, type Terms, type TypedRequest } from "../engine/eip712";
 import type { EligibilityClass, OrderKind, RequestAuth, Side } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
+import { saveChoice } from "../engine/wallet-persist";
 import { fixedToWire, formatFixedPlaces, parseFixed, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
 import { describeReject } from "../messages";
@@ -39,14 +40,15 @@ function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
   );
 }
 
-export async function connectWallet(store: ConsoleStore, optionId: string, quiet = false): Promise<void> {
+export async function connectWallet(store: ConsoleStore, optionId: string, quiet = false, connected?: Wallet): Promise<void> {
   try {
-    const wallet = await store.deps.wallets.connect(optionId);
+    const wallet = connected ?? (await store.deps.wallets.connect(optionId));
     // The wallet this one replaces keeps no session open.
     if (store.liveWallet !== wallet) release(store, store.liveWallet);
     store.liveWallet = wallet;
     store.patch(NO_ACCOUNT);
     store.setWallet({ address: wallet.address, label: wallet.label, ...(wallet.readOnly ? { readOnly: true } : {}) });
+    if (store.deps.persistence !== undefined && optionId === "injected") saveChoice(store.deps.persistence, { kind: "injected" });
     offerUsdcImport(store, wallet);
     await loadAccount(store, true);
     if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);

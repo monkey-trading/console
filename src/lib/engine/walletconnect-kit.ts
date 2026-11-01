@@ -95,7 +95,7 @@ export class FakeProvider implements WcProvider {
 }
 
 /** A connector over a fresh fake, the number of SDK loads, and the pairing states it published. */
-export function setup(onEnded?: () => void) {
+export function setup(onEnded?: () => void, onPaired?: (topic: string) => void) {
   const fake = new FakeProvider();
   const loads = { count: 0 };
   const sdk: WcModule = {
@@ -109,7 +109,7 @@ export function setup(onEnded?: () => void) {
   const connector = new WalletConnectConnector({ projectId: "0123456789abcdef0123456789abcdef", url: () => "https://console.example" }, CHAIN, { wait: async () => undefined }, async () => {
     loads.count += 1;
     return sdk;
-  }, onEnded);
+  }, onEnded, onPaired);
   const states: PairingState[] = [];
   connector.subscribe(() => states.push(connector.pairing()));
   return { fake, connector, loads, states };
