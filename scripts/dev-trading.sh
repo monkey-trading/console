@@ -19,10 +19,11 @@ engine_dir="$(cd "${ENGINE_DIR:?ENGINE_DIR is the engine checkout}" && pwd)"
 if [[ -n "${ENGINE_BIN:-}" ]]; then
   engine_bin="$(cd "$(dirname "$ENGINE_BIN")" && pwd)/$(basename "$ENGINE_BIN")"
 else
-  # One resolved path serves the node, the tests' admin CLI, and the example beside it. Cargo runs
-  # in the engine checkout, so a relative CARGO_TARGET_DIR is read against it, never the work dir.
-  target_dir="${CARGO_TARGET_DIR:-$engine_dir/target}"
-  [[ "$target_dir" = /* ]] || target_dir="$engine_dir/$target_dir"
+  # One resolved path serves the node, the tests' admin CLI, and the example beside it. The target
+  # directory is whatever Cargo resolves — CARGO_TARGET_DIR or build.target-dir move it — so ask
+  # `cargo metadata`, as the local stack does.
+  # shellcheck disable=SC2086
+  target_dir="$( (cd "$engine_dir" && ${CARGO_CMD:-} cargo metadata --format-version 1 --no-deps) | python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')"
   engine_bin="$target_dir/debug/engine"
 fi
 access_source="$(dirname "$engine_bin")/examples/access_source"
