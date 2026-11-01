@@ -7,11 +7,10 @@
  * one reaches the head.
  */
 
-import { queueTotals, setParamsOf, type HouseParams, type QueueTotals } from "../house";
+import { setParamsOf, type HouseParams } from "../house";
 import { fixedFromWire } from "../fixed";
-import type { SetParams, WithdrawalPage } from "./types";
+import type { SetParams } from "./types";
 import { atOrPast, position, type ScanDeps } from "./live-scan";
-import type { SignedTransport } from "./transport";
 import { parseFrameMessage, parseSignedFrame, type CheckpointEntry } from "./wire";
 
 /** When a chunk of the read stops: at either of these, whichever comes first. */
@@ -88,8 +87,13 @@ export function scanHouse(deps: ScanDeps, fromSeq: number, budget: HouseScanBudg
         return;
       }
       if ("offset" in message) {
-        if (++seen > budget.maxMessages) return finish(new Error("The budget for one read of the log was spent."));
-        last = position(message.offset);
+        // A resuming chunk re-reads the cursor's sequence; the replayed entries verify and track
+        // the cursor but do not spend the new-entry budget, or one long sequence could starve it.
+        const at = position(message.offset);
+        if (skipPast === undefined || !atOrPast(skipPast, at)) {
+          if (++seen > budget.maxMessages) return finish(new Error("The budget for one read of the log was spent."));
+        }
+        last = at;
       }
       // Entries a previous chunk folded are read again and skipped; a rejected command is
       // sequenced too, and its values never applied, so it folds nothing.
@@ -108,7 +112,6 @@ export function scanHouse(deps: ScanDeps, fromSeq: number, budget: HouseScanBudg
     socket.onerror = () => finish(new Error("The connection to the node failed while reading the log."));
   });
 }
-
 
 /**
  * The live client's fold of the log's house state: the latest `set_params` and the latest
@@ -245,44 +248,5 @@ export class HouseLog {
         this.last = result.last;
       }
     }
-  }
-}
-
-/** The most withdrawal-queue pages a totals walk reads before it reports a lower bound. */
-const QUEUE_PAGE_CAP = 25;
-/** How long a walk's answer is reused before the next read walks the queue again. */
-const TOTALS_TTL_MS = 15_000;
-
-/**
- * Walks the public withdrawal queue's signed pages to its end, or to the page cap as a lower
- * bound; a fresh walk's answer is reused for its TTL, so a tick's refresh does not re-walk an
- * unchanged queue. Each page is signed alone, so pages answered at different log seqs are not one
- * snapshot of the queue; the totals then mix a changing queue's states, which the caller says so.
- */
-export class QueueTotalsWalk {
-  private cache: { at: number; totals: QueueTotals } | null = null;
-
-  constructor(private readonly transport: SignedTransport, private readonly nowMs: () => number) {}
-
-  async totals(): Promise<QueueTotals> {
-    const cached = this.cache;
-    if (cached !== null && this.nowMs() - cached.at < TOTALS_TTL_MS) return cached.totals;
-    const totals = await this.walk();
-    this.cache = { at: this.nowMs(), totals };
-    return totals;
-  }
-
-  private async walk(): Promise<QueueTotals> {
-    const pages: WithdrawalPage[] = [];
-    const finish = (complete: boolean) => queueTotals(pages, complete, pages.every((p) => p.seq === (pages[0]?.seq ?? null)));
-    let after: number | null = null;
-    for (let i = 0; i < QUEUE_PAGE_CAP; i++) {
-      const suffix = after === null ? "" : `&after=${after}`;
-      const page = (await this.transport.get(`/v1/withdrawals?limit=200${suffix}`)) as WithdrawalPage;
-      pages.push(page);
-      if (page.next === null) return finish(true);
-      after = page.next;
-    }
-    return finish(false);
   }
 }

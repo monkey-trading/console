@@ -2,8 +2,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { BUDGET, checkpoint, command, frame, PARAMS_FIELDS, scanning, SET_PARAMS } from "./live-house-kit";
-import type { FakeSocket } from "./test-kit";
+import { BUDGET, checkpoint, command, conflict, frame, PARAMS_FIELDS, scanning, SET_PARAMS } from "./live-house-kit";
+import { acceptAll, FakeScheduler, FakeSocket } from "./test-kit";
+import { VECTORS } from "./test-vectors";
+import { scanHouse } from "./live-house";
+import type { Verifier } from "./verifier";
 
 describe("scanning the log for the house's state", () => {
   it("opens from the seq given, folds the latest applied set_params of either log shape and the latest checkpoint, and ends at the head a heartbeat names", async () => {
@@ -95,6 +98,44 @@ describe("scanning the log for the house's state", () => {
     sockets[1]?.receive(frame(1, checkpoint(41)));
     scheduler.advance(30_000);
     await expect(slow).resolves.toEqual({ params: PARAMS_FIELDS, paramsSeq: 40, checkpoint: checkpoint(41), complete: false, last: [41, 1] });
+  });
+
+  it("rejects a frame that fails verification, before any entry and after verified ones", async () => {
+    const rejecting = (afterN: number): Verifier => ({
+      ...acceptAll,
+      openFrames: () => ({
+        verify: (text: string) => {
+          const n = (JSON.parse(text) as { n: number }).n;
+          if (n <= afterN) return { ok: true, msg: (JSON.parse(text) as { msg: string }).msg };
+          return { ok: false, reason: "bad signature" };
+        },
+      }),
+    });
+    const depsFor = (verifier: Verifier, sockets: FakeSocket[]) => ({
+      origin: "wss://node.test", chainId: 31337, vault: conflict.vault, signer: VECTORS.signer, verifier,
+      openSocket: (url: string) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
+      scheduler: new FakeScheduler(), challenge: () => "ab".repeat(32),
+    });
+    // A tampered first frame rejects before any entry.
+    const socketsA: FakeSocket[] = [];
+    const first = scanHouse(depsFor(rejecting(-1), socketsA), 40, BUDGET);
+    await Promise.resolve();
+    socketsA[0]?.receive(frame(0, command(40, { type: "admin", ...SET_PARAMS })));
+    await expect(first).rejects.toThrow("did not verify");
+    // A tampered frame after verified entries keeps what verified, stops the cursor before it, and answers incomplete.
+    const socketsB: FakeSocket[] = [];
+    const later = scanHouse(depsFor(rejecting(1), socketsB), 40, BUDGET);
+    await Promise.resolve();
+    socketsB[0]?.receive(frame(0, command(40, { type: "admin", ...SET_PARAMS })));
+    socketsB[0]?.receive(frame(1, command(41, { type: "admin", ...SET_PARAMS, profit_fee_bps: 1500 })));
+    socketsB[0]?.receive(frame(2, command(42, { type: "admin", ...SET_PARAMS, profit_fee_bps: 900 })));
+    await expect(later).resolves.toEqual({
+      params: { ...PARAMS_FIELDS, profit_fee_bps: 1500 },
+      paramsSeq: 41,
+      checkpoint: null,
+      complete: false,
+      last: [41, 0],
+    });
   });
 
   it("rejects a frame whose checkpoint or command the console does not know", async () => {

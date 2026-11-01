@@ -20,7 +20,7 @@ export default defineConfig([
       "@typescript-eslint/no-non-null-assertion": "error",
       // As strict, except that a scrolling `log` may take focus, so the keyboard can scroll it in
       // browsers that do not make scroll containers focusable (WCAG 2.1.1); so may a tab panel with nothing focusable in it.
-      "jsx-a11y/no-noninteractive-tabindex": ["error", { tags: [], roles: ["log", "tabpanel"], allowExpressionValues: false }],
+      "jsx-a11y/no-noninteractive-tabindex": ["error", { tags: [], roles: ["log", "tabpanel", "region"], allowExpressionValues: false }], // a labelled scroll region takes tabIndex 0 so keyboard users can scroll it (the WAI-APG scrollable-region pattern)
     },
   },
 ]);

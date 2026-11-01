@@ -101,11 +101,12 @@ describe("the house log fold", () => {
     sockets[1]?.receive(frame(0, command(1, { type: "tick" })));
     sockets[1]?.receive(frame(1, command(2, { type: "tick" })));
     sockets[1]?.receive(frame(2, command(3, { type: "tick" })));
+    sockets[1]?.receive(frame(3, command(4, { type: "tick" })));
     for (let i = 0; i < 20; i++) await Promise.resolve();
     expect(sockets).toHaveLength(3);
-    sockets[2]?.receive(frame(0, command(2, { type: "tick" })));
-    sockets[2]?.receive(frame(1, command(3, { type: "admin", ...SET_PARAMS, profit_fee_bps: 750 })));
-    sockets[2]?.receive(frame(2, { type: "heartbeat", head: "3:0" }));
+    sockets[2]?.receive(frame(0, command(3, { type: "tick" })));
+    sockets[2]?.receive(frame(1, command(4, { type: "admin", ...SET_PARAMS, profit_fee_bps: 750 })));
+    sockets[2]?.receive(frame(2, { type: "heartbeat", head: "4:0" }));
     for (let i = 0; i < 20; i++) await Promise.resolve();
     expect(log.params?.fresh).toBe("current");
     expect(log.params?.profitFeeBps).toBe(750);

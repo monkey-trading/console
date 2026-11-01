@@ -59,10 +59,9 @@ export function HousePage() {
   return (
     // Keyboard scrolling needs a tab stop on the scroll container (the WAI-APG scrollable-region
     // pattern); the panels below the fold hold no focusable element of their own.
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a labelled scroll region takes tabIndex 0 so keyboard users can scroll it
-    <div aria-label="House solvency details" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
+    <div role="region" aria-label="House solvency details" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
       <div className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6">
-        <header className="space-y-3">
+        <div className="space-y-3">
           <h2 className="text-lead tracking-caps text-glow uppercase">House</h2>
           <p className={P}>
             The house takes the other side of every trade. This page shows what the engine node&apos;s signed answers prove
@@ -72,7 +71,7 @@ export function HousePage() {
           </p>
           {block !== null && <p className={P}>Figures appear once the node&apos;s attestation is verified and its feed is live.</p>}
           {block === null && !state.houseReady && <p className={P}>Reading the node&apos;s first signed answers…</p>}
-        </header>
+        </div>
         {ready && (
           <>
             <section aria-labelledby="solvency" className={CARD}>
@@ -88,7 +87,7 @@ export function HousePage() {
               </p>
               <p className={P}>
                 Net asset value is the house&apos;s cash minus clients&apos; unrealised profit or loss at current marks. Gross exposure is
-                the sum of the house&apos;s net position in every market, in dollars.
+                the sum of the house&apos;s absolute net exposure in each market, in dollars, so opposite positions do not cancel.
               </p>
             </section>
             <section aria-labelledby="cap" className={CARD}>
@@ -128,6 +127,9 @@ export function HousePage() {
                 </p>
               )}
               {state.withdrawalTotals?.complete === false && <p className={P}>The queue&apos;s first pages only are counted here, so these are lower bounds.</p>}
+              {state.withdrawalTotals !== null && state.queueFailed === true && (
+                <p className={P}>The queue&apos;s last read failed, so these figures may be behind.</p>
+              )}
               {state.withdrawalTotals !== null && state.withdrawalTotals.stable === false && (
                 <p className={P}>The queue changed while it was read, so these figures are approximate.</p>
               )}
@@ -191,11 +193,14 @@ export function HousePage() {
                     replay the log to a checkpoint&apos;s sequence and check its root, and the vault stops taking deposits if the
                     enclave stops posting roots.
                   </p>
-                  {state.houseStatus !== "current" && (
+                  {state.houseStatus === "reading" && (
                     <p className={P}>
                       The log read is still catching up, so a newer checkpoint may follow; replaying the log to this
                       checkpoint&apos;s sequence still checks its root.
                     </p>
+                  )}
+                  {state.houseStatus === "failed" && (
+                    <p className={P}>The log read keeps failing, so a newer checkpoint may exist that this page has not read.</p>
                   )}
                   {signatures === "none" && <p className={P}>This build runs the in-browser simulation: it signs nothing, and the roots above are the mock&apos;s stand-ins.</p>}
                 </>
