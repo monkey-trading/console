@@ -106,6 +106,11 @@ export class LiveStream {
     this.socket?.send(op);
   }
 
+  /** The node's verdict ended: an open connection stops, marks the feed stale and comes back only through the next verdict, since its frames are checked against the signer it opened with. */
+  distrust(reason: string): void {
+    if (!this.stopped && this.socket !== null) this.fail(reason);
+  }
+
   stop(): void {
     this.stopped = true;
     this.generation++;

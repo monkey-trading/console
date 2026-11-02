@@ -82,10 +82,11 @@ export interface EngineClient {
    */
   readChainThrough(chain: DeploymentReads | null): Promise<void>;
   /**
-   * What the vault says now, read by the caller through the wallet: a live client judges the node
-   * again if that signer is not the enclave it trusts, or if it has never read the vault.
+   * What the vault says now, read by the caller through `chain`: a live client judges the node again
+   * if that signer is not the enclave it trusts, or if it has never read the vault. An answer through
+   * any wallet but the one it reads through now is dropped.
    */
-  heedVault(facts: VaultFacts): Promise<void>;
+  heedVault(facts: VaultFacts, chain: DeploymentReads): Promise<void>;
   /** Reports each change of attestation status and of the feed. */
   watch(listener: (event: ClientEvent) => void): Unsubscribe;
   markets(): Promise<MarketView[]>;

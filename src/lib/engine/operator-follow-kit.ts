@@ -23,7 +23,7 @@ export class TrialClient {
   subscribers = new Set<(message: StreamMessage) => void>();
   readChainThrough = async (chain: DeploymentReads | null) => { this.chains.push(chain); };
   heeded: VaultFacts[] = [];
-  heedVault = async (facts: VaultFacts) => { this.heeded.push(facts); };
+  heedVault = async (facts: VaultFacts, _chain: DeploymentReads) => { void _chain; this.heeded.push(facts); };
   verify = async () => { this.verifies += 1; return this.verdict; };
   stats = { operator: () => this.signedRead() };
   watch(listener: (event: ClientEvent) => void) { this.watchers.add(listener); return () => { this.watchers.delete(listener); }; }

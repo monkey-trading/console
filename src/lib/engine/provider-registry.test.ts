@@ -1,6 +1,6 @@
 /** Tests for the vault's and the registry's reads over a wallet's provider, including what a lying RPC can answer. */
 
-import { decodeFunctionData, encodeAbiParameters, encodeFunctionResult, parseAbi, type Hex } from "viem";
+import { decodeFunctionData, encodeFunctionResult, parseAbi, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 
 import { ProviderDeployment } from "./provider-registry";
@@ -162,6 +162,5 @@ describe("ProviderDeployment.candidates", () => {
     const hostile = `https://evil.example/"><script>`;
     const { reads } = rig({ list: [B as Hex], hostnames: { [B]: hostile } });
     expect((await reads.candidates())?.candidates[0]?.hostname).toBe(hostile);
-    expect(encodeAbiParameters([{ type: "string" }], [hostile])).toMatch(/^0x/);
   });
 });

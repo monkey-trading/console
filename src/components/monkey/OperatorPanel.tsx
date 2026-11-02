@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 
+import { readBlock } from "@/lib/engine/attestation";
 import { NO_CANDIDATE, type Candidate } from "@/lib/engine/registry";
 import { formatMonkey, formatRate, shortHex } from "@/lib/format";
 import { delegateStake } from "@/lib/monkey/actions";
@@ -38,6 +39,7 @@ export function OperatorPanel({ operators }: { operators: OperatorReads }) {
   const panel = useMonkeyPanel();
   const { named, table, route, chosen: chosenRead } = useSyncExternalStore(operators.subscribe, operators.getSnapshot, operators.getSnapshot);
   const { settling } = usePanelState();
+  const nodeReadable = useConsoleSelect((state) => readBlock(state.attestation, "live") === null);
   const wallet = useConsoleSelect((state) => state.wallet);
   const busy = useConsoleSelect((state) => state.busy);
   const nowMs = useConsoleSelect((state) => Math.floor(state.now / 60_000) * 60_000);
@@ -72,7 +74,7 @@ export function OperatorPanel({ operators }: { operators: OperatorReads }) {
           The node has logged an election naming {shortHex(mirrored.candidate)}, which applies its admin key at {formatStamp(mirrored.effectiveAtMs)} UTC, in {formatDuration(mirrored.effectiveAtMs - nowMs)}.
         </p>
       )}
-      <ReadNote read={route} />
+      <ReadNote read={route} loading={nodeReadable ? "Reading the node's figures…" : "The node's figures wait until it is verified."} />
       {named.status === "unavailable" && table.status === "unavailable" ? (
         <p className={NOTE}>{wallet === null ? "Connect a wallet to read the candidates from the chain and delegate your stake." : "This account is read-only, so no wallet reads the candidates from the chain."}</p>
       ) : (
@@ -88,9 +90,10 @@ export function OperatorPanel({ operators }: { operators: OperatorReads }) {
                   <CandidateRow key={candidate.address} candidate={candidate} totalStaked={totalStaked} chosen={chosen === candidate.address} canVote={canVote} disabled={busy || settling} listed={node !== null || hostnameListed(deploy, candidate.hostname)} onDelegate={send} />
                 ))}
               </ul>
-              {table.status !== "ready" && <ReadNote read={table} loading="Reading the candidates…" />}
             </>
           )}
+          <ReadNote read={table} loading="Reading the candidates…" />
+          <ReadNote read={chosenRead} loading="Reading your vote…" />
           {canVote && (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="min-w-0 text-caption text-fg">{chosen === null ? "Your stake abstains." : `Your stake votes for ${nameOf(candidates.find((c) => c.address === chosen)?.hostname ?? null, chosen)}.`}</p>

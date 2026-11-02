@@ -92,6 +92,18 @@ export class NodeTrust {
     return this.signerAddress;
   }
 
+  /**
+   * The enclave address to send a signed request to. The last gate on one, whatever the screen
+   * checked before it asked for a nonce: a check that ran since may have left the vault unread.
+   * Error cases:
+   * - as `signer`, or the node has not been checked against the vault: `UntrustedError`
+   */
+  async sendingSigner(): Promise<string> {
+    const signer = await this.signer();
+    if (this.current.kind === "attested") throw new UntrustedError(`Nothing was sent. ${this.current.why}`);
+    return signer;
+  }
+
   /** Verifies the node's attestation now, or joins the check already running. */
   verify(): Promise<void> {
     if (this.verifying === null) {
@@ -134,7 +146,8 @@ export class NodeTrust {
   /** Whether the vault's `signer` calls for a new verdict: it is not the enclave trusted now, or the verdict was reached with no read of the vault. */
   outdatedBy(signer: string): boolean {
     if (!this.judgedByVault) return false;
-    return this.current.kind === "attested" || (this.signerAddress !== null && this.signerAddress !== signer);
+    // A check running now may have read the vault before these facts.
+    return this.verifying !== null || this.current.kind === "attested" || (this.signerAddress !== null && this.signerAddress !== signer);
   }
 
   /** The vault's read has answered after the check gave up on it: a verdict that went without it may now have it. */

@@ -15,7 +15,7 @@ import type { VaultFacts } from "./registry";
 import { manifestText, releaseName } from "./release-check";
 import { FakeScheduler } from "./test-kit";
 import { loadGlue, readWasm } from "./test-vectors";
-import { CONNECT_TO_CHECK, NodeTrust, NOT_NAMED, NOT_THE_SIGNER } from "./trust";
+import { CONNECT_TO_CHECK, NodeTrust, NOT_NAMED, NOT_THE_SIGNER, UntrustedError } from "./trust";
 import type { Verifier } from "./verifier";
 
 const ENCLAVE = "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf";
@@ -112,6 +112,25 @@ describe("a wallet that answers the vault's read late", () => {
     client.watch((event) => { if (event.type === "attestation") statuses.push(event.status); });
     answer(NAMED);
     await vi.waitFor(() => expect(statuses.at(-1)?.kind).toBe("verified"));
+  });
+});
+
+describe("a signed request to a node the vault has not judged", () => {
+  it("is not sent, whatever the screen checked before it asked for a nonce, while a read still may be", async () => {
+    const posts: string[] = [];
+    const client = new LiveEngineClient({
+      origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: ENCLAVE, heartbeatMs: 5_000, loadVerifier: async () => realVerifier([]), releases: [RELEASE], acceptsMock: false, scheduler: new FakeScheduler(), nowMs: () => NOW_MS,
+      openSocket: () => { throw new Error("no stream in these tests"); },
+      fetch: async (input, init) => {
+        if (init?.method === "POST" || init?.method === "DELETE") posts.push(String(input));
+        return new Response(String(input).endsWith("/collateral") ? fixture.collateral : fixture.attestation);
+      },
+    });
+    await expect(client.verify()).resolves.toMatchObject({ kind: "attested" });
+    const order = { account: ENCLAVE } as unknown as Parameters<typeof client.placeOrder>[0]; // never read: the gate comes first
+    await expect(client.placeOrder(order)).rejects.toThrow(`Nothing was sent. ${CONNECT_TO_CHECK}`);
+    await expect(client.revokeSessionKey(order as unknown as Parameters<typeof client.revokeSessionKey>[0])).rejects.toBeInstanceOf(UntrustedError);
+    expect(posts).toEqual([]);
   });
 });
 

@@ -39,6 +39,10 @@ describe("mirroredElection", () => {
     expect(mirroredElection(route({}), 99)).toEqual({ candidate: "0xb", effectiveAtMs: 100 });
   });
 
+  it("names none on a clock no frame has set, against which any election would look ahead", () => {
+    expect(mirroredElection(route({}), 0)).toBeNull();
+  });
+
   it("names none that has applied, was cancelled, or does not exist", () => {
     expect(mirroredElection(route({}), 100)).toBeNull();
     expect(mirroredElection(route({ cancelled: true }), 99)).toBeNull();
@@ -141,14 +145,30 @@ describe("OperatorReads", () => {
     stop();
   });
 
-  it("reads the registry and not the node's route while the node cannot be trusted", async () => {
+  it("while the node cannot be trusted, drops its figures and reads the registry alone, and reads the node at once when it can be again", async () => {
     const { operators, store, counts, stop } = await started();
+    expect(operators.getSnapshot().route.status).toBe("ready");
     store.patch({ attestation: { kind: "unverified", reason: "gone" } });
+    expect(operators.getSnapshot().route).toEqual({ status: "loading", value: null, message: null });
     await operators.refreshNode();
     await operators.refreshChain();
     expect(counts).toEqual({ route: 1, operator: 2, candidates: 2 });
     expect(operators.getSnapshot().table.status).toBe("ready");
+    store.patch({ attestation: { kind: "mock" } });
+    await flush();
+    expect(counts.route).toBe(2);
+    expect(operators.getSnapshot().route.status).toBe("ready");
     stop();
+  });
+
+  it("stops following the node's trust once closed", async () => {
+    const { operators, store, counts, stop } = await started();
+    stop();
+    store.patch({ attestation: { kind: "unverified", reason: "gone" } });
+    store.patch({ attestation: { kind: "mock" } });
+    await flush();
+    expect(counts.route).toBe(1);
+    expect(operators.getSnapshot().route.status).toBe("loading");
   });
 
   it("reads again at once on an election event in the stream, and not on other events", async () => {

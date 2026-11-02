@@ -97,7 +97,9 @@ function delegatedTo(state: MockState, candidate: string): bigint {
 }
 
 function candidateTable(state: MockState): CandidateTable {
-  const totalStaked = state.monkey.totalStakedAt(state.now);
+  // `Staking.totalStaked`: what votes, so an unstake leaves it at once though it keeps earning through its cooldown.
+  let totalStaked = state.monkey.otherStakedAt(state.now);
+  for (const staked of state.monkey.staked.values()) totalStaked += staked;
   const candidates = state.operators.candidates.map(({ address, hostname, votes }) => {
     const cast = votes + delegatedTo(state, address);
     return { address, hostname, votes: cast, eligible: cast * 10_000n >= ELIGIBILITY_BPS * totalStaked };

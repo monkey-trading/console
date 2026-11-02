@@ -89,21 +89,24 @@ export function MonkeyPage() {
         <div className="mx-auto w-full max-w-[110rem] px-4 py-5 sm:px-6">
           <h2 className="text-lead tracking-caps text-glow uppercase">MONKEY</h2>
           {!trusted && <p className="mt-3 text-data leading-relaxed text-fg-2">Figures appear once the node&apos;s attestation is verified and its feed is live.</p>}
-          {!trusted && <div className="mt-4 max-w-[35rem]"><OperatorPanel operators={operators} /></div>}
-          {/* Hidden, not unmounted, while the node is not trusted: a typed amount survives a gap in the feed, and no figure from before it shows. */}
-          <div className={`${trusted ? "grid" : "hidden"} mt-4 items-start gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,35rem)_minmax(0,1fr)]`}>
+          {/* The figures are hidden, not unmounted, while the node is not trusted: a typed amount survives a gap in the feed, and no figure from before it shows. The operator card alone stays, in one place: its reads go through the wallet, and the vote never depends on the host it may remove. */}
+          <div className={`mt-4 grid items-start gap-4 ${trusted ? "lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,35rem)_minmax(0,1fr)]" : "max-w-[35rem]"}`}>
             <div className="flex min-w-0 flex-col gap-4">
-              <ClaimPanel />
-              <StakePanel />
-              {trusted && <OperatorPanel operators={operators} />}
-              <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-                <RewardsPanel />
-                <TokenPanel />
+              <div className={trusted ? "contents" : "hidden"}>
+                <ClaimPanel />
+                <StakePanel />
               </div>
-              <DistributionPanel />
-              <ActivityTable />
+              <OperatorPanel operators={operators} />
+              <div className={trusted ? "contents" : "hidden"}>
+                <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+                  <RewardsPanel />
+                  <TokenPanel />
+                </div>
+                <DistributionPanel />
+                <ActivityTable />
+              </div>
             </div>
-            <div className="flex min-w-0 flex-col gap-4">
+            <div className={`${trusted ? "flex" : "hidden"} min-w-0 flex-col gap-4`}>
               <Charts panel={panel} />
             </div>
           </div>

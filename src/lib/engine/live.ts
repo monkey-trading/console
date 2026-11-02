@@ -81,7 +81,10 @@ export class LiveEngineClient implements EngineClient {
       collateral: () => collateral(deps),
       verifier: () => this.verifiers.load(), releases: deps.releases, devDigests: deps.devDigests ?? [], acceptsMock: deps.acceptsMock, nowMs: deps.nowMs,
       vaultFacts: () => this.vault.facts(),
-      onStatus: (status) => this.emit({ type: "attestation", status }),
+      onStatus: (status) => {
+        if (status.kind === "unverified") this.stream?.distrust(status.reason);
+        this.emit({ type: "attestation", status });
+      },
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
     });
     this.transport = new SignedTransport({ ...deps, verifier: () => this.verifiers.loaded(), trust: this.trust, challenge, signal: this.signal });
@@ -114,9 +117,10 @@ export class LiveEngineClient implements EngineClient {
     if (chain !== null && this.trust.judgedByVault) await this.trust.verifyAfresh();
   }
 
-  async heedVault(facts: VaultFacts): Promise<void> {
-    if (!this.vault.uses(null)) this.vault.note(facts);
-    if (this.trust.outdatedBy(facts.signer)) await this.trust.verify();
+  async heedVault(facts: VaultFacts, chain: DeploymentReads): Promise<void> {
+    if (!this.vault.uses(chain)) return;
+    this.vault.note(facts);
+    if (this.trust.outdatedBy(facts.signer)) await this.trust.verifyAfresh();
   }
 
   private readonly signal = (): AbortSignal => this.deps.signal?.() ?? AbortSignal.timeout(READ_TIMEOUT_MS);

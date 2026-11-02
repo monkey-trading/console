@@ -47,7 +47,8 @@ export function hostnameListed(deploy: Pick<Deploy, "origin" | "candidateOrigins
 /** An election the log mirrors and has not applied: what the page shows of a pending election with no chain to read. */
 export function mirroredElection(route: OperatorRoute | null, nowMs: number): { candidate: string; effectiveAtMs: number } | null {
   const election = route?.last_election ?? null;
-  if (election === null || election.cancelled === true || election.effective_at <= nowMs) return null;
+  // A clock of zero is one no frame has set yet, against which any election would look ahead.
+  if (election === null || election.cancelled === true || nowMs <= 0 || election.effective_at <= nowMs) return null;
   return { candidate: election.candidate, effectiveAtMs: election.effective_at };
 }
 
@@ -78,12 +79,26 @@ export class OperatorReads {
     for (const listener of this.listeners) listener();
   }
 
+  /** Whether the node's answers may be read now. */
+  private nodeReadable(): boolean {
+    return readBlock(this.store.getSnapshot().attestation, "live") === null;
+  }
+
   /** Starts the reads, and returns what stops them and forgets what they read. While `isHidden` says the tab is hidden the timer reads nothing. */
   start(isHidden: () => boolean): () => void {
     this.open = true;
     this.cycle += 1;
     void this.refreshNode();
     void this.refreshChain();
+    // No figure from a node the console has stopped trusting stays on the card, and a node trusted again is read at once.
+    let readable = this.nodeReadable();
+    const stopFollowing = this.store.subscribe(() => {
+      const now = this.nodeReadable();
+      if (now === readable) return;
+      readable = now;
+      if (now) void this.refreshNode();
+      else this.set({ route: LOADING });
+    });
     let ticks = 0;
     const timer = setInterval(() => {
       if (isHidden()) return;
@@ -101,6 +116,7 @@ export class OperatorReads {
       this.cycle += 1;
       clearInterval(timer);
       unsubscribe();
+      stopFollowing();
       this.readFor = null;
       this.chainRead = null;
       this.set(NOTHING_READ);
@@ -109,7 +125,7 @@ export class OperatorReads {
 
   /** Reads the node's route, while its answers may be read: the registry's reads need nothing from it. */
   async refreshNode(): Promise<void> {
-    if (readBlock(this.store.getSnapshot().attestation, "live") !== null) return;
+    if (!this.nodeReadable()) return;
     const cycle = this.cycle;
     try {
       const route = await this.store.deps.client.stats.operator();

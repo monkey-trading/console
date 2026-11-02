@@ -6,7 +6,7 @@ import { dev } from "./live-setup";
 import type { VaultFacts } from "./registry";
 import { releaseName } from "./release-check";
 import { mockAttestation } from "./test-kit";
-import { CONNECT_TO_CHECK, NodeTrust, NOT_NAMED, NOT_THE_SIGNER } from "./trust";
+import { NodeTrust, NOT_NAMED, NOT_THE_SIGNER } from "./trust";
 
 const ENCLAVE = "0x00000000000000000000000000000000000000aa";
 const DIGEST = `0x${"5a".repeat(48)}` as const;
@@ -45,6 +45,5 @@ describe("a dev build's mock node", () => {
     expect((await judge([DIGEST], { release: `0x${"ee".repeat(32)}`, signer: ENCLAVE })).status).toEqual({ kind: "unverified", reason: NOT_NAMED });
     expect((await judge([DIGEST], { release: releaseName(DIGEST, CONFIG), signer: "0xff" })).status).toEqual({ kind: "unverified", reason: NOT_THE_SIGNER });
     expect((await judge([DIGEST], new Error("no answer"))).status).toEqual({ kind: "unverified", reason: "Your wallet could not read the vault's current release: no answer" });
-    expect(CONNECT_TO_CHECK).toContain("vault");
   });
 });

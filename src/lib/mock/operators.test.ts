@@ -49,6 +49,19 @@ describe("the simulated registry", () => {
     await expect(reads.delegateOf(ME)).resolves.toBeNull();
   });
 
+  it("takes stake out of the total and the votes when its unstake starts, as the contract does, though the engine counts it through the cooldown", async () => {
+    const { reads, controls, state } = node();
+    const alpha = (await reads.candidates())?.candidates[0];
+    const total = (await reads.candidates())?.totalStaked ?? 0n;
+    if (alpha === undefined) throw new Error("the mock lists its candidates");
+    controls.delegate(ME, alpha.address);
+    controls.startUnstake(ME, 100n * MONKEY_UNIT);
+    const after = await reads.candidates();
+    expect(after?.totalStaked).toBe(total - 100n * MONKEY_UNIT);
+    expect(after?.candidates[0]?.votes).toBe(alpha.votes + 499_900n * MONKEY_UNIT);
+    expect(state.monkey.totalStakedAt(state.now)).toBeGreaterThan(after?.totalStaked ?? 0n);
+  });
+
   it("counts a delegator's votes as they follow its stake", async () => {
     const { reads, controls, state } = node();
     const alpha = (await reads.candidates())?.candidates[0];

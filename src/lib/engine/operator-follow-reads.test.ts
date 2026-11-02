@@ -166,6 +166,15 @@ describe("what the vault says", () => {
     expect(waiting.client.heeded).toEqual([waiting.facts]);
   });
 
+  it("hears nothing from a wallet that left while it read", async () => {
+    const kit = inUse(async () => named());
+    const read = kit.reads.vault;
+    kit.reads.vault = () => { kit.held.chain = null; return read(); };
+    await kit.follower.check();
+    expect(kit.client.heeded).toEqual([]);
+    expect(kit.adopted).toEqual([]);
+  });
+
   it("says so when the read fails, and keeps the node in use", async () => {
     const kit = rig({ operator: async () => named({ rotationEnabled: false }) });
     kit.reads.vault = async () => { throw new Error("no answer"); };

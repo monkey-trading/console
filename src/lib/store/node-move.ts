@@ -20,10 +20,11 @@ export async function moveToNode(old: ConsoleStore, next: ConsoleStore, host: st
   const wallet = old.liveWallet;
   const key = old.sessionKey;
   const { sessionExpiresAt } = old.getSnapshot();
+  old.movedAway = true;
   old.liveWallet = null;
   old.sessionKey = null;
   old.sessionLogin = null;
-  next.toast("info", `The operator changed, so the console connected to ${host} and is verifying its attestation.`);
+  next.toast("info", `The console connected to ${host}, the node the chain names, and is verifying its attestation.`);
   if (wallet === null) return;
   // Set first, so the connect below keeps the key rather than clearing another wallet's.
   next.liveWallet = wallet;

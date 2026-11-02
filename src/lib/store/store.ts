@@ -55,6 +55,7 @@ export class ConsoleStore {
   /** The reads a 404 holds back (a node without the House state route, an account not yet credited); not part of the snapshot. */ readonly quiet = new QuietReads();
   /** When each market's bar bucket was last ticked from the node's mark; a merge tells a stale candle from a fresh one. Not part of the snapshot. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
+  /** Whether the session moved to another node's store: what this one's work then comes to says nothing of the wallet's connection. */ movedAway = false;
   /** Stand-down flags for pending history work, bumped on each start; not part of the snapshot. */
   stopped = false; scanEpoch = 0;
   /** Whether trust in the node was lost (a failed check or a wrong clock) and not yet regained. */

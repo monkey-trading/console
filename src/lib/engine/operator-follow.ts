@@ -178,8 +178,10 @@ export class OperatorFollower {
       // whatever the operator's node has come to. A move of the release alone does not: the incumbent
       // holds the vault's signer key and keeps sequencing until its successor has taken it.
       const facts = await this.bounded(chain.vault());
-      await this.current?.heedVault(facts);
+      if (this.deps.chain() !== chain) return; // another wallet came while this ran; `check` runs again for it
+      await this.current?.heedVault(facts, chain);
     } catch (error) {
+      if (this.deps.chain() !== chain) return;
       return this.set({ kind: "failed", origin: this.origin, reason: error instanceof Error ? error.message : "the read failed" });
     }
     if (named === null) return this.settled({ kind: "pinned", origin: this.origin });

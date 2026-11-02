@@ -7,10 +7,11 @@ import { decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "vi
 
 import type { DistributionProof } from "./stats-types";
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
+import { NO_CANDIDATE } from "./registry";
 import type { StakingPosition, StakingWallet } from "./staking";
 import type { Progress } from "./wallet";
 
-/** The zero address: the vault that has not deployed its token yet names it, and so does the account that delegates to no one. */
+/** The vault that has not deployed its token yet names the zero address. */
 const NO_TOKEN = "0x0000000000000000000000000000000000000000";
 
 const ERC20 = parseAbi([
@@ -124,7 +125,7 @@ export class ProviderStaking implements StakingWallet {
   }
 
   async delegate(candidate: string, progress: Progress = () => undefined): Promise<string> {
-    const action = candidate === NO_TOKEN ? "clear your delegation" : "delegate your stake";
+    const action = candidate === NO_CANDIDATE ? "clear your delegation" : "delegate your stake";
     return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "delegate", args: [hexOf(candidate)] }), action, progress);
   }
 

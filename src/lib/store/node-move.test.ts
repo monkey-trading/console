@@ -7,8 +7,10 @@ import type { OperatorFollower } from "../engine/operator-follow";
 import { loadSessionKey } from "../engine/session-key-store";
 import { authorizeBrowser, connectWallet } from "./actions";
 import { memoryStorage } from "../engine/wallet-kit";
+import { loadChoice, saveChoice } from "../engine/wallet-persist";
 import { ActionClient, authorizedTab, BTC, tab } from "./live-kit";
 import { followNode, moveToNode, recheckNode } from "./node-move";
+import { reconnectWallet } from "./reconnect";
 import { keyScope, liveSessionKey } from "./session";
 import { ConsoleStore } from "./store";
 
@@ -105,7 +107,21 @@ describe("moveToNode", () => {
     const old = await authorizedTab();
     const next = nextStore(old.storage);
     await moveToNode(old.store, next.store, "b.example");
-    expect(next.store.getSnapshot().toasts.map((t) => t.text)).toContain("The operator changed, so the console connected to b.example and is verifying its attestation.");
+    expect(next.store.getSnapshot().toasts.map((t) => t.text)).toContain("The console connected to b.example, the node the chain names, and is verifying its attestation.");
+  });
+
+  it("marks the old store moved, so the reconnect it was running does not forget the choice the new store saved", async () => {
+    const storage = memoryStorage();
+    const old = await tab(storage);
+    saveChoice(storage, { kind: "injected" });
+    let answer = () => {};
+    old.client.readChainThrough = async () => { await new Promise<void>((resolve) => { answer = resolve; }); };
+    const reconnecting = reconnectWallet(old.store, null, () => true);
+    await settle();
+    await moveToNode(old.store, nextStore(storage).store, "b.example");
+    answer();
+    await reconnecting;
+    expect(loadChoice(storage)).toEqual({ kind: "injected" });
   });
 
   it("moves a session with no wallet, connecting nothing", async () => {
