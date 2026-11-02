@@ -122,21 +122,27 @@ describe("the P&L tab's reads", () => {
     expect(reads().filter((r) => r.kind === "emission_allocated")).toHaveLength(6);
   });
 
-  it("reads the schedule again when a reset drops the read in flight, and ignores the dropped one's answer", async () => {
+  it("reads the schedule again when a reset drops the read in flight, and holds the replacement's answer when the dropped one lands last", async () => {
     const { store, client, ledger } = await opened();
+    const replacement = { ...SCHEDULE, periodMs: 300_000 };
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    client.emissionSchedule = async () => { client.scheduleReads++; await gate; return SCHEDULE; };
+    client.emissionSchedule = async () => {
+      client.scheduleReads++;
+      if (client.scheduleReads === 1) { await gate; return SCHEDULE; }
+      return replacement;
+    };
     store.ledger.open(ACCOUNT);
     await settle();
     client.listener?.({ type: "feed", status: "stale" });
     client.listener?.({ type: "feed", status: "live" });
     await settle();
     expect(client.scheduleReads).toBe(2);
+    expect(ledger().schedule).toEqual(replacement);
     release();
     await settle();
     expect(ledger().scheduleStatus).toBe("ready");
-    expect(ledger().schedule).toEqual(SCHEDULE);
+    expect(ledger().schedule).toEqual(replacement);
   });
 
   it("stops reading allocations once the tab closes, and resumes them when it reopens", async () => {

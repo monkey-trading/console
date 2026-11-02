@@ -7,7 +7,7 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { formatUsd } from "@/lib/fixed";
 import { formatMonkeyFigure } from "@/lib/format";
 import { allocationsShort, atBound, rowsRemain } from "@/lib/ledger";
-import { ACCRUES, COLUMN_NOTE, coverageNote, scheduleNotice } from "@/lib/ledger-cell";
+import { ACCRUES, COLUMN_NOTE, ledgerHeader } from "@/lib/ledger-cell";
 import { viewOf } from "@/lib/ledger-share";
 import type { ConsoleStore } from "@/lib/store/store";
 
@@ -44,11 +44,8 @@ export function PnlLedger() {
   const ready = ledger.status === "ready";
   const more = rowsRemain(ledger.data) || allocationsShort(ledger.data, ledger.schedule);
   const full = atBound(ledger.data);
-  const blank = !ready && items.length === 0;
-  const notice = scheduleNotice(ledger.scheduleStatus);
+  const { blank, status } = ledgerHeader(ledger, items.length, totals, more, full);
   const rowFor = (item: (typeof items)[number]) => ({ item, symbol: names.get(item.row.market)?.symbol ?? `market ${item.row.market}`, places: names.get(item.row.market)?.places ?? 2, scheduleStatus: ledger.scheduleStatus });
-  // A live region that exists before it changes: the coverage of a read that landed, or why one failed.
-  const status = [ledger.error !== null ? ledger.error : ready ? coverageNote(items.length, totals, more, full) : "", notice ?? ""].filter(Boolean).join(" ");
   const empty = !ready ? (ledger.status === "failed" ? "The results could not be read." : "Reading your results.") : more ? "No realised results in what is loaded yet. Load more for older events." : "No realised results yet. Closing a position, a close-out or a split's cash in lieu shows here.";
 
   return (

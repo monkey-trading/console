@@ -61,6 +61,27 @@ export function divFixed(a: Fixed, b: Fixed): Fixed {
   return (a * SCALE) / b;
 }
 
+/** `numerator / divisor` rounded toward negative infinity; the divisor is not zero. */
+function floorDiv(numerator: bigint, divisor: bigint): bigint {
+  const quotient = numerator / divisor;
+  return numerator % divisor !== 0n && (numerator < 0n) !== (divisor < 0n) ? quotient - 1n : quotient;
+}
+
+/** `a * b`, rounded toward negative infinity: the engine's `mul_rounded(.., Rounding::Down)`. */
+export function mulFixedDown(a: Fixed, b: Fixed): Fixed {
+  return floorDiv(a * b, SCALE);
+}
+
+/**
+ * `a / b`, rounded toward negative infinity: the engine's `div_rounded(.., Rounding::Down)`.
+ * Error cases:
+ * - `b` is zero; callers check the divisor first
+ */
+export function divFixedDown(a: Fixed, b: Fixed): Fixed {
+  if (b === 0n) throw new Error("divFixedDown: division by zero");
+  return floorDiv(a * SCALE, b);
+}
+
 /** `value` times `bps` basis points, truncated toward zero. */
 export function bpsOf(value: Fixed, bps: number): Fixed {
   return (value * BigInt(Math.trunc(bps))) / 10_000n;

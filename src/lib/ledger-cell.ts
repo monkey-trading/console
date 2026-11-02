@@ -51,6 +51,17 @@ export function coverageNote(held: number, totals: LedgerTotals, more: boolean, 
   return totals.monkeyShort ? `${covers} The MONKEY total leaves out losses shown as Pending, Loading or —.` : covers;
 }
 
+/**
+ * What the header says: the totals are blank until a read has landed (a stream row alone would make them
+ * that one row), and the status line gives a read's error together with the coverage note, so a failed
+ * "Load more" leaves the totals qualified.
+ */
+export function ledgerHeader(state: Pick<LedgerState, "status" | "error" | "scheduleStatus">, held: number, totals: LedgerTotals, more: boolean, full: boolean): { blank: boolean; status: string } {
+  const ready = state.status === "ready";
+  const parts = [state.error ?? "", ready ? coverageNote(held, totals, more, full) : "", scheduleNotice(state.scheduleStatus) ?? ""];
+  return { blank: !ready, status: parts.filter(Boolean).join(" ") };
+}
+
 /** The texts of one ledger row, the same for its card and its table row. */
 export function rowTexts({ row, share }: LedgerItem, places: number, scheduleStatus: LedgerState["scheduleStatus"]) {
   return {
