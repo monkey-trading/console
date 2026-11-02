@@ -175,6 +175,10 @@ export class LiveEngineClient implements EngineClient {
     return { next_nonce: (answer.body as { next_nonce: number }).next_nonce, time_ms: answer.timeMs };
   }
 
+  exitProof(address: Address): Promise<unknown> {
+    return this.transport.get(`/v1/accounts/${address}/exit`).catch((error: unknown) => { if (error instanceof EngineError && error.status === 404) return null; throw error; });
+  }
+
   async eligibility(address: Address): Promise<EligibilityView> {
     return (await this.transport.get(`/v1/accounts/${address}/eligibility`)) as EligibilityView;
   }
@@ -273,7 +277,7 @@ export class LiveEngineClient implements EngineClient {
         onQuote: (quote) => this.emit({ type: "quote", quote }),
         onQuoteError: (error) => this.emit({ type: "quote_error", error }),
         onWithdrawal: (withdrawal) => this.emit({ type: "withdrawal", withdrawal }),
-        onCheckpoint: (checkpoint) => this.houseFold.foldCheckpoint(checkpoint),
+        onCheckpoint: (checkpoint) => { this.houseFold.foldCheckpoint(checkpoint); this.emit({ type: "checkpoint", seq: checkpoint.seq }); },
         onProblem: (reason) => this.emit({ type: "problem", reason }),
         onFeed: (status: FeedStatus, time?: number) => {
           this.emit(time === undefined ? { type: "feed", status } : { type: "feed", status, time });

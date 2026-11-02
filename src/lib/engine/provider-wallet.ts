@@ -14,10 +14,11 @@ import type { TypedRequest } from "./eip712";
 import { claimEmissionsTx, emissionsClaimedRead, suggestMonkeyToken, suggestTokenAsset } from "./provider-monkey";
 import { unknownChain, walletError } from "./provider-errors";
 import { usdcBalanceRead } from "./provider-balance";
+import { ProviderExit } from "./provider-exit";
 import { ProviderDeployment } from "./provider-registry";
 import { ProviderStaking } from "./provider-staking";
 import { waitMined } from "./receipts";
-import { serialized } from "./serialized-provider";
+import { serialized, WALLET_READ_MS, withinMs } from "./serialized-provider";
 import type { StakingWallet } from "./staking";
 import type { Address, SignedWithdrawal } from "./types";
 import type { Progress, SignRequest, UsdcBalance, Wallet } from "./wallet";
@@ -92,8 +93,8 @@ export class ProviderWallet implements Wallet {
   topic?: string;
   /** The staking and distribution calls. */
   readonly staking: StakingWallet;
-  /** The vault's and the operator registry's reads. */
-  readonly chainReads: ProviderDeployment;
+  readonly chainReads: ProviderDeployment; // the vault's and the operator registry's reads
+  readonly exit: ProviderExit; // the vault's exit, which needs no node
 
   /** The wallet's provider, asked one request at a time. */
   private readonly provider: Eip1193Provider;
@@ -108,6 +109,7 @@ export class ProviderWallet implements Wallet {
     this.provider = serialized(provider);
     this.staking = new ProviderStaking(address, chain, this.provider, { send: (to, data, action, progress) => this.send(to, data, action, progress), ensureChain: () => this.ensureChain() });
     this.chainReads = new ProviderDeployment(chain, this.provider);
+    this.exit = new ProviderExit(address, chain, this.provider, (data, action, progress) => this.send(chain.vault, data, action, progress));
   }
 
   /**
@@ -118,7 +120,7 @@ export class ProviderWallet implements Wallet {
    * - the user declines, or the wallet stays on another chain
    */
   async ensureChain(): Promise<void> {
-    const current = Number(await this.provider.request({ method: "eth_chainId" }));
+    const current = Number(await withinMs(this.provider, { method: "eth_chainId" }, WALLET_READ_MS));
     if (current === this.chain.chainId) return;
     const chainId = hex(this.chain.chainId);
     try {
@@ -161,9 +163,7 @@ export class ProviderWallet implements Wallet {
   async suggestMonkey(): Promise<boolean> { return suggestMonkeyToken(() => this.ensureChain(), this.chain, this.provider); }
 
   /** The wallet's USDC on the custody chain, read without a chain switch; see `usdcBalanceRead`. */
-  usdcBalance(): Promise<UsdcBalance> {
-    return usdcBalanceRead(this.address, this.chain, this.provider);
-  }
+  usdcBalance(): Promise<UsdcBalance> { return usdcBalanceRead(this.address, this.chain, this.provider); }
 
   /**
    * Error cases:
@@ -275,7 +275,7 @@ export class ProviderWallet implements Wallet {
    */
   private async send(to: string, data: Hex, action: string, progress: Progress): Promise<string> {
     try {
-      await this.provider.request({ method: "eth_getTransactionReceipt", params: [NO_TRANSACTION] });
+      await withinMs(this.provider, { method: "eth_getTransactionReceipt", params: [NO_TRANSACTION] }, WALLET_READ_MS);
     } catch (error) {
       throw walletError(error, `read transaction receipts, so the console did not ask it to ${action}`);
     }
@@ -288,7 +288,7 @@ export class ProviderWallet implements Wallet {
       throw walletError(error, action);
     }
     progress(`Waiting for the transaction to ${action} to be mined.`);
-    await waitMined(async (txHash) => this.provider.request({ method: "eth_getTransactionReceipt", params: [txHash] }), hash, action, this.deps.wait);
+    await waitMined((txHash) => withinMs(this.provider, { method: "eth_getTransactionReceipt", params: [txHash] }, WALLET_READ_MS), hash, action, this.deps.wait);
     return hash;
   }
 }

@@ -342,14 +342,17 @@ The bar is WCAG 2.2 AA; the [development checklist](../../rules/development-chec
 - No analytics (Vercel Web Analytics and Speed Insights included), cookies, `localStorage`,
   `sessionStorage`, IndexedDB, trackers, fingerprinting, third-party scripts, fonts, images,
   iframes, or embeds without the owner's explicit approval. A visitor's choices, such as the pause
-  switch, live in memory and end with the tab. Three exceptions, approved by the owner and disclosed
+  switch, live in memory and end with the tab. Four exceptions, approved by the owner and disclosed
   on /notices: the wallet connection choice (monkey-trading/console#82: the connector kind and, for
   WalletConnect, the session topic) persists in `localStorage` across page loads and is forgotten
   when the connection ends; the session key (monkey-trading/console#168: its private key, scoped
   to one account, chain and vault) persists there until it expires, is revoked, the node stops
-  accepting it, or the wallet disconnects, and reaches no snapshot, message or log; and the trading
+  accepting it, or the wallet disconnects, and reaches no snapshot, message or log; the trading
   preferences and the last size placed in each market (monkey-trading/console#169) persist there
-  (`monkeytrading.preferences`, `monkeytrading.last-sizes`), read tolerantly.
+  (`monkeytrading.preferences`, `monkeytrading.last-sizes`), read tolerantly; and the connected
+  account's latest exit proof (monkey-trading/engine#48, monkey-trading/console#36) persists there
+  per chain, vault and account, read as untrusted, with a visible warning when the browser will not
+  keep it.
 - Every request the page makes is same-origin, but for the engine nodes' origins the build lists, as
   the owner approved them, and WalletConnect's relay and its Verify frame while a user pairs or uses a wallet app over
   it (approved in monkey-trading/console#7 and #27): the site serves its own fonts, images, and scripts. Check the production build's

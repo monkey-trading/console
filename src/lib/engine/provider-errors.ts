@@ -27,6 +27,16 @@ export function unknownChain(error: unknown): boolean {
   return /chain/i.test(detail) && /unrecognized|unknown/i.test(detail);
 }
 
+/** Whether a call's rejection is the contract reverting, as a wallet reports it: JSON-RPC's code 3, or a message saying so, at the top or under `data`, where some wallets put what the chain said beneath "Internal JSON-RPC error". A timeout or a provider's failure says nothing of the contract. */
+export function isRevert(error: unknown): boolean {
+  if (errorCode(error) === 3) return true;
+  const detail = error instanceof Error ? error.message : typeof error === "object" && error !== null && "message" in error ? String(error.message) : "";
+  if (/revert/i.test(detail)) return true;
+  const data = typeof error === "object" && error !== null && "data" in error ? error.data : null;
+  if (typeof data !== "object" || data === null) return false;
+  return isRevert(data) || ("originalError" in data && isRevert(data.originalError));
+}
+
 /** `read`, or a rejection once `ms` has passed without it settling. */
 export function withTimeout<T>(read: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {

@@ -14,6 +14,7 @@ import { ConsoleProvider, useSession } from "./ConsoleProvider";
 import { DealTicket } from "./DealTicket";
 import { DepositForm } from "./DepositForm";
 import { EmissionsCard } from "./EmissionsCard";
+import { ExitPanel } from "./ExitPanel";
 import { MonkeyPanelProvider } from "./monkey/use-monkey";
 import { DistributionClaim } from "./monkey/DistributionClaim";
 import { OrdersView } from "./OrdersView";
@@ -60,6 +61,7 @@ const HOSTS: readonly [NoticeSurface, string, ReactNode][] = [
   ["setup", "the authorize step", el(SetupSteps, { step: "authorize" })],
   ["setup", "the faucet step", el(SetupSteps, { step: "fund" })],
   ["payouts", "the claims on the vault", el(Payouts)],
+  ["exit", "the exit panel", el(ExitPanel)],
   ["payoutReads", "the claims on the vault", el(Payouts)],
   ["payoutVault", "the claims on the vault", el(Payouts)],
   ["emissions", "the MONKEY emissions card", createElement(EmissionsCard, { claim: () => Promise.resolve() })],

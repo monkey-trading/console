@@ -49,6 +49,11 @@ interface Session {
 
 const SessionContext = createContext<Session | null>(null);
 
+/** The browser's timers; a handle is the one this scheduler's own setTimeout returned. */
+const scheduler = { setTimeout: (run: () => void, ms: number): unknown => setTimeout(run, ms), clearTimeout: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
+/** The browser's storage for the account's exit proof, reached only from effects and handlers; it throws where the browser denies it. */
+const exitStorage = () => window.localStorage;
+
 /** How often the page advances the mock node, in milliseconds. */
 const TICK_MS = 1_000;
 
@@ -69,8 +74,6 @@ function createPrefs(): PrefsStore {
 
 /** The store for a live node: nothing is loaded until its attestation is trusted. */
 function createLiveSession(deploy: Deploy): Session {
-  const scheduler = { setTimeout: (run: () => void, ms: number): unknown => setTimeout(run, ms), // The handle is the one this scheduler's own setTimeout returned.
-    clearTimeout: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
   const nowMs = () => Date.now();
   const browser = {
     fetch: (input: Parameters<typeof fetch>[0], init?: RequestInit) => fetch(input, init),
@@ -100,7 +103,7 @@ function createLiveSession(deploy: Deploy): Session {
   );
   const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, { wait }), ...(walletConnect === null ? [] : [walletConnect]), new WatchConnector(() => window.location.search)]);
   // A node without the marks endpoint 404s it; the chart's archive scan then seeds its history.
-  const storeFor = (forClient: EngineClient) => new ConsoleStore({ client: forClient, wallets, persistence, history: () => [], historyScan: (store, markets) => scanBarsHistory(store, markets, store.deps.scanClock), initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
+  const storeFor = (forClient: EngineClient) => new ConsoleStore({ client: forClient, wallets, persistence, exitStorage, history: () => [], historyScan: (store, markets) => scanBarsHistory(store, markets, store.deps.scanClock), initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
   // The store in use, which a move to another node replaces; `ended` above and the follower below read it when they run.
   let store = storeFor(client);
   let moved: ((next: ConsoleStore) => void) | null = null;
@@ -126,6 +129,7 @@ function createSession(): Session {
   const store = new ConsoleStore({
     client: node.client,
     wallets: node.wallets,
+    exitStorage,
     drive: (ms) => node.client.tick(ms),
     history: mockHistory,
     initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS, recent: node.client.recentLog(1000), viewer: DEMO_ADDRESS, housePanel: node.client.housePanelSnapshot(),
@@ -174,6 +178,12 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
     if (document.activeElement === null || document.activeElement === document.body) document.getElementById("main")?.focus();
   }, [session.moves, store, follower]);
   useEffect(() => (follower === null ? undefined : followNode(store, follower)), [follower, store]);
+  useEffect(() => {
+    const stop = store.exit.follow({ scheduler, hidden: () => document.visibilityState === "hidden", nowMs: () => Date.now() });
+    const seen = () => { if (document.visibilityState !== "hidden") store.exit.seen(); };
+    document.addEventListener("visibilitychange", seen);
+    return () => { document.removeEventListener("visibilitychange", seen); stop(); };
+  }, [store]);
   useEffect(() => {
     if (session.node === null) {
       // A live node sets the clock with its first message; the page follows it, and the account the address names.

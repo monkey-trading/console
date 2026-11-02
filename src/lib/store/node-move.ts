@@ -22,6 +22,7 @@ export async function moveToNode(old: ConsoleStore, next: ConsoleStore): Promise
   const key = old.sessionKey;
   const { sessionExpiresAt, setup } = old.getSnapshot();
   old.movedAway = true;
+  next.exit.keeper.carry(old.getSnapshot().exit, old.exit.keeper); // a proof the browser would not keep, or the wallet has not checked, lives only in the page
   old.liveWallet = null;
   old.sessionKey = null;
   old.sessionLogin = null;
@@ -59,4 +60,5 @@ export async function recheckNode(store: ConsoleStore, follower: Pick<OperatorFo
   }
   await store.deps.client.verify();
   await follower?.check();
+  await store.exit.refresh();
 }

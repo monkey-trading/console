@@ -21,6 +21,11 @@ export class MockControls {
 
   constructor(private readonly client: MockEngineClient) {}
 
+  /** The simulated vault's exit: what its wallet side and these controls act on. */
+  get exit(): MockEngineClient["vaultExit"] {
+    return this.client.vaultExit;
+  }
+
   setRegion(region: Region): void {
     this.client.state.region = region;
   }

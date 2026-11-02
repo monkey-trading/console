@@ -53,6 +53,19 @@ export default function Page() {
           or the network it signed in from.
         </p>
         <p className={P}>
+          While your account holds something in the vault, the console keeps a copy of its latest exit
+          proof in your browser&apos;s storage, one per account, chain and vault: the proof of your
+          balance, positions, withdrawals, staking distribution and pending deposits at the vault&apos;s
+          latest checkpoint, with when that checkpoint was posted. The console reads it from the engine
+          node, and at the vault&apos;s last checkpoint it lets you claim from the vault if the node is
+          gone. To check it, the console
+          sends it through your wallet to your wallet&apos;s chain provider, as a read of the vault&apos;s
+          verifier; a claim you register publishes it on chain. It goes nowhere else unless you export
+          it to a file. It stays after you disconnect, until a later proof replaces it, the node shows your
+          account holds nothing, the vault refuses it, or you clear this site&apos;s data. Anyone who can read this
+          browser&apos;s storage or that file can see those figures; they cannot move your funds with them.
+        </p>
+        <p className={P}>
           What you do in the console leaves your browser only for the party that needs it. Your account&apos;s
           address, your signed orders, cancels, withdrawals and eligibility declaration, the session
           key&apos;s address with its signed registration and revocation, and the reads of your account go

@@ -10,6 +10,7 @@ import type { HouseParams, QueueTotals } from "../house";
 import type { MarkProvenance } from "../engine/mark-types";
 import { fixedToNumber, type Fixed } from "../fixed";
 import { decodeHouse, decodeMarket, type AccountModel, type Eligibility, type HouseModel, type MarketModel } from "../models";
+import { NO_EXIT, type ExitState } from "./exit-state";
 import type { HousePanelInit } from "./store-deps";
 import { emptyLedgerState, type LedgerState } from "./ledger";
 
@@ -18,7 +19,7 @@ export type BlockReason = "united_states" | "sanctioned_jurisdiction";
 /** Where a message shows: beside the control the trader used, or in the one place its subject has on the page. */
 export const NOTICE_SURFACES = [
   "ticket", "orders", "positions", "accountRead", "account", "deposit", "withdraw", "faucet", "setup", "payouts", "payoutReads", "payoutVault",
-  "emissions", "distribution", "stake", "operator", "settings", "wallet", "node", "feed", "chart",
+  "emissions", "distribution", "stake", "operator", "settings", "wallet", "node", "feed", "chart", "exit",
 ] as const;
 export type NoticeSurface = (typeof NOTICE_SURFACES)[number];
 
@@ -164,6 +165,8 @@ export interface ConsoleState {
   entitlement: EntitlementProof | null;
   /** The vault's record of the connected account's MONKEY: what it has minted and its latest posted checkpoint seq. */
   emissionsVault: { claimed: bigint; latestSeq: number } | null;
+  /** The account's exit proof and where the vault's exit stands. */
+  exit: ExitState;
   /** What the wallet is asked to sign or send now, shown while it waits for the user. */
   prompt: string | null;
   /** The surface that asked, where the prompt shows. */
@@ -231,6 +234,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     quotes: {},
     quoteError: null,
     quoted: [],
+    exit: NO_EXIT,
     authorizations: [],
     approvals: [],
     approvalsNext: null,
