@@ -54,6 +54,30 @@ describe("decodeAccount", () => {
     });
     expect(account.balance).toBe(100_500_000_000n);
     expect(account.unfinalised).toBe(fixedFromInt(5));
-    expect(account.positions).toEqual([{ market: 1, qty: fixedFromInt(-2), entry: fixedFromInt(30_000) }]);
+    expect(account.positions).toEqual([{ market: 1, qty: fixedFromInt(-2), entry: fixedFromInt(30_000), closeout: null }]);
+  });
+
+  it("reads each position's close-out, and leaves a dash for a node that sends none or a malformed one", () => {
+    const view = {
+      balance: "100", equity: "99", margin: "10", toxicity_bps: 0, orders: {},
+      positions: { "1": { qty: "1", entry: "100" }, "2": { qty: "1", entry: "100" }, "3": { qty: "1", entry: "100" }, "4": { qty: "1", entry: "100" }, "5": { qty: "1", entry: "100" }, "6": { qty: "1", entry: "100" } },
+    };
+    const closeouts = [
+      { market: 1, reach: "at" as const, price: "84210.5263" },
+      { market: 2, reach: "due" as const, price: null },
+      { market: 3, reach: "beyond" as const, price: null },
+      { market: 4, reach: "at" as const, price: null },
+      { market: 5, reach: "soon" as never, price: null },
+      { market: 6, reach: "at" as const, price: "not a price" },
+    ];
+    expect(decodeAccount({ ...view, closeouts }).positions.map((p) => p.closeout)).toEqual([
+      { reach: "at", price: 84_210_526_300_000n },
+      { reach: "due" },
+      { reach: "beyond" },
+      null,
+      null,
+      null,
+    ]);
+    expect(decodeAccount(view).positions.map((p) => p.closeout)).toEqual([null, null, null, null, null, null]);
   });
 });

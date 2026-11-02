@@ -6,7 +6,7 @@ import { useEffect, useId } from "react";
 
 import { CONFIRM_MIN_GAP_MS, CONFIRM_MS } from "@/lib/confirm-window";
 import { describeLeftOut, planCloseAll, pressBatch, targetsKey } from "@/lib/close-all";
-import { formatMark } from "@/lib/price-format";
+import { formatCloseout, formatMark } from "@/lib/price-format";
 import { absFixed, formatFixedPlaces, formatUsd } from "@/lib/fixed";
 import { closingPrice } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
@@ -17,6 +17,7 @@ import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
 import { Notice } from "./Notice";
 import { useReadOnlyNote } from "./SignGate";
+import { Term } from "./house/Panel";
 import { useConfirmWindow } from "./use-confirm-window";
 import { usePrefs } from "./use-prefs";
 
@@ -24,6 +25,9 @@ const TH = "px-4 py-3 text-left text-label font-normal tracking-caps text-fg-3 u
 const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 /** The button while it waits for its second press: the hover colours, held. */
 const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
+
+/** What the Close-out value means, shared by the table's head and the phone rows' label. */
+const CLOSEOUT_TIP = "Where this market must reach for your account to fall below its close-out level, with your other positions held at their marks. Margin is shared, and the largest losing position closes first, which may be another. Due: already below it. None: no price in the node's range reaches it.";
 
 /** The slippage bound a Close sends, capped at the market's own. */
 const CLOSE_SLIPPAGE_BPS = 25;
@@ -63,6 +67,7 @@ export function PositionsView() {
       entry: formatMark(p.entry, places),
       mark: known === null ? "—" : formatMark(known, places),
       pnl: pnl === null ? "—" : formatUsd(pnl),
+      closeout: formatCloseout(p.closeout, places),
       loss: pnl !== null && pnl < 0n,
       open: market?.open === true,
       // An unpriced market has no closing price, whatever a quote says.
@@ -118,6 +123,7 @@ export function PositionsView() {
               <div><dt className="text-label text-fg-3">Size</dt><dd>{r.size}</dd></div>
               <div><dt className="text-label text-fg-3">Entry</dt><dd>{r.entry}</dd></div>
               <div><dt className="text-label text-fg-3">Mark</dt><dd>{r.mark}</dd></div>
+              <div><dt className="text-label text-fg-3"><Term label="Close-out" tip={CLOSEOUT_TIP} /></dt><dd>{r.closeout}</dd></div>
             </dl>
             <button type="button" disabled={!r.closable} className={`${BUTTON} mt-3 w-full`} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
             {r.unquoted && <p className="mt-2 text-label text-fg-3">Select {r.symbol} to get its closing price.</p>}
@@ -125,8 +131,8 @@ export function PositionsView() {
         ))}
       </ul>
       <div className="relative hidden overflow-x-auto lg:block">
-        <table className="w-full min-w-[640px] text-caption">
-          <thead><tr className="border-b border-line"><th className={TH}>Market</th><th className={TH}>Side</th><th className={TH}>Size</th><th className={TH}>Entry</th><th className={TH}>Mark</th><th className={TH}>P&amp;L</th><th className={TH}><span className="sr-only">Actions</span></th></tr></thead>
+        <table className="w-full min-w-[720px] text-caption">
+          <thead><tr className="border-b border-line"><th className={TH}>Market</th><th className={TH}>Side</th><th className={TH}>Size</th><th className={TH}>Entry</th><th className={TH}>Mark</th><th className={TH}><Term label="Close-out" tip={CLOSEOUT_TIP} /></th><th className={TH}>P&amp;L</th><th className={TH}><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.key} className="border-b border-line last:border-b-0">
@@ -135,6 +141,7 @@ export function PositionsView() {
                 <td className="px-4 py-4">{r.size}</td>
                 <td className="px-4 py-4">{r.entry}</td>
                 <td className="px-4 py-4">{r.mark}</td>
+                <td className="px-4 py-4">{r.closeout}</td>
                 <td className={`px-4 py-4 ${r.loss ? "text-ember" : "text-glow"}`}>{r.pnl}</td>
                 <td className="px-4 py-4 text-right">
                   <button type="button" disabled={!r.closable} className={BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>

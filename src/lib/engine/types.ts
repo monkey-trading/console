@@ -6,6 +6,7 @@
 
 import type { EngineEvent } from "./event-types";
 export type { EngineEvent } from "./event-types";
+export type { AccountView } from "./account-types";
 import type { HouseScanView } from "./stats-types";
 
 export type Address = string;
@@ -85,17 +86,6 @@ export interface RestingOrder {
   qty: string;
   kind: OrderKind;
   reduce_only: boolean;
-}
-
-/** `GET /v1/accounts/{address}`. */
-export interface AccountView {
-  balance: string;
-  unfinalised_deposits?: string;
-  equity: string;
-  margin: string;
-  positions: Record<string, Position>;
-  orders: Record<string, RestingOrder>;
-  toxicity_bps: number;
 }
 
 /** The account's signature, nonce, and expiry. */
