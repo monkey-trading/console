@@ -42,7 +42,7 @@ describe("revoking a session key", () => {
     client.answer = () => ({ seq: 2, events: [{ type: "session_key_rejected", account: ACCOUNT, session_key: OTHER_KEY, reason: { kind: "invalid_session_key" } }] });
     await list.revoke(OTHER_KEY);
     expect(list.getSnapshot().keys.map((k) => k.address)).toContain(OTHER_KEY);
-    expect(store.getSnapshot().toasts.at(-1)?.tone).toBe("error");
+    expect(store.getSnapshot().notices.settings?.tone).toBe("error");
   });
 
   it("leaves the row alone when the wallet declines", async () => {
@@ -78,8 +78,7 @@ describe("revoking a session key", () => {
     await revoking;
     expect(store.getSnapshot().wallet?.address).toBe(ACCOUNT);
     expect(store.sessionKey?.address).toBe(newer.address);
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "ok" });
-    expect(store.getSnapshot().toasts.filter((t) => t.tone === "info")).toEqual([]);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 
   it("starts no read and no timer when the page closed while the revocation was out", async () => {
@@ -106,7 +105,7 @@ describe("ending this browser's own session", () => {
     const { store } = await opened();
     sessionEnded(store, "first");
     sessionEnded(store, "second");
-    expect(store.getSnapshot().toasts.filter((t) => t.tone === "info").map((t) => t.text)).toEqual(["first"]);
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: "first" });
   });
 
   it("tells the user once when the stream's copy of the revocation arrives before the answer", async () => {
@@ -118,7 +117,7 @@ describe("ending this browser's own session", () => {
     };
     await list.revoke(own);
     expect(store.getSnapshot().wallet).toBeNull();
-    expect(store.getSnapshot().toasts.filter((t) => t.tone === "info").map((t) => t.text)).toEqual(["This browser's trading authorization was revoked, so your wallet was disconnected. Connect again to renew it."]);
+    expect(store.getSnapshot().notices).toEqual({ wallet: expect.objectContaining({ tone: "info", text: "This browser's trading authorization was revoked, so your wallet was disconnected. Connect again to renew it." }) });
   });
 
   it("disconnects for a revocation the stream reports while the page is closed, as on every other page, and asks nothing", async () => {

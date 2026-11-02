@@ -35,7 +35,7 @@ describe("as the wallet changes around it", () => {
     await connectWallet(store, "injected", true); // a reload's reconnect, which asks nothing
     let proceed!: (signature: string) => void;
     wallet.sign = () => new Promise<string>((resolve) => { proceed = resolve; });
-    const authorizing = authorizeBrowser(store);
+    const authorizing = authorizeBrowser(store, "setup");
     await settle();
     expect(store.getSnapshot()).toMatchObject({ busy: true, prompt: expect.stringContaining("authorize this browser") });
     client.declared = null;
@@ -56,14 +56,14 @@ describe("as the wallet changes around it", () => {
     wallet.sign = () => new Promise<string>((resolve) => { proceed = resolve; });
     const declaring = attestEligibility(store, "professional");
     await settle();
-    const toasts = store.getSnapshot().toasts.length;
+    const notices = store.getSnapshot().notices;
     disconnectWallet(store);
     expect(setupVisible(store.getSnapshot())).toBe(false);
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
     proceed(`0x${"11".repeat(65)}`);
     await declaring;
     expect(client.posted.some((p) => p.route === "eligibility")).toBe(false);
-    expect(store.getSnapshot().toasts).toHaveLength(toasts);
+    expect(store.getSnapshot().notices).toEqual(notices);
   });
 
   it("never asks the old wallet when its connection ends during the nonce read, and leaves the next connection's prompt alone", async () => {
@@ -74,7 +74,7 @@ describe("as the wallet changes around it", () => {
     const read = client.nonce.bind(client);
     let answer!: () => void;
     client.nonce = () => new Promise((resolve) => { answer = () => void read().then(resolve); });
-    const authorizing = authorizeBrowser(store);
+    const authorizing = authorizeBrowser(store, "setup");
     await settle();
     await connectWallet(store, "other", false, OTHER);
     store.patch({ busy: true, prompt: "the next wallet's request" });
@@ -109,17 +109,17 @@ describe("as the wallet changes around it", () => {
     const declining = deposit(store, fixedFromInt(10));
     await settle();
     await connectWallet(store, "other", false, OTHER);
-    const toasts = store.getSnapshot().toasts.length;
+    const notices = store.getSnapshot().notices;
     finish(walletError({ code: 4001 }, "deposit"));
     await declining;
-    expect(store.getSnapshot().toasts).toHaveLength(toasts);
+    expect(store.getSnapshot().notices).toEqual(notices);
     await connectWallet(store, "injected", false, wallet);
     const failing = deposit(store, fixedFromInt(10));
     await settle();
     await connectWallet(store, "other", false, OTHER);
     finish(walletError({ code: -32000, message: "the transaction reverted" }, "deposit"));
     await failing;
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("Your wallet could not deposit: the transaction reverted");
+    expect(store.getSnapshot().notices.deposit?.text).toBe("Your wallet could not deposit: the transaction reverted");
   });
 
   it("reports nothing when the old wallet declines after its connection ended, and leaves the next wallet's request alone", async () => {
@@ -131,10 +131,10 @@ describe("as the wallet changes around it", () => {
     await settle();
     await connectWallet(store, "other", false, OTHER);
     store.patch({ busy: true, prompt: "the next wallet's request" });
-    const toasts = store.getSnapshot().toasts.length;
+    const notices = store.getSnapshot().notices;
     decline(new Error("You declined to sign in your wallet."));
     await declaring;
-    expect(store.getSnapshot().toasts).toHaveLength(toasts);
+    expect(store.getSnapshot().notices).toEqual(notices);
     expect(store.getSnapshot()).toMatchObject({ busy: true, prompt: "the next wallet's request" });
     expect(client.posted.some((p) => p.route === "eligibility")).toBe(false);
   });
@@ -143,13 +143,13 @@ describe("as the wallet changes around it", () => {
     const { client, provider, store } = await connected();
     store.patch({ stream: "connecting" });
     client.nonceReads = 0;
-    expect(await loginSession(store)).toBe(false);
+    expect(await loginSession(store, "setup")).toBe(false);
     store.patch({ stream: "live", attestation: { kind: "unverified", reason: "no" } });
-    expect(await loginSession(store)).toBe(false);
+    expect(await loginSession(store, "setup")).toBe(false);
     expect(client.nonceReads).toBe(0);
     expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toEqual([]);
     store.patch({ attestation: { kind: "mock" } });
-    expect(await loginSession(store)).toBe(true);
+    expect(await loginSession(store, "setup")).toBe(true);
   });
 
   it("forgets a stored key a node that holds neither the account nor its declaration cannot have, as after a restarted chain", async () => {

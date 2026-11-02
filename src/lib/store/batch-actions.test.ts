@@ -28,7 +28,7 @@ async function setup(answer: (client: ActionClient) => ActionClient["answer"] = 
   const { client, store } = kit;
   client.credited = true;
   client.orders = { 7: resting(7, 1), 8: resting(8, 2), 9: resting(9, 1) };
-  await loginSession(store);
+  await loginSession(store, "setup");
   await store.refresh(true);
   const [btc] = store.getSnapshot().markets;
   if (!btc) throw new Error("no market");
@@ -42,9 +42,8 @@ const TARGETS = [{ market: 2, quoted: fixedFromInt(3_000) }, { market: 1, quoted
 const routes = (client: ActionClient) => client.posted.map((p) => p.route).filter((r) => r !== "session_key");
 
 describe("cancel all", () => {
-  it("makes one request for every order in every market and no wallet prompt once logged in, and says what it cancelled once", async () => {
+  it("makes one request for every order in every market and no wallet prompt once logged in, and says nothing", async () => {
     const { client, store, prompts, loginPrompts } = await setup(() => () => ({ seq: 5, events: [cancelled(7), cancelled(8), cancelled(9)] }));
-    const toasts = store.getSnapshot().toasts.length;
     const reads = client.marketReads;
     await cancelAll(store);
     // Exactly one request, to the batch route; never the single cancel.
@@ -55,7 +54,7 @@ describe("cancel all", () => {
     // The request is signed by the session key over the engine's CancelAllRequest.
     const typed = cancelAllTypedData(DOMAIN, body, { nonce: 4, expiresAt: NODE_TIME + REQUEST_TTL_MS });
     expect(await signerOf(typed, body.auth?.signature)).toBe(store.sessionKey?.address.toLowerCase());
-    expect(store.getSnapshot().toasts.slice(toasts)).toEqual([expect.objectContaining({ tone: "ok", text: "Cancelled 3 orders." })]);
+    expect(store.getSnapshot().notices).toEqual({});
     expect(client.marketReads).toBeGreaterThan(reads);
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
   });
@@ -76,7 +75,7 @@ describe("cancel all", () => {
       kit.client.answer = (posted) => posted.route === "session_key"
         ? { seq: 1, events: [{ type: "session_key_rejected", account: ME, session_key: (posted.body as { session_key: string }).session_key, reason: { kind: "too_many_session_keys", max: 10 } }] }
         : { seq: 2, events: [cancelled(7)] };
-      await loginSession(kit.store); // setup's registration, which the node refuses
+      await loginSession(kit.store, "setup"); // setup's registration, which the node refuses
       return { ...kit, prompts: () => kit.provider.calls.filter((c) => c.method === "eth_signTypedData_v4" && JSON.stringify(c.params).includes("CancelAllRequest")).length };
     });
     await cancelAll(store);
@@ -91,27 +90,26 @@ describe("cancel all", () => {
     });
     await cancelAll(store);
     expect(client.posted.filter((p) => p.route === "cancel_all").map((p) => (p.body as CancelAllRequest).auth?.nonce)).toEqual([4, 9]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("Cancelled 1 order.");
+    expect(store.getSnapshot().notices).toEqual({});
   });
 
   it("reports a refusal of the request as nothing cancelled", async () => {
     const { store } = await setup(() => () => ({ seq: 5, events: [rejected(0, { kind: "batch_unsupported" })] }));
     await cancelAll(store);
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "error", text: expect.stringMatching(/^Nothing was cancelled\. This node cannot cancel or close everything/) });
+    expect(store.getSnapshot().notices.orders).toMatchObject({ tone: "error", text: expect.stringMatching(/^Nothing was cancelled\. This node cannot cancel or close everything/) });
   });
 
   it("says plainly that an older node does not support it, and does not loop over single cancels", async () => {
     const { client, store } = await setup(() => () => { throw new EngineError(404, "The node answered HTTP 404."); });
     await cancelAll(store);
     expect(routes(client)).toEqual(["cancel_all"]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("This node does not support cancel all yet. It needs to restart onto a newer version.");
+    expect(store.getSnapshot().notices.orders?.text).toBe("This node does not support cancel all yet. It needs to restart onto a newer version.");
   });
 });
 
 describe("close all", () => {
   it("makes one request with every entry in order and no order placed, with no wallet prompt once logged in", async () => {
     const { client, store, prompts, loginPrompts } = await setup(() => () => ({ seq: 6, events: [fill(2), fill(1)] }));
-    const toasts = store.getSnapshot().toasts.length;
     await closeAll(store, TARGETS, BPS);
     expect(routes(client)).toEqual(["close_all"]);
     const body = client.posted.at(-1)?.body as CloseAllRequest;
@@ -121,7 +119,7 @@ describe("close all", () => {
     const typed = closeAllTypedData(DOMAIN, body, { nonce: 4, expiresAt: NODE_TIME + REQUEST_TTL_MS });
     expect(typed.message).toMatchObject({ closes: [{ market: 2, quoted: 3_000_000_000_000n }, { market: 1, quoted: 100_000_000_000_000n }], hasMaxSlippage: true, maxSlippageBps: 25n });
     expect(await signerOf(typed, body.auth?.signature)).toBe(store.sessionKey?.address.toLowerCase());
-    expect(store.getSnapshot().toasts.slice(toasts)).toEqual([expect.objectContaining({ tone: "ok", text: "Closed 2 positions." })]);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 
   it("asks the wallet exactly once for the request when the node refuses the session key", async () => {
@@ -130,7 +128,7 @@ describe("close all", () => {
     kit.client.answer = (posted) => posted.route === "session_key"
       ? { seq: 1, events: [{ type: "session_key_rejected", account: ME, session_key: (posted.body as { session_key: string }).session_key, reason: { kind: "too_many_session_keys", max: 10 } }] }
       : { seq: 2, events: [fill(1)] };
-    await loginSession(kit.store); // setup's registration, which the node refuses
+    await loginSession(kit.store, "setup"); // setup's registration, which the node refuses
     await closeAll(kit.store, [{ market: 1, quoted: fixedFromInt(100_000) }], BPS);
     expect(routes(kit.client)).toEqual(["close_all"]);
     expect(kit.provider.calls.filter((c) => c.method === "eth_signTypedData_v4" && JSON.stringify(c.params).includes("CloseAllRequest"))).toHaveLength(1);
@@ -139,13 +137,13 @@ describe("close all", () => {
   it("names the market whose entry was rejected, by its list index, and the count that closed", async () => {
     const { store } = await setup(() => () => ({ seq: 6, events: [rejected(0, slippage), fill(1)] }));
     await closeAll(store, TARGETS, BPS);
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "error", text: "Closed 1 of 2 positions; ETH-USD moved past its slippage bound." });
+    expect(store.getSnapshot().notices.positions).toMatchObject({ tone: "error", text: "Closed 1 of 2 positions; ETH-USD moved past its slippage bound." });
   });
 
   it("does not mistake a refusal of the whole request for entry 0's rejection", async () => {
     const { store } = await setup(() => () => ({ seq: 6, events: [rejected(0, { kind: "batch_unsupported" })] }));
     await closeAll(store, TARGETS, BPS);
-    const text = store.getSnapshot().toasts.at(-1)?.text ?? "";
+    const text = store.getSnapshot().notices.positions?.text ?? "";
     expect(text).toMatch(/^Nothing was closed\. This node cannot cancel or close everything/);
     expect(text).not.toContain("ETH-USD");
   });
@@ -153,7 +151,7 @@ describe("close all", () => {
   it("reads a lone rejection of the only entry as that entry's", async () => {
     const { store } = await setup(() => () => ({ seq: 6, events: [rejected(0, slippage)] }));
     await closeAll(store, [{ market: 2, quoted: fixedFromInt(3_000) }], BPS);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("No position was closed: ETH-USD moved past its slippage bound.");
+    expect(store.getSnapshot().notices.positions?.text).toBe("No position was closed: ETH-USD moved past its slippage bound.");
   });
 
   it("does not sign again after a 409, since a copy may have run, and says so", async () => {
@@ -162,14 +160,14 @@ describe("close all", () => {
     await closeAll(store, TARGETS, BPS);
     expect(client.posted.filter((p) => p.route === "close_all")).toHaveLength(1);
     expect(client.marketReads).toBeGreaterThan(reads);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toMatch(/^The node had already used nonce 4 for this account, so it did not take this request as sent\./);
+    expect(store.getSnapshot().notices.positions?.text).toMatch(/^The node had already used nonce 4 for this account, so it did not take this request as sent\./);
   });
 
   it("says plainly that an older node does not support it, and falls back to no single orders", async () => {
     const { client, store } = await setup(() => () => { throw new EngineError(404, "The node answered HTTP 404."); });
     await closeAll(store, TARGETS, BPS);
     expect(routes(client)).toEqual(["close_all"]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("This node does not support close all yet. It needs to restart onto a newer version.");
+    expect(store.getSnapshot().notices.positions?.text).toBe("This node does not support close all yet. It needs to restart onto a newer version.");
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
   });
 

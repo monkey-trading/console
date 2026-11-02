@@ -15,14 +15,14 @@ const WARN = `${LINE} border-amber/40 bg-amber/10 text-amber`;
 const BAD = `${LINE} border-ember/50 bg-ember/10 text-ember`;
 
 export function AttestationBanner() {
-  const { attestation, stream, signatures } = useConsole();
+  const { attestation, stream, signatures, notices } = useConsole();
   return (
     <section aria-label="Node attestation">
       <Status attestation={attestation} signatures={signatures} />
       <NodeLine />
       {stream === "stale" && attestation.kind !== "unverified" && (
         <div role="alert" className={BAD}>
-          <strong className="font-medium">The node&apos;s feed is stale.</strong> It stopped or failed a check (see the last message), so orders are disabled until it recovers.
+          <strong className="font-medium">The node&apos;s feed is stale.</strong> It stopped or failed a check, so orders are disabled until it recovers.{notices.feed !== undefined && <> Last problem: {notices.feed.text}</>}
         </div>
       )}
     </section>

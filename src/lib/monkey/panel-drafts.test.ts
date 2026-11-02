@@ -46,7 +46,7 @@ describe("the amounts typed on the MONKEY page", () => {
     // The stake has landed and its re-read is still waiting for the wallet.
     expect(held.stakes).toBe(1);
     expect(panel.getSnapshot()).toMatchObject({ settling: true, drafts: { stake: "" } });
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "ok", text: "Staked 1,000 MONKEY." });
+    expect(store.getSnapshot().notices.stake).toBeUndefined();
     panel.setDraft("stake", "7");
     held.release();
     expect(await staked).toBe(true);

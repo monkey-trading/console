@@ -11,7 +11,7 @@ import type { ConsoleStore } from "./store";
 /**
  * Reads the connected account's state into the store; a never-credited account is an empty one.
  * The wallet may change while the reads run; an answer for another account is dropped. A failure
- * is reported on the store and never thrown: it says nothing about the markets and house figures
+ * is put on the `accountRead` surface and never thrown: it says nothing about the markets and house figures
  * the same refresh read, so it must not reach that read's error handling.
  * A node across the network answers 404 for the account and its entitlement until the account is
  * credited: the account, its entitlement, eligibility and withdrawal queue are then read again at most
@@ -52,12 +52,12 @@ export async function loadAccount(store: ConsoleStore, withHistory: boolean): Pr
         if (history.length === 0) quiet?.rest(emptyHistory, UNTIL_EVENT, mark);
       }
     }
-    store.lastAccountError = null;
+    store.clearNotice("accountRead");
   } catch (error) {
     // Lost trust is reported once by the attestation check itself; the account read that waited on the same check stays silent.
-    if (error instanceof UntrustedError) return;
-    const message = error instanceof Error ? error.message : "The node did not answer.";
-    if (!store.noteAccess(error) && message !== store.lastAccountError) store.toast("error", message);
-    store.lastAccountError = message;
+    if (error instanceof UntrustedError || store.noteAccess(error)) return;
+    // Said where the account's figures would be; the next read, on the stream's next event, tries again. A failure that repeats keeps the one message.
+    const message = `Your account could not be read: ${(error instanceof Error ? error.message : "the node did not answer").replace(/\.$/, "")}. The console tries again by itself.`;
+    if (store.getSnapshot().notices.accountRead?.text !== message) store.notify("accountRead", message);
   }
 }

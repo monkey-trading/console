@@ -4,7 +4,8 @@
  * every 5, the wallet's chain reads every 15 (one at a time, bounded, never asking the wallet to do
  * anything) and after a transaction, and each straight away, at most once a second, on a stream event
  * that changes it (`live-reads.ts`). A failing read backs off and shows calmly on its panel, with no
- * toast and no button; the vault's MONKEY record, read with the wallet's, still reports its failure.
+ * no button; the vault's MONKEY record, read with the wallet's, is unread after a failure, which the
+ * emissions card says.
  */
 
 import { carryAccrued } from "../engine/claim-standing";
@@ -287,9 +288,8 @@ export class MonkeyPanel {
     if (current()) {
       try {
         await bounded(checkEmissionsClaimed(this.store));
-      } catch (error) {
-        // `checkEmissionsClaimed` reports its own failures; what reaches here is the wallet not answering in time. The queue holds until it does, so the next such report is for a later read.
-        this.store.toast("error", `The vault's MONKEY record could not be read: ${error instanceof Error ? error.message : "the read failed"}`);
+      } catch {
+        // The wallet did not answer in time. The emissions card says the vault's record is unread, and the next wallet read asks again.
       }
     }
     await Promise.all(outstanding);

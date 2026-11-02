@@ -145,7 +145,7 @@ describe("what closes it", () => {
     await attestEligibility(store, "professional");
     expect(store.getSnapshot().blocked).toBe("sanctioned_jurisdiction");
     expect(setupVisible(store.getSnapshot())).toBe(false);
-    expect(store.getSnapshot().toasts.filter((t) => t.tone === "error")).toEqual([]);
+    expect(store.getSnapshot().notices.setup).toBeUndefined();
   });
 
   it("stays on the step, and says why, for any other refusal in the log", async () => {
@@ -155,7 +155,7 @@ describe("what closes it", () => {
     await attestEligibility(store, "professional");
     expect(store.getSnapshot().blocked).toBeNull();
     expect(setupVisible(store.getSnapshot())).toBe(true);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The signature was not accepted.");
+    expect(store.getSnapshot().notices.setup?.text).toBe("The signature was not accepted.");
   });
 
   it("stays on the step when a signature is declined, and says why", async () => {
@@ -165,10 +165,10 @@ describe("what closes it", () => {
     await attestEligibility(kit.store, "professional");
     expect(kit.store.getSnapshot().setup.open).toBe(true);
     expect(steps(kit.store)).toEqual(["declare", "authorize", "deposit"]);
-    expect(kit.store.getSnapshot().toasts.at(-1)?.text).toBe("You declined to sign in your wallet.");
+    expect(kit.store.getSnapshot().notices.setup?.text).toBe("You declined to sign in your wallet.");
     kit.client.declared = "professional";
     await kit.store.refresh(true);
-    expect(await authorizeBrowser(kit.store)).toBe(false);
+    expect(await authorizeBrowser(kit.store, "setup")).toBe(false);
     expect(kit.store.getSnapshot()).toMatchObject({ busy: false, setup: { open: true } });
     expect(steps(kit.store)).toEqual(["authorize", "deposit"]);
   });
@@ -178,7 +178,7 @@ describe("what closes it", () => {
     await connectWallet(store, "injected");
     await attestEligibility(store, "professional");
     client.answer = () => ({ seq: 1, events: [{ type: "session_key_rejected", account: ACCOUNT, session_key: "0x0", reason: { kind: "too_many_session_keys", max: 10 } }] });
-    expect(await authorizeBrowser(store)).toBe(false);
+    expect(await authorizeBrowser(store, "setup")).toBe(false);
     expect(store.getSnapshot()).toMatchObject({ sessionRefusal: { kind: "too_many_session_keys", max: 10 }, setup: { open: true } });
     expect(steps(store)).toEqual(["authorize", "deposit"]);
   });
@@ -190,7 +190,7 @@ describe("what finishing it does", () => {
     await connectWallet(store, "injected");
     await attestEligibility(store, "professional");
     expect(listed(store).map((s) => s.done)).toEqual([true, false, false]);
-    await authorizeBrowser(store);
+    await authorizeBrowser(store, "setup");
     expect(listed(store).map((s) => s.done)).toEqual([true, true, false]);
     expect(currentStep(listed(store))).toBe("deposit");
     expect(setupVisible(store.getSnapshot())).toBe(true);

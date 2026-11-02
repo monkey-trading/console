@@ -1,17 +1,17 @@
 /**
  * The MONKEY page's transactions: staking, starting and completing an unstake, and claiming a USDC
  * distribution. Each goes through the connected wallet, shows the wallet prompt while it waits,
- * reports its outcome as a toast, and reads the wallet and the node again so the figures follow it.
+ * says on its panel why nothing was sent or what failed, and reads the wallet and the node again so
+ * the figures follow it.
  */
 
 import type { StakingWallet } from "../engine/staking";
 import type { Progress, Wallet } from "../engine/wallet";
 import { monkeyExact } from "./figures";
-import { formatUsdc } from "../vault";
 import { abandoned, errorText, notBusy, prompting, usableWallet } from "../store/signing";
 import { claimEmissions, emissionsPosition } from "../store/emissions";
-import { usdcFixed } from "./figures";
 import { NO_CANDIDATE } from "../engine/registry";
+import type { NoticeSurface } from "../store/state";
 import type { OperatorReads } from "./operators";
 import type { MonkeyPanel } from "./panel";
 
@@ -19,20 +19,21 @@ import type { MonkeyPanel } from "./panel";
 const CLAIM_ATTEMPTS = 3;
 
 /**
- * Runs one wallet transaction. `step` returns the sentence to report when it succeeded, or null
- * when it has already reported why nothing was sent. `onLanded` runs the moment a transaction
+ * Runs one wallet transaction for the panel on `surface`. `step` returns true when the transaction was
+ * sent, or false when it has already said why nothing was. `onLanded` runs the moment a transaction
  * has landed, before the wallet and the node are read again. Resolves true once one landed.
  */
-async function run(panel: MonkeyPanel, action: string, step: (wallet: Wallet, staking: StakingWallet, progress: Progress) => Promise<string | null>, movesStake = false, onLanded?: () => void): Promise<boolean> {
+async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, step: (wallet: Wallet, staking: StakingWallet, progress: Progress) => Promise<boolean>, movesStake = false, onLanded?: () => void): Promise<boolean> {
   const { store } = panel;
+  store.clearNotice(surface);
   const wallet = store.liveWallet;
   if (wallet === null) {
-    store.toast("error", "Connect a wallet first.");
+    store.notify(surface, "Connect a wallet first.");
     return false;
   }
   const staking = wallet.staking;
   if (wallet.readOnly === true || staking === undefined) {
-    store.toast("error", "This wallet cannot send transactions.");
+    store.notify(surface, "This wallet cannot send transactions.");
     return false;
   }
   if (store.getSnapshot().busy) return false;
@@ -41,30 +42,28 @@ async function run(panel: MonkeyPanel, action: string, step: (wallet: Wallet, st
   // only once it starts, so a wallet that is slow to answer a read does not lock the console.
   const ran = await panel.exclusive(async () => {
     if (store.liveWallet !== wallet) {
-      store.toast("info", "The wallet changed while this was waiting, so nothing was sent.");
+      store.notify(surface, "The wallet changed while this was waiting, so nothing was sent.", "info");
       return;
     }
     // Another page's request may have started while this one waited: sending beside it would overwrite its prompt.
     if (store.getSnapshot().busy) {
-      store.toast("info", "Another request is in progress, so nothing was sent.");
+      store.notify(surface, "Another request is in progress, so nothing was sent.", "info");
       return;
     }
     store.patch({ busy: true });
     try {
-      const done = await prompting(store, wallet, `Confirm in your wallet: ${action}.`, (progress) => step(wallet, staking, progress));
-      if (done !== null) {
+      if (await prompting(store, wallet, surface, `Confirm in your wallet: ${action}.`, (progress) => step(wallet, staking, progress))) {
         landed = true;
         onLanded?.();
-        store.toast("ok", done);
       }
     } catch (error) {
-      if (!abandoned(store, wallet, error)) store.toast("error", errorText(error));
+      if (!abandoned(store, wallet, error)) store.notify(surface, errorText(error));
     } finally {
       notBusy(store, wallet);
     }
   });
   if (ran === null) {
-    store.toast("info", "Your earlier request is still with your wallet.");
+    store.notify(surface, "Your earlier request is still with your wallet.", "info");
     return false;
   }
   // The chain moved, or the node's proof did: read both again on the page that is open now, which
@@ -83,33 +82,33 @@ async function run(panel: MonkeyPanel, action: string, step: (wallet: Wallet, st
 
 /** Stakes `amount` MONKEY base units, approving the staking contract first if needed. */
 export function stakeMonkey(panel: MonkeyPanel, amount: bigint, onLanded?: () => void): Promise<boolean> {
-  return run(panel, `stake ${monkeyExact(amount)}`, async (_wallet, staking, progress) => {
+  return run(panel, "stake", `stake ${monkeyExact(amount)}`, async (_wallet, staking, progress) => {
     await staking.stake(amount, progress);
-    return `Staked ${monkeyExact(amount)}.`;
+    return true;
   }, true, onLanded);
 }
 
 /** Starts unstaking `amount`; it can be completed, and then returns to the wallet, once the cooldown has passed. */
 export function startUnstake(panel: MonkeyPanel, amount: bigint, onLanded?: () => void): Promise<boolean> {
-  return run(panel, `unstake ${monkeyExact(amount)}`, async (_wallet, staking, progress) => {
+  return run(panel, "stake", `unstake ${monkeyExact(amount)}`, async (_wallet, staking, progress) => {
     await staking.startUnstake(amount, progress);
-    return `Unstake of ${monkeyExact(amount)} started. You can complete it once the cooldown has passed.`;
+    return true;
   }, false, onLanded);
 }
 
 export function completeUnstake(panel: MonkeyPanel): Promise<boolean> {
-  return run(panel, "complete the unstake", async (_wallet, staking, progress) => {
+  return run(panel, "stake", "complete the unstake", async (_wallet, staking, progress) => {
     await staking.completeUnstake(progress);
-    return "Unstake complete. The MONKEY is back in your wallet.";
+    return true;
   }, true);
 }
 
 /** Delegates the account's whole stake to `candidate`, or clears the choice with `NO_CANDIDATE`, then reads the candidates' votes again. */
 export async function delegateStake(panel: MonkeyPanel, operators: OperatorReads, candidate: string, label: string): Promise<boolean> {
   const clearing = candidate === NO_CANDIDATE;
-  const landed = await run(panel, clearing ? "clear your delegation" : `delegate your stake to ${label}`, async (_wallet, staking, progress) => {
+  const landed = await run(panel, "operator", clearing ? "clear your delegation" : `delegate your stake to ${label}`, async (_wallet, staking, progress) => {
     await staking.delegate(candidate, progress);
-    return clearing ? "Your stake abstains from now on." : `Your stake votes for ${label} from the next close.`;
+    return true;
   });
   await operators.refreshChain();
   return landed;
@@ -123,34 +122,31 @@ export async function delegateStake(panel: MonkeyPanel, operators: OperatorReads
  */
 export function claimDistribution(panel: MonkeyPanel): Promise<boolean> {
   const { store } = panel;
-  return run(panel, "claim your USDC distribution", async (wallet, staking, progress) => {
+  return run(panel, "distribution", "claim your USDC distribution", async (wallet, staking, progress) => {
     const address = wallet.address;
     for (let attempt = 1; ; attempt += 1) {
       const position = await staking.position();
       const proof = await store.deps.client.stats.distributions(address);
       // Another wallet may have been connected while the reads ran: this one's claim is not sent.
       if (store.liveWallet !== wallet) {
-        store.toast("info", "The wallet changed while the claim was prepared, so nothing was sent.");
-        return null;
+        store.notify("distribution", "The wallet changed while the claim was prepared, so nothing was sent.", "info");
+        return false;
       }
       if (proof === null) {
-        store.toast("info", "The node holds no distribution proof for this account right now.");
-        return null;
+        store.notify("distribution", "The node holds no distribution proof for this account right now.", "info");
+        return false;
       }
       if (proof.seq === position.latestSeq) {
         const due = BigInt(proof.entitled) - position.distributionsClaimed;
-        if (due <= 0n) {
-          store.toast("info", "All distributed USDC is claimed.");
-          return null;
-        }
+        if (due <= 0n) return false; // the panel already says all of it is claimed
         // Checked last: the verdict may have ended while the reads above waited on the wallet.
-        if (usableWallet(store, "claim the USDC distribution") === null) return null;
+        if (usableWallet(store, "claim the USDC distribution", "distribution") === null) return false;
         await staking.claimDistribution(proof, progress);
-        return `The vault paid ${formatUsdc(usdcFixed(due))} to your wallet.`;
+        return true;
       }
       if (attempt >= CLAIM_ATTEMPTS) {
-        store.toast("info", "The vault's latest checkpoint and the node's latest proof have not met yet; the claim unlocks once they do.");
-        return null;
+        store.notify("distribution", "The vault's latest checkpoint and the node's latest proof have not met yet; the claim unlocks once they do.", "info");
+        return false;
       }
     }
   });
@@ -169,13 +165,14 @@ export function distributionPosition(proof: Parameters<typeof emissionsPosition>
 export async function claimMonkeyEmissions(panel: MonkeyPanel): Promise<void> {
   const { store } = panel;
   const wallet = store.liveWallet;
+  store.clearNotice("emissions");
   const ran = await panel.exclusive(async () => {
-    if (store.liveWallet !== wallet) store.toast("info", "The wallet changed while this was waiting, so nothing was sent.");
-    else if (store.getSnapshot().busy) store.toast("info", "Another request is in progress, so nothing was sent.");
+    if (store.liveWallet !== wallet) store.notify("emissions", "The wallet changed while this was waiting, so nothing was sent.", "info");
+    else if (store.getSnapshot().busy) store.notify("emissions", "Another request is in progress, so nothing was sent.", "info");
     else {
       await claimEmissions(store);
     }
   });
-  if (ran === null) store.toast("info", "Your earlier request is still with your wallet.");
+  if (ran === null) store.notify("emissions", "Your earlier request is still with your wallet.", "info");
   await store.monkeySession.panel?.refreshWallet(true);
 }

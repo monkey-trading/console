@@ -56,7 +56,7 @@ describe("setup on the mock", () => {
     expect(store.getSnapshot().walletUsdc.read).toEqual({ status: "held", amount: fixedFromInt(50_000) });
     await attestEligibility(store, "professional");
     expect(steps(store)).toEqual(["authorize", "deposit"]);
-    expect(await authorizeBrowser(store)).toBe(true);
+    expect(await authorizeBrowser(store, "setup")).toBe(true);
     expect(store.getSnapshot().account).toBeNull(); // declared and keyed with nothing deposited
     expect(steps(store)).toEqual(["deposit"]);
     await deposit(store, fixedFromInt(10_000));
@@ -80,14 +80,14 @@ describe("setup on the mock", () => {
     await attestEligibility(store, "professional");
     await deposit(store, fixedFromInt(60_000));
     expect(store.getSnapshot().account).toBeNull();
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("holds less USDC");
+    expect(store.getSnapshot().notices.deposit?.text).toContain("holds less USDC");
   });
 
   it("says a never-credited account must declare first when it tries to register before declaring", async () => {
     const { store } = await setup(false);
     await connectWallet(store, "walletconnect");
-    expect(await authorizeBrowser(store)).toBe(false);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("a never-credited account must declare first");
+    expect(await authorizeBrowser(store, "ticket")).toBe(false);
+    expect(store.getSnapshot().notices.ticket?.text).toBe("a never-credited account must declare first");
     expect(liveSessionKey(store)).toBeNull();
   });
 

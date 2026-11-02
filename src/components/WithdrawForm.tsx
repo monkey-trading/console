@@ -9,6 +9,7 @@ import { parseAmount, withdraw } from "@/lib/store/actions";
 import { MIN_WITHDRAWAL, withdrawableNow, withdrawLimitCause } from "@/lib/vault";
 
 import { useConsole, useSession } from "./ConsoleProvider";
+import { Notice } from "./Notice";
 import { useSignGate } from "./SignGate";
 
 const INPUT = "min-h-11 w-full min-w-0 rounded border border-edge bg-ink px-2 py-2 text-base text-fg lg:min-h-0 lg:text-data focus-visible:outline-2 focus-visible:outline-glow";
@@ -39,6 +40,7 @@ export function WithdrawForm() {
         </div>
         <p className="mt-2 text-label leading-relaxed text-fg-3">The amount leaves your balance when you ask. The vault pays requests in order as it has liquidity, to six decimal places; the rest waits in the withdrawal queue.</p>
         {gate.note}
+        <Notice surface="withdraw" />
         {account && account.unfinalised > 0n && <p className="mt-2 text-label text-fg-3">${formatFixedPlaces(account.unfinalised, 2)} of your balance is locked until its deposit is final.</p>}
         {amount.trim() !== "" && value === null && <p className="mt-2 text-label text-ember">Enter the amount in digits with a decimal point if needed, such as 1250.50.</p>}
         {value !== null && value < MIN_WITHDRAWAL && <p className="mt-2 text-label text-ember">The smallest withdrawal is 10 USDC.</p>}

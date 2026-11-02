@@ -126,7 +126,7 @@ export class ChartFeed {
     return { page, points };
   }
 
-  /** Reads the whole window. A failure keeps what the chart held and shows on the chart, with no toast. */
+  /** Reads the whole window. A failure keeps what the chart held and shows on the chart. */
   async load(): Promise<void> {
     if (!this.active()) return;
     const stamp = ++this.generation;

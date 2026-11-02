@@ -13,7 +13,7 @@ import { tickBars } from "./bars-tick";
 import { BarsSeed } from "./bars-seed";
 import { eventAccount, FEED_LIMIT, feedFrom, isMine } from "./feed";
 import { LedgerReads } from "./ledger";
-import { initialState, seedAllBars, type ConsoleState, type ToastMessage } from "./state";
+import { initialState, KEPT_ON_WALLET_CHANGE, seedAllBars, type ConsoleState, type Notice, type NoticeSurface } from "./state";
 import { readHousePanelSoon } from "./house";
 import { HouseStats } from "./house-stats";
 import { PacedReads } from "./paced-reads";
@@ -32,9 +32,8 @@ export class ConsoleStore {
   sessionLogin: Promise<boolean> | null = null;
   /** The previous disconnect's revocation and release, awaited before the next connect adopts. */
   walletCleanup: Promise<void> | null = null;
-  /** Bookkeeping for the background vault reads: `paidCheck`/`emissionsCheck` name the wallet each runs for, `lastEmissionsReadError` dedupes its repeated failures. */
+  /** Bookkeeping for the background vault reads: `paidCheck` and `emissionsCheck` name the wallet each runs for. */
   paidCheck: Wallet | null = null; emissionsCheck: Wallet | null = null;
-  lastEmissionsReadError: string | null = null;
   readonly monkeySession = new MonkeySession(); // the MONKEY page's wallet queue and, while it is on screen, its store
   private snapshot: ConsoleState;
   private readonly listeners = new Set<() => void>();
@@ -60,18 +59,10 @@ export class ConsoleStore {
   stopped = false; scanEpoch = 0;
   /** Whether trust in the node was lost (a failed check or a wrong clock) and not yet regained. */
   private trustLost = false;
-  /** The last read failure shown, so a failure that repeats on every tick is shown once. */
-  private lastReadError: string | null = null;
   /** Whether the House page is on screen, the only time its reads run. */
   housePanelOpen = false; houseRead: Promise<void> | null = null;
   /** The house panel's queue walk in flight, guarded apart from the log reads. Not part of the snapshot. */
   queueRead: Promise<void> | null = null;
-  /** The last log read failure shown, deduplicated like the main read's. Not part of the snapshot. */
-  lastHouseReadError: string | null = null;
-  /** The last queue walk failure shown, deduplicated like the main read's. Not part of the snapshot. */
-  lastQueueReadError: string | null = null;
-  /** The last account read failure shown, deduplicated like the main read's. Not part of the snapshot. */
-  lastAccountError: string | null = null;
   constructor(deps: StoreDeps) {
     this.deps = deps;
     this.viewer = deps.initial.viewer;
@@ -102,20 +93,24 @@ export class ConsoleStore {
 
   id = (): number => this.nextId++;
 
-  toast(tone: ToastMessage["tone"], text: string): void {
-    this.patch({ toasts: [...this.snapshot.toasts.slice(-3), { id: this.id(), tone, text }] });
+  /** Puts `text` on `surface`, in place of what it held. It stays until the next action on that control or a change that makes it stale clears it. */
+  notify(surface: NoticeSurface, text: string, tone: Notice["tone"] = "error"): void {
+    this.patch({ notices: { ...this.snapshot.notices, [surface]: { id: this.id(), tone, text } } });
   }
 
-  clearToasts(): void {
-    this.patch({ toasts: [] });
-  }
-
-  dismissToast(id: number): void {
-    this.patch({ toasts: this.snapshot.toasts.filter((t) => t.id !== id) });
+  /** Clears what `surfaces` hold; nothing changes, and nothing is notified, when they hold nothing. */
+  clearNotice(...surfaces: NoticeSurface[]): void {
+    const { notices } = this.snapshot;
+    if (!surfaces.some((surface) => notices[surface] !== undefined)) return;
+    const kept = { ...notices };
+    for (const surface of surfaces) delete kept[surface];
+    this.patch({ notices: kept });
   }
 
   select(id: MarketId): void {
+    this.clearNotice("ticket", "chart"); // a refused order, and a chart that failed to load, name the market they were for
     this.patch({ selected: id });
+    this.barsSeed.retry(id, this.snapshot.timeframe);
     this.barsSeed.seed(id, this.snapshot.timeframe);
   }
 
@@ -123,10 +118,9 @@ export class ConsoleStore {
   setWallet(wallet: { address: string; label: string; readOnly?: boolean } | null): void {
     this.ledger.walletChanged(wallet?.address);
     this.viewer = undefined; // once a wallet has been connected or left, the starting viewer no longer applies
-    this.lastEmissionsReadError = null; // a new wallet's vault reads start fresh: no stale latch
-    this.lastAccountError = null; this.quiet.accountEvent(); // its account reads start fresh too: the same failure under a new wallet is reported, and no rest of the last wallet's reads holds
+    this.quiet.accountEvent(); // its account reads start fresh: no rest of the last wallet's reads holds
     const mine = wallet?.address.toLowerCase();
-    this.patch({ wallet, accountRead: false, feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
+    this.patch({ wallet, accountRead: false, notices: Object.fromEntries(Object.entries(this.snapshot.notices).filter(([surface]) => KEPT_ON_WALLET_CHANGE.includes(surface as NoticeSurface))), feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
   }
 
   setPaused(paused: boolean): void {
@@ -134,7 +128,9 @@ export class ConsoleStore {
   }
 
   setTimeframe(timeframe: TimeframeId): void {
+    this.clearNotice("chart"); // it names the series that failed
     this.patch({ timeframe });
+    this.barsSeed.retry(this.snapshot.selected, timeframe);
     this.barsSeed.seed(this.snapshot.selected, timeframe);
   }
 
@@ -180,6 +176,7 @@ export class ConsoleStore {
       // may predate an event the stream, which starts at the live end, will never carry.
       const was = this.snapshot.stream;
       const read = event.status === "live" && (was === "stale" || was === "connecting");
+      if (event.status === "live") this.clearNotice("feed");
       // The frame's signed time moves the node clock first, so a read it prompts plots marks at node time, not the pre-outage time.
       this.patch({ stream: event.status, ...(event.time !== undefined && event.time > this.snapshot.now ? { now: event.time } : {}) });
       if (read) {
@@ -187,7 +184,7 @@ export class ConsoleStore {
         this.quiet.reset(); // a node that was away may have restarted with the route, or credited the account
         void this.refresh(true);
       }
-    } else if (event.type === "problem") this.toast("error", event.reason);
+    } else if (event.type === "problem") this.notify("feed", event.reason);
     // Data read under the old enclave is read again once the new one is trusted; a check that ends
     // at the same address changes nothing, so a read that keeps failing is not repeated by it.
     else if (event.type === "enclave") {
@@ -219,22 +216,18 @@ export class ConsoleStore {
       await this.deps.client.accessProbe();
       this.patch({ blocked: null, accessChecked: true });
     } catch (error) {
-      if (!this.noteAccess(error)) this.toast("error", "The node did not answer the access check.");
+      this.noteAccess(error);
       this.patch({ accessChecked: true });
     }
   }
 
   private onMessage(message: StreamMessage): void {
     const viewer = this.snapshot.wallet?.address ?? this.viewer;
-    for (const event of message.events) {
-      if (event.type === "close_out" && isMine(event, viewer)) {
-        this.toast("error", "Your account was closed out: its equity fell below half its margin, so positions were closed at market. See History.");
-      }
-      // A resting order the node cancels later, on a tick, is something the user must be told.
-      if (event.type === "order_cancelled" && event.reason !== "client" && isMine(event, viewer)) {
-        this.toast("error", `Order ${event.order_id} could not be filled and was cancelled.`);
-      }
-    }
+    // A close-out, or a resting order the node cancels later on a tick, leaves the user with less than they placed and no control to say why.
+    const closedOut = message.events.some((event) => event.type === "close_out" && isMine(event, viewer));
+    const cancelled = message.events.flatMap((event) => (event.type === "order_cancelled" && event.reason !== "client" && isMine(event, viewer) ? [event.order_id] : []));
+    if (closedOut) this.notify("account", "Your account was closed out: its equity fell below half its margin, so positions were closed at market. See History.");
+    else if (cancelled.length > 0) this.notify("account", `${cancelled.length === 1 ? `Order ${cancelled[0]}` : `Orders ${cancelled.join(", ")}`} could not be filled and ${cancelled.length === 1 ? "was" : "were"} cancelled.`);
     this.pacing?.observe(message);
     this.ledger.ingest(message);
     const lines = feedFrom([message], this.snapshot.markets, viewer, () => this.id());
@@ -280,17 +273,14 @@ export class ConsoleStore {
       this.barsSeed.askScan();
       // loadAccount reports its own failure and never rejects: an account failure cannot stale the figures above.
       if (this.snapshot.wallet) await loadAccount(this, accountChanged);
-      this.lastReadError = null;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "The node did not answer.";
-      if (!this.noteAccess(error) && message !== this.lastReadError) this.toast("error", message);
-      this.lastReadError = message;
+      this.noteAccess(error);
       // Retained figures stay, marked not fresh, until a refresh reads them again.
       if (this.snapshot.houseReady) this.patch({ houseFresh: false });
     }
     // The house panel's reads run on their own schedule, outside this refresh's lock and error
     // handling: a failing markets or house read must not stop them, and they never delay the next
-    // market or account read nor toast as if the whole refresh failed.
+    // market or account read.
     readHousePanelSoon(this);
     const again = this.rerun;
     this.rerun = null;

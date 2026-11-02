@@ -143,7 +143,7 @@ export async function authorizedTab(storage = memoryStorage()) {
   const kit = await tab(storage);
   kit.client.credited = true;
   await connectWallet(kit.store, "injected");
-  await authorizeBrowser(kit.store);
+  await authorizeBrowser(kit.store, "setup");
   return { ...kit, storage };
 }
 
@@ -159,7 +159,7 @@ export async function loadedTab(storage: KeyStorage) {
 /** As `connected`, with this browser's session key already registered, as setup leaves it. */
 export async function keyed(options: StubOptions = {}) {
   const kit = await connected(options);
-  if (!(await loginSession(kit.store))) throw new Error("the kit's login was refused");
+  if (!(await loginSession(kit.store, "setup"))) throw new Error("the kit's login was refused");
   return kit;
 }
 

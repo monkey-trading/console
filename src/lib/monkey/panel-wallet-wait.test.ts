@@ -28,7 +28,7 @@ describe("MonkeyPanel wallet reads behind an unanswered call", () => {
     stop();
   });
 
-  it("reports the vault's record not answering in time, and still holds the queue until the provider answers", async () => {
+  it("stays silent when the vault's record does not answer in time, and still holds the queue until the provider answers", async () => {
     const { store, panel, stop } = await setup();
     const wallet = store.liveWallet;
     const record = wallet?.emissionsClaimed;
@@ -37,18 +37,18 @@ describe("MonkeyPanel wallet reads behind an unanswered call", () => {
     store.patch({ emissionsVault: null });
     const first = panel.refreshWallet(true);
     await vi.advanceTimersByTimeAsync(31_000);
-    expect(store.getSnapshot().toasts.filter((toast) => toast.text.startsWith("The vault's MONKEY record could not be read"))).toHaveLength(1);
+    expect(store.getSnapshot().notices).toEqual({});
     let second = false;
     const next = panel.refreshWallet(true).then(() => { second = true; });
     await vi.advanceTimersByTimeAsync(5_000);
     expect(second).toBe(false);
     await vi.advanceTimersByTimeAsync(10_000);
     await first;
-    expect(store.getSnapshot().toasts.filter((toast) => toast.text.startsWith("The vault's MONKEY record could not be read"))).toHaveLength(1);
-    // The next read's own record read times out in its turn, and is reported for that read.
+    expect(store.getSnapshot().notices).toEqual({});
+    // The next read's own record read times out in its turn, and is just as silent.
     await vi.advanceTimersByTimeAsync(60_000);
     await next;
-    expect(store.getSnapshot().toasts.filter((toast) => toast.text.startsWith("The vault's MONKEY record could not be read"))).toHaveLength(2);
+    expect(store.getSnapshot().notices).toEqual({});
     stop();
   });
 });

@@ -6,6 +6,7 @@ import { faucetAvailable } from "@/lib/engine/faucet";
 import { fundWithAnvil } from "@/lib/store/actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
+import { Notice } from "./Notice";
 
 /** Shown in the Deposit tab only in a `live-dev` build; nothing renders in mock or production builds. */
 export function FaucetCard() {
@@ -28,6 +29,7 @@ export function FaucetCard() {
       >
         Fund with Anvil
       </button>
+      <Notice surface="faucet" />
       {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet first.</p>}
       {readOnly && <p className="mt-2 text-label text-fg-3">The watched account is read-only, so the faucet cannot fund it.</p>}
     </section>

@@ -63,58 +63,55 @@ describe("a close-all's per-entry outcomes", () => {
 describe("the close-all message", () => {
   const summary = (markets: number[], events: EngineEvent[]) => describeCloseAll(closeAllOutcome(markets, events), symbolOf);
 
-  it("says all were closed", () => {
-    expect(summary([1, 2], [fill(1), fill(2)])).toEqual({ tone: "ok", text: "Closed 2 positions." });
-    expect(summary([1], [fill(1)])).toEqual({ tone: "ok", text: "Closed 1 position." });
+  it("says nothing when all were closed, since the screen shows it", () => {
+    expect(summary([1, 2], [fill(1), fill(2)])).toBeNull();
+    expect(summary([1], [fill(1)])).toBeNull();
   });
 
   it("says how many closed and names the market that moved past its bound", () => {
-    expect(summary([1, 2, 3], [fill(1), rejected(1, slippage), fill(3)])).toEqual({ tone: "error", text: "Closed 2 of 3 positions; ETH-USD moved past its slippage bound." });
+    expect(summary([1, 2, 3], [fill(1), rejected(1, slippage), fill(3)])).toBe("Closed 2 of 3 positions; ETH-USD moved past its slippage bound.");
   });
 
   it("names every market that did not close, each with its reason", () => {
-    expect(summary([1, 2, 3], [fill(1), rejected(1, { kind: "market_closed" }), rejected(2, { kind: "house_capacity" })]).text)
+    expect(summary([1, 2, 3], [fill(1), rejected(1, { kind: "market_closed" }), rejected(2, { kind: "house_capacity" })]))
       .toBe("Closed 1 of 3 positions; ETH-USD's market is closed; EUR-USD: The house cannot take more in this market. Try a smaller size.");
   });
 
   it("says a position that was already flat had none left to close", () => {
-    expect(summary([1, 2], [fill(1), rejected(1, { kind: "reduce_only" })]).text).toBe("Closed 1 of 2 positions; ETH-USD had no position left to close.");
+    expect(summary([1, 2], [fill(1), rejected(1, { kind: "reduce_only" })])).toBe("Closed 1 of 2 positions; ETH-USD had no position left to close.");
   });
 
   it("says a market with no price has none right now", () => {
-    expect(summary([1, 2], [fill(1), rejected(1, { kind: "no_price" })]).text).toBe("Closed 1 of 2 positions; ETH-USD has no price right now.");
+    expect(summary([1, 2], [fill(1), rejected(1, { kind: "no_price" })])).toBe("Closed 1 of 2 positions; ETH-USD has no price right now.");
   });
 
   it("says an entry it heard nothing for could not be confirmed closed", () => {
-    expect(summary([1, 2], [fill(1)])).toEqual({ tone: "error", text: "Closed 1 of 2 positions; ETH-USD could not be confirmed closed." });
+    expect(summary([1, 2], [fill(1)])).toBe("Closed 1 of 2 positions; ETH-USD could not be confirmed closed.");
   });
 
   it("says none closed when none did", () => {
-    expect(summary([1, 2], [rejected(0, slippage), rejected(1, slippage)])).toEqual({ tone: "error", text: "No position was closed: BTC-USD moved past its slippage bound; ETH-USD moved past its slippage bound." });
+    expect(summary([1, 2], [rejected(0, slippage), rejected(1, slippage)])).toBe("No position was closed: BTC-USD moved past its slippage bound; ETH-USD moved past its slippage bound.");
   });
 
   it("says nothing closed for a refusal of the whole request, with the node's reason", () => {
     const text = summary([1, 2], [rejected(0, { kind: "batch_unsupported" })]);
-    expect(text.tone).toBe("error");
-    expect(text.text).toMatch(/^Nothing was closed\. This node cannot cancel or close everything in one request yet/);
+    expect(text).toMatch(/^Nothing was closed\. This node cannot cancel or close everything in one request yet/);
   });
 });
 
 describe("the cancel-all message", () => {
   const cancelled = (order_id: number): EngineEvent => ({ type: "order_cancelled", account: ME, order_id, reason: "client" });
 
-  it("counts the orders the events cancelled", () => {
-    expect(describeCancelAll([cancelled(1), cancelled(2), cancelled(3)])).toEqual({ tone: "ok", text: "Cancelled 3 orders." });
-    expect(describeCancelAll([cancelled(1)])).toEqual({ tone: "ok", text: "Cancelled 1 order." });
+  it("says nothing when the events cancelled every order, since the screen shows it", () => {
+    expect(describeCancelAll([cancelled(1), cancelled(2), cancelled(3)])).toBeNull();
+    expect(describeCancelAll([cancelled(1)])).toBeNull();
   });
 
-  it("says nothing was left when no event came back", () => {
-    expect(describeCancelAll([])).toEqual({ tone: "info", text: "No resting orders were left to cancel." });
+  it("says nothing when no event came back because nothing was left to cancel", () => {
+    expect(describeCancelAll([])).toBeNull();
   });
 
-  it("reports a refusal as such, never as a count", () => {
-    const { tone, text } = describeCancelAll([rejected(0, { kind: "batch_unsupported" })]);
-    expect(tone).toBe("error");
-    expect(text).toMatch(/^Nothing was cancelled\./);
+  it("reports a refusal as such, never as a success", () => {
+    expect(describeCancelAll([rejected(0, { kind: "batch_unsupported" })])).toMatch(/^Nothing was cancelled\./);
   });
 });

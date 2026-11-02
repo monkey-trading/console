@@ -20,9 +20,9 @@ import type { ConsoleStore } from "./store";
 export const NO_ACCOUNT = { account: null, eligibility: null, queue: [], history: [], quotes: {}, quoteError: null, quoted: [], authorizations: [], approvals: [], approvalsNext: null, payoutsRead: null, payoutsProblem: null, paid: [], unpaid: [], entitlement: null, emissionsVault: null };
 
 /** The rest a change of connection clears: its key's expiry and refusal, its setup, its wallet's USDC, and a wallet request the old wallet may never answer, so the next connection's buttons are not stuck behind it. */
-export const NO_SESSION = { sessionExpiresAt: 0, sessionRefusal: null, setup: NO_SETUP, walletUsdc: NO_USDC, busy: false, prompt: null };
+export const NO_SESSION = { sessionExpiresAt: 0, sessionRefusal: null, setup: NO_SETUP, walletUsdc: NO_USDC, busy: false, prompt: null, promptAt: null };
 
-/** Why a connection ended, as the toast says it. */
+/** Why a connection ended, as the notice beside the Connect button says it. */
 export const KEY_EXPIRED = "This browser's trading authorization expired, so your wallet was disconnected. Connect again to renew it.";
 export const KEY_REVOKED = "This browser's trading authorization was revoked, so your wallet was disconnected. Connect again to renew it.";
 export const KEY_REFUSED = "The node no longer accepts this browser's trading authorization, so your wallet was disconnected. Connect again to renew it.";
@@ -30,7 +30,7 @@ const KEY_ENDED_ELSEWHERE = "This browser's trading authorization ended in anoth
 
 /** Ends a wallet's connection in the background, telling the user if that fails. */
 export function release(store: ConsoleStore, wallet: Wallet | null): void {
-  wallet?.disconnect?.().catch((error: unknown) => store.toast("error", `The wallet's session did not close: ${errorText(error)}`));
+  wallet?.disconnect?.().catch((error: unknown) => store.notify("wallet", `The wallet's session did not close: ${errorText(error)}`));
 }
 
 /**
@@ -61,15 +61,16 @@ export function walletSessionEnded(store: ConsoleStore, topic: string): void {
   }
   // The dead session cannot sign a revocation, so the key's registration is left to expire.
   dropWallet(store, false);
-  store.toast("info", "Your wallet ended the WalletConnect session, so the console disconnected it.");
+  store.notify("wallet", "Your wallet ended the WalletConnect session, so the console disconnected it.", "info");
 }
 
 /**
  * This connection's key is dead, by its expiry, a revocation, or the node's refusal: disconnects with
- * no prompt, forgets the stored choice and key, and says why. Reconnecting brings setup back at the
+ * no prompt, forgets the stored choice and key, and says why beside the Connect button, unless the
+ * user's own revocation ended it (`why` null). Reconnecting brings setup back at the
  * key's step. Another tab's wider choice stays: only this connection's own is forgotten.
  */
-export function sessionEnded(store: ConsoleStore, why: string): void {
+export function sessionEnded(store: ConsoleStore, why: string | null): void {
   const wallet = store.liveWallet;
   if (wallet === null) return;
   if (store.deps.persistence !== undefined) {
@@ -77,7 +78,7 @@ export function sessionEnded(store: ConsoleStore, why: string): void {
     removeHeldKey(store, wallet);
   }
   dropWallet(store, false);
-  store.toast("info", why);
+  if (why !== null) store.notify("wallet", why, "info");
 }
 
 /** The stored choice that names this connection. */
@@ -156,7 +157,7 @@ export function storedKeyChanged(store: ConsoleStore, name: string | null): void
   if (sessionExpiresAt === 0) return; // this tab holds no key, so nothing of it has ended
   clearChoiceIf(storage, ownChoice(wallet));
   dropWallet(store, false);
-  store.toast("info", KEY_ENDED_ELSEWHERE);
+  store.notify("wallet", KEY_ENDED_ELSEWHERE, "info");
 }
 
 /**

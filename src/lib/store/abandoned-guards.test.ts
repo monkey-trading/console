@@ -45,7 +45,7 @@ async function expectUntouched(kit: Awaited<ReturnType<typeof connectedTab>>, be
   kit.declineLate();
   await settle();
   const after = kit.store.getSnapshot();
-  expect(after.toasts).toEqual(before.toasts);
+  expect(after.notices).toEqual(before.notices);
   expect([after.busy, after.prompt]).toEqual([true, "Confirm the deposit in your wallet."]);
   return after;
 }

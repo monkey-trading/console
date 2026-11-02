@@ -27,23 +27,24 @@ describe("the page's transactions", () => {
     expect(panel.getSnapshot().wallet.position.value).toMatchObject({ staked: 13_000n * MONKEY_UNIT, balance: 27_000n * MONKEY_UNIT });
     await panel.refreshNode();
     expect(panel.getSnapshot().activity.value?.entries[0]).toMatchObject({ type: "stake", amount: (1_000n * MONKEY_UNIT).toString() });
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "ok", text: "Staked 1,000 MONKEY." });
+    expect(store.getSnapshot().notices.stake).toBeUndefined();
     expect(store.getSnapshot().busy).toBe(false);
     stop();
   });
 
-  it("says the exact amount in the toast, even one that two places would round to nothing", async () => {
+  it("stakes the exact amount, even one that two places would round to nothing", async () => {
     const { node, store, panel, stop } = await setup();
     node.client.state.monkey.seededBalance.set(DEMO_ADDRESS, 40_000n * MONKEY_UNIT + 5n * 10n ** 15n);
     expect(await stakeMonkey(panel, 5n * 10n ** 15n)).toBe(true);
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "ok", text: "Staked 0.005 MONKEY." });
+    expect(panel.getSnapshot().wallet.position.value?.staked).toBe(12_000n * MONKEY_UNIT + 5n * 10n ** 15n);
+    expect(store.getSnapshot().notices.stake).toBeUndefined();
     stop();
   });
 
   it("reports a refusal as an error and changes nothing", async () => {
     const { store, panel, stop } = await setup();
     expect(await stakeMonkey(panel, 29_000n * MONKEY_UNIT)).toBe(false);
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "error", text: "Your wallet holds less MONKEY than that." });
+    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "error", text: "Your wallet holds less MONKEY than that." });
     expect(panel.getSnapshot().wallet.position.value?.staked).toBe(12_000n * MONKEY_UNIT);
     stop();
   });
@@ -51,11 +52,11 @@ describe("the page's transactions", () => {
   it("starts an unstake that cannot complete until the cooldown has passed, then returns the tokens", async () => {
     const { node, store, panel, stop } = await setup();
     expect(await startUnstake(panel, 2_000n * MONKEY_UNIT)).toBe(true);
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "ok", text: "Unstake of 2,000 MONKEY started. You can complete it once the cooldown has passed." });
+    expect(store.getSnapshot().notices.stake).toBeUndefined();
     const position = panel.getSnapshot().wallet.position.value;
     expect(position?.unstaking?.amount).toBe(2_000n * MONKEY_UNIT);
     expect(await completeUnstake(panel)).toBe(false);
-    expect(store.getSnapshot().toasts.at(-1)?.tone).toBe("error");
+    expect(store.getSnapshot().notices.stake?.tone).toBe("error");
     node.client.state.now = position?.unstaking?.claimableAtMs ?? 0;
     expect(await completeUnstake(panel)).toBe(true);
     expect(panel.getSnapshot().wallet.position.value).toMatchObject({ unstaking: null, staked: 10_000n * MONKEY_UNIT, balance: 30_000n * MONKEY_UNIT });
@@ -114,10 +115,10 @@ describe("the page's transactions", () => {
     expect(BigInt(proof?.entitled ?? "0")).toBeGreaterThan(37_250_000n - 1n);
     expect(await claimDistribution(panel)).toBe(true);
     expect(panel.getSnapshot().wallet.position.value?.distributionsClaimed).toBe(BigInt(proof?.entitled ?? "0"));
-    expect(store.getSnapshot().toasts.at(-1)?.text).toMatch(/^The vault paid .* USDC to your wallet\.$/);
+    expect(store.getSnapshot().notices.distribution).toBeUndefined();
     // Nothing more is due.
     expect(await claimDistribution(panel)).toBe(false);
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "info", text: "All distributed USDC is claimed." });
+    expect(store.getSnapshot().notices.distribution).toBeUndefined();
     stop();
   });
 
@@ -131,7 +132,7 @@ describe("the page's transactions", () => {
     const claims = vi.spyOn(node.controls, "claimDistribution");
     expect(await claimDistribution(panel)).toBe(false);
     expect(claims).not.toHaveBeenCalled();
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "info", text: expect.stringContaining("have not met yet") });
+    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: expect.stringContaining("have not met yet") });
     stop();
   });
 
@@ -142,7 +143,7 @@ describe("the page's transactions", () => {
     store.patch({ attestation: { kind: "attested", release: "r", address: DEMO_ADDRESS, why: "Your wallet did not answer." } });
     expect(await claimDistribution(panel)).toBe(false);
     expect(claims).not.toHaveBeenCalled();
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "error", text: "The console will not claim the USDC distribution: the vault's current release has not been checked." });
+    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "error", text: "The console will not claim the USDC distribution: the vault's current release has not been checked." });
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
     stop();
   });
@@ -158,7 +159,7 @@ describe("the page's transactions", () => {
     const claims = vi.spyOn(node.controls, "claimDistribution");
     expect(await claimDistribution(panel)).toBe(false);
     expect(claims).not.toHaveBeenCalled();
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not claim the USDC distribution: your device clock differs from the node's signed time.");
+    expect(store.getSnapshot().notices.distribution?.text).toBe("The console will not claim the USDC distribution: your device clock differs from the node's signed time.");
     stop();
   });
 
@@ -181,7 +182,7 @@ describe("the page's transactions", () => {
     const claims = vi.spyOn(node.controls, "claimDistribution");
     expect(await claimDistribution(panel)).toBe(false);
     expect(claims).not.toHaveBeenCalled();
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "info", text: "The wallet changed while the claim was prepared, so nothing was sent." });
+    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: "The wallet changed while the claim was prepared, so nothing was sent." });
     stop();
   });
 
@@ -191,7 +192,7 @@ describe("the page's transactions", () => {
     const claims = vi.spyOn(node.controls, "claimDistribution");
     expect(await claimDistribution(panel)).toBe(false);
     expect(claims).not.toHaveBeenCalled();
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "info", text: "The node holds no distribution proof for this account right now." });
+    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: "The node holds no distribution proof for this account right now." });
     stop();
   });
 
@@ -201,7 +202,7 @@ describe("the page's transactions", () => {
     if (wallet === null) throw new Error("the wallet connected");
     store.liveWallet = { address: wallet.address, label: "Read-only", readOnly: true, sign: wallet.sign, deposit: wallet.deposit, claim: wallet.claim };
     expect(await stakeMonkey(panel, MONKEY_UNIT)).toBe(false);
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "error", text: "This wallet cannot send transactions." });
+    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "error", text: "This wallet cannot send transactions." });
     stop();
   });
 
@@ -230,7 +231,7 @@ describe("the page's transactions", () => {
     expect(await staked).toBe(false);
     expect(held.stakes).toBe(0);
     expect(store.getSnapshot()).toMatchObject({ busy: true, prompt: "Confirm in your wallet: deposit." });
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ text: "Another request is in progress, so nothing was sent." });
+    expect(store.getSnapshot().notices.stake).toMatchObject({ text: "Another request is in progress, so nothing was sent." });
     stop();
   });
 
@@ -245,7 +246,7 @@ describe("the page's transactions", () => {
     held.release();
     expect(await staked).toBe(false);
     expect(held.stakes).toBe(0);
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "info", text: "The wallet changed while this was waiting, so nothing was sent." });
+    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "info", text: "The wallet changed while this was waiting, so nothing was sent." });
     stop();
   });
 
@@ -257,7 +258,7 @@ describe("the page's transactions", () => {
     const first = stakeMonkey(panel, MONKEY_UNIT);
     await flush();
     expect(await stakeMonkey(panel, MONKEY_UNIT)).toBe(false);
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "info", text: "Your earlier request is still with your wallet." });
+    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "info", text: "Your earlier request is still with your wallet." });
     held.release();
     expect(await first).toBe(true);
     expect(held.stakes).toBe(1);

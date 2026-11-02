@@ -21,9 +21,9 @@ describe("a read-only account", () => {
     client.listener?.({ type: "feed", status: "live" });
     expect(store.getSnapshot().wallet?.readOnly).toBe(true);
     await cancelOrder(store, 1);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not sign: this account is read-only, so nothing can be signed for it.");
+    expect(store.getSnapshot().notices.orders?.text).toBe("The console will not sign: this account is read-only, so nothing can be signed for it.");
     await deposit(store, 10n);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not send a deposit: this account is read-only, so nothing can be signed for it.");
+    expect(store.getSnapshot().notices.deposit?.text).toBe("The console will not send a deposit: this account is read-only, so nothing can be signed for it.");
     expect(nonces).toBe(0);
   });
 });
@@ -35,14 +35,14 @@ describe("a node outage at load", () => {
     store.start(0);
     await settle();
     await connectWallet(store, "watch", true);
-    expect(store.getSnapshot().toasts).toEqual([]);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 
   it("still reports a wallet that fails to connect for another reason", async () => {
     const { client, store } = setup();
     client.eligibility = async () => { throw new Error("The node did not answer."); };
     await connectWallet(store, "watch", true);
-    expect(store.getSnapshot().toasts.map((t) => t.text)).toEqual(["The node did not answer."]);
+    expect(store.getSnapshot().notices).toMatchObject({ accountRead: { tone: "error", text: expect.stringContaining("The node did not answer.") } });
   });
 });
 

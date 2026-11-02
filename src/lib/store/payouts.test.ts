@@ -1,11 +1,12 @@
 /** Tests for the payout actions: reading approvals and paid nonces, claiming, reading the node's payouts and asking for a fresh authorization. */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { EngineError } from "../engine/client";
 import vectors from "../engine/eip712-vectors.json";
 import { reissueTypedData, requestDomain } from "../engine/eip712";
 import { settle } from "../engine/test-kit";
+import { UntrustedError } from "../engine/trust";
 import { ACCOUNT } from "../engine/wallet-kit";
 import { WatchConnector } from "../engine/watch-wallet";
 import { checkPaid, claim, loadApprovals, payoutsOf, reissue, unreadPayouts } from "./payouts";
@@ -24,6 +25,18 @@ describe("approvals and paid payouts", () => {
     store.patch({ approvals: [] });
     await reading;
     expect(store.getSnapshot().approvals).toEqual([]);
+  });
+
+  it("says on the claims that the approvals could not be read, until a read lands, and says nothing while the node is not yet trusted", async () => {
+    const { client, store } = await connected();
+    vi.spyOn(client, "history").mockRejectedValueOnce(new UntrustedError("The node is not verified."));
+    await loadApprovals(store);
+    expect(store.getSnapshot().notices).toEqual({});
+    vi.spyOn(client, "history").mockRejectedValueOnce(new EngineError(500, "boom"));
+    await loadApprovals(store);
+    expect(store.getSnapshot().notices.payoutReads).toMatchObject({ tone: "error", text: "Your approved withdrawals could not be read: boom" });
+    await loadApprovals(store);
+    expect(store.getSnapshot().notices.payoutReads).toBeUndefined();
   });
 
   it("follows every page of approvals the node returns", async () => {
@@ -61,7 +74,7 @@ describe("approvals and paid payouts", () => {
     await checkPaid(elsewhere.store);
     expect(elsewhere.store.getSnapshot()).toMatchObject({ paid: [], unpaid: [] });
     expect(payoutsOf(elsewhere.store.getSnapshot())[0]?.read).toBe(false);
-    expect(elsewhere.store.getSnapshot().toasts.at(-1)?.text).toBe("The vault's payouts could not be read: your wallet is on chain 1, not chain 31337");
+    expect(elsewhere.store.getSnapshot().notices.payoutVault).toMatchObject({ tone: "error", text: "The vault's payouts could not be read: your wallet is on chain 1, not chain 31337" });
   });
 
   it("reads each payout once in one run at a time, however often the page asks again, including one that arrives during the run", async () => {
@@ -84,9 +97,8 @@ describe("approvals and paid payouts", () => {
     const { store } = await connected();
     store.liveWallet = await new WatchConnector(() => `?account=${ACCOUNT}`).connect();
     store.patch({ now: 1_800_000_000_000, approvals: [approved(1, 40)], authorizations: [signed(1, 1_700_000_000)] });
-    const toasts = store.getSnapshot().toasts.length;
     await checkPaid(store);
-    expect(store.getSnapshot().toasts).toHaveLength(toasts);
+    expect(store.getSnapshot().notices).toEqual({});
     expect(payoutsOf(store.getSnapshot())[0]).toMatchObject({ read: false, status: { kind: "expired" } });
   });
 });
@@ -163,7 +175,7 @@ describe("claims", () => {
     await claim(store, 1);
     expect(provider.sent).toHaveLength(1);
     expect(store.getSnapshot()).toMatchObject({ paid: [1], busy: false, prompt: null });
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The vault paid 10 USDC to your wallet.");
+    expect(store.getSnapshot().notices.payouts).toBeUndefined();
   });
 
   it("leaves a payout unpaid when its claim reverts, and has the vault's record of it read again", async () => {
@@ -172,7 +184,7 @@ describe("claims", () => {
     await claim(store, 1);
     expect(store.getSnapshot().paid).toEqual([]);
     expect(unreadPayouts(store.getSnapshot())).toEqual([1]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("failed on chain");
+    expect(store.getSnapshot().notices.payouts?.text).toContain("failed on chain");
   });
 
   it("does not mark another account's payout paid when the wallet changed during the claim", async () => {
@@ -183,7 +195,7 @@ describe("claims", () => {
     store.patch({ paid: [] });
     await claiming;
     expect(store.getSnapshot().paid).toEqual([]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe(`The vault paid 10 USDC to ${ACCOUNT}.`);
+    expect(store.getSnapshot().notices.payouts).toBeUndefined();
   });
 });
 
@@ -197,7 +209,7 @@ describe("authorizations", () => {
     const body = posted?.body as { replaces_expires_at: number; signature: string };
     expect(body.replaces_expires_at).toBe(1_700_000_000);
     expect(await signerOf(reissueTypedData(requestDomain(vectors.chain_id, VAULT), ACCOUNT, 3, 1_700_000_000), body.signature)).toBe(ACCOUNT);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("Requested. The new authorization arrives here once the node signs it.");
+    expect(store.getSnapshot().notices.payouts).toMatchObject({ tone: "info", text: "Requested. The new authorization arrives here once the node signs it." });
     expect(client.payoutsReads).toHaveLength(1);
     expect(store.getSnapshot().authorizations).toEqual([signed(3, 2_000_000_000)]);
   });
@@ -207,7 +219,7 @@ describe("authorizations", () => {
     store.patch({ authorizations: [signed(3, 1_700_000_000)], unpaid: [3] });
     client.answer = () => { throw new EngineError(404, "not found"); };
     await reissue(store, 3, 1_700_000_000);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node holds no unpaid withdrawal 3 for this account: the vault has paid it, or the node is still loading it after a restart.");
+    expect(store.getSnapshot().notices.payouts).toMatchObject({ tone: "error", text: "The node holds no unpaid withdrawal 3 for this account: the vault has paid it, or the node is still loading it after a restart." });
     // The vault's record of it is read again.
     expect(unreadPayouts(store.getSnapshot())).toEqual([3]);
     expect(client.payoutsReads).toEqual([]);
@@ -222,7 +234,7 @@ describe("authorizations", () => {
     expect(client.payoutsReads).toHaveLength(1);
     expect(store.getSnapshot().authorizations).toEqual([signed(3, 1_700_086_400)]);
     expect(store.getSnapshot()).toMatchObject({ busy: false });
-    expect(store.getSnapshot().toasts.map((t) => t.text)).toEqual(["The node has signed a newer authorization for this withdrawal, valid until 15 Nov 22:13:20 UTC; reading it from the node."]);
+    expect(store.getSnapshot().notices.payouts).toBeUndefined();
   });
 
   it("reads nothing after a reissue refused for any other reason", async () => {
@@ -230,7 +242,7 @@ describe("authorizations", () => {
     client.answer = () => { throw new EngineError(500, "the node failed"); };
     await reissue(store, 3, 1_700_000_000);
     expect(client.payoutsReads).toEqual([]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("the node failed");
+    expect(store.getSnapshot().notices.payouts).toMatchObject({ tone: "error", text: "the node failed" });
   });
 
   it("reads the node's payouts after a reissue only for the wallet that asked", async () => {

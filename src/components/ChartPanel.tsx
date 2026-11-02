@@ -11,6 +11,7 @@ import { formatMark, splitDecimals } from "@/lib/price-format";
 import type { ConsoleState } from "@/lib/store/state";
 
 import { useConsole, useSession } from "./ConsoleProvider";
+import { Notice } from "./Notice";
 import { PriceChart, type PriceMarker } from "./PriceChart";
 import { usePrefs } from "./use-prefs";
 
@@ -64,6 +65,7 @@ export function ChartPanel() {
           ))}
         </div>
       </div>
+      <div className="px-4 pb-2 sm:px-6"><Notice surface="chart" /></div>
       <PriceChart symbol={market.symbol} places={market.places} bars={bars} seriesKey={`${market.id}-${state.timeframe}`} markers={markersFor(state, market, chartLines)} />
     </div>
   );

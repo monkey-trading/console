@@ -63,7 +63,7 @@ describe("moveToNode", () => {
     await moveToNode(old.store, next.store);
     expect(old.store.liveWallet).toBeNull();
     expect(old.store.sessionKey).toBeNull();
-    expect(await authorizeBrowser(old.store)).toBe(false);
+    expect(await authorizeBrowser(old.store, "setup")).toBe(false);
     expect(old.client.posted.filter((p) => p.route === "session_key")).toHaveLength(1);
   });
 
@@ -167,6 +167,6 @@ describe("recheckNode", () => {
     let checks = 0;
     await recheckNode(store, { check: async () => { checks += 1; } });
     expect([verifies, checks]).toEqual([0, 0]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("Your wallet is on chain 1.");
+    expect(store.getSnapshot().notices.node?.text).toBe("Your wallet is on chain 1.");
   });
 });

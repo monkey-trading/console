@@ -47,6 +47,14 @@ export class BarsSeed {
     void this.fetch(key, marketId, timeframe, attempt);
   }
 
+  /** A series the user returns to, after its fetch failed, is tried again and says so again if it fails again. */
+  retry(marketId: MarketId, timeframe: TimeframeId): void {
+    const key = `${marketId}:${timeframe}`;
+    if (!this.reported.delete(key)) return;
+    this.seeded.delete(key);
+    this.attempts.delete(key);
+  }
+
   /** Asks for the archive scan once a node without the endpoint is read again, until it starts. */
   askScan(): void {
     if (this.unavailable) this.askHistoryScan();
@@ -87,6 +95,7 @@ export class BarsSeed {
         : { ...this.store.getSnapshot().barProvenance, [marketId]: { ...this.store.getSnapshot().barProvenance[marketId], [timeframe]: fetched.provenance } };
       this.seeded.add(key);
       this.store.patch({ bars, barProvenance });
+      if (key === `${this.store.getSnapshot().selected}:${this.store.getSnapshot().timeframe}`) this.store.clearNotice("chart");
     } catch (error) {
       if (stale()) return;
       if (error instanceof EngineError && error.status === 404) {
@@ -101,7 +110,7 @@ export class BarsSeed {
         this.reported.add(key);
         this.seeded.add(key);
         const reason = error instanceof Error ? error.message : "The node did not answer.";
-        this.store.toast("error", `Chart history unavailable: ${reason}`);
+        this.store.notify("chart", `Chart history is unavailable: ${reason.replace(/\.$/, "")}. The chart shows the prices received since this page opened.`);
       }
     } finally {
       // A stale request never clears the flag a newer cycle set for the same series.

@@ -12,6 +12,7 @@ import { cancelAll } from "@/lib/store/batch-actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
+import { Notice } from "./Notice";
 import { useReadOnlyNote } from "./SignGate";
 import { useConfirmWindow } from "./use-confirm-window";
 import { usePrefs } from "./use-prefs";
@@ -23,7 +24,7 @@ const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption tex
 const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 
 export function OrdersView() {
-  const { account, markets, busy } = useConsole();
+  const { account, markets, busy, notices } = useConsole();
   const { store } = useSession();
   const readOnly = useReadOnlyNote(useId(), "Cancel");
   const count = account?.orders.length ?? 0;
@@ -31,7 +32,9 @@ export function OrdersView() {
   const { confirmBatch } = usePrefs().prefs;
   // The window confirms the count it was armed for: when an order rests or goes, it closes and the next press arms again.
   useEffect(() => cancel(), [count, cancel]);
-  if (count === 0) return <p className="px-4 py-6 text-caption text-fg-3">No resting orders.</p>;
+  // An account that could not be read (the panel above says so) shows no orders, rather than none as if it had none.
+  if (account === null && notices.accountRead !== undefined) return <p className="px-4 py-6 text-caption text-fg-3">Your orders show once your account can be read.</p>;
+  if (count === 0) return <><p className="px-4 py-6 text-caption text-fg-3">No resting orders.</p><div className="px-4 has-[p]:pb-3"><Notice surface="orders" /></div></>;
   const rows = (account?.orders ?? []).map((o) => {
     const market = markets.find((m) => m.id === o.market);
     return {
@@ -65,6 +68,7 @@ export function OrdersView() {
           {confirming ? `Confirm: cancel ${count} ${noun}` : `Cancel all (${count})`}
         </button>
         <p role="status" className="sr-only">{confirming ? `Press again within five seconds to cancel ${count} ${noun}.` : ""}</p>
+        <Notice surface="orders" />
       </div>
       <ul className="lg:hidden">
         {rows.map((r) => (

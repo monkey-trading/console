@@ -29,7 +29,7 @@ describe("a declared wallet with no key", () => {
     expect(liveSessionKey(store)).not.toBeNull();
     expect(store.getSnapshot().setup.open).toBe(false);
     expect(client.posted.map((p) => p.route)).toEqual(["session_key"]); // the order itself was not sent
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("This browser can trade now. Send the request again.");
+    expect(store.getSnapshot().notices.ticket).toMatchObject({ tone: "info", text: "This browser can trade now. Send the request again." });
     expect(store.getSnapshot().busy).toBe(false);
   });
 
@@ -48,7 +48,8 @@ describe("a declared wallet with no key", () => {
     expect(typedSignatures(provider)).toBe(2);
     expect(liveSessionKey(store)).toBeNull();
     expect(store.getSnapshot().setup.open).toBe(false);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("You declined to sign in your wallet.");
+    expect(store.getSnapshot().notices.ticket).toMatchObject({ tone: "error", text: "You declined to sign in your wallet." });
+    expect(store.getSnapshot().notices.orders).toMatchObject({ tone: "error", text: "You declined to sign in your wallet." });
   });
 
   it("is sent through the wallet when the node refused its key, saying why, and is not asked for the key again", async () => {
@@ -61,7 +62,7 @@ describe("a declared wallet with no key", () => {
     await order(store);
     expect(typedSignatures(provider)).toBe(before + 1); // the order's own signature, through the wallet
     expect(client.posted.filter((p) => p.route === "session_key")).toHaveLength(1);
-    expect(store.getSnapshot().toasts.some((t) => t.text.includes("This request will ask your wallet instead."))).toBe(true);
+    expect(store.getSnapshot().notices.ticket).toMatchObject({ tone: "error" }); // the order is refused in the log; the ticket's refusal note says the wallet signs it
   });
 
   it("is never asked at a quiet reconnect, only by what needs the key", async () => {

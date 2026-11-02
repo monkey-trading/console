@@ -16,6 +16,7 @@ import type { Wallet } from "../engine/wallet";
 import { formatStamp } from "../time";
 import { describeReject } from "../messages";
 import { DISCONNECTED, domainOf, errorText, notBusy, prompting, REQUEST_TTL_MS } from "./signing";
+import type { NoticeSurface } from "./state";
 import type { ConsoleStore } from "./store";
 
 /** What the login asks the wallet to sign, shown in the prompt and passed to the wallet. */
@@ -40,11 +41,11 @@ export function installKey(store: ConsoleStore, key: SessionKeySigner, expiresAt
 /**
  * Runs the login once: asks the wallet for the one `RegisterSessionKey` signature over the
  * connection's candidate key and posts the registration. False leaves the wallet connected with no
- * key, with the reason already shown. One candidate keypair serves every attempt of a connection, as
+ * key, with the reason on `surface`, where the user asked for the login. One candidate keypair serves every attempt of a connection, as
  * the engine's client contract settles it: re-registering a known key never counts against the caps.
  * The key is stored only once the node has registered it, so storage never holds one that did not land.
  */
-export async function loginSession(store: ConsoleStore): Promise<boolean> {
+export async function loginSession(store: ConsoleStore, surface: NoticeSurface): Promise<boolean> {
   // Silent gate: the popup's step says why it waits, and its button stays off until signing is possible.
   const wallet = store.liveWallet;
   if (wallet === null || wallet.readOnly === true) return false;
@@ -62,7 +63,7 @@ export async function loginSession(store: ConsoleStore): Promise<boolean> {
       // The connection may have ended while the nonce read waited: its wallet is not asked.
       if (store.liveWallet !== wallet) throw DISCONNECTED;
       const typed = registerSessionKeyTypedData(domainOf(store), wallet.address, key.address, sessionExpiresAt, { ...terms, nonce });
-      const signature = await prompting(store, wallet, `Confirm in your wallet: ${summary}. It covers trading only — deposits and withdrawals will still ask each time.`, () => wallet.sign({ summary, typed }));
+      const signature = await prompting(store, wallet, surface, `Confirm in your wallet: ${summary}. It covers trading only — deposits and withdrawals will still ask each time.`, () => wallet.sign({ summary, typed }));
       // Or while the wallet asked: nothing registers for a connection that ended.
       if (store.liveWallet !== wallet) throw DISCONNECTED;
       return store.deps.client.registerSessionKey({ account: wallet.address, session_key: key.address, expires_at: sessionExpiresAt, auth: { nonce, expires_at: terms.expiresAt, signature } });
@@ -80,7 +81,8 @@ export async function loginSession(store: ConsoleStore): Promise<boolean> {
     const refused = result.events.find((e) => e.type === "session_key_rejected");
     if (refused && refused.type === "session_key_rejected") {
       store.patch({ sessionRefusal: refused.reason });
-      store.toast("error", describeReject(refused.reason));
+      // The setup step shows the refusal itself, with the way out; anywhere else it is said where the login was asked for.
+      if (surface !== "setup") store.notify(surface, describeReject(refused.reason));
       return false;
     }
     if (!result.events.some((e) => e.type === "session_key_registered")) throw new Error("The node did not register the session key.");
@@ -89,16 +91,16 @@ export async function loginSession(store: ConsoleStore): Promise<boolean> {
     return true;
   } catch (error) {
     if (store.liveWallet !== wallet) return false; // disconnected mid-login: nothing to report
-    if (!store.noteAccess(error)) store.toast("error", errorText(error));
+    if (!store.noteAccess(error)) store.notify(surface, errorText(error));
     return false;
   }
 }
 
 /** The login a caller may kick freely: concurrent calls share one attempt, so two presses never open two wallet prompts. */
-export function ensureLogin(store: ConsoleStore): Promise<boolean> {
+export function ensureLogin(store: ConsoleStore, surface: NoticeSurface): Promise<boolean> {
   if (liveSessionKey(store) !== null) return Promise.resolve(true);
   if (store.sessionLogin === null) {
-    const attempt = loginSession(store);
+    const attempt = loginSession(store, surface);
     store.sessionLogin = attempt;
     void attempt.finally(() => {
       // A disconnect already discarded this attempt: never erase a newer connection's login.
@@ -109,12 +111,13 @@ export function ensureLogin(store: ConsoleStore): Promise<boolean> {
 }
 
 /** The one wallet signature that authorizes this browser, busy while the wallet asks. True once this browser holds a live key. */
-export async function authorizeBrowser(store: ConsoleStore): Promise<boolean> {
+export async function authorizeBrowser(store: ConsoleStore, surface: NoticeSurface): Promise<boolean> {
   const wallet = store.liveWallet;
   if (wallet === null) return false;
+  store.clearNotice(surface);
   store.patch({ busy: true });
   try {
-    return await ensureLogin(store);
+    return await ensureLogin(store, surface);
   } finally {
     notBusy(store, wallet);
   }
@@ -133,10 +136,10 @@ export async function revokeSession(store: ConsoleStore, wallet: Wallet, key: Se
     const expiresAt = (time_ms ?? store.getSnapshot().now) + REQUEST_TTL_MS;
     const typed = revokeSessionKeyTypedData(domainOf(store), wallet.address, key.address, { nonce: next_nonce, expiresAt });
     const summary = "revoke this browser's trading authorization";
-    const signature = await prompting(store, null, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
+    const signature = await prompting(store, null, "wallet", `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
     await store.deps.client.revokeSessionKey({ account: wallet.address, session_key: key.address, auth: { nonce: next_nonce, expires_at: expiresAt, signature } });
   } catch {
     // Best effort, as the issue settles it: an unrevoked key dies at its expiry either way.
-    store.toast("info", "The trading authorization was not revoked; it expires on its own.");
+    store.notify("wallet", "The trading authorization was not revoked; it expires on its own.", "info");
   }
 }

@@ -45,7 +45,7 @@ describe("a node without the House state route", () => {
     await refreshEvery(store, 30);
     expect(client.houseStateReads).toBe(1);
     expect(store.getSnapshot()).toMatchObject({ houseStateStatus: "unavailable", houseParams: null });
-    expect(store.getSnapshot().toasts).toHaveLength(0);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 
   it("is asked again once the long back-off has passed, and picks up a route it has gained", async () => {

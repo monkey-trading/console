@@ -3,12 +3,6 @@
 import type { EngineEvent, MarketId, Reject } from "./engine/types";
 import { describeReject } from "./messages";
 
-/** A message for the user, with the tone a toast shows it in. */
-export interface BatchSummary {
-  tone: "ok" | "error" | "info";
-  text: string;
-}
-
 /**
  * The refusals that can only be of the whole request: its authorisation, its screening, or the
  * protocol version. An entry's own rejection is one a single order gets after those checks
@@ -77,22 +71,19 @@ function whyNot(symbol: string, outcome: EntryOutcome): string {
   }
 }
 
-/** The one toast a close-all click shows: how many closed, and each market that did not, by name. */
-export function describeCloseAll(outcome: CloseAllOutcome, symbolOf: (market: MarketId) => string): BatchSummary {
-  if (outcome.kind === "refused") return { tone: "error", text: `Nothing was closed. ${describeReject(outcome.reason)}` };
+/** What a close-all click says when something was not closed: how many did, and each market that did not, by name. Null when every position closed, which the list shows. */
+export function describeCloseAll(outcome: CloseAllOutcome, symbolOf: (market: MarketId) => string): string | null {
+  if (outcome.kind === "refused") return `Nothing was closed. ${describeReject(outcome.reason)}`;
   const { entries } = outcome;
   const failed = entries.filter((e) => e.result !== "closed");
+  if (failed.length === 0) return null;
   const closed = entries.length - failed.length;
-  if (failed.length === 0) return { tone: "ok", text: `Closed ${positions(closed)}.` };
   const reasons = failed.map((e) => whyNot(symbolOf(e.market), e)).join("; ");
-  return { tone: "error", text: closed === 0 ? `No position was closed: ${reasons}.` : `Closed ${closed} of ${positions(entries.length)}; ${reasons}.` };
+  return closed === 0 ? `No position was closed: ${reasons}.` : `Closed ${closed} of ${positions(entries.length)}; ${reasons}.`;
 }
 
-/** The one toast a cancel-all click shows. Any rejection is the whole request's: it has no entries. */
-export function describeCancelAll(events: readonly EngineEvent[]): BatchSummary {
+/** What a cancel-all click says when the node refused it; null otherwise, since the orders leave the list. Any rejection is the whole request's: it has no entries. */
+export function describeCancelAll(events: readonly EngineEvent[]): string | null {
   const refused = events.find((e) => e.type === "order_rejected");
-  if (refused !== undefined && refused.type === "order_rejected") return { tone: "error", text: `Nothing was cancelled. ${describeReject(refused.reason)}` };
-  const n = events.filter((e) => e.type === "order_cancelled").length;
-  if (n === 0) return { tone: "info", text: "No resting orders were left to cancel." };
-  return { tone: "ok", text: `Cancelled ${n} ${n === 1 ? "order" : "orders"}.` };
+  return refused !== undefined && refused.type === "order_rejected" ? `Nothing was cancelled. ${describeReject(refused.reason)}` : null;
 }

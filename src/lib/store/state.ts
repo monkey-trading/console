@@ -15,11 +15,24 @@ import { emptyLedgerState, type LedgerState } from "./ledger";
 
 export type BlockReason = "united_states" | "sanctioned_jurisdiction";
 
-export interface ToastMessage {
+/** Where a message shows: beside the control the trader used, or in the one place its subject has on the page. */
+export const NOTICE_SURFACES = [
+  "ticket", "orders", "positions", "accountRead", "account", "deposit", "withdraw", "faucet", "setup", "payouts", "payoutReads", "payoutVault",
+  "emissions", "distribution", "stake", "operator", "settings", "wallet", "node", "feed", "chart",
+] as const;
+export type NoticeSurface = (typeof NOTICE_SURFACES)[number];
+
+/** One message on a surface. A failure is `error` and read out as an alert; `info` is a status. `id` tells a repeat of the same text from the message already there. */
+export interface Notice {
   id: number;
-  tone: "ok" | "error" | "info";
+  tone: "error" | "info";
   text: string;
 }
+
+export type Notices = Partial<Record<NoticeSurface, Notice>>;
+
+/** The surfaces that outlive a change of wallet: they are about the node, the feed, the chart, or how the last wallet's connection ended. */
+export const KEPT_ON_WALLET_CHANGE: readonly NoticeSurface[] = ["wallet", "node", "feed", "chart"];
 
 export interface FeedLine {
   id: number;
@@ -98,8 +111,8 @@ export interface ConsoleState {
   houseParams: HouseParams | null;
   /** The latest checkpoint the node's log holds; null before one is posted or read. */
   checkpoint: CheckpointEntry | null;
-  /** Whether the parameters and checkpoint have been read: `unavailable` from a node that predates the route that serves them. */
-  houseStateStatus: "pending" | "read" | "unavailable";
+  /** Whether the parameters and checkpoint have been read: `unavailable` from a node that predates the route that serves them, `failed` when the first read did not land. */
+  houseStateStatus: "pending" | "read" | "unavailable" | "failed";
   /** The public FIFO withdrawal queue's size; null before the first read. */
   withdrawalTotals: QueueTotals | null;
   /** Whether the queue read failed; true between a failed walk and its recovery. */
@@ -121,7 +134,8 @@ export interface ConsoleState {
   /** The P&L tab's rows and the schedule that prices them; read only once that tab has opened. */
   ledger: LedgerState;
   feed: FeedLine[];
-  toasts: ToastMessage[];
+  /** The messages on screen, one per surface, each replaced by the next action on its control and never timed out. */
+  notices: Notices;
   /** The node's executable quotes for the connected account, by market; the mock streams none and the ticket estimates. */
   quotes: Record<MarketId, MarketQuote>;
   /** Why the node will not quote the connected account, such as an account it has not credited yet. */
@@ -152,6 +166,8 @@ export interface ConsoleState {
   emissionsVault: { claimed: bigint; latestSeq: number } | null;
   /** What the wallet is asked to sign or send now, shown while it waits for the user. */
   prompt: string | null;
+  /** The surface that asked, where the prompt shows. */
+  promptAt: NoticeSurface | null;
   /** Whether a signed action is in flight. */
   busy: boolean;
   /** Whether the simulation is paused: the node clock and every price stand still. */
@@ -211,7 +227,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     history: [],
     ledger: emptyLedgerState(),
     feed: [],
-    toasts: [],
+    notices: {},
     quotes: {},
     quoteError: null,
     quoted: [],
@@ -227,6 +243,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     entitlement: null,
     emissionsVault: null,
     prompt: null,
+    promptAt: null,
     busy: false,
     paused: false,
   };

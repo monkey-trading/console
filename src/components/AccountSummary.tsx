@@ -7,6 +7,7 @@ import { shortHex } from "@/lib/format";
 import { withdrawableNow } from "@/lib/vault";
 
 import { useConsole } from "./ConsoleProvider";
+import { Notice } from "./Notice";
 
 const usd = (value: Fixed) => `$${formatFixedPlaces(value, 2)}`;
 
@@ -30,6 +31,7 @@ export function AccountSummary() {
           </div>
         ))}
       </dl>
+      <div className="bg-ink-1 px-4 has-[p]:pb-3"><Notice surface="accountRead" /></div>
       {wallet && <p className="bg-ink-1 px-4 py-2 text-caption text-fg-3 sm:hidden">Wallet <span className="text-fg-2">{shortHex(wallet.address)}</span></p>}
     </section>
   );

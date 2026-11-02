@@ -20,7 +20,7 @@ describe("the node's payouts", () => {
     client.payoutsPage = page([{ nonce: 5 }, { nonce: 4, withdrawal: signed(4, 2_000_000_000) }, { nonce: 3, withdrawal: signed(3, 1_700_000_000) }]);
     await loadPayouts(store);
     expect(payoutsOf(store.getSnapshot()).map((p) => [p.nonce, p.status.kind])).toEqual([[5, "waiting"], [4, "claimable"], [3, "expired"], [2, "paid"]]);
-    expect(store.getSnapshot().toasts).toEqual([]);
+    expect(store.getSnapshot().notices).toEqual({});
     // The nonces the answer lists still get the vault read; the absent one is paid without it.
     await checkPaid(store);
     expect(provider.calls.filter((c) => c.method === "eth_call")).toHaveLength(3);
@@ -35,7 +35,7 @@ describe("the node's payouts", () => {
     expect(payoutsOf(store.getSnapshot()).map((p) => [p.nonce, p.status.kind])).toEqual([[6, "waiting"], [2, "waiting"]]);
     expect(unreadPayouts(store.getSnapshot())).toEqual([6, 2]);
     expect(store.getSnapshot().payoutsProblem).toContain("still loading");
-    expect(store.getSnapshot().toasts).toEqual([]);
+    expect(store.getSnapshot().notices).toEqual({});
     client.payoutsPage = page([]);
     await loadPayouts(store);
     expect(payoutsOf(store.getSnapshot()).map((p) => [p.nonce, p.status.kind])).toEqual([[6, "waiting"], [2, "paid"]]);
@@ -63,24 +63,24 @@ describe("the node's payouts", () => {
     expect(store.getSnapshot().payoutsProblem).toContain("longer than this page reads");
   });
 
-  it("shows waiting with no message and no toast when the node predates the route, and keeps what the stream delivered", async () => {
+  it("shows waiting with no message and no notice when the node predates the route, and keeps what the stream delivered", async () => {
     const { client, store } = await connected();
     store.patch({ approvals: [approved(2, 60), approved(1, 40)], authorizations: [signed(2, 2_000_000_000)] });
     client.payoutsError = new EngineError(404, "not found");
     await loadPayouts(store);
     await loadPayouts(store);
     expect(client.payoutsReads).toHaveLength(2);
-    expect(store.getSnapshot()).toMatchObject({ payoutsProblem: null, payoutsRead: null, toasts: [] });
+    expect(store.getSnapshot()).toMatchObject({ payoutsProblem: null, payoutsRead: null, notices: {} });
     expect(payoutsOf(store.getSnapshot()).map((p) => [p.nonce, p.status.kind])).toEqual([[2, "claimable"], [1, "waiting"]]);
   });
 
-  it("says plainly that a failed read failed, with no toast, and reads again on the next trigger", async () => {
+  it("says plainly that a failed read failed, with no notice, and reads again on the next trigger", async () => {
     const { client, store } = await connected();
     store.patch({ approvals: [approved(1, 40)] });
     client.payoutsError = new EngineError(0, "The node did not answer.");
     await loadPayouts(store);
     expect(store.getSnapshot().payoutsProblem).toBe("The node's list of your payouts could not be read: The node did not answer. It is read again when the next withdrawal is approved or the page reloads.");
-    expect(store.getSnapshot().toasts).toEqual([]);
+    expect(store.getSnapshot().notices).toEqual({});
     expect(payoutsOf(store.getSnapshot())[0]?.status.kind).toBe("waiting");
     client.payoutsError = null;
     client.payoutsPage = page([{ nonce: 1, withdrawal: signed(1, 2_000_000_000) }]);

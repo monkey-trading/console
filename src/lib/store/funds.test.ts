@@ -68,7 +68,7 @@ describe("quoteSyncKey", () => {
     expect(quoteSyncKey({ ...start, account: { ...account, positions: [{ market: 2, qty: 1n, entry: 1n }] } })).not.toBe(quoteSyncKey({ ...start, account }));
     expect(quoteSyncKey({ ...start, selected: 9 })).not.toBe(key);
     expect(quoteSyncKey({ ...start, wallet: null })).not.toBe(key);
-    expect(quoteSyncKey({ ...start, toasts: [{ id: 1, tone: "ok", text: "x" }], quotes: { 1: quote(ME) } })).toBe(key);
+    expect(quoteSyncKey({ ...start, notices: { ticket: { id: 1, tone: "info", text: "x" } }, quotes: { 1: quote(ME) } })).toBe(key);
   });
 });
 

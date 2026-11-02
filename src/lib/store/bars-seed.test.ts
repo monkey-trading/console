@@ -129,10 +129,10 @@ describe("seeding the chart from the marks endpoint", () => {
     await settle();
     const bars = store.getSnapshot().bars[1]?.["1m"] ?? [];
     expect(bars[0]).toMatchObject({ time: (NOW - 60_000) / 1000 });
-    expect(store.getSnapshot().toasts).toEqual([]);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 
-  it("reports once and stops after the retries are spent", async () => {
+  it("says so and stops after the retries are spent", async () => {
     const { client, store } = setup();
     client.marks = async (market, resolution, fromMs, toMs) => {
       client.marksReads.push({ market, resolution, fromMs, toMs });
@@ -146,8 +146,10 @@ describe("seeding the chart from the marks endpoint", () => {
     client.onMessage?.(tick(NOW + 120_000));
     await settle();
     expect(client.marksReads).toHaveLength(3);
-    const texts = store.getSnapshot().toasts.map((t) => t.text);
-    expect(texts.filter((t) => t.startsWith("Chart history unavailable"))).toHaveLength(1);
+    expect(store.getSnapshot().notices.chart).toMatchObject({
+      tone: "error",
+      text: expect.stringContaining("Chart history is unavailable: The node did not answer."),
+    });
     await nextRead();
     client.onMessage?.(tick(NOW + 180_000));
     await settle();
@@ -211,7 +213,7 @@ describe("restarts", () => {
     client.onMessage?.(tick(NOW + 120_000)); // the series is unsealed, so the next trigger retries it
     await settle();
     expect(calls).toBe(3);
-    expect(store.getSnapshot().toasts.filter((t) => t.text.startsWith("Chart history unavailable"))).toHaveLength(0);
+    expect(store.getSnapshot().notices.chart).toBeUndefined();
   });
 });
 
@@ -234,7 +236,7 @@ describe("the archive-scan fallback", () => {
     await settle();
     expect(calls).toBe(2);
     expect(client.scans).toHaveLength(0);
-    expect(store.getSnapshot().toasts.filter((t) => t.text.startsWith("Chart history unavailable"))).toHaveLength(0);
+    expect(store.getSnapshot().notices.chart).toBeUndefined();
   });
 
   it("seeds every timeframe from the wired scan when the node 404s the endpoint", async () => {

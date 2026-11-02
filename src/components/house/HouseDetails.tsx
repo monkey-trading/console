@@ -36,6 +36,7 @@ function Meter({ bps }: { bps: number }) {
 /** What a panel fed by the node's house state says while it has nothing to show; `none` is the answer of a node that holds none. */
 function unread(status: ConsoleState["houseStateStatus"], none: string): string {
   if (status === "unavailable") return "Not available: this node does not serve the house state yet.";
+  if (status === "failed") return "The node's answer could not be read. The console tries again with its next read.";
   return status === "pending" ? "Waiting for the node's answer." : none;
 }
 
