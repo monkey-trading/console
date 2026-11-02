@@ -23,6 +23,8 @@ export class PrefsStore {
   private state: PrefsState | null = null;
   private readonly listeners = new Set<() => void>();
   private unwatch: (() => void) | null = null;
+  /** The storage keys whose last write failed: the page's copy of each is the only true one, so a read never replaces it. */
+  private readonly unsaved = new Set<string>();
 
   /**
    * `storage` is reached lazily and may be null (no storage) or throw; `watch` calls `onChange` when
@@ -33,11 +35,8 @@ export class PrefsStore {
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     if (this.listeners.size === 1) {
-      // Nothing heard another tab's writes while no one was listening: read again, unless a write failed (the page's own choices are then the only true copy).
-      if (this.state?.saved === true) {
-        const fresh = this.load();
-        if (fresh.saved) this.state = fresh;
-      }
+      // Nothing heard another tab's writes while no one was listening: read again.
+      if (this.state !== null) this.refresh();
       if (this.watch !== undefined) this.unwatch = this.watch(() => this.reload());
     }
     return () => {
@@ -84,13 +83,24 @@ export class PrefsStore {
     } catch {
       saved = false; // quota or permission: the change still applies to this page
     }
-    this.state = { ...next, saved };
+    if (saved) this.unsaved.delete(key);
+    else this.unsaved.add(key);
+    this.state = { ...next, saved: this.unsaved.size === 0 };
     this.notify();
+  }
+
+  /** Reads storage again into the state: what it holds replaces the page's copy of each key whose last write saved, and a read that fails changes nothing but the warning. */
+  private refresh(): void {
+    const fresh = this.load();
+    const current = this.state;
+    if (current === null) this.state = fresh;
+    else if (!fresh.saved) this.state = { ...current, saved: false };
+    else this.state = { prefs: this.unsaved.has(PREFS_KEY) ? current.prefs : fresh.prefs, sizes: this.unsaved.has(SIZES_KEY) ? current.sizes : fresh.sizes, saved: this.unsaved.size === 0 };
   }
 
   /** Another tab wrote: read it again. */
   private reload(): void {
-    this.state = this.load();
+    this.refresh();
     this.notify();
   }
 

@@ -6,6 +6,7 @@ import { EngineError } from "../engine/client";
 import { settle } from "../engine/test-kit";
 import type { HistoryPage } from "../engine/types";
 import { ACCOUNT } from "../engine/wallet-kit";
+import { disconnectWallet } from "./actions";
 import { connected, NODE_TIME } from "./live-kit";
 import { H, message, ManualScheduler, opened, OTHER_KEY, registered, registeredReads, revokedAt, serve, walletSignatures } from "./session-list-kit";
 import { SESSION_REFRESH_MS, SessionList } from "./session-list";
@@ -179,6 +180,27 @@ describe("the session list", () => {
     scheduler.fire();
     await settle();
     expect(list.getSnapshot().complete).toBe(true);
+  });
+
+  it("forgets that a read stopped short when the wallet is disconnected, and under the next account", async () => {
+    const { client, store, list, scheduler, wallet } = await opened();
+    let page = 0;
+    const stoppedShort = async () => ({ events: [registered(`${10_000 - page}:0`, OTHER_KEY, NODE_TIME - H, NODE_TIME + H)], next: `${10_000 - page++}:0` });
+    client.history = stoppedShort;
+    scheduler.fire();
+    await settle();
+    expect(list.getSnapshot().complete).toBe(false);
+    disconnectWallet(store);
+    await settle();
+    expect(list.getSnapshot()).toMatchObject({ status: { kind: "no-wallet" }, keys: [], complete: true });
+    // The next account's list is not under a warning about the last one's read, before its own read ends.
+    let release!: (page: HistoryPage) => void;
+    client.history = () => new Promise((resolve) => { release = resolve; });
+    store.liveWallet = { ...wallet, address: "0x00000000000000000000000000000000000000bb" };
+    store.setWallet({ address: "0x00000000000000000000000000000000000000bb", label: "Other" });
+    await settle();
+    expect(list.getSnapshot().complete).toBe(true);
+    release({ events: [], next: null });
   });
 
   it("makes no timed read in a hidden tab, and one when it returns", async () => {
