@@ -7,6 +7,7 @@ import { decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "vi
 
 import type { DistributionProof } from "./stats-types";
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
+import { NO_CANDIDATE } from "./registry";
 import type { StakingPosition, StakingWallet } from "./staking";
 import type { Progress } from "./wallet";
 
@@ -23,6 +24,7 @@ const STAKING = parseAbi([
   "function stake(uint256 amount)",
   "function startUnstake(uint256 amount)",
   "function completeUnstake()",
+  "function delegate(address candidate)",
   "function stakes(address account) view returns (uint256)",
   "function unstakes(address account) view returns (uint256 amount, uint256 claimableAt)",
 ]);
@@ -120,6 +122,11 @@ export class ProviderStaking implements StakingWallet {
 
   async completeUnstake(progress: Progress = () => undefined): Promise<string> {
     return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "completeUnstake" }), "complete the unstake", progress);
+  }
+
+  async delegate(candidate: string, progress: Progress = () => undefined): Promise<string> {
+    const action = candidate === NO_CANDIDATE ? "clear your delegation" : "delegate your stake";
+    return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "delegate", args: [hexOf(candidate)] }), action, progress);
   }
 
   /** The proof names this account: the node signed it for the account's own route. */

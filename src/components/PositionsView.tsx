@@ -120,7 +120,7 @@ export function PositionsView() {
           </li>
         ))}
       </ul>
-      <div className="hidden overflow-x-auto lg:block">
+      <div className="relative hidden overflow-x-auto lg:block">
         <table className="w-full min-w-[640px] text-caption">
           <thead><tr className="border-b border-line"><th className={TH}>Market</th><th className={TH}>Side</th><th className={TH}>Size</th><th className={TH}>Entry</th><th className={TH}>Mark</th><th className={TH}>P&amp;L</th><th className={TH}><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>

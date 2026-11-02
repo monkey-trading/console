@@ -56,6 +56,11 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     store.liveWallet = wallet;
     store.patch(NO_ACCOUNT);
     store.setWallet({ address: wallet.address, label: wallet.label, ...(wallet.readOnly ? { readOnly: true } : {}) });
+    // Before the key and the account, as nothing is signed for the node until the vault's release has
+    // been read, and before the offer below: its prompt would hold the wallet from answering the read.
+    await store.deps.client.readChainThrough(wallet.chainReads ?? null);
+    // The connection may have ended while the wallet answered: nothing of it is stored or adopted.
+    if (store.liveWallet !== wallet) return false;
     if (!quiet) offerUsdcImport(store, wallet);
     // The choice persists only now that the wallet is adopted: a refused connect, quiet or not, leaves storage alone.
     const choice = wallet.topic !== undefined ? { kind: "walletconnect" as const, topic: wallet.topic } : optionId === "injected" ? { kind: "injected" as const } : null;

@@ -131,7 +131,7 @@ beforeAll(async () => {
   };
   const client = new LiveEngineClient({
     origin: proxy.url, streamOrigin: proxy.url.replace(/^http/, "ws"), chainId: 31337, vault: VAULT, heartbeatMs: 5_000,
-    loadVerifier: async () => verifier, manifests: [], acceptsMock: true,
+    loadVerifier: async () => verifier, releases: [], acceptsMock: true,
     fetch: recordingFetch, openSocket: (url) => new WebSocket(url),
     scheduler: { setTimeout: (run, ms) => setTimeout(run, ms), clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
     nowMs: () => Date.now(),

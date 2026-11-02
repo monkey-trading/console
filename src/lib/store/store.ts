@@ -1,7 +1,7 @@
 /** The console's store: reads the node, follows its stream, and notifies the screens. */
 
 import type { TimeframeId } from "../bars";
-import { maySign } from "../engine/attestation";
+import { readBlock } from "../engine/attestation";
 import type { ClientEvent } from "../engine/client";
 import type { SessionKeySigner } from "../engine/session-key";
 import type { MarketId, StreamMessage } from "../engine/types";
@@ -55,6 +55,7 @@ export class ConsoleStore {
   /** The reads a 404 holds back (a node without the House state route, an account not yet credited); not part of the snapshot. */ readonly quiet = new QuietReads();
   /** When each market's bar bucket was last ticked from the node's mark; a merge tells a stale candle from a fresh one. Not part of the snapshot. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
+  /** Whether the session moved to another node's store: what this one's work then comes to says nothing of the wallet's connection. */ movedAway = false;
   /** Stand-down flags for pending history work, bumped on each start; not part of the snapshot. */
   stopped = false; scanEpoch = 0;
   /** Whether trust in the node was lost (a failed check or a wrong clock) and not yet regained. */
@@ -195,7 +196,7 @@ export class ConsoleStore {
     }
     else if (event.type === "attestation") {
       this.patch({ attestation: event.status });
-      const trusted = event.status.kind === "mock" || event.status.kind === "verified";
+      const trusted = event.status.kind === "mock" || event.status.kind === "verified" || event.status.kind === "attested";
       if (event.status.kind === "clock" || event.status.kind === "unverified") this.trustLost = true;
       else if (trusted && this.trustLost) {
         this.trustLost = false;
@@ -213,7 +214,7 @@ export class ConsoleStore {
       this.patch({ attestation: { kind: "unverified", reason: error instanceof Error ? error.message : "The attestation could not be read." } });
     }
     // A node whose markets have not loaded yet is read once it is trusted.
-    if (this.snapshot.markets.length === 0 && maySign(this.snapshot.attestation, "live")) await this.refresh(true);
+    if (this.snapshot.markets.length === 0 && readBlock(this.snapshot.attestation, "live") === null) await this.refresh(true);
     try {
       await this.deps.client.accessProbe();
       this.patch({ blocked: null, accessChecked: true });

@@ -6,7 +6,7 @@
  * that shows it.
  */
 
-import { signBlock } from "../engine/attestation";
+import { readBlock } from "../engine/attestation";
 import { EngineError } from "../engine/client";
 import { revokeSessionKeyTypedData } from "../engine/eip712";
 import type { Scheduler } from "../engine/live-stream";
@@ -148,7 +148,7 @@ export class SessionList {
   private statusNow(): SessionListStatus {
     const snapshot = this.store.getSnapshot();
     if (snapshot.wallet === null) return { kind: "no-wallet" };
-    const blocked = signBlock(snapshot.attestation, snapshot.stream, false);
+    const blocked = readBlock(snapshot.attestation, snapshot.stream);
     return blocked === null ? { kind: "loading" } : { kind: "waiting", why: blocked };
   }
 

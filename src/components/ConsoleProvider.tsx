@@ -2,12 +2,14 @@
 
 /** Creates the store once, over the in-browser mock node or a live node by the build's deployment, follows the node's clock, and shares them. */
 
-import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, Fragment, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { MultiConnector } from "@/lib/engine/connectors";
 import { parseDeploy, rawDeploy, type Deploy } from "@/lib/engine/deploy";
 import { InjectedConnector } from "@/lib/engine/injected";
 import { createLiveClient, GLUE_PATH } from "@/lib/engine/live-session";
+import { OperatorFollower, type FollowStatus } from "@/lib/engine/operator-follow";
+import type { EngineClient } from "@/lib/engine/client";
 import type { Eip1193Provider } from "@/lib/engine/provider-wallet";
 import type { KeyStorage } from "@/lib/engine/session-key-store";
 import { WalletConnectConnector } from "@/lib/engine/walletconnect";
@@ -18,6 +20,7 @@ import { queuePage } from "@/lib/mock/funds";
 import { mockHistory } from "@/lib/mock/history";
 import { createMockNode, SIM_EPOCH_MS, type MockNode } from "@/lib/mock";
 import { connectWallet, storedKeyChanged, walletSessionEnded } from "@/lib/store/actions";
+import { followNode, moveNotice, moveToNode } from "@/lib/store/node-move";
 import { reconnectWallet } from "@/lib/store/reconnect";
 import { scanBarsHistory } from "@/lib/store/bars-scan";
 import { followAccountFeeds, quoteSyncKey, syncQuotes } from "@/lib/store/funds";
@@ -36,6 +39,12 @@ interface Session {
   walletConnect: WalletConnectConnector | null;
   /** The trading preferences kept in this browser, apart from the store so a stream message re-renders nothing that reads them. */
   prefs: PrefsStore;
+  /** Which node a live session should talk to, from the chain; null for the mock. */
+  follower: OperatorFollower | null;
+  /** Counts the moves to another node, each of which remounts every screen on a fresh store. */
+  moves: number;
+  /** Hears each move to another node, which brings a fresh store; absent for the mock, which has one node. */
+  onMove?: (listener: (store: ConsoleStore) => void) => void;
 }
 
 const SessionContext = createContext<Session | null>(null);
@@ -60,17 +69,19 @@ function createPrefs(): PrefsStore {
 
 /** The store for a live node: nothing is loaded until its attestation is trusted. */
 function createLiveSession(deploy: Deploy): Session {
-  const client = createLiveClient(deploy, {
-    fetch: (input, init) => fetch(input, init),
-    openSocket: (url) => new WebSocket(url),
-    scheduler: { setTimeout: (run, ms) => setTimeout(run, ms), // The handle is the one this scheduler's own setTimeout returned.
-      clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
-    nowMs: () => Date.now(),
+  const scheduler = { setTimeout: (run: () => void, ms: number): unknown => setTimeout(run, ms), // The handle is the one this scheduler's own setTimeout returned.
+    clearTimeout: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
+  const nowMs = () => Date.now();
+  const browser = {
+    fetch: (input: Parameters<typeof fetch>[0], init?: RequestInit) => fetch(input, init),
+    openSocket: (url: string) => new WebSocket(url),
+    scheduler, nowMs,
     // The glue is a static file of the app, loaded as it is rather than bundled; the bundler would otherwise look for the .wasm beside it.
     loadGlue: () => import(/* webpackIgnore: true */ /* turbopackIgnore: true */ GLUE_PATH) as Promise<VerifierModule>,
-  });
-  if (deploy.chainId === null || deploy.vault === null) throw new Error("A live session needs the deployment's chain id and vault.");
-  const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, staking: deploy.staking, add: deploy.rpcUrl === null ? null : { name: deploy.chainId === 31337 ? "Anvil (local)" : `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
+  };
+  const client = createLiveClient(deploy, browser);
+  if (deploy.origin === null || deploy.chainId === null || deploy.vault === null) throw new Error("A live session needs the deployment's node, chain id and vault.");
+  const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, staking: deploy.staking, registry: deploy.registry, add: deploy.rpcUrl === null ? null : { name: deploy.chainId === 31337 ? "Anvil (local)" : `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   // The choice and the session key persist in localStorage, reached lazily: this function also runs on
   // the server, where `window` does not exist, so the storage is touched only from effects and handlers.
@@ -89,8 +100,23 @@ function createLiveSession(deploy: Deploy): Session {
   );
   const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, { wait }), ...(walletConnect === null ? [] : [walletConnect]), new WatchConnector(() => window.location.search)]);
   // A node without the marks endpoint 404s it; the chart's archive scan then seeds its history.
-  const store = new ConsoleStore({ client, wallets, persistence, history: () => [], historyScan: (store, markets) => scanBarsHistory(store, markets, store.deps.scanClock), initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
-  return { store, deploy, node: null, walletConnect, prefs: createPrefs() };
+  const storeFor = (forClient: EngineClient) => new ConsoleStore({ client: forClient, wallets, persistence, history: () => [], historyScan: (store, markets) => scanBarsHistory(store, markets, store.deps.scanClock), initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
+  // The store in use, which a move to another node replaces; `ended` above and the follower below read it when they run.
+  let store = storeFor(client);
+  let moved: ((next: ConsoleStore) => void) | null = null;
+  const follower = new OperatorFollower({
+    deploy, origin: deploy.origin, scheduler, nowMs,
+    chain: () => store.liveWallet?.chainReads ?? null,
+    open: (origin) => createLiveClient(deploy, browser, undefined, origin),
+    busy: () => store.getSnapshot().busy,
+    adopt: (next) => {
+      const old = store;
+      store = storeFor(next);
+      void moveToNode(old, store);
+      moved?.(store);
+    },
+  });
+  return { store, deploy, node: null, walletConnect, prefs: createPrefs(), follower, moves: 0, onMove: (listener) => { moved = listener; } };
 }
 
 function createSession(): Session {
@@ -112,7 +138,7 @@ function createSession(): Session {
       },
     },
   });
-  return { store, deploy, node, walletConnect: null, prefs: createPrefs() };
+  return { store, deploy, node, walletConnect: null, prefs: createPrefs(), follower: null, moves: 0 };
 }
 
 /** The most simulated time one tick may add, so a stalled timer does not jump the prices. */
@@ -125,10 +151,29 @@ const MAX_TICK_MS = 5_000;
  * and from the start for a visitor who prefers reduced motion, until they press play.
  */
 export function ConsoleProvider({ children }: { children: ReactNode }) {
-  const [session] = useState(createSession);
-  const { store } = session;
+  const [session, setSession] = useState(createSession);
+  const { store, follower, onMove } = session;
   /** Set once a stored choice has been reconnected, so a repeated effect run (React StrictMode) does not start a second one. */
   const reconnected = useRef(false);
+  // A move to another node swaps in its fresh store, and the key below remounts every screen on it.
+  useEffect(() => onMove?.((next) => setSession((held) => ({ ...held, store: next, moves: held.moves + 1 }))), [onMove]);
+  useEffect(() => {
+    if (follower === null) return;
+    const stop = follower.start(() => document.visibilityState === "hidden");
+    const seen = () => { if (document.visibilityState !== "hidden") follower.resume(); };
+    document.addEventListener("visibilitychange", seen);
+    return () => {
+      document.removeEventListener("visibilitychange", seen);
+      stop();
+    };
+  }, [follower]);
+  // After a move every screen has remounted: its log exists to announce this, and focus that fell with the old screens goes somewhere deliberate.
+  useEffect(() => {
+    if (session.moves === 0 || follower === null) return;
+    store.toast("info", moveNotice(new URL(follower.getSnapshot().origin).host));
+    if (document.activeElement === null || document.activeElement === document.body) document.getElementById("main")?.focus();
+  }, [session.moves, store, follower]);
+  useEffect(() => (follower === null ? undefined : followNode(store, follower)), [follower, store]);
   useEffect(() => {
     if (session.node === null) {
       // A live node sets the clock with its first message; the page follows it, and the account the address names.
@@ -207,7 +252,7 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       store.deps.client.quotes(null);
     };
   }, [store, session.node]);
-  return <SessionContext value={session}>{children}</SessionContext>;
+  return <SessionContext value={session}><Fragment key={session.moves}>{children}</Fragment></SessionContext>;
 }
 
 /** The session. Throws outside the provider. */
@@ -215,6 +260,15 @@ export function useSession(): Session {
   const session = useContext(SessionContext);
   if (!session) throw new Error("useSession is used outside ConsoleProvider");
   return session;
+}
+
+const NO_FOLLOW = () => () => {};
+
+/** What the console knows of the node it should talk to; null for the mock, whose node is in this page. */
+export function useNodeFollow(): FollowStatus | null {
+  const { follower } = useSession();
+  const read = () => follower?.getSnapshot() ?? null;
+  return useSyncExternalStore(follower?.subscribe ?? NO_FOLLOW, read, read);
 }
 
 /** The console's state, re-rendering on every change. */

@@ -13,6 +13,7 @@ import type { EntitlementProof } from "./emissions";
 import type { TypedRequest } from "./eip712";
 import { claimEmissionsTx, emissionsClaimedRead, suggestMonkeyToken, suggestTokenAsset } from "./provider-monkey";
 import { unknownChain, walletError } from "./provider-errors";
+import { ProviderDeployment } from "./provider-registry";
 import { ProviderStaking } from "./provider-staking";
 import { waitMined } from "./receipts";
 import { serialized } from "./serialized-provider";
@@ -35,6 +36,8 @@ export interface WalletChain {
   add: { name: string; rpcUrl: string } | null;
   /** The staking contract; null or absent when the build names none, and then staking is refused. */
   staking?: string | null;
+  /** The operator registry; null or absent when the build names none, and then nothing reads it. */
+  registry?: string | null;
 }
 
 export interface ProviderWalletDeps {
@@ -88,6 +91,8 @@ export class ProviderWallet implements Wallet {
   topic?: string;
   /** The staking and distribution calls. */
   readonly staking: StakingWallet;
+  /** The vault's and the operator registry's reads. */
+  readonly chainReads: ProviderDeployment;
 
   /** The wallet's provider, asked one request at a time. */
   private readonly provider: Eip1193Provider;
@@ -101,6 +106,7 @@ export class ProviderWallet implements Wallet {
   ) {
     this.provider = serialized(provider);
     this.staking = new ProviderStaking(address, chain, this.provider, { send: (to, data, action, progress) => this.send(to, data, action, progress), ensureChain: () => this.ensureChain() });
+    this.chainReads = new ProviderDeployment(chain, this.provider);
   }
 
   /**

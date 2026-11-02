@@ -8,6 +8,7 @@
  */
 
 import { carryAccrued } from "../engine/claim-standing";
+import { withTimeout } from "../engine/provider-errors";
 import type { ActivityPage, DistributionProof, MonkeyView } from "../engine/stats-types";
 import type { StakingPosition } from "../engine/staking";
 import type { Wallet } from "../engine/wallet";
@@ -283,14 +284,3 @@ export class MonkeyPanel {
 
 /** How long the wallet's reads may take before a read fails into its figures, in milliseconds. */
 const WALLET_READ_MS = 30_000;
-
-/** `read`, or a rejection once `ms` has passed without it settling. */
-function withTimeout<T>(read: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Your wallet did not answer in time.")), ms);
-    read.then(
-      (value) => { clearTimeout(timer); resolve(value); },
-      (error: unknown) => { clearTimeout(timer); reject(error); },
-    );
-  });
-}

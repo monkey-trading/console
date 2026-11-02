@@ -2,13 +2,16 @@
 
 import type { NextConfig } from "next";
 
-import { parseDeploy, rawDeploy, streamOrigin, WALLETCONNECT_RELAY, WALLETCONNECT_VERIFY } from "./src/lib/engine/deploy";
+import { listedOrigins, parseDeploy, rawDeploy, streamOrigin, WALLETCONNECT_RELAY, WALLETCONNECT_VERIFY } from "./src/lib/engine/deploy";
 import { geoBlockRewrites } from "./src/lib/geo-block";
 
 const isDev = process.env.NODE_ENV === "development";
 const deploy = parseDeploy(rawDeploy());
-// The engine node's origin is the one cross-origin destination, with its wss: stream; a live build also loads the verifier's WebAssembly.
-const nodeOrigins = deploy.origin === null ? [] : [deploy.origin, streamOrigin(deploy.origin)];
+// The engine's nodes are the one cross-origin destination, each with its wss: stream: the build's own and those of the
+// timelock-approved candidates it lists (owner decision, monkey-trading/console#37), named one by one with no wildcard or
+// scheme source, so rotation among them needs no rebuild and an unlisted operator cannot be reached. A live build also
+// loads the verifier's WebAssembly.
+const nodeOrigins = listedOrigins(deploy).flatMap((origin) => [origin, streamOrigin(origin)]);
 // A build with a WalletConnect project id also reaches WalletConnect's relay (monkey-trading/console#7) and frames its Verify
 // service (owner approval recorded in monkey-trading/console#27), and nothing else of WalletConnect's.
 const walletConnect = deploy.walletConnectProjectId !== null;
@@ -18,7 +21,7 @@ const relayOrigins = walletConnect ? [WALLETCONNECT_RELAY] : [];
 const faucetRpcOrigins = deploy.mode === "live-dev" && deploy.rpcUrl !== null ? [new URL(deploy.rpcUrl).origin] : [];
 
 // The page is statically rendered, so its inline bootstrap scripts cannot carry a nonce; the policy
-// allows inline scripts and styles but nothing from another origin but the pinned node's, the relay, Verify's frame,
+// allows inline scripts and styles but nothing from another origin but the listed nodes', the relay, Verify's frame,
 // and, in a live-dev build, the pinned Anvil RPC. Dev mode also needs eval.
 const contentSecurityPolicy = [
   "default-src 'self'",

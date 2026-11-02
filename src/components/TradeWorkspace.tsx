@@ -69,12 +69,12 @@ export function TradeWorkspace() {
   };
   return (
     <div ref={root} className="grid min-h-0 flex-1 max-lg:content-start lg:grid-cols-[210px_minmax(0,1fr)_290px] xl:grid-cols-[230px_minmax(0,1fr)_310px]">
-      <div data-pane="markets" className={`min-h-0 lg:overflow-y-auto ${hiddenUnless(pane, "markets")}`}><Watchlist onPick={picked} /></div>
-      <div className="flex min-h-0 min-w-0 flex-col lg:overflow-y-auto">
+      <div data-pane="markets" className={`relative min-h-0 lg:overflow-y-auto ${hiddenUnless(pane, "markets")}`}><Watchlist onPick={picked} /></div>
+      <div className="relative flex min-h-0 min-w-0 flex-col lg:overflow-y-auto">
         <div data-pane="chart" className={`flex flex-1 flex-col ${hiddenUnless(pane, "chart")}`}><ChartPanel /></div>
         <div data-pane="account" className={`flex shrink-0 flex-col ${hiddenUnless(pane, "account")}`}><BottomPanel /></div>
       </div>
-      <div data-pane="trade" className={`min-h-0 border-line lg:overflow-y-auto lg:border-l ${hiddenUnless(pane, "trade")}`}><OrderTicket /></div>
+      <div data-pane="trade" className={`relative min-h-0 border-line lg:overflow-y-auto lg:border-l ${hiddenUnless(pane, "trade")}`}><OrderTicket /></div>
       <PhoneNav pane={pane} onChange={choose} />
     </div>
   );

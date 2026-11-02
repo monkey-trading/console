@@ -1,6 +1,8 @@
 /** The engine client for a real node: verified attestation, signed reads, and the signed stream. */
 
 import type { AttestationStatus, FeedStatus } from "./attestation";
+import type { PinnedRelease } from "./manifests";
+import type { DeploymentReads, VaultFacts } from "./registry";
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks, type Unsubscribe } from "./client";
 import type { EntitlementProof } from "./emissions";
 import { setParamsOf, type QueueTotals } from "../house";
@@ -13,6 +15,7 @@ import { collateral, plainText, READ_TIMEOUT_MS } from "./live-plain";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import { LiveStream, type QuoteRequest, type Scheduler, type Socket } from "./live-stream";
+import { VaultReads, VerifierLoader } from "./live-verifier";
 import { SignedTransport } from "./transport";
 import { NodeTrust } from "./trust";
 import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
@@ -30,7 +33,10 @@ export interface LiveDeps {
   heartbeatMs: number;
   /** Loads the verifier; called once, when the node is first trusted. */
   loadVerifier(): Promise<Verifier>;
-  manifests: readonly string[];
+  /** The releases this build pins. */
+  releases: readonly PinnedRelease[];
+  /** A dev build's stand-ins for the launch digest a mock quote cannot measure. */
+  devDigests?: readonly string[];
   acceptsMock: boolean;
   fetch: typeof fetch;
   openSocket(url: string): Socket;
@@ -41,13 +47,11 @@ export interface LiveDeps {
   signal?: () => AbortSignal;
 }
 
-/** How long loading the verifier may take, in milliseconds. */
-const VERIFIER_LOAD_TIMEOUT_MS = 20_000;
-
 export class LiveEngineClient implements EngineClient {
   readonly signatures: SignatureChecks = "checked";
-  private verifierReady: Promise<Verifier> | null = null;
-  private loaded: Verifier | null = null;
+  /** The vault's facts through the connected wallet. */
+  private readonly vault: VaultReads;
+  private readonly verifiers: VerifierLoader;
   private readonly trust: NodeTrust;
   private readonly transport: SignedTransport;
   private readonly listeners = new Set<(event: ClientEvent) => void>();
@@ -70,14 +74,20 @@ export class LiveEngineClient implements EngineClient {
   constructor(private readonly deps: LiveDeps) {
     this.deployment = { chainId: deps.chainId, vault: deps.vault };
     const challenge = deps.challenge ?? (() => newChallenge());
+    this.verifiers = new VerifierLoader(deps.loadVerifier, deps.scheduler);
+    this.vault = new VaultReads(deps.scheduler, deps.nowMs, () => this.trust.vaultAnsweredLate());
     this.trust = new NodeTrust({
       attestation: () => plainText(deps, "/v1/attestation"),
       collateral: () => collateral(deps),
-      verifier: () => this.verifier(), manifests: deps.manifests, acceptsMock: deps.acceptsMock, nowMs: deps.nowMs,
-      onStatus: (status) => this.emit({ type: "attestation", status }),
+      verifier: () => this.verifiers.load(), releases: deps.releases, devDigests: deps.devDigests ?? [], acceptsMock: deps.acceptsMock, nowMs: deps.nowMs,
+      vaultFacts: () => this.vault.facts(),
+      onStatus: (status) => {
+        if (status.kind === "unverified") this.stream?.distrust(status.reason);
+        this.emit({ type: "attestation", status });
+      },
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
     });
-    this.transport = new SignedTransport({ ...deps, verifier: () => this.requireVerifier(), trust: this.trust, challenge, signal: this.signal });
+    this.transport = new SignedTransport({ ...deps, verifier: () => this.verifiers.loaded(), trust: this.trust, challenge, signal: this.signal });
     this.totalsWalk = new QueueTotalsWalk(this.transport, deps.nowMs);
     this.withdrawalTotals = () => this.totalsWalk.totals();
     this.emissions = (address) =>
@@ -101,35 +111,19 @@ export class LiveEngineClient implements EngineClient {
     };
   }
 
-  /** The verifier, loading it the first time. */
-  private verifier(): Promise<Verifier> {
-    if (this.verifierReady === null) {
-      const timer = { handle: null as unknown };
-      const deadline = new Promise<never>((_, reject) => {
-        timer.handle = this.deps.scheduler.setTimeout(() => reject(new Error("The verifier took too long to load.")), VERIFIER_LOAD_TIMEOUT_MS);
-      });
-      this.verifierReady = Promise.race([this.deps.loadVerifier(), deadline]).then(
-        (verifier) => {
-          this.deps.scheduler.clearTimeout(timer.handle);
-          return (this.loaded = verifier);
-        },
-        (error: unknown) => {
-          this.deps.scheduler.clearTimeout(timer.handle);
-          this.verifierReady = null; // a failed or stalled load is tried again on the next check
-          throw error;
-        },
-      );
-    }
-    return this.verifierReady;
+  async readChainThrough(chain: DeploymentReads | null): Promise<void> {
+    if (this.vault.uses(chain)) return;
+    this.vault.use(chain);
+    if (chain !== null && this.trust.judgedByVault) await this.trust.verifyAfresh();
+  }
+
+  async heedVault(facts: VaultFacts, chain: DeploymentReads): Promise<void> {
+    if (!this.vault.uses(chain)) return;
+    this.vault.note(facts);
+    if (this.trust.outdatedBy(facts.signer)) await this.trust.verifyAfresh();
   }
 
   private readonly signal = (): AbortSignal => this.deps.signal?.() ?? AbortSignal.timeout(READ_TIMEOUT_MS);
-
-  /** The loaded verifier; the trust check that precedes every use has loaded it. */
-  private requireVerifier(): Verifier {
-    if (this.loaded === null) throw new Error("The verifier was used before it loaded.");
-    return this.loaded;
-  }
 
   async attestation(): Promise<Attestation> {
     // The quote binds these fields and the verifier checks them; a wrong shape fails there.
@@ -252,7 +246,7 @@ export class LiveEngineClient implements EngineClient {
 
   /** The deps a signed log scan takes: the stream origin, a verified signer, and a fresh challenge. */
   private scanDeps(signer: string): import("./log-scan").ScanDeps {
-    return { ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) };
+    return { ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.verifiers.loaded(), challenge: this.deps.challenge ?? (() => newChallenge()) };
   }
 
   /** The market's index-mark history, one signed page; the enclave signs the shape, as every answer. */
@@ -269,7 +263,7 @@ export class LiveEngineClient implements EngineClient {
     this.subscribers.add(onMessage);
     if (this.stream === null) {
       const stream = new LiveStream({
-        ...this.deps, verifier: () => this.requireVerifier(), origin: this.deps.streamOrigin, trust: this.trust, challenge: this.deps.challenge ?? (() => newChallenge()),
+        ...this.deps, verifier: () => this.verifiers.loaded(), origin: this.deps.streamOrigin, trust: this.trust, challenge: this.deps.challenge ?? (() => newChallenge()),
         onMessage: (message) => {
 
           const entry = setParamsOf(message.cmd, message.events);

@@ -15,7 +15,7 @@ export function FundingPage() {
   const { wallet, signatures } = useConsole();
   return (
     // Keyboard scrolling needs a tab stop on the scroll container, as on the House page.
-    <div role="region" aria-label="Funding details" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
+    <div role="region" aria-label="Funding details" tabIndex={0} className="relative min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
       <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-lead tracking-caps text-glow uppercase">Funding</h2>

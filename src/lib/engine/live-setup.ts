@@ -26,7 +26,7 @@ export function setup(options: { verifier?: Verifier; acceptsMock?: boolean; add
   const verifier = options.verifier ?? dev;
   const client = new LiveEngineClient({
     origin: "https://node.test", streamOrigin: "wss://node.test", chainId: options.chainId ?? 31337, vault: markets.vault, heartbeatMs: 5_000,
-    loadVerifier: async () => verifier, manifests: [], acceptsMock: options.acceptsMock ?? true,
+    loadVerifier: async () => verifier, releases: [], acceptsMock: options.acceptsMock ?? true,
     fetch: node.fetch, openSocket: () => { throw new Error("no stream in these tests"); }, scheduler: new FakeScheduler(),
     nowMs: typeof options.nowMs === "function" ? options.nowMs : constant(options.nowMs ?? markets.time_ms), challenge: () => options.challenge ?? markets.challenge,
   });

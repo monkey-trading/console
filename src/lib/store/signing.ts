@@ -112,14 +112,19 @@ export async function signed(
     if (store.noteAccess(error)) return { ok: false };
     // A sent request the node refused, left unanswered, or answered unverifiably may still have run: read the account first.
     if (sent) await store.refresh(true);
-    // Only a refusal the node signed says the request did not run; no answer, or one that does not verify, says nothing.
-    const unanswered = error instanceof UntrustedError || (error instanceof EngineError && error.status === 0);
-    const unknown = sent && unanswered ? " It may have run: check your positions, orders, withdrawals and history before trying again." : "";
-    store.toast("error", `${errorText(error)}${unknown}`);
+    store.toast("error", `${errorText(error)}${sent && mayHaveRun(error) ? MAY_HAVE_RUN : ""}`);
     return { ok: false };
   } finally {
     notBusy(store, wallet);
   }
+}
+
+/** What the console adds for a request that went out with no answer it can judge. */
+export const MAY_HAVE_RUN = " It may have run: check your positions, orders, withdrawals and history before trying again.";
+
+/** Whether a sent request may have run: only a refusal the node signed, or a stop before it left, says it did not; no answer, or one that does not verify, says nothing. */
+export function mayHaveRun(error: unknown): boolean {
+  return error instanceof UntrustedError || (error instanceof EngineError && error.status === 0);
 }
 
 /** What the console says an unexpected error was, naming the node's refusal when it carried one. */

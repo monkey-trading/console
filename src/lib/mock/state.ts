@@ -14,6 +14,7 @@ import type {
 } from "../engine/types";
 import { MARKETS, type ListedMarket } from "./markets";
 import { MockMonkey } from "./monkey-state";
+import { MockOperators } from "./operators";
 import { isOpen } from "../schedule";
 
 /** Where the node's real-peer screening places the caller. */
@@ -137,11 +138,13 @@ export class MockState {
   postedSeq = 0;
   /** What the MONKEY page reads: stakers, the feed, closed epochs and periods. */
   readonly monkey: MockMonkey;
+  readonly operators: MockOperators;
 
   /** Starts at `startMs` with every market at its starting index; open per its schedule. */
   constructor(startMs: number) {
     this.now = startMs;
     this.monkey = new MockMonkey(startMs);
+    this.operators = new MockOperators(startMs);
     this.emission = { period: this.monkey.periodAt(startMs), results: new Map() };
     for (const listed of MARKETS) {
       this.markets.set(listed.spec.id, {

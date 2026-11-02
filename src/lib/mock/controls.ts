@@ -4,9 +4,11 @@ import { fixedFromInt, type Fixed } from "../fixed";
 import type { EngineEvent, MarketId } from "../engine/types";
 import type { AttestationMode, MockEngineClient } from "./client";
 import type { DistributionProof } from "../engine/stats-types";
+import type { DeploymentReads } from "../engine/registry";
 import type { StakingPosition } from "../engine/staking";
 import { chainDeposit, payQueue } from "./funds";
 import { claimDistribution, completeUnstake, distributionProof, stake, startUnstake, walletBalance } from "./monkey";
+import { delegate, mockChainReads } from "./operators";
 import { MAX_STRESS } from "../pricing";
 import type { Region } from "./state";
 
@@ -64,6 +66,7 @@ export class MockControls {
     state.entitledMonkey.delete(key);
     state.claimedMonkey.delete(key);
     state.monkey.forget(key);
+    state.operators.delegates.delete(key);
     state.emission.results.delete(key);
     for (let i = state.queue.length - 1; i >= 0; i--) if (state.queue[i]?.account === key) state.queue.splice(i, 1);
   }
@@ -100,6 +103,16 @@ export class MockControls {
       distributionsClaimed: state.monkey.distClaimed.get(key) ?? 0n,
       latestSeq: state.postedSeq,
     };
+  }
+
+  /** Stands in for the staking contract's `delegate`. */
+  delegate(address: string, candidate: string): void {
+    delegate(this.client.state, address, candidate);
+  }
+
+  /** The reads a wallet makes of the simulated vault and operator registry. */
+  chainReads(): DeploymentReads {
+    return mockChainReads(this.client.state);
   }
 
   /** Stand in for the staking contract's `stake`, `startUnstake` and `completeUnstake`, and the vault's `claimDistribution`, as the real wallet sends them. */

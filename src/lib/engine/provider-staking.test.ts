@@ -1,4 +1,4 @@
-import { decodeFunctionData, encodeAbiParameters, parseAbi, type Hex } from "viem";
+import { decodeFunctionData, encodeAbiParameters, getAddress, parseAbi, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 
 import { ProviderStaking } from "./provider-staking";
@@ -8,6 +8,8 @@ const ME = "0x00000000000000000000000000000000000000aa";
 const TOKEN = "0x00000000000000000000000000000000000000bb";
 const STAKING = "0x00000000000000000000000000000000000000cc";
 const VAULT = "0x00000000000000000000000000000000000000dd";
+const NO_ONE = "0x0000000000000000000000000000000000000000";
+const CANDIDATE = "0x00000000000000000000000000000000000000ee";
 const CHAIN: WalletChain = { chainId: 31337, vault: VAULT, usdc: null, add: null, staking: STAKING };
 const ABI = parseAbi([
   "function stakes(address) view returns (uint256)",
@@ -21,6 +23,7 @@ const ABI = parseAbi([
   "function stake(uint256)",
   "function startUnstake(uint256)",
   "function completeUnstake()",
+  "function delegate(address)",
   "function claimDistribution(address, uint256, bytes32[]) returns (uint256)",
 ]);
 
@@ -95,6 +98,17 @@ describe("ProviderStaking.position", () => {
 });
 
 describe("ProviderStaking transactions", () => {
+  it("delegates to a candidate, and clears the choice with the zero address, on the staking contract", async () => {
+    const { staking, sent } = rig(WORLD);
+    await staking.delegate(CANDIDATE);
+    await staking.delegate(NO_ONE);
+    expect(sent).toEqual([{ to: STAKING, name: "delegate", args: [getAddress(CANDIDATE)] }, { to: STAKING, name: "delegate", args: [NO_ONE] }]);
+  });
+
+  it("refuses to delegate when the build names no staking contract", async () => {
+    await expect(rig(WORLD, { ...CHAIN, staking: null }).staking.delegate(CANDIDATE)).rejects.toThrow("names no staking contract");
+  });
+
   it("approves the staking contract for the amount before staking when the allowance is short", async () => {
     const { staking, sent } = rig(WORLD);
     await staking.stake(100n);

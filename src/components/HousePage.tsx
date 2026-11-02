@@ -9,7 +9,7 @@
 
 import { useEffect } from "react";
 
-import { signBlock } from "@/lib/engine/attestation";
+import { readBlock } from "@/lib/engine/attestation";
 import { openHousePanel } from "@/lib/store/house";
 import type { ConsoleState } from "@/lib/store/state";
 
@@ -23,7 +23,7 @@ import { QueuePlace, QueueStats } from "./house/QueuePanels";
 import { HouseFigures, MonkeyFigures, OpenPositions } from "./house/Stats";
 import { useSelected } from "./house/use-feed";
 
-const selectGate = (s: ConsoleState) => ({ blocked: signBlock(s.attestation, s.stream) !== null, ready: s.houseReady, fresh: s.houseFresh });
+const selectGate = (s: ConsoleState) => ({ blocked: readBlock(s.attestation, s.stream) !== null, ready: s.houseReady, fresh: s.houseFresh });
 const STACK = "flex min-w-0 flex-col gap-2";
 
 /** The House dashboard. */
@@ -45,7 +45,7 @@ export function HousePage() {
   return (
     // Keyboard scrolling needs a tab stop on the scroll container (the WAI-APG scrollable-region
     // pattern), which also reaches a dashboard whose panels hold only labels and a few controls.
-    <div role="region" aria-label="House dashboard" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
+    <div role="region" aria-label="House dashboard" tabIndex={0} className="relative min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
       <div className="mx-auto flex w-full max-w-[120rem] flex-col gap-2 p-2 sm:p-3">
         <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-1">
           <h2 className="text-lead tracking-caps text-glow uppercase">House</h2>

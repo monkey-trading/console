@@ -19,7 +19,7 @@ describe("the live client's queue totals", () => {
     node.signed("/v1/withdrawals?limit=200&after=7", () => page(queueB, null));
     const live = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000,
-      loadVerifier: async () => acceptAll, manifests: [], acceptsMock: true, fetch: node.fetch,
+      loadVerifier: async () => acceptAll, releases: [], acceptsMock: true, fetch: node.fetch,
       openSocket: (url) => new FakeSocket(url), scheduler: new FakeScheduler(), nowMs: () => 1, challenge: () => "ab".repeat(32),
     });
     await expect(live.withdrawalTotals()).resolves.toEqual({ count: 2, remaining: 9_000_000_000n, largest: 6_000_000_000n, head: 3_000_000_000n, seq: 5, complete: true, stable: true });
@@ -39,7 +39,7 @@ describe("the live client's queue totals", () => {
     const walkRequests = () => node.requests.filter((r) => r.path.startsWith("/v1/withdrawals?limit=200"));
     const live = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000,
-      loadVerifier: async () => acceptAll, manifests: [], acceptsMock: true, fetch: node.fetch,
+      loadVerifier: async () => acceptAll, releases: [], acceptsMock: true, fetch: node.fetch,
       openSocket: (url) => new FakeSocket(url), scheduler: new FakeScheduler(), nowMs: () => now, challenge: () => "ab".repeat(32),
     });
     // A queue longer than the walk's page cap reports a lower bound.
@@ -75,7 +75,7 @@ describe("the live client's queue totals", () => {
     );
     const live = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000,
-      loadVerifier: async () => acceptAll, manifests: [], acceptsMock: true, fetch: node.fetch,
+      loadVerifier: async () => acceptAll, releases: [], acceptsMock: true, fetch: node.fetch,
       openSocket: (url) => new FakeSocket(url), scheduler: new FakeScheduler(), nowMs: () => now, challenge: () => "ab".repeat(32),
     });
     const walked = () => node.requests.filter((r) => r.path.startsWith("/v1/withdrawals?limit=200")).length;

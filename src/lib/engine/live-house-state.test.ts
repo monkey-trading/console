@@ -24,7 +24,7 @@ function house() {
   const sockets: FakeSocket[] = [];
   const client = new LiveEngineClient({
     origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: conflict.vault, heartbeatMs: 5_000,
-    loadVerifier: async () => acceptAll, manifests: [], acceptsMock: true, fetch: node.fetch,
+    loadVerifier: async () => acceptAll, releases: [], acceptsMock: true, fetch: node.fetch,
     openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
     scheduler: new FakeScheduler(), nowMs: () => 1_000, challenge: () => "ab".repeat(32),
   });

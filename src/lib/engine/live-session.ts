@@ -1,11 +1,11 @@
 /** Builds the live client for a build's deployment from the browser's own `fetch`, WebSocket and clock. */
 
-import { acceptsMockAttestation, streamOrigin, type Deploy } from "./deploy";
+import { acceptsMockAttestation, listedOrigins, streamOrigin, type Deploy } from "./deploy";
 import { LiveEngineClient } from "./live";
 import type { Scheduler, Socket } from "./live-stream";
 import { loadVerifier } from "./load-verifier";
 import type { VerifierModule } from "./wasm-verifier";
-import { RELEASE_MANIFESTS } from "./manifests";
+import { PINNED_RELEASES } from "./manifests";
 
 /** Where the build serves the verifier's pinned WebAssembly from. */
 export const WASM_PATH = "/engine-verify/engine_verify_bg.wasm";
@@ -21,17 +21,20 @@ export interface Browser {
 }
 
 /**
- * The client for a live deployment. Only a dev build for a listed dev origin gets a verifier that
- * can read a mock attestation.
+ * The client for the node at `origin`, the build's own by default. Only a dev build for a listed dev
+ * origin gets a verifier that can read a mock attestation. A client answers for one node for its
+ * whole life: another node is another client, so nothing read from one reaches the other.
  * Error cases:
  * - the deployment is the mock, which has no node to talk to
+ * - `origin` is not one the build lists, which its CSP would refuse anyway
  */
-export function createLiveClient(deploy: Deploy, browser: Browser, load: typeof loadVerifier = loadVerifier): LiveEngineClient {
-  if (deploy.origin === null || deploy.chainId === null || deploy.vault === null) throw new Error("A live client needs a deployment with a node origin, chain id and vault.");
-  const allowMock = acceptsMockAttestation(deploy);
+export function createLiveClient(deploy: Deploy, browser: Browser, load: typeof loadVerifier = loadVerifier, origin: string | null = deploy.origin): LiveEngineClient {
+  if (origin === null || deploy.chainId === null || deploy.vault === null) throw new Error("A live client needs a deployment with a node origin, chain id and vault.");
+  if (!listedOrigins(deploy).includes(origin)) throw new Error(`This build does not list the node origin ${origin}.`);
+  const allowMock = acceptsMockAttestation(deploy, origin);
   return new LiveEngineClient({
-    origin: deploy.origin, streamOrigin: streamOrigin(deploy.origin), chainId: deploy.chainId, vault: deploy.vault, heartbeatMs: deploy.heartbeatMs,
+    origin, streamOrigin: streamOrigin(origin), chainId: deploy.chainId, vault: deploy.vault, heartbeatMs: deploy.heartbeatMs,
     loadVerifier: () => load({ allowMock, loadGlue: browser.loadGlue, fetchWasm: async () => new Uint8Array(await (await browser.fetch(WASM_PATH)).arrayBuffer()) }),
-    manifests: RELEASE_MANIFESTS, acceptsMock: allowMock, ...browser,
+    releases: PINNED_RELEASES, devDigests: deploy.devLaunchDigests, acceptsMock: allowMock, ...browser,
   });
 }

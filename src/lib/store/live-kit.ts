@@ -60,7 +60,11 @@ export class ActionClient implements EngineClient {
   async houseState() { return { seq: null, params: null, checkpoint: null }; }
   async withdrawalTotals() { return { count: 0, remaining: 0n, largest: null, head: null, seq: null, complete: true, stable: true }; }
   private absent = async (): Promise<never> => { throw new EngineError(404, "not found"); };
-  readonly stats = { positions: this.absent, series: this.absent, monkey: this.absent, activity: this.absent, distributions: async () => null };
+  readonly stats = { positions: this.absent, series: this.absent, monkey: this.absent, activity: this.absent, distributions: async () => null, operator: this.absent };
+  /** The chain reads each connection handed over, oldest first. */
+  chainsRead: unknown[] = [];
+  async readChainThrough(chain: unknown) { this.chainsRead.push(chain); }
+  async heedVault() {}
   /** Whether the account read answers as a credited account; false answers the node's 404. */
   credited = false;
   /** What the credited account holds; a test sets it and reads the account again. */

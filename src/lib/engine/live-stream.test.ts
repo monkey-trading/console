@@ -32,7 +32,7 @@ function setup(options: { address?: () => string; clockMs?: number; accept?: boo
     : { ...real, openFrames: (c) => { opened.push(c); return real.openFrames({ ...c, pathAndQuery: connection.path_and_query }); } };
   const address = options.address ?? (() => VECTORS.signer);
   const trust = new NodeTrust({
-    attestation: async () => mockAttestation(address()), collateral: async () => null, verifier: async () => verifier, manifests: [], acceptsMock: true, nowMs: () => 0, onStatus: () => {}, onEnclaveChanged: () => {},
+    attestation: async () => mockAttestation(address()), collateral: async () => null, verifier: async () => verifier, releases: [], devDigests: [], vaultFacts: () => null, acceptsMock: true, nowMs: () => 0, onStatus: () => {}, onEnclaveChanged: () => {},
   });
   const stream = new LiveStream({
     origin: "wss://node.test", chainId: connection.chain_id, vault: connection.vault, heartbeatMs: HEARTBEAT_MS, verifier: () => verifier, trust,

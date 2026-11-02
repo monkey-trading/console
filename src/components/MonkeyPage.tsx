@@ -10,8 +10,9 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { formatCompactUsd } from "@/lib/chart-format";
-import { signBlock } from "@/lib/engine/attestation";
+import { readBlock } from "@/lib/engine/attestation";
 import { compactNumber, halvingsBetween, monkeyText } from "@/lib/monkey/figures";
+import { OperatorReads } from "@/lib/monkey/operators";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import { formatStamp } from "@/lib/time";
 
@@ -20,6 +21,7 @@ import { ActivityTable } from "./monkey/ActivityTable";
 import { ChartCard } from "./monkey/ChartCard";
 import type { LineSpec } from "./monkey/ChartCanvas";
 import { ClaimPanel } from "./monkey/ClaimPanel";
+import { OperatorPanel } from "./monkey/OperatorPanel";
 import { DistributionPanel } from "./monkey/DistributionPanel";
 import { RewardsPanel } from "./monkey/RewardsPanel";
 import { TokenPanel } from "./monkey/TokenPanel";
@@ -69,34 +71,42 @@ function Charts({ panel }: { panel: MonkeyPanel }) {
 export function MonkeyPage() {
   const { store } = useSession();
   const [panel] = useState(() => new MonkeyPanel(store));
-  const trusted = useConsoleSelect((state) => signBlock(state.attestation, state.stream) === null);
+  const [operators] = useState(() => new OperatorReads(store));
+  const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
   // The wallet object changes whenever a wallet connects, even to the same address, and the chain reads follow it.
   const wallet = useConsoleSelect((state) => state.wallet);
   // Reads start once the node's answers can be trusted and stop when the page is left.
   useEffect(() => (trusted ? panel.start(() => document.visibilityState === "hidden") : undefined), [panel, trusted]);
+  // The operator card's reads go through the wallet and need nothing from a node the vote may be removing.
+  useEffect(() => operators.start(() => document.visibilityState === "hidden"), [operators]);
   useEffect(() => {
     if (trusted) void panel.refreshWallet();
   }, [panel, trusted, wallet]);
   return (
     <MonkeyPanelProvider value={panel}>
       {/* Keyboard scrolling needs a tab stop on the scroll container, as on the House page. */}
-      <div role="region" aria-label="MONKEY details" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
+      <div role="region" aria-label="MONKEY details" tabIndex={0} className="relative min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
         <div className="mx-auto w-full max-w-[110rem] px-4 py-5 sm:px-6">
           <h2 className="text-lead tracking-caps text-glow uppercase">MONKEY</h2>
           {!trusted && <p className="mt-3 text-data leading-relaxed text-fg-2">Figures appear once the node&apos;s attestation is verified and its feed is live.</p>}
-          {/* Hidden, not unmounted, while the node is not trusted: a typed amount survives a gap in the feed, and no figure from before it shows. */}
-          <div className={`${trusted ? "grid" : "hidden"} mt-4 items-start gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,35rem)_minmax(0,1fr)]`}>
+          {/* The figures are hidden, not unmounted, while the node is not trusted: a typed amount survives a gap in the feed, and no figure from before it shows. The operator card alone stays, in one place: its reads go through the wallet, and the vote never depends on the host it may remove. */}
+          <div className={`mt-4 grid items-start gap-4 ${trusted ? "lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,35rem)_minmax(0,1fr)]" : "max-w-[35rem]"}`}>
             <div className="flex min-w-0 flex-col gap-4">
-              <ClaimPanel />
-              <StakePanel />
-              <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-                <RewardsPanel />
-                <TokenPanel />
+              <div className={trusted ? "contents" : "hidden"}>
+                <ClaimPanel />
+                <StakePanel />
               </div>
-              <DistributionPanel />
-              <ActivityTable />
+              <OperatorPanel operators={operators} />
+              <div className={trusted ? "contents" : "hidden"}>
+                <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+                  <RewardsPanel />
+                  <TokenPanel />
+                </div>
+                <DistributionPanel />
+                <ActivityTable />
+              </div>
             </div>
-            <div className="flex min-w-0 flex-col gap-4">
+            <div className={`${trusted ? "flex" : "hidden"} min-w-0 flex-col gap-4`}>
               <Charts panel={panel} />
             </div>
           </div>

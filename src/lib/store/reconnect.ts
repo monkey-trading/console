@@ -28,7 +28,7 @@ export interface ResumableConnector {
 function forgetChoice(store: ConsoleStore, expected: WalletChoice): void {
   const persistence = store.deps.persistence;
   // A connected wallet means this reconnect was superseded, not failed: the choice that wallet saved may equal `expected`.
-  if (persistence === undefined || store.liveWallet !== null) return;
+  if (persistence === undefined || store.liveWallet !== null || store.movedAway) return;
   clearChoiceIf(persistence, expected);
 }
 

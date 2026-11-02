@@ -5,7 +5,7 @@ import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
 import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
-import type { ActivityPage, MonkeyView, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "../engine/stats-types";
+import type { ActivityPage, MonkeyView, OperatorRoute, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "../engine/stats-types";
 import type { AccountView, EligibilityClass, HistoryPage, MarketId, PriceRules, StreamMessage, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import type { CheckpointEntry } from "../engine/wire";
@@ -63,7 +63,9 @@ export class FakeClient implements EngineClient {
     monkey: async () => this.canned("monkey", this.monkeyView),
     activity: async () => this.canned("activity", this.activityPage),
     distributions: async () => null,
+    operator: async () => this.canned("operator", this.operatorRoute),
   };
+  operatorRoute: OperatorRoute | null = null;
   private canned<T>(read: string, answer: T | null): T {
     this.statsReads.push(read);
     if (this.statsError !== null) throw this.statsError;
@@ -100,6 +102,10 @@ export class FakeClient implements EngineClient {
     return { balance: "1000", equity: "1000", margin: "0", positions: {}, orders: {}, toxicity_bps: 0 };
   }
   async accessProbe() {}
+  /** The wallets each connection handed over, oldest first. */
+  chainsRead: unknown[] = [];
+  async readChainThrough(chain: unknown) { this.chainsRead.push(chain); }
+  async heedVault() {}
   async nonce() { return { next_nonce: 0 }; }
   /** The declaration the eligibility read answers with, and how many times it and the withdrawal queue were read. */
   declared: EligibilityClass | null = null;

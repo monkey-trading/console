@@ -197,11 +197,12 @@ in a test file: a test cannot reset it, and a second instance of a component can
 - `Content-Security-Policy`: `default-src 'self'`; `script-src 'self' 'unsafe-inline'`, plus
   `'wasm-unsafe-eval'` in a live build (the engine's verifier is WebAssembly) and
   `'unsafe-eval'` in development only; `style-src 'self' 'unsafe-inline'`; `img-src 'self' data:`;
-  `font-src 'self'`; `connect-src 'self'`, plus the approved engine node's `https:` and `wss:` host once there is one;
+  `font-src 'self'`; `connect-src 'self'`, plus the `https:` and `wss:` origin of the build's engine node and of each
+  timelock-approved candidate's registered hostname (owner decision, monkey-trading/console#37), named one by one;
   `object-src 'none'`; `base-uri 'self'`;
   `form-action 'self'`; `frame-ancestors 'none'`. A statically rendered page is built once for
   every visitor, so its inline bootstrap scripts cannot carry a per-request nonce;
-  `'unsafe-inline'` covers them, and the policy allows nothing from another origin but the approved engine node's
+  `'unsafe-inline'` covers them, and the policy allows nothing from another origin but those engine nodes'
   and, in a build with a WalletConnect project id, WalletConnect's relay (`wss://relay.walletconnect.org`,
   approved in monkey-trading/console#7) in `connect-src` and its Verify service
   (`https://verify.walletconnect.org`, approved by the owner as monkey-trading/console#27 records) in
@@ -213,7 +214,7 @@ in a test file: a test cannot reset it, and a second instance of a component can
   error.
 - `poweredByHeader: false`.
 - Never widen the CSP with a wildcard, a scheme source such as `https:`, or another origin
-  without the owner's approval; the engine node's origin is the one expected. A new origin is a
+  without the owner's approval; the listed engine nodes' origins are the ones expected. A new kind of origin is a
   privacy change and needs that approval first ([Privacy](#privacy)).
 - Read the headers from the production build, not only the config: `npm run build`, then
   `npm start -- --port <port>` on a free port (`next start` exits rather than move when the port
@@ -293,7 +294,9 @@ The bar is WCAG 2.2 AA; the [development checklist](../../rules/development-chec
   static description of what it shows. A result the visitor caused, such as a replay verdict or a
   shell response, is announced through an `aria-live="polite"` region that exists before it
   changes.
-- Text for screen readers only uses `sr-only`, as the pause control's " animations" does.
+- Text for screen readers only uses `sr-only`, as the pause control's " animations" does. An
+  `sr-only` element is absolutely positioned, so a scroller that holds one is `relative`, or the
+  text escapes it and lengthens the document.
 - `lang="en"` on `html`.
 - `eslint-plugin-jsx-a11y` runs its strict config at error. Lint is not conformance: check a change
   in a browser with the keyboard alone, the accessibility tree (Playwright's `getByRole`, or the
@@ -347,8 +350,8 @@ The bar is WCAG 2.2 AA; the [development checklist](../../rules/development-chec
   accepting it, or the wallet disconnects, and reaches no snapshot, message or log; and the trading
   preferences and the last size placed in each market (monkey-trading/console#169) persist there
   (`monkeytrading.preferences`, `monkeytrading.last-sizes`), read tolerantly.
-- Every request the page makes is same-origin, but for the engine node's origin once the owner has
-  approved it, and WalletConnect's relay and its Verify frame while a user pairs or uses a wallet app over
+- Every request the page makes is same-origin, but for the engine nodes' origins the build lists, as
+  the owner approved them, and WalletConnect's relay and its Verify frame while a user pairs or uses a wallet app over
   it (approved in monkey-trading/console#7 and #27): the site serves its own fonts, images, and scripts. Check the production build's
   network panel after any change to what the page loads.
 - Links to other sites are plain links; nothing is fetched from them.

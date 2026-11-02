@@ -88,12 +88,12 @@ export class SignedTransport {
    * Error cases: as `get`.
    */
   async post(path: string, body: unknown): Promise<SignedAnswer> {
-    return this.attempt("POST", path, JSON.stringify(body), await this.deps.trust.signer());
+    return this.attempt("POST", path, JSON.stringify(body), await this.deps.trust.sendingSigner());
   }
 
   /** `DELETE path` with `body` as JSON, resolving with the signed answer of a 2xx; as `post`, never sent again after an answer that does not verify. */
   async delete(path: string, body: unknown): Promise<SignedAnswer> {
-    return this.attempt("DELETE", path, JSON.stringify(body), await this.deps.trust.signer());
+    return this.attempt("DELETE", path, JSON.stringify(body), await this.deps.trust.sendingSigner());
   }
 
   private async attempt(method: "GET" | "POST" | "DELETE", path: string, requestBody: string | null, signer: string): Promise<SignedAnswer> {

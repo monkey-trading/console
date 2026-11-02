@@ -95,7 +95,7 @@ describe("what the build trusts", () => {
 
   it("trusts a hardware quote only with its collateral, and refuses one it cannot verify", async () => {
     const { node, client } = setup();
-    node.routes.set("/v1/attestation", () => new Response(JSON.stringify({ provider: "sev_snp", enclave_address: VECTORS.signer, quote: "0xab" })));
+    node.routes.set("/v1/attestation", () => new Response(JSON.stringify({ provider: "sev_snp", enclave_address: VECTORS.signer, config_sha256: `0x${"c0".repeat(32)}`, quote: "0xab" })));
     await expect(client.verify()).resolves.toMatchObject({ kind: "unverified", reason: expect.stringContaining("collateral") });
     node.routes.set("/v1/attestation/collateral", () => new Response("{}"));
     await expect(client.verify()).resolves.toMatchObject({ kind: "unverified" });
@@ -109,7 +109,7 @@ describe("what the build trusts", () => {
     const client = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000,
       loadVerifier: async () => { if (++attempts === 1) throw new Error("The verifier's WebAssembly does not match the build's pin."); return dev; },
-      manifests: [], acceptsMock: true, fetch: node.fetch, openSocket: () => { throw new Error("unused"); }, scheduler: new FakeScheduler(), nowMs: () => 0,
+      releases: [], acceptsMock: true, fetch: node.fetch, openSocket: () => { throw new Error("unused"); }, scheduler: new FakeScheduler(), nowMs: () => 0,
     });
     await expect(client.verify()).resolves.toMatchObject({ kind: "unverified", reason: expect.stringContaining("pin") });
     await expect(client.verify()).resolves.toEqual({ kind: "mock" });
@@ -179,7 +179,7 @@ describe("a stream replaced while the node is being verified", () => {
     const sockets: FakeSocket[] = [];
     const client = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000, loadVerifier: async () => acceptAll,
-      manifests: [], acceptsMock: true, fetch: node.fetch, openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
+      releases: [], acceptsMock: true, fetch: node.fetch, openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
       scheduler: new FakeScheduler(), nowMs: () => markets.time_ms,
     });
     // React's setup, cleanup, setup: the first stream is stopped while its open still waits on the verifier.

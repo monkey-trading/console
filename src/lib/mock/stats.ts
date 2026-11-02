@@ -10,6 +10,7 @@ import { seedBars } from "../bars";
 import { SEED } from "../prng";
 import { houseNav } from "./accounts";
 import { activityPage, distributionProof, mockContracts, monkeySeries, overview } from "./monkey";
+import { operatorRoute } from "./operators";
 import { AVERAGE_POSITION_USD, bookAt, cashAt, MOCK_RECORD_BEGINS_MS, navAt, noise, numberOf, queueAt, volumeIn, wire, type Book } from "./stats-model";
 import type { MockState } from "./state";
 
@@ -211,6 +212,7 @@ export function mockStats(state: MockState): StatsReads {
         throw error;
       }
     },
+    operator: async () => operatorRoute(state),
     contracts: mockContracts(),
   };
 }
