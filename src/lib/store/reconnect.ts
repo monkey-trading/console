@@ -5,7 +5,8 @@
  * back to the pairing dialog. A reconnect the visitor cancels or that fails forgets the choice —
  * but only while it is still the stored one and no wallet is connected, so a failed or superseded
  * attempt never deletes a newer connection's choice. A reconnect also yields, silently, to a wallet
- * the visitor connected or a WalletConnect pairing they opened while the SDK loaded.
+ * the visitor connected or a WalletConnect pairing they opened while the SDK loaded, and stops at a
+ * move to another node's store, releasing any wallet that arrived and storing nothing.
  */
 
 import { clearChoiceIf, loadChoice, type WalletChoice } from "../engine/wallet-persist";
@@ -13,6 +14,7 @@ import type { Wallet } from "../engine/wallet";
 import type { PairingState } from "../engine/walletconnect";
 import { connectWallet } from "./actions";
 import type { ConsoleStore } from "./store";
+import { release } from "./wallet-session";
 
 /** The part of the WalletConnect connector a reconnect needs; the connector passes itself. */
 export interface ResumableConnector {
@@ -49,6 +51,11 @@ export async function reconnectWallet(store: ConsoleStore, walletConnect: Resuma
   }
   if (walletConnect === null) return;
   const wallet = await walletConnect.resume(choice.topic).catch(() => null);
+  // A moved store has no wallet, which must not read as a free slot: this reconnect is over, and a pairing opened now would be for no screen.
+  if (store.movedAway) {
+    release(store, wallet);
+    return;
+  }
   // The visitor may have connected something, or opened their own pairing, while the SDK loaded; either wins over this reconnect.
   // The relay socket is the SDK's to leave alone: it opens none until a pairing exists, and one open belongs to the visitor.
   if (store.liveWallet !== null || walletConnect.pairing().status !== "idle") return;

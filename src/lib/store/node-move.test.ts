@@ -8,20 +8,10 @@ import { loadSessionKey } from "../engine/session-key-store";
 import { authorizeBrowser, connectWallet } from "./actions";
 import { memoryStorage } from "../engine/wallet-kit";
 import { loadChoice, saveChoice } from "../engine/wallet-persist";
-import { ActionClient, authorizedTab, BTC, tab } from "./live-kit";
+import { authorizedTab, nextStore, tab } from "./live-kit";
 import { followNode, moveNotice, moveToNode, recheckNode } from "./node-move";
 import { reconnectWallet } from "./reconnect";
 import { keyScope, liveSessionKey } from "./session";
-import { ConsoleStore } from "./store";
-
-/** A second store over its own client, as a move to another node builds one. */
-function nextStore(persistence = memoryStorage(), wallets: ConsoleStore["deps"]["wallets"] = { options: [], connect: async () => { throw new Error("a move connects no wallet of its own"); } }) {
-  const client = new ActionClient();
-  client.credited = true;
-  const store = new ConsoleStore({ client, wallets, persistence, history: () => [], initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
-  store.start(0);
-  return { client, store };
-}
 
 describe("moveToNode", () => {
   it("carries the wallet and its session key to the new store, asking the wallet for nothing", async () => {

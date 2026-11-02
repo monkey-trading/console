@@ -13,7 +13,7 @@ import type { Wallet } from "../engine/wallet";
 import { describeReject } from "../messages";
 import { liveSessionKey } from "./session";
 import { openSetup } from "./setup";
-import { DISCONNECTED, errorText, MAY_HAVE_RUN, mayHaveRun, notBusy, REQUEST_TTL_MS, signed, type OnNonceTaken, type Outcome, usableWallet } from "./signing";
+import { DISCONNECTED, errorText, MAY_HAVE_RUN, mayHaveRun, notBusy, REQUEST_TTL_MS, signed, type OnNonceTaken, type Outcome, usableWallet, wentOut } from "./signing";
 import type { ConsoleStore } from "./store";
 import { KEY_REFUSED, sessionEnded } from "./wallet-session";
 
@@ -53,7 +53,7 @@ export async function sessionSigned(
     return { ok: false };
   }
   store.patch({ busy: true });
-  /** Whether the request left the page: from then on it may have run, whatever comes back. */
+  /** Whether the request was handed to `send`: from then on it may have run, unless the last gate stopped it (`wentOut`). */
   let sent = false;
   try {
     const { next_nonce, time_ms } = await store.deps.client.nonce(key.address);
@@ -79,7 +79,8 @@ export async function sessionSigned(
       throw new EngineError(error.status, `The node had already used nonce ${next_nonce} for this account, so it did not take this request as sent. If it was sent twice it may have run: check your positions, orders, withdrawals and history before trying again.`);
     }
   } catch (error) {
-    if (error === DISCONNECTED || (!sent && store.liveWallet !== wallet)) return { ok: false }; // the connection ended mid-action: nothing to report
+    const left = wentOut(sent, error);
+    if (error === DISCONNECTED || (!left && store.liveWallet !== wallet)) return { ok: false }; // the connection ended mid-action: nothing to report
     if (keyDied(error)) {
       // Only the key that signed has died. The connection may have ended, or another tab's newer key been adopted, while the answer came.
       if (store.liveWallet === wallet && store.sessionKey?.address === key.address) sessionEnded(store, KEY_REFUSED);
@@ -92,8 +93,8 @@ export async function sessionSigned(
     }
     if (store.noteAccess(error)) return { ok: false };
     // A sent request the node refused, left unanswered, or answered unverifiably may still have run: read the account first.
-    if (sent) await store.refresh(true);
-    store.toast("error", `${errorText(error)}${sent && mayHaveRun(error) ? MAY_HAVE_RUN : ""}`);
+    if (left) await store.refresh(true);
+    store.toast("error", `${errorText(error)}${left && mayHaveRun(error) ? MAY_HAVE_RUN : ""}`);
     return { ok: false };
   } finally {
     notBusy(store, wallet);

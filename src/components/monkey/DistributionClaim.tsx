@@ -1,11 +1,14 @@
 "use client";
 
-/** The USDC the stakers' distributions have added to the account, what the vault has paid, and the claim. */
+/** The USDC the stakers' distributions have added to the account, what the vault has paid, and the claim, which waits on a verdict that may sign since it is built from the node's proof. */
+
+import { useId } from "react";
 
 import { claimDistribution, distributionPosition } from "@/lib/monkey/actions";
 import { usdcFixed } from "@/lib/monkey/figures";
 import { formatUsdc } from "@/lib/vault";
 
+import { useSignGate } from "../SignGate";
 import { Card, focusHeading } from "./Card";
 import { ReadNote } from "./ReadNote";
 import { Row } from "./Row";
@@ -17,6 +20,7 @@ export function DistributionClaim() {
   const { wallet: figures } = usePanelState();
   const wallet = useConsoleSelect((state) => state.wallet);
   const busy = useConsoleSelect((state) => state.busy);
+  const gate = useSignGate(useId());
   const readOnly = wallet?.readOnly === true;
   // The figures are for the account they name: while another account's are on screen, none show.
   const mine = wallet !== null && figures.address === wallet.address;
@@ -47,9 +51,12 @@ export function DistributionClaim() {
       {mine && figures.position.status === "failed" && <ReadNote read={figures.position} />}
       {mine && readOnly && proof !== null && <p role="status" className="text-caption leading-relaxed text-amber">Claiming is off: this account is read-only, so nothing can be signed for it. What the vault has paid is read from a wallet&apos;s own chain connection, which a watched account does not have.</p>}
       {mine && !readOnly && position.claimable > 0n && (
-        <button type="button" aria-disabled={busy} onClick={() => { if (!busy) void claimDistribution(panel).then(() => focusHeading("distributions-title")); }} className={`${BUTTON} w-full`}>
-          Claim {formatUsdc(usdcFixed(position.claimable))} on the vault
-        </button>
+        <div>
+          <button type="button" aria-disabled={busy || gate.blocked} aria-describedby={gate.describedBy} onClick={() => { if (!busy && !gate.blocked) void claimDistribution(panel).then(() => focusHeading("distributions-title")); }} className={`${BUTTON} w-full`}>
+            Claim {formatUsdc(usdcFixed(position.claimable))} on the vault
+          </button>
+          {gate.note}
+        </div>
       )}
       {mine && !readOnly && proof !== null && held === null && figures.position.status !== "loading" && <p className={NOTE}>The vault&apos;s record of what it has paid has not been read. Refresh to read it.</p>}
       {mine && !readOnly && position.claimed !== null && position.checkpoint === "waiting" && position.accrued > position.claimed && <p className={NOTE}>The vault has not posted a checkpoint covering this yet. Refresh to check again; the claim unlocks once one posts.</p>}

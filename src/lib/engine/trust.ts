@@ -10,8 +10,8 @@ import type { Verifier } from "./verifier";
 
 /** A signed request stopped before it left the page, because the node may not be signed for: unlike a request that went out, it cannot have run. */
 export class NotSentError extends Error {
-  constructor(reason: string) {
-    super(`Nothing was sent. ${reason}`);
+  constructor(reason: string, options?: ErrorOptions) {
+    super(`Nothing was sent. ${reason}`, options);
     this.name = "NotSentError";
   }
 }
@@ -66,6 +66,28 @@ export interface TrustDeps {
   onEnclaveChanged(): void;
 }
 
+/** Why a signed request may not leave under `status`, as a sentence, or null when it may: only a verdict that read the vault, or a dev build's mock, signs. */
+function sendRefusal(status: AttestationStatus): string | null {
+  switch (status.kind) {
+    case "verified":
+    case "mock":
+      return null;
+    case "attested":
+      return status.why;
+    case "unverified":
+      return status.reason;
+    case "clock":
+      return `Your device clock differs from the node's signed time by ${Math.round(Math.abs(status.skewMs) / 1000)} s. Correct the clock and reload.`;
+    case "checking":
+    case "reverifying":
+      return "The node is not verified.";
+    default: {
+      const unhandled: never = status;
+      throw new Error(`Unknown attestation status: ${String(unhandled)}`);
+    }
+  }
+}
+
 /**
  * Holds the verified enclave address. The first caller verifies the node's attestation and every
  * other caller waits for that; when an answer's signature fails, `recheck` verifies the node's
@@ -102,16 +124,22 @@ export class NodeTrust {
 
   /**
    * The enclave address to send a signed request to. The last gate on one, whatever the screen
-   * checked before it asked for a nonce: a check that ran since may have left the vault unread.
+   * checked before it asked for a nonce: a check that ran since may have left the vault unread, ended
+   * in a refusal, or met a wrong clock. Only a `verified` or `mock` verdict passes.
    * Error cases:
-   * - as `signer`
-   * - the node has not been checked against the vault: `NotSentError`
+   * - any other verdict, or a node that fails verification or cannot be reached: `NotSentError`, since nothing has left the page
    */
   async sendingSigner(): Promise<string> {
-    let signer = await this.signer();
-    // A check queued behind the one `signer` waited for may have started as it resumed: its verdict, not the last one's, decides.
-    while (this.verifying !== null) signer = await this.signer();
-    if (this.current.kind === "attested") throw new NotSentError(this.current.why);
+    let signer: string;
+    try {
+      signer = await this.signer();
+      // A check queued behind the one `signer` waited for may have started as it resumed: its verdict, not the last one's, decides.
+      while (this.verifying !== null) signer = await this.signer();
+    } catch (error) {
+      throw new NotSentError(error instanceof Error ? error.message : "The node is not verified.", { cause: error });
+    }
+    const refused = sendRefusal(this.current);
+    if (refused !== null) throw new NotSentError(refused);
     return signer;
   }
 

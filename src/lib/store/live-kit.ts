@@ -163,6 +163,15 @@ export async function keyed(options: StubOptions = {}) {
   return kit;
 }
 
+/** A second store over its own client, as a move to another node builds one. */
+export function nextStore(persistence = memoryStorage(), wallets: ConsoleStore["deps"]["wallets"] = { options: [], connect: async () => { throw new Error("a move connects no wallet of its own"); } }) {
+  const client = new ActionClient();
+  client.credited = true;
+  const store = new ConsoleStore({ client, wallets, persistence, history: () => [], initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
+  store.start(0);
+  return { client, store };
+}
+
 /** The account that signed `signature` over `typed`, lowercased. */
 export const signerOf = (typed: TypedRequest, signature: string | undefined) =>
   // The typed data is viem's shape: domain, types, primaryType and message.

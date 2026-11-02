@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, parseAbi } from "viem";
 
+import type { AttestationStatus } from "../engine/attestation";
 import { carryAccrued } from "../engine/claim-standing";
 import type { EntitlementProof } from "../engine/emissions";
 import { ACCOUNT } from "../engine/wallet-kit";
@@ -214,6 +215,35 @@ describe("claimEmissions", () => {
     await claimEmissions(store);
     expect(provider.sent).toHaveLength(0);
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("All accrued MONKEY is claimed.");
+  });
+
+  it("waits on a verdict that may sign, says why, and sends nothing: the transaction would be built from the node's proof", async () => {
+    const refusals: [AttestationStatus, string][] = [
+      [{ kind: "attested", release: "r", address: ACCOUNT, why: "Your wallet did not answer." }, "the vault's current release has not been checked"],
+      [{ kind: "clock", skewMs: 60_000 }, "your device clock differs from the node's signed time"],
+      [{ kind: "unverified", reason: "no" }, "the node's attestation is not verified"],
+      [{ kind: "reverifying" }, "the node is being verified again"],
+    ];
+    for (const [attestation, why] of refusals) {
+      const { client, provider, store } = await connected({ emissionsClaimed: 0n, latestSeq: 40 });
+      client.entitlement = proof(5n * MONKEY_UNIT);
+      store.patch({ attestation });
+      await claimEmissions(store);
+      expect(provider.sent).toHaveLength(0);
+      expect(store.getSnapshot().toasts.at(-1)?.text).toBe(`The console will not claim MONKEY: ${why}.`);
+      expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
+    }
+  });
+
+  it("sends nothing when the verdict ends while the reads wait on the wallet", async () => {
+    const { client, provider, store } = await connected({ emissionsClaimed: 0n, latestSeq: 40 });
+    client.emissions = async () => {
+      store.patch({ attestation: { kind: "attested", release: "r", address: ACCOUNT, why: "Your wallet did not answer." } });
+      return proof(5n * MONKEY_UNIT);
+    };
+    await claimEmissions(store);
+    expect(provider.sent).toHaveLength(0);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not claim MONKEY: the vault's current release has not been checked.");
   });
 
   it("stands down when the wallet changes while the fresh reads run", async () => {
