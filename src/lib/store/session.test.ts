@@ -233,6 +233,23 @@ describe("the session-key login", () => {
     expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "ok", text: "Eligibility recorded." });
   });
 
+  it("abandons an order silently when the wallet disconnects between the nonce read and the send", async () => {
+    const { client, provider, store, wallet } = await connected();
+    await loginSession(store);
+    const waiters: (() => void)[] = [];
+    const original = client.nonce.bind(client);
+    client.nonce = () => new Promise<Awaited<ReturnType<typeof original>>>((resolve) => { waiters.push(() => void resolve(original())); });
+    const ordering = placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
+    await settle();
+    disconnectWallet(store); // the user leaves while the nonce read waits (the revocation's nonce read queues behind it)
+    for (const proceed of waiters.splice(0)) proceed();
+    await ordering;
+    expect(client.posted.some((p) => p.route === "order")).toBe(false);
+    expect(store.getSnapshot().toasts.filter((t) => t.tone === "error")).toEqual([]);
+    void wallet;
+    void provider;
+  });
+
   it("a fresh login mints a fresh key, and two keys never share an address", async () => {
     const first = SessionKeySigner.generate();
     const second = SessionKeySigner.generate();

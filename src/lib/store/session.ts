@@ -83,15 +83,23 @@ export async function loginSession(store: ConsoleStore): Promise<boolean> {
  */
 export function ensureLogin(store: ConsoleStore, force = false): Promise<boolean> {
   if (!force && liveSessionKey(store) !== null) return Promise.resolve(true);
-  store.sessionLogin ??= loginSession(store).finally(() => {
-    store.sessionLogin = null;
-  });
+  if (store.sessionLogin === null) {
+    const attempt = loginSession(store);
+    store.sessionLogin = attempt;
+    void attempt.finally(() => {
+      // A disconnect already discarded this attempt: never erase a newer connection's login.
+      if (store.sessionLogin === attempt) store.sessionLogin = null;
+    });
+  }
   return store.sessionLogin;
 }
 
 /**
  * Runs the login when one of the account's deposits credits it, so a fresh account is asked for the
- * one signature at the moment trading becomes possible, not at every connect.
+ * one signature at the moment trading becomes possible, not at every connect. `deposited` is the
+ * only trigger: the engine credits a first deposit at its declaration or its finality, and both
+ * paths emit `deposited` — `eligibility_attested` can precede crediting, where a registration must
+ * refuse and would spend a signature for nothing.
  */
 export function loginOnCredit(store: ConsoleStore, events: StreamMessage["events"], mine: string | undefined): void {
   if (mine === undefined || store.liveWallet === null || store.liveWallet.readOnly === true || liveSessionKey(store) !== null) return;
@@ -139,41 +147,50 @@ export async function sessionSigned(
 ): Promise<Outcome> {
   const wallet = usableWallet(store, "sign");
   if (!wallet) return { ok: false };
-  if (liveSessionKey(store) === null && !(await ensureLogin(store))) return { ok: false };
-  // The login waited on the wallet: this connection must still be the one that asked.
-  if (store.liveWallet !== wallet) return { ok: false };
-  const key = liveSessionKey(store);
-  if (key === null) return { ok: false };
+  // Busy across the on-demand login too: a second Trade press waits instead of queueing a second order.
   store.patch({ busy: true });
   /** Whether the request left the page: from then on it may have run, whatever comes back. */
   let sent = false;
   try {
-    const { next_nonce, time_ms } = await store.deps.client.nonce(key.address);
-    const expiresAt = (time_ms ?? store.getSnapshot().now) + REQUEST_TTL_MS;
+    if (liveSessionKey(store) === null && !(await ensureLogin(store))) return { ok: false };
+    // The login waited on the wallet: this connection must still be the one that asked.
+    if (store.liveWallet !== wallet) return { ok: false };
+    const key = liveSessionKey(store);
+    if (key === null) return { ok: false };
+    /** Signs and sends once, abandoning silently when the connection ended or changed while the nonce read waited. */
     const attempt = async (withKey: SessionKeySigner, nonce: number, validUntil: number) => {
+      if (store.liveWallet !== wallet) throw DISCONNECTED;
       const typed = build({ nonce, expiresAt: validUntil }, wallet.address);
       const signature = await withKey.sign(typed);
+      if (store.liveWallet !== wallet) throw DISCONNECTED;
       sent = true;
       return send({ nonce, expires_at: validUntil, signature }, wallet);
     };
     try {
-      return { ok: true, result: await attempt(key, next_nonce, expiresAt) };
-    } catch (error) {
-      if (error instanceof EngineError && error.reject?.kind === "invalid_nonce") {
-        // As `signed`: a cancel is re-signed with the nonce the node names; an order is reported, since a copy may have run.
-        if (onNonceTaken === "sign-again") return { ok: true, result: await attempt(key, error.reject.expected, expiresAt) };
-        throw new EngineError(error.status, `The node had already used nonce ${next_nonce} for this account, so it did not take this request as sent. If it was sent twice it may have run: check your positions, orders, withdrawals and history before trying again.`);
-      }
-      // A key the node no longer admits (revoked, expired, or unknown after a restart) re-runs the login once.
-      if (keyDied(error) && (await ensureLogin(store, true)) && store.liveWallet === wallet) {
-        const fresh = liveSessionKey(store);
-        if (fresh !== null) {
-          // Fresh terms from the answer after the re-login: the first expiry may already be past.
-          const terms = await store.deps.client.nonce(fresh.address);
-          const freshExpiry = (terms.time_ms ?? store.getSnapshot().now) + REQUEST_TTL_MS;
-          return { ok: true, result: await attempt(fresh, terms.next_nonce, freshExpiry) };
+      const { next_nonce, time_ms } = await store.deps.client.nonce(key.address);
+      const expiresAt = (time_ms ?? store.getSnapshot().now) + REQUEST_TTL_MS;
+      try {
+        return { ok: true, result: await attempt(key, next_nonce, expiresAt) };
+      } catch (error) {
+        if (error instanceof EngineError && error.reject?.kind === "invalid_nonce") {
+          // As `signed`: a cancel is re-signed with the nonce the node names; an order is reported, since a copy may have run.
+          if (onNonceTaken === "sign-again") return { ok: true, result: await attempt(key, error.reject.expected, expiresAt) };
+          throw new EngineError(error.status, `The node had already used nonce ${next_nonce} for this account, so it did not take this request as sent. If it was sent twice it may have run: check your positions, orders, withdrawals and history before trying again.`);
         }
+        // A key the node no longer admits (revoked, expired, or unknown after a restart) re-runs the login once.
+        if (keyDied(error) && (await ensureLogin(store, true)) && store.liveWallet === wallet) {
+          const fresh = liveSessionKey(store);
+          if (fresh !== null) {
+            // Fresh terms from the answer after the re-login: the first expiry may already be past.
+            const terms = await store.deps.client.nonce(fresh.address);
+            const freshExpiry = (terms.time_ms ?? store.getSnapshot().now) + REQUEST_TTL_MS;
+            return { ok: true, result: await attempt(fresh, terms.next_nonce, freshExpiry) };
+          }
+        }
+        throw error;
       }
+    } catch (error) {
+      if (error === DISCONNECTED) return { ok: false }; // the connection ended mid-action: nothing to report
       throw error;
     }
   } catch (error) {
@@ -192,3 +209,6 @@ export async function sessionSigned(
     store.patch({ busy: false });
   }
 }
+
+/** The sentinel an abandoned action throws when its connection ends between the nonce read and the send. */
+const DISCONNECTED = new Error("The connection ended before the request was sent.");

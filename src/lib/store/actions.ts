@@ -31,11 +31,12 @@ function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
 export async function connectWallet(store: ConsoleStore, optionId: string, quiet = false, connected?: Wallet): Promise<boolean> {
   try {
     // A previous disconnect's revocation and release run to the end before a new wallet adopts the
-    // store, so a WalletConnect relay is never closed under a fresh pairing.
+    // store, so a WalletConnect relay is never closed under a fresh pairing. The promise stays
+    // installed until it settles: a second connect waits on the same cleanup, not a cleared slot.
     if (store.walletCleanup !== null) {
       const cleanup = store.walletCleanup;
-      store.walletCleanup = null;
       await cleanup;
+      if (store.walletCleanup === cleanup) store.walletCleanup = null;
     }
     const wallet = connected ?? (await store.deps.wallets.connect(optionId));
     if (quiet && store.liveWallet !== null && store.liveWallet !== wallet) {
