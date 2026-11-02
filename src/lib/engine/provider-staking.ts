@@ -8,6 +8,7 @@ import { decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "vi
 import type { DistributionProof } from "./stats-types";
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
 import { NO_CANDIDATE } from "./registry";
+import { WALLET_READ_MS, withinMs } from "./serialized-provider";
 import type { StakingPosition, StakingWallet } from "./staking";
 import type { Progress } from "./wallet";
 
@@ -62,7 +63,7 @@ export class ProviderStaking implements StakingWallet {
   }
 
   private async call(to: string, data: Hex): Promise<Hex> {
-    return hexOf(await this.provider.request({ method: "eth_call", params: [{ to, data }, "latest"] }));
+    return hexOf(await withinMs(this.provider, { method: "eth_call", params: [{ to, data }, "latest"] }, WALLET_READ_MS));
   }
 
   /** The vault's MONKEY token, or null while it names the zero address (no token deployed yet), which is read again next time. */
@@ -82,7 +83,7 @@ export class ProviderStaking implements StakingWallet {
    * vault, so a build that names no staking contract still reads it.
    */
   async position(): Promise<StakingPosition> {
-    const current = Number(await this.provider.request({ method: "eth_chainId" }));
+    const current = Number(await withinMs(this.provider, { method: "eth_chainId" }, WALLET_READ_MS));
     if (current !== this.chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chain.chainId}`);
     const owner = hexOf(this.address);
     const paid = decodeFunctionResult({ abi: VAULT, functionName: "distributionsClaimed", data: await this.call(this.chain.vault, encodeFunctionData({ abi: VAULT, functionName: "distributionsClaimed", args: [owner] })) });

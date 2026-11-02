@@ -136,7 +136,7 @@ export class ProviderWallet implements Wallet {
       // Adding a chain does not always move the wallet onto it; the chain read below decides.
       await this.provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] }).catch(() => undefined);
     }
-    const after = Number(await this.provider.request({ method: "eth_chainId" }));
+    const after = Number(await withinMs(this.provider, { method: "eth_chainId" }, WALLET_READ_MS));
     if (after !== this.chain.chainId) throw new Error(`Your wallet is on chain ${after}; switch it to chain ${this.chain.chainId} to continue.`);
   }
 
@@ -254,15 +254,15 @@ export class ProviderWallet implements Wallet {
    * - the wallet is on another chain than the deployment's
    */
   async claimed(nonce: number): Promise<boolean> {
-    const current = Number(await this.provider.request({ method: "eth_chainId" }));
+    const current = Number(await withinMs(this.provider, { method: "eth_chainId" }, WALLET_READ_MS));
     if (current !== this.chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chain.chainId}`);
     const data = encodeFunctionData({ abi: VAULT, functionName: "usedNonces", args: [hexOf(this.address), BigInt(nonce)] });
-    const result = hexOf(await this.provider.request({ method: "eth_call", params: [{ to: this.chain.vault, data }, "latest"] }));
+    const result = hexOf(await withinMs(this.provider, { method: "eth_call", params: [{ to: this.chain.vault, data }, "latest"] }, WALLET_READ_MS));
     return decodeFunctionResult({ abi: VAULT, functionName: "usedNonces", data: result });
   }
 
   private async read(to: string, data: Hex, functionName: "balanceOf" | "allowance"): Promise<bigint> {
-    const result = hexOf(await this.provider.request({ method: "eth_call", params: [{ to, data }, "latest"] }));
+    const result = hexOf(await withinMs(this.provider, { method: "eth_call", params: [{ to, data }, "latest"] }, WALLET_READ_MS));
     return decodeFunctionResult({ abi: ERC20, functionName, data: result });
   }
 

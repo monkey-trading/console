@@ -38,8 +38,11 @@ export interface ExitFollowDeps {
 export class ExitWatch {
   readonly keeper: ExitKeeper;
   private wallet: Wallet | null = null;
-  private refreshing: Promise<void> | null = null;
+  /** The read of the vault under way, and whose: a read of a wallet since replaced holds up nothing. */
+  private refreshing: { wallet: Wallet; done: Promise<void> } | null = null;
   private refreshAgain = false;
+  /** How many reads of the vault have answered, by which a press tells one that began after it. */
+  private answers = 0;
   private refreshOwed = false;
   private lastKey = "";
   private ready = false;
@@ -68,12 +71,12 @@ export class ExitWatch {
     const stopStore = store.subscribe(() => this.sync());
     const stopClient: Unsubscribe = store.deps.client.watch((event) => {
       if (event.type === "checkpoint") this.chase(event.seq, 0);
-      else if (event.type === "feed" && event.status === "stale" && !this.standingDown()) void this.refresh();
+      else if (event.type === "feed" && event.status === "stale" && this.mayReadUnasked()) void this.refresh();
     });
     let timer: unknown = null;
     const slow = () => {
       timer = deps.scheduler.setTimeout(slow, SLOW_READ_MS);
-      if (!deps.hidden()) void this.refresh();
+      if (!deps.hidden() && this.mayReadUnasked()) void this.refresh();
     };
     timer = deps.scheduler.setTimeout(slow, SLOW_READ_MS);
     this.sync();
@@ -99,8 +102,7 @@ export class ExitWatch {
     if (delay === undefined) return;
     this.chasing = deps.scheduler.setTimeout(() => {
       this.chasing = null;
-      // Reads that are failing go at the retry's pace, not the chase's, and a hidden tab makes none.
-      if (readFailed(this.store.getSnapshot().exit)) return;
+      if (!this.mayReadUnasked()) return;
       void this.refresh().then(() => {
         const { exit } = this.store.getSnapshot();
         if (!readFailed(exit) && (exit.vault?.latestSeq ?? 0) < seq) this.chase(seq, step + 1);
@@ -108,9 +110,9 @@ export class ExitWatch {
     }, delay);
   }
 
-  /** Whether reads have been failing in a hidden tab, which makes no more of them: its next comes once it is seen. */
-  private standingDown(): boolean {
-    return this.deps?.hidden() === true && readFailed(this.store.getSnapshot().exit);
+  /** The gate every read with nobody waiting on it passes: while reads are failing they go only at the retry's pace, which a hidden tab stands down from until it is seen. */
+  private mayReadUnasked(): boolean {
+    return !readFailed(this.store.getSnapshot().exit);
   }
 
   private stopRetry(): void {
@@ -145,6 +147,7 @@ export class ExitWatch {
       this.stopRetry();
       this.retries = 0;
       this.refreshOwed = false;
+      this.refreshAgain = false;
       this.lastKey = "";
       const scope = this.keeper.scope(wallet);
       this.patch({ ...NO_EXIT, ...this.keeper.startingFrom(scope) });
@@ -159,7 +162,7 @@ export class ExitWatch {
     if (ready && !this.ready) this.keeper.forgetTried(); // a node back from away may answer what it could not
     this.ready = ready;
     const key = `${typeof wait === "string" ? wait : "away"}|${state.accountRead}|${state.accountHistory}|${stakeKey(state)}`;
-    if (key === this.lastKey || state.exit.vault === null) return;
+    if (key === this.lastKey || state.exit.vault === null || !this.mayReadUnasked()) return;
     this.lastKey = key;
     void this.keeper.settle();
   }
@@ -173,20 +176,25 @@ export class ExitWatch {
       this.refreshOwed = true;
       return Promise.resolve();
     }
-    if (this.refreshing !== null) {
+    if (this.refreshing?.wallet === wallet) {
       this.refreshAgain = true;
-      return this.refreshing;
+      return this.refreshing.done;
     }
     this.refreshOwed = false;
     this.lastReadMs = this.deps?.nowMs() ?? this.lastReadMs;
-    this.refreshing = this.readVault(wallet, exit).finally(() => {
-      this.refreshing = null;
-      if (this.refreshAgain) {
-        this.refreshAgain = false;
-        void this.refresh();
-      }
-    });
-    return this.refreshing;
+    const read = {
+      wallet,
+      done: this.readVault(wallet, exit).finally(() => {
+        if (this.refreshing !== read) return;
+        this.refreshing = null;
+        if (this.refreshAgain) {
+          this.refreshAgain = false;
+          void this.refresh();
+        }
+      }),
+    };
+    this.refreshing = read;
+    return read.done;
   }
 
   /** The tab was seen again: reads the vault, unless it was read just now. */
@@ -199,6 +207,7 @@ export class ExitWatch {
     try {
       const vault = await this.store.monkeySession.walletWork.work(wallet, () => exit.facts());
       if (this.store.liveWallet !== wallet) return;
+      this.answers += 1;
       this.patch({ vault, vaultProblem: null, vaultFailures: 0 });
     } catch (error) {
       if (this.store.liveWallet === wallet) this.patch({ vaultProblem: errorText(error), vaultFailures: this.store.getSnapshot().exit.vaultFailures + 1 });
@@ -246,9 +255,12 @@ export class ExitWatch {
     this.patch({ paid });
   }
 
-  /** Reads the vault afresh, and says whether it answered: what an action needs before it sends anything. */
+  /** Reads the vault afresh, and says whether that read answered: what an action needs before it sends anything. A read under way may have taken the vault's facts before the press, so it is waited out, and only one that began after the press serves. */
   async readFresh(): Promise<boolean> {
-    await this.refresh();
-    return this.store.getSnapshot().exit.vaultProblem === null;
+    const wallet = this.store.liveWallet;
+    if (this.refreshing?.wallet === wallet) await this.refreshing?.done;
+    const answers = this.answers;
+    await (this.refreshing?.wallet === wallet ? this.refreshing?.done : this.refresh());
+    return this.answers > answers;
   }
 }
