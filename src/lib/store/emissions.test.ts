@@ -12,7 +12,7 @@ import { MONKEY_UNIT } from "../format";
 import { checkEmissionsClaimed, claimEmissions, emissionsPosition } from "./emissions";
 import { connected, VAULT } from "./live-kit";
 
-const VAULT_ABI = parseAbi(["function claimEmissions(address account, uint256 entitled, bytes32[] siblings) returns (uint256)"]);
+const VAULT_ABI = parseAbi(["function claimEmissions(address account, uint256 entitled, uint64 checkpointSeq, bytes32[] siblings) returns (uint256)"]);
 
 const proof = (entitled: bigint, seq = 40): EntitlementProof => ({
   seq, root: `0x${"11".repeat(32)}`, account: ACCOUNT, entitled: entitled.toString(), siblings: [],
@@ -31,11 +31,11 @@ describe("emissionsPosition", () => {
     expect(emissionsPosition(at, { claimed: 2n * MONKEY_UNIT, latestSeq: 40 }).checkpoint).toBe("posted");
   });
 
-  it("treats only a checkpoint exactly at the proof's seq as claimable, since the vault verifies against its latest root", () => {
+  it("treats a checkpoint at or past the proof's seq as claimable, since the vault keeps the root of each one", () => {
     const at = proof(5n * MONKEY_UNIT);
     expect(emissionsPosition(at, { claimed: 2n * MONKEY_UNIT, latestSeq: 40 }).claimable).toBe(3n * MONKEY_UNIT);
-    // A newer checkpoint has superseded the proof: the claim would revert, so nothing is offered.
-    expect(emissionsPosition(at, { claimed: 0n, latestSeq: 41 })).toEqual({ accrued: 5n * MONKEY_UNIT, awaiting: 0n, claimed: 0n, checkpoint: "superseded", claimable: 0n });
+    // A newer checkpoint has posted: the proof still claims.
+    expect(emissionsPosition(at, { claimed: 0n, latestSeq: 41 })).toEqual({ accrued: 5n * MONKEY_UNIT, awaiting: 0n, claimed: 0n, checkpoint: "posted", claimable: 5n * MONKEY_UNIT });
     // The vault caught up: nothing is due.
     expect(emissionsPosition(at, { claimed: 5n * MONKEY_UNIT, latestSeq: 40 }).claimable).toBe(0n);
     // The vault record cannot run ahead of what it minted.
@@ -123,16 +123,16 @@ describe("claimEmissions", () => {
     const decoded = decodeFunctionData({ abi: VAULT_ABI, data: tx?.data ?? "0x" });
     expect(decoded.functionName).toBe("claimEmissions");
     expect(String(decoded.args[0]).toLowerCase()).toBe(ACCOUNT);
-    expect(decoded.args.slice(1)).toEqual([5n * MONKEY_UNIT, []]);
+    expect(decoded.args.slice(1)).toEqual([5n * MONKEY_UNIT, 40n, []]);
     expect(store.getSnapshot().notices.emissions).toBeUndefined();
     expect(store.getSnapshot().emissionsVault).toBeNull();
     expect(store.getSnapshot().busy).toBe(false);
   });
 
-  it("re-fetches the proof at the vault's latest seq and claims against it when the stored pair is stale", async () => {
+  it("re-reads the proof and claims with the newer one when the stored pair is stale", async () => {
     const { client, provider, store } = await connected({ emissionsClaimed: 2n * MONKEY_UNIT, latestSeq: 40 });
     // The page holds a stale pair: the vault moved past the stored proof's seq. The node now
-    // serves a proof against the vault's latest checkpoint, and the claim must use that pair.
+    // serves a proof against the vault's latest checkpoint, and the claim uses it.
     const stale = proof(5n * MONKEY_UNIT, 40);
     const fresh = proof(8n * MONKEY_UNIT, 41);
     client.entitlement = fresh;
@@ -144,11 +144,21 @@ describe("claimEmissions", () => {
     const decoded = decodeFunctionData({ abi: VAULT_ABI, data: tx?.data ?? "0x" });
     expect(decoded.functionName).toBe("claimEmissions");
     // The fresh proof's cumulative entitlement, less the fresh record's claimed: 8 - 2.
-    expect(decoded.args.slice(1)).toEqual([8n * MONKEY_UNIT, []]);
+    expect(decoded.args.slice(1)).toEqual([8n * MONKEY_UNIT, 41n, []]);
     expect(store.getSnapshot().notices.emissions).toBeUndefined();
   });
 
-  it("keeps the waiting state after a bounded number of attempts when the pair never meets", async () => {
+  it("claims at the proof's own seq while the vault's latest has moved past it", async () => {
+    const { client, provider, store } = await connected({ emissionsClaimed: 2n * MONKEY_UNIT, latestSeq: 44 });
+    client.entitlement = proof(5n * MONKEY_UNIT, 40);
+    store.patch({ entitlement: client.entitlement });
+    await claimEmissions(store);
+    const decoded = decodeFunctionData({ abi: VAULT_ABI, data: provider.sent.at(-1)?.data ?? "0x" });
+    expect(decoded.args.slice(1)).toEqual([5n * MONKEY_UNIT, 40n, []]);
+    expect(store.getSnapshot().notices.emissions).toBeUndefined();
+  });
+
+  it("keeps the waiting state after a bounded number of attempts while the vault has not reached the proof", async () => {
     const { client, provider, store } = await connected({ emissionsClaimed: 0n, latestSeq: 39 });
     const at = proof(5n * MONKEY_UNIT, 40);
     client.entitlement = at;
@@ -158,8 +168,8 @@ describe("claimEmissions", () => {
     client.emissions = async () => { proofReads++; return original(); };
     await claimEmissions(store);
     expect(provider.sent).toHaveLength(0);
-    expect(proofReads).toBe(3); // bounded: the claim does not spin on a pair that never meets
-    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "The vault's latest checkpoint and the node's latest proof have not met yet; the claim unlocks once they do." });
+    expect(proofReads).toBe(3); // bounded: the claim does not spin on a vault that stays behind
+    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "The vault has not reached the checkpoint of the node's latest proof yet; the claim unlocks once it does." });
     // A node that now holds no proof at all says so instead of blaming the lag.
     client.emissions = original;
     client.entitlement = null;
@@ -182,15 +192,15 @@ describe("claimEmissions", () => {
     expect(other.provider.sent).toHaveLength(0);
   });
 
-  it("sends nothing when the checkpoint never meets the proof, and reports nothing due once it does", async () => {
+  it("sends nothing while the vault is behind the proof, and reports nothing due once it has reached it", async () => {
     const { client, provider, store } = await connected({ emissionsClaimed: 5n * MONKEY_UNIT, latestSeq: 40 });
     // The vault is behind the proof: waiting.
     client.entitlement = proof(5n * MONKEY_UNIT, 40);
     provider.vault.latestSeq = 39;
     await claimEmissions(store);
     expect(provider.sent).toHaveLength(0);
-    expect(store.getSnapshot().notices.emissions?.text).toContain("have not met yet");
-    // The pair meets but the vault already minted it all: nothing is due.
+    expect(store.getSnapshot().notices.emissions?.text).toContain("has not reached");
+    // The vault has reached the proof and already minted it all: nothing is due.
     provider.vault.latestSeq = 40;
     await claimEmissions(store);
     expect(provider.sent).toHaveLength(0);

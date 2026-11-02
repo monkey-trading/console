@@ -65,7 +65,6 @@ export function DistributionClaim() {
       {mine && !readOnly && proof !== null && held === null && figures.position.status === "failed" && <p className={NOTE}>The vault&apos;s record of what it has paid could not be read; it is read again by itself.</p>}
       {mine && !readOnly && position.claimed !== null && checkpoint === "checking" && <p role="status" className={NOTE}>Checking the vault&apos;s latest checkpoint against the node&apos;s proof…</p>}
       {mine && !readOnly && position.claimed !== null && checkpoint === "waiting" && position.accrued > position.claimed && <p className={NOTE}>The vault has not posted a checkpoint covering this yet; the claim unlocks once one posts. It is checked again by itself.</p>}
-      {mine && !readOnly && position.claimed !== null && checkpoint === "superseded" && <p className={NOTE}>A newer checkpoint has posted on the vault; the claim unlocks once the node serves a proof against it. It is checked again by itself.</p>}
       {mine && !readOnly && position.claimed !== null && checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && <p className={NOTE}>All distributed USDC is claimed.</p>}
     </Card>
   );

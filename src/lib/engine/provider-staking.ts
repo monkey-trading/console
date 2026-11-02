@@ -29,7 +29,7 @@ const STAKING = parseAbi([
   "function unstakes(address account) view returns (uint256 amount, uint256 claimableAt)",
 ]);
 const VAULT = parseAbi([
-  "function claimDistribution(address account, uint256 entitled, bytes32[] siblings) returns (uint256)",
+  "function claimDistribution(address account, uint256 entitled, uint64 checkpointSeq, bytes32[] siblings) returns (uint256)",
   "function distributionsClaimed(address account) view returns (uint256)",
   "function latestSeq() view returns (uint64)",
   "function monkey() view returns (address)",
@@ -129,13 +129,13 @@ export class ProviderStaking implements StakingWallet {
     return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "delegate", args: [hexOf(candidate)] }), action, progress);
   }
 
-  /** The proof names this account: the node signed it for the account's own route. */
+  /** Claims at the checkpoint the proof's `seq` names. The proof names this account: the node signed it for the account's own route. */
   async claimDistribution(proof: DistributionProof, progress: Progress = () => undefined): Promise<string> {
     if (proof.account.toLowerCase() !== this.address.toLowerCase()) throw new Error("The distribution proof is for another account.");
     // `BigInt` throws on a malformed string; the enclave signed this shape for the account's route.
     const entitled = BigInt(proof.entitled);
     if (entitled <= 0n) throw new Error("The distribution proof names nothing to claim.");
-    const data = encodeFunctionData({ abi: VAULT, functionName: "claimDistribution", args: [hexOf(this.address), entitled, proof.siblings.map(hexOf)] });
+    const data = encodeFunctionData({ abi: VAULT, functionName: "claimDistribution", args: [hexOf(this.address), entitled, BigInt(proof.seq), proof.siblings.map(hexOf)] });
     return this.transport.send(this.chain.vault, data, "claim your USDC distribution", progress);
   }
 }

@@ -16,7 +16,7 @@ describe("distributionPosition", () => {
     expect(distributionPosition(proof(900n), null)).toEqual({ accrued: 900n, awaiting: 0n, claimed: null, checkpoint: "unknown", claimable: 0n });
     expect(distributionPosition(proof(900n), { distributionsClaimed: 400n, latestSeq: 39 })).toEqual({ accrued: 900n, awaiting: 0n, claimed: 400n, checkpoint: "waiting", claimable: 0n });
     expect(distributionPosition(proof(900n), { distributionsClaimed: 400n, latestSeq: 40 })).toEqual({ accrued: 900n, awaiting: 0n, claimed: 400n, checkpoint: "posted", claimable: 500n });
-    expect(distributionPosition(proof(900n), { distributionsClaimed: 400n, latestSeq: 41 })).toEqual({ accrued: 900n, awaiting: 0n, claimed: 400n, checkpoint: "superseded", claimable: 0n });
+    expect(distributionPosition(proof(900n), { distributionsClaimed: 400n, latestSeq: 41 })).toEqual({ accrued: 900n, awaiting: 0n, claimed: 400n, checkpoint: "posted", claimable: 500n });
   });
 
   it("offers nothing once the vault has paid all of it", () => {

@@ -206,7 +206,7 @@ export interface ActivityPage {
 
 /** `GET /v1/accounts/{address}/distributions`: the proof the vault's `claimDistribution` takes. */
 export interface DistributionProof extends ClaimStanding {
-  /** The seq the root was computed at; a claim works only while the vault's latest posted seq equals it. */
+  /** The seq the root was computed at, which a claim names; it works once the vault's latest posted seq has reached it. */
   seq: number;
   root: string;
   account: Address;

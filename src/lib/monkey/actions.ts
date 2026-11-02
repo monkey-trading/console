@@ -115,10 +115,11 @@ export async function delegateStake(panel: MonkeyPanel, operators: OperatorReads
 }
 
 /**
- * Claims the account's USDC distribution. The vault checks a proof against its latest posted
- * root, so the claim needs the proof for that checkpoint, not the page's last-read pair: both are
- * read again, bounded, and the claim is sent with the pair whose seqs meet. It is built from the
- * node's proof, so unlike a stake or a delegation it waits on a verdict that may sign.
+ * Claims the account's USDC distribution. The vault checks a proof against the root it keeps for
+ * the proof's seq, so the claim needs a proof at a checkpoint the vault has reached, not the page's
+ * last-read pair: both are read again, bounded, and the claim is sent once the vault has reached
+ * the proof's. Later checkpoints do not undo it. It is built from the node's proof, so unlike a
+ * stake or a delegation it waits on a verdict that may sign.
  */
 export function claimDistribution(panel: MonkeyPanel): Promise<boolean> {
   const { store } = panel;
@@ -136,7 +137,7 @@ export function claimDistribution(panel: MonkeyPanel): Promise<boolean> {
         store.notify("distribution", "The node holds no distribution proof for this account right now.", "info");
         return false;
       }
-      if (proof.seq === position.latestSeq) {
+      if (proof.seq <= position.latestSeq) {
         const due = BigInt(proof.entitled) - position.distributionsClaimed;
         if (due <= 0n) return false; // the panel already says all of it is claimed
         // Checked last: the verdict may have ended while the reads above waited on the wallet.
@@ -145,7 +146,7 @@ export function claimDistribution(panel: MonkeyPanel): Promise<boolean> {
         return true;
       }
       if (attempt >= CLAIM_ATTEMPTS) {
-        store.notify("distribution", "The vault's latest checkpoint and the node's latest proof have not met yet; the claim unlocks once they do.", "info");
+        store.notify("distribution", "The vault has not reached the checkpoint of the node's latest proof yet; the claim unlocks once it does.", "info");
         return false;
       }
     }

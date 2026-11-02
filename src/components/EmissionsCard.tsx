@@ -71,9 +71,6 @@ export function EmissionsCard({ claim }: { claim: () => Promise<unknown> }) {
           {position.claimed !== null && checkpoint === "waiting" && position.accrued > position.claimed && (
             <p className="mt-2 text-fg-3">The vault has not posted a checkpoint covering this yet; the claim unlocks once one posts. It is checked again by itself.</p>
           )}
-          {position.claimed !== null && checkpoint === "superseded" && (
-            <p className="mt-2 text-fg-3">A newer checkpoint has posted on the vault; the claim unlocks once the node serves a proof against it. It is checked again by itself.</p>
-          )}
           {position.claimed !== null && position.checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && (
             <p className="mt-2 text-fg-3">All accrued MONKEY is claimed.</p>
           )}

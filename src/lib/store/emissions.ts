@@ -20,11 +20,10 @@ export interface EmissionsPosition {
   claimed: bigint | null;
   /**
    * Where the vault's latest posted checkpoint stands against the proof: `unknown` before its
-   * record is read, `waiting` while it has not reached the proof's seq, `posted` at it — the only
-   * state a claim works in, since the vault verifies a proof against its latest root — and
-   * `superseded` once a newer checkpoint has passed it.
+   * record is read, `waiting` while it has not reached the proof's seq, and `posted` at or past it,
+   * where a claim works: the vault checks the proof against the root it keeps for that seq.
    */
-  checkpoint: "unknown" | "waiting" | "posted" | "superseded";
+  checkpoint: "unknown" | "waiting" | "posted";
   /** What a claim would mint now: the proof's entitlement less what the vault has minted; zero unless the checkpoint is posted. */
   claimable: bigint;
 }
@@ -35,15 +34,15 @@ export function emissionsPosition(entitlement: EntitlementProof | null, vault: {
   const proven = BigInt(entitlement.entitled);
   const accrued = accruedOf(entitlement);
   const claimed = vault?.claimed ?? null;
-  const checkpoint = vault === null ? "unknown" : vault.latestSeq < entitlement.seq ? "waiting" : vault.latestSeq === entitlement.seq ? "posted" : "superseded";
+  const checkpoint = vault === null ? "unknown" : vault.latestSeq < entitlement.seq ? "waiting" : "posted";
   const claimable = checkpoint === "posted" && claimed !== null ? (proven > claimed ? proven - claimed : 0n) : 0n;
   return { accrued, awaiting: accrued - proven, claimed, checkpoint, claimable };
 }
 
 /**
  * How many rounds a claim re-reads the vault record and the node's proof before it keeps the
- * waiting state. Each round is a pair of network reads, and the pair meets within a few rounds
- * once the vault posts the checkpoint the node's latest proof stands at.
+ * waiting state. Each round is a pair of network reads, and a few are enough for the vault to post
+ * the checkpoint the node's latest proof stands at.
  */
 const CLAIM_PROOF_ATTEMPTS = 3;
 
@@ -85,16 +84,15 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
   // Set once the mint has landed: the token offer is made after the claim has finished, so a caller that queues the claim holds the wallet until the offer has been answered too.
   let offered: Wallet | null = null;
   try {
-    // The vault claims against its current latest root, so the claim needs the proof for the
-    // vault's latest posted checkpoint, not the page's last-read pair: under a fast sequencer the
-    // vault and the node's newest proof pass each other between refreshes. Re-read both, bounded,
-    // and claim with the pair whose seqs meet.
+    // The claim needs a proof at a checkpoint the vault has reached, and what it has minted, not
+    // the page's last-read pair: the node may have moved on to a newer proof since. Re-read both,
+    // bounded, and claim with a proof the vault has reached; later checkpoints do not undo it.
     for (let attempt = 1; ; attempt += 1) {
       const [record, proof] = await Promise.all([readRecord(), store.deps.client.emissions(wallet.address)]);
       if (store.liveWallet !== wallet) return; // the wallet changed while the reads ran; its claim is not this one's
       store.patch({ entitlement: proof === null ? null : carryAccrued(store.getSnapshot().entitlement, proof), emissionsVault: record });
       if (proof === null) return store.notify("emissions", "The node holds no entitlement proof for this account right now.", "info");
-      if (proof.seq === record.latestSeq) {
+      if (proof.seq <= record.latestSeq) {
         const due = BigInt(proof.entitled) - record.claimed;
         if (due <= 0n) return; // the card already says all of it is claimed
         // Checked last: the verdict may have ended while the reads above waited on the wallet.
@@ -106,7 +104,7 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
       }
       if (attempt >= CLAIM_PROOF_ATTEMPTS) {
         // Genuine lag: the card's waiting line stands; say why the claim did not fire.
-        return store.notify("emissions", "The vault's latest checkpoint and the node's latest proof have not met yet; the claim unlocks once they do.", "info");
+        return store.notify("emissions", "The vault has not reached the checkpoint of the node's latest proof yet; the claim unlocks once it does.", "info");
       }
     }
   } catch (error) {
