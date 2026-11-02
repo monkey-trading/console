@@ -111,4 +111,79 @@ describe("PrefsStore", () => {
     stop();
     expect(watching).toBe(0);
   });
+
+  describe("a write that failed for one key", () => {
+    /** Storage that refuses writes to `refused` and holds the rest. */
+    function partlyFull(refused: string, initial: Record<string, string> = {}) {
+      const data = { ...initial };
+      const storage: PrefsStorage = { getItem: (key) => data[key] ?? null, setItem: (key, value) => { if (key === refused) throw new Error("quota"); data[key] = value; } };
+      return { data, storage };
+    }
+
+    it("is not forgotten when a write to the other key succeeds", () => {
+      const { storage } = partlyFull(PREFS_KEY);
+      const store = new PrefsStore(() => storage);
+      store.set("chartLines", false);
+      store.rememberSize(1, "0.5");
+      expect(store.getSnapshot()).toMatchObject({ prefs: { chartLines: false }, sizes: { 1: "0.5" }, saved: false });
+    });
+
+    it("is not forgotten by a later preference write either, when the size write failed", () => {
+      const { storage } = partlyFull(SIZES_KEY);
+      const store = new PrefsStore(() => storage);
+      store.rememberSize(1, "0.5");
+      store.set("chartLines", false);
+      expect(store.getSnapshot()).toMatchObject({ sizes: { 1: "0.5" }, saved: false });
+    });
+
+    it("keeps the unsaved choice when a listener returns, while the other key is read again", () => {
+      const { data, storage } = partlyFull(PREFS_KEY, { [PREFS_KEY]: JSON.stringify({ ...DEFAULT_PREFS, chartLines: true }) });
+      const store = new PrefsStore(() => storage);
+      const stop = store.subscribe(() => {});
+      store.set("chartLines", false);
+      store.rememberSize(1, "0.5");
+      stop();
+      data[SIZES_KEY] = JSON.stringify({ 1: "0.75" });
+      store.subscribe(() => {});
+      expect(store.getSnapshot()).toMatchObject({ prefs: { chartLines: false }, sizes: { 1: "0.75" }, saved: false });
+    });
+
+    it("keeps the unsaved choice when another tab writes the other key", () => {
+      const { data, storage } = partlyFull(PREFS_KEY);
+      let fire: () => void = () => {};
+      const store = new PrefsStore(() => storage, (onChange) => { fire = onChange; return () => {}; });
+      store.subscribe(() => {});
+      store.set("chartLines", false);
+      data[SIZES_KEY] = JSON.stringify({ 2: "3" });
+      fire();
+      expect(store.getSnapshot()).toMatchObject({ prefs: { chartLines: false }, sizes: { 2: "3" }, saved: false });
+    });
+
+    it("keeps an unsaved size when another tab writes the preferences", () => {
+      const { data, storage } = partlyFull(SIZES_KEY);
+      let fire: () => void = () => {};
+      const store = new PrefsStore(() => storage, (onChange) => { fire = onChange; return () => {}; });
+      store.subscribe(() => {});
+      store.rememberSize(1, "0.5");
+      data[PREFS_KEY] = JSON.stringify({ ...DEFAULT_PREFS, orderType: "stop" });
+      fire();
+      expect(store.getSnapshot()).toMatchObject({ prefs: { orderType: "stop" }, sizes: { 1: "0.5" }, saved: false });
+    });
+
+    it("is cleared by a later write that saves the same key, and then storage is read again", () => {
+      let refusing = true;
+      const data: Record<string, string> = {};
+      const storage: PrefsStorage = { getItem: (key) => data[key] ?? null, setItem: (key, value) => { if (refusing && key === PREFS_KEY) throw new Error("quota"); data[key] = value; } };
+      const store = new PrefsStore(() => storage);
+      const stop = store.subscribe(() => {});
+      store.set("chartLines", false);
+      refusing = false;
+      store.set("confirmBatch", false);
+      expect(store.getSnapshot().saved).toBe(true);
+      stop();
+      data[PREFS_KEY] = JSON.stringify({ ...DEFAULT_PREFS, orderType: "stop" });
+      store.subscribe(() => {});
+      expect(store.getSnapshot()).toMatchObject({ prefs: { orderType: "stop" }, saved: true });
+    });
+  });
 });

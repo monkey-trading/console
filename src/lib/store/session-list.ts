@@ -166,8 +166,8 @@ export class SessionList {
     if (gate === this.gate) return;
     const accountChanged = account !== this.gate.split("|")[0];
     this.gate = gate;
-    // Keys read for another account are not shown.
-    const forgotten = accountChanged ? { keys: [] } : {};
+    // Keys read for another account are not shown, nor is the warning that its read stopped short.
+    const forgotten = accountChanged ? { keys: [], complete: true } : {};
     if (status.kind === "loading") {
       this.patch({ ownKey, ...forgotten });
       void this.read();

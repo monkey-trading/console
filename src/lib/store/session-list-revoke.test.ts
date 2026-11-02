@@ -29,9 +29,11 @@ describe("revoking a session key", () => {
     expect(await signerOf(revokeSessionKeyTypedData(DOMAIN, ACCOUNT, OTHER_KEY, { nonce: sent.auth.nonce, expiresAt: sent.auth.expires_at }), sent.auth.signature)).toBe(ACCOUNT);
     await settle();
     expect(list.getSnapshot().keys.map((k) => k.address)).toEqual([own.toLowerCase()]);
+    // The answer alone brings one read that confirms the revocation, whether or not the stream delivers its copy.
+    expect(registeredReads(reads) - before).toBe(1);
     client.deliver(message([{ type: "session_key_revoked", account: ACCOUNT, session_key: OTHER_KEY }]));
     await settle();
-    // One read confirms the revocation after the answer, and the stream's copy of it folds into one more.
+    // The stream's copy of it folds into at most one more.
     expect(registeredReads(reads) - before).toBeLessThanOrEqual(2);
   });
 
