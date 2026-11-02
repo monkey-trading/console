@@ -1,21 +1,28 @@
 "use client";
 
-/** One MONKEY amount field with a Max button and its submit; a landed transaction clears the field. */
+/**
+ * One MONKEY amount field with a Max button and its submit. What is typed is kept by the page's
+ * store, so a gap in the feed does not lose it; a transaction that lands clears the field as it
+ * lands, unless something else has been typed since.
+ */
 
-import { useId, useState } from "react";
+import { useId } from "react";
 
 import { monkeyInputText, parseMonkeyAmount } from "@/lib/monkey/figures";
 
 import { BUTTON } from "./styles";
+import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
 
 interface Props {
+  field: "stake" | "unstake";
   label: string;
   action: string;
   /** The most the account can put in, in base units, which the Max button fills. */
   max: bigint;
   maxLabel: string;
   disabled: boolean;
-  onSubmit: (amount: bigint) => Promise<boolean>;
+  /** Sends the transaction; `onLanded` clears the field the moment it has landed. */
+  onSubmit: (amount: bigint, onLanded: () => void) => Promise<unknown>;
 }
 
 /** Longer than any supply plus eighteen places, so a pasted string cannot be parsed to a huge number on every render. */
@@ -23,9 +30,14 @@ const MAX_AMOUNT_CHARS = 40;
 
 const INPUT = "min-h-11 min-w-0 flex-1 rounded border border-line-2 bg-ink px-2 py-2 text-data text-fg placeholder:text-fg-3 focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0";
 
-export function AmountForm({ label, action, max, maxLabel, disabled, onSubmit }: Props) {
+export function AmountForm({ field, label, action, max, maxLabel, disabled, onSubmit }: Props) {
   const id = useId();
-  const [text, setText] = useState("");
+  const panel = useMonkeyPanel();
+  const { drafts } = usePanelState();
+  const account = useConsoleSelect((state) => state.wallet?.address ?? null);
+  // Text typed for another account is not this one's.
+  const text = drafts.account === account ? drafts[field] : "";
+  const setText = (next: string) => panel.setDraft(field, next);
   const amount = parseMonkeyAmount(text);
   const problem = text.trim() === "" ? null : amount === null ? "Enter an amount of MONKEY with up to 18 decimal places." : amount > max ? `That is more than ${maxLabel}.` : null;
   const ok = amount !== null && problem === null && !disabled;
@@ -33,7 +45,7 @@ export function AmountForm({ label, action, max, maxLabel, disabled, onSubmit }:
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        if (ok) void onSubmit(amount).then((landed) => { if (landed) setText(""); });
+        if (ok) void onSubmit(amount, () => panel.clearDraft(field, text));
       }}
       className="space-y-1"
     >

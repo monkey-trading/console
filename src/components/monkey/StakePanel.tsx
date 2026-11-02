@@ -15,7 +15,7 @@ import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
 
 export function StakePanel() {
   const panel = useMonkeyPanel();
-  const { wallet: figures, overview, unmirroredTotal } = usePanelState();
+  const { wallet: figures, overview, unmirroredTotal, settling } = usePanelState();
   const wallet = useConsoleSelect((state) => state.wallet);
   const busy = useConsoleSelect((state) => state.busy);
   // The node's clock to five seconds, so the Complete button opens within moments of the cooldown ending; the time left is shown to the minute.
@@ -56,8 +56,8 @@ export function StakePanel() {
             <Row label="Share of all stake">{share === null ? "—" : formatRate(share)}</Row>
           </dl>
           <ReadNote read={figures.position} />
-          <AmountForm label="Stake" action="Stake" max={position.balance} maxLabel="your wallet balance" disabled={busy} onSubmit={(amount) => stakeMonkey(panel, amount)} />
-          <AmountForm label="Unstake" action="Start unstake" max={position.staked} maxLabel="your stake" disabled={busy} onSubmit={(amount) => startUnstake(panel, amount)} />
+          <AmountForm field="stake" label="Stake" action="Stake" max={position.balance} maxLabel="your wallet balance" disabled={busy || settling} onSubmit={(amount, onLanded) => stakeMonkey(panel, amount, onLanded)} />
+          <AmountForm field="unstake" label="Unstake" action="Start unstake" max={position.staked} maxLabel="your stake" disabled={busy || settling} onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)} />
           <p className={NOTE}>
             {staking === null ? "An unstake waits out a cooldown before it can be completed." : `An unstake waits ${formatDuration(staking.cooldown_ms)} before it can be completed.`} Until then it still counts as staked, so it stays in your share.
           </p>

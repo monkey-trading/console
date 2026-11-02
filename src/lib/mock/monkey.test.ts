@@ -83,17 +83,46 @@ describe("staking in the mock", () => {
 });
 
 describe("distribution epochs in the mock", () => {
-  it("pays a staker its share at each close it was staked for, and posts a checkpoint with it", () => {
+  it("pays a staker its exact share of what the close allocates, and posts a checkpoint with it", () => {
     const state = node();
     stake(state, ME, 500n * MONKEY_UNIT);
     expect(() => distributionProof(state, ME)).toThrow(EngineError);
-    // Advance the clock past several closes, one of them (every seventh epoch) paying nothing.
-    advance(state, state.now + 4 * EPOCH_MS);
+    // A house holding exactly 10,000 USD above the floor: that is what the next close shares, in USDC base units.
+    state.houseCash = FLOOR_USD + fixedFromInt(10_000);
+    // The vault's posted checkpoint is behind the log, and the clock has not reached the next close, so only a close can move it.
+    const lastClosed = state.monkey.epochs[state.monkey.epochs.length - 1]?.closedMs ?? 0;
+    state.seq = 500;
+    state.postedSeq = 3;
+    closeDistributionEpochs(state);
+    expect(state.postedSeq).toBe(3);
+    expect(state.monkey.distEntitled.has(ME)).toBe(false);
+    // The clock reaches exactly one close.
+    state.now = lastClosed + EPOCH_MS;
+    closeDistributionEpochs(state);
+    const close = state.monkey.epochs[state.monkey.epochs.length - 1];
+    expect(close).toMatchObject({ closedMs: lastClosed + EPOCH_MS, allocated: 10_000n * 1_000_000n });
+    // Staked 500 of the total the engine counts at the close.
+    const total = state.monkey.totalStakedAt(lastClosed + EPOCH_MS);
+    const expectedShare = (10_000n * 1_000_000n * (500n * MONKEY_UNIT)) / total;
+    expect(expectedShare).toBeGreaterThan(0n);
     const proof = distributionProof(state, ME);
-    expect(BigInt(proof.entitled)).toBeGreaterThan(0n);
-    expect(proof.seq).toBe(state.postedSeq);
-    const closed = state.monkey.epochs.filter((close) => close.closedMs > START);
-    expect(closed.length).toBeGreaterThanOrEqual(4);
+    expect(BigInt(proof.entitled)).toBe(expectedShare);
+    expect(proof.seq).toBe(500);
+    expect(state.postedSeq).toBe(500);
+    // The next close adds its share to the cumulative figure.
+    state.houseCash = FLOOR_USD + fixedFromInt(4_000);
+    state.now = lastClosed + 2 * EPOCH_MS;
+    closeDistributionEpochs(state);
+    const second = (4_000n * 1_000_000n * (500n * MONKEY_UNIT)) / state.monkey.totalStakedAt(lastClosed + 2 * EPOCH_MS);
+    expect(BigInt(distributionProof(state, ME).entitled)).toBe(expectedShare + second);
+  });
+
+  it("serves its proofs at the posted checkpoint as the newest and claimable, as the node's claim answers say", () => {
+    const state = node();
+    stake(state, ME, 500n * MONKEY_UNIT);
+    state.postedSeq = 9;
+    state.monkey.distEntitled.set(ME, 1_234n);
+    expect(distributionProof(state, ME)).toMatchObject({ seq: 9, entitled: "1234", accepted_seq: 9, newest_seq: 9, newest_entitled: "1234", claimable: true });
   });
 
   it("closes each epoch once", () => {

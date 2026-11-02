@@ -27,7 +27,7 @@ export function DistributionClaim() {
     <Card
       id="distributions-title"
       title="USDC distributions"
-      aside={wallet !== null && !readOnly && <button type="button" onClick={() => void panel.refreshWallet(true)} className={LINK_BUTTON}>Refresh<span className="sr-only"> your distributions</span></button>}
+      aside={wallet !== null && <button type="button" onClick={() => void panel.refreshWallet(true)} className={LINK_BUTTON}>Refresh<span className="sr-only"> your distributions</span></button>}
     >
       {wallet === null ? (
         <p className={NOTE}>Connect a wallet to see your USDC distributions.</p>
@@ -42,6 +42,7 @@ export function DistributionClaim() {
           {position.claimable > 0n && <Row label="Claimable">{formatUsdc(usdcFixed(position.claimable))}</Row>}
         </dl>
       )}
+      {proof !== null && position.awaiting > 0n && <p className={NOTE}>{formatUsdc(usdcFixed(position.awaiting))} of this is not claimable yet; the rest follows once the vault reaches the newest checkpoint.</p>}
       {mine && <ReadNote read={figures.proof} />}
       {mine && figures.position.status === "failed" && <ReadNote read={figures.position} />}
       {mine && readOnly && proof !== null && <p role="status" className="text-caption leading-relaxed text-amber">Claiming is off: this account is read-only, so nothing can be signed for it. What the vault has paid is read from a wallet&apos;s own chain connection, which a watched account does not have.</p>}

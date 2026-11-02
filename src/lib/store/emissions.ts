@@ -3,16 +3,19 @@
  * record, the background read of that record, and the claim that closes the gap.
  */
 
+import { accruedOf, carryAccrued } from "../engine/claim-standing";
 import type { EntitlementProof } from "../engine/emissions";
 import type { Wallet } from "../engine/wallet";
 import { formatMonkey } from "../format";
 import { errorText, prompting } from "./signing";
 import type { ConsoleStore } from "./store";
 
-/** Where the account's MONKEY stands: what the node's last posted root proves owed against what the vault has minted. */
+/** Where the account's MONKEY stands: what it has earned, what the node's proof against the vault's checkpoint owes, and what the vault has minted. */
 export interface EmissionsPosition {
-  /** The cumulative entitlement the proof names, in MONKEY base units; zero before the node holds one. */
+  /** The cumulative entitlement at the node's newest checkpoint (`newest_entitled`, else the proof's own), in MONKEY base units; zero before the node holds one. */
   accrued: bigint;
+  /** The part of `accrued` the proof does not cover: it can be claimed once the vault accepts the newest checkpoint. Zero from a node that does not say. */
+  awaiting: bigint;
   /** What the vault has minted so far, or null before its record has been read. */
   claimed: bigint | null;
   /**
@@ -22,18 +25,19 @@ export interface EmissionsPosition {
    * `superseded` once a newer checkpoint has passed it.
    */
   checkpoint: "unknown" | "waiting" | "posted" | "superseded";
-  /** What a claim would mint now; zero unless the checkpoint is posted and something is due. */
+  /** What a claim would mint now: the proof's entitlement less what the vault has minted; zero unless the checkpoint is posted. */
   claimable: bigint;
 }
 
 /** The account's MONKEY position from what the page holds; nothing is claimable without a proof. */
 export function emissionsPosition(entitlement: EntitlementProof | null, vault: { claimed: bigint; latestSeq: number } | null): EmissionsPosition {
-  if (entitlement === null) return { accrued: 0n, claimed: vault?.claimed ?? null, checkpoint: "unknown", claimable: 0n };
-  const accrued = BigInt(entitlement.entitled);
+  if (entitlement === null) return { accrued: 0n, awaiting: 0n, claimed: vault?.claimed ?? null, checkpoint: "unknown", claimable: 0n };
+  const proven = BigInt(entitlement.entitled);
+  const accrued = accruedOf(entitlement);
   const claimed = vault?.claimed ?? null;
   const checkpoint = vault === null ? "unknown" : vault.latestSeq < entitlement.seq ? "waiting" : vault.latestSeq === entitlement.seq ? "posted" : "superseded";
-  const claimable = checkpoint === "posted" && claimed !== null ? (accrued > claimed ? accrued - claimed : 0n) : 0n;
-  return { accrued, claimed, checkpoint, claimable };
+  const claimable = checkpoint === "posted" && claimed !== null ? (proven > claimed ? proven - claimed : 0n) : 0n;
+  return { accrued, awaiting: accrued - proven, claimed, checkpoint, claimable };
 }
 
 /**
@@ -98,7 +102,7 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
     for (let attempt = 1; ; attempt += 1) {
       const [record, proof] = await Promise.all([readRecord(), store.deps.client.emissions(wallet.address)]);
       if (store.liveWallet !== wallet) return; // the wallet changed while the reads ran; its claim is not this one's
-      store.patch({ entitlement: proof, emissionsVault: record });
+      store.patch({ entitlement: proof === null ? null : carryAccrued(store.getSnapshot().entitlement, proof), emissionsVault: record });
       if (proof === null) return store.toast("info", "The node holds no entitlement proof for this account right now.");
       if (proof.seq === record.latestSeq) {
         const due = BigInt(proof.entitled) - record.claimed;

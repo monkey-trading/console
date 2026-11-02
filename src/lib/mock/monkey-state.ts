@@ -5,6 +5,7 @@
  * mock's clock closes after it is recorded on top. `monkey.ts` serves these as the node's routes.
  */
 
+import type { ClaimStanding } from "../engine/emissions";
 import { fixedFromInt, type Fixed } from "../fixed";
 import { MONKEY_UNIT } from "../format";
 import { mulberry32, SEED } from "../prng";
@@ -27,6 +28,11 @@ const UTILISATION_PERCENT = 62n;
 const BASE_STAKED_START = 1_400_000n * MONKEY_UNIT;
 const BASE_STAKED_GROWTH = 600_000n * MONKEY_UNIT;
 const OTHER_STAKERS = 187;
+
+/** What the node's claim answers say beside the proof. The mock's vault posts a checkpoint with every close, so its proofs are at the newest and claimable. */
+export function postedStanding(postedSeq: number, entitled: bigint): ClaimStanding {
+  return { accepted_seq: postedSeq, newest_seq: postedSeq, newest_entitled: entitled.toString(), claimable: true };
+}
 
 export interface MockActivity {
   id: number;

@@ -52,6 +52,9 @@ export function EmissionsCard({ refresh, claim }: { refresh: () => void; claim: 
           {position.claimable > 0n && (
             <button type="button" aria-disabled={!idle || readOnly.readOnly} aria-describedby={readOnly.describedBy} onClick={() => !readOnly.readOnly && act()} className={BUTTON}>Claim {formatMonkey(position.claimable)} on the vault</button>
           )}
+          {position.awaiting > 0n && (
+            <p className="mt-2 text-fg-3">{formatMonkey(position.awaiting)} of this is not claimable yet; the rest follows once the vault reaches the newest checkpoint.</p>
+          )}
           {position.claimed !== null && position.checkpoint === "waiting" && position.accrued > position.claimed && (
             <p className="mt-2 text-fg-3">The vault has not posted a checkpoint covering this yet; the claim unlocks once one posts. Refresh to check again.</p>
           )}
