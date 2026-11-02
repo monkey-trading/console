@@ -1,11 +1,12 @@
 "use client";
 
-/** Resting orders with a Cancel button: a table from 1024 px, cards below. */
+/** Resting orders with a Cancel button each and a Cancel all above them: a table from 1024 px, cards below. */
 
 import { useId } from "react";
 
 import { fixedFromWire, formatFixedPlaces } from "@/lib/fixed";
 import { cancelOrder } from "@/lib/store/actions";
+import { cancelAll } from "@/lib/store/batch-actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
@@ -18,7 +19,8 @@ export function OrdersView() {
   const { account, markets, busy } = useConsole();
   const { store } = useSession();
   const readOnly = useReadOnlyNote(useId(), "Cancel");
-  if ((account?.orders.length ?? 0) === 0) return <p className="px-4 py-6 text-caption text-fg-3">No resting orders.</p>;
+  const count = account?.orders.length ?? 0;
+  if (count === 0) return <p className="px-4 py-6 text-caption text-fg-3">No resting orders.</p>;
   const rows = (account?.orders ?? []).map((o) => {
     const market = markets.find((m) => m.id === o.market);
     return {
@@ -34,6 +36,10 @@ export function OrdersView() {
   return (
     <>
       {readOnly.note}
+      <div className="border-b border-line px-4 py-3 lg:py-2">
+        {/* One signature and one request for every resting order in every market, so it asks nothing more. */}
+        <button type="button" disabled={busy || readOnly.readOnly} className={`${BUTTON} w-full lg:w-auto`} aria-describedby={readOnly.describedBy} onClick={(event) => { keepFocus(event.currentTarget); void cancelAll(store); }}>Cancel all ({count})</button>
+      </div>
       <ul className="lg:hidden">
         {rows.map((r) => (
           <li key={r.id} className="border-b border-line px-4 py-3 text-caption last:border-b-0">

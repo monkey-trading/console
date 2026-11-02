@@ -14,8 +14,8 @@ history and a withdrawal in the queue; Mock controls can reset it to an empty ac
 A build can instead talk to a real engine node: it checks the node's attestation, shows only answers the
 attested enclave signed for the request, and follows the node's signed stream, which starts at the live end of the log and reconnects there, marking the feed stale
 (and disabling order entry) when it stops. With a browser wallet, or a wallet app over WalletConnect, it
-deposits USDC to the vault, signs the engine's typed requests (orders, cancels, withdrawals, the eligibility
-declaration) for a node whose attestation it accepts. Orders and cancels sign with an ephemeral in-browser
+deposits USDC to the vault, signs the engine's typed requests (orders, cancels, cancel all and close all, withdrawals, the eligibility
+declaration) for a node whose attestation it accepts. Orders, cancels and the two batches sign with an ephemeral in-browser
 session key the wallet authorizes with one signature at connect; deposits, withdrawals and claims always use
 the wallet. It trades at the executable quote the node streams for the account, and claims approved
 withdrawals on the vault. The checks run

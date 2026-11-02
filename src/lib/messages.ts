@@ -54,6 +54,7 @@ export function describeReject(reject: Reject): string {
     case "expired": return "The request had already expired.";
     case "expiry_too_far": return "The expiry was past the node's bound.";
     case "too_many_session_keys": return "This account already holds the most session keys the node allows.";
+    case "batch_unsupported": return "This node cannot cancel or close everything in one request yet. It needs the newer protocol version.";
   }
   // A refusal the engine adds later must get a case above; until then the user still sees that one happened.
   return unnamed(reject);

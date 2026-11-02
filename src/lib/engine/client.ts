@@ -9,7 +9,7 @@ import type { ScanBudget, ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import type { QuoteRequest } from "./live-stream";
 import type { StatsReads } from "./stats-types";
-import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
+import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 
 /**
@@ -108,6 +108,19 @@ export interface EngineClient {
   attestEligibility(request: EligibilityRequest): Promise<ActionResult>;
   placeOrder(request: OrderRequest): Promise<ActionResult>;
   cancelOrder(request: CancelRequest): Promise<ActionResult>;
+  /**
+   * Cancels every resting order of the account on one signature and one nonce (from V44): one
+   * `order_cancelled` apiece, none when nothing rests, or a lone `order_rejected` (`client_id` 0)
+   * for a refusal of the request. A node that predates the route answers 404.
+   */
+  cancelAll(request: CancelAllRequest): Promise<ActionResult>;
+  /**
+   * Closes the whole position in each listed market on one signature and one nonce (from V44),
+   * in list order. An entry's rejection is the `order_rejected` a single order would get, with its
+   * list index as `client_id`; a refusal of the whole request is a lone `order_rejected` with
+   * `client_id` 0. A node that predates the route answers 404.
+   */
+  closeAll(request: CloseAllRequest): Promise<ActionResult>;
   withdraw(request: WithdrawalRequest): Promise<ActionResult>;
   /** Registers the account's session key (monkey-trading/console#68); the events name `session_key_registered`, or a `session_key_rejected` refusal. */
   registerSessionKey(request: SessionKeyRequest): Promise<ActionResult>;
