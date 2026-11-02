@@ -17,7 +17,7 @@ import { shortHex } from "../format";
 import { liveSessionKey } from "./session";
 import { domainOf, errorText, signed } from "./signing";
 import type { ConsoleStore } from "./store";
-import { sessionEnded } from "./wallet-session";
+import { revocationFreesSlot, sessionEnded } from "./wallet-session";
 
 /** How often the list is read when nothing tells the page it changed: the node signs every answer, so this is slow. */
 export const SESSION_REFRESH_MS = 60_000;
@@ -117,7 +117,6 @@ export class SessionList {
     const { store } = this;
     const wallet = store.liveWallet;
     if (wallet === null || this.state.revoking !== null) return;
-    const own = this.state.ownKey?.toLowerCase() === address.toLowerCase();
     this.patch({ revoking: address });
     try {
       const out = await signed(store, `revoke the trading authorization of session key ${shortHex(address)}`, (terms, account) => revokeSessionKeyTypedData(domainOf(store), account, address, terms), (auth, signer) =>
@@ -128,8 +127,10 @@ export class SessionList {
         store.toast("error", describeReject(refused.reason));
       } else if (out.result.events.some((e) => e.type === "session_key_revoked")) {
         this.patch({ keys: this.state.keys.filter((k) => k.address !== address.toLowerCase()) });
+        revocationFreesSlot(store);
+        // Worked out after the signature: a login in another tab may have replaced the key meanwhile, and then only the old one was revoked.
         // The stream's copy of this revocation may already have ended the session, in which case this does nothing.
-        if (own) return sessionEnded(store, "You revoked this browser's trading authorization, so the console disconnected the wallet.");
+        if (store.sessionKey?.address.toLowerCase() === address.toLowerCase()) return sessionEnded(store, "You revoked this browser's trading authorization, so the console disconnected the wallet.");
         store.toast("ok", `Session key ${shortHex(address)} revoked.`);
       }
       if (this.mayRead()) void this.read();

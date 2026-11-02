@@ -6,7 +6,7 @@ import type { EntitlementProof } from "../engine/emissions";
 import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
 import type { ActivityPage, MonkeyView, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "../engine/stats-types";
-import type { AccountView, HistoryPage, MarketId, PriceRules, StreamMessage, MarketView } from "../engine/types";
+import type { AccountView, EligibilityClass, HistoryPage, MarketId, PriceRules, StreamMessage, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
@@ -101,7 +101,11 @@ export class FakeClient implements EngineClient {
   }
   async accessProbe() {}
   async nonce() { return { next_nonce: 0 }; }
-  async eligibility() { return { class: null, statement: null }; }
+  /** The declaration the eligibility read answers with, and how many times it and the withdrawal queue were read. */
+  declared: EligibilityClass | null = null;
+  eligibilityReads = 0;
+  queueReads = 0;
+  async eligibility() { this.eligibilityReads++; return { class: this.declared, statement: null }; }
   /** The account's entitlement proof; a test may set it. */
   entitlement: EntitlementProof | null = null;
   async emissions() { this.emissionsReads++; return this.entitlement; }
@@ -125,7 +129,7 @@ export class FakeClient implements EngineClient {
     return page;
   }
   quotes() {}
-  async withdrawalQueue() { return { seq: 1, queue: [], next: null }; }
+  async withdrawalQueue() { this.queueReads++; return { seq: 1, queue: [], next: null }; }
   /** Canned history, replaced by a test: what each `history` read answers, and the reads made. */
   historyAnswer: (params: { kind?: string; before?: string; limit?: number }) => HistoryPage = () => ({ events: [], next: null });
   historyReads: { address: string; kind?: string; before?: string; limit?: number }[] = [];

@@ -35,13 +35,13 @@ const signatures = (provider: { calls: { method: string }[] }) => provider.calls
 
 describe("one tab's removal of the shared key", () => {
   it("disconnects the other tab with no prompt, while only the first revokes", async () => {
-    const { storage, a, b } = await twoTabs();
+    const { a, b } = await twoTabs();
     expect(liveSessionKey(b.store)?.address).toBe(liveSessionKey(a.store)?.address);
     expect(signatures(b.provider)).toEqual([]);
     disconnectWallet(a.store);
     await settle();
     expect(a.client.posted.some((p) => p.route === "session_key_revoke")).toBe(true);
-    storedKeyChanged(b.store, NAME, storage.getItem(NAME)); // the storage event, as the browser fires it in the other tab
+    storedKeyChanged(b.store, NAME); // the storage event, as the browser fires it in the other tab
     await settle();
     expect(b.store.getSnapshot().wallet).toBeNull();
     expect(b.store.getSnapshot().toasts.at(-1)?.text).toBe("This browser's trading authorization ended in another tab, so your wallet was disconnected here too. Connect again to renew it.");
@@ -50,15 +50,53 @@ describe("one tab's removal of the shared key", () => {
   });
 
   it("disconnects the other tab when the whole storage is cleared", async () => {
-    const { b } = await twoTabs();
-    storedKeyChanged(b.store, null, null);
+    const { storage, b } = await twoTabs();
+    storage.held.clear();
+    storedKeyChanged(b.store, null);
     expect(b.store.getSnapshot().wallet).toBeNull();
+  });
+
+  it("keeps a tab that has since stored a newer key, however late the removal event runs", async () => {
+    const { storage, b } = await twoTabs();
+    storage.removeItem(NAME); // the first tab's removal, whose event is still queued here
+    const newer = SessionKeySigner.generate();
+    saveSessionKey(storage, SCOPE, newer, NODE_TIME + 1000); // this tab's own registration lands first
+    storedKeyChanged(b.store, NAME);
+    expect(b.store.getSnapshot().wallet?.address).toBe(ACCOUNT);
+    expect(liveSessionKey(b.store)?.address).toBe(newer.address);
+    expect(b.store.getSnapshot().toasts).toEqual([]);
+  });
+
+  it("keeps a tab that has since stored a newer key when a whole-storage clear event runs late", async () => {
+    const { storage, b } = await twoTabs();
+    storage.held.clear();
+    const newer = SessionKeySigner.generate();
+    saveSessionKey(storage, SCOPE, newer, NODE_TIME + 1000);
+    storedKeyChanged(b.store, null);
+    expect(liveSessionKey(b.store)?.address).toBe(newer.address);
+  });
+
+  it("holds the key storage holds now when a queued write would replace it with an older one", async () => {
+    const { storage, b } = await twoTabs();
+    const newer = SessionKeySigner.generate();
+    saveSessionKey(storage, SCOPE, newer, NODE_TIME + 2000);
+    storedKeyChanged(b.store, NAME); // the event for the older write reaches here after the newer one is stored
+    expect(liveSessionKey(b.store)?.address).toBe(newer.address);
+    expect(b.store.getSnapshot().sessionExpiresAt).toBe(NODE_TIME + 2000);
+  });
+
+  it("does not disconnect on storage that cannot be read", async () => {
+    const { storage, b } = await twoTabs();
+    storage.getItem = () => { throw new Error("denied"); };
+    storedKeyChanged(b.store, NAME);
+    expect(b.store.getSnapshot().wallet?.address).toBe(ACCOUNT);
   });
 
   it("leaves a stored choice the first tab has since saved again", async () => {
     const { storage, b } = await twoTabs();
     saveChoice(storage, { kind: "walletconnect", topic: "newer" });
-    storedKeyChanged(b.store, NAME, null);
+    storage.removeItem(NAME);
+    storedKeyChanged(b.store, NAME);
     expect(b.store.getSnapshot().wallet).toBeNull();
     expect(loadChoice(storage)).toEqual({ kind: "walletconnect", topic: "newer" });
   });
@@ -66,13 +104,15 @@ describe("one tab's removal of the shared key", () => {
   it("forgets the stored choice when it names this connection", async () => {
     const { storage, b } = await twoTabs();
     saveChoice(storage, { kind: "injected" });
-    storedKeyChanged(b.store, NAME, null);
+    storage.removeItem(NAME);
+    storedKeyChanged(b.store, NAME);
     expect(loadChoice(storage)).toBeNull();
   });
 
   it("treats a value this console would not use as a removal, never as a key", async () => {
-    const { b } = await twoTabs();
-    storedKeyChanged(b.store, NAME, "not json");
+    const { storage, b } = await twoTabs();
+    storage.setItem(NAME, "not json");
+    storedKeyChanged(b.store, NAME);
     expect(b.store.getSnapshot().wallet).toBeNull();
     expect(b.store.sessionKey).toBeNull();
   });
@@ -81,17 +121,17 @@ describe("one tab's removal of the shared key", () => {
     const storage = memoryStorage();
     const fresh = await tab(storage);
     await connectWallet(fresh.store, "injected");
-    storedKeyChanged(fresh.store, NAME, null);
+    storedKeyChanged(fresh.store, NAME);
     expect(fresh.store.getSnapshot().wallet?.address).toBe(ACCOUNT); // no key here to end
 
     const { b } = await twoTabs();
-    storedKeyChanged(b.store, sessionKeyName({ ...SCOPE, account: "0x0000000000000000000000000000000000000abc" }), null);
-    storedKeyChanged(b.store, "monkeytrading.wallet-choice", null);
+    storedKeyChanged(b.store, sessionKeyName({ ...SCOPE, account: "0x0000000000000000000000000000000000000abc" }));
+    storedKeyChanged(b.store, "monkeytrading.wallet-choice");
     expect(b.store.getSnapshot().wallet?.address).toBe(ACCOUNT);
 
     const watcher = await tab(storage);
     await connectWallet(watcher.store, "watch", true, { address: ACCOUNT, label: "Watching", readOnly: true, sign: async () => "0x", deposit: async () => "0x", claim: async () => "0x" });
-    storedKeyChanged(watcher.store, NAME, null);
+    storedKeyChanged(watcher.store, NAME);
     expect(watcher.store.getSnapshot().wallet?.address).toBe(ACCOUNT);
   });
 });
@@ -104,7 +144,7 @@ describe("a new key another tab registered", () => {
     expect(waiting.store.getSnapshot().setup.open).toBe(true);
     const key = SessionKeySigner.generate();
     saveSessionKey(storage, SCOPE, key, NODE_TIME + 1000);
-    storedKeyChanged(waiting.store, NAME, storage.getItem(NAME));
+    storedKeyChanged(waiting.store, NAME);
     expect(liveSessionKey(waiting.store)?.address).toBe(key.address);
     expect(waiting.store.getSnapshot().sessionExpiresAt).toBe(NODE_TIME + 1000);
     expect(signatures(waiting.provider)).toEqual([]);
@@ -113,11 +153,11 @@ describe("a new key another tab registered", () => {
   it("replaces the key a tab holds, and is ignored when it is the one it holds", async () => {
     const { storage, b } = await twoTabs();
     const held = liveSessionKey(b.store);
-    storedKeyChanged(b.store, NAME, storage.getItem(NAME));
+    storedKeyChanged(b.store, NAME);
     expect(liveSessionKey(b.store)).toBe(held); // the same key: not swapped for a copy
     const newer = SessionKeySigner.generate();
     saveSessionKey(storage, SCOPE, newer, NODE_TIME + 1000);
-    storedKeyChanged(b.store, NAME, storage.getItem(NAME));
+    storedKeyChanged(b.store, NAME);
     expect(liveSessionKey(b.store)?.address).toBe(newer.address);
   });
 
@@ -144,7 +184,7 @@ describe("a refusal of a key another tab has since replaced", () => {
     const ordering = placeOrder(a.store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
     await settle();
     saveSessionKey(storage, SCOPE, newer, NODE_TIME + 1000);
-    storedKeyChanged(a.store, NAME, storage.getItem(NAME)); // the other tab's key arrives while the answer is on its way
+    storedKeyChanged(a.store, NAME); // the other tab's key arrives while the answer is on its way
     refuse();
     expect(await ordering).toBe(false);
     expect(a.store.getSnapshot().wallet?.address).toBe(ACCOUNT);

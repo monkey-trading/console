@@ -11,7 +11,7 @@ export const FEED_LIMIT = 150;
  * receipt names.
  */
 export function eventAccount(event: EngineEvent): string | undefined {
-  if ("account" in event) return event.account.toLowerCase();
+  if ("account" in event) return event.account?.toLowerCase(); // a house deposit's account is null: nobody's
   if (event.type === "custody_deposit_changed" && event.receipt.beneficiary.kind === "trader") return event.receipt.beneficiary.account.toLowerCase();
   return undefined;
 }
@@ -19,7 +19,7 @@ export function eventAccount(event: EngineEvent): string | undefined {
 /** Whether an event belongs in this user's activity: market events, and events of their own account. */
 export function isMine(event: EngineEvent, mine: string | undefined): boolean {
   if (!("account" in event)) return true;
-  return mine !== undefined && event.account.toLowerCase() === mine.toLowerCase();
+  return mine !== undefined && event.account !== null && event.account.toLowerCase() === mine.toLowerCase();
 }
 
 /** Activity lines for a batch of messages, newest first, as the stream handler adds them; `nextId` numbers each line. */
@@ -29,7 +29,7 @@ export function feedFrom(messages: readonly StreamMessage[], markets: readonly {
     message.events.flatMap((event) => {
       if (!isMine(event, mine)) return [];
       const text = describeEvent(event, symbolOf);
-      return text === null ? [] : [{ id: nextId(), ts: message.ts, text, ...("account" in event ? { account: event.account.toLowerCase() } : {}) }];
+      return text === null ? [] : [{ id: nextId(), ts: message.ts, text, ...("account" in event && event.account !== null ? { account: event.account.toLowerCase() } : {}) }];
     }),
   );
   return lines.reverse().slice(0, FEED_LIMIT);

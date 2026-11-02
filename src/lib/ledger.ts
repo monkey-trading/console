@@ -164,7 +164,7 @@ export function addMessage(data: LedgerData, message: StreamMessage, account: st
   let closed = data.closedThrough;
   message.events.forEach((event, index) => {
     if (event.type === "emission_period_closed") closed = Math.max(closed, event.period);
-    else if ("account" in event && event.account.toLowerCase() === mine) entries.push({ ...event, cursor: `${message.seq}:${index}`, ts: message.ts });
+    else if ("account" in event && event.account?.toLowerCase() === mine) entries.push({ ...event, cursor: `${message.seq}:${index}`, ts: message.ts });
   });
   const folded = fold(data, entries);
   return closed === folded.closedThrough ? bound(folded) : bound({ ...folded, closedThrough: closed });

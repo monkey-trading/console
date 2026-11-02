@@ -123,7 +123,7 @@ export class ConsoleStore {
     this.ledger.walletChanged(wallet?.address);
     this.viewer = undefined; // once a wallet has been connected or left, the starting viewer no longer applies
     this.lastEmissionsReadError = null; // a new wallet's vault reads start fresh: no stale latch
-    this.lastAccountError = null; // its account reads start fresh too: the same failure under a new wallet is reported
+    this.lastAccountError = null; this.quiet.accountEvent(); // its account reads start fresh too: the same failure under a new wallet is reported, and no rest of the last wallet's reads holds
     const mine = wallet?.address.toLowerCase();
     this.patch({ wallet, accountRead: false, feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
   }
@@ -248,7 +248,7 @@ export class ConsoleStore {
       this.quiet.accountEvent(); // the credit this event may carry is read at once, not at the next rest's end
       void this.refresh(true);
     } else if (message.cmd.type === "tick") {
-      const accountChanged = message.events.some((e) => "account" in e);
+      const accountChanged = message.events.some((e) => "account" in e && e.account !== null);
       if (this.pacing) this.pacing.readOnTick(accountChanged);
       else void this.refresh(accountChanged);
     }

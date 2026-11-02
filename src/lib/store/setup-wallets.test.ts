@@ -176,7 +176,7 @@ describe("as the wallet changes around it", () => {
     await settle();
     const key = SessionKeySigner.generate();
     saveSessionKey(storage, SCOPE, key, NODE_TIME + 1000);
-    storedKeyChanged(store, sessionKeyName(SCOPE), storage.getItem(sessionKeyName(SCOPE)));
+    storedKeyChanged(store, sessionKeyName(SCOPE));
     answer({ class: null, statement: null });
     await reading;
     expect(liveSessionKey(store)?.address).toBe(key.address);
