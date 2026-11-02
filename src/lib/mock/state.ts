@@ -100,7 +100,6 @@ const LAUNCH_PARAMS: HouseParams = {
   totalCapBps: 20000,
   totalCapFloor: fixedFromInt(2_000_000),
   seq: null,
-  fresh: "current",
 };
 
 export class MockState {

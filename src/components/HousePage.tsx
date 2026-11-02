@@ -6,10 +6,14 @@
  * figure from an answer the node's enclave signed, refreshed on the stream's cadence.
  */
 
+import { useEffect } from "react";
+
 import { signBlock } from "@/lib/engine/attestation";
 import { formatRate } from "@/lib/format";
 import { formatUsd } from "@/lib/fixed";
-import { capFor, utilBps, type HouseParams } from "@/lib/house";
+import { capFor, utilBps } from "@/lib/house";
+import { openHousePanel } from "@/lib/store/house";
+import type { ConsoleState } from "@/lib/store/state";
 
 import { HouseCaps } from "./HouseCaps";
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -39,17 +43,18 @@ function Figure({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** The note the Parameters panel carries while the log read feeding its values is still running, or keeps failing. */
-function freshnessNote(params: HouseParams): string {
-  return params.fresh === "failed"
-    ? "The log read keeps failing, so these are the latest values it read, which may not be the latest the log records."
-    : "The log read is still catching up, so these are the latest values it read, which may not be the latest the log records.";
+/** What a panel fed by the node's house state says while it has nothing to show; `none` is the answer of a node that holds none. */
+function unread(status: ConsoleState["houseStateStatus"], none: string): string {
+  if (status === "unavailable") return "Not available: this node does not serve the house state yet.";
+  return status === "pending" ? "Waiting for the node's answer." : none;
 }
 
 /** The House solvency screen. */
 export function HousePage() {
   const state = useConsole();
-  const { signatures } = useSession().store.deps.client;
+  const { store } = useSession();
+  const { signatures } = store.deps.client;
+  useEffect(() => openHousePanel(store), [store]);
   const block = signBlock(state.attestation, state.stream);
   const ready = block === null && state.houseReady;
   const house = state.house;
@@ -94,10 +99,7 @@ export function HousePage() {
             <section aria-labelledby="cap" className={CARD}>
               <h2 id="cap" className={H2}>Exposure against the cap</h2>
               {params === null ? (
-                <p className={P}>
-                  The cap&apos;s parameters are read from the node&apos;s public log; that read{" "}
-                  {state.houseStatus === "failed" ? "keeps failing before any have been read." : "has not finished."}
-                </p>
+                <p className={P}>{unread(state.houseStateStatus, "The cap's parameters have not been set in the log yet.")}</p>
               ) : used === null || totalCap === null ? (
                 <p className={P}>The cap is not positive at the current net asset value, so no utilisation can be stated.</p>
               ) : (
@@ -152,10 +154,7 @@ export function HousePage() {
             <section aria-labelledby="parameters" className={CARD}>
               <h2 id="parameters" className={H2}>Parameters</h2>
               {params === null ? (
-                <p className={P}>
-                  The parameters are read from the node&apos;s public log; that read{" "}
-                  {state.houseStatus === "failed" ? "keeps failing before any have been read." : "has not finished."}
-                </p>
+                <p className={P}>{unread(state.houseStateStatus, "No parameters have been set in the log yet.")}</p>
               ) : (
                 <>
                   <dl className="grid grid-cols-2 gap-4">
@@ -168,18 +167,13 @@ export function HousePage() {
                     launch values, and only after a public notice of at least seven days
                     {params.seq === null ? "." : `; the log records the current values at seq ${params.seq}.`}
                   </p>
-                  {params.fresh !== "current" && <p className={P}>{freshnessNote(params)}</p>}
                 </>
               )}
             </section>
             <section aria-labelledby="checkpoints" className={CARD}>
               <h2 id="checkpoints" className={H2}>Checkpoints</h2>
               {state.checkpoint === null ? (
-                <p className={P}>
-                  {state.houseStatus === "failed"
-                    ? "The log read keeps failing before any checkpoint has been read."
-                    : "No checkpoint has been read from the log yet."}
-                </p>
+                <p className={P}>{unread(state.houseStateStatus, "The log holds no checkpoint yet.")}</p>
               ) : (
                 <>
                   <dl className="grid grid-cols-2 gap-4">
@@ -194,15 +188,6 @@ export function HousePage() {
                     replay the log to a checkpoint&apos;s sequence and check its root, and the vault stops taking deposits if the
                     enclave stops posting roots.
                   </p>
-                  {state.houseStatus === "reading" && (
-                    <p className={P}>
-                      The log read is still catching up, so a newer checkpoint may follow; replaying the log to this
-                      checkpoint&apos;s sequence still checks its root.
-                    </p>
-                  )}
-                  {state.houseStatus === "failed" && (
-                    <p className={P}>The log read keeps failing, so a newer checkpoint may exist that this page has not read.</p>
-                  )}
                   {signatures === "none" && <p className={P}>This build runs the in-browser simulation: it signs nothing, and the roots above are the mock&apos;s stand-ins.</p>}
                 </>
               )}

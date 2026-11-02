@@ -42,11 +42,11 @@ export function DealTicket() {
   const [chosenSlippage, setSlippage] = useState<number>(10);
   const market = state.markets.find((m) => m.id === state.selected);
   if (!market) return null;
-  const size = sizeShown(typedSize, market);
+  const triggerPrice = parseFixed(price);
+  const size = sizeShown(typedSize, market, kind === "market" ? null : triggerPrice);
   const slippage = slippageBound(chosenSlippage, market);
   const parsedSize = parseSize(size);
   const qty = parsedSize.kind === "qty" ? parsedSize.qty : 0n;
-  const triggerPrice = parseFixed(price);
   const live = state.signatures === "checked";
   // The margin use after the order comes from the console's own quote model, which does not know a live node's toxicity spread, so it is shown only for the in-browser node.
   const preview = previewTicket({ market, side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice, account: state.account, houseNav: state.house.nav, estimates: !live });

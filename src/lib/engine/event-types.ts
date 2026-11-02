@@ -20,6 +20,7 @@ export type EngineEvent =
   | { type: "financing"; account: Address; market: MarketId; amount: string }
   | { type: "bad_debt"; account: Address; amount: string }
   | { type: "eligibility_rejected"; account: Address; reason: Reject }
+  | { type: "prices_rejected"; market: MarketId; reason: string }
   | { type: "market_opened"; market: MarketId }
   | { type: "market_closed"; market: MarketId }
   | { type: "stress_changed"; market: MarketId; level: number }

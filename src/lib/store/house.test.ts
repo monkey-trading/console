@@ -1,14 +1,22 @@
-/** Tests for the store's house panel state: the parameters, the latest checkpoint, and the withdrawal queue's totals. */
+/** Tests for the store's house panel state: the node's house state (parameters and latest checkpoint) and the withdrawal queue's totals. */
 
 import { describe, expect, it } from "vitest";
 
 import { fixedFromWire } from "../fixed";
 import { QueueTotalsRetrying } from "../engine/live-queue";
 import { settle } from "../engine/test-kit";
-import { ACCOUNT, setup } from "./live-fake";
+import { openHousePanel } from "./house";
+import { ACCOUNT, setup as setupClosed } from "./live-fake";
 
-const PARAMS = { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, totalCapFloor: fixedFromWire("2000000"), seq: 7, fresh: "current" as const };
+const PARAMS = { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, totalCapFloor: fixedFromWire("2000000"), seq: 7 };
 const CHECKPOINT = { type: "checkpoint" as const, offset: "1200:1", seq: 1200, root: `0x${"ab".repeat(32)}` };
+
+/** A store with the House page on screen, as the panel's reads need. */
+function setup(...args: Parameters<typeof setupClosed>) {
+  const session = setupClosed(...args);
+  openHousePanel(session.store);
+  return session;
+}
 
 describe("the store's house panel state", () => {
   it("starts with nothing read and the figures gated off for a live node", () => {
@@ -144,25 +152,63 @@ describe("the store's house panel state", () => {
 
   it("starts no house reads once the session has stopped", async () => {
     const { client, store } = setup();
-    let reads = 0;
-    const original = client.houseParams.bind(client);
-    client.houseParams = async () => {
-      reads++;
-      return original();
-    };
     const stop = store.start(0);
     stop();
     await settle();
-    expect(reads).toBe(0);
+    expect(client.houseStateReads).toBe(0);
   });
 
-  it("publishes the log read's failure state before any parameters have been read", async () => {
+  it("shows an empty log as read, with no parameters and no checkpoint", async () => {
     const { client, store } = setup();
-    client.logStatus = "failed";
+    client.houseSeq = null;
     store.start(0);
     await settle();
-    expect(store.getSnapshot().houseStatus).toBe("failed");
-    expect(store.getSnapshot().houseParams).toBeNull();
+    expect(store.getSnapshot()).toMatchObject({ houseStateStatus: "read", houseParams: null, checkpoint: null });
+    expect(client.houseStateReads).toBe(1);
+  });
+
+  it("keeps the parameters whose seq the node does not know", async () => {
+    const { client, store } = setup();
+    client.houseSeq = 40;
+    client.params = { ...PARAMS, seq: null };
+    store.start(0);
+    await settle();
+    expect(store.getSnapshot()).toMatchObject({ houseStateStatus: "read", houseParams: { seq: null, profitFeeBps: 1000 } });
+  });
+
+  it("reports a failed read once and shows the panels as waiting, then reads on recovery", async () => {
+    const { client, store } = setup();
+    client.houseStateError = new Error("house state down");
+    store.start(0);
+    await settle();
+    await store.refresh(false);
+    await settle();
+    const state = store.getSnapshot();
+    expect(state.toasts.filter((t) => t.text === "house state down")).toHaveLength(1);
+    expect(state).toMatchObject({ houseStateStatus: "pending", houseParams: null, checkpoint: null });
+    client.houseStateError = null;
+    client.params = PARAMS;
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot()).toMatchObject({ houseStateStatus: "read", houseParams: PARAMS });
+    client.houseStateError = new Error("house state down");
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot().toasts.filter((t) => t.text === "house state down")).toHaveLength(2); // recovery cleared the latch
+  });
+
+  it("shows a node that predates the route as not available, with no toast and no failure", async () => {
+    const { client, store } = setup();
+    client.unavailable = true;
+    client.params = PARAMS;
+    store.start(0);
+    await settle();
+    await store.refresh(false);
+    await settle();
+    const state = store.getSnapshot();
+    expect(state).toMatchObject({ houseStateStatus: "unavailable", houseParams: null, checkpoint: null, houseReady: true });
+    expect(state.toasts).toHaveLength(0);
+    expect(state.withdrawalTotals).not.toBeNull(); // the rest of the page still reads
   });
 
   it("publishes the parameters and checkpoint when the queue walk fails", async () => {
@@ -177,5 +223,38 @@ describe("the store's house panel state", () => {
     expect(state.checkpoint).toEqual(CHECKPOINT);
     expect(state.withdrawalTotals).toBeNull();
     expect(state.toasts.some((t) => t.text === "queue unavailable")).toBe(true);
+  });
+});
+
+describe("the house panel's reads, by whether the page is on screen", () => {
+  it("reads nothing while the House page is closed, though the house figures still load", async () => {
+    const { client, store } = setupClosed();
+    client.params = PARAMS;
+    client.checkpoint = CHECKPOINT;
+    client.totals = { count: 2, remaining: fixedFromWire("30.5"), seq: 9, complete: true, stable: true };
+    store.start(0);
+    await settle();
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot()).toMatchObject({ houseReady: true, houseParams: null, checkpoint: null, withdrawalTotals: null });
+    expect(client.houseStateReads).toBe(0);
+    expect(store.getSnapshot().houseStateStatus).toBe("pending");
+  });
+
+  it("reads at once when the page opens after the first refresh, and stops when it closes", async () => {
+    const { client, store } = setupClosed();
+    client.params = PARAMS;
+    store.start(0);
+    await settle();
+    const close = openHousePanel(store);
+    await settle();
+    expect(store.getSnapshot().houseParams).toEqual(PARAMS);
+    close();
+    expect(client.houseStateReads).toBe(1);
+    client.params = { ...PARAMS, seq: 8 };
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot().houseParams).toEqual(PARAMS); // closed: the newer answer was never read
+    expect(client.houseStateReads).toBe(1);
   });
 });

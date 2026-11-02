@@ -1,24 +1,30 @@
 /**
  * The connected account's approved withdrawals as payouts to claim on the vault: each approval's
- * signed authorization, whether the vault has paid it, and the claim, the search of the log for an
- * authorization the page's stream did not carry, and the request for a fresh one once it expired.
+ * signed authorization (from the node's list of unpaid approvals and from the stream), whether the
+ * vault has paid it, the claim, and the request for a fresh authorization once it expired.
  */
 
 import { EngineError } from "../engine/client";
 import { reissueTypedData } from "../engine/eip712";
-import type { HistoryEvent, SignedWithdrawal } from "../engine/types";
+import type { HistoryEvent, PayoutEntry, SignedWithdrawal } from "../engine/types";
 import { fixedFromWire, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
 import { domainOf, errorText, prompting, usableWallet } from "./signing";
 import { formatStamp } from "../time";
 import { authorizationFor, keepLatest } from "./funds";
-import type { ConsoleState, PayoutHint } from "./state";
+import type { ConsoleState } from "./state";
 import type { ConsoleStore } from "./store";
 
 /** The most approvals one read of the account's history returns: the node's page limit. */
 const APPROVALS_LIMIT = 200;
 /** The most pages of approvals read, so a node that keeps answering with more cannot keep the page reading. */
 const APPROVAL_PAGES = 20;
+/** The most unpaid approvals one read of the node's payouts returns: the node's page limit. */
+const PAYOUTS_LIMIT = 200;
+/** The most pages of payouts read, so a node that keeps answering with more cannot keep the page reading. */
+const PAYOUT_PAGES = 20;
+/** What a row says a failed read will do next: reads happen on triggers, never on a timer. */
+const READ_AGAIN = "It is read again when the next withdrawal is approved or the page reloads.";
 /** Paid payouts shown beside the unpaid ones, newest first. */
 const PAID_SHOWN = 5;
 
@@ -27,30 +33,34 @@ export type PayoutStatus =
   | { kind: "paid" }
   /** Signed and claimable on the vault until `expiresAt` (Unix seconds). */
   | { kind: "claimable"; withdrawal: SignedWithdrawal; expiresAt: number }
-  /** The node signed a newer authorization, valid until `expiresAt`, which the page has not seen. */
-  | { kind: "missed"; expiresAt: number }
   /** Its last authorization expired unclaimed, at `expiresAt`; a fresh one can be asked for. */
   | { kind: "expired"; expiresAt: number }
-  /** Not signed yet as far as the page knows: a checkpoint covering the approval comes first. */
+  /** Not signed yet: a checkpoint covering the approval comes first, and the stream then delivers the authorization. */
   | { kind: "waiting" };
 
 export interface Payout {
   nonce: number;
   amount: Fixed;
-  /** Where a search of the log for its latest authorization starts: the approval, or a later reissue. */
-  searchFrom: number;
   status: PayoutStatus;
   /** Whether the vault's record of the payout has been read, so an unpaid status is known rather than assumed. */
   read: boolean;
 }
 
-/** Where payout `nonce` stands at node time `nowSeconds`. */
-function statusOf(state: ConsoleState, nonce: number, nowSeconds: number): PayoutStatus {
-  if (state.paid.includes(nonce)) return { kind: "paid" };
+/**
+ * Whether the node's list shows the approval paid: it is at or before the last command the complete,
+ * loaded list reflects, and the list does not hold it. An approval after that command, or one whose
+ * seq is unknown, is not settled by the list.
+ */
+function paidByNode(state: ConsoleState, nonce: number, approvedSeq: number | undefined): boolean {
+  const read = state.payoutsRead;
+  return read !== null && approvedSeq !== undefined && approvedSeq <= read.seq && !read.listed.includes(nonce);
+}
+
+/** Where payout `nonce`, approved at `approvedSeq`, stands at node time `nowSeconds`. */
+function statusOf(state: ConsoleState, nonce: number, approvedSeq: number, nowSeconds: number): PayoutStatus {
+  if (state.paid.includes(nonce) || paidByNode(state, nonce, approvedSeq)) return { kind: "paid" };
   const signed = authorizationFor(state, nonce);
   const held = signed?.authorization?.expires_at ?? 0;
-  const newer = state.payoutHints[nonce]?.newerUntil ?? 0;
-  if (newer > held) return newer > nowSeconds ? { kind: "missed", expiresAt: newer } : { kind: "expired", expiresAt: newer };
   if (signed === null || held === 0) return { kind: "waiting" };
   return held > nowSeconds ? { kind: "claimable", withdrawal: signed, expiresAt: held } : { kind: "expired", expiresAt: held };
 }
@@ -67,9 +77,8 @@ export function payoutsOf(state: ConsoleState): Payout[] {
   const all = approvalsListed(state).flatMap((event) => {
     if (event.type !== "withdrawal_approved") return [];
     const approvedSeq = Number(event.cursor.split(":")[0]);
-    const searchFrom = Math.max(approvedSeq, state.payoutHints[event.nonce]?.searchFrom ?? 0);
-    const status = statusOf(state, event.nonce, nowSeconds);
-    return [{ nonce: event.nonce, amount: fixedFromWire(event.amount), searchFrom, status, read: status.kind === "paid" || state.unpaid.includes(event.nonce) }];
+    const status = statusOf(state, event.nonce, approvedSeq, nowSeconds);
+    return [{ nonce: event.nonce, amount: fixedFromWire(event.amount), status, read: status.kind === "paid" || state.unpaid.includes(event.nonce) }];
   });
   return [...all.filter((p) => p.status.kind !== "paid"), ...all.filter((p) => p.status.kind === "paid").slice(0, PAID_SHOWN)];
 }
@@ -103,14 +112,63 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
 }
 
 /**
+ * Reads the node's unpaid approvals of the connected account, page by page, and takes each
+ * authorization from the answer. An answer for a wallet or a read that a later one overtook is
+ * dropped. A nonce is paid only once a complete, loaded answer omits it: a failed or partial read
+ * settles nothing, and a node that predates the route (404) leaves every row waiting, with no message.
+ * Error cases:
+ * - the read fails: the payouts' problem is set for the rows to say, and the next trigger reads again
+ */
+export async function loadPayouts(store: ConsoleStore): Promise<void> {
+  const address = store.getSnapshot().wallet?.address;
+  if (address === undefined) return;
+  const generation = store.getSnapshot().payoutsGeneration + 1;
+  store.patch({ payoutsGeneration: generation });
+  const current = () => store.getSnapshot().wallet?.address === address && store.getSnapshot().payoutsGeneration === generation;
+  try {
+    const entries: PayoutEntry[] = [];
+    let seq: number | null = null;
+    let loaded = false;
+    let complete = false;
+    let after: number | undefined;
+    for (let page = 0; page < PAYOUT_PAGES && !complete; page++) {
+      const read = await store.deps.client.payouts(address, { limit: PAYOUTS_LIMIT, ...(after === undefined ? {} : { after }) });
+      if (page === 0) seq = read.seq;
+      entries.push(...read.payouts);
+      loaded = read.loaded;
+      after = read.next ?? undefined;
+      complete = !read.loaded || read.next === null;
+    }
+    if (!current()) return;
+    const state = store.getSnapshot();
+    const mine = address.toLowerCase();
+    const authorizations = entries.reduce((held, { nonce, withdrawal }) => {
+      const signed = withdrawal !== null && withdrawal.nonce === nonce && withdrawal.authorization !== undefined && withdrawal.account.toLowerCase() === mine;
+      return signed ? keepLatest(held, withdrawal) : held;
+    }, state.authorizations);
+    const problem = !loaded ? "The node is still loading its record of your payouts after a restart." : after !== undefined ? "The node's list of your payouts is longer than this page reads." : null;
+    store.patch({
+      authorizations,
+      payoutsRead: problem === null && seq !== null ? { seq, listed: entries.map((e) => e.nonce) } : state.payoutsRead,
+      payoutsProblem: problem === null ? null : `${problem} ${READ_AGAIN}`,
+    });
+  } catch (error) {
+    if (!current()) return;
+    // A node that predates the route has no list to read; its rows wait for the stream, as they do between checkpoints.
+    store.patch({ payoutsProblem: error instanceof EngineError && error.status === 404 ? null : `The node's list of your payouts could not be read: ${errorText(error)} ${READ_AGAIN}` });
+  }
+}
+
+/**
  * The payouts whose payment the vault has not been asked about: every approval the page lists, newest
- * first, with or without an authorization (a reload leaves none, as only the stream carries them),
- * then any authorization held for an approval not listed.
+ * first, then any authorization held for an approval not listed, but for those the node's list shows
+ * paid. A reload may leave no authorization yet, so the vault is asked whether the payout is paid.
  */
 export function unreadPayouts(state: ConsoleState): number[] {
-  const listed = approvalsListed(state).flatMap((e) => (e.type === "withdrawal_approved" ? [e.nonce] : []));
-  const nonces = [...new Set([...listed, ...state.authorizations.map((w) => w.nonce)])];
-  return nonces.filter((nonce) => !state.paid.includes(nonce) && !state.unpaid.includes(nonce));
+  const approvedSeqs = new Map<number, number | undefined>();
+  for (const event of approvalsListed(state)) if (event.type === "withdrawal_approved") approvedSeqs.set(event.nonce, Number(event.cursor.split(":")[0]));
+  for (const { nonce, approved_seq } of state.authorizations) if (!approvedSeqs.has(nonce)) approvedSeqs.set(nonce, approved_seq);
+  return [...approvedSeqs].filter(([nonce, seq]) => !state.paid.includes(nonce) && !state.unpaid.includes(nonce) && !paidByNode(state, nonce, seq)).map(([nonce]) => nonce);
 }
 
 /**
@@ -166,60 +224,34 @@ export async function claim(store: ConsoleStore, nonce: number): Promise<void> {
   }
 }
 
-/** Searches the log from `fromSeq` for payout `nonce`'s latest authorization; nothing else waits on the search. */
-export async function findAuthorization(store: ConsoleStore, nonce: number, fromSeq: number): Promise<void> {
-  const address = store.getSnapshot().wallet?.address;
-  if (address === undefined || store.getSnapshot().searching !== null) return;
-  store.patch({ searching: nonce });
-  try {
-    const { withdrawal, complete, reached } = await store.deps.client.findWithdrawal(address, nonce, fromSeq);
-    const state = store.getSnapshot();
-    if (state.wallet?.address !== address) return;
-    if (withdrawal?.authorization !== undefined) store.patch({ authorizations: keepLatest(state.authorizations, withdrawal) });
-    // The next search reads on from where this one stopped.
-    if (!complete && reached !== null) hint(store, nonce, { searchFrom: reached });
-    if (!complete) store.toast("info", "The search of the log stopped before reaching its end, so a newer authorization may still be there. Search again to read on.");
-    else if (withdrawal?.authorization === undefined) store.toast("info", "The log holds no authorization for this withdrawal yet. The node signs one once a checkpoint covering the approval is confirmed on chain; it then arrives here.");
-  } catch (error) {
-    store.toast("error", errorText(error));
-  } finally {
-    store.patch({ searching: null });
-  }
-}
-
 /** The node's refusal of a reissue that names an older authorization than its latest, with that one's expiry (`reissue.rs`, `Reissue::Stale`). */
 const NEWER_EXISTS = /^the latest authorization expires at (\d+)/;
 
-/** Records what the page learnt of payout `nonce`'s authorizations. */
-function hint(store: ConsoleStore, nonce: number, learnt: PayoutHint): void {
-  const hints = store.getSnapshot().payoutHints;
-  store.patch({ payoutHints: { ...hints, [nonce]: { ...hints[nonce], ...learnt } } });
-}
-
 /**
  * Asks the node to sign payout `nonce` again, replacing the authorization that expired at
- * `expiresAt`, and keeps where in the log the new one will land. When the node names a newer one the
- * page missed, an expired one is replaced in turn, and an unexpired one is searched for from `fromSeq`.
+ * `expiresAt`, then reads the node's payouts: when the node names a newer authorization than the
+ * expired one, the answer holds it.
  */
-export async function reissue(store: ConsoleStore, nonce: number, expiresAt: number, fromSeq: number, retried = false): Promise<void> {
+export async function reissue(store: ConsoleStore, nonce: number, expiresAt: number): Promise<void> {
   const wallet = usableWallet(store, "sign");
   if (!wallet) return;
   // Every step after an await applies only while the wallet that asked is still the one connected.
   const asking = () => store.getSnapshot().wallet?.address === wallet.address;
   store.patch({ busy: true });
-  let newer: number | null = null;
+  let reread = false;
   try {
-    // A signed read of the log head before the request: the new authorization can only land after it.
-    const { seq: before } = await store.deps.client.withdrawalQueue(wallet.address);
     const typed = reissueTypedData(domainOf(store), wallet.address, nonce, expiresAt);
     const summary = `ask for a new authorization of withdrawal ${nonce}`;
     const signature = await prompting(store, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
     await store.deps.client.reissue(wallet.address, nonce, { replaces_expires_at: expiresAt, signature });
-    if (before !== null && asking()) hint(store, nonce, { searchFrom: before });
     store.toast("ok", "Requested. The new authorization arrives here once the node signs it.");
+    reread = true;
   } catch (error) {
     const stale = error instanceof EngineError && error.status === 400 ? NEWER_EXISTS.exec(error.message) : null;
-    if (stale?.[1] !== undefined) newer = Number(stale[1]);
+    if (stale?.[1] !== undefined) {
+      store.toast("info", `The node has signed a newer authorization for this withdrawal, valid until ${formatStamp(Number(stale[1]) * 1000)} UTC; reading it from the node.`);
+      reread = true;
+    }
     // The node holds no unpaid approval under this nonce (`reissue.rs`, `Reissue::Unknown`), so the vault's record is read again.
     else if (error instanceof EngineError && error.status === 404) {
       store.toast("error", `The node holds no unpaid withdrawal ${nonce} for this account: the vault has paid it, or the node is still loading it after a restart.`);
@@ -228,9 +260,5 @@ export async function reissue(store: ConsoleStore, nonce: number, expiresAt: num
   } finally {
     store.patch({ busy: false });
   }
-  if (newer === null || !asking()) return;
-  hint(store, nonce, { newerUntil: newer });
-  if (newer * 1000 <= store.getSnapshot().now && !retried) return reissue(store, nonce, newer, fromSeq, true);
-  store.toast("info", `The node has signed a newer authorization for this withdrawal, valid until ${formatStamp(newer * 1000)} UTC; looking for it in the log.`);
-  await findAuthorization(store, nonce, fromSeq);
+  if (reread && asking()) await loadPayouts(store);
 }

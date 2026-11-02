@@ -54,10 +54,18 @@ export class FakeClient implements EngineClient {
   totals: QueueTotals = { count: 0, remaining: 0n, seq: null, complete: true, stable: true };
   /** When set, the queue totals read rejects with it, as a failing node answers. */
   totalsError: Error | null = null;
-  async houseParams() { return this.params; }
-  async latestCheckpoint() { return this.checkpoint; }
-  logStatus: "current" | "reading" | "failed" = "reading";
-  async houseLogStatus() { return this.logStatus; }
+  /** The log head the house state read answers at. */
+  houseSeq: number | null = null;
+  /** How many times the house state was read. */
+  houseStateReads = 0;
+  /** When set, the house state read rejects with it; `unavailable` answers as a node that predates the route does. */
+  houseStateError: Error | null = null;
+  unavailable = false;
+  async houseState() {
+    this.houseStateReads++;
+    if (this.houseStateError !== null) throw this.houseStateError;
+    return this.unavailable ? null : { seq: this.houseSeq, params: this.params, checkpoint: this.checkpoint };
+  }
   async withdrawalTotals() { if (this.totalsError !== null) throw this.totalsError; return this.totals; }
   async account(): Promise<never> { throw this.accountError ?? new EngineError(404, "not found"); }
   async accessProbe() {}
@@ -75,7 +83,7 @@ export class FakeClient implements EngineClient {
   async registerSessionKey(): Promise<ActionResult> { return this.sessionKeyResult; }
   async revokeSessionKey(): Promise<ActionResult> { return { seq: 1, events: [{ type: "session_key_revoked", account: "0x0", session_key: "0x0" }] }; }
   async reissue(): Promise<never> { throw new EngineError(501, "no"); }
-  async findWithdrawal() { return { withdrawal: null, complete: true, reached: null }; }
+  async payouts() { return { seq: null, loaded: true, payouts: [], next: null }; }
   async scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>) { this.scans.push({ fromSeq, budget, rules, sessions }); return this.scanned; }
   async marks(market: number, resolution: "1s" | "1m" | "1h" | "1d", fromMs: number, toMs: number) {
     this.marksReads.push({ market, resolution, fromMs, toMs });

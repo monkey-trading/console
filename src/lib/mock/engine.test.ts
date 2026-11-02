@@ -168,6 +168,14 @@ describe("withdrawals", () => {
     expect((await node.client.withdrawalQueue(ME)).queue).toEqual([]);
   });
 
+  it("lists no unpaid approval after approving one, as the mock pays at once, from a loaded answer at its head", async () => {
+    const node = await funded(1_000);
+    await node.client.withdraw({ account: ME, amount: "100", auth: auth(node) });
+    expect(types(node.controls.addLiquidity(fixedFromInt(1_000_000)))).toContain("withdrawal_approved");
+    await expect(node.client.payouts()).resolves.toEqual({ seq: node.client.headSeq, loaded: true, payouts: [], next: null });
+    expect(node.client.headSeq).not.toBeNull();
+  });
+
   it("reserves whole base units only: a request finer than a millionth keeps its dust in cash (nothing is lost)", async () => {
     const node = await funded(1_000);
     await node.client.withdraw({ account: ME, amount: "100.0000009", auth: auth(node) });
@@ -197,5 +205,13 @@ describe("market hours and stress", () => {
     node.controls.setStressFloor(null, 2);
     node.client.tick(START + 1_000);
     expect((await node.client.markets()).every((m) => m.stress_level === 2)).toBe(true);
+  });
+
+  it("serves the house state as the node does: the launch parameters and the checkpoint at the head", async () => {
+    const node = createMockNode(START);
+    node.client.tick(START + 1_000);
+    const state = await node.client.houseState();
+    expect(state).toMatchObject({ seq: node.client.headSeq, params: { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, seq: null } });
+    expect(state?.checkpoint).toEqual(node.client.housePanelSnapshot().checkpoint);
   });
 });

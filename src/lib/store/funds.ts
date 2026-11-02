@@ -27,8 +27,8 @@ export function applyFeedEvent(state: ConsoleState, event: ClientEvent): Partial
 
 /**
  * `authorizations` with `signed` in place of its payout's, unless the one held is newer: a later
- * signer epoch, or the same epoch and a later expiry. The stream and a search of the log both arrive
- * here, in either order.
+ * signer epoch, or the same epoch and a later expiry. The stream and the node's payouts list both
+ * arrive here, in either order.
  */
 export function keepLatest(authorizations: readonly SignedWithdrawal[], signed: SignedWithdrawal): SignedWithdrawal[] {
   const held = authorizations.find((w) => w.nonce === signed.nonce)?.authorization;

@@ -13,10 +13,8 @@ export interface HouseParams {
   totalCapBps: number;
   /** The least the total cap may be, in USD notional. */
   totalCapFloor: Fixed;
-  /** The seq of the `set_params` these values come from; null in the mock, which logs none. */
+  /** The seq of the `set_params` these values come from; null in the mock, which logs none, and from a node restored from an older snapshot. */
   seq: number | null;
-  /** `current` once the log read feeding them has reached the head; `reading` while it catches up; `failed` after a read that keeps failing — either way they may not be the latest the log records. */
-  fresh: "current" | "reading" | "failed";
 }
 
 /** The public FIFO withdrawal queue's size, summed from its pages. */

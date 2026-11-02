@@ -1,6 +1,6 @@
 /** Tests for seeding the chart's bars from the node's marks endpoint, and its archive-scan fallback. */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { barsFromMarks } from "../bars";
 import { EngineError } from "../engine/client";
@@ -25,7 +25,12 @@ const streamBar = (seconds: number, at = NOW) => ({
   observedLow: 100_000,
 });
 
+/** Lets the store's wait between tick-prompted reads pass, so the next tick reads. */
+const nextRead = () => vi.advanceTimersByTimeAsync(1_000);
+
 describe("seeding the chart from the marks endpoint", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
   it("replaces the selected market's active timeframe after the first live read, merging the stream's current bar", async () => {
     const { client, store } = setup();
     client.marksPages = [{ entries: [entry(NOW - 60_000), entry(NOW - 30_000), entry(NOW - 5_000)], next: null }];
@@ -119,6 +124,7 @@ describe("seeding the chart from the marks endpoint", () => {
     await settle();
     client.onMessage?.(tick(NOW + 60_000));
     await settle();
+    await nextRead();
     client.onMessage?.(tick(NOW + 120_000));
     await settle();
     const bars = store.getSnapshot().bars[1]?.["1m"] ?? [];
@@ -136,11 +142,13 @@ describe("seeding the chart from the marks endpoint", () => {
     await settle();
     client.onMessage?.(tick(NOW + 60_000));
     await settle();
+    await nextRead();
     client.onMessage?.(tick(NOW + 120_000));
     await settle();
     expect(client.marksReads).toHaveLength(3);
     const texts = store.getSnapshot().toasts.map((t) => t.text);
     expect(texts.filter((t) => t.startsWith("Chart history unavailable"))).toHaveLength(1);
+    await nextRead();
     client.onMessage?.(tick(NOW + 180_000));
     await settle();
     expect(client.marksReads).toHaveLength(3);

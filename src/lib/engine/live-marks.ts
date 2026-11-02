@@ -1,17 +1,18 @@
 /**
  * A one-off signed read of the log from a seq for the index marks the chart backfills with: every
  * `prices` command folds into a per-market quote book, and the index the engine's rule gives at the
- * command's sequenced time becomes a mark. Like the withdrawal scan in `live-scan.ts`, the read is
- * bounded, and it resolves with the marks it kept when it stops short; completion follows the same
- * cursor the withdrawal scan uses, so a heartbeat ends the read only once the cursor has reached
- * the head it names. The listing in force at the read's start is the node's current one: an
- * `upsert_market` the window carries is honored from its seq, but marks before the first such
- * listing replay under today's rules and schedule, which a bounded read cannot rewind to check.
+ * command's sequenced time becomes a mark. The read is bounded, and it resolves with the marks it
+ * kept when it stops short; completion follows a cursor over log offsets (`log-scan.ts`), so a
+ * heartbeat ends the read only once the cursor has reached the head it names. The listing in force
+ * at the read's start is the node's current one: an `upsert_market` the window carries is honored
+ * from its seq, but marks before the first such listing replay under today's rules and schedule,
+ * which a bounded read cannot rewind to check.
  */
 
-import { foldQuotes, indexOf, type QuoteBook } from "./mark-index";
+import { fixedToNumber, type Fixed } from "../fixed";
+import { foldQuotes, indexFixed, type QuoteBook } from "./mark-index";
 import { sessionRule, type SessionRule } from "./mark-session";
-import { atOrPast, position, type ScanDeps } from "./live-scan";
+import { atOrPast, position, type ScanDeps } from "./log-scan";
 import type { MarketId, PriceRules, Schedule, SourceQuote } from "./types";
 import { parseFrameMessage, parseSignedFrame } from "./wire";
 
@@ -52,6 +53,8 @@ export class MarkFolder {
   /** The first command's time per market: marks are trusted only a freshness window later. */
   private readonly firstAt: Record<number, number> = {};
   readonly marks: ScannedMark[] = [];
+  /** Each market's newest mark as the engine's fixed point, for a caller that shows the mark itself rather than plotting it. */
+  readonly fixed = new Map<number, Fixed>();
 
   constructor(
     private readonly stepMs: number,
@@ -86,12 +89,13 @@ export class MarkFolder {
       }
       this.book = book;
       const first = this.firstAt[id] ?? (this.firstAt[id] = atMs);
-      const mid = indexOf(this.book[id], rule, atMs);
+      const fixed = indexFixed(this.book[id], rule, atMs);
       const last = this.lastAt[id] ?? Number.NEGATIVE_INFINITY;
       // A quote exactly max_age old still counts, so the warm-up ends one millisecond past it:
       // only then must every quote the engine held when the scan started have expired.
-      if (mid !== null && atMs - first > rule.max_age_ms && atMs - last >= this.stepMs) {
-        this.marks.push({ market: id, ts: atMs, mid });
+      if (fixed !== null && atMs - first > rule.max_age_ms && atMs - last >= this.stepMs) {
+        this.marks.push({ market: id, ts: atMs, mid: fixedToNumber(fixed) });
+        this.fixed.set(id, fixed);
         this.lastAt[id] = atMs;
       }
     }

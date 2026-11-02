@@ -11,6 +11,7 @@ import { sessionRule, type SessionRule } from "../engine/mark-session";
 import type { MarketId, PriceRules } from "../engine/types";
 import type { MarketModel } from "../models";
 import type { ConsoleStore } from "./store";
+import { streamPriced } from "./stream-marks";
 
 /** The scan starts this many seqs before the head. */
 const SCAN_WINDOW_SEQS = 60_000;
@@ -42,10 +43,7 @@ export function scanBarsHistory(store: ConsoleStore, markets: readonly MarketMod
   // scan does not replay. Neither are markets quoted in another currency: the engine withholds
   // their marks while the FX market's index is invalid, and the replay models one market's book.
   // All keep the history the stream builds from the node's marks.
-  const spot = markets.filter((m) =>
-    (m.view.contracts === undefined || m.view.contracts.length === 0)
-    && m.view.asset_class !== "equity"
-    && m.view.quote_currency === undefined);
+  const spot = markets.filter((m) => streamPriced(m.view));
   const rules: Record<number, PriceRules> = Object.fromEntries(spot.map((m) => [m.id, m.priceRules]));
   const sessions = Object.fromEntries(spot.map((m) => [m.id, sessionRule(m.view.schedule)]));
   void attempt(store, store.scanEpoch, markets, rules, sessions, Math.max(0, head - SCAN_WINDOW_SEQS), SCAN_RETRIES, clock);

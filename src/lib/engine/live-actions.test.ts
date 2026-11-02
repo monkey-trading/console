@@ -175,76 +175,22 @@ describe("quotes across a reconnect", () => {
   });
 });
 
-describe("finding an authorization in the log", () => {
-  const frame = (n: number, msg: object) => JSON.stringify({ v: 1, n, time: 1_000, msg: JSON.stringify(msg), sig: "0x00" });
-  const signed = (nonce: number, expires: number) => ({ type: "withdrawal", offset: `${40 + nonce}:0`, account: ACCOUNT, amount: "10", nonce, chain_id: 31337, vault: conflict.vault, signature: "0x22", approved_seq: 40, authorization: { expires_at: expires } });
+describe("reading an account's payouts", () => {
+  const withdrawal: SignedWithdrawal = { account: ACCOUNT, amount: "40", nonce: 3, chain_id: 31337, vault: conflict.vault, signature: "0x22", approved_seq: 40, authorization: { signer: ACCOUNT, signer_epoch: 1, issued_at: 1, expires_at: 100, checkpoint_seq: 64, checkpoint_root: "0x33", siblings: [] } };
 
-  it("reads from the approval's seq until the head a heartbeat names, keeping the latest authorization of that payout", async () => {
-    const sockets: FakeSocket[] = [];
-    const { client } = accepting(sockets);
-    const found = client.findWithdrawal(ACCOUNT, 1, 40);
-    await settle();
-    const socket = sockets[0];
-    if (!socket) throw new Error("no socket");
-    expect(socket.url).toBe(`wss://node.test/v1/stream?signed=1&challenge=${"ab".repeat(32)}&from=40`);
-    socket.receive(frame(0, { type: "heartbeat", head: "45:0" }));
-    socket.receive(frame(1, signed(1, 100)));
-    socket.receive(frame(2, signed(2, 100)));
-    socket.receive(frame(3, { ...signed(1, 200), offset: "45:0" }));
-    socket.receive(frame(4, { type: "heartbeat", head: "45:0" }));
-    await expect(found).resolves.toMatchObject({ withdrawal: { nonce: 1, authorization: { expires_at: 200 } }, complete: true });
-    expect(socket.closed).toBe(true);
+  it("reads a page of the account's unpaid approvals from the cursor, with the signed answer's shape", async () => {
+    const { node, client, reply } = accepting();
+    const page = { seq: 7, loaded: true, payouts: [{ nonce: 3, amount: "40", withdrawal }], next: 3 };
+    reply(`/v1/accounts/${ACCOUNT}/payouts?limit=200`, 200, page);
+    reply(`/v1/accounts/${ACCOUNT}/payouts?limit=50&after=3`, 200, { seq: 7, loaded: true, payouts: [], next: null });
+    await expect(client.payouts(ACCOUNT, { limit: 200 })).resolves.toEqual(page);
+    await expect(client.payouts(ACCOUNT, { limit: 50, after: 3 })).resolves.toEqual({ seq: 7, loaded: true, payouts: [], next: null });
+    expect(node.requests.map((r) => r.path).filter((path) => path !== "/v1/attestation")).toEqual([`/v1/accounts/${ACCOUNT}/payouts?limit=200`, `/v1/accounts/${ACCOUNT}/payouts?limit=50&after=3`]);
   });
 
-  it("answers null when the log holds nothing after the seq, and fails on a frame out of order", async () => {
-    const sockets: FakeSocket[] = [];
-    const { client } = accepting(sockets);
-    const none = client.findWithdrawal(ACCOUNT, 1, 50);
-    await settle();
-    sockets[0]?.receive(frame(0, { type: "heartbeat", head: "45:0" }));
-    await expect(none).resolves.toEqual({ withdrawal: null, complete: true, reached: null });
-    const broken = client.findWithdrawal(ACCOUNT, 1, 40);
-    await settle();
-    sockets[1]?.receive(frame(1, { type: "heartbeat", head: "45:0" }));
-    await expect(broken).rejects.toThrow("skipped");
-  });
-
-  it("reads past an unexpired authorization to the head, since the node signs a payout again when the vault's signer rotates", async () => {
-    const sockets: FakeSocket[] = [];
-    const { client } = accepting(sockets);
-    const found = client.findWithdrawal(ACCOUNT, 1, 40);
-    await settle();
-    sockets[0]?.receive(frame(0, { type: "heartbeat", head: "45:0" }));
-    sockets[0]?.receive(frame(1, signed(1, 2_000_000_000)));
-    expect(sockets[0]?.closed).toBe(false);
-    sockets[0]?.receive(frame(2, { ...signed(1, 2_000_000_100), offset: "45:0" }));
-    sockets[0]?.receive(frame(3, { type: "heartbeat", head: "45:0" }));
-    await expect(found).resolves.toMatchObject({ withdrawal: { authorization: { expires_at: 2_000_000_100 } }, complete: true });
-  });
-
-  it("answers with the latest authorization found, marked incomplete, when the read fails or runs out of time after it", async () => {
-    const sockets: FakeSocket[] = [];
-    const { client, scheduler } = accepting(sockets);
-    const timedOut = client.findWithdrawal(ACCOUNT, 1, 40);
-    await settle();
-    sockets[0]?.receive(frame(0, { type: "heartbeat", head: "90:0" }));
-    sockets[0]?.receive(frame(1, signed(1, 100)));
-    scheduler.advance(30_000);
-    await expect(timedOut).resolves.toMatchObject({ withdrawal: { authorization: { expires_at: 100 } }, complete: false, reached: 41 });
-    const dropped = client.findWithdrawal(ACCOUNT, 1, 40);
-    await settle();
-    sockets[1]?.receive(frame(0, signed(1, 100)));
-    sockets[1]?.drop("close");
-    await expect(dropped).resolves.toMatchObject({ withdrawal: { authorization: { expires_at: 100 } }, complete: false });
-  });
-
-  it("gives up after 30 s", async () => {
-    const sockets: FakeSocket[] = [];
-    const { client, scheduler } = accepting(sockets);
-    const slow = client.findWithdrawal(ACCOUNT, 1, 40);
-    await settle();
-    scheduler.advance(30_000);
-    await expect(slow).rejects.toThrow("took too long");
-    expect(sockets[0]?.closed).toBe(true);
+  it("rejects with the node's 404 when it predates the route", async () => {
+    const { client, reply } = accepting();
+    reply(`/v1/accounts/${ACCOUNT}/payouts?limit=200`, 404, { error: "not found" });
+    await expect(client.payouts(ACCOUNT, { limit: 200 })).rejects.toMatchObject({ status: 404 });
   });
 });

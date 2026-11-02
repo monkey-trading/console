@@ -99,18 +99,20 @@ export function parseSize(text: string): SizeInput {
 }
 
 /**
- * The size a new ticket starts at: the smallest quantity on the size field's step whose USD value at the
- * mark, converted as `previewTicket`'s minimum check converts it, reaches the market's `min_order_notional`.
+ * The size a new ticket starts at: the smallest quantity on the size field's step whose USD value, at the
+ * price and through the conversion `previewTicket`'s minimum check uses, reaches the market's
+ * `min_order_notional`. That price is `triggerPrice` for a resting order with one above zero, else the mark.
  * A minimum of zero starts at one step. Null while the market has no mark or no FX price to value it at.
  * Error cases: none; the value grows with the quantity, so one reaches the minimum, and the search gives up (null) only past 2^128 steps.
  */
-export function startingSize(market: MarketModel): string | null {
+export function startingSize(market: MarketModel, triggerPrice: Fixed | null = null): string | null {
   const mark = market.mark;
   if (mark === null || mark <= 0n) return null;
-  const toUsd = usdConverter(market.view, mark);
+  const price = triggerPrice !== null && triggerPrice > 0n ? triggerPrice : mark;
+  const toUsd = usdConverter(market.view, price);
   if (toUsd === null) return null;
   const minimum = fixedFromWire(market.view.min_order_notional);
-  const reaches = (steps: bigint) => toUsd(mulFixed(steps * QTY_STEP, mark)) >= minimum;
+  const reaches = (steps: bigint) => toUsd(mulFixed(steps * QTY_STEP, price)) >= minimum;
   // The value is non-decreasing in the quantity: double to a quantity that reaches the minimum, then bisect.
   let high = 1n;
   while (!reaches(high)) {
@@ -127,8 +129,8 @@ export function startingSize(market: MarketModel): string | null {
 }
 
 /** What the size field shows: what the trader typed, even a cleared field (`""`), else the starting size while they have not touched it (`typed` null). */
-export function sizeShown(typed: string | null, market: MarketModel): string {
-  return typed ?? startingSize(market) ?? "";
+export function sizeShown(typed: string | null, market: MarketModel, triggerPrice: Fixed | null = null): string {
+  return typed ?? startingSize(market, triggerPrice) ?? "";
 }
 
 /** `qty` cut down to the size field's step, so the size it names can be typed. */

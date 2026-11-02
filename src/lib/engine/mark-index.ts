@@ -53,6 +53,12 @@ export function foldQuotes(book: QuoteBook, market: number, quotes: readonly Sou
  * last places of a huge mid are approximate, below any chart resolution.
  */
 export function indexOf(book: Readonly<Record<string, { mid: Fixed; ts: number }>> | undefined, rules: PriceRules, nowMs: number): number | null {
+  const mid = indexFixed(book, rules, nowMs);
+  return mid === null ? null : fixedToNumber(mid);
+}
+
+/** `indexOf` as the engine's fixed point, for a caller that shows the index itself. */
+export function indexFixed(book: Readonly<Record<string, { mid: Fixed; ts: number }>> | undefined, rules: PriceRules, nowMs: number): Fixed | null {
   if (book === undefined) return null;
   const mids = Object.values(book)
     .filter((quote) => nowMs - quote.ts <= rules.max_age_ms)
@@ -62,7 +68,7 @@ export function indexOf(book: Readonly<Record<string, { mid: Fixed; ts: number }
   const n = mids.length;
   const mid = n % 2 === 1 ? middle(mids) : evenMiddle(mids);
   const spreadBps = ((mids[n - 1] ?? mid) - (mids[0] ?? mid)) * BPS_SCALE / mid;
-  return spreadBps > BigInt(rules.max_divergence_bps) ? null : fixedToNumber(mid);
+  return spreadBps > BigInt(rules.max_divergence_bps) ? null : mid;
 }
 
 /** The median of an odd-length sorted list, which always has a middle element. */
