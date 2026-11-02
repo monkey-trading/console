@@ -58,4 +58,24 @@ describe("the live client's dashboard reads", () => {
     await expect(live.stats.monkey()).rejects.toMatchObject({ status: 404 });
     await expect(live.stats.monkey()).rejects.toBeInstanceOf(EngineError);
   });
+
+  it("asks for the MONKEY activity page and the MONKEY series with the queries the node reads", async () => {
+    const { node, live, reply } = client();
+    reply("/v1/monkey/activity?limit=25&before=77", 200, { entries: [], next: null });
+    reply("/v1/stats/series?metric=total_staked&resolution=1h&from_ms=5&to_ms=9&limit=100", 200, { metric: "total_staked", entries: [] });
+    await expect(live.stats.activity({ limit: 25, before: "77" })).resolves.toMatchObject({ entries: [] });
+    await expect(live.stats.series({ metric: "total_staked", market: null, resolution: "1h", fromMs: 5, toMs: 9, limit: 100 })).resolves.toMatchObject({ metric: "total_staked" });
+    expect(node.requests.map((r) => r.path).filter((path) => path.startsWith("/v1/monkey") || path.startsWith("/v1/stats"))).toEqual([
+      "/v1/monkey/activity?limit=25&before=77",
+      "/v1/stats/series?metric=total_staked&resolution=1h&from_ms=5&to_ms=9&limit=100",
+    ]);
+  });
+
+  it("answers a missing distribution proof as none, and any other refusal as an error", async () => {
+    const { live, reply } = client();
+    reply("/v1/accounts/0x00a1/distributions", 404, { error: "not found" });
+    reply("/v1/accounts/0x00b2/distributions", 503, { error: "busy" });
+    await expect(live.stats.distributions("0x00a1")).resolves.toBeNull();
+    await expect(live.stats.distributions("0x00b2")).rejects.toBeInstanceOf(EngineError);
+  });
 });

@@ -54,7 +54,7 @@ export class ActionClient implements EngineClient {
   async houseState() { return { seq: null, params: null, checkpoint: null }; }
   async withdrawalTotals() { return { count: 0, remaining: 0n, largest: null, head: null, seq: null, complete: true, stable: true }; }
   private absent = async (): Promise<never> => { throw new EngineError(404, "not found"); };
-  readonly stats = { positions: this.absent, series: this.absent, monkey: this.absent };
+  readonly stats = { positions: this.absent, series: this.absent, monkey: this.absent, activity: this.absent, distributions: async () => null };
   /** Whether the account read answers as a credited account; false answers the node's 404. */
   credited = false;
   async account(): Promise<AccountView> {

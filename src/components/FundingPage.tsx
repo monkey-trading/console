@@ -1,12 +1,11 @@
 "use client";
 
-/** The funding page: the account's figures, the panel that moves money, what is under way, then MONKEY and what the wallet signs for. */
+/** The funding page: the account's figures, the panel that moves money, what is under way, then what the wallet signs for. */
 
 import Link from "next/link";
 
 import { AccountSummary } from "./AccountSummary";
 import { useConsole } from "./ConsoleProvider";
-import { EmissionsCard } from "./EmissionsCard";
 import { InProgress } from "./InProgress";
 import { MoveMoney } from "./MoveMoney";
 import { SigningFor } from "./SigningFor";
@@ -28,7 +27,6 @@ export function FundingPage() {
           <MoveMoney />
           <InProgress />
         </div>
-        <EmissionsCard />
         {signatures === "checked" && <SigningFor />}
       </div>
     </div>

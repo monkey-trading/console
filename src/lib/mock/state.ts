@@ -13,7 +13,7 @@ import type {
   StreamMessage,
 } from "../engine/types";
 import { MARKETS, type ListedMarket } from "./markets";
-import { EMISSION_PERIOD_MS } from "./emissions";
+import { MockMonkey } from "./monkey-state";
 import { isOpen } from "../schedule";
 
 /** Where the node's real-peer screening places the caller. */
@@ -135,11 +135,14 @@ export class MockState {
   readonly entitledMonkey = new Map<string, bigint>();
   readonly claimedMonkey = new Map<string, bigint>();
   postedSeq = 0;
+  /** What the MONKEY page reads: stakers, the feed, closed epochs and periods. */
+  readonly monkey: MockMonkey;
 
   /** Starts at `startMs` with every market at its starting index; open per its schedule. */
   constructor(startMs: number) {
     this.now = startMs;
-    this.emission = { period: Math.floor(startMs / EMISSION_PERIOD_MS), results: new Map() };
+    this.monkey = new MockMonkey(startMs);
+    this.emission = { period: this.monkey.periodAt(startMs), results: new Map() };
     for (const listed of MARKETS) {
       this.markets.set(listed.spec.id, {
         listed,

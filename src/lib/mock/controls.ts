@@ -3,7 +3,10 @@
 import { fixedFromInt, type Fixed } from "../fixed";
 import type { EngineEvent, MarketId } from "../engine/types";
 import type { AttestationMode, MockEngineClient } from "./client";
+import type { DistributionProof } from "../engine/stats-types";
+import type { StakingPosition } from "../engine/staking";
 import { chainDeposit, payQueue } from "./funds";
+import { claimDistribution, completeUnstake, distributionProof, stake, startUnstake, walletBalance } from "./monkey";
 import { MAX_STRESS } from "../pricing";
 import type { Region } from "./state";
 
@@ -60,6 +63,7 @@ export class MockControls {
     state.sessionKeys.delete(key);
     state.entitledMonkey.delete(key);
     state.claimedMonkey.delete(key);
+    state.monkey.forget(key);
     state.emission.results.delete(key);
     for (let i = state.queue.length - 1; i >= 0; i--) if (state.queue[i]?.account === key) state.queue.splice(i, 1);
   }
@@ -81,6 +85,41 @@ export class MockControls {
   /** The simulated vault's latest posted checkpoint seq, which the mock's entitlement proofs are taken against. */
   postedSeq(): number {
     return this.client.state.postedSeq;
+  }
+
+  /** What the simulated staking contract and vault hold for `address`: the reads a wallet makes on chain. */
+  stakingPosition(address: string): StakingPosition {
+    const { state } = this.client;
+    const key = address.toLowerCase();
+    const pending = state.monkey.unstaking.get(key);
+    return {
+      stakingEnabled: true,
+      staked: state.monkey.staked.get(key) ?? 0n,
+      unstaking: pending === undefined ? null : { amount: pending.amount, claimableAtMs: pending.claimableAt },
+      balance: walletBalance(state, key),
+      distributionsClaimed: state.monkey.distClaimed.get(key) ?? 0n,
+      latestSeq: state.postedSeq,
+    };
+  }
+
+  /** Stand in for the staking contract's `stake`, `startUnstake` and `completeUnstake`, and the vault's `claimDistribution`, as the real wallet sends them. */
+  stake(address: string, amount: bigint): void {
+    stake(this.client.state, address, amount);
+  }
+
+  startUnstake(address: string, amount: bigint): void {
+    startUnstake(this.client.state, address, amount);
+  }
+
+  completeUnstake(address: string): void {
+    completeUnstake(this.client.state, address);
+  }
+
+  claimDistribution(address: string, proof: DistributionProof): void {
+    // The simulated vault, like the real one, checks the proof is the one it holds for the account.
+    const held = distributionProof(this.client.state, address);
+    if (held.seq !== proof.seq || held.entitled !== proof.entitled) throw new Error("The simulated vault holds another proof for this account.");
+    claimDistribution(this.client.state, address, BigInt(proof.entitled));
   }
 
   /** Stands in for a transaction to the vault, as the real wallet sends; see `chainDeposit`. */

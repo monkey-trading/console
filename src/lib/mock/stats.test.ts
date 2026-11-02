@@ -98,7 +98,7 @@ describe("the mock node's dashboard routes", () => {
   it("serves the MONKEY totals and the distribution's liquidity floor", async () => {
     const monkey = await node().client.stats.monkey();
     expect(monkey.emissions?.period_ms).toBe(600_000);
-    expect(monkey.distribution?.liquidity_floor).toBe("8000000");
+    expect(monkey.distribution?.liquidity_floor).toBe("19900000");
     expect(monkey.staking?.stakers).toBeGreaterThan(0);
   });
 

@@ -3,6 +3,7 @@
 import type { Fixed } from "../fixed";
 import type { EntitlementProof } from "./emissions";
 import type { TypedRequest } from "./eip712";
+import type { StakingWallet } from "./staking";
 import type { Address, SignedWithdrawal } from "./types";
 
 export interface WalletOption {
@@ -50,6 +51,8 @@ export interface Wallet {
    * when the wallet added it. Absent from a wallet with no token to suggest, such as the mock's.
    */
   suggestMonkey?(): Promise<boolean>;
+  /** Staking, unstaking and USDC distribution claims; absent from a wallet that reads no chain, such as a watched account's. */
+  staking?: StakingWallet;
   /**
    * Dev-only, live-dev builds: mints `amount` of the deployment's mock USDC to this account through
    * the wallet and resolves with the transaction hash; `progress` as for `deposit`. Absent on

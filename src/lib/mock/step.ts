@@ -4,6 +4,7 @@ import { absFixed, bpsOf, fixedFromInt, fixedToWire, moveBps, mulFixed, type Fix
 import type { EngineEvent, SourceQuote } from "../engine/types";
 import { closeOutUnderwater } from "./closeout";
 import { closeEmissionPeriods } from "./emissions";
+import { closeDistributionEpochs } from "./monkey";
 import { creditFinal, payQueue } from "./funds";
 import { triggerResting } from "./orders";
 import { MAX_STRESS } from "../pricing";
@@ -103,7 +104,9 @@ export function advance(state: MockState, ms: number, options: { liquidity?: boo
   }
   // Emission periods finalise before the command's other effects, as the engine's apply does, so a
   // charge this tick lands cannot forfeit a weight the account held at the period's cutoff.
-  events.push(...closeEmissionPeriods(state), ...chargeFinancing(state, previous), ...triggerResting(state), ...closeOutUnderwater(state), ...creditFinal(state));
+  events.push(...closeEmissionPeriods(state));
+  closeDistributionEpochs(state);
+  events.push(...chargeFinancing(state, previous), ...triggerResting(state), ...closeOutUnderwater(state), ...creditFinal(state));
   const bucket = (t: number) => Math.floor(t / LIQUIDITY_EVERY_MS);
   events.push(...payQueue(state, options.liquidity !== false && bucket(ms) > bucket(previous) ? LIQUIDITY_STEP : 0n));
   state.emit({ type: "tick" }, events);

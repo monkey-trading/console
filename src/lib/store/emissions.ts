@@ -36,9 +36,6 @@ export function emissionsPosition(entitlement: EntitlementProof | null, vault: {
   return { accrued, claimed, checkpoint, claimable };
 }
 
-/** How long a stale vault record waits before it is read again, in milliseconds of the node's clock. */
-export const EMISSIONS_READ_RETRY_MS = 60_000;
-
 /**
  * How many rounds a claim re-reads the vault record and the node's proof before it keeps the
  * waiting state. Each round is a pair of network reads, and the pair meets within a few rounds
@@ -47,20 +44,9 @@ export const EMISSIONS_READ_RETRY_MS = 60_000;
 const CLAIM_PROOF_ATTEMPTS = 3;
 
 /**
- * Whether the vault's record should be read now: always when it has not been read, and again when
- * the proof's checkpoint has passed it — the vault posts checkpoints on its own, so a record
- * behind the proof has simply not seen them yet. The retry waits out `EMISSIONS_READ_RETRY_MS` of
- * node time so a checkpoint still posting does not spin the wallet's chain provider.
- */
-export function emissionsRecordStale(entitlement: EntitlementProof, vault: { latestSeq: number } | null, nowMs: number, lastReadAtMs: number): boolean {
-  if (vault === null || vault.latestSeq < entitlement.seq) return lastReadAtMs < 0 || nowMs - lastReadAtMs >= EMISSIONS_READ_RETRY_MS;
-  return false;
-}
-
-/**
  * Reads the vault's record of the connected account's MONKEY through the wallet's chain provider:
  * what it has minted and its latest posted checkpoint seq. One read per wallet at a time; a failed
- * read is reported once, and the effect that asked retries it when the proof changes.
+ * read is reported once, and the MONKEY page's next wallet read tries it again.
  */
 export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> {
   const wallet = store.liveWallet;
@@ -85,8 +71,6 @@ export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> 
       }
     }
   } finally {
-    // The throttle window runs from the read's end, whatever it answered, for the wallet it ran for.
-    if (current()) store.lastEmissionsReadAt = store.getSnapshot().now;
     if (store.emissionsCheck === wallet) store.emissionsCheck = null;
   }
 }
@@ -104,6 +88,8 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
   const readRecord = wallet.emissionsClaimed?.bind(wallet);
   if (claim === undefined || readRecord === undefined) return store.toast("error", "This wallet cannot claim MONKEY.");
   store.patch({ busy: true });
+  // Set once the mint has landed: the token offer is made after the claim has finished, so a caller that queues the claim holds the wallet until the offer has been answered too.
+  let offered: Wallet | null = null;
   try {
     // The vault claims against its current latest root, so the claim needs the proof for the
     // vault's latest posted checkpoint, not the page's last-read pair: under a fast sequencer the
@@ -122,8 +108,8 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
         // The mint belongs to the account that claimed it, which may no longer be the one connected.
         const after = store.getSnapshot();
         store.toast("ok", `The vault minted ${amount} to ${after.wallet?.address === wallet.address ? "your wallet" : wallet.address}.`);
-        offerMonkeyImport(store, wallet);
-        return;
+        offered = wallet;
+        break;
       }
       if (attempt >= CLAIM_PROOF_ATTEMPTS) {
         // Genuine lag: the card's waiting line stands; say why the claim did not fire.
@@ -133,18 +119,17 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
   } catch (error) {
     store.toast("error", errorText(error));
   } finally {
-    // The vault's record changed with the claim, or the reads above refreshed it; a fresh read
-    // settles the claimed-versus-accrued line at once, so the record's invalidation resets the
-    // read window too.
-    store.lastEmissionsReadAt = -1;
+    // The vault's record changed with the claim, or the reads above refreshed it; the page reads it
+    // again once the claim has finished, which settles the claimed-versus-accrued line.
     store.patch({ busy: false, emissionsVault: null });
   }
+  if (offered !== null) await offerMonkeyImport(store, offered);
 }
 
 /** Offers to add the vault's MONKEY to the wallet that just claimed; one small toast when it is added, silence on a decline. */
-function offerMonkeyImport(store: ConsoleStore, wallet: Wallet): void {
-  if (wallet.readOnly || wallet.suggestMonkey === undefined) return;
-  void wallet.suggestMonkey().then(
+function offerMonkeyImport(store: ConsoleStore, wallet: Wallet): Promise<void> {
+  if (wallet.readOnly || wallet.suggestMonkey === undefined) return Promise.resolve();
+  return wallet.suggestMonkey().then(
     (added) => { if (added) store.toast("info", "MONKEY was added to your wallet, so its balance shows there."); },
     () => undefined,
   );

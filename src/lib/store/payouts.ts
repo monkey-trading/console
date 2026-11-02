@@ -185,7 +185,8 @@ export async function checkPaid(store: ConsoleStore): Promise<void> {
   const current = () => store.liveWallet === wallet && store.getSnapshot().wallet?.address === address;
   try {
     for (let nonce = unreadPayouts(store.getSnapshot())[0]; nonce !== undefined && current(); nonce = unreadPayouts(store.getSnapshot())[0]) {
-      const paid = await wallet.claimed(nonce);
+      // Through the session's wallet queue, so it never asks the provider beside the MONKEY page's reads.
+      const paid = await store.monkeySession.walletWork.work(wallet, () => wallet.claimed?.(nonce) ?? Promise.resolve(false));
       if (!current()) return;
       const now = store.getSnapshot();
       store.patch(paid ? { paid: [...new Set([...now.paid, nonce])] } : { unpaid: [...new Set([...now.unpaid, nonce])] });

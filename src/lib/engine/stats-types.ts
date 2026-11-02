@@ -4,7 +4,7 @@
  * (the engine's nine-place `Fixed`, or whole base units for the MONKEY and USDC counts).
  */
 
-import type { MarketId } from "./types";
+import type { Address, MarketId } from "./types";
 
 /** `/v1/house`'s added figures. A scan figure is null until the node's first scan; a node that predates the routes omits them. */
 export interface HouseScanView {
@@ -80,7 +80,10 @@ export interface PositionsView {
   profit: ProfitBucketView[];
 }
 
-export type SeriesMetric = "nav" | "cash" | "withdrawal_queue" | "long" | "short" | "volume";
+export type HouseSeriesMetric = "nav" | "cash" | "withdrawal_queue" | "long" | "short" | "volume";
+/** The MONKEY page's series: MONKEY base units staked and allocated, USDC base units distributed (cumulative and per epoch), and MONKEY base units per dollar of realised loss by period. */
+export type MonkeySeriesMetric = "total_staked" | "total_allocated" | "cumulative_distributed" | "monkey_per_loss" | "distributed_per_epoch";
+export type SeriesMetric = HouseSeriesMetric | MonkeySeriesMetric;
 export type SeriesResolution = "1m" | "1h" | "1d";
 
 /** A level series' bucket. */
@@ -156,7 +159,59 @@ export interface MonkeyView {
     last_closed_ms: number | null;
     next_close_ms: number;
     distributed_usdc_units: string;
+    /** The last close this record saw, with what it measured; null before one. */
+    last_distribution: {
+      epoch: number;
+      closed_ms: number;
+      nav: string;
+      floor: string;
+      excess_usdc_units: string;
+      allocated_usdc_units: string;
+    } | null;
   } | null;
+}
+
+/** The groups of `/v1/monkey`, each null until the operator configures it. */
+export type EmissionsView = NonNullable<MonkeyView["emissions"]>;
+export type StakingView = NonNullable<MonkeyView["staking"]>;
+export type DistributionView = NonNullable<MonkeyView["distribution"]>;
+
+export type ActivityKind = "loss_close" | "stake" | "unstake";
+
+/** One public MONKEY event. */
+export interface ActivityEntry {
+  /** Orders entries in time; a decimal string, since it passes what a JavaScript number holds. */
+  id: string;
+  seq: number;
+  ts: number;
+  type: ActivityKind;
+  account: Address;
+  /** MONKEY base units. */
+  amount: string;
+  /** The emission period of a `loss_close`. */
+  period: number | null;
+}
+
+/** `GET /v1/monkey/activity`: the newest events first. */
+export interface ActivityPage {
+  entries: ActivityEntry[];
+  next: string | null;
+  begins_ms: number | null;
+  begins_seq: number | null;
+  from_genesis: boolean;
+  truncated: boolean;
+  retained_from_ms: number | null;
+}
+
+/** `GET /v1/accounts/{address}/distributions`: the proof the vault's `claimDistribution` takes. */
+export interface DistributionProof {
+  /** The seq the root was computed at; a claim works only while the vault's latest posted seq equals it. */
+  seq: number;
+  root: string;
+  account: Address;
+  /** The account's cumulative USDC distribution in base units. */
+  entitled: string;
+  siblings: string[];
 }
 
 /** The dashboard's reads, kept apart from the rest of the client so a node without the routes answers 404 to them alone. */
@@ -164,4 +219,10 @@ export interface StatsReads {
   positions(market: MarketId): Promise<PositionsView>;
   series(query: SeriesQuery): Promise<SeriesPage>;
   monkey(): Promise<MonkeyView>;
+  /** The newest MONKEY events, newest first, older than `before`. */
+  activity(params: { limit?: number; before?: string }): Promise<ActivityPage>;
+  /** The account's distribution proof, or null when the node holds none for it. */
+  distributions(address: Address): Promise<DistributionProof | null>;
+  /** Contract addresses a client knows without a deployment config; only the mock names any. */
+  readonly contracts?: { token: string; staking: string };
 }

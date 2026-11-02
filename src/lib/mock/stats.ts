@@ -2,16 +2,15 @@
 
 import { EngineError } from "../engine/client";
 import type { MarkPage } from "../engine/mark-types";
-import type { HouseMarketView, HouseScanView, LevelEntry, MonkeyView, PositionsView, SeriesPage, SeriesQuery, SideCounts, StatsReads, ValueEntry } from "../engine/stats-types";
+import type { HouseMarketView, HouseScanView, HouseSeriesMetric, LevelEntry, MonkeySeriesMetric, MonkeyView, PositionsView, SeriesMetric, SeriesPage, SeriesQuery, SideCounts, StatsReads, ValueEntry } from "../engine/stats-types";
 import { decodeSchedule, type EmissionSchedule } from "../engine/emission-schedule";
 import type { HouseView, MarketId } from "../engine/types";
-import { absFixed, fixedFromInt, fixedFromWire, fixedToNumber, fixedToWire } from "../fixed";
-import { MONKEY_UNIT } from "../format";
+import { absFixed, fixedFromWire, fixedToNumber, fixedToWire } from "../fixed";
 import { seedBars } from "../bars";
 import { SEED } from "../prng";
 import { houseNav } from "./accounts";
-import { EMISSION_PERIOD_BUDGET, EMISSION_PERIOD_MS } from "./emissions";
-import { AVERAGE_POSITION_USD, bookAt, cashAt, MOCK_RECORD_BEGINS_MS, navAt, noise, numberOf, queueAt, volumeIn, wave, wire, type Book } from "./stats-model";
+import { activityPage, distributionProof, mockContracts, monkeySeries, overview } from "./monkey";
+import { AVERAGE_POSITION_USD, bookAt, cashAt, MOCK_RECORD_BEGINS_MS, navAt, noise, numberOf, queueAt, volumeIn, wire, type Book } from "./stats-model";
 import type { MockState } from "./state";
 
 const MINUTE_MS = 60_000;
@@ -69,7 +68,7 @@ function queueNow(state: MockState): bigint {
 }
 
 /** One metric's value at `ms`, in dollars; the bucket that holds the node's clock ends on the figure it answers now. */
-function valueAt(state: MockState, metric: SeriesQuery["metric"], market: MarketId | null, ms: number): number {
+function valueAt(state: MockState, metric: HouseSeriesMetric, market: MarketId | null, ms: number): number {
   const now = state.now;
   switch (metric) {
     case "nav": return navAt(houseNav(state), now, ms);
@@ -87,6 +86,8 @@ function valueAt(state: MockState, metric: SeriesQuery["metric"], market: Market
 /** `GET /v1/stats/series` over the mock's waves. */
 export function seriesPage(state: MockState, query: SeriesQuery): SeriesPage {
   const { metric, market, resolution } = query;
+  // The MONKEY metrics are served by `mockStats` from `monkey.ts`; one reaching here is a mistake of the caller's.
+  if (isMonkeyMetric(metric)) throw bad(`${metric} is not a house metric`);
   if ((metric === "long" || metric === "short") && market === null) throw bad(`${metric} needs a market`);
   if ((metric !== "long" && metric !== "short" && metric !== "volume") && market !== null) throw bad(`${metric} takes no market`);
   if (market !== null) markOf(state, market);
@@ -173,19 +174,9 @@ export function positionsView(state: MockState, id: MarketId): PositionsView {
   };
 }
 
-/** `GET /v1/monkey` over the mock: its emission accrual, a stand-in stake, and the distribution's floor. */
+/** `GET /v1/monkey` over the mock: the schedule, stakers and distributions `monkey.ts` holds. */
 export function monkeyView(state: MockState): MonkeyView {
-  const allocated = [...state.entitledMonkey.values()].reduce((total, units) => total + units, 0n);
-  const nav = houseNav(state);
-  const floor = fixedFromInt(8_000_000);
-  const epochMs = 7 * DAY_MS;
-  const epoch = Math.floor((state.now - MOCK_RECORD_BEGINS_MS) / epochMs);
-  return {
-    seq: state.seq, time_ms: state.now, begins_ms: MOCK_RECORD_BEGINS_MS, begins_seq: 0, from_genesis: true,
-    emissions: { start_ms: 0, period_ms: EMISSION_PERIOD_MS, period_budget: EMISSION_PERIOD_BUDGET.toString(), halving_periods: 4_320, period: state.emission.period, current_budget: EMISSION_PERIOD_BUDGET.toString(), next_halving_ms: (state.emission.period + 4_320) * EMISSION_PERIOD_MS, max_supply: (EMISSION_PERIOD_BUDGET * 8_640n).toString(), allocated: allocated.toString(), cancelled: "0" },
-    staking: { total_staked: (2_450_000n * MONKEY_UNIT + BigInt(Math.floor(state.now / MINUTE_MS) % 5_000) * MONKEY_UNIT).toString(), stakers: 184 + Math.floor(wave(31, state.now) * 6), cooldown_ms: 7 * DAY_MS },
-    distribution: { start_ms: MOCK_RECORD_BEGINS_MS, epoch_ms: epochMs, liquidity_floor: wire(fixedToNumber(floor)), nav: wire(fixedToNumber(nav)), excess_usd: nav > floor ? wire(fixedToNumber(nav - floor)) : null, excess_seq: state.seq, epoch, last_closed_epoch: epoch - 1, last_closed_ms: MOCK_RECORD_BEGINS_MS + epoch * epochMs, next_close_ms: MOCK_RECORD_BEGINS_MS + (epoch + 1) * epochMs, distributed_usdc_units: "1842500000" },
-  };
+  return overview(state);
 }
 
 /**
@@ -207,8 +198,25 @@ export function emissionScheduleOf(state: MockState): EmissionSchedule {
 
 /** The dashboard routes over `state`. */
 export function mockStats(state: MockState): StatsReads {
-  return { positions: async (market) => positionsView(state, market), series: async (query) => seriesPage(state, query), monkey: async () => monkeyView(state) };
+  return {
+    positions: async (market) => positionsView(state, market),
+    series: async (query) => (isMonkeyMetric(query.metric) ? monkeySeries(state, { ...query, metric: query.metric }) : seriesPage(state, query)),
+    monkey: async () => monkeyView(state),
+    activity: async (params) => activityPage(state, params),
+    distributions: async (address) => {
+      try {
+        return distributionProof(state, address);
+      } catch (error) {
+        if (error instanceof EngineError && error.status === 404) return null;
+        throw error;
+      }
+    },
+    contracts: mockContracts(),
+  };
 }
+
+const MONKEY_METRICS: ReadonlySet<string> = new Set<MonkeySeriesMetric>(["total_staked", "total_allocated", "cumulative_distributed", "monkey_per_loss", "distributed_per_epoch"]);
+const isMonkeyMetric = (metric: SeriesMetric): metric is MonkeySeriesMetric => MONKEY_METRICS.has(metric);
 
 /** `GET /v1/markets/{id}/marks` over the mock's seeded history, ending at its index now. */
 export function marksPage(state: MockState, id: MarketId, resolution: "1s" | "1m" | "1h" | "1d", fromMs: number, toMs: number): MarkPage {
