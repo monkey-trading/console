@@ -25,6 +25,15 @@ describe("ExitKeeper", () => {
       expect(kit.store.getSnapshot().exit.missingSince).toBe(OLDEST);
       expect(notice()).toBe(WARNED);
     });
+    it("leaves it alone while the answer is held for a vault that is still taking checkpoints", async () => {
+      heard(OLDEST);
+      kit.exit.vault = factsAt(100, { chainNow: NOW, lastCheckpointAt: NOW - 3_599 });
+      kit.client.exitAnswer = fullProof(200);
+      await kit.connect();
+      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "node-ahead", nodeSeq: 200 });
+      expect(kit.store.getSnapshot().exit.missingSince).toBe(NOW);
+      expect(notice()).toBeUndefined();
+    });
     it("warns when the read failed too", async () => {
       heard(OLDEST);
       kit.client.exitError = new EngineError(0, "The node did not answer.");

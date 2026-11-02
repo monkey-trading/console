@@ -158,6 +158,7 @@ export class ExitKeeper {
       if (answer.root === vault.latestRoot) this.heldNothing(this.store.getSnapshot(), scope, answer);
     }
     if (this.triedRoot === vault.latestRoot) return;
+    if (this.answer !== null && this.answer.seq > vault.latestSeq) return; // the node has given what the vault holds next: its next read has nothing to add
     const wait = nodeWait(state.attestation, state.stream);
     if (wait === "wait") return;
     if (wait !== "ready") {
@@ -207,13 +208,14 @@ export class ExitKeeper {
     if (this.answer !== null) return this.takeAnswer(wallet, scope);
     const current = () => this.store.liveWallet === wallet;
     this.triedRoot = root;
-    this.patch({ reading: true, nothing: false });
+    this.patch({ reading: true });
     try {
       const answer = await this.store.deps.client.exitProof(wallet.address);
       if (!current()) return;
       if (answer === null) return this.patch({ attempt: { kind: "no-proof" } });
       this.answer = parseExitProof(answer);
       await this.takeAnswer(wallet, scope);
+      if (this.answer !== null && current()) this.store.exit.chaseHeld(this.answer.seq);
     } catch (error) {
       if (!current()) return;
       this.patch({ attempt: error instanceof ExitProofError ? { kind: "refused", reason: error.message } : { kind: "node-failed", reason: errorText(error) } });
@@ -235,7 +237,7 @@ export class ExitKeeper {
       return;
     }
     if (!current()) return;
-    // One ahead of the vault is what it holds next, so it is checked again then, at no signature, and it may be all there is if the node has gone by that time.
+    // One ahead of the vault is what it holds next, so it is checked and saved then, at no signature, and it may be all there is if the node has gone by that time. It is the one answer held, and the next replaces it.
     if (outcome.kind !== "other-root" || outcome.proofSeq <= outcome.vaultSeq) this.answer = null;
     const now = this.store.getSnapshot();
     if (outcome.kind === "other-root" && outcome.proofSeq <= outcome.vaultSeq) {
@@ -269,10 +271,17 @@ export class ExitKeeper {
     this.patch({ attempt: null, nothing: true, record: now.exit.record?.proof.root === proof.root ? now.exit.record : null });
   }
 
-  /** Tries an answer the wallet could not check before. */
+  /** Takes up the answer held, from what the vault was just read to say: ahead of the vault it waits, with no read of the wallet; at the vault's latest it is checked and saved; passed, it can never be claimed from, and the settle after this asks for the next. */
   async retryAnswer(): Promise<void> {
     const wallet = this.store.liveWallet;
     const scope = this.scope(wallet);
-    if (wallet !== null && scope !== null && this.answer !== null) await this.takeAnswer(wallet, scope);
+    const { vault } = this.store.getSnapshot().exit;
+    if (wallet === null || scope === null || this.answer === null || vault === null) return;
+    if (this.answer.seq > vault.latestSeq) return;
+    if (this.answer.seq < vault.latestSeq) {
+      this.answer = null;
+      return;
+    }
+    await this.takeAnswer(wallet, scope);
   }
 }

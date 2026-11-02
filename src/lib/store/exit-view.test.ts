@@ -48,16 +48,17 @@ describe("exitView, before anything goes wrong", () => {
   it("is calm before a first proof has been tried", () => {
     expect(exitView({ ...NO_EXIT, vault: factsAt(100) }, WALLET).lines).toEqual([{ tone: "calm", text: "No proof is saved in this browser yet." }]);
   });
-  it("says it is updating while a read is out, whatever came before", () => {
-    const exit = { ...NO_EXIT, vault: factsAt(200), record: recordAt(100), reading: true, attempt: { kind: "node-ahead", nodeSeq: 300 } as const };
-    expect(exitView(exit, WALLET).lines).toEqual([{ tone: "calm", text: "Updating your proof to the vault's latest checkpoint…" }]);
+  it("says it is updating only while a file is read, and holds its line through the node's reads", () => {
+    const exit = { ...NO_EXIT, vault: factsAt(200), record: recordAt(100), attempt: { kind: "node-ahead", nodeSeq: 300 } as const };
+    expect(exitView({ ...exit, importing: true }, WALLET).lines).toEqual([{ tone: "calm", text: "Updating your proof to the vault's latest checkpoint…" }]);
+    expect(exitView({ ...exit, reading: true }, WALLET).lines).toEqual(exitView(exit, WALLET).lines);
   });
 });
 
 describe("exitView, when the proof has gone stale", () => {
   const behind = { ...NO_EXIT, vault: factsAt(200, { chainNow: 1_600 }), record: recordAt(100) };
-  it("says how old it is, and that the vault would refuse a claim from it", () => {
-    expect(exitView(behind, WALLET).lines[0]).toEqual({ tone: "warn", text: "Your saved proof is from checkpoint 100, posted 10 min ago. The vault's latest is checkpoint 200, so the vault would refuse a claim from it." });
+  it("says calmly which checkpoint it is from, while being behind has not lasted", () => {
+    expect(exitView(behind, WALLET).lines).toEqual([{ tone: "calm", text: "Saved in this browser: checkpoint 100, posted 10 min ago." }]);
   });
   it("leaves the other pages alone for the first hour, then tells them", () => {
     expect(exitView(behind, WALLET).notice).toBeNull();
@@ -72,7 +73,6 @@ describe("exitView, when the proof has gone stale", () => {
     expect(exitView({ ...old, reading: true, attempt: { kind: "node-failed", reason: "x" } }, WALLET).notice).toBeNull();
   });
   it.each<[string, ExitState["attempt"], RegExp, string]>([
-    ["the node ahead of the vault", { kind: "node-ahead", nodeSeq: 300 }, /checkpoint 300, which the vault does not hold/, "warn"],
     ["a failed read", { kind: "node-failed", reason: "timed out" }, /could not be read: timed out\. It is read again by itself\./, "calm"],
     ["the node away", { kind: "node-away", reason: "the node's feed is stale" }, /cannot be read now: the node's feed is stale/, "warn"],
     ["a refused proof", { kind: "refused", reason: "its exit terms do not prove" }, /did not pass the vault's check, so it was not saved: its exit terms do not prove/, "bad"],
