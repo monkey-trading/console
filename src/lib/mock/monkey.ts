@@ -11,7 +11,7 @@ import { fixedToWire, type Fixed } from "../fixed";
 import { MONKEY_UNIT } from "../format";
 import { mockHex } from "./client";
 import { houseNav } from "./accounts";
-import { COOLDOWN_MS, EPOCH_MS, FLOOR_USD, HALVING_PERIODS, PERIOD_BUDGET, PERIOD_MS } from "./monkey-state";
+import { COOLDOWN_MS, EPOCH_MS, FLOOR_USD, HALVING_PERIODS, PERIOD_BUDGET, PERIOD_MS, postedStanding } from "./monkey-state";
 import type { MockState } from "./state";
 
 const RESOLUTION_MS: Record<SeriesResolution, number> = { "1m": 60_000, "1h": 3_600_000, "1d": 86_400_000 };
@@ -158,7 +158,7 @@ function closedTotals(state: MockState): { upTo(ts: number): bigint } {
 export function distributionProof(state: MockState, address: string): DistributionProof {
   const entitled = state.monkey.distEntitled.get(address.toLowerCase());
   if (entitled === undefined) throw new EngineError(404, "not found");
-  return { seq: state.postedSeq, root: `0x${mockHex("distribution-root", 32)}`, account: address, entitled: entitled.toString(), siblings: [] };
+  return { seq: state.postedSeq, root: `0x${mockHex("distribution-root", 32)}`, account: address, entitled: entitled.toString(), siblings: [], ...postedStanding(state.postedSeq, entitled) };
 }
 
 /** Closes every distribution epoch the clock has passed, paying each staker its share of the amount, and posts a checkpoint with the close. */

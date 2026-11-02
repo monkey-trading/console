@@ -7,6 +7,7 @@
  * record, read with the wallet's, which reports a failure as it always has, once for a failed read and again for a call the wallet did not answer in time.
  */
 
+import { carryAccrued } from "../engine/claim-standing";
 import type { ActivityPage, DistributionProof, MonkeyView } from "../engine/stats-types";
 import type { StakingPosition } from "../engine/staking";
 import type { Wallet } from "../engine/wallet";
@@ -31,6 +32,11 @@ export interface WalletFigures {
   proof: Read<DistributionProof | null>;
 }
 
+/** The text typed in the stake and unstake fields, for the account it was typed for. */
+export interface Drafts { account: string | null; stake: string; unstake: string }
+
+const NO_DRAFTS: Drafts = { account: null, stake: "", unstake: "" };
+
 export interface PanelState {
   overview: Read<MonkeyView>;
   activity: Read<ActivityPage>;
@@ -41,13 +47,24 @@ export interface PanelState {
    * moves, the wallet and the total disagree and a share of one in the other would be wrong.
    */
   unmirroredTotal: string | null;
+  /**
+   * Held here, not in the fields, so a gap in the feed (the stop clears the wallet figures and the
+   * forms with them) loses nothing a visitor typed; another account's, or none, clears them.
+   */
+  drafts: Drafts;
+  /** True from the moment a transaction lands until the wallet has been read again, so a stale balance or Max cannot be sent again. */
+  settling: boolean;
 }
 
 const NO_WALLET: WalletFigures = { address: null, position: LOADING, proof: LOADING };
 
 export class MonkeyPanel {
   readonly feeds: Record<"epochs" | "perLoss" | "supply" | "rewards", ChartFeed>;
-  private state: PanelState = { overview: LOADING, activity: LOADING, wallet: NO_WALLET, unmirroredTotal: null };
+  private state: PanelState = { overview: LOADING, activity: LOADING, wallet: NO_WALLET, unmirroredTotal: null, drafts: NO_DRAFTS, settling: false };
+  /** Landed transactions whose re-read is still running. */
+  private settlers = 0;
+  private proofReads = 0;
+  private proofLanded = 0;
   private readonly listeners = new Set<() => void>();
   private nodeRead: Promise<void> | null = null;
   /** Counts the page's openings; work that began in an earlier one never writes into a later one. */
@@ -102,16 +119,40 @@ export class MonkeyPanel {
       this.open = false;
       this.cycle = this.store.monkeySession.nextOpening();
       this.nodeRead = null;
+      this.settlers = 0;
       if (this.store.monkeySession.panel === this) this.store.monkeySession.panel = null;
       clearInterval(timer);
       for (const feed of Object.values(this.feeds)) feed.close();
-      this.set({ overview: LOADING, activity: LOADING, wallet: NO_WALLET, unmirroredTotal: null });
+      this.set({ overview: LOADING, activity: LOADING, wallet: NO_WALLET, unmirroredTotal: null, settling: false });
     };
   }
 
   /** Marks the stake figures as ahead of the node's mirror until its total moves; see [PanelState.unmirroredTotal]. */
   holdShare(): void {
     this.set({ unmirroredTotal: this.state.overview.value?.staking?.total_staked ?? "" });
+  }
+
+  /** Keeps what was typed in a field; the field's account is the connected one. */
+  setDraft(field: "stake" | "unstake", text: string): void {
+    const account = this.store.liveWallet?.address ?? null;
+    this.set({ drafts: { ...(this.state.drafts.account === account ? this.state.drafts : NO_DRAFTS), account, [field]: text } });
+  }
+
+  /** Empties a field once what was sent from it has landed, unless the visitor has typed something else since. */
+  clearDraft(field: "stake" | "unstake", sent: string): void {
+    if (this.state.drafts[field] === sent) this.set({ drafts: { ...this.state.drafts, [field]: "" } });
+  }
+
+  /** Marks a landed transaction's re-read as running; `reread` is that read, after which the forms open again. */
+  async settle(reread: Promise<unknown>): Promise<void> {
+    const cycle = this.cycle;
+    this.settlers += 1;
+    this.set({ settling: true });
+    await reread.finally(() => {
+      if (cycle !== this.cycle) return; // the page was reopened meanwhile, which reset the count
+      this.settlers -= 1;
+      this.set({ settling: this.settlers > 0 });
+    });
   }
 
   /** Reads the totals and the activity, one read of each at a time. */
@@ -148,7 +189,7 @@ export class MonkeyPanel {
   refreshWallet(fresh = false): Promise<void> {
     const wallet = this.store.liveWallet;
     if (wallet === null) {
-      this.set({ wallet: NO_WALLET });
+      this.set({ wallet: NO_WALLET, drafts: NO_DRAFTS });
       return Promise.resolve();
     }
     const cycle = this.cycle;
@@ -182,12 +223,21 @@ export class MonkeyPanel {
 
   /** The node's distribution proof for `wallet`, into the figures; a failure lands there, so this never rejects. */
   private async readProof(wallet: Wallet, cycle: number): Promise<void> {
-    const current = () => this.open && cycle === this.cycle && this.store.liveWallet === wallet;
+    // Reads overlap (a Refresh and the read after a transaction), so an answer lands only if no read begun after it has landed already. The order of the reads decides, not the checkpoints the proofs name: the node may now answer at an older checkpoint than an earlier read did.
+    const ticket = ++this.proofReads;
+    const current = () => this.open && cycle === this.cycle && this.store.liveWallet === wallet && ticket > this.proofLanded;
+    const held = () => (this.state.wallet.address === wallet.address ? this.state.wallet.proof.value : null);
     try {
-      const proof = ready(await this.store.deps.client.stats.distributions(wallet.address));
-      if (current()) this.set({ wallet: { ...this.state.wallet, address: wallet.address, proof } });
+      const answer = await this.store.deps.client.stats.distributions(wallet.address);
+      if (current()) {
+        this.proofLanded = ticket;
+        this.set({ wallet: { ...this.state.wallet, address: wallet.address, proof: ready(answer === null ? null : carryAccrued(held(), answer)) } });
+      }
     } catch (error) {
-      if (current()) this.set({ wallet: { ...this.state.wallet, address: wallet.address, proof: failed(error, this.state.wallet.proof.value) } });
+      if (current()) {
+        this.proofLanded = ticket;
+        this.set({ wallet: { ...this.state.wallet, address: wallet.address, proof: failed(error, this.state.wallet.proof.value) } });
+      }
     }
   }
 

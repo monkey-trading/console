@@ -15,6 +15,7 @@ import { equityOf, marginOf } from "./accounts";
 import { cancelAll, closeAll } from "./batch";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";
 import { mockTotals, queuePage, withdraw } from "./funds";
+import { postedStanding } from "./monkey-state";
 import { registerSessionKey, revokeSessionKey } from "./session-keys";
 import { advance } from "./step";
 import { emissionScheduleOf, houseFigures, marksPage, mockStats } from "./stats";
@@ -198,7 +199,7 @@ export class MockEngineClient implements EngineClient {
   async emissions(address: Address): Promise<EntitlementProof | null> {
     const entitled = this.state.entitledMonkey.get(address.toLowerCase());
     if (entitled === undefined) return null;
-    return { seq: this.state.postedSeq, root: `0x${mockHex("emission-root", 64)}`, account: address, entitled: entitled.toString(), siblings: [] };
+    return { seq: this.state.postedSeq, root: `0x${mockHex("emission-root", 64)}`, account: address, entitled: entitled.toString(), siblings: [], ...postedStanding(this.state.postedSeq, entitled) };
   }
 
   async attestEligibility(request: EligibilityRequest): Promise<ActionResult> {

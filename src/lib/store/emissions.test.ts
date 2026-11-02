@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, parseAbi } from "viem";
 
+import { carryAccrued } from "../engine/claim-standing";
 import type { EntitlementProof } from "../engine/emissions";
 import { ACCOUNT } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
@@ -18,14 +19,14 @@ const proof = (entitled: bigint, seq = 40): EntitlementProof => ({
 
 describe("emissionsPosition", () => {
   it("names nothing claimable before the node holds a proof, whatever the vault record says", () => {
-    expect(emissionsPosition(null, null)).toEqual({ accrued: 0n, claimed: null, checkpoint: "unknown", claimable: 0n });
-    expect(emissionsPosition(null, { claimed: 5n, latestSeq: 40 })).toEqual({ accrued: 0n, claimed: 5n, checkpoint: "unknown", claimable: 0n });
+    expect(emissionsPosition(null, null)).toEqual({ accrued: 0n, awaiting: 0n, claimed: null, checkpoint: "unknown", claimable: 0n });
+    expect(emissionsPosition(null, { claimed: 5n, latestSeq: 40 })).toEqual({ accrued: 0n, awaiting: 0n, claimed: 5n, checkpoint: "unknown", claimable: 0n });
   });
 
   it("reports the checkpoint waiting until the vault posts one at the proof's seq", () => {
     const at = proof(5n * MONKEY_UNIT);
     expect(emissionsPosition(at, null).checkpoint).toBe("unknown");
-    expect(emissionsPosition(at, { claimed: 0n, latestSeq: 39 })).toEqual({ accrued: 5n * MONKEY_UNIT, claimed: 0n, checkpoint: "waiting", claimable: 0n });
+    expect(emissionsPosition(at, { claimed: 0n, latestSeq: 39 })).toEqual({ accrued: 5n * MONKEY_UNIT, awaiting: 0n, claimed: 0n, checkpoint: "waiting", claimable: 0n });
     expect(emissionsPosition(at, { claimed: 2n * MONKEY_UNIT, latestSeq: 40 }).checkpoint).toBe("posted");
   });
 
@@ -33,11 +34,39 @@ describe("emissionsPosition", () => {
     const at = proof(5n * MONKEY_UNIT);
     expect(emissionsPosition(at, { claimed: 2n * MONKEY_UNIT, latestSeq: 40 }).claimable).toBe(3n * MONKEY_UNIT);
     // A newer checkpoint has superseded the proof: the claim would revert, so nothing is offered.
-    expect(emissionsPosition(at, { claimed: 0n, latestSeq: 41 })).toEqual({ accrued: 5n * MONKEY_UNIT, claimed: 0n, checkpoint: "superseded", claimable: 0n });
+    expect(emissionsPosition(at, { claimed: 0n, latestSeq: 41 })).toEqual({ accrued: 5n * MONKEY_UNIT, awaiting: 0n, claimed: 0n, checkpoint: "superseded", claimable: 0n });
     // The vault caught up: nothing is due.
     expect(emissionsPosition(at, { claimed: 5n * MONKEY_UNIT, latestSeq: 40 }).claimable).toBe(0n);
     // The vault record cannot run ahead of what it minted.
     expect(emissionsPosition(at, { claimed: 6n * MONKEY_UNIT, latestSeq: 40 }).claimable).toBe(0n);
+  });
+});
+
+describe("emissionsPosition against a node that says what is newest", () => {
+  const lagging = { ...proof(5n * MONKEY_UNIT), accepted_seq: 40, newest_seq: 44, newest_entitled: (8n * MONKEY_UNIT).toString(), claimable: true };
+
+  it("accrues what the newest checkpoint names, and claims only what the proof pays, while the vault lags", () => {
+    expect(emissionsPosition(lagging, { claimed: 2n * MONKEY_UNIT, latestSeq: 40 })).toEqual({
+      accrued: 8n * MONKEY_UNIT, awaiting: 3n * MONKEY_UNIT, claimed: 2n * MONKEY_UNIT, checkpoint: "posted", claimable: 3n * MONKEY_UNIT,
+    });
+  });
+
+  it("has nothing awaiting once the vault has caught up to the newest checkpoint", () => {
+    const caughtUp = { ...proof(8n * MONKEY_UNIT, 44), accepted_seq: 44, newest_seq: 44, newest_entitled: (8n * MONKEY_UNIT).toString(), claimable: true };
+    expect(emissionsPosition(caughtUp, { claimed: 5n * MONKEY_UNIT, latestSeq: 44 })).toEqual({
+      accrued: 8n * MONKEY_UNIT, awaiting: 0n, claimed: 5n * MONKEY_UNIT, checkpoint: "posted", claimable: 3n * MONKEY_UNIT,
+    });
+  });
+
+  it("keeps accrued where it was when an answer moves back to the older checkpoint the vault has reached", () => {
+    const newest = { ...proof(8n * MONKEY_UNIT, 44), accepted_seq: null, newest_seq: 44, newest_entitled: (8n * MONKEY_UNIT).toString(), claimable: false };
+    const back = carryAccrued(newest, lagging);
+    expect(emissionsPosition(newest, { claimed: 0n, latestSeq: 40 }).accrued).toBe(8n * MONKEY_UNIT);
+    expect(emissionsPosition(back, { claimed: 0n, latestSeq: 40 })).toMatchObject({ accrued: 8n * MONKEY_UNIT, checkpoint: "posted", claimable: 5n * MONKEY_UNIT });
+  });
+
+  it("reads a node without the fields as it always has", () => {
+    expect(emissionsPosition(proof(5n * MONKEY_UNIT), { claimed: 2n * MONKEY_UNIT, latestSeq: 40 })).toMatchObject({ accrued: 5n * MONKEY_UNIT, awaiting: 0n, claimable: 3n * MONKEY_UNIT });
   });
 });
 

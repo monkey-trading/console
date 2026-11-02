@@ -1,5 +1,6 @@
 /** The connected account's reads: eligibility, its withdrawal queue and history, and its state. */
 
+import { carryAccrued } from "../engine/claim-standing";
 import { EngineError } from "../engine/client";
 import { UntrustedError } from "../engine/trust";
 import { decodeAccount } from "../models";
@@ -37,7 +38,7 @@ export async function loadAccount(store: ConsoleStore, withHistory: boolean): Pr
       }
     }
     if (store.getSnapshot().wallet?.address !== wallet.address) return;
-    store.patch({ eligibility: eligibility.class, queue: queue.queue, accountQueueRead: true, account, entitlement });
+    store.patch({ eligibility: eligibility.class, queue: queue.queue, accountQueueRead: true, account, entitlement: entitlement === null ? null : carryAccrued(store.getSnapshot().entitlement, entitlement) });
     if (withHistory || store.getSnapshot().history.length === 0) {
       const history = (await client.history(wallet.address, { limit: 100 })).events;
       if (store.getSnapshot().wallet?.address === wallet.address) store.patch({ history });

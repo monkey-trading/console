@@ -4,6 +4,7 @@
  * (the engine's nine-place `Fixed`, or whole base units for the MONKEY and USDC counts).
  */
 
+import type { ClaimStanding } from "./emissions";
 import type { Address, MarketId } from "./types";
 
 /** `/v1/house`'s added figures. A scan figure is null until the node's first scan; a node that predates the routes omits them. */
@@ -204,7 +205,7 @@ export interface ActivityPage {
 }
 
 /** `GET /v1/accounts/{address}/distributions`: the proof the vault's `claimDistribution` takes. */
-export interface DistributionProof {
+export interface DistributionProof extends ClaimStanding {
   /** The seq the root was computed at; a claim works only while the vault's latest posted seq equals it. */
   seq: number;
   root: string;
