@@ -8,12 +8,13 @@ import { useMemo } from "react";
 import { formatCompactUsd, formatUsdc, parseUnits } from "@/lib/chart-format";
 import { fixedToNumber, formatUsd, type Fixed } from "@/lib/fixed";
 import { groupThousands, formatMonkey } from "@/lib/format";
+import { queueCaveats } from "@/lib/house";
 import { PAGES } from "@/lib/nav";
 import type { HouseScan } from "@/lib/house-scan";
 import { feedProblem } from "@/lib/store/house-feed-text";
 import { monkeyFeed } from "@/lib/store/house-feeds";
 import type { ConsoleState } from "@/lib/store/state";
-import { formatClock } from "@/lib/time";
+import { formatClock, formatStamp } from "@/lib/time";
 
 import { useSession } from "../ConsoleProvider";
 import { Panel, Quiet, Row, Term, type Emphasis } from "./Panel";
@@ -30,7 +31,7 @@ const compact = (value: Fixed | null): string => (value === null ? "—" : forma
 const net = compact;
 
 const selectScan = (s: ConsoleState): HouseScan | null => s.house.scan;
-const selectHouse = (s: ConsoleState) => ({ cash: s.house.cash, nav: s.house.nav, gross: s.house.grossExposure, scan: s.house.scan, queued: s.withdrawalTotals?.remaining ?? null });
+const selectHouse = (s: ConsoleState) => ({ cash: s.house.cash, nav: s.house.nav, gross: s.house.grossExposure, scan: s.house.scan, queue: s.withdrawalTotals, queueFailed: s.queueFailed });
 
 /** Open interest, margin and positions, then each market's clients' long, short and net notional. */
 export function OpenPositions() {
@@ -88,18 +89,20 @@ export function OpenPositions() {
 
 /** The house's cash, NAV, unrealised result, queued withdrawals, gross exposure and volume. */
 export function HouseFigures() {
-  const { cash, nav, gross, scan, queued } = useSelected(selectHouse);
+  const { cash, nav, gross, scan, queue, queueFailed } = useSelected(selectHouse);
+  const simulated = useSession().store.deps.client.signatures === "none";
   const unrealised = scan?.unrealised ?? nav - cash;
   return (
-    <Panel title="House" tip="The house's own finances, from the node's signed answers.">
+    <Panel title="House" tip={simulated ? "The house's own finances, simulated in this browser and signed by nothing." : "The house's own finances, from the node's signed answers."}>
       <dl className="space-y-1">
         <Row label="House funds" tip="The house's cash: its capital plus what clients have lost and paid in fees, less what they have won." value={formatUsd(cash)} tone="glow" />
         <Row label="NAV" tip="Net asset value: cash less the clients' unrealised profit at current marks." value={formatUsd(nav)} />
         <Row label="Unrealised P&L" tip="The house's result on the positions open now at current marks: NAV less cash. Negative when clients are ahead." value={formatUsd(unrealised)} tone={sign(unrealised)} />
-        <Row label="Queued withdrawals" tip="What the vault still owes clients waiting in the withdrawal queue." value={queued === null ? "—" : formatUsd(queued)} />
+        <Row label="Queued withdrawals" tip="What the vault still owes clients waiting in the withdrawal queue." value={queue === null ? "—" : formatUsd(queue.remaining)} />
         <Row label="Gross exposure" tip="The sum of the house's absolute net exposure in each market, in dollars: opposite positions in different markets do not cancel." value={formatUsd(gross)} />
-        <Row label="Volume" tip={scan === null ? "USD traded in the recent window." : `USD traded since ${formatClock(scan.volumeSinceMs)} UTC, the start of the node's volume window.`} value={scan === null ? "—" : formatUsd(scan.volume)} />
+        <Row label="Volume" tip={scan === null ? "USD traded in the recent window." : `USD traded since ${formatStamp(scan.volumeSinceMs)} UTC, the start of the node's volume window.`} value={scan === null ? "—" : formatUsd(scan.volume)} />
       </dl>
+      {queue !== null && queueCaveats(queue, queueFailed).map((line) => <p key={line} className="text-label text-fg-3">{line}</p>)}
     </Panel>
   );
 }

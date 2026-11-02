@@ -33,8 +33,6 @@ import { useMarketOptions } from "./use-markets";
 const TIMEFRAME_OPTIONS = [{ value: "15m", label: "15m" }, { value: "1h", label: "1h" }, { value: "1D", label: "1D" }] as const satisfies readonly { value: TimeframeId; label: string }[];
 /** The ranges offered before the node has answered: the widest it serves today. */
 const UNKNOWN_NODE_RANGE_BPS = 2_000;
-/** The bands the keyboard-reachable table lists. */
-const TABLE_BANDS = 40;
 
 interface Live {
   chart: IChartApi;
@@ -81,7 +79,9 @@ export function CloseoutMap({ className }: { className?: string }) {
   const effectiveBps = view === null ? rangeBps : Math.min(rangeBps, view.closeout_range_bps);
   const bands = useMemo(() => (view === null || mark === null ? [] : bandsWithin(closeoutBands(view), mark, effectiveBps)), [view, mark, effectiveBps]);
   const rangeOptions = useMemo(() => offeredRanges(view?.closeout_range_bps ?? UNKNOWN_NODE_RANGE_BPS).map((bps) => ({ value: bps, label: `±${bps / 100}%` })), [view?.closeout_range_bps]);
-  const emptyNote = view === null ? null : emptyMapNote(view, effectiveBps);
+  const symbol = markets.find((m) => m.id === market)?.label ?? "";
+  // A node that has not priced the market yet gives no mark to place the bands around.
+  const emptyNote = view === null ? null : mark === null ? `The node has no mark for ${symbol} yet, so its bands cannot be placed.` : emptyMapNote(view, effectiveBps);
   const maxUsd = useMemo(() => Math.max(0, ...bands.map(bandUsd)), [bands]);
   const candleBars = candles.data?.bars;
   const places = useSelected(useCallback((state) => state.markets.find((m) => m.id === market)?.places ?? placesOf(mark ?? 1), [market, mark]));
@@ -156,7 +156,6 @@ export function CloseoutMap({ className }: { className?: string }) {
     c.chart.priceScale("right").applyOptions({ autoScale: true });
   }, [ready, bands, maxUsd, mark, effectiveBps, anchorTime]);
 
-  const symbol = markets.find((m) => m.id === market)?.label ?? "";
   const side = (usd: string, count: number) => `${formatCompactUsd(fixedToNumber(fixedFromWire(usd)))} (${count})`;
   const detail = hover === null
     ? null
@@ -186,7 +185,7 @@ export function CloseoutMap({ className }: { className?: string }) {
       }
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-label text-fg-3" aria-hidden="true">
-        <span className="flex items-center gap-2">$0<span className="h-2 w-24 bg-linear-to-r from-amber/5 to-amber/65" />{formatCompactUsd(maxUsd)}</span>
+        {mark !== null && <span className="flex items-center gap-2">$0<span className="h-2 w-24 bg-linear-to-r from-amber/5 to-amber/65" />{formatCompactUsd(maxUsd)}</span>}
         <span className="min-h-4 text-fg-2">{detail ?? "Move over the chart to read a band."}</span>
       </div>
       <div className="relative min-h-80 flex-1">
@@ -195,9 +194,9 @@ export function CloseoutMap({ className }: { className?: string }) {
         {failed && <p role="alert" className="absolute inset-0 z-10 flex items-center justify-center text-caption text-ember">The chart could not load. Reload the page to try again.</p>}
         <DataTable
           summary="Close-out bands as a table"
-          caption={`Close-out bands within ${effectiveBps / 100} percent of the ${symbol} mark, lowest price first`}
+          caption={`All ${bands.length} close-out bands within ${effectiveBps / 100} percent of the ${symbol} mark, lowest price first`}
           columns={["Price range", "Long", "Short"]}
-          rows={bands.slice(0, TABLE_BANDS).map((b) => ({ key: b.fromPrice, head: `${formatPrice(b.fromPrice, places)} to ${formatPrice(b.toPrice, places)}`, cells: [`${formatCompactUsd(b.longUsd)}, ${b.longCount} positions`, `${formatCompactUsd(b.shortUsd)}, ${b.shortCount} positions`] }))}
+          rows={bands.map((b) => ({ key: b.fromPrice, head: `${formatPrice(b.fromPrice, places)} to ${formatPrice(b.toPrice, places)}`, cells: [`${formatCompactUsd(b.longUsd)}, ${b.longCount} positions`, `${formatCompactUsd(b.shortUsd)}, ${b.shortCount} positions`] }))}
         />
       </div>
       {emptyNote !== null && <p className="text-label text-fg-2">{emptyNote}</p>}
@@ -207,7 +206,7 @@ export function CloseoutMap({ className }: { className?: string }) {
       {view !== null && (
         <p className="text-label text-fg-3">
           Due now: long {side(view.due_now.long_usd, view.due_now.long_count)}, short {side(view.due_now.short_usd, view.due_now.short_count)}. Beyond the node&apos;s ±{view.closeout_range_bps / 100}% range: long {side(view.beyond_range.long_usd, view.beyond_range.long_count)}, short {side(view.beyond_range.short_usd, view.beyond_range.short_count)}.
-          {" "}Bands are the node&apos;s scan at {formatClock(view.snapshot_ms)} UTC, one snapshot with no history along the time axis.
+          {" "}{mark === null ? `The node's scan was at ${formatClock(view.snapshot_ms)} UTC.` : `Bands are the node's scan at ${formatClock(view.snapshot_ms)} UTC, one snapshot with no history along the time axis.`}
           {candleNote !== null && ` ${candleNote}`}
         </p>
       )}

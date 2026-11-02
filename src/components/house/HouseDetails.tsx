@@ -4,7 +4,7 @@
 
 import { formatUsd } from "@/lib/fixed";
 import { formatRate } from "@/lib/format";
-import { capFor, paramsSource, utilBps } from "@/lib/house";
+import { capFor, paramsSource, queueCaveats, utilBps } from "@/lib/house";
 import type { ConsoleState } from "@/lib/store/state";
 
 import { useSession } from "../ConsoleProvider";
@@ -127,7 +127,7 @@ export function WithdrawalHealth() {
         <Row label="Requests waiting" tip="How many requests wait in the queue." value={totals === null ? "—" : String(totals.count)} />
         <Row label="Queued" tip="What the queue still owes, in dollars." value={totals === null ? "—" : formatUsd(totals.remaining)} />
       </dl>
-      {totals === null && <p className={NOTE}>The queue&apos;s size is read from the node&apos;s signed answers; that read {failed ? "keeps failing." : "has not finished."}</p>}
+      {totals === null ? <p className={NOTE}>The queue&apos;s size is read from the node&apos;s signed answers; that read {failed ? "keeps failing." : "has not finished."}</p> : queueCaveats(totals, failed).map((line) => <p key={line} className={NOTE}>{line}</p>)}
       <p className={NOTE}>The node signs no flag that pauses withdrawals: custody-side pauses are the vault contract&apos;s own state, on chain, outside the node&apos;s signed answers.</p>
     </Panel>
   );

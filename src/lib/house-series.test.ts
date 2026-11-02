@@ -52,6 +52,12 @@ describe("foldSeries", () => {
     expect(foldSeries(null, page(entries), 0).points).toHaveLength(MAX_POINTS);
   });
 
+  it("keeps the points held when a follow-up page has no entries, ageing them out by the window alone", () => {
+    const held = foldSeries(null, page([level(60, "1"), level(120, "2")]), 0);
+    expect(foldSeries(held, page([]), 0).points).toEqual([{ ts: 60, value: 1 }, { ts: 120, value: 2 }]);
+    expect(foldSeries(held, page([]), 100).points).toEqual([{ ts: 120, value: 2 }]);
+  });
+
   it("keeps what the node says about where its data begins", () => {
     const folded = foldSeries(null, page([], { begins_ms: 5, from_genesis: false, retained_from_ms: 9 }), 0);
     expect(folded).toMatchObject({ beginsMs: 5, fromGenesis: false, retainedFromMs: 9 });

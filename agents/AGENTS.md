@@ -19,7 +19,7 @@ matches the current action.
   and the icons.
 - **src/app/(console)/house/page.tsx** — the House screen (the `HousePage` component), linked from the
   top bar's page links (Trade, House, MONKEY, Funding): a dense dashboard of the house's book, every figure from an
-  answer the node's enclave signed. Panels: open positions with each market's long, short and net; the house's cash, NAV,
+  answer the node's enclave signed (generated and unsigned on the mock build). Panels: open positions with each market's long, short and net; the house's cash, NAV,
   unrealised result, queued withdrawals, gross exposure and volume; MONKEY's supply, stake and staker rewards; a NAV chart
   with the liquidity floor shaded; exposure, the close-out map, the house result at ±1% and the position map per market; the
   withdrawal queue's totals, the connected account's place and a queue chart; and the exposure cap, market caps, parameters,
