@@ -95,6 +95,8 @@ export class FakeExitWallet implements ExitWallet {
   factsReads = 0;
   checks: string[] = [];
   sent: ExitStep[] = [];
+  /** What a mined claim's receipt shows paid; null when it shows nothing. */
+  paidAnswer: bigint | null = 4_800_000_000n;
   /** What the vault's clock says a sent step changes; a test may add to it. */
   onSend: (step: ExitStep) => void = () => undefined;
   async facts(): Promise<VaultExitFacts> {
@@ -120,6 +122,6 @@ export class FakeExitWallet implements ExitWallet {
     if (this.sendError !== null) throw this.sendError;
     this.sent.push(step);
     this.onSend(step);
-    return { hash: `0x${String(this.sent.length).padStart(64, "0")}`, paid: step.kind === "claim" ? 4_800_000_000n : null };
+    return { hash: `0x${String(this.sent.length).padStart(64, "0")}`, paid: step.kind === "claim" ? this.paidAnswer : null };
   }
 }

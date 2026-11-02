@@ -6,7 +6,7 @@ import type { ExitClaimFacts, ExitPhase, ExitStep } from "../engine/exit-types";
 import { groupThousands, shortHex } from "../format";
 import { formatSpan, formatStamp } from "../time";
 import { formatUsdc, USDC_UNIT } from "../vault";
-import { acceptedRecord, type ExitAttempt, type ExitState } from "./exit-state";
+import { acceptedRecord, readingProof, type ExitAttempt, type ExitState } from "./exit-state";
 
 /** How long the account may be without a proof at the vault's latest root before every page says so, in chain seconds. */
 const STALE_NOTICE_SECONDS = 3_600;
@@ -103,7 +103,7 @@ function noticeOf(exit: ExitState, phase: ExitPhase, current: boolean, canClaim:
   if (attempt?.kind === "refused" || attempt?.kind === "saved-refused") notice = { tone: "warn", text: "Your exit proof did not pass the vault's check." };
   if (current && acceptedRecord(exit) === null && exit.checkFailures >= FAILURES_NOTICED) notice = { tone: "warn", text: "Your wallet could not check your exit proof against the vault." };
   // Its age alone is no alarm while the keeper has yet to try for a newer one, as on a returning trader's first read.
-  if (record !== null && !current && age >= STALE_NOTICE_SECONDS && !exit.nothing && !exit.reading && (attempt !== null || missingFor >= STALE_NOTICE_SECONDS)) notice = { tone: "warn", text: `Your exit proof is ${spanOf(age)} old, behind the vault's latest checkpoint.` };
+  if (record !== null && !current && age >= STALE_NOTICE_SECONDS && !exit.nothing && !readingProof(exit) && (attempt !== null || missingFor >= STALE_NOTICE_SECONDS)) notice = { tone: "warn", text: `Your exit proof is ${spanOf(age)} old, behind the vault's latest checkpoint.` };
   // An account known to hold nothing has no part in the exit, so no page interrupts it; the panel still says where the vault stands.
   const windowEnd = vault.exitStartedAt === 0 ? null : claimWindowEnd(vault);
   if (phase === "due" && !exit.nothing) notice = { tone: "warn", text: `No checkpoint has been posted for ${spanOf(vault.chainNow - vault.lastCheckpointAt)}. The vault's exit can start.` };
@@ -137,18 +137,18 @@ export function exitView(exit: ExitState, wallet: { address: string; readOnly?: 
   if (phase === "closed" && windowEnd !== null) lines.push({ tone: "warn", text: `The vault's claim window closed at ${stamp(windowEnd)}. Registered claims can be paid now, and nothing more can register.` });
   if (!vault.hasCheckpoint) lines.push({ tone: "calm", text: "The vault has no checkpoint yet, so there is nothing to prove against." });
   else if (current) lines.push({ tone: "calm", text: `Saved in this browser: checkpoint ${groupThousands(record.proof.seq)}, posted ${spanOf(age)} ago.${accepted === null ? " Your wallet has not checked it against the vault yet." : provesLine(accepted, claims)}` });
-  else if (exit.reading) lines.push({ tone: "calm", text: "Updating your proof to the vault's latest checkpoint…" });
+  else if (readingProof(exit)) lines.push({ tone: "calm", text: "Updating your proof to the vault's latest checkpoint…" });
   else if (record !== null) lines.push({ tone: "warn", text: `Your saved proof is from checkpoint ${groupThousands(record.proof.seq)}, posted ${spanOf(age)} ago. The vault's latest is checkpoint ${groupThousands(vault.latestSeq)}, so the vault would refuse a claim from it.` });
   else if (exit.nothing) lines.push({ tone: "calm", text: "Nothing to save: this account holds nothing in the vault." });
   else if (attempt === null) lines.push({ tone: "calm", text: "No proof is saved in this browser yet." });
   else lines.push({ tone: attempt.kind === "node-ahead" || attempt.kind === "node-away" || attempt.kind === "refused" || attempt.kind === "saved-refused" ? "warn" : "calm", text: "No proof is saved in this browser for this account." });
   // A read that failed says so even of an account known to hold nothing: that is what it was reading to check.
   const failedRead = attempt?.kind === "node-failed" || attempt?.kind === "wallet-failed";
-  if (!exit.reading && (!exit.nothing || failedRead) && attempt !== null && (!current || attempt.kind === "wallet-failed")) lines.push(attemptLine(attempt, vault.exitStartedAt !== 0));
+  if (!readingProof(exit) && (!exit.nothing || failedRead) && attempt !== null && (!current || attempt.kind === "wallet-failed")) lines.push(attemptLine(attempt, vault.exitStartedAt !== 0));
   if (exit.vaultProblem !== null) lines.push({ tone: readTone, text: `Your wallet could not read the vault just now, so this is from its last read: ${clause(exit.vaultProblem)}. It is read again by itself.` });
   const started = phase === "open" || phase === "closed";
   if (started && accepted !== null && claims !== null && claims.mismatched.length > 0) lines.push(mismatchLine(claims.mismatched));
-  const canClaim = phase === "closed" && registered !== null && registered > 0n;
+  const canClaim = phase === "closed" && registered !== null && registered > 0n && !exit.claimed;
   const left = phase === "open" && accepted !== null && claims !== null ? registerSteps(accepted, claims) : [];
   const allRegistered = phase === "open" && accepted !== null && claims !== null && left.length === 0 && registered !== null && registered > 0n;
   return {

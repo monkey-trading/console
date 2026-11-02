@@ -6,6 +6,7 @@
  */
 
 import { ExitProofError } from "../engine/exit-proof";
+import { withTimeout } from "../engine/provider-errors";
 import { MAX_EXIT_FILE_BYTES, parseExitFile } from "../engine/exit-file";
 import { exitPhase, NO_TERMS, refundSteps, registeredTotal, registerSteps } from "../engine/exit-steps";
 import type { ExitStep, ExitWallet } from "../engine/exit-types";
@@ -16,6 +17,9 @@ import { acceptedRecord, type ExitResult } from "./exit-state";
 import { clause } from "./exit-view";
 import { abandoned, errorText, notBusy, prompting } from "./signing";
 import type { ConsoleStore } from "./store";
+
+/** How long a chosen file may take to read, in milliseconds: one from a cloud drive is fetched on demand. */
+const FILE_READ_MS = 120_000;
 
 /** A wallet that can act on the vault; with none the panel says so, and offers nothing that reaches here. */
 function exitWallet(store: ConsoleStore): { wallet: Wallet; exit: ExitWallet } | null {
@@ -75,15 +79,21 @@ export async function importExitFile(store: ConsoleStore, text: string): Promise
   }
 }
 
-/** Takes a file the trader chose, for the wallet that chose it: one connected by the time it has been read did not. */
+/**
+ * Takes a file the trader chose, for the wallet that chose it: one connected by the time it has been
+ * read did not. The controls are held from now to the end of its check, as a file fetched on demand can
+ * be slow, so its result cannot replace a later one; one that never comes gives them back in time.
+ */
 export async function importChosenFile(store: ConsoleStore, file: Pick<File, "size" | "text">): Promise<void> {
   const owner = store.liveWallet;
+  if (exitWallet(store) === null || store.getSnapshot().exit.importing) return;
   if (file.size > MAX_EXIT_FILE_BYTES) return store.exit.note({ ok: false, text: "The file was not imported: it is longer than any exit proof." });
+  store.exit.note(null, true);
   let text: string;
   try {
-    text = await file.text();
+    text = await withTimeout(file.text(), FILE_READ_MS);
   } catch {
-    if (store.liveWallet === owner) store.exit.note({ ok: false, text: "The file could not be read." });
+    if (store.liveWallet === owner) store.exit.note({ ok: false, text: "The file could not be read." }, false);
     return;
   }
   if (store.liveWallet === owner) await importExitFile(store, text);
@@ -108,11 +118,13 @@ async function holding(store: ConsoleStore, wallet: Wallet, action: () => Promis
   }
 }
 
-/** Runs `steps` in order, one wallet prompt each; a step that fails or is declined stops them, and the vault's record says how far they got. */
+/** Runs `steps` in order, one wallet prompt each, while the connection that asked lasts; a step that fails or is declined stops them, and the vault's record says how far they got. */
 async function sendSteps(store: ConsoleStore, wallet: Wallet, exit: ExitWallet, steps: readonly ExitStep[], prompt: (step: ExitStep) => string): Promise<{ ended: (did: string) => Ended; done: boolean; paid: bigint | null }> {
   let paid: bigint | null = null;
   try {
     for (const step of steps) {
+      // A wallet stays reachable once disconnected, and `prompting` shows nothing for it, so it would be asked with no word on the page.
+      if (store.liveWallet !== wallet) return { ended: () => null, done: false, paid };
       const sent = await prompting(store, wallet, "exit", prompt(step), (progress) => exit.send(step, progress));
       paid = sent.paid;
     }

@@ -62,8 +62,10 @@ export interface ExitState {
   storageProblem: string | null;
   /** Why `record` is not at the vault's latest root; null when nothing failed. */
   attempt: ExitAttempt | null;
-  /** Whether a proof is being read or checked now. */
+  /** Whether the node's proof is being read or checked now. */
   reading: boolean;
+  /** Whether a file the trader chose is being read or checked now. */
+  importing: boolean;
   /** Whether the account is known to have nothing at stake, so nothing is read for it. */
   nothing: boolean;
   /** What the vault holds for `record` once its exit has started; null before that read answers. */
@@ -72,20 +74,25 @@ export interface ExitState {
   claimsProblem: string | null;
   /** How many reads of it have failed in a row. */
   claimsFailures: number;
-  /** The USDC base units the vault paid this page's claim. */
+  /** The USDC base units the vault paid this page's claim, null too when its receipt did not show them. */
   paid: bigint | null;
+  /** Whether this page's claim was mined: nothing is left to claim, whatever the vault was last read to hold. */
+  claimed: boolean;
   /** What a screen reader was last told of a success the panel shows by itself; a failure goes on the `exit` notice surface. */
   announced: string;
 }
 
 /** The state for a connection nothing has been read for. */
-export const NO_EXIT: ExitState = { vault: null, vaultProblem: null, vaultFailures: 0, missingSince: null, record: null, checked: null, checkFailures: 0, terms: null, storageProblem: null, attempt: null, reading: false, nothing: false, claims: null, claimsProblem: null, claimsFailures: 0, paid: null, announced: "" };
+export const NO_EXIT: ExitState = { vault: null, vaultProblem: null, vaultFailures: 0, missingSince: null, record: null, checked: null, checkFailures: 0, terms: null, storageProblem: null, attempt: null, reading: false, importing: false, nothing: false, claims: null, claimsProblem: null, claimsFailures: 0, paid: null, claimed: false, announced: "" };
 
 /** `exit`'s record once this connection's verifier has accepted it at the vault's latest root: only then does anything in it count for a claim, a refund or a figure. */
 export function acceptedRecord(exit: Pick<ExitState, "vault" | "record" | "checked">): ExitRecord | null {
   const { vault, record, checked } = exit;
   return record !== null && record === checked && record.proof.root === vault?.latestRoot ? record : null;
 }
+
+/** Whether a proof is being read or checked, which a press may not come between: what it comes to is not for the press to replace. */
+export const readingProof = (exit: Pick<ExitState, "reading" | "importing">): boolean => exit.reading || exit.importing;
 
 /** Whether a read failed that reading again can mend: of the vault, of what it holds for the account, of the node, or the wallet's check of a proof. */
 export const readFailed = (exit: ExitState): boolean => exit.vaultProblem !== null || exit.claimsProblem !== null || exit.attempt?.kind === "node-failed" || exit.attempt?.kind === "wallet-failed";
