@@ -87,6 +87,11 @@ export default function Page() {
         </p>
         <p className={P}>Portions © 2025 Reown, Inc. All Rights Reserved.</p>
         <p className={P}>
+          The Trade page&apos;s price chart and the House page&apos;s close-out map draw their candles with{" "}
+          <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer" className={LINK}>TradingView Lightweight Charts™</a>,
+          copyright © TradingView, Inc., under the Apache License, Version 2.0.
+        </p>
+        <p className={P}>
           The console itself is licensed under the Apache License, Version 2.0.
         </p>
       </section>

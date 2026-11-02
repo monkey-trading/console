@@ -17,10 +17,10 @@ import { useMarketOptions } from "./use-markets";
 
 const NAV_LINES: readonly LineSpec[] = [{ id: "nav", metric: "nav", label: "NAV", tip: "The house's net asset value now: its cash less its clients' unrealised profit.", tone: "glow", area: true }];
 const EXPOSURE_LINES: readonly LineSpec[] = [
-  { id: "long", metric: "long", label: "Long", tip: "Clients' long notional in this market: positions that gain when the price rises, so the house loses.", tone: "glow" },
-  { id: "short", metric: "short", label: "Short", tip: "Clients' short notional in this market: positions that gain when the price falls.", tone: "ember" },
+  { id: "long", metric: "long", label: "Long", tip: "Clients' long notional in this market: positions that gain when the price rises, so the house loses.", tone: "glow", nonNegative: true, sampled: true },
+  { id: "short", metric: "short", label: "Short", tip: "Clients' short notional in this market: positions that gain when the price falls.", tone: "ember", nonNegative: true, sampled: true },
 ];
-const QUEUE_LINES: readonly LineSpec[] = [{ id: "queue", metric: "withdrawal_queue", label: "Queued", tip: "What the withdrawal queue still owes now.", tone: "amber", area: true }];
+const QUEUE_LINES: readonly LineSpec[] = [{ id: "queue", metric: "withdrawal_queue", label: "Queued", tip: "What the withdrawal queue still owes now.", tone: "amber", area: true, nonNegative: true }];
 
 const selectNav = (s: ConsoleState) => ({ nav: fixedToNumber(s.house.nav) });
 // The headline is the walked total only while the walk was complete, steady and its last read succeeded; otherwise the chart's own last bucket stands in.
@@ -40,12 +40,13 @@ export function NavChart({ className }: { className?: string }) {
   return (
     <SeriesPanel
       title="NAV"
-      tip="The house's net asset value: its cash less its clients' unrealised profit at current marks. Where the node reports one, the shaded area is below the liquidity floor, under which no staker distribution is paid."
+      tip="The house's net asset value: its cash less its clients' unrealised profit at current marks. Where the node reports one, the shaded area is below the liquidity floor, under which no staker distribution is paid. An arrow marks each epoch that paid stakers: NAV steps down by what it paid."
       lines={NAV_LINES}
       markets={null}
       currents={useSelected(selectNav)}
       floor={floorText === undefined ? null : fixedToNumber(fixedFromWire(floorText))}
       note={floorProblem}
+      stakerPayouts
       className={className}
     />
   );

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SeriesPage } from "./engine/stats-types";
-import { beginsOf, beginsText, foldSeries, FOLLOW_UP_LIMIT, MAX_POINTS, nextQuery, pointsOf, tableRows, rangeOf, seriesQuery } from "./house-series";
+import { beginsOf, beginsText, foldSeries, FOLLOW_UP_LIMIT, MAX_POINTS, nextQuery, payoutMarks, payoutsText, pointsOf, tableRows, rangeOf, seriesQuery } from "./house-series";
 
 const level = (ts: number, close: string) => ({ ts, open: close, high: close, low: close, close });
 const page = (entries: SeriesPage["entries"], extra: Partial<SeriesPage> = {}): SeriesPage => ({
@@ -128,5 +128,34 @@ describe("tableRows", () => {
 
   it("is empty for no series", () => {
     expect(tableRows([], 5)).toEqual([]);
+  });
+});
+
+describe("staker payouts", () => {
+  const stamp = (ms: number) => `t${ms}`;
+
+  it("reads a page in USDC base units as dollars, and folds it by its own unit", () => {
+    expect(pointsOf([{ ts: 5, value: "100000000000" }], "usdc_base_units")).toEqual([{ ts: 5, value: 100_000 }]);
+    const folded = foldSeries(null, page([{ ts: 5, value: "2500000" }], { metric: "distributed_per_epoch", kind: "flow", unit: "usdc_base_units" }), 0);
+    expect(folded.points).toEqual([{ ts: 5, value: 2.5 }]);
+  });
+
+  it("refuses a payout amount that is not whole base units rather than plotting a guess", () => {
+    expect(() => pointsOf([{ ts: 5, value: "1.5" }], "usdc_base_units")).toThrow("malformed USDC amount");
+  });
+
+  it("marks each epoch that paid, with what it paid, and none for a bucket that paid nothing", () => {
+    expect(payoutMarks([{ ts: 120, value: 100_000 }, { ts: 150, value: 0 }, { ts: 180, value: 2_500 }])).toEqual([{ ts: 120, text: "Paid $100K" }, { ts: 180, text: "Paid $2.50K" }]);
+    expect(payoutMarks([])).toEqual([]);
+  });
+
+  it("explains the steps under the chart with the total, and says plainly when no epoch paid", () => {
+    expect(payoutsText([{ ts: 1, value: 0 }], stamp)).toBe("No epoch paid stakers in this window.");
+    expect(payoutsText([{ ts: 10, value: 100_000 }], stamp)).toBe("Epochs paid stakers $100K in this window, marked on the chart where NAV steps down: $100K at t10 UTC.");
+  });
+
+  it("lists the newest three payouts and counts the rest", () => {
+    const paid = [1, 2, 3, 4, 5].map((ts) => ({ ts, value: 1_000 }));
+    expect(payoutsText(paid, stamp)).toBe("Epochs paid stakers $5.00K in this window, marked on the chart where NAV steps down: 2 earlier, $1.00K at t3 UTC, $1.00K at t4 UTC, $1.00K at t5 UTC.");
   });
 });

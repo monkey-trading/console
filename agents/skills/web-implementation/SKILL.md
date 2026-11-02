@@ -403,7 +403,7 @@ rules; these are the conventions that keep copy checkable.
 - Tools outside the build — Playwright, Lighthouse — are not dependencies of this repository: run
   them from a scratch directory outside it, at an exact version of the official package.
 - In use (non-exhaustive): `next`, `react`, `react-dom`, and `lightweight-charts` (TradingView, Apache-2.0,
-  the owner-approved charting library; its `fancy-canvas` dependency is MIT), `viem` (MIT, typed data,
+  the owner-approved charting library, used only where candles are drawn: the Trade page's price chart and the close-out map, each loading it where it is on screen; the House and MONKEY line, area and bar charts are the console's own SVG chart; its `fancy-canvas` dependency is MIT), `viem` (MIT, typed data,
   ABI encoding and signature recovery for the wallet), `@walletconnect/universal-provider` (the
   licence exception above, loaded when the user picks WalletConnect or a stored connection choice
   reconnects) and `uqr` (MIT, the pairing

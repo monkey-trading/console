@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCompactUsd, formatUsdc, minimumSpanRange, parseUnits } from "./chart-format";
+import { formatCompactUsd, formatUsdc, minimumSpanRange, nonNegativeRange, parseUnits } from "./chart-format";
 
 describe("formatCompactUsd", () => {
   it.each([[61_936_727.53, "$61.9M"], [-3_250, "-$3.25K"], [850, "$850"], [4.5, "$4.50"], [0, "$0.00"], [1.2e9, "$1.20B"], [-0.2, "-$0.20"], [-0.004, "$0.00"], [123_456, "$123K"], [999_600, "$1.00M"], [999.6, "$1.00K"], [999_400, "$999K"], [-999_600_000, "-$1.00B"]])("writes %s as %s", (value, text) => {
@@ -35,5 +35,31 @@ describe("minimumSpanRange", () => {
 
   it("gives a series flat at zero a span of one", () => {
     expect(minimumSpanRange(0, 0)).toEqual({ min: -0.5, max: 0.5 });
+  });
+});
+
+describe("nonNegativeRange", () => {
+  it("fits a series flat at zero to $0 to $1, never to -$0.50 to $0.50", () => {
+    expect(nonNegativeRange(0, 0)).toEqual({ min: 0, max: 1 });
+  });
+
+  it("starts the $0.15 position that drew an axis down to -$0.40 at zero, with a span of one", () => {
+    expect(minimumSpanRange(0.15, 0.15)?.min).toBeLessThan(0);
+    expect(nonNegativeRange(0.15, 0.15)).toEqual({ min: 0, max: 1 });
+    expect(nonNegativeRange(0, 0.15)).toEqual({ min: 0, max: 1 });
+  });
+
+  it("never returns a range that starts below zero, whatever the values, even for a value that is not", () => {
+    for (const [min, max] of [[0, 0], [0, 0.01], [0.2, 0.2], [3, 3], [0, 5_000], [99_900, 99_950], [-4, -4]] as const) {
+      const range = nonNegativeRange(min, max);
+      expect(range.min).toBeGreaterThanOrEqual(0);
+      expect(range.max).toBeGreaterThan(range.min);
+    }
+  });
+
+  it("leaves a series that is above zero and spans enough as its own values, and a flat one above zero centred as before", () => {
+    expect(nonNegativeRange(90_000, 99_900)).toEqual({ min: 90_000, max: 99_900 });
+    expect(nonNegativeRange(99_900, 99_900)).toEqual(minimumSpanRange(99_900, 99_900));
+    expect(nonNegativeRange(0, 5_000)).toEqual({ min: 0, max: 5_000 });
   });
 });

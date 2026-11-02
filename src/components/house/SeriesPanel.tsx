@@ -3,8 +3,8 @@
 /**
  * A chart panel over one or more of the node's series: timeframe and Live controls (and a market
  * select where the series is per market), the current figure of each line above the chart, and a
- * line that says where the chart's data begins. It reads through `useFeed`, so its feeds run only
- * while it is on screen.
+ * line that says where the chart's data begins, and how it was sampled where it is. It reads
+ * through `useFeed`, so its feeds run only while it is on screen.
  */
 
 import { memo, useMemo, useState } from "react";
@@ -12,18 +12,17 @@ import { memo, useMemo, useState } from "react";
 import type { SeriesMetric } from "@/lib/engine/stats-types";
 import type { MarketId } from "@/lib/engine/types";
 import { formatCompactUsd } from "@/lib/chart-format";
-import { beginsText, DEFAULT_RANGE, RANGES, tableRows, type RangeId } from "@/lib/house-series";
+import { beginsText, DEFAULT_RANGE, payoutMarks, payoutsText, RANGES, tableRows, type RangeId } from "@/lib/house-series";
 import { feedProblem } from "@/lib/store/house-feed-text";
 import { seriesFeed } from "@/lib/store/house-feeds";
 import { formatStamp } from "@/lib/time";
 
 import { useSession } from "../ConsoleProvider";
-import type { Tone } from "./chart-theme";
+import { Chart, type ChartSeries, type Tone } from "../charts/Chart";
 import { LiveToggle, Pick } from "./Controls";
 import { DataTable } from "./DataTable";
 import { Panel, Quiet, Term } from "./Panel";
-import { SeriesChart, type ChartLine } from "./SeriesChart";
-import { useFeeds } from "./use-feed";
+import { useFeed, useFeeds } from "./use-feed";
 
 /** One line of a series panel. */
 export interface LineSpec {
@@ -34,7 +33,14 @@ export interface LineSpec {
   tip: string;
   tone: Tone;
   area?: boolean;
+  /** The line cannot go below zero, so its chart's axis never does. */
+  nonNegative?: boolean;
+  /** The node measures the line by a periodic scan of every account, so what opens and closes between two scans is not in it. */
+  sampled?: boolean;
 }
+
+/** What the footnote says of a sampled line. The answers carry the time of the last scan but not how often the node scans, so it says periodic. */
+const SAMPLED = "These figures are the node's periodic scan of every account, so a position opened and closed between two scans does not show.";
 
 interface Props {
   title: string;
@@ -48,6 +54,8 @@ interface Props {
   floor?: number | null;
   /** A line about a figure the chart leans on beyond its own series, such as a floor that may be old. */
   note?: string | null;
+  /** Marks on the first line each epoch that paid stakers, so a step down in NAV explains itself. */
+  stakerPayouts?: boolean;
   className?: string;
 }
 
@@ -56,7 +64,7 @@ const TEXT = { fg: "text-fg", glow: "text-glow", ember: "text-ember", amber: "te
 /** The most points the keyboard-reachable table lists. */
 const TABLE_POINTS = 30;
 
-function SeriesPanelView({ title, tip, lines, markets, currents, floor = null, note = null, className }: Props) {
+function SeriesPanelView({ title, tip, lines, markets, currents, floor = null, note = null, stakerPayouts = false, className }: Props) {
   const { store } = useSession();
   const [range, setRange] = useState<RangeId>(DEFAULT_RANGE);
   const [live, setLive] = useState(false);
@@ -66,7 +74,11 @@ function SeriesPanelView({ title, tip, lines, markets, currents, floor = null, n
   const current = (id: string): number | null => currents?.[markets === null ? id : `${market}:${id}`] ?? null;
   const specs = useMemo(() => (markets !== null && market === null ? [] : lines.map((line) => seriesFeed(store, line.metric, market, range, live))), [store, lines, markets, market, range, live]);
   const states = useFeeds(specs);
-  const plotted: ChartLine[] = useMemo(() => lines.map((line, i) => ({ id: `${line.id}:${market ?? "-"}`, tone: line.tone, area: line.area, points: states[i]?.data?.points ?? [] })), [lines, market, states]);
+  const plotted: ChartSeries[] = useMemo(() => lines.map((line, i) => ({ id: `${line.id}:${market ?? "-"}`, label: line.label, tone: line.tone, kind: line.area === true ? "area" as const : "line" as const, points: states[i]?.data?.points ?? [] })), [lines, market, states]);
+  const payoutFeed = useFeed(useMemo(() => (stakerPayouts ? seriesFeed(store, "distributed_per_epoch", null, range, live) : null), [store, stakerPayouts, range, live]));
+  const payouts = payoutFeed.data?.points ?? null;
+  const marks = useMemo(() => (payouts === null ? [] : payoutMarks(payouts)), [payouts]);
+  const nonNegative = lines.every((line) => line.nonNegative === true);
   const data = states[0]?.data ?? null;
   // A node that stops serving a route keeps the chart it already holds; only a chart with nothing to show says it is not available.
   const unavailable = states.length > 0 && states.every((s) => s.status === "unavailable" && s.data === null);
@@ -97,11 +109,13 @@ function SeriesPanelView({ title, tip, lines, markets, currents, floor = null, n
       ) : (
         <>
           <div className="relative flex min-h-52 flex-1 flex-col">
-            <SeriesChart lines={plotted} floor={floor} viewKey={`${market ?? "-"}:${range}`} format={formatCompactUsd} label={`${title} chart, ${RANGES.find((r) => r.id === range)?.label ?? range}`} />
+            <Chart series={plotted} nonNegative={nonNegative} marks={marks} floor={floor} format={formatCompactUsd} label={`${title} chart, ${RANGES.find((r) => r.id === range)?.label ?? range}`} />
             <DataTable summary={`${title} as a table`} caption={`The latest ${rows.length} buckets of ${title}, newest first`} columns={["Time (UTC)", ...lines.map((line) => line.label)]} rows={rows} />
           </div>
           <p className="text-label text-fg-3">
             {states.length === 0 || states.every((s) => s.status === "loading") ? "Reading the node's signed history…" : data === null ? null : beginsText(data, formatStamp)}
+            {lines.some((line) => line.sampled === true) && ` ${SAMPLED}`}
+            {payouts !== null && ` ${payoutsText(payouts, formatStamp)}`}
             {problem !== null && ` ${problem}`}
             {note !== null && ` ${note}`}
           </p>
