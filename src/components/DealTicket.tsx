@@ -12,6 +12,7 @@ import { formatMark } from "@/lib/price-format";
 import { ticketPrices } from "@/lib/quotes";
 import { setupGate } from "@/lib/setup-steps";
 import { placeOrder } from "@/lib/store/actions";
+import { AMOUNT_INPUT } from "./amount-input";
 import { SessionRefusalNote } from "./SessionRefusalNote";
 import { openSetup } from "@/lib/store/setup";
 import { belowMinimum, contractUnit, MARGIN_SHORT, NO_SIZE, parseSize, previewTicket, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
@@ -100,7 +101,7 @@ export function DealTicket() {
         </fieldset>
         {kind !== "market" && (
           <label className="mt-4 block text-caption text-fg-2">Trigger price
-            <input value={price} inputMode="decimal" maxLength={24} onChange={(event) => setPrice(event.target.value)} className={INPUT} />
+            <input {...AMOUNT_INPUT} value={price} inputMode="decimal" maxLength={24} onChange={(event) => setPrice(event.target.value)} className={INPUT} />
           </label>
         )}
         <fieldset className="mt-4 grid grid-cols-2 gap-2">
@@ -117,7 +118,7 @@ export function DealTicket() {
         </div>
         <div className="mt-4">
           <label htmlFor={`${id}-size`} className="block text-caption text-fg-2">Size (contracts)</label>
-          <input id={`${id}-size`} value={size} inputMode="decimal" maxLength={24} aria-describedby={`${id}-size-note ${id}-size-problems`} onChange={(event) => setTypedSize(event.target.value)} className={INPUT} />
+          <input {...AMOUNT_INPUT} id={`${id}-size`} value={size} inputMode="decimal" maxLength={24} aria-describedby={`${id}-size-note ${id}-size-problems`} onChange={(event) => setTypedSize(event.target.value)} className={INPUT} />
           <p id={`${id}-size-note`} className="mt-1 text-label text-fg-3">
             1 contract = 1 {contractUnit(market)} · {preview.notional === null || qty === 0n ? "Notional —" : `Notional ≈ $${formatFixedPlaces(preview.notional, 2)}`}{preview.notional !== null && qty > 0n && kind !== "market" && triggerPrice !== null && triggerPrice > 0n ? " at the trigger price" : ""}
           </p>

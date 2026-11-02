@@ -10,6 +10,7 @@ import { deposit, parseAmount } from "@/lib/store/actions";
 import { readWalletUsdc } from "@/lib/store/wallet-usdc";
 import { isWholeUsdc, MAX_DEPOSIT, MIN_DEPOSIT, plainUsdc } from "@/lib/vault";
 
+import { AMOUNT_INPUT } from "./amount-input";
 import { useConsole, useSession } from "./ConsoleProvider";
 import { Notice } from "./Notice";
 import { useSignGate } from "./SignGate";
@@ -56,7 +57,7 @@ export function DepositForm({ embedded = false }: { embedded?: boolean }) {
       <form onSubmit={(event) => { event.preventDefault(); if (valid && value && !busy && wallet && !gate.blocked) void deposit(store, value, surface); }}>
         <label htmlFor={id} className="mt-3 block text-caption text-fg-2">Amount (USDC)</label>
         <div className="mt-1 flex flex-col gap-2 sm:flex-row">
-          <input id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} aria-describedby={`${id}-hint`} className={INPUT} />
+          <input {...AMOUNT_INPUT} id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} aria-describedby={`${id}-hint`} className={INPUT} />
           <button type="submit" aria-disabled={!wallet || !valid || busy || gate.blocked} aria-describedby={gate.describedBy} className={SUBMIT}>Deposit</button>
         </div>
         <p id={`${id}-hint`} className="mt-2 text-label leading-relaxed text-fg-3">10 to 1,000,000,000 USDC. Your wallet approves the vault for the amount, if it needs to, then deposits it. The node counts a deposit as collateral once it is credited and releases it for withdrawal when it is final.</p>

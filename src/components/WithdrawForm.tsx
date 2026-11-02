@@ -8,6 +8,7 @@ import { formatFixedPlaces } from "@/lib/fixed";
 import { parseAmount, withdraw } from "@/lib/store/actions";
 import { MIN_WITHDRAWAL, withdrawableNow, withdrawLimitCause } from "@/lib/vault";
 
+import { AMOUNT_INPUT } from "./amount-input";
 import { useConsole, useSession } from "./ConsoleProvider";
 import { Notice } from "./Notice";
 import { useSignGate } from "./SignGate";
@@ -35,7 +36,7 @@ export function WithdrawForm() {
           <button type="button" onClick={() => setAmount(formatFixedPlaces(max, 6).replaceAll(",", "").replace(/\.?0+$/, ""))} className="inline-flex min-h-11 items-center text-glow underline focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0">Max ${formatFixedPlaces(max, 2)}</button>
         </div>
         <div className="mt-1 flex flex-col gap-2 sm:flex-row">
-          <input id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} className={INPUT} />
+          <input {...AMOUNT_INPUT} id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} className={INPUT} />
           <button type="submit" aria-disabled={!wallet || !valid || busy || gate.blocked} aria-describedby={gate.describedBy} className={SUBMIT}>Request withdrawal</button>
         </div>
         <p className="mt-2 text-label leading-relaxed text-fg-3">The amount leaves your balance when you ask. The vault pays requests in order as it has liquidity, to six decimal places; the rest waits in the withdrawal queue.</p>
