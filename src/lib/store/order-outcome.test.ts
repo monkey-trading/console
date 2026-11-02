@@ -25,9 +25,9 @@ const answer = (events: EngineEvent[]) => (posted: Posted) =>
 
 const send = (store: ConsoleStore) => placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
 
-/** A store over a real live client, showing a verdict that may sign and connected to a wallet that signs anything: what `run` then does to the client is the verdict's change while the wallet was open. */
-function liveConnected(run: { nowMs?: number } = {}) {
-  const live = setup(run);
+/** A store over a real live client, showing a verdict that may sign and connected to a wallet that signs anything, so a verdict the client reaches after this is one that ended while the wallet was open. */
+function liveConnected(options: { nowMs?: number } = {}) {
+  const live = setup(options);
   live.client.nonce = async () => ({ next_nonce: 4, time_ms: markets.time_ms });
   const wallet: Wallet = { address: ACCOUNT, label: "Test wallet", sign: async () => "0x", deposit: async () => "0x", claim: async () => "0x" };
   const store = new ConsoleStore({ client: live.client, wallets: { options: [], connect: async () => wallet }, history: () => [], initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
