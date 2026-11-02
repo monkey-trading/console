@@ -81,7 +81,7 @@ export function OrdersView() {
           </li>
         ))}
       </ul>
-      <div className="hidden overflow-x-auto lg:block">
+      <div className="relative hidden overflow-x-auto lg:block">
         <table className="w-full min-w-[560px] text-caption">
           <thead><tr className="border-b border-line"><th className={TH}>Order</th><th className={TH}>Market</th><th className={TH}>Side</th><th className={TH}>Type</th><th className={TH}>Size</th><th className={TH}>Trigger</th><th className={TH}><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
