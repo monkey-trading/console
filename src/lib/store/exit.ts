@@ -229,11 +229,11 @@ export class ExitWatch {
     }
   }
 
-  /** What the panel says of the last import or action, until the next replaces it, and, for an import, whether its file is being read. */
-  note(result: ExitResult, reading?: boolean): void {
+  /** What the panel says of the last import or action, until the next replaces it, and, for an import, whether its file is being read or checked. */
+  note(result: ExitResult, importing?: boolean): void {
     if (result === null) this.store.clearNotice("exit");
     else this.store.notify("exit", result.text, result.ok ? "info" : "error");
-    if (reading !== undefined) this.patch({ reading });
+    if (importing !== undefined) this.patch({ importing });
   }
 
   /** What a screen reader is told of an action the panel shows by itself. One the same as the last would change nothing in the live region and go unread, so it differs by a space a screen reader does not speak. */
@@ -241,9 +241,9 @@ export class ExitWatch {
     this.patch({ announced: this.store.getSnapshot().exit.announced === text ? `${text}\u00a0` : text });
   }
 
-  /** What the vault paid this page's claim, for the card to say. */
+  /** That this page's claim was mined, and what the vault paid, for the card to say. */
   notePaid(paid: bigint | null): void {
-    this.patch({ paid });
+    this.patch({ paid, claimed: true });
   }
 
   /** Reads the vault afresh, and says whether it answered: what an action needs before it sends anything. */

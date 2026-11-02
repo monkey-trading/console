@@ -7,6 +7,7 @@
  */
 
 import { claimVaultExit, refundExitDeposit, registerExitClaims, startVaultExit } from "@/lib/store/exit-actions";
+import { readingProof } from "@/lib/store/exit-state";
 import { clause, stepKey, stepLabel, type ExitView } from "@/lib/store/exit-view";
 import { formatUsdc, USDC_UNIT } from "@/lib/vault";
 
@@ -19,7 +20,7 @@ const STEP = "text-label tracking-caps text-fg-3 uppercase";
 export function ExitClaim({ view, settled }: { view: ExitView; settled: () => void }) {
   const { busy, exit } = useConsole();
   const { store } = useSession();
-  const held = busy || exit.reading; // an import or a read is out: what it comes to is not for a press to replace
+  const held = busy || readingProof(exit);
   const unless = (run: () => Promise<void>) => () => { if (!held) void run().then(settled); };
   const { phase, registered } = view;
   const usdc = (units: bigint) => formatUsdc(units * USDC_UNIT);
@@ -39,7 +40,7 @@ export function ExitClaim({ view, settled }: { view: ExitView; settled: () => vo
         <div className="space-y-2">
           <h4 className={STEP}>{phase === "open" ? "Step 2: be paid" : "Be paid"}</h4>
           <p className="text-caption leading-relaxed text-fg-2">
-            {exit.paid !== null ? `The vault paid ${usdc(exit.paid)} to your wallet.` : registered > 0n ? `Registered: ${usdc(registered)}. ${phase === "open" ? "The vault pays it once the claim window closes, pro rata if it is short." : "The vault pays it now, pro rata if it is short."}` : phase === "open" ? "Nothing is registered yet." : "Nothing is registered for this account, or the vault has paid it."}
+            {exit.paid !== null ? `The vault paid ${usdc(exit.paid)} to your wallet.` : exit.claimed ? "The vault paid your claim." : registered > 0n ? `Registered: ${usdc(registered)}. ${phase === "open" ? "The vault pays it once the claim window closes, pro rata if it is short." : "The vault pays it now, pro rata if it is short."}` : phase === "open" ? "Nothing is registered yet." : "Nothing is registered for this account, or the vault has paid it."}
           </p>
           {view.canClaim && <button type="button" aria-disabled={held} onClick={unless(() => claimVaultExit(store))} className={BUTTON}>Claim from the vault</button>}
         </div>

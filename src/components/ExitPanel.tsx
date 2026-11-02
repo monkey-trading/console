@@ -10,6 +10,7 @@ import { useId, useRef, type ChangeEvent } from "react";
 
 import { exitFileName, exitFileText } from "@/lib/engine/exit-file";
 import { importChosenFile } from "@/lib/store/exit-actions";
+import { readingProof } from "@/lib/store/exit-state";
 import { exitView, type ExitLine, type ExitTone } from "@/lib/store/exit-view";
 
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -68,7 +69,7 @@ export function ExitPanel() {
           {record !== null && <button type="button" onClick={() => download(exitFileName(record), exitFileText(record))} className={BUTTON}>Export to a file</button>}
           {view.canImport && (
             <>
-              <button type="button" aria-disabled={busy || exit.reading} onClick={() => { if (!busy && !exit.reading) input.current?.click(); }} className={BUTTON}>Import a file</button>
+              <button type="button" aria-disabled={busy || readingProof(exit)} onClick={() => { if (!busy && !readingProof(exit)) input.current?.click(); }} className={BUTTON}>Import a file</button>
               <input ref={input} type="file" accept=".json,application/json" aria-label="Exit proof file" tabIndex={-1} onChange={choose} className="sr-only" />
             </>
           )}
