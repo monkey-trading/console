@@ -271,9 +271,7 @@ export class MockEngineClient implements EngineClient {
     return this.state.accounts.get(address.toLowerCase())?.eligibility ?? null;
   }
 
-  async history(address: Address, params: { limit?: number; before?: string; kind?: string }): Promise<HistoryPage> {
-    return this.historyPage(address, params);
-  }
+  async history(address: Address, params: { limit?: number; before?: string; kind?: string }): Promise<HistoryPage> { return this.historyPage(address, params); }
 
   /** The emission schedule `GET /v1/monkey` serves: the mock's periods run from the epoch, and its open period is the one it accrues into. */
   async emissionSchedule(): Promise<EmissionSchedule> {
