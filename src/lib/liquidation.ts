@@ -1,32 +1,17 @@
-/** Where a position would be closed out, estimated from the account's current margin. */
+/** The close-out marker the chart draws. */
 
-import { bpsOf, divFixed, mulFixed, type Fixed } from "./fixed";
-import type { AccountModel, MarketModel } from "./models";
 import type { SignatureChecks } from "./engine/client";
-import { CLOSE_OUT_BPS } from "./pricing";
+import type { AccountModel, MarketModel } from "./models";
+import type { Fixed } from "./fixed";
 
 /**
- * The index at which `account` would be closed out if it held every other mark and its margin
- * stayed where it is: the price where equity falls to the close-out share of margin. An estimate,
- * since margin changes with the price; null when there is no such price above zero.
+ * The close-out marker the chart draws, or null: shown only where the console models the node
+ * (`signatures` is `none`, the in-browser mock), at the mock's own close-out price for the
+ * position, the one the Positions table shows. A live node's own margin and spreads decide its
+ * close-out, so none is drawn for it.
  */
-export function liquidationPrice(account: AccountModel, market: MarketModel, others: readonly MarketModel[]): Fixed | null {
-  const position = account.positions.find((p) => p.market === market.id);
-  if (!position || position.qty === 0n) return null;
-  let otherPnl = 0n;
-  for (const p of account.positions) {
-    const m = others.find((o) => o.id === p.market);
-    if (p.market !== market.id && m?.mark != null) otherPnl += mulFixed(p.qty, m.mark - p.entry);
-  }
-  const threshold = bpsOf(account.margin, CLOSE_OUT_BPS);
-  const price = position.entry + divFixed(threshold - account.balance - otherPnl, position.qty);
-  return price > 0n ? price : null;
-}
-
-/**
- * The close-out marker the chart draws, or null: the console's estimate is shown only where it
- * models the node (`signatures` is `none`), since a live node's own margin and spreads decide it.
- */
-export function closeOutMarker(signatures: SignatureChecks, account: AccountModel, market: MarketModel, others: readonly MarketModel[]): Fixed | null {
-  return signatures === "none" ? liquidationPrice(account, market, others) : null;
+export function closeOutMarker(signatures: SignatureChecks, account: AccountModel, market: MarketModel): Fixed | null {
+  if (signatures !== "none") return null;
+  const closeout = account.positions.find((p) => p.market === market.id)?.closeout ?? null;
+  return closeout?.reach === "at" ? closeout.price : null;
 }

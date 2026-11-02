@@ -2,7 +2,7 @@
 
 import { metaFor } from "./engine/meta";
 import type { AccountView, EligibilityClass, HouseView, MarketId, MarketView, PriceRules, RestingOrder } from "./engine/types";
-import { fixedFromWire, type Fixed } from "./fixed";
+import { fixedFromWire, parseFixed, type Fixed } from "./fixed";
 import { decodeHouseScan, type HouseScan } from "./house-scan";
 
 export interface MarketModel {
@@ -38,10 +38,25 @@ export function decodeMarket(view: MarketView, previous: MarketModel | undefined
   };
 }
 
+/** Where a position's account closes out: already, at a price, or at none inside the node's range. */
+export type CloseoutModel = { reach: "due" } | { reach: "at"; price: Fixed } | { reach: "beyond" };
+
 export interface PositionModel {
   market: MarketId;
   qty: Fixed;
   entry: Fixed;
+  /** Null from a node that does not serve close-outs, or whose entry for the market is malformed. */
+  closeout: CloseoutModel | null;
+}
+
+/** The close-out the node gave for `market`, if it gave a well-formed one. */
+function decodeCloseout(view: AccountView, market: MarketId): CloseoutModel | null {
+  const found = view.closeouts?.find((c) => c.market === market);
+  if (found === undefined) return null;
+  if (found.reach === "due" || found.reach === "beyond") return { reach: found.reach };
+  if (found.reach !== "at" || typeof found.price !== "string") return null;
+  const price = parseFixed(found.price);
+  return price === null ? null : { reach: "at", price };
 }
 
 export interface AccountModel {
@@ -59,7 +74,7 @@ export function decodeAccount(view: AccountView): AccountModel {
     unfinalised: fixedFromWire(view.unfinalised_deposits ?? "0"),
     equity: fixedFromWire(view.equity),
     margin: fixedFromWire(view.margin),
-    positions: Object.entries(view.positions).map(([id, p]) => ({ market: Number(id), qty: fixedFromWire(p.qty), entry: fixedFromWire(p.entry) })),
+    positions: Object.entries(view.positions).map(([id, p]) => ({ market: Number(id), qty: fixedFromWire(p.qty), entry: fixedFromWire(p.entry), closeout: decodeCloseout(view, Number(id)) })),
     orders: Object.values(view.orders),
   };
 }

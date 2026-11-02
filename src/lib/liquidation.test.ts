@@ -1,61 +1,40 @@
-/** Tests for the liquidation estimate. */
+/** Tests for the chart's close-out marker. */
 
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
-import { closeOutMarker, liquidationPrice } from "./liquidation";
-import { decodeMarket, type AccountModel } from "./models";
+import { closeOutMarker } from "./liquidation";
+import { decodeMarket, type AccountModel, type CloseoutModel } from "./models";
 import { createMockNode } from "./mock";
 
 const START = Date.UTC(2026, 9, 28, 15, 0, 0);
 
-async function markets() {
+async function btcMarket() {
   const node = createMockNode(START);
-  return (await node.client.markets()).map((v) => decodeMarket(v, undefined, true));
+  const views = await node.client.markets();
+  const view = views.find((m) => m.id === 1);
+  if (!view) throw new Error("BTC-USD is listed");
+  return decodeMarket(view, undefined, true);
 }
 
-const account = (balance: number, margin: number, qty: bigint, entry: number): AccountModel => ({
-  balance: fixedFromInt(balance), unfinalised: 0n, equity: fixedFromInt(balance), margin: fixedFromInt(margin),
-  positions: [{ market: 1, qty, entry: fixedFromInt(entry) }], orders: [],
-});
-
-describe("liquidationPrice", () => {
-  it("sits below a long's entry by what equity can lose above the threshold", async () => {
-    const all = await markets();
-    const btc = all.find((m) => m.id === 1);
-    if (!btc) throw new Error("BTC-USD is listed");
-    // Balance 1,000, margin 400 (threshold 200): 800 of loss on one unit leaves a price 800 under entry.
-    expect(liquidationPrice(account(1_000, 400, fixedFromInt(1), 60_000), btc, all)).toBe(fixedFromInt(59_200));
-  });
-
-  it("sits above a short's entry, and there is none without a position", async () => {
-    const all = await markets();
-    const btc = all.find((m) => m.id === 1);
-    if (!btc) throw new Error("BTC-USD is listed");
-    expect(liquidationPrice(account(1_000, 400, fixedFromInt(-1), 60_000), btc, all)).toBe(fixedFromInt(60_800));
-    expect(liquidationPrice({ ...account(1_000, 0, 0n, 0), positions: [] }, btc, all)).toBeNull();
-  });
-
-  it("counts the other positions' profit and loss, and has no price at or below zero", async () => {
-    const all = await markets();
-    const btc = all.find((m) => m.id === 1);
-    const eth = all.find((m) => m.id === 2);
-    if (!btc || !eth) throw new Error("BTC-USD and ETH-USD are listed");
-    const ethMark = eth.mark ?? 0n;
-    const withOther = { ...account(1_000, 400, fixedFromInt(1), 60_000), positions: [{ market: 1, qty: fixedFromInt(1), entry: fixedFromInt(60_000) }, { market: 2, qty: fixedFromInt(1), entry: ethMark + fixedFromInt(100) }] };
-    // ETH is 100 under its entry, so BTC has 100 less to lose before the threshold.
-    expect(liquidationPrice(withOther, btc, all)).toBe(fixedFromInt(59_300));
-    expect(liquidationPrice(account(1_000_000, 400, fixedFromInt(1), 1_000), btc, all)).toBeNull();
-  });
+const held = (closeout: CloseoutModel | null): AccountModel => ({
+  balance: fixedFromInt(1_000), unfinalised: 0n, equity: fixedFromInt(1_000), margin: fixedFromInt(400),
+  positions: [{ market: 1, qty: fixedFromInt(1), entry: fixedFromInt(60_000), closeout }], orders: [],
 });
 
 describe("closeOutMarker", () => {
-  it("draws the estimate for the in-browser node and none for a live one", async () => {
-    const all = await markets();
-    const btc = all.find((m) => m.id === 1);
-    if (!btc) throw new Error("BTC-USD is listed");
-    const held = account(1_000, 400, fixedFromInt(1), 60_000);
-    expect(closeOutMarker("none", held, btc, all)).toBe(fixedFromInt(59_200));
-    expect(closeOutMarker("checked", held, btc, all)).toBeNull();
+  it("draws the position's close-out price for the in-browser node and none for a live one", async () => {
+    const btc = await btcMarket();
+    const at = held({ reach: "at", price: fixedFromInt(58_000) });
+    expect(closeOutMarker("none", at, btc)).toBe(fixedFromInt(58_000));
+    expect(closeOutMarker("checked", at, btc)).toBeNull();
+  });
+
+  it("draws nothing for Due, None, an unknown close-out or no position", async () => {
+    const btc = await btcMarket();
+    expect(closeOutMarker("none", held({ reach: "due" }), btc)).toBeNull();
+    expect(closeOutMarker("none", held({ reach: "beyond" }), btc)).toBeNull();
+    expect(closeOutMarker("none", held(null), btc)).toBeNull();
+    expect(closeOutMarker("none", { ...held(null), positions: [] }, btc)).toBeNull();
   });
 });

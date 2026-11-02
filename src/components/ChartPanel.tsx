@@ -26,7 +26,7 @@ export function markersFor(state: ConsoleState, market: MarketModel, lines = tru
   const position = state.account?.positions.find((p) => p.market === market.id);
   if (state.account && position) {
     if (lines) out.push({ price: fixedToNumber(position.entry), tone: position.qty > 0n ? "glow" : "ember", style: "dotted", title: `${position.qty > 0n ? "Long" : "Short"} entry` });
-    const liq = closeOutMarker(state.signatures, state.account, market, state.markets);
+    const liq = closeOutMarker(state.signatures, state.account, market);
     if (liq !== null) out.push({ price: fixedToNumber(liq), tone: "ember", style: "dashed", title: "Close-out (est.)" });
   }
   for (const order of lines ? (state.account?.orders ?? []) : []) {

@@ -15,6 +15,7 @@ import { equityOf, marginOf } from "./accounts";
 import { MockVaultExit } from "./exit";
 import { mockHex } from "./hex";
 import { cancelAll, closeAll } from "./batch";
+import { closeoutsOf } from "./closeout-price";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";
 import { mockTotals, queuePage, withdraw } from "./funds";
 import { postedStanding } from "./monkey-state";
@@ -172,6 +173,7 @@ export class MockEngineClient implements EngineClient {
       positions,
       orders,
       toxicity_bps: 0,
+      closeouts: closeoutsOf(this.state, account),
     };
   }
 
