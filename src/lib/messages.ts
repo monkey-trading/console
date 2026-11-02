@@ -1,5 +1,6 @@
 /** Plain-language text for what the engine refused or did. */
 
+import { MAX_SESSION_KEYS_PER_ACCOUNT } from "./engine/session-key";
 import type { EngineEvent, MarketId, Reject } from "./engine/types";
 import { fixedFromWire, formatFixedPlaces, formatUsd } from "./fixed";
 import { formatMonkey } from "./format";
@@ -53,7 +54,7 @@ export function describeReject(reject: Reject): string {
     case "session_key_unsupported": return "This node does not support session keys yet.";
     case "expired": return "The request had already expired.";
     case "expiry_too_far": return "The expiry was past the node's bound.";
-    case "too_many_session_keys": return "This account already holds the most session keys the node allows.";
+    case "too_many_session_keys": return reject.max === MAX_SESSION_KEYS_PER_ACCOUNT ? "This account already holds the most session keys the node allows." : "This account has added new session keys too quickly. The node allows one more each hour.";
     case "batch_unsupported": return "This node cannot cancel or close everything in one request yet. It needs the newer protocol version.";
   }
   // A refusal the engine adds later must get a case above; until then the user still sees that one happened.

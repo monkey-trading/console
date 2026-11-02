@@ -281,14 +281,14 @@ describe("the house panel's reads, by whether the page is on screen", () => {
   it("does not call the connected account's queue read until a read of it has succeeded", async () => {
     const { client, store } = setupClosed();
     store.setWallet({ address: ACCOUNT, label: "watch" });
-    expect(store.getSnapshot().accountQueueRead).toBe(false);
+    expect(store.getSnapshot().accountRead).toBe(false);
     client.accountError = new Error("the node stalled");
     await loadAccount(store, false);
-    expect(store.getSnapshot()).toMatchObject({ accountQueueRead: false, queue: [] });
+    expect(store.getSnapshot()).toMatchObject({ accountRead: false, queue: [] });
     client.accountError = null;
     await loadAccount(store, false);
-    expect(store.getSnapshot().accountQueueRead).toBe(true);
+    expect(store.getSnapshot().accountRead).toBe(true);
     store.setWallet(null);
-    expect(store.getSnapshot().accountQueueRead).toBe(false);
+    expect(store.getSnapshot().accountRead).toBe(false);
   });
 });

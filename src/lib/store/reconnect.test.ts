@@ -2,11 +2,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { ACCOUNT } from "../engine/wallet-kit";
+import { ACCOUNT, memoryStorage } from "../engine/wallet-kit";
 import { session, setup as walletConnect, URI } from "../engine/walletconnect-kit";
 import type { PairingState } from "../engine/walletconnect";
 import type { Wallet } from "../engine/wallet";
-import { loadChoice, saveChoice, type ChoiceStorage } from "../engine/wallet-persist";
+import { loadChoice, saveChoice } from "../engine/wallet-persist";
 import type { WalletConnector } from "../engine/wallet";
 import { reconnectWallet } from "./reconnect";
 import { setup } from "./live-fake";
@@ -15,12 +15,7 @@ const WALLET: Wallet = { address: ACCOUNT, label: "Test wallet", sign: async () 
 
 /** A storage and the connector's record of what it was asked to connect, for one reconnect test. */
 function rig(choice: Parameters<typeof saveChoice>[1] | null, connect: WalletConnector["connect"] = async () => WALLET, storage = true) {
-  const held = new Map<string, string>();
-  const persistence: ChoiceStorage = {
-    getItem: (key) => held.get(key) ?? null,
-    setItem: (key, value) => void held.set(key, value),
-    removeItem: (key) => void held.delete(key),
-  };
+  const persistence = memoryStorage();
   if (choice !== null && storage) saveChoice(persistence, choice);
   const asked: string[] = [];
   const { store } = setup({ wallets: { options: [], connect: (id: string) => { asked.push(id); return connect(id); } }, ...(storage ? { persistence } : {}) });

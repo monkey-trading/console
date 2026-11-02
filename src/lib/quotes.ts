@@ -72,7 +72,7 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
   const { quote } = input;
   if (quote === null) {
     if (input.quoteError === null) return none("Waiting for the node's executable quote.");
-    return none(input.quoteError === UNCREDITED ? "The node quotes an account once it has credited it: deposit and declare your eligibility first." : `The node will not quote this market: ${input.quoteError}.`);
+    return none(input.quoteError === UNCREDITED ? "The node quotes an account once it has credited it: deposit first." : `The node will not quote this market: ${input.quoteError}.`);
   }
   if (quote.unavailable !== undefined) return none(describeReject(quote.unavailable));
   const ask = executablePrice(quote, "buy", preview.qty);

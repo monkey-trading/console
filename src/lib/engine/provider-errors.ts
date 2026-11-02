@@ -15,6 +15,9 @@ export function walletError(error: unknown, action: string): Error {
   return new Error(`Your wallet could not ${action}: ${detail}`, { cause: error });
 }
 
+/** Whether an error from `walletError` is the user's own refusal, as opposed to a request that failed. */
+export const declinedByUser = (error: unknown): boolean => error instanceof Error && errorCode(error.cause) === USER_REJECTED;
+
 /** Whether a chain-switch refusal says the wallet does not know the chain: EIP-3085's 4902, or a -32603 whose message names the chain and reports it unrecognized or unknown, which some wallets answer instead. A generic failure that says neither is a refusal, not an unknown chain. */
 export function unknownChain(error: unknown): boolean {
   const code = errorCode(error);

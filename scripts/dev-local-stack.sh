@@ -542,9 +542,11 @@ Priced markets     ${priced:-none yet}
 Awaiting quotes    ${waiting:-none} (live crypto venues)
 Unpriced markets   ${unfed:-none} (no market-data vendor keys)
 
+Setup              Connecting a wallet opens the console's setup popup: the Anvil faucet, the
+                   eligibility declaration, then authorizing the browser.
 Deposits           Approve the vault and deposit from the console. The node sees a deposit a few
-                   blocks (seconds) after it is mined; it stays pending until the wallet signs its
-                   eligibility declaration, then it is credited.
+                   blocks (seconds) after it is mined and credits it; a deposit sent straight to the
+                   vault before a declaration stays pending until the wallet signs one.
 Withdrawals        The engine approves a withdrawal; the next checkpoint (every 1000 commands, within
                    seconds) is posted to the vault, and the console then claims it on the vault.
 MONKEY             Emissions run from $emissions_start: ten-minute budgets accrue to each period's

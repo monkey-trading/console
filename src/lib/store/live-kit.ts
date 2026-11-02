@@ -8,11 +8,15 @@ import type { EntitlementProof } from "../engine/emissions";
 import type { TypedRequest } from "../engine/eip712";
 import type { QuoteRequest } from "../engine/live-stream";
 import { ProviderWallet } from "../engine/provider-wallet";
+import type { KeyStorage } from "../engine/session-key-store";
 import { settle } from "../engine/test-kit";
-import type { AccountView, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, HistoryPage, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalRequest, MarketView } from "../engine/types";
+import type { AccountView, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityClass, EligibilityRequest, HistoryPage, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
-import { ACCOUNT, StubProvider, type StubOptions } from "../engine/wallet-kit";
+import { ACCOUNT, memoryStorage, StubProvider, type StubOptions } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
+import { saveChoice } from "../engine/wallet-persist";
+import { authorizeBrowser, connectWallet } from "./actions";
+import { loginSession } from "./session";
 import { ConsoleStore } from "./store";
 
 export const VAULT = vectors.vault;
@@ -48,7 +52,9 @@ export class ActionClient implements EngineClient {
       : { seq: 1, events: [] };
   async attestation(): Promise<never> { throw new Error("unused"); }
   async verify() { return { kind: "mock" } as const; }
-  watch(listener: (event: ClientEvent) => void) { listener({ type: "feed", status: "live" }); return () => {}; }
+  /** The store's client-event listener, for a test to report an event as the client would. */
+  listener: ((event: ClientEvent) => void) | null = null;
+  watch(listener: (event: ClientEvent) => void) { this.listener = listener; listener({ type: "feed", status: "live" }); return () => {}; }
   async markets() { this.marketReads++; return [BTC]; }
   async house() { return { cash: "0", nav: "0", gross_exposure: "0" }; }
   async houseState() { return { seq: null, params: null, checkpoint: null }; }
@@ -65,7 +71,9 @@ export class ActionClient implements EngineClient {
   }
   async accessProbe() {}
   async nonce() { this.nonceReads++; return { next_nonce: 4, time_ms: NODE_TIME }; }
-  async eligibility() { return { class: null, statement: null }; }
+  /** The account's recorded declaration; a test may clear it. */
+  declared: EligibilityClass | null = "professional";
+  async eligibility() { return { class: this.declared, statement: null }; }
   /** The account's entitlement proof; a test may set it. */
   entitlement: EntitlementProof | null = null;
   async emissions() { return this.entitlement; }
@@ -113,6 +121,42 @@ export async function connected(options: StubOptions = {}) {
   store.liveWallet = wallet;
   store.setWallet({ address: ACCOUNT, label: "Test wallet" });
   return { client, provider, store, wallet };
+}
+
+/** A started store with storage, as a tab of a live build opens, whose connector answers the fixed-key wallet; give two the one storage for two tabs. */
+export async function tab(persistence: KeyStorage, options: StubOptions = {}) {
+  const client = new ActionClient();
+  const provider = new StubProvider(options);
+  const wallet: Wallet = new ProviderWallet(ACCOUNT, "Browser wallet", provider, { chainId: vectors.chain_id, vault: VAULT, usdc: null, add: null }, { wait: async () => {} });
+  const store = new ConsoleStore({ client, wallets: { options: [], connect: async () => wallet }, persistence, history: () => [], initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
+  store.start(0);
+  await settle();
+  return { client, provider, store, wallet };
+}
+
+/** A tab connected on `storage` and authorized, as setup leaves it, its account credited. */
+export async function authorizedTab(storage = memoryStorage()) {
+  const kit = await tab(storage);
+  kit.client.credited = true;
+  await connectWallet(kit.store, "injected");
+  await authorizeBrowser(kit.store);
+  return { ...kit, storage };
+}
+
+/** A tab opened on `storage` that reconnects its stored choice, as a page load does; a repeat call is a reload. */
+export async function loadedTab(storage: KeyStorage) {
+  const kit = await tab(storage);
+  kit.client.credited = true;
+  saveChoice(storage, { kind: "injected" });
+  await connectWallet(kit.store, "injected", true);
+  return kit;
+}
+
+/** As `connected`, with this browser's session key already registered, as setup leaves it. */
+export async function keyed(options: StubOptions = {}) {
+  const kit = await connected(options);
+  if (!(await loginSession(kit.store))) throw new Error("the kit's login was refused");
+  return kit;
 }
 
 /** The account that signed `signature` over `typed`, lowercased. */

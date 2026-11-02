@@ -4,13 +4,14 @@
 
 import { useId, useState } from "react";
 
-import { depositSteps } from "@/lib/deposit-steps";
+import { setupGate } from "@/lib/setup-steps";
+import { openSetup } from "@/lib/store/setup";
 import { tabAfterKey } from "@/lib/tabs";
 
-import { useConsole } from "./ConsoleProvider";
+import { useConsole, useSession } from "./ConsoleProvider";
 import { DepositForm } from "./DepositForm";
-import { EligibilityCard } from "./EligibilityCard";
 import { FaucetCard } from "./FaucetCard";
+import { useSignGate } from "./SignGate";
 import { WithdrawForm } from "./WithdrawForm";
 
 const TABS = [
@@ -19,12 +20,14 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
-/** Both forms stay mounted, so an amount typed in one survives a look at the other. */
+/** Both forms stay mounted, so an amount typed in one survives a look at the other. Depositing comes last: until setup is done, the Deposit tab says so instead of showing its form. */
 export function MoveMoney() {
-  const { signatures, eligibility } = useConsole();
-  const steps = depositSteps(signatures, eligibility !== null);
+  const state = useConsole();
+  const { store } = useSession();
+  const setup = setupGate(state);
   const [tab, setTab] = useState<Tab>("deposit");
   const id = useId();
+  const gate = useSignGate(`${id}-gate`);
   const onKeyDown = (event: React.KeyboardEvent) => {
     const next = tabAfterKey(event.key, TABS.findIndex((t) => t.id === tab), TABS.length);
     const target = next === null ? undefined : TABS[next];
@@ -45,10 +48,16 @@ export function MoveMoney() {
         ))}
       </div>
       <div role="tabpanel" id={`${id}-deposit-panel`} aria-labelledby={`${id}-deposit`} hidden={tab !== "deposit"} className="divide-y divide-line">
-        {steps.map((name, index) => {
-          const step = steps.length > 1 ? index + 1 : undefined;
-          return name === "deposit" ? <DepositForm key={name} step={step} /> : <EligibilityCard key={name} step={index + 1} />;
-        })}
+        {setup === null && <DepositForm />}
+        {/* A node the console does not trust may never answer that read, so why it cannot sign comes first. */}
+        {setup === "reading" && <div className="p-4 text-caption text-fg-2">{gate.blocked ? gate.note : "Reading your account…"}</div>}
+        {setup === "needed" && (
+          <section aria-labelledby={`${id}-setup`} className="p-4">
+            <h4 id={`${id}-setup`} className="text-label tracking-caps text-fg-3 uppercase">Deposit USDC</h4>
+            <p className="mt-3 text-caption leading-relaxed text-fg-2">You deposit last. First {state.eligibility === null ? "sign the declaration and authorize this browser" : "authorize this browser"}.</p>
+            <button type="button" onClick={() => openSetup(store)} className="mt-4 min-h-11 rounded border border-glow bg-glow/10 px-4 py-2.5 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0">Continue setup</button>
+          </section>
+        )}
         <FaucetCard />
       </div>
       <div role="tabpanel" id={`${id}-withdraw-panel`} aria-labelledby={`${id}-withdraw`} hidden={tab !== "withdraw"}>

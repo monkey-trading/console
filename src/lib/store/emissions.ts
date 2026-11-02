@@ -7,7 +7,7 @@ import { accruedOf, carryAccrued } from "../engine/claim-standing";
 import type { EntitlementProof } from "../engine/emissions";
 import type { Wallet } from "../engine/wallet";
 import { formatMonkey } from "../format";
-import { errorText, prompting } from "./signing";
+import { abandoned, errorText, prompting } from "./signing";
 import type { ConsoleStore } from "./store";
 
 /** Where the account's MONKEY stands: what it has earned, what the node's proof against the vault's checkpoint owes, and what the vault has minted. */
@@ -108,7 +108,7 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
         const due = BigInt(proof.entitled) - record.claimed;
         if (due <= 0n) return store.toast("info", "All accrued MONKEY is claimed.");
         const amount = formatMonkey(due);
-        await prompting(store, `Confirm in your wallet: claim ${amount} from the vault.`, () => claim(proof, (waitingFor) => store.patch({ prompt: waitingFor })));
+        await prompting(store, wallet, `Confirm in your wallet: claim ${amount} from the vault.`, (progress) => claim(proof, progress));
         // The mint belongs to the account that claimed it, which may no longer be the one connected.
         const after = store.getSnapshot();
         store.toast("ok", `The vault minted ${amount} to ${after.wallet?.address === wallet.address ? "your wallet" : wallet.address}.`);
@@ -121,11 +121,11 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
       }
     }
   } catch (error) {
-    store.toast("error", errorText(error));
+    if (!abandoned(store, wallet, error)) store.toast("error", errorText(error));
   } finally {
     // The vault's record changed with the claim, or the reads above refreshed it; the page reads it
     // again once the claim has finished, which settles the claimed-versus-accrued line.
-    store.patch({ busy: false, emissionsVault: null });
+    if (store.liveWallet === wallet) store.patch({ busy: false, emissionsVault: null });
   }
   if (offered !== null) await offerMonkeyImport(store, offered);
 }

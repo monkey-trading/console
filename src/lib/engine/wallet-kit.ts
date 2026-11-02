@@ -4,10 +4,23 @@ import { decodeFunctionData, encodeAbiParameters, parseAbi, type Hex } from "vie
 import { privateKeyToAccount } from "viem/accounts";
 
 import type { Eip1193Provider } from "./provider-wallet";
+import type { KeyStorage } from "./session-key-store";
 
 /** Anvil's public account 0, the key the engine's EIP-712 vectors sign with. */
 export const KEY: Hex = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 export const ACCOUNT = privateKeyToAccount(KEY).address.toLowerCase();
+
+/** A browser storage in a map, with the map to look at; two stores given one share it as two tabs do. */
+export function memoryStorage(): KeyStorage & { held: Map<string, string> } {
+  const held = new Map<string, string>();
+  return {
+    held,
+    getItem: (key) => held.get(key) ?? null,
+    setItem: (key, value) => void held.set(key, value),
+    removeItem: (key) => void held.delete(key),
+    keys: () => [...held.keys()],
+  };
+}
 
 const NUMERIC = /^u?int\d*$/;
 

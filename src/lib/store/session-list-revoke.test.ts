@@ -8,7 +8,7 @@ import type { SessionKeyRevocationRequest } from "../engine/types";
 import { ACCOUNT } from "../engine/wallet-kit";
 import { NODE_TIME, signerOf } from "./live-kit";
 import { DOMAIN, H, message, opened, OTHER_KEY, registered, registeredReads, revokedAt, walletSignatures } from "./session-list-kit";
-import { endOwnSession } from "./session-list";
+import { sessionEnded } from "./wallet-session";
 
 describe("revoking a session key", () => {
   it("asks the wallet once for a RevokeSessionKey signature and removes the row, and reads again", async () => {
@@ -78,11 +78,42 @@ describe("revoking a session key", () => {
   });
 });
 
-describe("endOwnSession", () => {
+describe("ending this browser's own session", () => {
   it("does nothing when the wallet is already gone, so the stream and the answer cannot both report it", async () => {
     const { store } = await opened();
-    endOwnSession(store, "first");
-    endOwnSession(store, "second");
+    sessionEnded(store, "first");
+    sessionEnded(store, "second");
     expect(store.getSnapshot().toasts.filter((t) => t.tone === "info").map((t) => t.text)).toEqual(["first"]);
+  });
+
+  it("tells the user once when the stream's copy of the revocation arrives before the answer", async () => {
+    const { client, store, list, own } = await opened();
+    client.answer = () => {
+      // The store hears the node's event on the stream before the revocation's own answer returns.
+      client.deliver(message([{ type: "session_key_revoked", account: ACCOUNT, session_key: own }]));
+      return { seq: 2, events: [{ type: "session_key_revoked", account: ACCOUNT, session_key: own }] };
+    };
+    await list.revoke(own);
+    expect(store.getSnapshot().wallet).toBeNull();
+    expect(store.getSnapshot().toasts.filter((t) => t.tone === "info").map((t) => t.text)).toEqual(["This browser's trading authorization was revoked, so your wallet was disconnected. Connect again to renew it."]);
+  });
+
+  it("disconnects for a revocation the stream reports while the page is closed, as on every other page, and asks nothing", async () => {
+    const { client, close, provider, store, own } = await opened();
+    close();
+    const prompts = walletSignatures(provider);
+    client.deliver(message([{ type: "session_key_revoked", account: ACCOUNT, session_key: own }]));
+    await settle();
+    expect(store.getSnapshot().wallet).toBeNull();
+    expect(walletSignatures(provider)).toBe(prompts);
+  });
+
+  it("does nothing more when it hears a revocation of another key: the row goes and the connection stays", async () => {
+    const { client, list, store, setEvents, own } = await opened();
+    setEvents([revokedAt("12:0", OTHER_KEY, NODE_TIME), registered("9:0", OTHER_KEY, NODE_TIME - H, NODE_TIME + 20 * H), registered("5:0", own, NODE_TIME - 3 * H, NODE_TIME + 20 * H)]);
+    client.deliver(message([{ type: "session_key_revoked", account: ACCOUNT, session_key: OTHER_KEY }]));
+    await settle();
+    expect(store.getSnapshot().wallet?.address).toBe(ACCOUNT);
+    expect(list.getSnapshot().keys.map((k) => k.address)).toEqual([own.toLowerCase()]);
   });
 });

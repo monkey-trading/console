@@ -1,26 +1,16 @@
-/** Tests for the session-key login at connect: the credited-account login, the credit-event login, and wallet swaps. */
+/** Tests for what a connect asks of the wallet (nothing), and for a connect replacing another wallet. */
 
 import { describe, expect, it } from "vitest";
 
 import vectors from "../engine/eip712-vectors.json";
-import { registerSessionKeyTypedData, requestDomain } from "../engine/eip712";
-import type { SessionKeyRequest } from "../engine/types";
 import { ProviderWallet } from "../engine/provider-wallet";
 import { ACCOUNT, StubProvider } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
-import { connectWallet } from "./actions";
-import { ActionClient, BTC, NODE_TIME, signerOf, VAULT } from "./live-kit";
+import { authorizeBrowser, connectWallet } from "./actions";
+import { ActionClient, BTC, NODE_TIME, VAULT } from "./live-kit";
 import { liveSessionKey } from "./session";
 import { ConsoleStore } from "./store";
 import { settle } from "../engine/test-kit";
-
-const DOMAIN = requestDomain(vectors.chain_id, VAULT);
-
-/** Recovers the signer of one recorded registration, as the node verifies it. */
-const recover = async (body: SessionKeyRequest): Promise<string> => {
-  const typed = registerSessionKeyTypedData(DOMAIN, body.account, body.session_key, body.expires_at, { nonce: body.auth.nonce, expiresAt: body.auth.expires_at });
-  return signerOf(typed, body.auth.signature);
-};
 
 /** A started store over an ActionClient that records what it is sent. */
 async function setup(credited: boolean) {
@@ -34,50 +24,55 @@ async function setup(credited: boolean) {
   return { client, provider, store, walletA };
 }
 
-describe("the session-key login at connect", () => {
-  it("runs the login at connect for a credited account, silently when the feed is still starting", async () => {
-    const { client, provider, store } = await setup(true);
-    await connectWallet(store, "injected");
-    const registration = client.posted.find((p) => p.route === "session_key");
-    if (!registration) throw new Error("no registration at connect");
-    expect(await recover(registration.body as SessionKeyRequest)).toBe(ACCOUNT);
-    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(1);
-    expect(liveSessionKey(store)).not.toBeNull();
+const signatures = (provider: StubProvider) => provider.calls.filter((c) => c.method === "eth_signTypedData_v4");
+
+describe("what a connect asks of the wallet", () => {
+  it("asks for no signature and registers nothing at connect, credited or not", async () => {
+    for (const credited of [true, false]) {
+      const { client, provider, store } = await setup(credited);
+      expect(await connectWallet(store, "injected")).toBe(true);
+      expect(client.posted).toEqual([]);
+      expect(signatures(provider)).toEqual([]);
+      expect(liveSessionKey(store)).toBeNull();
+    }
   });
 
-  it("runs the login when a deposit credits the account, even though the connect did not", async () => {
-    const { client, store } = await setup(false);
-    await connectWallet(store, "injected"); // uncredited: no login
-    expect(client.posted.some((p) => p.route === "session_key")).toBe(false);
+  it("registers nothing when the account's credit arrives: a deposit, or a deposit credited on a screening retry", async () => {
+    const { client, provider, store } = await setup(false);
+    await connectWallet(store, "injected");
     client.credited = true;
+    const receipt = { beneficiary: { kind: "trader", account: ACCOUNT }, principal: "1000", held: "0", uncredited: "0" };
     client.deliver({ offset: "1:0", type: "command", seq: 1, ts: NODE_TIME, cmd: { type: "deposit" }, events: [{ type: "deposited", account: ACCOUNT, amount: "1000" }] });
+    // The receipt carries more than this path reads; the event's own fields stand in for it.
+    client.deliver({ offset: "2:0", type: "command", seq: 2, ts: NODE_TIME, cmd: { type: "deposit" }, events: [{ type: "custody_deposit_changed", receipt } as never] });
     await settle();
-    expect(client.posted.some((p) => p.route === "session_key")).toBe(true);
+    expect(client.posted).toEqual([]);
+    expect(signatures(provider)).toEqual([]);
+  });
+
+  it("registers nothing when the feed turns live after a connect that found it starting", async () => {
+    const { client, provider, store } = await setup(true);
+    store.patch({ stream: "connecting" });
+    await connectWallet(store, "injected");
+    client.listener?.({ type: "feed", status: "live" });
+    await settle();
+    expect(client.posted).toEqual([]);
+    expect(signatures(provider)).toEqual([]);
   });
 
   it("clears the session key and refusal when a connect replaces the wallet", async () => {
     const { store } = await setup(true);
     const walletB: Wallet = { address: "0x0000000000000000000000000000000000000bbb", label: "Other", sign: async () => "0x", deposit: async () => "0x0", claim: async () => "0x0" };
     await connectWallet(store, "injected");
+    await authorizeBrowser(store);
     const keyOfA = liveSessionKey(store);
     if (keyOfA === null) throw new Error("no key for wallet A");
+    store.patch({ sessionRefusal: { kind: "session_key_unsupported" } });
     store.deps.wallets.connect = async () => walletB;
-    await connectWallet(store, "other"); // B's own login may replace it, but A's key must not survive
-    expect(liveSessionKey(store)?.address).not.toBe(keyOfA.address);
-    expect(store.sessionLoginRefusal).toBeNull();
+    await connectWallet(store, "other");
+    expect(liveSessionKey(store)).toBeNull();
+    expect(store.sessionKey).toBeNull();
+    expect(store.getSnapshot()).toMatchObject({ sessionRefusal: null, sessionExpiresAt: 0 });
     expect(store.getSnapshot().wallet?.address).toBe(walletB.address);
   });
-
-  it("connect skips the login for an account the node has not credited: no prompt, no registration", async () => {
-    const client = new ActionClient(); // its account read 404s, as any uncredited account
-    const provider = new StubProvider();
-    const wallet: Wallet = new ProviderWallet(ACCOUNT, "Test wallet", provider, { chainId: vectors.chain_id, vault: VAULT, usdc: null, add: null }, { wait: async () => {} });
-    const store = new ConsoleStore({ client, wallets: { options: [], connect: async () => wallet }, history: () => [], initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
-    store.start(0);
-    await settle();
-    expect(await connectWallet(store, "injected")).toBe(true);
-    expect(client.posted.some((p) => p.route === "session_key")).toBe(false);
-    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(0);
-  });
-
 });

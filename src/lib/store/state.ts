@@ -4,7 +4,7 @@ import { DEFAULT_TIMEFRAME, TIMEFRAMES, type Bar, type TimeframeId } from "../ba
 import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { SignatureChecks } from "../engine/client";
 import type { EntitlementProof } from "../engine/emissions";
-import type { HistoryEvent, HouseView, QueuedWithdrawal, SignedWithdrawal, MarketId, MarketQuote, MarketView } from "../engine/types";
+import type { HistoryEvent, HouseView, QueuedWithdrawal, Reject, SignedWithdrawal, MarketId, MarketQuote, MarketView } from "../engine/types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
 import type { MarkProvenance } from "../engine/mark-types";
@@ -39,6 +39,19 @@ export interface PayoutsRead {
   listed: number[];
 }
 
+/** Where the setup popup stands on this connection (monkey-trading/console#168). */
+export interface SetupState {
+  /** Whether the popup is open; a dismissal lasts until something a missing step blocks reopens it. */
+  open: boolean;
+  /** Whether this connection's first account read has decided the popup. */
+  decided: boolean;
+  /** Whether the faucet step was used or skipped. */
+  fundSettled: boolean;
+}
+
+/** A connection before anything has been read for it. */
+export const NO_SETUP: SetupState = { open: false, decided: false, fundSettled: false };
+
 export interface ConsoleState {
   /** The node's clock: the stamp of the latest message. */
   now: number;
@@ -49,6 +62,8 @@ export interface ConsoleState {
   signatures: SignatureChecks;
   /** Set when the node refuses the caller's region. */
   blocked: BlockReason | null;
+  /** Whether the node has answered the access check; a visitor it refuses is never shown setup first. */
+  accessChecked: boolean;
   markets: MarketModel[];
   /** Bars per market and timeframe, built from the node's marks. */
   bars: Record<MarketId, Record<TimeframeId, Bar[]>>;
@@ -79,8 +94,13 @@ export interface ConsoleState {
   eligibility: Eligibility;
   account: AccountModel | null;
   queue: QueuedWithdrawal[];
-  /** Whether the connected account's queue has been read since it connected; `queue` is empty before it, and after a read that failed. */
-  accountQueueRead: boolean;
+  /** Whether the connected account's eligibility, queue and state have been read since it connected; each is empty before it, and after a read that failed. */
+  accountRead: boolean;
+  /** When this browser's session key expires by the node's clock, or 0 with no registered key; the key itself never enters the snapshot. */
+  sessionExpiresAt: number;
+  /** Why the last registration the node answered was refused, or null: orders and cancels then ask the wallet instead. */
+  sessionRefusal: Reject | null;
+  setup: SetupState;
   history: HistoryEntry[];
   /** The P&L tab's rows and the schedule that prices them; read only once that tab has opened. */
   ledger: LedgerState;
@@ -149,6 +169,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     stream: signatures === "none" ? "live" : "connecting",
     signatures,
     blocked: null,
+    accessChecked: false,
     markets: models,
     bars: seedAllBars(models, startMs, history),
     barProvenance: {},
@@ -166,7 +187,10 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     eligibility: null,
     account: null,
     queue: [],
-    accountQueueRead: false,
+    accountRead: false,
+    sessionExpiresAt: 0,
+    sessionRefusal: null,
+    setup: NO_SETUP,
     history: [],
     ledger: emptyLedgerState(),
     feed: [],

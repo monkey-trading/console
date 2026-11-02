@@ -17,7 +17,7 @@ import { shortHex } from "../format";
 import { liveSessionKey } from "./session";
 import { domainOf, errorText, signed } from "./signing";
 import type { ConsoleStore } from "./store";
-import { disconnectWallet } from "./wallet-session";
+import { sessionEnded } from "./wallet-session";
 
 /** How often the list is read when nothing tells the page it changed: the node signs every answer, so this is slow. */
 export const SESSION_REFRESH_MS = 60_000;
@@ -52,18 +52,6 @@ const browserScheduler: Scheduler = {
   // The handle is the one this scheduler's own setTimeout returned.
   clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
-
-/**
- * Ends this browser's own session after its key was revoked: nothing live remains to revoke, so the
- * disconnect asks the wallet for nothing. The wallet disconnects as the Disconnect button does.
- */
-export function endOwnSession(store: ConsoleStore, message: string): void {
-  if (store.liveWallet === null) return; // already ended: the stream and the revoke's answer both report it
-  store.sessionKey = null;
-  store.sessionKeyExpiresAt = 0;
-  disconnectWallet(store);
-  store.toast("info", message);
-}
 
 export class SessionList {
   private state: SessionListState = INITIAL;
@@ -140,7 +128,8 @@ export class SessionList {
         store.toast("error", describeReject(refused.reason));
       } else if (out.result.events.some((e) => e.type === "session_key_revoked")) {
         this.patch({ keys: this.state.keys.filter((k) => k.address !== address.toLowerCase()) });
-        if (own) return endOwnSession(store, "You revoked this browser's trading authorization, so the console disconnected the wallet.");
+        // The stream's copy of this revocation may already have ended the session, in which case this does nothing.
+        if (own) return sessionEnded(store, "You revoked this browser's trading authorization, so the console disconnected the wallet.");
         store.toast("ok", `Session key ${shortHex(address)} revoked.`);
       }
       if (this.mayRead()) void this.read();
@@ -192,11 +181,7 @@ export class SessionList {
     if (account === undefined) return;
     for (const event of message.events) {
       if ((event.type !== "session_key_registered" && event.type !== "session_key_revoked") || event.account.toLowerCase() !== account) continue;
-      const key = event.session_key.toLowerCase();
-      if (event.type === "session_key_revoked" && key === this.state.ownKey?.toLowerCase()) {
-        endOwnSession(this.store, "This browser's trading authorization was revoked, so the console disconnected the wallet.");
-        return;
-      }
+      // A revocation of this browser's own key has already ended the connection, on every page, in the store (`noteSessionRevoked`), so no read starts.
       if (this.mayRead()) void this.read();
       return;
     }

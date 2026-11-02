@@ -2,10 +2,10 @@
 
 import { describe, expect, it } from "vitest";
 
+import { MAX_SESSION_KEY_EXPIRY_MS } from "../engine/session-key";
 import { readLiveKeys } from "../live-keys";
 import { fixedFromInt, fixedToWire, parseFixed } from "../fixed";
 import { DEMO_ADDRESS } from "./demo";
-import { MAX_SESSION_KEY_EXPIRY_MS } from "./session-keys";
 import { createMockNode } from "./index";
 import { auth, funded, ME, order, START, types } from "./test-helpers";
 
@@ -107,13 +107,25 @@ describe("session keys", () => {
     expect(types(renewed.events)).toEqual(["session_key_registered"]);
   });
 
-  it("refuses a never-credited account's registration, as the node does, and admits it after a deposit", async () => {
+  it("refuses a never-credited account's registration and revocation until it declares, as the node does, with no deposit", async () => {
     const node = createMockNode(START);
-    await expect(register(node, KEY, node.client.state.now + 60_000)).rejects.toMatchObject({ status: 403, message: "account has never been credited" });
+    await expect(register(node, KEY, node.client.state.now + 60_000)).rejects.toMatchObject({ status: 403, message: "a never-credited account must declare first" });
+    await expect(node.client.revokeSessionKey({ account: ME, session_key: KEY, auth: auth(node) })).rejects.toMatchObject({ status: 403, message: "a never-credited account must declare first" });
     await node.client.attestEligibility({ account: ME, class: "professional", auth: auth(node) });
-    node.controls.deposit(ME, fixedFromInt(1_000));
     const out = await register(node, KEY, node.client.state.now + 60_000);
     expect(types(out.events)).toEqual(["session_key_registered"]);
+    const revoked = await node.client.revokeSessionKey({ account: ME, session_key: KEY, auth: auth(node) });
+    expect(types(revoked.events)).toEqual(["session_key_revoked"]);
+  });
+
+  it("refuses any other request from a never-credited account, the session key's included, and admits it after a deposit", async () => {
+    const node = createMockNode(START);
+    await node.client.attestEligibility({ account: ME, class: "professional", auth: auth(node) });
+    await register(node, KEY, node.client.state.now + 60_000);
+    await expect(keyOrder(node, KEY, 0)).rejects.toMatchObject({ status: 403, message: "account has never been credited" });
+    await expect(order(node, "0.01", "buy")).rejects.toMatchObject({ status: 403, message: "account has never been credited" });
+    node.controls.deposit(ME, fixedFromInt(1_000));
+    expect(types((await keyOrder(node, KEY, 0)).events)).toContain("fill");
   });
 
   it("refuses a registration naming the account itself, and a revocation of a key never registered", async () => {

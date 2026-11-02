@@ -110,7 +110,7 @@ describe("an account the node has not credited", () => {
     expect([client.accountReads, client.emissionsReads]).toEqual([1, 1]);
     await refreshEvery(store, 5, 500); // 4.5 s on in all: one rest has ended
     expect([client.accountReads, client.emissionsReads]).toEqual([2, 2]);
-    expect(store.getSnapshot()).toMatchObject({ account: null, entitlement: null, accountQueueRead: true });
+    expect(store.getSnapshot()).toMatchObject({ account: null, entitlement: null, accountRead: true });
   });
 
   it("is read at once when an event for the account arrives, inside the rest", async () => {

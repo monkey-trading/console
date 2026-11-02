@@ -59,7 +59,7 @@ describe("ticketPrices", () => {
 
   it("says why a live order has no price: no quote yet, an account not yet credited, no market price, too large, or declined", () => {
     expect(live("1", "buy", null)).toEqual({ bid: null, offer: null, price: null, spreadBps: null, problem: "Waiting for the node's executable quote.", problemIsSize: false });
-    expect(live("1", "buy", null, UNCREDITED).problem).toBe("The node quotes an account once it has credited it: deposit and declare your eligibility first.");
+    expect(live("1", "buy", null, UNCREDITED).problem).toBe("The node quotes an account once it has credited it: deposit first.");
     expect(live("1", "buy", null, "unknown market 9").problem).toBe("The node will not quote this market: unknown market 9.");
     expect(live("1", "buy", { ...QUOTE, unavailable: { kind: "market_closed" }, ask: [], bid: [] })).toMatchObject({ price: null, problem: "The market is closed.", problemIsSize: false });
     expect(live("6", "sell")).toMatchObject({ price: null, offer: f("100.5"), problem: "The node would not open an order this large. Try a smaller size.", problemIsSize: true });

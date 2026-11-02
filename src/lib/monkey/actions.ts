@@ -8,7 +8,7 @@ import type { StakingWallet } from "../engine/staking";
 import type { Progress, Wallet } from "../engine/wallet";
 import { monkeyExact } from "./figures";
 import { formatUsdc } from "../vault";
-import { errorText, prompting } from "../store/signing";
+import { abandoned, errorText, notBusy, prompting } from "../store/signing";
 import { claimEmissions, emissionsPosition } from "../store/emissions";
 import { usdcFixed } from "./figures";
 import type { MonkeyPanel } from "./panel";
@@ -49,16 +49,16 @@ async function run(panel: MonkeyPanel, action: string, step: (wallet: Wallet, st
     }
     store.patch({ busy: true });
     try {
-      const done = await prompting(store, `Confirm in your wallet: ${action}.`, () => step(wallet, staking, (waitingFor) => store.patch({ prompt: waitingFor })));
+      const done = await prompting(store, wallet, `Confirm in your wallet: ${action}.`, (progress) => step(wallet, staking, progress));
       if (done !== null) {
         landed = true;
         onLanded?.();
         store.toast("ok", done);
       }
     } catch (error) {
-      store.toast("error", errorText(error));
+      if (!abandoned(store, wallet, error)) store.toast("error", errorText(error));
     } finally {
-      store.patch({ busy: false });
+      notBusy(store, wallet);
     }
   });
   if (ran === null) {

@@ -9,7 +9,7 @@ import { reissueTypedData } from "../engine/eip712";
 import type { HistoryEvent, PayoutEntry, SignedWithdrawal } from "../engine/types";
 import { fixedFromWire, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
-import { domainOf, errorText, prompting, usableWallet } from "./signing";
+import { abandoned, domainOf, errorText, notBusy, prompting, usableWallet } from "./signing";
 import { formatStamp } from "../time";
 import { authorizationFor, keepLatest } from "./funds";
 import type { ConsoleState } from "./state";
@@ -210,18 +210,19 @@ export async function claim(store: ConsoleStore, nonce: number): Promise<void> {
   const amount = formatUsdc(fixedFromWire(signed.amount));
   store.patch({ busy: true });
   try {
-    await prompting(store, `Confirm in your wallet: claim ${amount} from the vault.`, () => wallet.claim(signed, (waitingFor) => store.patch({ prompt: waitingFor })));
+    await prompting(store, wallet, `Confirm in your wallet: claim ${amount} from the vault.`, (progress) => wallet.claim(signed, progress));
     // The payout belongs to the account that claimed it, which may no longer be the one connected.
     const state = store.getSnapshot();
     if (state.wallet?.address === wallet.address) store.patch({ paid: [...new Set([...state.paid, nonce])] });
     store.toast("ok", `The vault paid ${amount} to ${wallet.address === state.wallet?.address ? "your wallet" : wallet.address}.`);
   } catch (error) {
+    if (abandoned(store, wallet, error)) return;
     store.toast("error", errorText(error));
     // The vault may have paid it since it was read, such as on a claim from another device, so it is read again.
     const state = store.getSnapshot();
     if (state.wallet?.address === wallet.address) store.patch({ unpaid: state.unpaid.filter((n) => n !== nonce) });
   } finally {
-    store.patch({ busy: false });
+    notBusy(store, wallet);
   }
 }
 
@@ -243,11 +244,12 @@ export async function reissue(store: ConsoleStore, nonce: number, expiresAt: num
   try {
     const typed = reissueTypedData(domainOf(store), wallet.address, nonce, expiresAt);
     const summary = `ask for a new authorization of withdrawal ${nonce}`;
-    const signature = await prompting(store, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
+    const signature = await prompting(store, wallet, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
     await store.deps.client.reissue(wallet.address, nonce, { replaces_expires_at: expiresAt, signature });
     store.toast("ok", "Requested. The new authorization arrives here once the node signs it.");
     reread = true;
   } catch (error) {
+    if (abandoned(store, wallet, error)) return;
     const stale = error instanceof EngineError && error.status === 400 ? NEWER_EXISTS.exec(error.message) : null;
     if (stale?.[1] !== undefined) {
       store.toast("info", `The node has signed a newer authorization for this withdrawal, valid until ${formatStamp(Number(stale[1]) * 1000)} UTC; reading it from the node.`);
@@ -259,7 +261,7 @@ export async function reissue(store: ConsoleStore, nonce: number, expiresAt: num
       if (asking()) store.patch({ unpaid: store.getSnapshot().unpaid.filter((n) => n !== nonce) });
     } else if (!store.noteAccess(error)) store.toast("error", errorText(error));
   } finally {
-    store.patch({ busy: false });
+    notBusy(store, wallet);
   }
   if (reread && asking()) await loadPayouts(store);
 }

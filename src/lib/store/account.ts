@@ -5,6 +5,7 @@ import { EngineError } from "../engine/client";
 import { UntrustedError } from "../engine/trust";
 import { decodeAccount } from "../models";
 import { NOT_CREDITED_MS, uncreditedKey } from "./quiet-reads";
+import { decideSetup } from "./setup";
 import type { ConsoleStore } from "./store";
 
 /**
@@ -22,6 +23,7 @@ export async function loadAccount(store: ConsoleStore, withHistory: boolean): Pr
   const { client } = store.deps;
   const quiet = client.signatures === "none" ? null : store.quiet; // the mock runs in this page: nothing to spare
   const mark = store.quiet.mark();
+  const keyAtRead = store.sessionKey;
   const key = uncreditedKey(wallet.address);
   try {
     const held = quiet?.resting(key) === true;
@@ -38,7 +40,8 @@ export async function loadAccount(store: ConsoleStore, withHistory: boolean): Pr
       }
     }
     if (store.getSnapshot().wallet?.address !== wallet.address) return;
-    store.patch({ eligibility: eligibility.class, queue: queue.queue, accountQueueRead: true, account, entitlement: entitlement === null ? null : carryAccrued(store.getSnapshot().entitlement, entitlement) });
+    store.patch({ eligibility: eligibility.class, queue: queue.queue, accountRead: true, account, entitlement: entitlement === null ? null : carryAccrued(store.getSnapshot().entitlement, entitlement) });
+    decideSetup(store, keyAtRead);
     if (withHistory || store.getSnapshot().history.length === 0) {
       const history = (await client.history(wallet.address, { limit: 100 })).events;
       if (store.getSnapshot().wallet?.address === wallet.address) store.patch({ history });

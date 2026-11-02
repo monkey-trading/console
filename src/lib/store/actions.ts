@@ -11,13 +11,14 @@ import { fixedToWire, formatFixedPlaces, parseFixed, type Fixed } from "../fixed
 import { formatUsdc } from "../vault";
 import { describeReject } from "../messages";
 import { loadAccount } from "./account";
-import { ensureLogin, sessionSigned } from "./session";
-import { domainOf, errorText, prompting, REQUEST_TTL_MS, signed, usableWallet } from "./signing";
+import { ensureLogin } from "./session";
+import { sessionSigned } from "./session-signed";
+import { abandoned, domainOf, errorText, notBusy, noteRegionRefusal, prompting, REQUEST_TTL_MS, signed, usableWallet } from "./signing";
 import type { ConsoleStore } from "./store";
-import { NO_ACCOUNT, release } from "./wallet-session";
+import { adoptStoredKey, KEY_EXPIRED, NO_ACCOUNT, NO_SESSION, release, sessionEnded } from "./wallet-session";
 
 export { REQUEST_TTL_MS, STATEMENTS };
-export { disconnectWallet, walletSessionEnded } from "./wallet-session";
+export { disconnectWallet, storedKeyChanged, walletSessionEnded } from "./wallet-session";
 
 /** Offers to add the deployment's USDC to the wallet that just connected; one small toast when the wallet adds it, silence on a decline or a wallet that cannot. */
 function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
@@ -47,11 +48,10 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     }
     if (store.liveWallet !== wallet) {
       release(store, store.liveWallet); // the wallet this one replaces keeps no session open
-      // The old connection's key, expiry, in-flight login and refusal do not carry to the new wallet.
+      // The old connection's key, expiry, in-flight login, refusal and setup do not carry to the new wallet.
       store.sessionKey = null;
-      store.sessionKeyExpiresAt = 0;
       store.sessionLogin = null;
-      store.sessionLoginRefusal = null;
+      store.patch(NO_SESSION);
     }
     store.liveWallet = wallet;
     store.patch(NO_ACCOUNT);
@@ -60,11 +60,17 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     // The choice persists only now that the wallet is adopted: a refused connect, quiet or not, leaves storage alone.
     const choice = wallet.topic !== undefined ? { kind: "walletconnect" as const, topic: wallet.topic } : optionId === "injected" ? { kind: "injected" as const } : null;
     if (store.deps.persistence !== undefined && choice !== null) saveChoice(store.deps.persistence, choice);
+    // A key stored for this account, chain and vault is reused with no signature. A reload that re-attached
+    // its connection by itself and finds the key expired ends as any expiry does. A connect the user just
+    // made, by pressing it or by the pairing a reload falls back to, is the reconnection that would ask for.
+    const reattached = quiet && (connected !== undefined || optionId !== "walletconnect");
+    if (adoptStoredKey(store, wallet) === "expired" && reattached) {
+      sessionEnded(store, KEY_EXPIRED);
+      return false;
+    }
+    // The mock's demo account, connected on load, holds a key as a returning trader does. Everything else asks through setup.
+    if (quiet && store.deps.client.signatures === "none") await ensureLogin(store);
     await loadAccount(store, true);
-    // The one-signature login (console#68): trading signs with the ephemeral key it authorizes. A
-    // not-yet-credited account skips it (the engine refuses until the first deposit credits, and the
-    // deposit's event runs the login then); the first order asks if the account still is not credited.
-    if (!wallet.readOnly && store.getSnapshot().account !== null) await ensureLogin(store);
     if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);
     return true;
   } catch (error) {
@@ -76,15 +82,32 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
 }
 
 
-export async function attestEligibility(store: ConsoleStore, cls: EligibilityClass): Promise<void> {
+/** The setup popup's authorization: the one wallet signature, busy while the wallet asks. True once this browser holds a live key. */
+export async function authorizeBrowser(store: ConsoleStore): Promise<boolean> {
+  const wallet = store.liveWallet;
+  if (wallet === null) return false;
+  store.patch({ busy: true });
+  try {
+    return await ensureLogin(store);
+  } finally {
+    notBusy(store, wallet);
+  }
+}
+
+/** Signs and sends the declaration, then reads the account again, so what comes next sees it. True when this connection's declaration was recorded. */
+export async function attestEligibility(store: ConsoleStore, cls: EligibilityClass): Promise<boolean> {
+  const wallet = store.liveWallet;
   const out = await signed(store, `declare "${STATEMENTS[cls]}"`, (t, account) => eligibilityTypedData(domainOf(store), account, cls, t), (auth, wallet) =>
     store.deps.client.attestEligibility({ account: wallet.address, class: cls, auth }), "sign-again",
   );
-  if (!out.ok) return;
+  if (!out.ok) return false;
   const refused = out.result.events.find((e) => e.type === "eligibility_rejected");
-  if (refused && refused.type === "eligibility_rejected") store.toast("error", describeReject(refused.reason));
-  else store.toast("ok", "Eligibility recorded.");
+  // The node screens a declaration in the log: a region it does not serve answers here, not as a 403.
+  if (refused && refused.type === "eligibility_rejected") {
+    if (!noteRegionRefusal(store, refused.reason)) store.toast("error", describeReject(refused.reason));
+  } else store.toast("ok", "Eligibility recorded.");
   await store.refresh(true);
+  return refused === undefined && store.liveWallet === wallet;
 }
 
 /** Sends a deposit from the wallet to the vault, approving the vault first if needed; the node credits it once it is final. */
@@ -94,32 +117,33 @@ export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void>
   const shown = formatUsdc(amount);
   store.patch({ busy: true });
   try {
-    await prompting(store, `Confirm in your wallet: deposit ${shown} to the vault (an approval first, if the vault needs one).`, () => wallet.deposit(amount, (waitingFor) => store.patch({ prompt: waitingFor })));
+    await prompting(store, wallet, `Confirm in your wallet: deposit ${shown} to the vault (an approval first, if the vault needs one).`, (progress) => wallet.deposit(amount, progress));
     store.toast("info", store.deps.client.signatures === "none"
       ? `Deposit of ${shown} sent. It counts as collateral now and can be withdrawn once the vault's transaction is final.`
-      : `Deposit of ${shown} sent. The node sees it a few blocks after it is mined and credits it once your eligibility is recorded; it can be withdrawn once the vault's transaction is final.`);
+      : `Deposit of ${shown} sent. The node sees it a few blocks after it is mined and credits it; it can be withdrawn once the vault's transaction is final.`);
     await store.refresh(true);
   } catch (error) {
-    if (!store.noteAccess(error)) store.toast("error", errorText(error));
+    if (!abandoned(store, wallet, error) && !store.noteAccess(error)) store.toast("error", errorText(error));
   } finally {
-    store.patch({ busy: false });
+    notBusy(store, wallet);
   }
 }
 
 /**
  * The dev-only faucet (monkey-trading/console#44): tops the wallet's gas up to 1 ETH through
  * `anvil_setBalance` on the build's pinned RPC, then mints 10,000 mock USDC to it through the
- * wallet. A pinned RPC that is not Anvil is named, not guessed at, and nothing is minted then.
+ * wallet. A pinned RPC that is not Anvil is named, not guessed at, and nothing is minted then. True
+ * when the mint went through and this wallet is still the one connected.
  */
-export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy): Promise<void> {
-  if (!faucetAvailable(deploy)) return;
+export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy): Promise<boolean> {
+  if (!faucetAvailable(deploy)) return false;
   // usableWallet toasts its own reason when it refuses; only an able wallet that cannot mint reaches the toast below.
   const wallet = usableWallet(store, "fund the wallet");
-  if (!wallet) return;
+  if (!wallet) return false;
   const rpcUrl = deploy.rpcUrl;
   if (wallet.fund === undefined || rpcUrl === null) {
     store.toast("error", "This build's faucet is not available for the connected wallet.");
-    return;
+    return false;
   }
   // Bound to the wallet: calling the method without a receiver unbinds `this` in the provider wallet.
   const fund = wallet.fund.bind(wallet);
@@ -130,14 +154,16 @@ export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy): Promis
       store.toast("error", gas.notAnvil
         ? `The build's RPC is not an Anvil node (${gas.detail}), so the faucet cannot fund this wallet.`
         : `The faucet could not top up gas: ${gas.detail}.`);
-      return;
+      return false;
     }
-    await prompting(store, `Confirm in your wallet: mint ${formatUsdc(FAUCET_USDC)} from the Anvil faucet.`, () => fund(FAUCET_USDC, (waitingFor) => store.patch({ prompt: waitingFor })));
+    await prompting(store, wallet, `Confirm in your wallet: mint ${formatUsdc(FAUCET_USDC)} from the Anvil faucet.`, (progress) => fund(FAUCET_USDC, progress));
     store.toast("ok", `${formatUsdc(FAUCET_USDC)} minted${gas.toppedUp ? " and the wallet holds 1 ETH for gas" : ""}. Deposit into the vault to trade it.`);
+    return store.liveWallet === wallet; // a mint the old wallet finished settles nothing for the connection that came next
   } catch (error) {
-    if (!store.noteAccess(error)) store.toast("error", errorText(error));
+    if (!abandoned(store, wallet, error) && !store.noteAccess(error)) store.toast("error", errorText(error));
+    return false;
   } finally {
-    store.patch({ busy: false });
+    notBusy(store, wallet);
   }
 }
 

@@ -2,20 +2,15 @@
 
 import { describe, expect, it } from "vitest";
 
-import { ACCOUNT } from "../engine/wallet-kit";
-import { loadChoice, saveChoice, type ChoiceStorage, type WalletChoice } from "../engine/wallet-persist";
+import { ACCOUNT, memoryStorage } from "../engine/wallet-kit";
+import { loadChoice, saveChoice, type WalletChoice } from "../engine/wallet-persist";
 import { disconnectWallet, walletSessionEnded } from "./actions";
 import { connected } from "./live-kit";
 
 /** A store connected as `label` (a watch account when `readOnly`) over a storage that holds `choice`, as a page load left it. */
 async function stored(label: string, choice: WalletChoice | null, readOnly = false) {
   const { store, wallet } = await connected();
-  const held = new Map<string, string>();
-  const persistence: ChoiceStorage = {
-    getItem: (key) => held.get(key) ?? null,
-    setItem: (key, value) => void held.set(key, value),
-    removeItem: (key) => void held.delete(key),
-  };
+  const persistence = memoryStorage();
   if (choice !== null) saveChoice(persistence, choice);
   store.deps.persistence = persistence;
   store.liveWallet = { ...wallet, label };

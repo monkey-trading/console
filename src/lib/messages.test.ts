@@ -5,6 +5,11 @@ import { describe, expect, it } from "vitest";
 import { describeEvent, describeMockAttestation, describeReject, describeReverifying } from "./messages";
 
 describe("describeReject", () => {
+  it("tells the live-key cap from the budget of new keys, which a revocation does not refill", () => {
+    expect(describeReject({ kind: "too_many_session_keys", max: 10 })).toBe("This account already holds the most session keys the node allows.");
+    expect(describeReject({ kind: "too_many_session_keys", max: 100 })).toBe("This account has added new session keys too quickly. The node allows one more each hour.");
+  });
+
   it("names the numbers a slippage and a margin refusal carry", () => {
     expect(describeReject({ kind: "slippage", quoted: "100", live: "101", slippage_bps: 100 })).toContain("100 bps");
     expect(describeReject({ kind: "insufficient_margin", equity: "1000", required: "2500.5" })).toContain("$2,500.50");

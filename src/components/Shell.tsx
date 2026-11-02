@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { AccessGate } from "./AccessGate";
 import { AttestationBanner } from "./AttestationBanner";
 import { RiskStrip } from "./RiskStrip";
+import { SetupDialog } from "./SetupDialog";
 import { Toasts } from "./Toasts";
 import { TopBar } from "./TopBar";
 import { WalletConnectPairing } from "./WalletConnectPairing";
@@ -24,6 +25,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </main>
       <RiskStrip />
       <WalletConnectPairing />
+      <SetupDialog />
       <Toasts />
       <WalletPrompt />
     </div>

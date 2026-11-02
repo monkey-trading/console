@@ -1,4 +1,4 @@
-/** Tests for the ephemeral session key: it generates as a valid address and signs typed data it owns. */
+/** Tests for the session key: it generates as a valid address and signs typed data it owns. */
 
 import { recoverTypedDataAddress } from "viem";
 import { describe, expect, it } from "vitest";
@@ -29,6 +29,26 @@ describe("the session key signer", () => {
     expect(signature).toMatch(/^0x[0-9a-f]{130}$/);
     const recovered = await recoverTypedDataAddress({ ...(typed as unknown as Parameters<typeof recoverTypedDataAddress>[0]), signature: signature as `0x${string}` });
     expect(recovered.toLowerCase()).toBe(key.address.toLowerCase());
+  });
+
+  it("restores from its private key to the same address and signatures", async () => {
+    const key = SessionKeySigner.generate();
+    const restored = SessionKeySigner.fromPrivateKey(key.exportPrivateKey());
+    expect(restored.address).toBe(key.address);
+    const typed = registerSessionKeyTypedData(domain, vectors.account, key.address, 1, { nonce: 0, expiresAt: 1 });
+    expect(await restored.sign(typed)).toBe(await key.sign(typed));
+  });
+
+  it("refuses a private key that is no scalar", () => {
+    expect(() => SessionKeySigner.fromPrivateKey(`0x${"00".repeat(32)}`)).toThrow();
+  });
+
+  it("shows its private key to no serialization or inspection", () => {
+    const key = SessionKeySigner.generate();
+    const secret = key.exportPrivateKey().slice(2);
+    expect(JSON.stringify(key)).not.toContain(secret);
+    expect(String(key)).not.toContain(secret);
+    expect(Object.values(key).map((value) => JSON.stringify(value) ?? "").join("")).not.toContain(secret);
   });
 
   it("expires within the engine's 24-hour registration cap", () => {
