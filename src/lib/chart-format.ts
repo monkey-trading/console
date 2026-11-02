@@ -19,6 +19,20 @@ export function formatCompactUsd(value: number): string {
   return `${sign}$${scaled.toFixed(scaled < 10 ? 2 : scaled < 100 ? 1 : 0)}${unit.suffix}`;
 }
 
+/** The least a chart's price scale spans, as a share of the plotted value: below it, ticks closer than a compact label's precision print one label. */
+const MIN_SPAN_SHARE = 0.04;
+
+/**
+ * The price range to fix a scale to when the plotted values `min` to `max` span less than a few
+ * percent of their size (a flat series): centred on them and wide enough that the axis ticks print
+ * distinct compact labels. Null when the values already span enough, and the scale fits them itself.
+ */
+export function minimumSpanRange(min: number, max: number): { min: number; max: number } | null {
+  const middle = (min + max) / 2;
+  const span = Math.max(Math.abs(middle) * MIN_SPAN_SHARE, 1);
+  return max - min >= span ? null : { min: middle - span / 2, max: middle + span / 2 };
+}
+
 /** Whole base units from the wire's decimal text, or null for anything else. */
 export function parseUnits(text: string): bigint | null {
   return /^\d+$/.test(text) ? BigInt(text) : null;

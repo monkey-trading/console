@@ -35,13 +35,19 @@ export interface PanelState {
   overview: Read<MonkeyView>;
   activity: Read<ActivityPage>;
   wallet: WalletFigures;
+  /**
+   * Set after a transaction that changed the account's counted stake (a stake, a completed unstake),
+   * to the node's total as it stood: the node mirrors the chain a little later, so until its total
+   * moves, the wallet and the total disagree and a share of one in the other would be wrong.
+   */
+  unmirroredTotal: string | null;
 }
 
 const NO_WALLET: WalletFigures = { address: null, position: LOADING, proof: LOADING };
 
 export class MonkeyPanel {
   readonly feeds: Record<"epochs" | "perLoss" | "supply" | "rewards", ChartFeed>;
-  private state: PanelState = { overview: LOADING, activity: LOADING, wallet: NO_WALLET };
+  private state: PanelState = { overview: LOADING, activity: LOADING, wallet: NO_WALLET, unmirroredTotal: null };
   private readonly listeners = new Set<() => void>();
   private nodeRead: Promise<void> | null = null;
   /** Counts the page's openings; work that began in an earlier one never writes into a later one. */
@@ -99,8 +105,13 @@ export class MonkeyPanel {
       if (this.store.monkeySession.panel === this) this.store.monkeySession.panel = null;
       clearInterval(timer);
       for (const feed of Object.values(this.feeds)) feed.close();
-      this.set({ overview: LOADING, activity: LOADING, wallet: NO_WALLET });
+      this.set({ overview: LOADING, activity: LOADING, wallet: NO_WALLET, unmirroredTotal: null });
     };
+  }
+
+  /** Marks the stake figures as ahead of the node's mirror until its total moves; see [PanelState.unmirroredTotal]. */
+  holdShare(): void {
+    this.set({ unmirroredTotal: this.state.overview.value?.staking?.total_staked ?? "" });
   }
 
   /** Reads the totals and the activity, one read of each at a time. */
@@ -112,7 +123,10 @@ export class MonkeyPanel {
     const run = async () => {
       const [overview, activity] = await Promise.allSettled([stats.monkey(), stats.activity({ limit: ACTIVITY_LIMIT })]);
       if (cycle !== this.cycle || !this.open) return;
+      const held = this.state.unmirroredTotal;
+      const mirrored = overview.status === "fulfilled" && (overview.value.staking?.total_staked ?? "") !== held;
       this.set({
+        unmirroredTotal: mirrored ? null : held,
         overview: overview.status === "fulfilled" ? ready(overview.value) : failed(overview.reason, this.state.overview.value),
         activity: activity.status === "fulfilled" ? ready(activity.value) : failed(activity.reason, this.state.activity.value),
       });
@@ -138,7 +152,7 @@ export class MonkeyPanel {
       return Promise.resolve();
     }
     const cycle = this.cycle;
-    if (this.state.wallet.address !== wallet.address) this.set({ wallet: { ...NO_WALLET, address: wallet.address } });
+    if (this.state.wallet.address !== wallet.address) this.set({ wallet: { ...NO_WALLET, address: wallet.address }, unmirroredTotal: null });
     // The node's proof needs nothing from the wallet, so it is not held up behind a call the wallet has not answered.
     const proof = this.readProof(wallet, cycle);
     // A read still waiting for the wallet to answer an earlier call says so once the time limit has passed, instead of reading "Reading…" with no reason.

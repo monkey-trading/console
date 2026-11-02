@@ -15,7 +15,7 @@ import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
 
 export function StakePanel() {
   const panel = useMonkeyPanel();
-  const { wallet: figures, overview } = usePanelState();
+  const { wallet: figures, overview, unmirroredTotal } = usePanelState();
   const wallet = useConsoleSelect((state) => state.wallet);
   const busy = useConsoleSelect((state) => state.busy);
   // The node's clock to five seconds, so the Complete button opens within moments of the cooldown ending; the time left is shown to the minute.
@@ -26,7 +26,8 @@ export function StakePanel() {
   const total = staking === null ? null : BigInt(staking.total_staked);
   const pending = position?.unstaking ?? null;
   // The engine counts an unstake as staked until it completes, so it counts in the share through the cooldown.
-  const share = position === null || total === null ? null : shareBps(position.staked + (pending?.amount ?? 0n), total);
+  // Until the node's total has caught up with a stake or a completed unstake, the wallet and the total disagree, so no share is shown.
+  const share = position === null || total === null || unmirroredTotal !== null ? null : shareBps(position.staked + (pending?.amount ?? 0n), total);
   const left = pending === null ? 0 : pending.claimableAtMs - nowMs;
   const readOnly = wallet?.readOnly === true;
   return (

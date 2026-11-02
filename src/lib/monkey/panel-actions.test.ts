@@ -60,6 +60,50 @@ describe("the page's transactions", () => {
     stop();
   });
 
+  it("holds the stake share back while the node's total has not caught up with a stake or a completed unstake", async () => {
+    const { node, panel, stop } = await setup();
+    const real = node.client.stats.monkey;
+    let lagging = true;
+    const stale = await real();
+    node.client.stats.monkey = async () => (lagging ? stale : real());
+    await panel.refreshNode();
+    expect(panel.getSnapshot().unmirroredTotal).toBeNull();
+    expect(await stakeMonkey(panel, 1_000n * MONKEY_UNIT)).toBe(true);
+    expect(panel.getSnapshot().unmirroredTotal).toBe(stale.staking?.total_staked);
+    await panel.refreshNode();
+    expect(panel.getSnapshot().unmirroredTotal).toBe(stale.staking?.total_staked);
+    lagging = false;
+    await panel.refreshNode();
+    expect(panel.getSnapshot().unmirroredTotal).toBeNull();
+    stop();
+  });
+
+  it("holds the share after a completed unstake until the node's total has dropped", async () => {
+    const { node, panel, stop } = await setup();
+    expect(await startUnstake(panel, 2_000n * MONKEY_UNIT)).toBe(true);
+    node.client.state.now = panel.getSnapshot().wallet.position.value?.unstaking?.claimableAtMs ?? 0;
+    // The read the start left running settles before the node is made to lag.
+    await flush();
+    const real = node.client.stats.monkey;
+    const stale = await real();
+    node.client.stats.monkey = async () => stale;
+    await panel.refreshNode();
+    expect(await completeUnstake(panel)).toBe(true);
+    expect(panel.getSnapshot().unmirroredTotal).toBe(stale.staking?.total_staked);
+    await flush();
+    node.client.stats.monkey = real;
+    await panel.refreshNode();
+    expect(panel.getSnapshot().unmirroredTotal).toBeNull();
+    stop();
+  });
+
+  it("does not hold the share for an unstake that only starts, which leaves the counted stake as it was", async () => {
+    const { panel, stop } = await setup();
+    expect(await startUnstake(panel, 1_000n * MONKEY_UNIT)).toBe(true);
+    expect(panel.getSnapshot().unmirroredTotal).toBeNull();
+    stop();
+  });
+
   it("claims the USDC a close distributed, once the vault's checkpoint and the node's proof meet", async () => {
     const { node, store, panel, stop } = await setup();
     node.client.tick(SIM_EPOCH_MS + EPOCH_MS);
