@@ -59,9 +59,11 @@ export async function importExitFile(store: ConsoleStore, text: string): Promise
     if (file.account !== null && file.account !== scope.account) return refuse(`it is for account ${shortHex(file.account)}. Connect that wallet to import it`);
     const offChain = await onChain(wallet);
     if (offChain !== null) return refuse(`your wallet could not check it: ${offChain}`);
+    const before = store.getSnapshot().exit.record;
     const outcome = await store.exit.keeper.adopter.adopt(wallet, scope, file.proof);
     switch (outcome.kind) {
-      case "saved": // the panel's saved line says it, and its storage line when the browser would not keep it
+      case "saved": // the panel's saved line says it, and its storage line when the browser would not keep it, but neither moves for a file at the checkpoint already saved
+        if (before?.proof.root === file.proof.root) return finish({ ok: true, text: "This file is for the checkpoint already saved, and the vault accepts it." });
         if (store.liveWallet === wallet) store.exit.announce(`Imported the proof for checkpoint ${file.proof.seq}.`);
         return finish(null);
       case "empty": {
