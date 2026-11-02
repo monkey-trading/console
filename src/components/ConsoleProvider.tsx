@@ -20,7 +20,7 @@ import { queuePage } from "@/lib/mock/funds";
 import { mockHistory } from "@/lib/mock/history";
 import { createMockNode, SIM_EPOCH_MS, type MockNode } from "@/lib/mock";
 import { connectWallet, storedKeyChanged, walletSessionEnded } from "@/lib/store/actions";
-import { followNode, moveToNode } from "@/lib/store/node-move";
+import { followNode, moveNotice, moveToNode } from "@/lib/store/node-move";
 import { reconnectWallet } from "@/lib/store/reconnect";
 import { scanBarsHistory } from "@/lib/store/bars-scan";
 import { followAccountFeeds, quoteSyncKey, syncQuotes } from "@/lib/store/funds";
@@ -109,10 +109,10 @@ function createLiveSession(deploy: Deploy): Session {
     chain: () => store.liveWallet?.chainReads ?? null,
     open: (origin) => createLiveClient(deploy, browser, undefined, origin),
     busy: () => store.getSnapshot().busy,
-    adopt: (next, origin) => {
+    adopt: (next) => {
       const old = store;
       store = storeFor(next);
-      void moveToNode(old, store, new URL(origin).host);
+      void moveToNode(old, store);
       moved?.(store);
     },
   });
@@ -157,7 +157,22 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
   const reconnected = useRef(false);
   // A move to another node swaps in its fresh store, and the key below remounts every screen on it.
   useEffect(() => onMove?.((next) => setSession((held) => ({ ...held, store: next, moves: held.moves + 1 }))), [onMove]);
-  useEffect(() => follower?.start(() => document.visibilityState === "hidden"), [follower]);
+  useEffect(() => {
+    if (follower === null) return;
+    const stop = follower.start(() => document.visibilityState === "hidden");
+    const seen = () => { if (document.visibilityState !== "hidden") follower.resume(); };
+    document.addEventListener("visibilitychange", seen);
+    return () => {
+      document.removeEventListener("visibilitychange", seen);
+      stop();
+    };
+  }, [follower]);
+  // After a move every screen has remounted: its log exists to announce this, and focus that fell with the old screens goes somewhere deliberate.
+  useEffect(() => {
+    if (session.moves === 0 || follower === null) return;
+    store.toast("info", moveNotice(new URL(follower.getSnapshot().origin).host));
+    if (document.activeElement === null || document.activeElement === document.body) document.getElementById("main")?.focus();
+  }, [session.moves, store, follower]);
   useEffect(() => (follower === null ? undefined : followNode(store, follower)), [follower, store]);
   useEffect(() => {
     if (session.node === null) {

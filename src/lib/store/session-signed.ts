@@ -9,12 +9,11 @@
 import { EngineError, type ActionResult } from "../engine/client";
 import type { Terms, TypedRequest } from "../engine/eip712";
 import type { RequestAuth } from "../engine/types";
-import { UntrustedError } from "../engine/trust";
 import type { Wallet } from "../engine/wallet";
 import { describeReject } from "../messages";
 import { liveSessionKey } from "./session";
 import { openSetup } from "./setup";
-import { DISCONNECTED, errorText, notBusy, REQUEST_TTL_MS, signed, usableWallet, type OnNonceTaken, type Outcome } from "./signing";
+import { DISCONNECTED, errorText, MAY_HAVE_RUN, mayHaveRun, notBusy, REQUEST_TTL_MS, signed, type OnNonceTaken, type Outcome, usableWallet } from "./signing";
 import type { ConsoleStore } from "./store";
 import { KEY_REFUSED, sessionEnded } from "./wallet-session";
 
@@ -94,9 +93,7 @@ export async function sessionSigned(
     if (store.noteAccess(error)) return { ok: false };
     // A sent request the node refused, left unanswered, or answered unverifiably may still have run: read the account first.
     if (sent) await store.refresh(true);
-    const unanswered = error instanceof UntrustedError || (error instanceof EngineError && error.status === 0);
-    const unknown = sent && unanswered ? " It may have run: check your positions, orders, withdrawals and history before trying again." : "";
-    store.toast("error", `${errorText(error)}${unknown}`);
+    store.toast("error", `${errorText(error)}${sent && mayHaveRun(error) ? MAY_HAVE_RUN : ""}`);
     return { ok: false };
   } finally {
     notBusy(store, wallet);

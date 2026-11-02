@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import type { ClientEvent, EngineClient } from "./client";
 import { RETRY_MS, SLOW_READ_MS } from "./operator-follow";
 import { B, named, rig, TrialClient, VERIFIED } from "./operator-follow-kit";
-import type { NamedOperator } from "./registry";
 import { settle } from "./test-kit";
 import type { StreamMessage } from "./types";
 
@@ -25,6 +24,24 @@ describe("when the follower reads", () => {
     await settle();
     expect(operatorReads.count).toBe(0);
     advance(1);
+    await settle();
+    expect(operatorReads.count).toBe(1);
+  });
+
+  it("reads when a hidden tab that skipped a read is seen again, and not for one that skipped none", async () => {
+    let hidden = true;
+    const { follower, advance, operatorReads } = await started({ operator: async () => null }, () => hidden);
+    follower.resume();
+    await settle();
+    expect(operatorReads.count).toBe(0);
+    advance(SLOW_READ_MS);
+    await settle();
+    expect(operatorReads.count).toBe(0);
+    hidden = false;
+    follower.resume();
+    await settle();
+    expect(operatorReads.count).toBe(1);
+    follower.resume();
     await settle();
     expect(operatorReads.count).toBe(1);
   });
@@ -137,53 +154,6 @@ describe("when the follower reads", () => {
   });
 });
 
-describe("what the vault says", () => {
-  /** A rig watching a client in use, the vault answering `facts`. */
-  function inUse(operator: () => Promise<NamedOperator | null>, facts = { release: "0x1", signer: "0xa" }) {
-    const kit = rig({ operator });
-    kit.reads.vault = async () => facts;
-    const client = new TrialClient();
-    kit.follower.watch(client as unknown as EngineClient); // the follower uses only what TrialClient has
-    return { ...kit, client, facts };
-  }
-
-  it("reaches the client in use on every path, whatever comes of the operator's node", async () => {
-    const paths: [string, () => Promise<NamedOperator | null>][] = [
-      ["no registry", async () => null],
-      ["the node in use is the operator's", async () => named({ hostname: null })],
-      ["a hostname the build does not list", async () => named({ hostname: "evil.example" })],
-      ["a move", async () => named()],
-    ];
-    for (const [path, operator] of paths) {
-      const { follower, client, facts } = inUse(operator);
-      await follower.check();
-      expect(client.heeded, path).toEqual([facts]);
-    }
-    const waiting = inUse(async () => named());
-    waiting.trial.verdict = { kind: "unverified", reason: "not yet" };
-    await waiting.follower.check();
-    expect(waiting.follower.getSnapshot().kind).toBe("waiting");
-    expect(waiting.client.heeded).toEqual([waiting.facts]);
-  });
-
-  it("hears nothing from a wallet that left while it read", async () => {
-    const kit = inUse(async () => named());
-    const read = kit.reads.vault;
-    kit.reads.vault = () => { kit.held.chain = null; return read(); };
-    await kit.follower.check();
-    expect(kit.client.heeded).toEqual([]);
-    expect(kit.adopted).toEqual([]);
-  });
-
-  it("says so when the read fails, and keeps the node in use", async () => {
-    const kit = rig({ operator: async () => named({ rotationEnabled: false }) });
-    kit.reads.vault = async () => { throw new Error("no answer"); };
-    await kit.follower.check();
-    expect(kit.follower.getSnapshot()).toEqual({ kind: "failed", origin: "https://build.example", reason: "no answer" });
-    expect(kit.adopted).toEqual([]);
-  });
-});
-
 describe("what makes the follower read sooner", () => {
   const message = (type: string) => ({ offset: "1:0", type: "command", seq: 1, ts: 0, cmd: { type: "election" }, events: [{ type }] }) as unknown as StreamMessage;
 
@@ -221,6 +191,38 @@ describe("what makes the follower read sooner", () => {
     for (const watcher of client.watchers) watcher({ type: "feed", status: "live" });
     await settle();
     expect(operatorReads.count).toBe(0);
+  });
+
+  it("keeps an event that arrives while a check is running: it may have read before it", async () => {
+    let answer = () => {};
+    const { client, operatorReads, setOperator, follower } = await watched();
+    setOperator(() => new Promise((resolve) => { answer = () => resolve(null); }));
+    const running = follower.check();
+    await settle();
+    for (const watcher of client.watchers) watcher({ type: "feed", status: "stale" });
+    setOperator(async () => null);
+    answer();
+    await running;
+    await settle();
+    expect(operatorReads.count).toBe(2);
+  });
+
+  it("reads on the first refusal alone, as a refused node is asked again on every retry of the stream", async () => {
+    const { client, operatorReads, advance } = await watched();
+    const refuse = () => { for (const watcher of client.watchers) watcher({ type: "attestation", status: { kind: "unverified", reason: "x" } }); };
+    refuse();
+    await settle();
+    expect(operatorReads.count).toBe(1);
+    advance(RETRY_MS);
+    await settle();
+    refuse();
+    await settle();
+    expect(operatorReads.count).toBe(1);
+    for (const watcher of client.watchers) watcher({ type: "attestation", status: { kind: "mock" } });
+    advance(RETRY_MS);
+    refuse();
+    await settle();
+    expect(operatorReads.count).toBe(2);
   });
 
   it("does not read twice inside the gap however often the feed flaps, but reads once the gap has passed", async () => {

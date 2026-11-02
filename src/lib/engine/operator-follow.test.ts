@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { EngineError } from "./client";
+import { EngineError, type EngineClient } from "./client";
 import { operatorTarget } from "./operator-follow";
 import { B, BUILD, DEPLOY, named, rig } from "./operator-follow-kit";
 import { settle } from "./test-kit";
@@ -167,6 +167,19 @@ describe("OperatorFollower.check", () => {
     expect(adopted).toEqual([B, BUILD]);
   });
 
+  it("with rotation off, goes back to the deployment's node once the node in use is refused: a fallback may be there", async () => {
+    const { follower, adopted, setOperator, trial } = rig();
+    await follower.check();
+    expect(adopted).toEqual([B]);
+    setOperator(async () => named({ rotationEnabled: false }));
+    follower.watch(trial as unknown as EngineClient); // the follower uses only what TrialClient has
+    await follower.check();
+    expect(adopted).toEqual([B]); // still trusted: it stays
+    for (const watcher of trial.watchers) watcher({ type: "attestation", status: { kind: "unverified", reason: "not the vault's release" } });
+    await follower.check();
+    expect(adopted).toEqual([B, BUILD]);
+  });
+
   it("does not reopen a node once it follows it", async () => {
     const { follower, opened } = rig();
     await follower.check();
@@ -190,6 +203,7 @@ describe("OperatorFollower.check", () => {
     const { follower, operatorReads } = rig({ operator: () => new Promise((resolve) => { release = () => resolve(null); }) });
     const first = follower.check();
     const second = follower.check();
+    await settle();
     expect(operatorReads.count).toBe(1);
     release();
     await first;

@@ -15,7 +15,7 @@ import type { VaultFacts } from "./registry";
 import { manifestText, releaseName } from "./release-check";
 import { FakeScheduler } from "./test-kit";
 import { loadGlue, readWasm } from "./test-vectors";
-import { CONNECT_TO_CHECK, NodeTrust, NOT_NAMED, NOT_THE_SIGNER, UntrustedError } from "./trust";
+import { CONNECT_TO_CHECK, NodeTrust, NOT_NAMED, NOT_THE_SIGNER, NotSentError } from "./trust";
 import type { Verifier } from "./verifier";
 
 const ENCLAVE = "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf";
@@ -115,6 +115,40 @@ describe("a wallet that answers the vault's read late", () => {
   });
 });
 
+describe("a late answer to a check still running", () => {
+  it("is followed by a check of its own, not lost to the verdict that gave up on it", async () => {
+    const seen: (readonly string[])[] = [];
+    const verifier = realVerifier(seen);
+    const scheduler = new FakeScheduler();
+    let releaseCollateral = () => {};
+    let holdCollateral = true;
+    const client = new LiveEngineClient({
+      origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: ENCLAVE, heartbeatMs: 5_000, loadVerifier: async () => verifier, releases: [RELEASE], acceptsMock: false, scheduler, nowMs: () => NOW_MS,
+      openSocket: () => { throw new Error("no stream in these tests"); },
+      fetch: async (input) => {
+        if (String(input).endsWith("/collateral")) {
+          if (holdCollateral) await new Promise<void>((resolve) => { releaseCollateral = resolve; });
+          return new Response(fixture.collateral);
+        }
+        return new Response(fixture.attestation);
+      },
+    });
+    let answer: (facts: VaultFacts) => void = () => {};
+    const reads = { vault: () => new Promise<VaultFacts>((resolve) => { answer = resolve; }), operator: async () => null, candidates: async () => null, delegateOf: async () => null };
+    const statuses: AttestationStatus[] = [];
+    client.watch((event) => { if (event.type === "attestation") statuses.push(event.status); });
+    const judged = client.readChainThrough(reads);
+    await vi.waitFor(() => expect(scheduler.pending()).toBeGreaterThan(0));
+    scheduler.advance(10_000); // the check gives up on the vault, and waits on the collateral
+    await vi.waitFor(() => expect(holdCollateral && releaseCollateral !== undefined).toBe(true));
+    answer(NAMED);
+    holdCollateral = false;
+    releaseCollateral();
+    await judged;
+    await vi.waitFor(() => expect(statuses.at(-1)?.kind).toBe("verified"));
+  });
+});
+
 describe("a signed request to a node the vault has not judged", () => {
   it("is not sent, whatever the screen checked before it asked for a nonce, while a read still may be", async () => {
     const posts: string[] = [];
@@ -129,8 +163,28 @@ describe("a signed request to a node the vault has not judged", () => {
     await expect(client.verify()).resolves.toMatchObject({ kind: "attested" });
     const order = { account: ENCLAVE } as unknown as Parameters<typeof client.placeOrder>[0]; // never read: the gate comes first
     await expect(client.placeOrder(order)).rejects.toThrow(`Nothing was sent. ${CONNECT_TO_CHECK}`);
-    await expect(client.revokeSessionKey(order as unknown as Parameters<typeof client.revokeSessionKey>[0])).rejects.toBeInstanceOf(UntrustedError);
+    await expect(client.revokeSessionKey(order as unknown as Parameters<typeof client.revokeSessionKey>[0])).rejects.toBeInstanceOf(NotSentError);
     expect(posts).toEqual([]);
+  });
+
+  it("waits out a check that started as the one before it finished, and takes that check's verdict", async () => {
+    let attestations = 0;
+    const seen: (readonly string[])[] = [];
+    const verifier = realVerifier(seen);
+    const vault: { facts: VaultFacts | null } = { facts: NAMED };
+    const trust = new NodeTrust({
+      attestation: async () => { attestations += 1; return fixture.attestation; }, collateral: async () => fixture.collateral, verifier: async () => verifier, releases: [RELEASE], devDigests: [], acceptsMock: false, nowMs: () => NOW_MS,
+      vaultFacts: () => (vault.facts === null ? null : Promise.resolve(vault.facts)), onStatus: () => {}, onEnclaveChanged: () => {},
+    });
+    await trust.verify();
+    const first = trust.verify();
+    const sending = trust.sendingSigner();
+    vault.facts = null; // the next check has no vault to read, so its verdict may not sign
+    const second = trust.verifyAfresh();
+    await first;
+    await expect(sending).rejects.toBeInstanceOf(NotSentError);
+    await second;
+    expect(attestations).toBe(3);
   });
 });
 

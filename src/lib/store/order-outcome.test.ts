@@ -3,11 +3,13 @@
 import { describe, expect, it } from "vitest";
 
 import { EngineError } from "../engine/client";
+import { NotSentError, UntrustedError } from "../engine/trust";
 import type { EngineEvent, Fill } from "../engine/types";
 import { ACCOUNT } from "../engine/wallet-kit";
 import { fixedFromInt, fixedFromWire } from "../fixed";
 import { disconnectWallet, placeOrder } from "./actions";
 import { ActionClient, connected, keyed, type Posted } from "./live-kit";
+import { MAY_HAVE_RUN } from "./signing";
 import type { ConsoleStore } from "./store";
 
 const FILL: Fill = { account: ACCOUNT, order_id: 7, market: 1, side: "buy", qty: "0.5", price: "100000", index: "100000", spread_bps: 0, realised_pnl: "0", profit_fee: "0", position: "0.5", liquidation: false };
@@ -18,6 +20,35 @@ const answer = (events: EngineEvent[]) => (posted: Posted) =>
   posted.route === "session_key" ? new ActionClient().answer(posted) : { seq: 1, events };
 
 const send = (store: ConsoleStore) => placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
+
+describe("what the user is told of a request that stopped or went unanswered", () => {
+  const stopped = "Nothing was sent. Connect a wallet to check the vault's current release before anything is signed.";
+
+  it("says plainly that nothing went out when the last gate stopped it, on the session-signed and the wallet-signed path", async () => {
+    const { client, store } = await keyed();
+    client.answer = (posted) => {
+      if (posted.route === "session_key") return new ActionClient().answer(posted);
+      throw new NotSentError(stopped.replace("Nothing was sent. ", ""));
+    };
+    expect(await send(store)).toBe(false);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe(stopped);
+    const unkeyed = await connected();
+    unkeyed.client.answer = () => { throw new NotSentError(stopped.replace("Nothing was sent. ", "")); };
+    unkeyed.store.patch({ sessionRefusal: { kind: "too_many_session_keys", max: 10 } });
+    expect(await send(unkeyed.store)).toBe(false);
+    expect(unkeyed.store.getSnapshot().toasts.at(-1)?.text).toBe(stopped);
+  });
+
+  it("still says a request that went out with no answer it can judge may have run", async () => {
+    const { client, store } = await keyed();
+    client.answer = (posted) => {
+      if (posted.route === "session_key") return new ActionClient().answer(posted);
+      throw new UntrustedError("The node's answer did not verify.");
+    };
+    expect(await send(store)).toBe(false);
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe(`The node's answer did not verify.${MAY_HAVE_RUN}`);
+  });
+});
 
 describe("what placeOrder reports", () => {
   it("is true for a fill", async () => {

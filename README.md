@@ -114,11 +114,11 @@ not expose the mock entry point there (the served package still exports it); wit
 
 A hardware quote must show a pinned release's launch digest, guest policy and minimum TCB. With a wallet connected, the
 attested launch digest and config hash must also hash to the vault's `currentRelease()`, and the attested enclave must be the
-vault's `checkpointSigner()`; until then the node may be read and nothing is signed for it. While the operator registry has
-rotation on, a connected wallet's reads name the operator's registered hostname, and the console moves to it once that node
-passes the whole check and answers a signed read, without a rebuild. Rotation among listed candidates needs no release; a newly
-approved candidate needs one, and a console that does not list the elected operator stays out and says it needs updating. A code
-upgrade needs a console release first, which pins the new release.
+vault's `checkpointSigner()`; until then the node may be read and nothing is signed for it. A connected wallet's reads name the
+operator's registered hostname, and the console moves to it, when the build lists it, once that node passes the whole check and
+answers a signed read, without a rebuild. Rotation among listed candidates needs no release; a newly approved candidate needs one,
+and while rotation is on a console that does not list the elected operator stays out and says it needs updating. A code upgrade
+needs a console release first, which pins the new release.
 
 `scripts/dev-live-client.sh` (Node, `curl`, and `ENGINE_DIR`, the engine checkout, with `ENGINE_BIN`
 or Cargo) starts a dev node and runs the live client in Node against it through a tampering proxy,

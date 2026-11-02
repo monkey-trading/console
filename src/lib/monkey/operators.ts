@@ -13,7 +13,7 @@ import type { OperatorRoute } from "../engine/stats-types";
 import type { Wallet } from "../engine/wallet";
 import type { ConsoleStore } from "../store/store";
 import { failed, LOADING, ready, type Read } from "./figures";
-import { NODE_READ_MS, WALLET_READ_MS, withTimeout } from "./panel";
+import { NODE_READ_MS } from "./panel";
 
 /** The registry's slow read, as a count of the node read's ticks: five minutes. */
 const CHAIN_READ_TICKS = 10;
@@ -58,6 +58,8 @@ export class OperatorReads {
   /** Counts the card's openings; work begun in an earlier one never writes into a later one. */
   private cycle = 0;
   private open = false;
+  /** Numbers the route's reads: only the latest may land. */
+  private routeRead = 0;
   /** The wallet the registry was last read through, so a page opening does not read twice for one wallet. */
   private readFor: Wallet | null = null;
   /** The registry read waiting or running for a wallet, which a second ask for that wallet joins: each costs dozens of calls. */
@@ -97,7 +99,10 @@ export class OperatorReads {
       if (now === readable) return;
       readable = now;
       if (now) void this.refreshNode();
-      else this.set({ route: LOADING });
+      else {
+        this.routeRead += 1; // an answer on its way came from the node trust just left
+        this.set({ route: LOADING });
+      }
     });
     let ticks = 0;
     const timer = setInterval(() => {
@@ -126,12 +131,14 @@ export class OperatorReads {
   /** Reads the node's route, while its answers may be read: the registry's reads need nothing from it. */
   async refreshNode(): Promise<void> {
     if (!this.nodeReadable()) return;
+    const ticket = ++this.routeRead;
     const cycle = this.cycle;
+    const current = () => ticket === this.routeRead && cycle === this.cycle && this.open;
     try {
       const route = await this.store.deps.client.stats.operator();
-      if (cycle === this.cycle && this.open) this.set({ route: ready(route) });
+      if (current()) this.set({ route: ready(route) });
     } catch (error) {
-      if (cycle === this.cycle && this.open) this.set({ route: failed(error, this.state.route.value) });
+      if (current()) this.set({ route: failed(error, this.state.route.value) });
     }
   }
 
@@ -168,21 +175,21 @@ export class OperatorReads {
     const current = () => this.open && cycle === this.cycle && this.store.liveWallet === wallet;
     if (reads === undefined || !current()) return;
     try {
-      const named = await withTimeout(reads.operator(), WALLET_READ_MS);
+      const named = await reads.operator();
       if (current()) this.set({ named: ready(named) });
     } catch (error) {
       if (current()) this.set({ named: failed(error, this.state.named.value) });
     }
     if (!current()) return;
     try {
-      const table = await withTimeout(reads.candidates(), WALLET_READ_MS);
+      const table = await reads.candidates();
       if (current()) this.set({ table: ready(table) });
     } catch (error) {
       if (current()) this.set({ table: failed(error, this.state.table.value) });
     }
     if (!current()) return;
     try {
-      const chosen = await withTimeout(reads.delegateOf(wallet.address), WALLET_READ_MS);
+      const chosen = await reads.delegateOf(wallet.address);
       if (current()) this.set({ chosen: ready(chosen) });
     } catch (error) {
       if (current()) this.set({ chosen: failed(error, this.state.chosen.value) });

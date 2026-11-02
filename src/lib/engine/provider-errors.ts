@@ -27,3 +27,13 @@ export function unknownChain(error: unknown): boolean {
   return /chain/i.test(detail) && /unrecognized|unknown/i.test(detail);
 }
 
+/** `read`, or a rejection once `ms` has passed without it settling. */
+export function withTimeout<T>(read: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Your wallet did not answer in time.")), ms);
+    read.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error: unknown) => { clearTimeout(timer); reject(error); },
+    );
+  });
+}

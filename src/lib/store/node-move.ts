@@ -12,11 +12,11 @@ import { connectWallet } from "./actions";
 import { installKey } from "./session";
 import type { ConsoleStore } from "./store";
 
-/**
- * Hands `old`'s wallet and key to `next`, and tells the user where the console went; the stored
- * entries need no change, since they name the account, chain and vault and no node.
- */
-export async function moveToNode(old: ConsoleStore, next: ConsoleStore, host: string): Promise<void> {
+/** What the console tells the user once the screens have remounted on the new store, so the log that announces it exists first. */
+export const moveNotice = (host: string): string => `The console connected to ${host}, the node the chain names, and is verifying its attestation.`;
+
+/** Hands `old`'s wallet and key to `next`; the stored entries need no change, since they name the account, chain and vault and no node. */
+export async function moveToNode(old: ConsoleStore, next: ConsoleStore): Promise<void> {
   const wallet = old.liveWallet;
   const key = old.sessionKey;
   const { sessionExpiresAt } = old.getSnapshot();
@@ -24,7 +24,6 @@ export async function moveToNode(old: ConsoleStore, next: ConsoleStore, host: st
   old.liveWallet = null;
   old.sessionKey = null;
   old.sessionLogin = null;
-  next.toast("info", `The console connected to ${host}, the node the chain names, and is verifying its attestation.`);
   if (wallet === null) return;
   // Set first, so the connect below keeps the key rather than clearing another wallet's.
   next.liveWallet = wallet;

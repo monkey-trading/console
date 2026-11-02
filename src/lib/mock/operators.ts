@@ -96,6 +96,7 @@ function delegatedTo(state: MockState, candidate: string): bigint {
   return sum;
 }
 
+/** The simulated registry's `candidates()` read. */
 function candidateTable(state: MockState): CandidateTable {
   // `Staking.totalStaked`: what votes, so an unstake leaves it at once though it keeps earning through its cooldown.
   let totalStaked = state.monkey.otherStakedAt(state.now);

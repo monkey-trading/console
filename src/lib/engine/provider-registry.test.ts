@@ -1,7 +1,7 @@
 /** Tests for the vault's and the registry's reads over a wallet's provider, including what a lying RPC can answer. */
 
 import { decodeFunctionData, encodeFunctionResult, parseAbi, type Hex } from "viem";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ProviderDeployment } from "./provider-registry";
 import type { Eip1193Provider, WalletChain } from "./provider-wallet";
@@ -75,8 +75,25 @@ function rig(world: World = {}, chain = CHAIN) {
       }
     },
   };
-  return { reads: new ProviderDeployment(chain, provider), order };
+  return { reads: new ProviderDeployment(chain, provider), order, provider };
 }
+
+describe("a wallet that moves chain during a read", () => {
+  it("gives no answer, rather than one read from two chains, on every read", async () => {
+    const reads: [string, (deployment: ProviderDeployment) => Promise<unknown>][] = [
+      ["vault", (deployment) => deployment.vault()],
+      ["operator", (deployment) => deployment.operator()],
+      ["candidates", (deployment) => deployment.candidates()],
+      ["delegateOf", (deployment) => deployment.delegateOf(KEY)],
+    ];
+    for (const [name, read] of reads) {
+      const { provider } = rig({ list: [B as Hex] });
+      let asked = 0;
+      const moving: Eip1193Provider = { request: async (args) => (args.method === "eth_chainId" && ++asked > 1 ? "0x1" : provider.request(args)) };
+      await expect(read(new ProviderDeployment(CHAIN, moving)), name).rejects.toThrow("on chain 1, not chain 31337");
+    }
+  });
+});
 
 describe("ProviderDeployment.vault", () => {
   it("reads the current release and the signer, lowercase, naming the contract's own getters", async () => {
@@ -144,6 +161,24 @@ describe("ProviderDeployment.candidates", () => {
   it("answers null from a build that names no registry or no staking contract", async () => {
     await expect(rig({}, { ...CHAIN, registry: null }).reads.candidates()).resolves.toBeNull();
     await expect(rig({}, { ...CHAIN, staking: null }).reads.candidates()).resolves.toBeNull();
+  });
+
+  it("gives a slow wallet thirty seconds per call, not across the table, so many candidates can still be read", async () => {
+    vi.useFakeTimers();
+    try {
+      const { provider } = rig({ list: [A as Hex, B as Hex], hostnames: { [A.toLowerCase()]: "a.example", [B]: "b.example" } });
+      const slow: Eip1193Provider = { request: async (args) => { if (args.method === "eth_call") await new Promise((resolve) => setTimeout(resolve, 20_000)); return provider.request(args); } };
+      const reading = new ProviderDeployment(CHAIN, slow).candidates();
+      await vi.advanceTimersByTimeAsync(20_000 * 20);
+      await expect(reading).resolves.toMatchObject({ candidates: [{ hostname: "a.example" }, { hostname: "b.example" }] });
+      const stuck: Eip1193Provider = { request: async (args) => (args.method === "eth_chainId" ? "0x7a69" : new Promise(() => {})) };
+      const failing = new ProviderDeployment(CHAIN, stuck).candidates();
+      const refused = expect(failing).rejects.toThrow("did not answer in time");
+      await vi.advanceTimersByTimeAsync(30_000);
+      await refused;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("stops at once at a count the registry cannot hold, rather than read without bound", async () => {

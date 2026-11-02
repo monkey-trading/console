@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EngineError } from "../engine/client";
 import { NO_CANDIDATE, type DeploymentReads } from "../engine/registry";
+import type { OperatorRoute } from "../engine/stats-types";
 import { connectWallet, disconnectWallet } from "../store/actions";
 import { delegateStake } from "./actions";
 import { hostnameListed, mirroredElection, OperatorReads, shownHostname } from "./operators";
@@ -158,6 +159,26 @@ describe("OperatorReads", () => {
     await flush();
     expect(counts.route).toBe(2);
     expect(operators.getSnapshot().route.status).toBe("ready");
+    stop();
+  });
+
+  it("drops the node's answer that lands after trust in it ended, and an older answer that lands after a newer one", async () => {
+    const { operators, store, node, stop } = await started();
+    const answers: ((route: OperatorRoute) => void)[] = [];
+    const route = (operator: string): OperatorRoute => ({ operator, pending_rotation: null, rotation_enabled: true, last_election: null });
+    node.client.stats.operator = () => new Promise((resolve) => { answers.push(resolve); });
+    const older = operators.refreshNode();
+    const newer = operators.refreshNode();
+    answers[1]?.(route("0xnewer"));
+    await newer;
+    answers[0]?.(route("0xolder"));
+    await older;
+    expect(operators.getSnapshot().route.value?.operator).toBe("0xnewer");
+    const pending = operators.refreshNode();
+    store.patch({ attestation: { kind: "unverified", reason: "gone" } });
+    answers[2]?.(route("0xretired"));
+    await pending;
+    expect(operators.getSnapshot().route).toEqual({ status: "loading", value: null, message: null });
     stop();
   });
 

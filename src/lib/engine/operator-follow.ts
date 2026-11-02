@@ -95,8 +95,10 @@ export class OperatorFollower {
   private trial: { origin: string; client: EngineClient } | null = null;
   /** The client of the node in use, which a move of the vault's signer judges again. */
   private current: EngineClient | null = null;
-  /** The signer the vault last named. */
-  private signer: string | null = null;
+  /** Whether the node in use has lost its verdict. */
+  private refused = false;
+  /** Whether a timed read was skipped in a hidden tab, and is owed when the tab is seen. */
+  private skipped = false;
 
   constructor(private readonly deps: FollowerDeps) {
     this.origin = deps.origin;
@@ -130,8 +132,14 @@ export class OperatorFollower {
   /** Reads again when `client` reports something a change of operator would explain. */
   watch(client: EngineClient): Unsubscribe {
     this.current = client;
+    this.refused = false;
     const stopEvents = client.watch((event) => {
-      if ((event.type === "feed" && event.status === "stale") || event.type === "enclave" || (event.type === "attestation" && event.status.kind === "unverified")) this.poke();
+      if ((event.type === "feed" && event.status === "stale") || event.type === "enclave") this.poke();
+      if (event.type !== "attestation") return;
+      const refused = event.status.kind === "unverified";
+      // The first refusal only: a refused node is asked again on every retry of the stream, and each would cost the wallet a read.
+      if (refused && !this.refused) this.poke();
+      if (refused || event.status.kind === "mock" || event.status.kind === "verified" || event.status.kind === "attested") this.refused = refused;
     });
     const stopStream = client.subscribe((message) => {
       if (message.events.some((event) => event.type === "operator_elected" || event.type === "rotation_switched")) this.poke();
@@ -142,8 +150,19 @@ export class OperatorFollower {
     };
   }
 
-  /** Reads now, unless it read within `RETRY_MS`, when the read waits out the rest. */
+  /** The tab can be seen again: a timed read skipped while it could not runs now. */
+  resume(): void {
+    if (!this.skipped) return;
+    this.skipped = false;
+    void this.check();
+  }
+
+  /** Reads now, unless it read within `RETRY_MS`, when the read waits out the rest; a check running now may have read before this, so it runs again. */
   poke(): void {
+    if (this.checking !== null) {
+      this.again = true;
+      return;
+    }
     const left = this.lastCheckAt + RETRY_MS - this.deps.nowMs();
     if (left <= 0) void this.check();
     else if (this.isHidden !== null) this.arm(left);
@@ -171,25 +190,36 @@ export class OperatorFollower {
     this.lastCheckAt = this.deps.nowMs();
     const chain = this.deps.chain();
     if (chain === null) return this.settled({ kind: "pinned", origin: this.origin });
-    let named: NamedOperator | null;
+    const reason = (error: unknown) => (error instanceof Error ? error.message : "the read failed");
+    // First, whatever the registry goes on to answer: a retirement or a promotion's `setSigner` ends
+    // the verdict on the node in use whatever comes of the operator's node. A move of the release alone
+    // does not: the incumbent holds the vault's signer key and keeps sequencing until its successor has taken it.
+    let vaultFailed: string | null = null;
     try {
-      named = await this.bounded(chain.operator());
-      // Before any move: a retirement or a promotion's `setSigner` ends the verdict on the node in use
-      // whatever the operator's node has come to. A move of the release alone does not: the incumbent
-      // holds the vault's signer key and keeps sequencing until its successor has taken it.
       const facts = await this.bounded(chain.vault());
       if (this.deps.chain() !== chain) return; // another wallet came while this ran; `check` runs again for it
       await this.current?.heedVault(facts, chain);
     } catch (error) {
-      if (this.deps.chain() !== chain) return;
-      return this.set({ kind: "failed", origin: this.origin, reason: error instanceof Error ? error.message : "the read failed" });
+      vaultFailed = reason(error);
     }
+    let named: NamedOperator | null;
+    try {
+      named = await this.bounded(chain.operator());
+    } catch (error) {
+      if (this.deps.chain() === chain) this.set({ kind: "failed", origin: this.origin, reason: reason(error) });
+      return;
+    }
+    if (this.deps.chain() !== chain) return;
+    if (vaultFailed !== null) return this.set({ kind: "failed", origin: this.origin, reason: vaultFailed });
     if (named === null) return this.settled({ kind: "pinned", origin: this.origin });
     this.effectiveAtMs = named.pending?.effectiveAtMs ?? null;
     const target = operatorTarget(this.deps.deploy, named);
     if ("unlisted" in target) return this.settled({ kind: "unlisted", origin: this.origin, hostname: target.unlisted });
-    if (target.origin === null || target.origin === this.origin) return this.settled({ kind: "following", origin: this.origin });
-    await this.tryNode(target.origin, chain, named.rotationEnabled);
+    if (target.origin !== null && target.origin !== this.origin) return this.tryNode(target.origin, chain, named.rotationEnabled);
+    // Governance may turn rotation off to install a fallback on the deployment's own node (engine#359 §12), and the registry goes on naming the operator it left.
+    const home = this.deps.deploy.origin;
+    if (!named.rotationEnabled && this.refused && home !== null && home !== this.origin) return this.tryNode(home, chain, false);
+    this.settled({ kind: "following", origin: this.origin });
   }
 
   /** `read`, or a rejection once the wallet has had its time. */
@@ -246,8 +276,10 @@ export class OperatorFollower {
     this.timer = this.deps.scheduler.setTimeout(() => {
       this.timer = null;
       // A target that is on its way is worth a read; the rest wait for the tab to be seen.
-      if (this.isHidden?.() === true && this.state.kind !== "waiting") this.arm();
-      else void this.check();
+      if (this.isHidden?.() === true && this.state.kind !== "waiting") {
+        this.skipped = true;
+        this.arm();
+      } else void this.check();
     }, delay);
   }
 

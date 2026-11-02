@@ -8,6 +8,14 @@ import type { VaultFacts } from "./registry";
 import { digestNamed, isConfigHash, manifestText } from "./release-check";
 import type { Verifier } from "./verifier";
 
+/** A signed request stopped before it left the page, because the node may not be signed for: unlike a request that went out, it cannot have run. */
+export class NotSentError extends Error {
+  constructor(reason: string) {
+    super(`Nothing was sent. ${reason}`);
+    this.name = "NotSentError";
+  }
+}
+
 /** Something the node sent cannot be trusted; the reason is written for the user. */
 export class UntrustedError extends Error {
   constructor(reason: string, options?: ErrorOptions) {
@@ -96,11 +104,14 @@ export class NodeTrust {
    * The enclave address to send a signed request to. The last gate on one, whatever the screen
    * checked before it asked for a nonce: a check that ran since may have left the vault unread.
    * Error cases:
-   * - as `signer`, or the node has not been checked against the vault: `UntrustedError`
+   * - as `signer`
+   * - the node has not been checked against the vault: `NotSentError`
    */
   async sendingSigner(): Promise<string> {
-    const signer = await this.signer();
-    if (this.current.kind === "attested") throw new UntrustedError(`Nothing was sent. ${this.current.why}`);
+    let signer = await this.signer();
+    // A check queued behind the one `signer` waited for may have started as it resumed: its verdict, not the last one's, decides.
+    while (this.verifying !== null) signer = await this.signer();
+    if (this.current.kind === "attested") throw new NotSentError(this.current.why);
     return signer;
   }
 
@@ -152,7 +163,7 @@ export class NodeTrust {
 
   /** The vault's read has answered after the check gave up on it: a verdict that went without it may now have it. */
   vaultAnsweredLate(): void {
-    if (this.current.kind === "attested") void this.verify();
+    if (this.verifying !== null || this.current.kind === "attested") void this.verifyAfresh();
   }
 
   /** The device clock disagrees with the node's signed time by `skewMs`; nothing the node says can be judged. */

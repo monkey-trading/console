@@ -22,7 +22,7 @@ export function releaseName(launchDigest: Hex, configHash: Hex): Hex {
   return keccak256(concatHex([launchDigest, configHash]));
 }
 
-/** The first of `digests` that, with `configHash`, hashes to the release the vault names; null when none does. */
+/** The first of `pinned` that, with `configHash`, hashes to the release the vault names; null when none does. */
 export function digestNamed<T extends { launchDigest: Hex }>(pinned: readonly T[], vaultRelease: string, configHash: Hex): T | null {
   const wanted = vaultRelease.toLowerCase();
   return pinned.find((release) => releaseName(release.launchDigest, configHash) === wanted) ?? null;

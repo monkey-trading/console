@@ -2,6 +2,7 @@
 
 import { decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "viem";
 
+import { withTimeout } from "./provider-errors";
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
 import { CANDIDATE_LIMIT, NO_CANDIDATE, type CandidateTable, type DeploymentReads, type NamedOperator, type PendingElection, type VaultFacts } from "./registry";
 import type { Address } from "./types";
@@ -29,6 +30,9 @@ const STAKING = parseAbi([
   "function delegates(address account) view returns (address)",
 ]);
 
+/** How long the wallet may take over one call, in milliseconds: a table of many candidates takes as long as it takes, one call after another. */
+const CALL_MS = 30_000;
+
 /** Chain seconds as the milliseconds the console shows; beyond any time a chain could hold, so the conversion is exact. */
 const secondsToMs = (seconds: bigint): number => Number(seconds) * 1000;
 
@@ -42,14 +46,23 @@ export class ProviderDeployment implements DeploymentReads {
   }
 
   private async call(to: string, data: Hex): Promise<Hex> {
-    return hexOf(await this.provider.request({ method: "eth_call", params: [{ to, data }, "latest"] }));
+    return hexOf(await withTimeout(this.provider.request({ method: "eth_call", params: [{ to, data }, "latest"] }), CALL_MS));
   }
 
-  async vault(): Promise<VaultFacts> {
+  /** `read`, whose calls all come from the deployment's chain: a wallet that moved while they ran gives no answer, rather than one from two chains. */
+  private async onChainThroughout<T>(read: () => Promise<T>): Promise<T> {
     await this.onChain();
-    const release = decodeFunctionResult({ abi: VAULT, functionName: "currentRelease", data: await this.call(this.chain.vault, encodeFunctionData({ abi: VAULT, functionName: "currentRelease" })) });
-    const signer = decodeFunctionResult({ abi: VAULT, functionName: "checkpointSigner", data: await this.call(this.chain.vault, encodeFunctionData({ abi: VAULT, functionName: "checkpointSigner" })) });
-    return { release: release.toLowerCase(), signer: signer.toLowerCase() };
+    const answer = await read();
+    await this.onChain();
+    return answer;
+  }
+
+  vault(): Promise<VaultFacts> {
+    return this.onChainThroughout(async () => {
+      const release = decodeFunctionResult({ abi: VAULT, functionName: "currentRelease", data: await this.call(this.chain.vault, encodeFunctionData({ abi: VAULT, functionName: "currentRelease" })) });
+      const signer = decodeFunctionResult({ abi: VAULT, functionName: "checkpointSigner", data: await this.call(this.chain.vault, encodeFunctionData({ abi: VAULT, functionName: "checkpointSigner" })) });
+      return { release: release.toLowerCase(), signer: signer.toLowerCase() };
+    });
   }
 
   private async candidateOf(registry: string, candidate: Hex) {
@@ -58,8 +71,10 @@ export class ProviderDeployment implements DeploymentReads {
 
   async operator(): Promise<NamedOperator | null> {
     const registry = this.chain.registry ?? null;
-    if (registry === null) return null;
-    await this.onChain();
+    return registry === null ? null : this.onChainThroughout(() => this.readOperator(registry));
+  }
+
+  private async readOperator(registry: string): Promise<NamedOperator> {
     const rotationEnabled = decodeFunctionResult({ abi: REGISTRY, functionName: "rotationEnabled", data: await this.call(registry, encodeFunctionData({ abi: REGISTRY, functionName: "rotationEnabled" })) });
     const named = decodeFunctionResult({ abi: REGISTRY, functionName: "namedOperator", data: await this.call(registry, encodeFunctionData({ abi: REGISTRY, functionName: "namedOperator" })) });
     const { apiHostname } = await this.candidateOf(registry, named.candidate);
@@ -78,8 +93,10 @@ export class ProviderDeployment implements DeploymentReads {
   async candidates(): Promise<CandidateTable | null> {
     const registry = this.chain.registry ?? null;
     const staking = this.chain.staking ?? null;
-    if (registry === null || staking === null) return null;
-    await this.onChain();
+    return registry === null || staking === null ? null : this.onChainThroughout(() => this.readCandidates(registry, staking));
+  }
+
+  private async readCandidates(registry: string, staking: string): Promise<CandidateTable> {
     const count = decodeFunctionResult({ abi: REGISTRY, functionName: "candidateCount", data: await this.call(registry, encodeFunctionData({ abi: REGISTRY, functionName: "candidateCount" })) });
     if (count > BigInt(CANDIDATE_LIMIT)) throw new Error("The chain read named more candidates than the registry can hold.");
     const totalStaked = decodeFunctionResult({ abi: STAKING, functionName: "totalStaked", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "totalStaked" })) });
@@ -100,8 +117,9 @@ export class ProviderDeployment implements DeploymentReads {
   async delegateOf(account: Address): Promise<Address | null> {
     const staking = this.chain.staking ?? null;
     if (staking === null) return null;
-    await this.onChain();
-    const chosen = decodeFunctionResult({ abi: STAKING, functionName: "delegates", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegates", args: [hexOf(account)] })) });
-    return chosen === NO_CANDIDATE ? null : chosen.toLowerCase();
+    return this.onChainThroughout(async () => {
+      const chosen = decodeFunctionResult({ abi: STAKING, functionName: "delegates", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegates", args: [hexOf(account)] })) });
+      return chosen === NO_CANDIDATE ? null : chosen.toLowerCase();
+    });
   }
 }

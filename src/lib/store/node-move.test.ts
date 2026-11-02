@@ -9,7 +9,7 @@ import { authorizeBrowser, connectWallet } from "./actions";
 import { memoryStorage } from "../engine/wallet-kit";
 import { loadChoice, saveChoice } from "../engine/wallet-persist";
 import { ActionClient, authorizedTab, BTC, tab } from "./live-kit";
-import { followNode, moveToNode, recheckNode } from "./node-move";
+import { followNode, moveNotice, moveToNode, recheckNode } from "./node-move";
 import { reconnectWallet } from "./reconnect";
 import { keyScope, liveSessionKey } from "./session";
 import { ConsoleStore } from "./store";
@@ -29,7 +29,7 @@ describe("moveToNode", () => {
     const key = old.store.sessionKey;
     const signaturesBefore = old.provider.calls.filter((c) => c.method === "eth_signTypedData_v4").length;
     const next = nextStore(old.storage);
-    await moveToNode(old.store, next.store, "b.example");
+    await moveToNode(old.store, next.store);
     expect(next.store.liveWallet).toBe(old.wallet);
     expect(next.store.getSnapshot().wallet?.address).toBe(old.wallet.address);
     expect(key).not.toBeNull();
@@ -41,7 +41,7 @@ describe("moveToNode", () => {
   it("leaves the stored key where it was: its entry names the account, chain and vault, and no node", async () => {
     const old = await authorizedTab();
     const next = nextStore(old.storage);
-    await moveToNode(old.store, next.store, "b.example");
+    await moveToNode(old.store, next.store);
     const stored = loadSessionKey(old.storage, keyScope(next.store, old.wallet), 1);
     expect(stored.kind).toBe("live");
     expect(stored.kind === "live" && stored.signer.address).toBe(next.store.sessionKey?.address);
@@ -52,7 +52,7 @@ describe("moveToNode", () => {
     old.storage.removeItem(`monkeytrading.session-key.31337.${old.client.deployment.vault.toLowerCase()}.${old.wallet.address.toLowerCase()}`);
     const key = old.store.sessionKey;
     const next = nextStore(old.storage);
-    await moveToNode(old.store, next.store, "b.example");
+    await moveToNode(old.store, next.store);
     expect(next.store.sessionKey).toBe(key);
   });
 
@@ -63,14 +63,14 @@ describe("moveToNode", () => {
     second.client.credited = true;
     second.store.liveWallet = first.wallet;
     const next = nextStore(storage);
-    await moveToNode(second.store, next.store, "b.example");
+    await moveToNode(second.store, next.store);
     expect(next.store.sessionKey?.address).toBe(first.store.sessionKey?.address);
   });
 
   it("takes the wallet from the old store, so work it has in flight finds no wallet and sends nothing", async () => {
     const old = await authorizedTab();
     const next = nextStore(old.storage);
-    await moveToNode(old.store, next.store, "b.example");
+    await moveToNode(old.store, next.store);
     expect(old.store.liveWallet).toBeNull();
     expect(old.store.sessionKey).toBeNull();
     expect(await authorizeBrowser(old.store)).toBe(false);
@@ -81,7 +81,7 @@ describe("moveToNode", () => {
     const old = await authorizedTab();
     let disconnects = 0;
     old.wallet.disconnect = async () => { disconnects += 1; };
-    await moveToNode(old.store, nextStore(old.storage).store, "b.example");
+    await moveToNode(old.store, nextStore(old.storage).store);
     await settle();
     expect(disconnects).toBe(0);
   });
@@ -98,16 +98,13 @@ describe("moveToNode", () => {
     let accountReads = 0;
     const read = next.client.account.bind(next.client);
     next.client.account = () => { accountReads += 1; return read(); };
-    await moveToNode(old.store, next.store, "b.example");
+    await moveToNode(old.store, next.store);
     expect(next.store.getSnapshot().account).toBeNull();
     expect(accountReads).toBeGreaterThan(0);
   });
 
-  it("tells the user where the console went", async () => {
-    const old = await authorizedTab();
-    const next = nextStore(old.storage);
-    await moveToNode(old.store, next.store, "b.example");
-    expect(next.store.getSnapshot().toasts.map((t) => t.text)).toContain("The console connected to b.example, the node the chain names, and is verifying its attestation.");
+  it("says where the console went only as a node the chain names, never as a change of operator it may not have seen", () => {
+    expect(moveNotice("b.example")).toBe("The console connected to b.example, the node the chain names, and is verifying its attestation.");
   });
 
   it("marks the old store moved, so the reconnect it was running does not forget the choice the new store saved", async () => {
@@ -118,7 +115,7 @@ describe("moveToNode", () => {
     old.client.readChainThrough = async () => { await new Promise<void>((resolve) => { answer = resolve; }); };
     const reconnecting = reconnectWallet(old.store, null, () => true);
     await settle();
-    await moveToNode(old.store, nextStore(storage).store, "b.example");
+    await moveToNode(old.store, nextStore(storage).store);
     answer();
     await reconnecting;
     expect(loadChoice(storage)).toEqual({ kind: "injected" });
@@ -127,7 +124,7 @@ describe("moveToNode", () => {
   it("moves a session with no wallet, connecting nothing", async () => {
     const old = await tab(memoryStorage());
     const next = nextStore();
-    await moveToNode(old.store, next.store, "b.example");
+    await moveToNode(old.store, next.store);
     expect(next.store.liveWallet).toBeNull();
     expect(next.store.getSnapshot().wallet).toBeNull();
   });
