@@ -9,6 +9,7 @@ import type { DeploymentReads, VaultFacts } from "./registry";
 import { releaseName } from "./release-check";
 import { FakeNode, FakeScheduler, settle } from "./test-kit";
 import { VECTORS } from "./test-vectors";
+import { NOT_THE_SIGNER } from "./trust";
 
 const DIGEST = `0x${"5a".repeat(48)}` as const;
 const NAMED: VaultFacts = { release: releaseName(DIGEST, `0x${"01".repeat(32)}`), signer: VECTORS.signer };
@@ -39,15 +40,12 @@ describe("readChainThrough", () => {
   });
 
   it("judges again after a check already running, which may have passed its read of the vault before the wallet came", async () => {
-    const { client } = rig([DIGEST]);
-    const statuses: AttestationStatus[] = [];
-    client.watch((event) => { if (event.type === "attestation") statuses.push(event.status); });
-    const asked = { vault: 0 };
-    const first = client.verify(); // no wallet yet: this check reads no vault
-    await client.readChainThrough(reading(async () => { asked.vault += 1; return { ...NAMED, signer: "0xff" }; }));
+    const { client, attestations } = rig([DIGEST]);
+    const first = client.verify(); // no wallet yet: this check may read no vault
+    await client.readChainThrough(reading(async () => ({ ...NAMED, signer: "0xff" })));
     await first;
-    expect(asked.vault).toBe(1);
-    expect(statuses.at(-1)).toMatchObject({ kind: "unverified" });
+    expect(attestations()).toBe(2); // a run of its own, not the one already running
+    await expect(client.markets()).rejects.toThrow(NOT_THE_SIGNER);
   });
 
   it("leaves a mock node with no stand-in digests alone, as nothing on chain can judge it", async () => {
