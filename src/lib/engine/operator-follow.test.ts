@@ -117,6 +117,22 @@ describe("OperatorFollower.check", () => {
     expect(follower.getSnapshot()).toEqual({ kind: "failed", origin: BUILD, reason: "your wallet is on chain 1" });
   });
 
+  it("gives up on a wallet that does not answer, so a later wallet is still followed", async () => {
+    const { follower, scheduler, setOperator, operatorReads, adopted } = rig({ operator: () => new Promise(() => {}) });
+    const stuck = follower.check();
+    await settle();
+    scheduler.advance(29_999);
+    await settle();
+    expect(follower.getSnapshot().kind).toBe("pinned");
+    scheduler.advance(1);
+    await stuck;
+    expect(follower.getSnapshot()).toEqual({ kind: "failed", origin: BUILD, reason: "your wallet did not answer in time" });
+    setOperator(async () => named());
+    await follower.check();
+    expect(operatorReads.count).toBe(2);
+    expect(adopted).toEqual([B]);
+  });
+
   it("does not move on an answer for a wallet that has since left", async () => {
     const { follower, held, adopted, trial } = rig();
     const signed = trial.signedRead;

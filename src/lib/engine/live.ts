@@ -110,7 +110,7 @@ export class LiveEngineClient implements EngineClient {
   async readChainThrough(chain: DeploymentReads | null): Promise<void> {
     if (chain === this.chain) return;
     this.chain = chain;
-    if (chain !== null && this.trust.judgedByVault) await this.trust.verify();
+    if (chain !== null && this.trust.judgedByVault) await this.trust.verifyAfresh();
   }
 
   private readonly signal = (): AbortSignal => this.deps.signal?.() ?? AbortSignal.timeout(READ_TIMEOUT_MS);

@@ -105,6 +105,12 @@ export class NodeTrust {
     return this.verifying;
   }
 
+  /** Verifies the node's attestation on what is known now: a check already running may have read before a wallet arrived, so this runs after it rather than join it. */
+  async verifyAfresh(): Promise<void> {
+    await this.verifying;
+    await this.verify();
+  }
+
   /**
    * An answer failed to verify under `failed`. Verifies the node's attestation again and says
    * whether it now names another address; the caller may then retry once.

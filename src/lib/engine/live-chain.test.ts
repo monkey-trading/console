@@ -38,6 +38,18 @@ describe("readChainThrough", () => {
     expect(attestations()).toBe(2);
   });
 
+  it("judges again after a check already running, which may have passed its read of the vault before the wallet came", async () => {
+    const { client } = rig([DIGEST]);
+    const statuses: AttestationStatus[] = [];
+    client.watch((event) => { if (event.type === "attestation") statuses.push(event.status); });
+    const asked = { vault: 0 };
+    const first = client.verify(); // no wallet yet: this check reads no vault
+    await client.readChainThrough(reading(async () => { asked.vault += 1; return { ...NAMED, signer: "0xff" }; }));
+    await first;
+    expect(asked.vault).toBe(1);
+    expect(statuses.at(-1)).toMatchObject({ kind: "unverified" });
+  });
+
   it("leaves a mock node with no stand-in digests alone, as nothing on chain can judge it", async () => {
     const { client, attestations } = rig([]);
     await client.verify();

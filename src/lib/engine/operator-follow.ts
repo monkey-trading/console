@@ -23,6 +23,8 @@ export const SLOW_READ_MS = 5 * 60_000;
 export const RETRY_MS = 30_000;
 /** How long after a pending election's effective time it is read again, so the chain has passed it, in milliseconds. */
 const AFTER_EFFECT_MS = 5_000;
+/** How long the wallet may take over one chain read before the check gives up on it, in milliseconds; a wallet asleep must not hold the follower from the next wallet. */
+const CHAIN_READ_MS = 30_000;
 
 /** What the console knows of the node it should talk to; `origin` is the node it talks to now. */
 export type FollowStatus =
@@ -165,7 +167,7 @@ export class OperatorFollower {
     if (chain === null) return this.settled({ kind: "pinned", origin: this.origin });
     let named: NamedOperator | null;
     try {
-      named = await chain.operator();
+      named = await this.bounded(chain.operator());
     } catch (error) {
       return this.set({ kind: "failed", origin: this.origin, reason: error instanceof Error ? error.message : "the read failed" });
     }
@@ -188,13 +190,24 @@ export class OperatorFollower {
    */
   private async followSigner(chain: DeploymentReads): Promise<void> {
     try {
-      const { signer } = await chain.vault();
+      const { signer } = await this.bounded(chain.vault());
       const moved = this.signer !== null && this.signer !== signer;
       this.signer = signer;
       if (moved) await this.current?.verify();
     } catch (error) {
       this.set({ kind: "failed", origin: this.origin, reason: error instanceof Error ? error.message : "the read failed" });
     }
+  }
+
+  /** `read`, or a rejection once the wallet has had its time. */
+  private bounded<T>(read: Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const timer = this.deps.scheduler.setTimeout(() => reject(new Error("your wallet did not answer in time")), CHAIN_READ_MS);
+      read.then(
+        (value) => { this.deps.scheduler.clearTimeout(timer); resolve(value); },
+        (error: unknown) => { this.deps.scheduler.clearTimeout(timer); reject(error); },
+      );
+    });
   }
 
   private settled(state: FollowStatus): void {
