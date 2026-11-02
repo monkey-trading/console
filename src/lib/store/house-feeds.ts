@@ -10,8 +10,12 @@ import type { ConsoleStore } from "./store";
 
 /** How often the scan-derived reads repeat: the node scans once per `api.stats_interval`, 60 s by default. */
 export const SCAN_EVERY_MS = 30_000;
-/** How often a chart set to Live reads. */
-export const LIVE_EVERY_MS = 5_000;
+/**
+ * How often a House chart reads, while its page is on screen and its tab visible, with no switch. The page already makes about three signed reads a second for its
+ * markets and house figures, so its four charts read every ten seconds, which keeps the whole page
+ * near 3.5 reads a second where every five would take it to 4.
+ */
+export const HOUSE_CHART_EVERY_MS = 10_000;
 /** The candles the close-out map draws behind its bands. */
 const MAP_BARS = 120;
 
@@ -26,10 +30,10 @@ function nodeNow(store: ConsoleStore): number {
  * One metric over one range. The first read takes the whole window; later reads ask from the last
  * bucket held, so a live chart reads a few buckets, not the window again.
  */
-export function seriesFeed(store: ConsoleStore, metric: SeriesMetric, market: MarketId | null, range: RangeId, live: boolean): FeedSpec<SeriesData> {
+export function seriesFeed(store: ConsoleStore, metric: SeriesMetric, market: MarketId | null, range: RangeId): FeedSpec<SeriesData> {
   return {
     key: `series:${metric}:${market ?? "-"}:${range}`,
-    everyMs: live ? LIVE_EVERY_MS : SCAN_EVERY_MS,
+    everyMs: HOUSE_CHART_EVERY_MS,
     async read(previous) {
       const now = nodeNow(store);
       const full = seriesQuery(metric, market, range, now);

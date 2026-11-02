@@ -32,7 +32,7 @@ interface Props {
   series: readonly ChartSeries[];
   /** Shades everything below this value with a dashed line on it, when set. */
   floor?: number | null;
-  /** Arrows over the first series where something happened, such as an epoch that paid stakers. */
+  /** Arrows over the first series where something happened, such as a halving. */
   marks?: readonly Mark[];
   /** The series cannot go below zero, so the axis does not: it starts at $0. */
   nonNegative?: boolean;

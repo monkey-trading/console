@@ -40,13 +40,12 @@ export function NavChart({ className }: { className?: string }) {
   return (
     <SeriesPanel
       title="NAV"
-      tip="The house's net asset value: its cash less its clients' unrealised profit at current marks. Where the node reports one, the shaded area is below the liquidity floor, under which no staker distribution is paid. An arrow marks each epoch that paid stakers: NAV steps down by what it paid."
+      tip="The house's net asset value: its cash less its clients' unrealised profit at current marks. Where the node reports one, the shaded area is below the liquidity floor, under which no staker distribution is paid."
       lines={NAV_LINES}
       markets={null}
       currents={useSelected(selectNav)}
       floor={floorText === undefined ? null : fixedToNumber(fixedFromWire(floorText))}
       note={floorProblem}
-      stakerPayouts
       className={className}
     />
   );

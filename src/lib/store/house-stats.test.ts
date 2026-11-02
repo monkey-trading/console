@@ -113,11 +113,11 @@ describe("the House page's dashboard feeds", () => {
     store.patch({ now: NOW });
     client.seriesPage = page([level(NOW - 120_000, "10"), level(NOW - 60_000, "11")]);
     store.houseStats.setOpen(true);
-    const feed = seriesFeed(store, "nav", null, "1h", true);
+    const feed = seriesFeed(store, "nav", null, "1h");
     store.houseStats.follow(feed);
     await vi.advanceTimersByTimeAsync(0);
     client.seriesPage = page([level(NOW - 60_000, "12"), level(NOW, "13")]);
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(client.statsReads).toEqual([`series:nav:${NOW - 3_600_000}:62`, `series:nav:${NOW - 60_000}:200`]);
     const data = store.houseStats.state<{ points: { ts: number; value: number }[] }>(feed.key).data;
     expect(data?.points.map((p) => p.value)).toEqual([10, 12, 13]);

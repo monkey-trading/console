@@ -12,6 +12,7 @@ import type { MarketId, PriceRules } from "../engine/types";
 import type { MarketModel } from "../models";
 import type { ConsoleStore } from "./store";
 import { streamPriced } from "./stream-marks";
+import { awaitsTrust } from "./signing";
 
 /** The scan starts this many seqs before the head. */
 const SCAN_WINDOW_SEQS = 60_000;
@@ -72,6 +73,7 @@ async function attempt(store: ConsoleStore, epoch: number, markets: readonly Mar
 
 /** Shows a scan that spent its retries; development also logs the reason where the owner can see it. */
 function report(store: ConsoleStore, error: unknown): void {
+  if (awaitsTrust(error)) return;
   const reason = error instanceof Error ? error.message : String(error);
   if (process.env.NODE_ENV === "development") console.error(`The chart history scan failed: ${reason}`, error);
   store.toast("error", `Chart history unavailable: ${reason}`);

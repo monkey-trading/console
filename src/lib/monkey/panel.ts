@@ -1,10 +1,10 @@
 /**
- * The MONKEY page's reads. It is a store of its own, opened only while the page is on screen: the
- * node's totals and the activity are read about every 30 seconds, each chart on open, on a change
- * of timeframe and, with its Live switch on, every 5 seconds; the wallet's chain reads run on load
- * and after a transaction, one at a time, never on a timer. Failed reads show on their panels
- * and are tried again at the next read, with no toast; the one exception is the vault's MONKEY
- * record, read with the wallet's, which reports a failure as it always has, once for a failed read and again for a call the wallet did not answer in time.
+ * The MONKEY page's reads (monkey-trading/console#202). It is a store of its own, opened only while the
+ * page is on screen and its tab visible: the node's totals and activity every 30 seconds, every chart
+ * every 5, the wallet's chain reads every 15 (one at a time, bounded, never asking the wallet to do
+ * anything) and after a transaction, and each straight away, at most once a second, on a stream event
+ * that changes it (`live-reads.ts`). A failing read backs off and shows calmly on its panel, with no
+ * toast and no button; the vault's MONKEY record, read with the wallet's, still reports its failure.
  */
 
 import { carryAccrued } from "../engine/claim-standing";
@@ -16,11 +16,13 @@ import { checkEmissionsClaimed } from "../store/emissions";
 import type { ConsoleStore } from "../store/store";
 import { ChartFeed } from "./feed";
 import { failed, LOADING, ready, type Read } from "./figures";
+import { Backoff, followLive } from "./live-reads";
+import { PairCheck } from "./recheck";
 
 /** The activity table's length, and how often the page's totals and activity are read, in milliseconds. */
 export const ACTIVITY_LIMIT = 25;
 export const NODE_READ_MS = 30_000;
-/** The page's one timer: the Live switches' cadence, and the unit the slower reads count in. */
+/** The page's one timer: the charts' cadence, and the unit the slower reads count in. */
 export const LIVE_READ_MS = 5_000;
 
 /** What the connected account holds on chain and what the node proves it was distributed. */
@@ -68,6 +70,9 @@ export class MonkeyPanel {
   private proofLanded = 0;
   private readonly listeners = new Set<() => void>();
   private nodeRead: Promise<void> | null = null;
+  private readonly nodeBackoff = new Backoff();
+  private readonly walletBackoff = new Backoff();
+  private readonly pair = new PairCheck();
   /** Counts the page's openings; work that began in an earlier one never writes into a later one. */
   private cycle = 0;
   private open = false;
@@ -108,21 +113,26 @@ export class MonkeyPanel {
     this.store.monkeySession.panel = this;
     void this.refreshNode();
     for (const feed of Object.values(this.feeds)) void feed.load();
-    let ticks = 0;
-    const timer = setInterval(() => {
-      if (isHidden()) return;
-      ticks += 1;
+    const stopLive = followLive({
+      isHidden, open: () => this.open, account: () => this.store.liveWallet?.address.toLowerCase() ?? null,
+      subscribe: (onMessage) => this.store.deps.client.subscribe(onMessage),
+      readNode: () => void this.refreshNode(), readWallet: () => void this.refreshWallet(),
       // A node that predates both routes is not asked again until the page is reopened.
-      if (ticks % (NODE_READ_MS / LIVE_READ_MS) === 0 && !(this.state.overview.status === "unavailable" && this.state.activity.status === "unavailable")) void this.refreshNode();
-      for (const feed of Object.values(this.feeds)) void feed.tickLive();
-    }, LIVE_READ_MS);
+      nodeDue: () => this.nodeBackoff.ready() && !(this.state.overview.status === "unavailable" && this.state.activity.status === "unavailable"),
+      walletDue: () => this.walletBackoff.ready(),
+      tickCharts: () => { for (const feed of Object.values(this.feeds)) void feed.tickLive(); },
+      tickMs: LIVE_READ_MS, nodeEveryMs: NODE_READ_MS,
+    });
     return () => {
+      stopLive();
+      this.pair.stop();
       this.open = false;
       this.cycle = this.store.monkeySession.nextOpening();
       this.nodeRead = null;
+      this.nodeBackoff.reset();
+      this.walletBackoff.reset();
       this.settlers = 0;
       if (this.store.monkeySession.panel === this) this.store.monkeySession.panel = null;
-      clearInterval(timer);
       for (const feed of Object.values(this.feeds)) feed.close();
       this.set({ overview: LOADING, activity: LOADING, wallet: NO_WALLET, unmirroredTotal: null, settling: false });
     };
@@ -165,6 +175,7 @@ export class MonkeyPanel {
     const run = async () => {
       const [overview, activity] = await Promise.allSettled([stats.monkey(), stats.activity({ limit: ACTIVITY_LIMIT })]);
       if (cycle !== this.cycle || !this.open) return;
+      this.nodeBackoff.record(overview.status === "rejected" || activity.status === "rejected");
       const held = this.state.unmirroredTotal;
       const mirrored = overview.status === "fulfilled" && (overview.value.staking?.total_staked ?? "") !== held;
       this.set({
@@ -209,7 +220,10 @@ export class MonkeyPanel {
       clearTimeout(waiting);
       return this.readWallet(wallet, cycle);
     }).finally(() => clearTimeout(waiting));
-    return Promise.all([proof, chain]).then(() => undefined);
+    return Promise.all([proof, chain]).then(() => {
+      this.walletBackoff.record(this.state.wallet.position.status === "failed" || this.state.wallet.proof.status === "failed");
+      this.pair.after(this.store, this.state, () => this.open && cycle === this.cycle, () => this.refreshWallet(true));
+    });
   }
 
   /**

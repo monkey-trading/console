@@ -12,17 +12,17 @@ import { memo, useMemo, useState } from "react";
 import type { SeriesMetric } from "@/lib/engine/stats-types";
 import type { MarketId } from "@/lib/engine/types";
 import { formatCompactUsd } from "@/lib/chart-format";
-import { beginsText, DEFAULT_RANGE, payoutMarks, payoutsText, RANGES, tableRows, type RangeId } from "@/lib/house-series";
+import { beginsText, DEFAULT_RANGE, RANGES, tableRows, type RangeId } from "@/lib/house-series";
 import { feedProblem } from "@/lib/store/house-feed-text";
 import { seriesFeed } from "@/lib/store/house-feeds";
 import { formatStamp } from "@/lib/time";
 
 import { useSession } from "../ConsoleProvider";
 import { Chart, type ChartSeries, type Tone } from "../charts/Chart";
-import { LiveToggle, Pick } from "./Controls";
+import { Pick } from "./Controls";
 import { DataTable } from "./DataTable";
 import { Panel, Quiet, Term } from "./Panel";
-import { useFeed, useFeeds } from "./use-feed";
+import { useFeeds } from "./use-feed";
 
 /** One line of a series panel. */
 export interface LineSpec {
@@ -54,8 +54,6 @@ interface Props {
   floor?: number | null;
   /** A line about a figure the chart leans on beyond its own series, such as a floor that may be old. */
   note?: string | null;
-  /** Marks on the first line each epoch that paid stakers, so a step down in NAV explains itself. */
-  stakerPayouts?: boolean;
   className?: string;
 }
 
@@ -64,20 +62,16 @@ const TEXT = { fg: "text-fg", glow: "text-glow", ember: "text-ember", amber: "te
 /** The most points the keyboard-reachable table lists. */
 const TABLE_POINTS = 30;
 
-function SeriesPanelView({ title, tip, lines, markets, currents, floor = null, note = null, stakerPayouts = false, className }: Props) {
+function SeriesPanelView({ title, tip, lines, markets, currents, floor = null, note = null, className }: Props) {
   const { store } = useSession();
   const [range, setRange] = useState<RangeId>(DEFAULT_RANGE);
-  const [live, setLive] = useState(false);
   const [picked, setPicked] = useState<MarketId | null>(null);
   const market = markets === null ? null : (picked !== null && markets.some((m) => m.id === picked) ? picked : (markets[0]?.id ?? null));
   const first = lines[0];
   const current = (id: string): number | null => currents?.[markets === null ? id : `${market}:${id}`] ?? null;
-  const specs = useMemo(() => (markets !== null && market === null ? [] : lines.map((line) => seriesFeed(store, line.metric, market, range, live))), [store, lines, markets, market, range, live]);
+  const specs = useMemo(() => (markets !== null && market === null ? [] : lines.map((line) => seriesFeed(store, line.metric, market, range))), [store, lines, markets, market, range]);
   const states = useFeeds(specs);
   const plotted: ChartSeries[] = useMemo(() => lines.map((line, i) => ({ id: `${line.id}:${market ?? "-"}`, label: line.label, tone: line.tone, kind: line.area === true ? "area" as const : "line" as const, points: states[i]?.data?.points ?? [] })), [lines, market, states]);
-  const payoutFeed = useFeed(useMemo(() => (stakerPayouts ? seriesFeed(store, "distributed_per_epoch", null, range, live) : null), [store, stakerPayouts, range, live]));
-  const payouts = payoutFeed.data?.points ?? null;
-  const marks = useMemo(() => (payouts === null ? [] : payoutMarks(payouts)), [payouts]);
   const nonNegative = lines.every((line) => line.nonNegative === true);
   const data = states[0]?.data ?? null;
   // A node that stops serving a route keeps the chart it already holds; only a chart with nothing to show says it is not available.
@@ -94,7 +88,6 @@ function SeriesPanelView({ title, tip, lines, markets, currents, floor = null, n
         <>
           {markets !== null && <Pick label={`${title} market`} value={market ?? 0} options={markets.map((m) => ({ value: m.id, label: m.label }))} onChange={setPicked} />}
           <Pick label={`${title} timeframe`} value={range} options={RANGES.map((r) => ({ value: r.id, label: r.label }))} onChange={setRange} />
-          <LiveToggle live={live} onChange={setLive} />
         </>
       }
     >
@@ -109,13 +102,12 @@ function SeriesPanelView({ title, tip, lines, markets, currents, floor = null, n
       ) : (
         <>
           <div className="relative flex min-h-52 flex-1 flex-col">
-            <Chart series={plotted} nonNegative={nonNegative} marks={marks} floor={floor} format={formatCompactUsd} label={`${title} chart, ${RANGES.find((r) => r.id === range)?.label ?? range}`} />
+            <Chart series={plotted} nonNegative={nonNegative} floor={floor} format={formatCompactUsd} label={`${title} chart, ${RANGES.find((r) => r.id === range)?.label ?? range}`} />
             <DataTable summary={`${title} as a table`} caption={`The latest ${rows.length} buckets of ${title}, newest first`} columns={["Time (UTC)", ...lines.map((line) => line.label)]} rows={rows} />
           </div>
           <p className="text-label text-fg-3">
             {states.length === 0 || states.every((s) => s.status === "loading") ? "Reading the node's signed history…" : data === null ? null : beginsText(data, formatStamp)}
             {lines.some((line) => line.sampled === true) && ` ${SAMPLED}`}
-            {payouts !== null && ` ${payoutsText(payouts, formatStamp)}`}
             {problem !== null && ` ${problem}`}
             {note !== null && ` ${note}`}
           </p>

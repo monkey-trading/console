@@ -141,8 +141,8 @@ describe("nearestIndex and valueAt", () => {
 
 describe("placeMarks", () => {
   const line = pts([1, 2, 3, 4], 100);
-  it("moves a marker to the first point at or after its time, as the epoch marks on NAV", () => {
-    expect(placeMarks([{ ts: 150, text: "Paid $100K" }, { ts: 200, text: "Halving" }], line)).toEqual([{ ts: 200, text: "Paid $100K" }, { ts: 200, text: "Halving" }]);
+  it("moves a marker to the first point at or after its time", () => {
+    expect(placeMarks([{ ts: 150, text: "Between" }, { ts: 200, text: "Halving" }], line)).toEqual([{ ts: 200, text: "Between" }, { ts: 200, text: "Halving" }]);
   });
 
   it("drops a marker before the first point or after the last, and all of them for a line with no points", () => {

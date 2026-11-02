@@ -48,9 +48,6 @@ export function SessionsCard() {
     <section aria-labelledby="sessions-title" className="rounded-xl border border-line-2 bg-ink-1">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 p-4 pb-0 sm:px-5 sm:pt-5">
         <h3 id="sessions-title" ref={heading} tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">Active sessions{status.kind === "ready" ? ` (${keys.length})` : ""}</h3>
-        {(status.kind === "ready" || status.kind === "failed") && (
-          <button type="button" aria-disabled={!idle} onClick={keepingFocus(() => list.refresh())} className="min-h-6 rounded px-1 text-label text-fg-3 underline hover:text-glow focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:opacity-40">Refresh<span className="sr-only"> the sessions</span></button>
-        )}
       </div>
       <p className="px-4 pt-2 text-caption leading-relaxed text-fg-3 sm:px-5">
         Each sign-in registers its own session key, valid for up to 24 hours. A key not marked &quot;This browser&quot; may belong to another browser, or to an earlier sign-in here that was never revoked; it expires on its own within the day. Revoke one you do not recognise.

@@ -83,17 +83,14 @@ describe("ChartFeed", () => {
     expect(feed.getSnapshot().read.value?.lines["distributed_per_epoch"]).toHaveLength(1);
   });
 
-  it("refreshes only while Live is on, from the last bucket, and replaces the open one", async () => {
+  it("refreshes from the last bucket, with no switch, and replaces the open one", async () => {
     const open = now() - 3_600_000;
     const next = now() - 1_800_000;
-    let live = false;
-    const { reads: client, queries } = reads((query) => (live ? page(query, [[open, "2000000"], [next, "3000000"]]) : page(query, [[open, "1000000"]])));
+    let later = false;
+    const { reads: client, queries } = reads((query) => (later ? page(query, [[open, "2000000"], [next, "3000000"]]) : page(query, [[open, "1000000"]])));
     const feed = new ChartFeed(["distributed_per_epoch"], client, now, on, "7d");
     await feed.load();
-    await feed.tickLive();
-    expect(queries).toHaveLength(1);
-    feed.setLive(true);
-    live = true;
+    later = true;
     await feed.tickLive();
     expect(queries[1]).toMatchObject({ fromMs: open, limit: 50 });
     expect(feed.getSnapshot().read.value?.lines["distributed_per_epoch"]).toEqual([point(open, 2), point(next, 3)]);
@@ -121,7 +118,6 @@ describe("ChartFeed", () => {
     const { reads: client } = reads((query) => (query.limit === 50 ? page(query, [[fresh, "2000000"]]) : page(query, [[clock - 7 * 86_400_000, "1000000"], [fresh, "1000000"]])));
     const feed = new ChartFeed(["distributed_per_epoch"], client, () => clock, on, "7d");
     await feed.load();
-    feed.setLive(true);
     clock += 2 * hour;
     await feed.tickLive();
     const ms = feed.getSnapshot().read.value?.lines["distributed_per_epoch"]?.map((p) => p.ms) ?? [];
@@ -134,7 +130,6 @@ describe("ChartFeed", () => {
     const { reads: client, queries } = reads((query) => (failing ? new EngineError(503, "busy") : page(query, [[1_000, "1000000"]])));
     const feed = new ChartFeed(["distributed_per_epoch"], client, now, on, "all");
     await feed.load();
-    feed.setLive(true);
     failing = true;
     await feed.setTimeframe("6h");
     expect(feed.getSnapshot().read).toMatchObject({ status: "failed" });
@@ -166,7 +161,6 @@ describe("ChartFeed", () => {
     const { reads: client, queries } = reads((query) => (query.limit === 50 ? page(query, [[now() - 2 * day, "9000000"], [now() - 3_600_000, "4000000"]]) : page(query, [])));
     const feed = new ChartFeed(["distributed_per_epoch"], client, now, on, "7d");
     await feed.load();
-    feed.setLive(true);
     await feed.tickLive();
     expect(queries[1]).toMatchObject({ limit: 50, fromMs: now() - 7 * day - 3_600_000 });
     // Only a bucket inside the window is the latest; the older one the page also held is not.
@@ -178,14 +172,12 @@ describe("ChartFeed", () => {
     const { reads: client, queries } = reads((query) => failure ?? page(query, [[now() - 3_600_000, "1000000"]]));
     const feed = new ChartFeed(["distributed_per_epoch"], client, now, on, "7d");
     await feed.load();
-    feed.setLive(true);
     failure = null;
     await feed.tickLive();
     expect(queries).toHaveLength(2);
     expect(feed.getSnapshot().read.status).toBe("ready");
     const missing = new ChartFeed(["distributed_per_epoch"], NO_STATS, now, on, "7d");
     await missing.load();
-    missing.setLive(true);
     await missing.tickLive();
     expect(missing.getSnapshot().read.status).toBe("unavailable");
   });
@@ -215,7 +207,6 @@ describe("ChartFeed", () => {
     const { reads: client } = reads((query) => (failing ? new EngineError(503, "busy") : page(query, [[at, "1000000"]])));
     const feed = new ChartFeed(["distributed_per_epoch"], client, now, on, "7d");
     await feed.load();
-    feed.setLive(true);
     failing = true;
     await feed.tickLive();
     expect(feed.getSnapshot().read).toMatchObject({ status: "ready", message: "busy" });
@@ -230,7 +221,6 @@ describe("ChartFeed", () => {
     const feed = new ChartFeed(["distributed_per_epoch"], client, () => clock, on, "6h");
     await feed.load();
     expect(feed.getSnapshot().read.value?.latest["distributed_per_epoch"]).toBe("1000000");
-    feed.setLive(true);
     clock += 2 * hour;
     await feed.tickLive();
     expect(feed.getSnapshot().read.value?.lines["distributed_per_epoch"]).toEqual([]);

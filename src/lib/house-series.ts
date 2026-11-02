@@ -1,8 +1,6 @@
 /** The dashboard's series reads: the timeframes a chart offers, the window each asks for, and the points a page folds into. */
 
 import { fixedFromWire, fixedToNumber } from "./fixed";
-import { formatCompactUsd } from "./chart-format";
-import { plotValue } from "./monkey/figures";
 import type { MarketId } from "./engine/types";
 import type { LevelEntry, SeriesMetric, SeriesPage, SeriesQuery, SeriesResolution, ValueEntry } from "./engine/stats-types";
 
@@ -58,19 +56,12 @@ export interface SeriesData {
 }
 
 /**
- * The points of one page: a level's close or a flow's value, in dollars. A page in USDC base units
- * (the staker payouts) is read as those; every other series is the engine's nine-place decimal.
+ * The points of one page: a level's close or a flow's value, in dollars.
  * Error cases:
  * - an amount is not a decimal: the node signed it, so the engine never sends one and the read fails rather than plotting a guess
  */
-export function pointsOf(entries: readonly (LevelEntry | ValueEntry)[], unit = "usd"): SeriesPoint[] {
-  return entries.map((entry) => {
-    const text = "close" in entry ? entry.close : entry.value;
-    if (unit !== "usdc_base_units") return { ts: entry.ts, value: fixedToNumber(fixedFromWire(text)) };
-    const value = plotValue(text, unit);
-    if (value === null) throw new Error(`malformed USDC amount: ${text}`);
-    return { ts: entry.ts, value };
-  });
+export function pointsOf(entries: readonly (LevelEntry | ValueEntry)[]): SeriesPoint[] {
+  return entries.map((entry) => ({ ts: entry.ts, value: fixedToNumber(fixedFromWire("close" in entry ? entry.close : entry.value)) }));
 }
 
 /**
@@ -79,7 +70,7 @@ export function pointsOf(entries: readonly (LevelEntry | ValueEntry)[], unit = "
  * point cap fall away, so what is held stays bounded however long the page stays open.
  */
 export function foldSeries(prev: SeriesData | null, page: SeriesPage, windowFromMs: number): SeriesData {
-  const fresh = pointsOf(page.entries, page.unit);
+  const fresh = pointsOf(page.entries);
   const first = fresh[0];
   // An empty page replaces nothing: what is held stays, and the window filter ages it out.
   const kept = prev === null ? [] : first === undefined ? prev.points : prev.points.filter((p) => p.ts < first.ts);
@@ -135,19 +126,4 @@ export function tableRows(series: readonly (readonly SeriesPoint[])[], limit: nu
   const byTime = series.map((points) => new Map(points.map((point) => [point.ts, point.value])));
   const times = [...new Set(series.flatMap((points) => points.map((point) => point.ts)))].sort((a, b) => b - a).slice(0, limit);
   return times.map((ts) => ({ ts, values: byTime.map((values) => values.get(ts) ?? null) }));
-}
-
-/** The markers for the epochs that paid stakers: one for each bucket of `payouts` that paid something. The chart puts each on the point it belongs to. */
-export function payoutMarks(payouts: readonly SeriesPoint[]): { ts: number; text: string }[] {
-  return payouts.filter((payout) => payout.value > 0).map((payout) => ({ ts: payout.ts, text: `Paid ${formatCompactUsd(payout.value)}` }));
-}
-
-/** The sentence under the NAV chart that says what its steps are: what stakers were paid in the window and when, so a fall in NAV explains itself. */
-export function payoutsText(payouts: readonly SeriesPoint[], stamp: (ms: number) => string): string {
-  const paid = payouts.filter((payout) => payout.value > 0);
-  if (paid.length === 0) return "No epoch paid stakers in this window.";
-  const total = paid.reduce((sum, payout) => sum + payout.value, 0);
-  const shown = paid.slice(-3).map((payout) => `${formatCompactUsd(payout.value)} at ${stamp(payout.ts)} UTC`);
-  const more = paid.length > shown.length ? `${paid.length - shown.length} earlier, ` : "";
-  return `Epochs paid stakers ${formatCompactUsd(total)} in this window, marked on the chart where NAV steps down: ${more}${shown.join(", ")}.`;
 }

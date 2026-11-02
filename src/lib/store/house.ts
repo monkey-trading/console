@@ -3,6 +3,7 @@
 import { QueueTotalsRetrying } from "../engine/live-queue";
 import { HOUSE_STATE, ROUTE_ABSENT_MS } from "./quiet-reads";
 import type { ConsoleStore } from "./store";
+import { awaitsTrust } from "./signing";
 
 /**
  * Reads the house's parameters and checkpoint from the node into the store. Called on every
@@ -89,7 +90,7 @@ export function readHousePanelSoon(store: ConsoleStore): void {
  * persistent outage toasts once and the wait's own message never alternates with it.
  */
 function report(store: ConsoleStore, error: unknown, which: "state" | "queue"): void {
-  if (error instanceof QueueTotalsRetrying) return;
+  if (error instanceof QueueTotalsRetrying || awaitsTrust(error)) return;
   const message = error instanceof Error ? error.message : "The node did not answer the house panel's reads.";
   const latch = which === "state" ? "lastHouseReadError" : "lastQueueReadError";
   if (!store.noteAccess(error) && message !== store[latch]) store.toast("error", message);

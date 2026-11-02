@@ -137,6 +137,14 @@ export function errorText(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
+/**
+ * Whether a failed background read is the node not being verified (yet, or any longer): the
+ * attestation banner says so, once, and the read runs again when trust returns, so it must not
+ * toast. A wallet reattaches on page load before the node has attested, so every read that
+ * starts there meets this (monkey-trading/console#202).
+ */
+export const awaitsTrust = (error: unknown): boolean => error instanceof UntrustedError;
+
 /** Marks the caller as refused when `reject` names a region the node does not serve; true if it did. */
 export function noteRegionRefusal(store: ConsoleStore, reject: Reject): boolean {
   if (reject.kind !== "access") return false;
