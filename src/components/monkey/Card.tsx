@@ -19,7 +19,7 @@ export function focusHeading(id: string): void {
 export function Card({ id, title, aside, children }: { id: string; title: string; aside?: ReactNode; children: ReactNode }) {
   return (
     <section aria-labelledby={id} className="min-w-0 rounded-xl border border-line-2 bg-ink-1 p-4">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <h3 id={id} tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">{title}</h3>
         {aside}
       </div>

@@ -64,7 +64,7 @@ const HOSTS: readonly [NoticeSurface, string, ReactNode][] = [
   ["exit", "the exit panel", el(ExitPanel)],
   ["payoutReads", "the claims on the vault", el(Payouts)],
   ["payoutVault", "the claims on the vault", el(Payouts)],
-  ["emissions", "the MONKEY emissions card", createElement(EmissionsCard, { claim: () => Promise.resolve() })],
+  ["emissions", "the MONKEY emissions card", createElement(OnMonkeyPage, null, createElement(EmissionsCard, { claim: () => Promise.resolve() }))],
   ["distribution", "the distribution claim", createElement(OnMonkeyPage, null, el(DistributionClaim))],
   ["settings", "Settings' sessions", el(SessionsCard)],
   ["chart", "the chart", el(ChartPanel)],

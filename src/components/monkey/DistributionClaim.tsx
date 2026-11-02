@@ -11,6 +11,7 @@ import { formatUsdc } from "@/lib/vault";
 import { Notice } from "../Notice";
 import { useSignGate } from "../SignGate";
 import { Card, focusHeading } from "./Card";
+import { CloseCountdown } from "./Countdown";
 import { ReadNote } from "./ReadNote";
 import { Row } from "./Row";
 import { BUTTON, NOTE } from "./styles";
@@ -32,6 +33,7 @@ export function DistributionClaim() {
     <Card
       id="distributions-title"
       title="USDC distributions"
+      aside={<CloseCountdown />}
     >
       {wallet === null ? (
         <p className={NOTE}>Connect a wallet to see your USDC distributions.</p>

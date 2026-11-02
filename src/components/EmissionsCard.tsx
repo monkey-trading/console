@@ -9,6 +9,7 @@ import { emissionsPosition } from "@/lib/store/emissions";
 
 import { useConsole } from "./ConsoleProvider";
 import { focusHeading } from "./monkey/Card";
+import { BudgetCountdown } from "./monkey/Countdown";
 import { Notice } from "./Notice";
 import { useReadOnlyNote, useSignGate } from "./SignGate";
 
@@ -35,8 +36,9 @@ export function EmissionsCard({ claim }: { claim: () => Promise<unknown> }) {
   const accrued = formatMonkey(position.accrued);
   return (
     <section aria-labelledby="monkey-title" className="rounded-xl border border-line-2 bg-ink-1 p-4">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <h3 id="monkey-title" tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">MONKEY emissions</h3>
+        <BudgetCountdown />
       </div>
       {readOnly.note}
       {!state.wallet ? (
