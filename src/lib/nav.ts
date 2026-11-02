@@ -4,6 +4,7 @@ export const PAGES = [
   { href: "/house", label: "House" },
   { href: "/monkey", label: "MONKEY" },
   { href: "/funding", label: "Funding" },
+  { href: "/settings", label: "Settings" },
 ] as const;
 
 /** Whether `pathname` is the page `href` names; a trailing slash on the path does not change the page. */

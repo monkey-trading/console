@@ -24,10 +24,20 @@ export default function Page() {
           The console sets no cookies and runs no analytics. Its fonts and scripts come from its own
           address. When you connect a wallet, the console remembers that connection in your
           browser&apos;s storage — which kind of wallet it was, and the WalletConnect session&apos;s
-          topic when that is how you connected — so a later page load can reconnect you. It stores
-          nothing else — no keys, no addresses, no session secrets — and the stored choice is removed
+          topic when that is how you connected — so a later page load can reconnect you. That choice
+          holds no keys, no addresses and no session secrets, and it is removed
           when you disconnect in the console, when your wallet app ends the WalletConnect session
           while a console page is open, or when a reconnect does not complete.
+        </p>
+        <p className={P}>
+          The console also stores your trading preferences in your browser&apos;s storage: your default
+          order type, slippage bound and size choice, whether Cancel all and Close all ask first,
+          whether the chart shows entry and order lines, and the last size you placed in each market,
+          which it writes each time you place an order. They never leave your browser, and unlike the
+          wallet choice they stay after you disconnect, until you clear this site&apos;s data. The
+          Settings page lists your active sessions from the node&apos;s public record of session
+          keys, which holds each key&apos;s address, start and expiry and nothing about the browser
+          or the network it signed in from.
         </p>
         <p className={P}>
           When trading becomes possible for your account, the console asks your wallet for one signature

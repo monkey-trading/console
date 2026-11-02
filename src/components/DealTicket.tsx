@@ -7,6 +7,7 @@ import { useId, useState } from "react";
 
 import { signBlock } from "@/lib/engine/attestation";
 import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
+import { ORDER_LABELS, ORDER_TYPES, type OrderType } from "@/lib/prefs";
 import { formatMark } from "@/lib/price-format";
 import { ticketPrices } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
@@ -15,13 +16,10 @@ import { belowMinimum, contractUnit, MARGIN_SHORT, NO_SIZE, parseSize, previewTi
 import { useConsole, useSession } from "./ConsoleProvider";
 import { MarketInfo } from "./MarketInfo";
 import { SigningFor } from "./SigningFor";
+import { usePrefs } from "./use-prefs";
 
-type Kind = "market" | "limit" | "stop";
-const KINDS = [
-  { value: "market", label: "Market" },
-  { value: "limit", label: "Limit" },
-  { value: "stop", label: "Stop" },
-] as const;
+type Kind = OrderType;
+const KINDS = ORDER_TYPES.map((value) => ({ value, label: ORDER_LABELS[value] }));
 const INPUT = "mt-1 min-h-11 w-full rounded border border-edge bg-ink px-2 py-2 text-base text-fg lg:min-h-0 lg:text-data focus-visible:outline-2 focus-visible:outline-glow";
 
 /** Links to the Funding page. */
@@ -32,19 +30,22 @@ function FundingLink() {
 /** The deal ticket for the selected market; `OrderTicket` remounts it per market so no typed value carries over. */
 export function DealTicket() {
   const state = useConsole();
-  const { store } = useSession();
+  const { store, prefs: prefStore } = useSession();
+  const { prefs, sizes } = usePrefs();
   const id = useId();
   const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [kind, setKind] = useState<Kind>("market");
+  // Null until the trader picks one, so the ticket follows the Settings default; a pick is theirs and no default replaces it.
+  const [chosenKind, setKind] = useState<Kind | null>(null);
+  const kind = chosenKind ?? prefs.orderType;
   // Null until the trader edits the field, so the size follows the market's minimum as its mark moves; "" is a field they cleared.
   const [typedSize, setTypedSize] = useState<string | null>(null);
   const [price, setPrice] = useState("");
-  const [chosenSlippage, setSlippage] = useState<number>(10);
+  const [chosenSlippage, setSlippage] = useState<number | null>(null);
   const market = state.markets.find((m) => m.id === state.selected);
   if (!market) return null;
   const triggerPrice = parseFixed(price);
-  const size = sizeShown(typedSize, market, kind === "market" ? null : triggerPrice);
-  const slippage = slippageBound(chosenSlippage, market);
+  const size = sizeShown(typedSize, market, kind === "market" ? null : triggerPrice, prefs.size === "last" ? (sizes[market.id] ?? null) : null);
+  const slippage = slippageBound(chosenSlippage ?? prefs.slippageBps, market);
   const parsedSize = parseSize(size);
   const qty = parsedSize.kind === "qty" ? parsedSize.qty : 0n;
   const live = state.signatures === "checked";
@@ -72,6 +73,7 @@ export function DealTicket() {
     // Only what was sent clears: a value the trader changed while the wallet was asking stays.
     const clearSent = (placed: boolean) => {
       if (!placed) return;
+      prefStore.rememberSize(market.id, size);
       setTypedSize((now) => (now === typedSize ? null : now));
       setPrice((now) => (now === price ? "" : now));
     };

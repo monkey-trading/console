@@ -68,4 +68,13 @@ describe("markersFor", () => {
     expect(lines.map((l) => l.title)).toEqual(["Long entry"]);
     expect(markersFor(base, market)).toEqual([]);
   });
+
+  it("with lines off leaves out the entry and the resting orders and keeps the close-out estimate", async () => {
+    const { market, base } = await fixture();
+    const held = withAccount(base, account(fixedFromInt(1), [order(1, "sell", "limit")]));
+    const titles = (lines: boolean) => markersFor(held, market, lines).map((l) => l.title);
+    expect(titles(true)).toEqual(expect.arrayContaining(["Long entry", "limit sell", "Close-out (est.)"]));
+    expect(titles(false)).toEqual(["Close-out (est.)"]);
+    expect(markersFor(withAccount(base, account(0n, [order(1, "sell", "limit")])), market, false)).toEqual([]);
+  });
 });

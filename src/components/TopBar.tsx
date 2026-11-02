@@ -41,7 +41,7 @@ export function TopBar() {
           </Link>
         </h1>
         <span aria-hidden="true" className="hidden text-caption text-fg-3 sm:inline">/</span>
-        <nav aria-label="Pages" className="flex items-center gap-1 sm:gap-2">
+        <nav aria-label="Pages" className="flex flex-wrap items-center gap-x-1 sm:gap-x-2">
           {PAGES.map(({ href, label }) => {
             const current = isCurrentPage(pathname, href);
             return (

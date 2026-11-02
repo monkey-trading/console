@@ -96,10 +96,10 @@ export class ActionClient implements EngineClient {
     this.historyReads.push({ kind: params.kind });
     return this.historyPages?.[params.before ?? ""] ?? this.historyPage;
   }
-  private subscriber: ((message: StreamMessage) => void) | null = null;
-  subscribe(onMessage: (message: StreamMessage) => void) { this.subscriber = onMessage; return () => { this.subscriber = null; }; }
-  /** Delivers one stream message to the store, as the node would. */
-  deliver(message: StreamMessage) { this.subscriber?.(message); }
+  private subscribers = new Set<(message: StreamMessage) => void>();
+  subscribe(onMessage: (message: StreamMessage) => void) { this.subscribers.add(onMessage); return () => { this.subscribers.delete(onMessage); }; }
+  /** Delivers one stream message to every subscriber, as the node would. */
+  deliver(message: StreamMessage) { for (const subscriber of this.subscribers) subscriber(message); }
 }
 
 /** A started store over an `ActionClient`, connected to a wallet over a stub provider with Anvil's account 0. */

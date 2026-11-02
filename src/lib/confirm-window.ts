@@ -2,6 +2,10 @@
 
 import type { Scheduler } from "./engine/live-stream";
 
+/** How long Cancel all and Close all wait for their second press, and how soon after the first a press is taken as the same click's double. */
+export const CONFIRM_MS = 5_000;
+export const CONFIRM_MIN_GAP_MS = 400;
+
 /** Where the window stands at a press: nothing armed, armed but too soon to confirm (a double-click's second click), or ready to confirm. */
 export type ConfirmState = "idle" | "early" | "ready";
 

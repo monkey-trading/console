@@ -21,6 +21,8 @@ import { connectWallet, walletSessionEnded } from "@/lib/store/actions";
 import { reconnectWallet } from "@/lib/store/reconnect";
 import { scanBarsHistory } from "@/lib/store/bars-scan";
 import { followAccountFeeds, quoteSyncKey, syncQuotes } from "@/lib/store/funds";
+import { PREFS_KEY, SIZES_KEY } from "@/lib/prefs";
+import { PrefsStore } from "@/lib/prefs-store";
 import { ConsoleStore } from "@/lib/store/store";
 import type { ConsoleState } from "@/lib/store/state";
 
@@ -32,6 +34,8 @@ interface Session {
   node: MockNode | null;
   /** The WalletConnect connector, whose pairing link the pairing dialog shows; null when the build has none. */
   walletConnect: WalletConnectConnector | null;
+  /** The trading preferences kept in this browser, apart from the store so a stream message re-renders nothing that reads them. */
+  prefs: PrefsStore;
 }
 
 const SessionContext = createContext<Session | null>(null);
@@ -43,6 +47,15 @@ const TICK_MS = 1_000;
 function injectedProvider(): Eip1193Provider | undefined {
   // EIP-1193 providers sit at `window.ethereum`, which the DOM types do not declare.
   return (window as Window & { ethereum?: Eip1193Provider }).ethereum;
+}
+
+/** The preferences over `localStorage`, which is reached only from effects and handlers, never in the server render; another tab's write is heard through the `storage` event. */
+function createPrefs(): PrefsStore {
+  return new PrefsStore(() => window.localStorage, (onChange) => {
+    const heard = (event: StorageEvent) => { if (event.key === null || event.key === PREFS_KEY || event.key === SIZES_KEY) onChange(); };
+    window.addEventListener("storage", heard);
+    return () => window.removeEventListener("storage", heard);
+  });
 }
 
 /** The store for a live node: nothing is loaded until its attestation is trusted. */
@@ -76,7 +89,7 @@ function createLiveSession(deploy: Deploy): Session {
   const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, { wait }), ...(walletConnect === null ? [] : [walletConnect]), new WatchConnector(() => window.location.search)]);
   // A node without the marks endpoint 404s it; the chart's archive scan then seeds its history.
   const store = new ConsoleStore({ client, wallets, persistence, history: () => [], historyScan: (store, markets) => scanBarsHistory(store, markets, store.deps.scanClock), initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
-  return { store, deploy, node: null, walletConnect };
+  return { store, deploy, node: null, walletConnect, prefs: createPrefs() };
 }
 
 function createSession(): Session {
@@ -98,7 +111,7 @@ function createSession(): Session {
       },
     },
   });
-  return { store, deploy, node, walletConnect: null };
+  return { store, deploy, node, walletConnect: null, prefs: createPrefs() };
 }
 
 /** The most simulated time one tick may add, so a stalled timer does not jump the prices. */
@@ -198,4 +211,13 @@ export function useSession(): Session {
 export function useConsole(): ConsoleState {
   const { store } = useSession();
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+}
+
+/**
+ * A value derived from the console's state, re-rendering only when it changes by `Object.is`: `select` returns a primitive or
+ * something the state keeps, so a screen that shows a clock to the minute is not redrawn by every tick.
+ */
+export function useConsoleValue<T>(select: (state: ConsoleState) => T): T {
+  const { store } = useSession();
+  return useSyncExternalStore(store.subscribe, () => select(store.getSnapshot()), () => select(store.getSnapshot()));
 }
