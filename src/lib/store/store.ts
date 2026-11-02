@@ -1,17 +1,18 @@
 /** The console's store: reads the node, follows its stream, and notifies the screens. */
 
-import { MAX_BARS, pushTick, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
+import type { TimeframeId } from "../bars";
 import { maySign } from "../engine/attestation";
 import { EngineError, type ClientEvent } from "../engine/client";
 import type { MarketId, StreamMessage } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
-import { fixedToNumber } from "../fixed";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
 import { loadAccount } from "./account";
+import { tickBars } from "./bars-tick";
 import { BarsSeed } from "./bars-seed";
 import { FEED_LIMIT, feedFrom, isMine } from "./feed";
 import { initialState, seedAllBars, type BlockReason, type ConsoleState, type ToastMessage } from "./state";
 import { readHousePanelSoon } from "./house";
+import { PacedReads } from "./paced-reads";
 import type { StoreDeps } from "./store-deps";
 
 export class ConsoleStore {
@@ -33,6 +34,8 @@ export class ConsoleStore {
   private rerun: { accountChanged: boolean } | null = null;
   private unsubscribe: (() => void) | null = null;
   private unwatch: (() => void) | null = null;
+  /** Paces the reads and shows the stream's marks for a node across the network; null for the mock, which runs in this page and is read on every tick. */
+  private readonly pacing: PacedReads | null;
   /** Seeds the chart's bars from the marks endpoint once per market and timeframe. */
   readonly barsSeed = new BarsSeed(this);
   /** When each market's bar bucket was last ticked from the node's mark, so a history merge can tell a stale live candle from a fresh one; derived bookkeeping, not part of the snapshot. */
@@ -60,6 +63,7 @@ export class ConsoleStore {
   constructor(deps: StoreDeps) {
     this.deps = deps;
     this.viewer = deps.initial.viewer;
+    this.pacing = deps.client.signatures === "none" ? null : new PacedReads(this, (accountChanged) => void this.refresh(accountChanged));
     const state = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs, deps.history, deps.client.signatures, deps.initial.housePanel);
     const session = deps.initial.session;
     this.snapshot = {
@@ -144,6 +148,7 @@ export class ConsoleStore {
     // history work and scans anew: its results were discarded when the cycle stopped.
     this.stopped = false;
     this.scanEpoch += 1;
+    this.pacing?.stop(); // a restart (StrictMode) begins with no wait or held read from the cycle before
     this.barsSeed.reset();
     this.deps.drive?.(nowMs);
     this.patch({ now: nowMs, bars: seedAllBars(this.snapshot.markets, nowMs, this.deps.history) });
@@ -152,6 +157,7 @@ export class ConsoleStore {
     void this.checkNode();
     return () => {
       this.stopped = true;
+      this.pacing?.stop();
       this.unsubscribe?.();
       this.unwatch?.();
       this.unsubscribe = this.unwatch = null;
@@ -221,6 +227,7 @@ export class ConsoleStore {
         this.toast("error", `Order ${event.order_id} could not be filled and was cancelled.`);
       }
     }
+    this.pacing?.observe(message);
     const lines = feedFrom([message], this.snapshot.markets, viewer, () => this.id());
     // Price updates change nothing on screen by themselves; only the node's tick moves the clock and the log.
     if (message.cmd.type === "prices" && lines.length === 0) return;
@@ -229,7 +236,11 @@ export class ConsoleStore {
     const mine = this.snapshot.wallet?.address.toLowerCase();
     const own = mine !== undefined && message.events.some((e) => "account" in e && e.account.toLowerCase() === mine);
     if (own) void this.refresh(true);
-    else if (message.cmd.type === "tick") void this.refresh(message.events.some((e) => "account" in e));
+    else if (message.cmd.type === "tick") {
+      const accountChanged = message.events.some((e) => "account" in e);
+      if (this.pacing) this.pacing.readOnTick(accountChanged);
+      else void this.refresh(accountChanged);
+    }
   }
 
   /**
@@ -250,27 +261,9 @@ export class ConsoleStore {
   private async readAll(accountChanged: boolean): Promise<void> {
     try {
       const [views, house] = await Promise.all([this.deps.client.markets(), this.deps.client.house()]);
-      const markets = views.map((view) => decodeMarket(view, this.snapshot.markets.find((m) => m.id === view.id), this.deps.client.signatures === "none"));
-      const bars = { ...this.snapshot.bars };
-      for (const m of markets) {
-        if (m.mark === null || !m.open) continue;
-        const price = fixedToNumber(m.mark);
-        // A market first seen now, as a live node's list arrives, starts from the history source.
-        const frames = bars[m.id] ?? (Object.fromEntries(TIMEFRAMES.map((tf) => [tf.id, this.deps.history(m.symbol, tf.seconds, this.snapshot.now, price)])) as Record<TimeframeId, Bar[]>);
-        // `fromEntries` loses the key type; the keys are exactly the timeframes `frames` holds.
-        // Before the node's first message there is no node time to place a bar at.
-        bars[m.id] = this.snapshot.now === 0 ? frames : (Object.fromEntries(TIMEFRAMES.map((tf) => {
-          const next = pushTick(frames[tf.id], this.snapshot.now, price, tf.seconds);
-          // A closed or unpriced market's candle is untouched, so its last tick stays where it was.
-          const bucket = Math.floor(this.snapshot.now / 1000 / tf.seconds) * tf.seconds;
-          const ticks = (this.barTicks[m.id] ?? {}) as Record<TimeframeId, Map<number, number>>;
-          const series = (ticks[tf.id] ?? new Map<number, number>()) as Map<number, number>;
-          series.set(bucket, this.snapshot.now);
-          for (const at of series.keys()) if (at < bucket - MAX_BARS * tf.seconds) series.delete(at);
-          this.barTicks[m.id] = { ...ticks, [tf.id]: series };
-          return [tf.id, next];
-        })) as typeof frames);
-      }
+      const decoded = views.map((view) => decodeMarket(view, this.snapshot.markets.find((m) => m.id === view.id), this.deps.client.signatures === "none"));
+      const markets = this.pacing?.reconcile(views, decoded) ?? decoded;
+      const bars = tickBars(this, markets, this.snapshot.now);
       const selected = markets.some((m) => m.id === this.snapshot.selected) ? this.snapshot.selected : (markets[0]?.id ?? this.snapshot.selected);
       this.patch({ markets, bars, selected, house: decodeHouse(house), houseReady: true, houseFresh: true });
       // The chart's history comes from the marks endpoint once a live node's list has arrived; a

@@ -78,6 +78,7 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
     // Period housekeeping names no account; the allocations above are the viewer's lines.
     case "emission_period_closed": return null;
     case "order_accepted": return null;
+    case "prices_rejected": return null;
     // Operator housekeeping is not the viewer's activity.
     case "admin_applied": return null;
     case "admin_rejected": return null;
