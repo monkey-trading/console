@@ -30,7 +30,7 @@ export class MockWalletConnector implements WalletConnector {
         return `0x${mockHex(JSON.stringify(request, (_, value: unknown) => (typeof value === "bigint" ? String(value) : value)), 65)}`;
       },
       async deposit(amount: Fixed) {
-        controls.deposit(address, amount);
+        controls.walletDeposit(address, amount);
         return `0x${mockHex(`tx-${amount}-${address}`, 32)}`;
       },
       async claim() {
@@ -65,6 +65,9 @@ export class MockWalletConnector implements WalletConnector {
           controls.delegate(address, candidate);
           return `0x${mockHex(`delegate-${candidate}-${address}`, 32)}`;
         },
+      },
+      async usdcBalance() {
+        return { kind: "held" as const, amount: controls.walletUsdc(address) };
       },
       chainReads: controls.chainReads(),
       async claimed() {

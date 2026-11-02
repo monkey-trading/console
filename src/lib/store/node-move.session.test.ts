@@ -115,10 +115,11 @@ describe("a connect still running on the store a move leaves", () => {
 });
 
 describe("the setup popup across a move", () => {
-  /** A connected tab whose account lacks a key, so setup has opened for it. */
+  /** A connected tab whose account has no declaration, so setup has opened for it. */
   async function needingSetup() {
     const kit = await tab(memoryStorage());
     kit.client.credited = true;
+    kit.client.declared = null;
     await connectWallet(kit.store, "injected");
     expect(kit.store.getSnapshot().setup).toMatchObject({ open: true, decided: true });
     return kit;
@@ -135,10 +136,10 @@ describe("the setup popup across a move", () => {
 
   it("stays open where it was left open, and keeps the faucet step settled", async () => {
     const old = await needingSetup();
-    settleFund(old.store);
+    settleFund(old.store, "skipped");
     const next = nextStore();
     await moveToNode(old.store, next.store);
-    expect(next.store.getSnapshot().setup).toEqual({ open: true, decided: true, fundSettled: true });
+    expect(next.store.getSnapshot().setup).toEqual({ open: true, decided: true, fund: "skipped", deposit: null });
   });
 
   it("still reopens after the move for whatever a missing step blocks", async () => {
@@ -155,9 +156,10 @@ describe("the setup popup across a move", () => {
     old.store.liveWallet = old.wallet;
     old.store.setWallet({ address: old.wallet.address, label: old.wallet.label });
     const next = nextStore();
+    next.client.declared = null;
     await moveToNode(old.store, next.store);
     expect(next.store.getSnapshot().setup).toMatchObject({ open: true, decided: true });
     disconnectWallet(next.store);
-    expect(next.store.getSnapshot().setup).toEqual({ open: false, decided: false, fundSettled: false });
+    expect(next.store.getSnapshot().setup).toEqual({ open: false, decided: false, fund: null, deposit: null });
   });
 });

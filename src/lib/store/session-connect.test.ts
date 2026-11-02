@@ -1,11 +1,11 @@
-/** Tests for what a connect asks of the wallet (nothing), and for a connect replacing another wallet. */
+/** Tests for what a connect asks of the wallet (one key signature, for a declared wallet and a connect the user pressed), and for a connect replacing another wallet. */
 
 import { describe, expect, it } from "vitest";
 
 import vectors from "../engine/eip712-vectors.json";
 import { ProviderWallet } from "../engine/provider-wallet";
 import type { KeyStorage } from "../engine/session-key-store";
-import { ACCOUNT, memoryStorage, StubProvider } from "../engine/wallet-kit";
+import { ACCOUNT, memoryStorage, StubProvider, type StubOptions } from "../engine/wallet-kit";
 import { loadChoice } from "../engine/wallet-persist";
 import type { Wallet } from "../engine/wallet";
 import { authorizeBrowser, connectWallet, disconnectWallet } from "./actions";
@@ -15,10 +15,10 @@ import { ConsoleStore } from "./store";
 import { settle } from "../engine/test-kit";
 
 /** A started store over an ActionClient that records what it is sent. */
-async function setup(credited: boolean, persistence?: KeyStorage) {
+async function setup(credited: boolean, persistence?: KeyStorage, options: StubOptions = {}) {
   const client = new ActionClient();
   client.credited = credited;
-  const provider = new StubProvider();
+  const provider = new StubProvider(options);
   const walletA: Wallet = new ProviderWallet(ACCOUNT, "Test wallet", provider, { chainId: vectors.chain_id, vault: VAULT, usdc: null, add: null }, { wait: async () => {} });
   const store = new ConsoleStore({ client, wallets: { options: [], connect: async () => walletA }, ...(persistence === undefined ? {} : { persistence }), history: () => [], initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
   store.start(0);
@@ -75,19 +75,51 @@ describe("a connect that ended while the wallet answered the vault's read", () =
 });
 
 describe("what a connect asks of the wallet", () => {
-  it("asks for no signature and registers nothing at connect, credited or not", async () => {
+  it("asks a declared wallet for the one key signature straight after a connect the user pressed, credited or not", async () => {
     for (const credited of [true, false]) {
       const { client, provider, store } = await setup(credited);
       expect(await connectWallet(store, "injected")).toBe(true);
+      await settle();
+      expect(signatures(provider)).toHaveLength(1);
+      expect(client.posted.map((p) => p.route)).toEqual(["session_key"]);
+      expect(liveSessionKey(store)).not.toBeNull();
+      expect(store.getSnapshot().setup.open).toBe(false); // no popup for a declared wallet
+    }
+  });
+
+  it("asks for nothing on a quiet reconnect at page load, and leaves the key for the deal ticket's button to ask", async () => {
+    for (const credited of [true, false]) {
+      const { client, provider, store } = await setup(credited);
+      expect(await connectWallet(store, "injected", true)).toBe(true);
+      await settle();
       expect(client.posted).toEqual([]);
       expect(signatures(provider)).toEqual([]);
       expect(liveSessionKey(store)).toBeNull();
     }
   });
 
+  it("asks an undeclared wallet for nothing at connect: its popup takes the declaration first", async () => {
+    const { client, provider, store } = await setup(false);
+    client.declared = null;
+    await connectWallet(store, "injected");
+    await settle();
+    expect(signatures(provider)).toEqual([]);
+    expect(store.getSnapshot().setup.open).toBe(true);
+  });
+
+  it("leaves a declined prompt alone: no key, no popup, the reason in a toast", async () => {
+    const { client, store } = await setup(true, undefined, { fail: { eth_signTypedData_v4: { code: 4001, message: "User rejected" } } });
+    await connectWallet(store, "injected");
+    await settle();
+    expect(liveSessionKey(store)).toBeNull();
+    expect(store.getSnapshot()).toMatchObject({ busy: false, setup: { open: false } });
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("You declined to sign in your wallet.");
+    expect(client.posted).toEqual([]);
+  });
+
   it("registers nothing when the account's credit arrives: a deposit, or a deposit credited on a screening retry", async () => {
     const { client, provider, store } = await setup(false);
-    await connectWallet(store, "injected");
+    await connectWallet(store, "injected", true);
     client.credited = true;
     const receipt = { beneficiary: { kind: "trader", account: ACCOUNT }, principal: "1000", held: "0", uncredited: "0" };
     client.deliver({ offset: "1:0", type: "command", seq: 1, ts: NODE_TIME, cmd: { type: "deposit" }, events: [{ type: "deposited", account: ACCOUNT, amount: "1000" }] });
@@ -109,14 +141,16 @@ describe("what a connect asks of the wallet", () => {
   });
 
   it("clears the session key and refusal when a connect replaces the wallet", async () => {
-    const { store } = await setup(true);
+    const { client, store } = await setup(true);
     const walletB: Wallet = { address: "0x0000000000000000000000000000000000000bbb", label: "Other", sign: async () => "0x", deposit: async () => "0x0", claim: async () => "0x0" };
     await connectWallet(store, "injected");
     await authorizeBrowser(store);
+    await settle();
     const keyOfA = liveSessionKey(store);
     if (keyOfA === null) throw new Error("no key for wallet A");
     store.patch({ sessionRefusal: { kind: "session_key_unsupported" } });
     store.deps.wallets.connect = async () => walletB;
+    client.declared = null; // so the new wallet has a popup and no prompt
     await connectWallet(store, "other");
     expect(liveSessionKey(store)).toBeNull();
     expect(store.sessionKey).toBeNull();

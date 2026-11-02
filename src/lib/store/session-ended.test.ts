@@ -50,20 +50,23 @@ describe("a stored key that expired", () => {
     expect(signatures(provider)).toEqual([]);
   });
 
-  it("is discarded for the pairing a WalletConnect reload falls back to, which the user just approved: setup shows, and the session stays", async () => {
+  it("is discarded for the pairing a WalletConnect reload falls back to, which the user just approved: the wallet is asked for a new key, and the session stays", async () => {
     const storage = memoryStorage();
-    saveSessionKey(storage, SCOPE, SessionKeySigner.generate(), EXPIRES);
+    const old = SessionKeySigner.generate();
+    saveSessionKey(storage, SCOPE, old, NODE_TIME); // expired by the node's own clock, which a new key's expiry follows
     saveChoice(storage, { kind: "walletconnect", topic: "old-topic" });
-    const { client, store, wallet } = await tab(storage);
+    const { client, provider, store, wallet } = await tab(storage);
     client.credited = true;
     let released = 0;
     wallet.disconnect = async () => void (released += 1);
-    store.patch({ now: EXPIRES });
+    store.patch({ now: NODE_TIME });
     await reconnectWallet(store, { resume: async () => null, pairing: () => ({ status: "idle" }) }, () => false);
     expect(store.getSnapshot().wallet?.address).toBe(ACCOUNT);
     expect(released).toBe(0);
-    expect(storage.held.has(NAME)).toBe(false);
-    expect(store.getSnapshot().setup.open).toBe(true);
+    await settle();
+    expect(liveSessionKey(store)?.address).not.toBe(old.address);
+    expect(signatures(provider)).toHaveLength(1);
+    expect(store.getSnapshot().setup.open).toBe(false);
     expect(store.getSnapshot().toasts.filter((t) => t.text.includes("expired"))).toEqual([]);
   });
 
@@ -80,17 +83,19 @@ describe("a stored key that expired", () => {
     expect(store.getSnapshot().toasts.at(-1)?.text).toContain("expired");
   });
 
-  it("is discarded for a connect the user pressed, which goes straight to setup at the key's step", async () => {
+  it("is discarded for a connect the user pressed, which goes straight to the wallet's signature for a new key, with no popup", async () => {
     const storage = memoryStorage();
-    saveSessionKey(storage, SCOPE, SessionKeySigner.generate(), EXPIRES);
-    const { client, store } = await tab(storage);
+    const old = SessionKeySigner.generate();
+    saveSessionKey(storage, SCOPE, old, NODE_TIME); // expired by the node's own clock, which a new key's expiry follows
+    const { client, provider, store } = await tab(storage);
     client.credited = true;
-    store.patch({ now: EXPIRES });
+    store.patch({ now: NODE_TIME });
     expect(await connectWallet(store, "injected")).toBe(true);
     expect(store.getSnapshot().wallet?.address).toBe(ACCOUNT);
-    expect(liveSessionKey(store)).toBeNull();
-    expect(storage.held.has(NAME)).toBe(false);
-    expect(store.getSnapshot().setup.open).toBe(true);
+    await settle();
+    expect(liveSessionKey(store)?.address).not.toBe(old.address);
+    expect(signatures(provider)).toHaveLength(1);
+    expect(store.getSnapshot().setup.open).toBe(false);
   });
 });
 
@@ -112,7 +117,7 @@ describe("a key that dies while connected", () => {
     expect(client.posted.some((p) => p.route === "session_key_revoke")).toBe(false);
   });
 
-  it.each(["invalid signature", "session key revoked", "session key expired"])("disconnects on the first refusal saying %s, retries nothing, and says why; reconnecting shows only the key's step", async (message) => {
+  it.each(["invalid signature", "session key revoked", "session key expired"])("disconnects on the first refusal saying %s, retries nothing, and says why; reconnecting asks the wallet for a new key, with no popup", async (message) => {
     const { client, provider, storage, store } = await authorizedTab();
     saveChoice(storage, { kind: "injected" });
     const prompts = signatures(provider).length;
@@ -129,9 +134,11 @@ describe("a key that dies while connected", () => {
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node no longer accepts this browser's trading authorization, so your wallet was disconnected. Connect again to renew it.");
     expect(signatures(provider)).toHaveLength(prompts);
     await connectWallet(store, "injected");
-    expect(store.getSnapshot().setup.open).toBe(true);
+    await settle();
+    expect(store.getSnapshot().setup.open).toBe(false);
     expect(store.getSnapshot().eligibility).toBe("professional");
-    expect(liveSessionKey(store)).toBeNull();
+    expect(signatures(provider)).toHaveLength(prompts + 1);
+    expect(liveSessionKey(store)).not.toBeNull();
   });
 
   it("is refused the first time when it never landed: a stored key the node does not know", async () => {

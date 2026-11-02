@@ -2,14 +2,17 @@
 
 /** The visible list of messages with a dismiss button each; shown over the page. */
 
+import { setupVisible } from "@/lib/store/setup";
+
 import { useConsole, useSession } from "./ConsoleProvider";
 
 const TONE = { ok: "border-glow/50 text-glow", error: "border-ember/60 text-ember", info: "border-line-2 text-fg" } as const;
 
-/** Dismissing a message returns focus to the page's main region, since the button that held it is gone. */
+/** Dismissing a message returns focus to the page's main region, since the button that held it is gone. While the setup popup is open only errors show: its steps already say what finished, and the pile would cover its buttons. */
 export function ToastList() {
-  const { toasts } = useConsole();
+  const state = useConsole();
   const { store } = useSession();
+  const toasts = setupVisible(state) ? state.toasts.filter((toast) => toast.tone === "error") : state.toasts;
   return (
     <div className="flex flex-col gap-2">
       {toasts.map((toast) => (

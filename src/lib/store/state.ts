@@ -8,7 +8,7 @@ import type { HistoryEvent, HouseView, QueuedWithdrawal, Reject, SignedWithdrawa
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
 import type { MarkProvenance } from "../engine/mark-types";
-import { fixedToNumber } from "../fixed";
+import { fixedToNumber, type Fixed } from "../fixed";
 import { decodeHouse, decodeMarket, type AccountModel, type Eligibility, type HouseModel, type MarketModel } from "../models";
 import type { HousePanelInit } from "./store-deps";
 import { emptyLedgerState, type LedgerState } from "./ledger";
@@ -39,18 +39,32 @@ export interface PayoutsRead {
   listed: number[];
 }
 
-/** Where the setup popup stands on this connection (monkey-trading/console#168). */
+/** Where the setup popup stands on this connection (monkey-trading/console#168, #199). */
 export interface SetupState {
   /** Whether the popup is open; a dismissal lasts until something a missing step blocks reopens it. */
   open: boolean;
   /** Whether this connection's first account read has decided the popup. */
   decided: boolean;
-  /** Whether the faucet step was used or skipped. */
-  fundSettled: boolean;
+  /** How the faucet step ended on this connection, or null while it has not. */
+  fund: "minted" | "skipped" | null;
+  /** The deposit this connection's wallet sent, with the account's balance before it, so the step knows when the node has credited it; null before one. */
+  deposit: { amount: Fixed; balanceBefore: Fixed } | null;
 }
 
 /** A connection before anything has been read for it. */
-export const NO_SETUP: SetupState = { open: false, decided: false, fundSettled: false };
+export const NO_SETUP: SetupState = { open: false, decided: false, fund: null, deposit: null };
+
+/** What the last read of the wallet's USDC found: its balance, the chain it sits on instead, or that the read failed. */
+export type UsdcRead = { status: "unread" } | { status: "held"; amount: Fixed } | { status: "wrong_chain"; chainId: number } | { status: "failed" };
+
+/** The wallet's USDC read; `phase` is `again` when a read was asked for while one ran, whose answer may predate the change. */
+export interface WalletUsdc {
+  read: UsdcRead;
+  phase: "idle" | "reading" | "again";
+}
+
+/** No wallet read yet. */
+export const NO_USDC: WalletUsdc = { read: { status: "unread" }, phase: "idle" };
 
 export interface ConsoleState {
   /** The node's clock: the stamp of the latest message. */
@@ -101,6 +115,8 @@ export interface ConsoleState {
   /** Why the last registration the node answered was refused, or null: orders and cancels then ask the wallet instead. */
   sessionRefusal: Reject | null;
   setup: SetupState;
+  /** The connected wallet's USDC on the custody chain, as its own provider reports it; never a node figure. */
+  walletUsdc: WalletUsdc;
   history: HistoryEntry[];
   /** The P&L tab's rows and the schedule that prices them; read only once that tab has opened. */
   ledger: LedgerState;
@@ -191,6 +207,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     sessionExpiresAt: 0,
     sessionRefusal: null,
     setup: NO_SETUP,
+    walletUsdc: NO_USDC,
     history: [],
     ledger: emptyLedgerState(),
     feed: [],

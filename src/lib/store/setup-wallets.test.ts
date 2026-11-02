@@ -19,7 +19,7 @@ import type { ConsoleStore } from "./store";
 
 const SCOPE = { account: ACCOUNT, chainId: vectors.chain_id, vault: VAULT };
 const OTHER: Wallet = { address: "0x0000000000000000000000000000000000000bbb", label: "Other", sign: async () => "0x", deposit: async () => "0x", claim: async () => "0x" };
-const steps = (store: ConsoleStore) => setupSteps(setupFacts(store.getSnapshot(), false));
+const steps = (store: ConsoleStore) => setupSteps(setupFacts(store.getSnapshot(), false)).filter((s) => !s.done).map((s) => s.step);
 
 /** A tab whose account has no declaration yet, as a fresh wallet's. */
 async function fresh() {
@@ -32,7 +32,7 @@ describe("as the wallet changes around it", () => {
   it("starts over for a different wallet connected while it is open, and the first wallet's login installs nothing", async () => {
     const { client, store, wallet } = await fresh();
     client.declared = "professional";
-    await connectWallet(store, "injected");
+    await connectWallet(store, "injected", true); // a reload's reconnect, which asks nothing
     let proceed!: (signature: string) => void;
     wallet.sign = () => new Promise<string>((resolve) => { proceed = resolve; });
     const authorizing = authorizeBrowser(store);
@@ -42,7 +42,7 @@ describe("as the wallet changes around it", () => {
     await connectWallet(store, "other", false, OTHER);
     // The first wallet may never answer: its request holds nothing up for the wallet that replaced it.
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null, setup: { open: true, decided: true }, wallet: { address: OTHER.address } });
-    expect(steps(store)).toEqual(["declare", "authorize"]);
+    expect(steps(store)).toEqual(["declare", "authorize", "deposit"]);
     proceed(`0x${"11".repeat(65)}`);
     expect(await authorizing).toBe(false);
     expect(liveSessionKey(store)).toBeNull();
@@ -162,7 +162,7 @@ describe("as the wallet changes around it", () => {
     expect(liveSessionKey(store)).toBeNull();
     expect(storage.held.has(sessionKeyName(SCOPE))).toBe(false);
     expect(store.getSnapshot().setup.open).toBe(true);
-    expect(steps(store)).toEqual(["declare", "authorize"]);
+    expect(steps(store)).toEqual(["declare", "authorize", "deposit"]);
   });
 
   it("keeps a key another tab installed while a read was on its way: the read predates it", async () => {

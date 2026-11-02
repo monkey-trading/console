@@ -11,14 +11,17 @@ import { fixedToWire, formatFixedPlaces, parseFixed, type Fixed } from "../fixed
 import { formatUsdc } from "../vault";
 import { describeReject } from "../messages";
 import { loadAccount } from "./account";
-import { ensureLogin } from "./session";
+import { authorizeBrowser, ensureLogin, liveSessionKey } from "./session";
 import { sessionSigned } from "./session-signed";
 import { abandoned, domainOf, errorText, notBusy, noteRegionRefusal, prompting, REQUEST_TTL_MS, signed, usableWallet } from "./signing";
 import type { ConsoleStore } from "./store";
+import { noteDeposit } from "./setup";
+import { readWalletUsdc } from "./wallet-usdc";
 import { adoptStoredKey, KEY_EXPIRED, NO_ACCOUNT, NO_SESSION, release, sessionEnded } from "./wallet-session";
 
 export { REQUEST_TTL_MS, STATEMENTS };
 export { disconnectWallet, storedKeyChanged, walletSessionEnded } from "./wallet-session";
+export { authorizeBrowser } from "./session";
 
 /** Offers to add the deployment's USDC to the wallet that just connected; one small toast when the wallet adds it, silence on a decline or a wallet that cannot. */
 function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
@@ -85,8 +88,11 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     }
     // The mock's demo account, connected on load, holds a key as a returning trader does. Everything else asks through setup.
     if (quiet && store.deps.client.signatures === "none") await ensureLogin(store);
+    void readWalletUsdc(store);
     await loadAccount(store, true);
     if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);
+    // A declared wallet has no popup, so the signature that lets this browser trade is asked for here, but only for a connect the user made.
+    if (!reattached && store.liveWallet === wallet && store.getSnapshot().eligibility !== null && liveSessionKey(store) === null) void authorizeBrowser(store);
     return true;
   } catch (error) {
     // A node that cannot be trusted is reported by the attestation banner and the stream, once; the account read waiting on the same check does not repeat it.
@@ -96,18 +102,6 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
   }
 }
 
-
-/** The setup popup's authorization: the one wallet signature, busy while the wallet asks. True once this browser holds a live key. */
-export async function authorizeBrowser(store: ConsoleStore): Promise<boolean> {
-  const wallet = store.liveWallet;
-  if (wallet === null) return false;
-  store.patch({ busy: true });
-  try {
-    return await ensureLogin(store);
-  } finally {
-    notBusy(store, wallet);
-  }
-}
 
 /** Signs and sends the declaration, then reads the account again, so what comes next sees it. True when this connection's declaration was recorded. */
 export async function attestEligibility(store: ConsoleStore, cls: EligibilityClass): Promise<boolean> {
@@ -136,6 +130,8 @@ export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void>
     store.toast("info", store.deps.client.signatures === "none"
       ? `Deposit of ${shown} sent. It counts as collateral now and can be withdrawn once the vault's transaction is final.`
       : `Deposit of ${shown} sent. The node sees it a few blocks after it is mined and credits it; it can be withdrawn once the vault's transaction is final.`);
+    noteDeposit(store, amount);
+    void readWalletUsdc(store, true);
     await store.refresh(true);
   } catch (error) {
     if (!abandoned(store, wallet, error) && !store.noteAccess(error)) store.toast("error", errorText(error));
@@ -173,6 +169,7 @@ export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy): Promis
     }
     await prompting(store, wallet, `Confirm in your wallet: mint ${formatUsdc(FAUCET_USDC)} from the Anvil faucet.`, (progress) => fund(FAUCET_USDC, progress));
     store.toast("ok", `${formatUsdc(FAUCET_USDC)} minted${gas.toppedUp ? " and the wallet holds 1 ETH for gas" : ""}. Deposit into the vault to trade it.`);
+    void readWalletUsdc(store, true);
     return store.liveWallet === wallet; // a mint the old wallet finished settles nothing for the connection that came next
   } catch (error) {
     if (!abandoned(store, wallet, error) && !store.noteAccess(error)) store.toast("error", errorText(error));
