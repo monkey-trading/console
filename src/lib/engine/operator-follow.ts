@@ -39,12 +39,18 @@ export type FollowStatus =
   /** The chain read failed; the node in use stays, and it is tried again. */
   | { kind: "failed"; origin: string; reason: string };
 
-/** Where the chain's answer says to connect: the operator's registered origin when the build lists it, or the build's own node while rotation is off or the operator never registered a hostname. */
+/**
+ * Where the chain's answer says to connect: the named operator's registered origin when the build
+ * lists it, or the build's own node when it never registered a hostname. Turning rotation off leaves
+ * the settled operator named, so it says nothing about the host. With rotation on, a hostname the
+ * build does not list is a console that needs updating; with it off the operator may be the deployment's own.
+ */
 export function operatorTarget(deploy: Pick<Deploy, "origin" | "candidateOrigins">, named: NamedOperator): { origin: string | null } | { unlisted: string | null } {
-  if (!named.rotationEnabled || named.hostname === null) return { origin: deploy.origin };
+  if (named.hostname === null) return { origin: deploy.origin };
   const origin = hostnameOrigin(named.hostname);
-  if (origin === null) return { unlisted: null };
-  return listedOrigins(deploy).includes(origin) ? { origin } : { unlisted: named.hostname.toLowerCase() };
+  if (origin !== null && listedOrigins(deploy).includes(origin)) return { origin };
+  if (!named.rotationEnabled) return { origin: deploy.origin };
+  return { unlisted: origin === null ? null : named.hostname.toLowerCase() };
 }
 
 export interface FollowerDeps {
@@ -168,35 +174,20 @@ export class OperatorFollower {
     let named: NamedOperator | null;
     try {
       named = await this.bounded(chain.operator());
+      // Before any move: a retirement or a promotion's `setSigner` ends the verdict on the node in use
+      // whatever the operator's node has come to. A move of the release alone does not: the incumbent
+      // holds the vault's signer key and keeps sequencing until its successor has taken it.
+      const facts = await this.bounded(chain.vault());
+      await this.current?.heedVault(facts);
     } catch (error) {
       return this.set({ kind: "failed", origin: this.origin, reason: error instanceof Error ? error.message : "the read failed" });
     }
-    if (named === null) {
-      this.settled({ kind: "pinned", origin: this.origin });
-      return this.followSigner(chain);
-    }
+    if (named === null) return this.settled({ kind: "pinned", origin: this.origin });
     this.effectiveAtMs = named.pending?.effectiveAtMs ?? null;
     const target = operatorTarget(this.deps.deploy, named);
     if ("unlisted" in target) return this.settled({ kind: "unlisted", origin: this.origin, hostname: target.unlisted });
-    if (target.origin !== null && target.origin !== this.origin) return this.tryNode(target.origin, chain);
-    this.settled({ kind: "following", origin: this.origin });
-    await this.followSigner(chain);
-  }
-
-  /**
-   * Judges the node in use again if the vault's signer moved, by a retirement or a promotion's
-   * `setSigner`, rather than wait for an answer to fail. A move of the release alone does not: the
-   * incumbent holds the vault's signer key and keeps sequencing until its successor has taken it.
-   */
-  private async followSigner(chain: DeploymentReads): Promise<void> {
-    try {
-      const { signer } = await this.bounded(chain.vault());
-      const moved = this.signer !== null && this.signer !== signer;
-      this.signer = signer;
-      if (moved) await this.current?.verify();
-    } catch (error) {
-      this.set({ kind: "failed", origin: this.origin, reason: error instanceof Error ? error.message : "the read failed" });
-    }
+    if (target.origin === null || target.origin === this.origin) return this.settled({ kind: "following", origin: this.origin });
+    await this.tryNode(target.origin, chain, named.rotationEnabled);
   }
 
   /** `read`, or a rejection once the wallet has had its time. */
@@ -211,18 +202,22 @@ export class OperatorFollower {
   }
 
   private settled(state: FollowStatus): void {
-    this.wait = RETRY_MS;
     this.trial = null;
     this.set(state);
   }
 
-  /** Runs the whole trust path against the node at `target`, and moves to it only if it holds. */
-  private async tryNode(target: string, chain: DeploymentReads): Promise<void> {
-    if (this.trial?.origin !== target) this.trial = { origin: target, client: this.deps.open(target) };
-    const { client } = this.trial;
-    const waiting = (reason: string) => this.set({ kind: "waiting", origin: this.origin, target, reason });
+  /**
+   * Runs the whole trust path against the node at `target`, and moves to it only if it holds. Until
+   * it does the node in use stays; with rotation off that is no change of operator on its way, as
+   * governance may have installed a fallback on the deployment's own node, so it is not told as one.
+   */
+  private async tryNode(target: string, chain: DeploymentReads, rotationEnabled: boolean): Promise<void> {
+    const waiting = (reason: string) => (rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, reason }) : this.settled({ kind: "following", origin: this.origin }));
+    let client: EngineClient;
     let status: AttestationStatus;
     try {
+      if (this.trial?.origin !== target) this.trial = { origin: target, client: this.deps.open(target) };
+      ({ client } = this.trial);
       await client.readChainThrough(chain);
       status = await client.verify();
       if (status.kind === "unverified") return waiting(status.reason);
@@ -262,6 +257,7 @@ export class OperatorFollower {
       this.wait = Math.min(this.wait * 2, SLOW_READ_MS);
       return delay;
     }
+    this.wait = RETRY_MS;
     return untilEffect === null ? SLOW_READ_MS : Math.min(SLOW_READ_MS, untilEffect + AFTER_EFFECT_MS);
   }
 }

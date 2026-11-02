@@ -8,7 +8,7 @@ import type { HouseState } from "./house-state";
 import type { ScanBudget, ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import type { QuoteRequest } from "./live-stream";
-import type { DeploymentReads } from "./registry";
+import type { DeploymentReads, VaultFacts } from "./registry";
 import type { StatsReads } from "./stats-types";
 import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
@@ -81,6 +81,11 @@ export interface EngineClient {
    * and signer through them, and judges the node again when a wallet arrives, resolving once it has.
    */
   readChainThrough(chain: DeploymentReads | null): Promise<void>;
+  /**
+   * What the vault says now, read by the caller through the wallet: a live client judges the node
+   * again if that signer is not the enclave it trusts, or if it has never read the vault.
+   */
+  heedVault(facts: VaultFacts): Promise<void>;
   /** Reports each change of attestation status and of the feed. */
   watch(listener: (event: ClientEvent) => void): Unsubscribe;
   markets(): Promise<MarketView[]>;

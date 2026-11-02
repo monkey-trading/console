@@ -102,7 +102,6 @@ export class MockControls {
       balance: walletBalance(state, key),
       distributionsClaimed: state.monkey.distClaimed.get(key) ?? 0n,
       latestSeq: state.postedSeq,
-      delegate: state.operators.delegates.get(key) ?? null,
     };
   }
 

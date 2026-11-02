@@ -36,8 +36,9 @@ function NodeLine() {
   switch (follow.kind) {
     case "pinned":
     case "following":
-    case "failed":
       return null;
+    case "failed":
+      return <div role="status" className={WARN}><strong className="font-medium">The console could not read who the operator is.</strong> It stays on {new URL(follow.origin).host} and tries again: {follow.reason}<CheckAgain /></div>;
     case "unlisted":
       return <div role="alert" className={BAD}><strong className="font-medium">This console needs updating.</strong> The elected operator{follow.hostname === null ? " registered no plain hostname" : `'s host, ${follow.hostname}, is not one this build lists`}, so the console does not connect to it.</div>;
     case "waiting":
@@ -49,8 +50,8 @@ function NodeLine() {
 
 /** The check of the vault's release through the wallet: what a wallet that left the chain and came back asks for. */
 function CheckAgain() {
-  const { store } = useSession();
-  return <button type="button" onClick={() => void recheckNode(store)} className="ml-2 min-h-6 rounded border border-amber/60 px-1.5 hover:bg-amber/20 focus-visible:outline-2 focus-visible:outline-glow">Check again</button>;
+  const { store, follower } = useSession();
+  return <button type="button" onClick={() => void recheckNode(store, follower)} className="ml-2 min-h-6 rounded border border-amber/60 px-1.5 hover:bg-amber/20 focus-visible:outline-2 focus-visible:outline-glow">Check again</button>;
 }
 
 function Status({ attestation, signatures }: { attestation: ReturnType<typeof useConsole>["attestation"]; signatures: ReturnType<typeof useConsole>["signatures"] }) {

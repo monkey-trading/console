@@ -131,6 +131,17 @@ export class NodeTrust {
     return this.current.kind !== "mock" || this.deps.devDigests.length > 0;
   }
 
+  /** Whether the vault's `signer` calls for a new verdict: it is not the enclave trusted now, or the verdict was reached with no read of the vault. */
+  outdatedBy(signer: string): boolean {
+    if (!this.judgedByVault) return false;
+    return this.current.kind === "attested" || (this.signerAddress !== null && this.signerAddress !== signer);
+  }
+
+  /** The vault's read has answered after the check gave up on it: a verdict that went without it may now have it. */
+  vaultAnsweredLate(): void {
+    if (this.current.kind === "attested") void this.verify();
+  }
+
   /** The device clock disagrees with the node's signed time by `skewMs`; nothing the node says can be judged. */
   clockWrong(skewMs: number): void {
     this.setStatus({ kind: "clock", skewMs });

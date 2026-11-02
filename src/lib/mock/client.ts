@@ -93,6 +93,7 @@ export class MockEngineClient implements EngineClient {
 
   /** The mock vouches for itself and has no vault to read. */
   async readChainThrough(): Promise<void> {}
+  async heedVault(): Promise<void> {}
 
   /** The mock's trust and feed never change, so there is nothing to report. */
   watch(): Unsubscribe {

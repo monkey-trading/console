@@ -6,6 +6,7 @@
  * since each read costs the wallet's provider money.
  */
 
+import { readBlock } from "../engine/attestation";
 import { hostnameOrigin, listedOrigins, type Deploy } from "../engine/deploy";
 import type { CandidateTable, NamedOperator } from "../engine/registry";
 import type { OperatorRoute } from "../engine/stats-types";
@@ -26,9 +27,11 @@ export interface OperatorsState {
   /** The operator the vault names, from the registry; null from a build that names no registry. */
   named: Read<NamedOperator | null>;
   table: Read<CandidateTable | null>;
+  /** The candidate the connected account's whole stake votes for; null while it abstains. */
+  chosen: Read<string | null>;
 }
 
-const NOTHING_READ: OperatorsState = { route: LOADING, named: LOADING, table: LOADING };
+const NOTHING_READ: OperatorsState = { route: LOADING, named: LOADING, table: LOADING, chosen: LOADING };
 
 /** A hostname as the page shows it: plain ASCII as the build could connect to it, or null for text it could not, so a lookalike in another script never reads as a host. */
 export function shownHostname(hostname: string | null): string | null {
@@ -56,8 +59,8 @@ export class OperatorReads {
   private open = false;
   /** The wallet the registry was last read through, so a page opening does not read twice for one wallet. */
   private readFor: Wallet | null = null;
-  /** The registry read waiting or running, which a second ask joins: each costs dozens of calls. */
-  private chainRead: Promise<void> | null = null;
+  /** The registry read waiting or running for a wallet, which a second ask for that wallet joins: each costs dozens of calls. */
+  private chainRead: { wallet: Wallet; read: Promise<void> } | null = null;
 
   constructor(private readonly store: ConsoleStore) {}
 
@@ -104,7 +107,9 @@ export class OperatorReads {
     };
   }
 
+  /** Reads the node's route, while its answers may be read: the registry's reads need nothing from it. */
   async refreshNode(): Promise<void> {
+    if (readBlock(this.store.getSnapshot().attestation, "live") !== null) return;
     const cycle = this.cycle;
     try {
       const route = await this.store.deps.client.stats.operator();
@@ -121,21 +126,23 @@ export class OperatorReads {
 
   /**
    * Reads the registry through the connected wallet, behind the wallet's earlier work; with no wallet
-   * that reads a chain there is nothing to read. A read waiting or running serves this one too: it
-   * ran or will run after anything already done, a transaction included, since those share its queue.
+   * that reads a chain there is nothing to read. A read waiting or running for this wallet serves this
+   * one too: it ran or will run after anything already done, a transaction included, since those
+   * share its queue. Another wallet's figures go at once, and its read stands aside.
    */
   refreshChain(): Promise<void> {
     const wallet = this.store.liveWallet;
+    if (wallet !== this.readFor) this.set({ named: LOADING, table: LOADING, chosen: LOADING });
     this.readFor = wallet;
     if (wallet === null || wallet.chainReads === undefined) {
-      this.set({ named: NO_CHAIN, table: NO_CHAIN });
+      this.set({ named: NO_CHAIN, table: NO_CHAIN, chosen: NO_CHAIN });
       return Promise.resolve();
     }
-    if (this.chainRead !== null) return this.chainRead;
+    if (this.chainRead?.wallet === wallet) return this.chainRead.read;
     const read = this.store.monkeySession.walletWork.work(wallet, () => this.readChain(wallet)).finally(() => {
-      if (this.chainRead === read) this.chainRead = null;
+      if (this.chainRead?.read === read) this.chainRead = null;
     });
-    this.chainRead = read;
+    this.chainRead = { wallet, read };
     return read;
   }
 
@@ -156,6 +163,13 @@ export class OperatorReads {
       if (current()) this.set({ table: ready(table) });
     } catch (error) {
       if (current()) this.set({ table: failed(error, this.state.table.value) });
+    }
+    if (!current()) return;
+    try {
+      const chosen = await withTimeout(reads.delegateOf(wallet.address), WALLET_READ_MS);
+      if (current()) this.set({ chosen: ready(chosen) });
+    } catch (error) {
+      if (current()) this.set({ chosen: failed(error, this.state.chosen.value) });
     }
   }
 }

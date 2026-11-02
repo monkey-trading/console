@@ -4,6 +4,7 @@ import { decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "vi
 
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
 import { CANDIDATE_LIMIT, NO_CANDIDATE, type CandidateTable, type DeploymentReads, type NamedOperator, type PendingElection, type VaultFacts } from "./registry";
+import type { Address } from "./types";
 
 const VAULT = parseAbi([
   "function currentRelease() view returns (bytes32)",
@@ -15,6 +16,7 @@ const REGISTRY = parseAbi([
   "struct Candidate { address adminKey; address enclave; uint256 bond; bytes32 release; uint64 registration; string apiHostname; string handoverEndpoint; }",
   "function rotationEnabled() view returns (bool)",
   "function namedOperator() view returns (Operator)",
+  "function operatorInEffect() view returns (Operator)",
   "function pendingElection() view returns (Election)",
   "function candidateOf(address candidate) view returns (Candidate)",
   "function candidateCount() view returns (uint256)",
@@ -24,6 +26,7 @@ const REGISTRY = parseAbi([
 const STAKING = parseAbi([
   "function votes(address candidate) view returns (uint256)",
   "function totalStaked() view returns (uint256)",
+  "function delegates(address account) view returns (address)",
 ]);
 
 /** Chain seconds as the milliseconds the console shows; beyond any time a chain could hold, so the conversion is exact. */
@@ -80,6 +83,8 @@ export class ProviderDeployment implements DeploymentReads {
     const count = decodeFunctionResult({ abi: REGISTRY, functionName: "candidateCount", data: await this.call(registry, encodeFunctionData({ abi: REGISTRY, functionName: "candidateCount" })) });
     if (count > BigInt(CANDIDATE_LIMIT)) throw new Error("The chain read named more candidates than the registry can hold.");
     const totalStaked = decodeFunctionResult({ abi: STAKING, functionName: "totalStaked", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "totalStaked" })) });
+    const { candidate: inEffect } = decodeFunctionResult({ abi: REGISTRY, functionName: "operatorInEffect", data: await this.call(registry, encodeFunctionData({ abi: REGISTRY, functionName: "operatorInEffect" })) });
+    const { apiHostname: inEffectHostname } = await this.candidateOf(registry, inEffect);
     const candidates = [];
     for (let index = 0n; index < count; index += 1n) {
       const address = decodeFunctionResult({ abi: REGISTRY, functionName: "candidateList", data: await this.call(registry, encodeFunctionData({ abi: REGISTRY, functionName: "candidateList", args: [index] })) });
@@ -89,6 +94,14 @@ export class ProviderDeployment implements DeploymentReads {
       const eligible = decodeFunctionResult({ abi: REGISTRY, functionName: "isEligible", data: await this.call(registry, encodeFunctionData({ abi: REGISTRY, functionName: "isEligible", args: [address] })) });
       candidates.push({ address: address.toLowerCase(), hostname: apiHostname, votes, eligible });
     }
-    return { candidates, totalStaked };
+    return { inEffect: { candidate: inEffect.toLowerCase(), hostname: inEffectHostname === "" ? null : inEffectHostname }, candidates, totalStaked };
+  }
+
+  async delegateOf(account: Address): Promise<Address | null> {
+    const staking = this.chain.staking ?? null;
+    if (staking === null) return null;
+    await this.onChain();
+    const chosen = decodeFunctionResult({ abi: STAKING, functionName: "delegates", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegates", args: [hexOf(account)] })) });
+    return chosen === NO_CANDIDATE ? null : chosen.toLowerCase();
   }
 }

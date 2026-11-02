@@ -13,8 +13,13 @@ describe("operatorTarget", () => {
     expect(operatorTarget(DEPLOY, named({ hostname: "C.example:8443" }))).toEqual({ origin: "https://c.example:8443" });
   });
 
-  it("stays on the build's node while rotation is off, whatever the registry names", () => {
-    expect(operatorTarget(DEPLOY, named({ rotationEnabled: false }))).toEqual({ origin: BUILD });
+  it("keeps following the settled operator with rotation off, as turning it off leaves that operator named", () => {
+    expect(operatorTarget(DEPLOY, named({ rotationEnabled: false }))).toEqual({ origin: B });
+  });
+
+  it("uses the build's node with rotation off when the build does not list the host: no election makes that a console to update", () => {
+    expect(operatorTarget(DEPLOY, named({ rotationEnabled: false, hostname: "evil.example" }))).toEqual({ origin: BUILD });
+    expect(operatorTarget(DEPLOY, named({ rotationEnabled: false, hostname: "not a host" }))).toEqual({ origin: BUILD });
   });
 
   it("stays on the build's node for an operator that registered no hostname", () => {
@@ -44,11 +49,22 @@ describe("OperatorFollower.check", () => {
     expect(follower.getSnapshot()).toEqual({ kind: "pinned", origin: BUILD });
   });
 
-  it("follows the build's node while rotation is off", async () => {
-    const { follower, opened, adopted } = rig({ operator: async () => named({ rotationEnabled: false }) });
+  it("follows the build's node while it is the one named", async () => {
+    const { follower, opened, adopted } = rig({ operator: async () => named({ hostname: null }) });
     await follower.check();
     expect(follower.getSnapshot()).toEqual({ kind: "following", origin: BUILD });
     expect([opened, adopted]).toEqual([[], []]);
+  });
+
+  it("with rotation off, moves to a settled operator that verifies, and says nothing of one that does not", async () => {
+    const off = rig({ operator: async () => named({ rotationEnabled: false }) });
+    await off.follower.check();
+    expect(off.adopted).toEqual([B]);
+    const gone = rig({ operator: async () => named({ rotationEnabled: false }) });
+    gone.trial.verdict = { kind: "unverified", reason: "not the vault's release" };
+    await gone.follower.check();
+    expect(gone.adopted).toEqual([]);
+    expect(gone.follower.getSnapshot()).toEqual({ kind: "following", origin: BUILD });
   });
 
   it("moves to the operator's node only after its whole trust path holds, on a client given the wallet's reads", async () => {
@@ -143,10 +159,10 @@ describe("OperatorFollower.check", () => {
     expect(follower.getSnapshot()).toEqual({ kind: "pinned", origin: BUILD });
   });
 
-  it("moves back to the build's node when rotation turns off after a move", async () => {
+  it("moves back to the build's node when the operator named has registered no hostname", async () => {
     const { follower, adopted, setOperator } = rig();
     await follower.check();
-    setOperator(async () => named({ rotationEnabled: false }));
+    setOperator(async () => named({ hostname: null }));
     await follower.check();
     expect(adopted).toEqual([B, BUILD]);
   });

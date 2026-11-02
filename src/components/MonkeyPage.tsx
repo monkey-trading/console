@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatCompactUsd } from "@/lib/chart-format";
 import { readBlock } from "@/lib/engine/attestation";
 import { compactNumber, halvingsBetween, monkeyText } from "@/lib/monkey/figures";
+import { OperatorReads } from "@/lib/monkey/operators";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import { formatStamp } from "@/lib/time";
 
@@ -70,11 +71,14 @@ function Charts({ panel }: { panel: MonkeyPanel }) {
 export function MonkeyPage() {
   const { store } = useSession();
   const [panel] = useState(() => new MonkeyPanel(store));
+  const [operators] = useState(() => new OperatorReads(store));
   const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
   // The wallet object changes whenever a wallet connects, even to the same address, and the chain reads follow it.
   const wallet = useConsoleSelect((state) => state.wallet);
   // Reads start once the node's answers can be trusted and stop when the page is left.
   useEffect(() => (trusted ? panel.start(() => document.visibilityState === "hidden") : undefined), [panel, trusted]);
+  // The operator card's reads go through the wallet and need nothing from a node the vote may be removing.
+  useEffect(() => operators.start(() => document.visibilityState === "hidden"), [operators]);
   useEffect(() => {
     if (trusted) void panel.refreshWallet();
   }, [panel, trusted, wallet]);
@@ -85,12 +89,13 @@ export function MonkeyPage() {
         <div className="mx-auto w-full max-w-[110rem] px-4 py-5 sm:px-6">
           <h2 className="text-lead tracking-caps text-glow uppercase">MONKEY</h2>
           {!trusted && <p className="mt-3 text-data leading-relaxed text-fg-2">Figures appear once the node&apos;s attestation is verified and its feed is live.</p>}
+          {!trusted && <div className="mt-4 max-w-[35rem]"><OperatorPanel operators={operators} /></div>}
           {/* Hidden, not unmounted, while the node is not trusted: a typed amount survives a gap in the feed, and no figure from before it shows. */}
           <div className={`${trusted ? "grid" : "hidden"} mt-4 items-start gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,35rem)_minmax(0,1fr)]`}>
             <div className="flex min-w-0 flex-col gap-4">
               <ClaimPanel />
               <StakePanel />
-              {trusted && <OperatorPanel />}
+              {trusted && <OperatorPanel operators={operators} />}
               <div className="grid min-w-0 gap-4 xl:grid-cols-2">
                 <RewardsPanel />
                 <TokenPanel />

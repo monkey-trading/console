@@ -23,6 +23,7 @@ const ABI = parseAbi([
   "function checkpointSigner() view returns (address)",
   "function rotationEnabled() view returns (bool)",
   "function namedOperator() view returns (Operator)",
+  "function operatorInEffect() view returns (Operator)",
   "function pendingElection() view returns (Election)",
   "function candidateOf(address candidate) view returns (Candidate)",
   "function candidateCount() view returns (uint256)",
@@ -30,6 +31,7 @@ const ABI = parseAbi([
   "function isEligible(address candidate) view returns (bool)",
   "function votes(address candidate) view returns (uint256)",
   "function totalStaked() view returns (uint256)",
+  "function delegates(address account) view returns (address)",
 ]);
 
 interface World {
@@ -40,6 +42,7 @@ interface World {
   hostnames?: Record<string, string>;
   list?: readonly Hex[];
   count?: bigint;
+  delegate?: Hex;
 }
 
 const candidateOf = (hostname: string) => ({ adminKey: KEY as Hex, enclave: KEY as Hex, bond: 1n, release: RELEASE, registration: 0n, apiHostname: hostname, handoverEndpoint: "x" });
@@ -59,6 +62,8 @@ function rig(world: World = {}, chain = CHAIN) {
         case "checkpointSigner": return encodeFunctionResult({ abi: ABI, functionName: "checkpointSigner", result: A as Hex });
         case "rotationEnabled": return encodeFunctionResult({ abi: ABI, functionName: "rotationEnabled", result: world.rotation ?? true });
         case "namedOperator": return encodeFunctionResult({ abi: ABI, functionName: "namedOperator", result: { candidate: A as Hex, adminKey: KEY as Hex, release: RELEASE, since: 100n } });
+        case "operatorInEffect": return encodeFunctionResult({ abi: ABI, functionName: "operatorInEffect", result: { candidate: A as Hex, adminKey: KEY as Hex, release: RELEASE, since: 100n } });
+        case "delegates": return encodeFunctionResult({ abi: ABI, functionName: "delegates", result: world.delegate ?? (ZERO as Hex) });
         case "pendingElection": return encodeFunctionResult({ abi: ABI, functionName: "pendingElection", result: { epoch: 3n, candidate: (world.effectiveAt ? B : ZERO) as Hex, adminKey: KEY as Hex, release: RELEASE, effectiveAt: world.effectiveAt ?? 0n, promoted: false } });
         case "candidateOf": return encodeFunctionResult({ abi: ABI, functionName: "candidateOf", result: candidateOf(world.hostnames?.[String(decoded.args[0]).toLowerCase()] ?? "") });
         case "candidateCount": return encodeFunctionResult({ abi: ABI, functionName: "candidateCount", result: world.count ?? BigInt((world.list ?? []).length) });
@@ -112,14 +117,28 @@ describe("ProviderDeployment.operator", () => {
   });
 });
 
+describe("ProviderDeployment.delegateOf", () => {
+  it("names the candidate the account's stake votes for, lowercase, and none for the zero address", async () => {
+    await expect(rig({ delegate: "0x00000000000000000000000000000000000000ab" }).reads.delegateOf(KEY)).resolves.toBe("0x00000000000000000000000000000000000000ab");
+    await expect(rig().reads.delegateOf(KEY)).resolves.toBeNull();
+  });
+
+  it("answers null, reading nothing, from a build that names no staking contract", async () => {
+    const { reads, order } = rig({}, { ...CHAIN, staking: null });
+    await expect(reads.delegateOf(KEY)).resolves.toBeNull();
+    expect(order).toEqual([]);
+  });
+});
+
 describe("ProviderDeployment.candidates", () => {
   it("reads each listed candidate's hostname, votes and eligibility, and the total", async () => {
     const { reads, order } = rig({ list: [A as Hex, B as Hex], hostnames: { [A.toLowerCase()]: "a.example", [B]: "b.example" } });
     await expect(reads.candidates()).resolves.toEqual({
       totalStaked: 100n,
+      inEffect: { candidate: A.toLowerCase(), hostname: "a.example" },
       candidates: [{ address: A.toLowerCase(), hostname: "a.example", votes: 40n, eligible: true }, { address: B, hostname: "b.example", votes: 40n, eligible: false }],
     });
-    expect(order).toEqual(["candidateCount", "totalStaked", "candidateList", "candidateOf", "votes", "isEligible", "candidateList", "candidateOf", "votes", "isEligible"]);
+    expect(order).toEqual(["candidateCount", "totalStaked", "operatorInEffect", "candidateOf", "candidateList", "candidateOf", "votes", "isEligible", "candidateList", "candidateOf", "votes", "isEligible"]);
   });
 
   it("answers null from a build that names no registry or no staking contract", async () => {
@@ -136,7 +155,7 @@ describe("ProviderDeployment.candidates", () => {
 
   it("skips a zero address in the list", async () => {
     const { reads } = rig({ count: 1n });
-    await expect(reads.candidates()).resolves.toEqual({ totalStaked: 100n, candidates: [] });
+    await expect(reads.candidates()).resolves.toEqual({ totalStaked: 100n, inEffect: { candidate: A.toLowerCase(), hostname: null }, candidates: [] });
   });
 
   it("keeps a hostile hostname as data; nothing here decides a connection", async () => {

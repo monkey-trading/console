@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { checkAttestation, maySign, readBlock, signBlock } from "./attestation";
+import { checkAttestation, readBlock, signBlock } from "./attestation";
 import type { Attestation } from "./types";
 
 const toHex = (text: string) => Array.from(text, (c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
@@ -34,23 +34,23 @@ describe("checkAttestation", () => {
   });
 });
 
-describe("maySign", () => {
+describe("signBlock", () => {
   it("signs only for an attested node whose feed is arriving", () => {
     const verified = { kind: "verified", release: "r", config: "c", address: "0x1" } as const;
-    expect(maySign({ kind: "mock" }, "live")).toBe(true);
-    expect(maySign(verified, "live")).toBe(true);
+    expect(signBlock({ kind: "mock" }, "live")).toBeNull();
+    expect(signBlock(verified, "live")).toBeNull();
     for (const status of [{ kind: "checking" }, { kind: "reverifying" }, { kind: "clock", skewMs: 60_000 }, { kind: "unverified", reason: "x" }] as const) {
-      expect(maySign(status, "live")).toBe(false);
+      expect(signBlock(status, "live")).not.toBeNull();
     }
-    expect(maySign(verified, "stale")).toBe(false);
-    expect(maySign(verified, "connecting")).toBe(false);
+    expect(signBlock(verified, "stale")).not.toBeNull();
+    expect(signBlock(verified, "connecting")).not.toBeNull();
   });
 
   it("reads under a quote the vault has not judged, and signs nothing", () => {
     const attested = { kind: "attested", release: "r", address: "0x1", why: "w" } as const;
     expect(readBlock(attested, "live")).toBeNull();
     expect(signBlock(attested, "live")).toContain("vault's current release");
-    expect(maySign(attested, "live")).toBe(false);
+    expect(signBlock(attested, "live")).not.toBeNull();
     expect(readBlock(attested, "stale")).toContain("stale");
     for (const status of [{ kind: "checking" }, { kind: "reverifying" }, { kind: "clock", skewMs: 60_000 }, { kind: "unverified", reason: "x" }] as const) {
       expect(readBlock(status, "live")).not.toBeNull();
@@ -66,6 +66,6 @@ describe("maySign", () => {
   it("names a read-only account first, whatever else blocks", () => {
     expect(signBlock({ kind: "mock" }, "live", true)).toContain("read-only");
     expect(signBlock({ kind: "checking" }, "stale", true)).toContain("read-only");
-    expect(maySign({ kind: "mock" }, "live")).toBe(true);
+    expect(signBlock({ kind: "mock" }, "live")).toBeNull();
   });
 });

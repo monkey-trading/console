@@ -52,6 +52,8 @@ export interface Candidate {
 
 /** The registry's candidates and the stake their votes are a share of. */
 export interface CandidateTable {
+  /** The operator in effect (`OperatorRegistry.operatorInEffect`): for a liveness promotion's notice, not the operator the vault names. `hostname` is as the chain answered. */
+  inEffect: { candidate: Address; hostname: string | null };
   candidates: readonly Candidate[];
   /** MONKEY base units staked across every account, unstaking amounts excluded. */
   totalStaked: bigint;
@@ -65,6 +67,8 @@ export interface DeploymentReads {
   vault(): Promise<VaultFacts>;
   operator(): Promise<NamedOperator | null>;
   candidates(): Promise<CandidateTable | null>;
+  /** The candidate `account`'s whole stake votes for, lowercase; null while it abstains or the build names no staking contract. */
+  delegateOf(account: Address): Promise<Address | null>;
 }
 
 /** The registry's bound on its candidate list (`OperatorRegistry.CANDIDATE_LIMIT`): an RPC that claims more is not read further. */

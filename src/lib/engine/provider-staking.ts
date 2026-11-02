@@ -24,7 +24,6 @@ const STAKING = parseAbi([
   "function startUnstake(uint256 amount)",
   "function completeUnstake()",
   "function delegate(address candidate)",
-  "function delegates(address account) view returns (address)",
   "function stakes(address account) view returns (uint256)",
   "function unstakes(address account) view returns (uint256 amount, uint256 claimableAt)",
 ]);
@@ -90,17 +89,14 @@ export class ProviderStaking implements StakingWallet {
     const staking = this.stakingAddress();
     let staked = 0n;
     let unstaking: StakingPosition["unstaking"] = null;
-    let delegate: string | null = null;
     if (staking !== null) {
       staked = decodeFunctionResult({ abi: STAKING, functionName: "stakes", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "stakes", args: [owner] })) });
       const [amount, claimableAt] = decodeFunctionResult({ abi: STAKING, functionName: "unstakes", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "unstakes", args: [owner] })) });
       unstaking = amount > 0n ? { amount, claimableAtMs: Number(claimableAt) * 1000 } : null;
-      const chosen = decodeFunctionResult({ abi: STAKING, functionName: "delegates", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegates", args: [owner] })) });
-      delegate = chosen === NO_TOKEN ? null : chosen.toLowerCase();
     }
     const token = await this.tokenAddress();
     const balance = token === null ? 0n : decodeFunctionResult({ abi: ERC20, functionName: "balanceOf", data: await this.call(token, encodeFunctionData({ abi: ERC20, functionName: "balanceOf", args: [owner] })) });
-    return { stakingEnabled: staking !== null, staked, unstaking, balance, distributionsClaimed: paid, latestSeq: Number(latestSeq), delegate };
+    return { stakingEnabled: staking !== null, staked, unstaking, balance, distributionsClaimed: paid, latestSeq: Number(latestSeq) };
   }
 
   async stake(amount: bigint, progress: Progress = () => undefined): Promise<string> {

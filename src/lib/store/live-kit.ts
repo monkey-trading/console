@@ -64,6 +64,7 @@ export class ActionClient implements EngineClient {
   /** The chain reads each connection handed over, oldest first. */
   chainsRead: unknown[] = [];
   async readChainThrough(chain: unknown) { this.chainsRead.push(chain); }
+  async heedVault() {}
   /** Whether the account read answers as a credited account; false answers the node's 404. */
   credited = false;
   /** What the credited account holds; a test sets it and reads the account again. */

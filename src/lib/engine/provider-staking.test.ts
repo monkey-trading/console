@@ -24,11 +24,10 @@ const ABI = parseAbi([
   "function startUnstake(uint256)",
   "function completeUnstake()",
   "function delegate(address)",
-  "function delegates(address) view returns (address)",
   "function claimDistribution(address, uint256, bytes32[]) returns (uint256)",
 ]);
 
-interface World { balance: bigint; allowance: bigint; staked: bigint; pending: [bigint, bigint]; paid: bigint; seq: bigint; chainId: number; delegate?: Hex }
+interface World { balance: bigint; allowance: bigint; staked: bigint; pending: [bigint, bigint]; paid: bigint; seq: bigint; chainId: number }
 
 /** A provider that answers the contracts' reads from `world` and records the order of every call. */
 function rig(world: World, chain: WalletChain = CHAIN, token: string = TOKEN) {
@@ -46,7 +45,6 @@ function rig(world: World, chain: WalletChain = CHAIN, token: string = TOKEN) {
       switch (functionName) {
         case "monkey": return encodeAbiParameters([{ type: "address" }], [token as Hex]);
         case "stakes": return uint(world.staked);
-        case "delegates": return encodeAbiParameters([{ type: "address" }], [world.delegate ?? NO_ONE]);
         case "unstakes": return encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], world.pending);
         case "balanceOf": return uint(world.balance);
         case "allowance": return uint(world.allowance);
@@ -72,13 +70,8 @@ const WORLD: World = { balance: 500n, allowance: 0n, staked: 40n, pending: [0n, 
 describe("ProviderStaking.position", () => {
   it("reads the stake, the unstake, the balance, the vault's payments and checkpoint, one call after another", async () => {
     const { staking, order } = rig({ ...WORLD, pending: [25n, 1_700_000_000n] });
-    expect(await staking.position()).toEqual({ stakingEnabled: true, staked: 40n, unstaking: { amount: 25n, claimableAtMs: 1_700_000_000_000 }, balance: 500n, distributionsClaimed: 7n, latestSeq: 9, delegate: null });
-    expect(order).toEqual([`distributionsClaimed@${VAULT}`, `latestSeq@${VAULT}`, `stakes@${STAKING}`, `unstakes@${STAKING}`, `delegates@${STAKING}`, `monkey@${VAULT}`, `balanceOf@${TOKEN}`]);
-  });
-
-  it("names the candidate the stake votes for, lowercase, and none when the contract names the zero address", async () => {
-    expect((await rig({ ...WORLD, delegate: getAddress(CANDIDATE) }).staking.position()).delegate).toBe(CANDIDATE);
-    expect((await rig(WORLD).staking.position()).delegate).toBeNull();
+    expect(await staking.position()).toEqual({ stakingEnabled: true, staked: 40n, unstaking: { amount: 25n, claimableAtMs: 1_700_000_000_000 }, balance: 500n, distributionsClaimed: 7n, latestSeq: 9 });
+    expect(order).toEqual([`distributionsClaimed@${VAULT}`, `latestSeq@${VAULT}`, `stakes@${STAKING}`, `unstakes@${STAKING}`, `monkey@${VAULT}`, `balanceOf@${TOKEN}`]);
   });
 
   it("reports no unstake when the contract holds none", async () => {
@@ -91,7 +84,7 @@ describe("ProviderStaking.position", () => {
 
   it("still reads the vault's payments and checkpoint and the wallet's balance when the build names no staking contract", async () => {
     const { staking, order } = rig(WORLD, { ...CHAIN, staking: null });
-    expect(await staking.position()).toEqual({ stakingEnabled: false, staked: 0n, unstaking: null, balance: 500n, distributionsClaimed: 7n, latestSeq: 9, delegate: null });
+    expect(await staking.position()).toEqual({ stakingEnabled: false, staked: 0n, unstaking: null, balance: 500n, distributionsClaimed: 7n, latestSeq: 9 });
     expect(order.some((call) => call.includes(STAKING))).toBe(false);
   });
 

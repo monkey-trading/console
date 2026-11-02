@@ -17,8 +17,6 @@ export interface StakingPosition {
   distributionsClaimed: bigint;
   /** The seq of the vault's latest posted checkpoint, at which a distribution proof's claim works. */
   latestSeq: number;
-  /** The candidate the account's whole stake votes for, lowercase; null while it abstains. */
-  delegate: string | null;
 }
 
 /**

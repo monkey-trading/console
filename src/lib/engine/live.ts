@@ -2,7 +2,7 @@
 
 import type { AttestationStatus, FeedStatus } from "./attestation";
 import type { PinnedRelease } from "./manifests";
-import type { DeploymentReads } from "./registry";
+import type { DeploymentReads, VaultFacts } from "./registry";
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks, type Unsubscribe } from "./client";
 import type { EntitlementProof } from "./emissions";
 import { setParamsOf, type QueueTotals } from "../house";
@@ -15,7 +15,7 @@ import { collateral, plainText, READ_TIMEOUT_MS } from "./live-plain";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import { LiveStream, type QuoteRequest, type Scheduler, type Socket } from "./live-stream";
-import { boundedVaultRead, VerifierLoader } from "./live-verifier";
+import { VaultReads, VerifierLoader } from "./live-verifier";
 import { SignedTransport } from "./transport";
 import { NodeTrust } from "./trust";
 import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
@@ -49,8 +49,8 @@ export interface LiveDeps {
 
 export class LiveEngineClient implements EngineClient {
   readonly signatures: SignatureChecks = "checked";
-  /** The connected wallet's chain reads; null with no wallet that reads a chain. */
-  private chain: DeploymentReads | null = null;
+  /** The vault's facts through the connected wallet. */
+  private readonly vault: VaultReads;
   private readonly verifiers: VerifierLoader;
   private readonly trust: NodeTrust;
   private readonly transport: SignedTransport;
@@ -75,11 +75,12 @@ export class LiveEngineClient implements EngineClient {
     this.deployment = { chainId: deps.chainId, vault: deps.vault };
     const challenge = deps.challenge ?? (() => newChallenge());
     this.verifiers = new VerifierLoader(deps.loadVerifier, deps.scheduler);
+    this.vault = new VaultReads(deps.scheduler, deps.nowMs, () => this.trust.vaultAnsweredLate());
     this.trust = new NodeTrust({
       attestation: () => plainText(deps, "/v1/attestation"),
       collateral: () => collateral(deps),
       verifier: () => this.verifiers.load(), releases: deps.releases, devDigests: deps.devDigests ?? [], acceptsMock: deps.acceptsMock, nowMs: deps.nowMs,
-      vaultFacts: () => (this.chain === null ? null : boundedVaultRead(this.chain.vault(), deps.scheduler)),
+      vaultFacts: () => this.vault.facts(),
       onStatus: (status) => this.emit({ type: "attestation", status }),
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
     });
@@ -108,9 +109,14 @@ export class LiveEngineClient implements EngineClient {
   }
 
   async readChainThrough(chain: DeploymentReads | null): Promise<void> {
-    if (chain === this.chain) return;
-    this.chain = chain;
+    if (this.vault.uses(chain)) return;
+    this.vault.use(chain);
     if (chain !== null && this.trust.judgedByVault) await this.trust.verifyAfresh();
+  }
+
+  async heedVault(facts: VaultFacts): Promise<void> {
+    if (!this.vault.uses(null)) this.vault.note(facts);
+    if (this.trust.outdatedBy(facts.signer)) await this.trust.verify();
   }
 
   private readonly signal = (): AbortSignal => this.deps.signal?.() ?? AbortSignal.timeout(READ_TIMEOUT_MS);

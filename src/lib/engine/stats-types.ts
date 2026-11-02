@@ -215,7 +215,6 @@ export interface DistributionProof extends ClaimStanding {
   siblings: string[];
 }
 
-/** The dashboard's reads, kept apart from the rest of the client so a node without the routes answers 404 to them alone. */
 /** An election as the engine mirrors it (`GET /v1/operator`'s `last_election`). */
 export interface ElectionView {
   epoch: number;
@@ -235,6 +234,7 @@ export interface OperatorRoute {
   last_election: ElectionView | null;
 }
 
+/** The dashboard's reads, kept apart from the rest of the client so a node without the routes answers 404 to them alone. */
 export interface StatsReads {
   positions(market: MarketId): Promise<PositionsView>;
   series(query: SeriesQuery): Promise<SeriesPage>;

@@ -4,7 +4,7 @@
  * flight lands in a store no screen reads and finds its wallet gone, so it sends nothing. A session
  * key survives the move because it is registered in the engine's state, which an elected successor
  * takes with the log; a node that no longer holds it refuses it, and the session-signed path then
- * asks the wallet again.
+ * disconnects the wallet, so reconnecting brings setup back at the key's step.
  */
 
 import type { OperatorFollower } from "../engine/operator-follow";
@@ -46,8 +46,8 @@ export function followNode(store: ConsoleStore, follower: OperatorFollower): () 
   };
 }
 
-/** Asks the wallet back onto the deployment's chain and judges the node again: what a wallet that wandered off, then came back, needs before anything is signed. */
-export async function recheckNode(store: ConsoleStore): Promise<void> {
+/** Asks the wallet back onto the deployment's chain, judges the node again and reads the chain again: what a wallet that wandered off, then came back, needs before anything is signed. */
+export async function recheckNode(store: ConsoleStore, follower: Pick<OperatorFollower, "check"> | null): Promise<void> {
   try {
     await store.liveWallet?.ensureChain?.();
   } catch (error) {
@@ -55,4 +55,5 @@ export async function recheckNode(store: ConsoleStore): Promise<void> {
     return;
   }
   await store.deps.client.verify();
+  await follower?.check();
 }

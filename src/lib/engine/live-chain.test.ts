@@ -18,15 +18,16 @@ function rig(devDigests: readonly string[]) {
   const node = new FakeNode();
   node.attestation(() => VECTORS.signer);
   const scheduler = new FakeScheduler();
+  const clock = { now: markets.time_ms };
   const client = new LiveEngineClient({
     origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000, loadVerifier: async () => dev,
-    releases: [], devDigests, acceptsMock: true, fetch: node.fetch, openSocket: () => { throw new Error("no stream in these tests"); }, scheduler, nowMs: () => markets.time_ms,
+    releases: [], devDigests, acceptsMock: true, fetch: node.fetch, openSocket: () => { throw new Error("no stream in these tests"); }, scheduler, nowMs: () => clock.now,
   });
   const attestations = () => node.requests.filter((r) => r.path === "/v1/attestation").length;
-  return { client, scheduler, attestations };
+  return { client, scheduler, clock, attestations };
 }
 
-const reading = (vault: () => Promise<VaultFacts>): DeploymentReads => ({ vault, operator: async () => null, candidates: async () => null });
+const reading = (vault: () => Promise<VaultFacts>): DeploymentReads => ({ vault, operator: async () => null, candidates: async () => null, delegateOf: async () => null });
 
 describe("readChainThrough", () => {
   it("judges the node again when a wallet arrives, and not for the same wallet twice", async () => {
@@ -80,5 +81,48 @@ describe("readChainThrough", () => {
     await judged;
     expect(settled).toBe(true);
     expect(statuses.at(-1)).toEqual({ kind: "unverified", reason: "Your wallet could not read the vault's current release: your wallet did not answer in time" });
+  });
+
+  it("keeps a good answer for thirty seconds, so a node that keeps failing its check does not cost a read per retry", async () => {
+    const { client, clock } = rig([DIGEST]);
+    let reads = 0;
+    await client.readChainThrough(reading(async () => { reads += 1; return { ...NAMED, signer: "0xff" }; }));
+    await client.verify();
+    await client.verify();
+    expect(reads).toBe(1);
+    clock.now += 30_000;
+    await client.verify();
+    expect(reads).toBe(2);
+  });
+
+  it("does not keep a failed answer, nor another wallet's", async () => {
+    const { client } = rig([DIGEST]);
+    let reads = 0;
+    await client.readChainThrough(reading(async () => { reads += 1; throw new Error("no answer"); }));
+    await client.verify();
+    expect(reads).toBe(2);
+    let others = 0;
+    await client.readChainThrough(reading(async () => { others += 1; return NAMED; }));
+    expect(others).toBe(1);
+  });
+});
+
+describe("heedVault", () => {
+  it("judges the node again when the vault's signer is not the enclave it trusts, and not otherwise", async () => {
+    const { client, attestations } = rig([DIGEST]);
+    await client.readChainThrough(reading(async () => NAMED));
+    const before = attestations();
+    await client.heedVault(NAMED);
+    expect(attestations()).toBe(before);
+    await client.heedVault({ ...NAMED, signer: "0x00000000000000000000000000000000000000ff" });
+    expect(attestations()).toBe(before + 1);
+    await expect(client.markets()).rejects.toThrow(NOT_THE_SIGNER);
+  });
+
+  it("leaves a mock node with no stand-in digests alone", async () => {
+    const { client, attestations } = rig([]);
+    await client.verify();
+    await client.heedVault({ ...NAMED, signer: "0x00000000000000000000000000000000000000ff" });
+    expect(attestations()).toBe(1);
   });
 });

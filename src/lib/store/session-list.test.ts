@@ -123,6 +123,16 @@ describe("the session list", () => {
     expect(list.getSnapshot().status).toEqual({ kind: "ready" });
   });
 
+  it("reads under a verdict that may not sign: the list is the public record, and needs no signature", async () => {
+    const kit = await connected();
+    kit.store.patch({ now: NODE_TIME, stream: "live", attestation: { kind: "attested", release: "r", address: "0x1", why: "w" } });
+    serve(kit.client, () => []);
+    const list = new SessionList(kit.store, () => false, new ManualScheduler());
+    list.open();
+    await settle();
+    expect(list.getSnapshot().status).toEqual({ kind: "ready" });
+  });
+
   it("drops an answer, and schedules nothing, when the node becomes unreadable while a read waits", async () => {
     const { client, store, list, scheduler } = await opened();
     const waiting: ((page: HistoryPage) => void)[] = [];

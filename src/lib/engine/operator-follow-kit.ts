@@ -3,7 +3,7 @@
 import type { AttestationStatus } from "./attestation";
 import type { ClientEvent, EngineClient } from "./client";
 import { OperatorFollower } from "./operator-follow";
-import type { DeploymentReads, NamedOperator } from "./registry";
+import type { DeploymentReads, NamedOperator, VaultFacts } from "./registry";
 import { FakeScheduler } from "./test-kit";
 import type { StreamMessage } from "./types";
 
@@ -22,6 +22,8 @@ export class TrialClient {
   watchers = new Set<(event: ClientEvent) => void>();
   subscribers = new Set<(message: StreamMessage) => void>();
   readChainThrough = async (chain: DeploymentReads | null) => { this.chains.push(chain); };
+  heeded: VaultFacts[] = [];
+  heedVault = async (facts: VaultFacts) => { this.heeded.push(facts); };
   verify = async () => { this.verifies += 1; return this.verdict; };
   stats = { operator: () => this.signedRead() };
   watch(listener: (event: ClientEvent) => void) { this.watchers.add(listener); return () => { this.watchers.delete(listener); }; }
@@ -33,7 +35,7 @@ export function rig(options: { reads?: DeploymentReads | null; operator?: () => 
   let now = 1_000_000;
   let answer = options.operator ?? (async () => named());
   const operatorReads = { count: 0 };
-  const reads: DeploymentReads = { vault: async () => ({ release: "0x", signer: "0x" }), operator: () => { operatorReads.count += 1; return answer(); }, candidates: async () => null };
+  const reads: DeploymentReads = { vault: async () => ({ release: "0x", signer: "0x" }), operator: () => { operatorReads.count += 1; return answer(); }, candidates: async () => null, delegateOf: async () => null };
   const held = { chain: options.reads === undefined ? (reads as DeploymentReads | null) : options.reads, busy: false };
   const opened: { origin: string; client: TrialClient }[] = [];
   const adopted: string[] = [];

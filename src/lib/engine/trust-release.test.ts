@@ -5,13 +5,15 @@
  * the vault's signer each able to refuse it.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { AttestationStatus } from "./attestation";
 import fixture from "./attestation-fixture.json";
+import { LiveEngineClient } from "./live";
 import type { PinnedRelease } from "./manifests";
 import type { VaultFacts } from "./registry";
 import { manifestText, releaseName } from "./release-check";
+import { FakeScheduler } from "./test-kit";
 import { loadGlue, readWasm } from "./test-vectors";
 import { CONNECT_TO_CHECK, NodeTrust, NOT_NAMED, NOT_THE_SIGNER } from "./trust";
 import type { Verifier } from "./verifier";
@@ -91,6 +93,28 @@ describe("with the vault not read", () => {
   });
 });
 
+describe("a wallet that answers the vault's read late", () => {
+  it("regains the verdict once it answers, with nobody having to press anything", async () => {
+    const seen: (readonly string[])[] = [];
+    const verifier = realVerifier(seen);
+    const scheduler = new FakeScheduler();
+    const client = new LiveEngineClient({
+      origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: ENCLAVE, heartbeatMs: 5_000, loadVerifier: async () => verifier, releases: [RELEASE], acceptsMock: false,
+      fetch: async (input) => new Response(String(input).endsWith("/collateral") ? fixture.collateral : fixture.attestation), openSocket: () => { throw new Error("no stream in these tests"); }, scheduler, nowMs: () => NOW_MS,
+    });
+    let answer: (facts: VaultFacts) => void = () => {};
+    const reads = { vault: () => new Promise<VaultFacts>((resolve) => { answer = resolve; }), operator: async () => null, candidates: async () => null, delegateOf: async () => null };
+    const judged = client.readChainThrough(reads);
+    await vi.waitFor(() => expect(seen.length + scheduler.pending()).toBeGreaterThan(0));
+    scheduler.advance(10_000);
+    await judged;
+    const statuses: AttestationStatus[] = [];
+    client.watch((event) => { if (event.type === "attestation") statuses.push(event.status); });
+    answer(NAMED);
+    await vi.waitFor(() => expect(statuses.at(-1)?.kind).toBe("verified"));
+  });
+});
+
 describe("what a hostile node, candidate or RPC gets", () => {
   it("refuses a release the vault does not name, before the node's other answers matter", async () => {
     const { status, seen } = await judge({ vault: { release: `0x${"ee".repeat(32)}`, signer: ENCLAVE } });
@@ -145,6 +169,10 @@ describe("what a hostile node, candidate or RPC gets", () => {
     const { status, seen } = await judge({ attestation: hostile, vault: NAMED });
     expect(status.kind).toBe("unverified");
     expect(seen).toEqual([]);
+    // With no vault read, the guard alone stands between that text and the manifests.
+    const unread = await judge({ attestation: hostile });
+    expect(unread.status).toEqual({ kind: "unverified", reason: "The node's attestation names no configuration hash, so it cannot be verified." });
+    expect(unread.seen).toEqual([]);
   });
 
   it("refuses a served config hash the quote does not bind, though it hashes to the vault's release", async () => {

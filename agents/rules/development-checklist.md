@@ -197,8 +197,8 @@ iframe, or embed.
   `localStorage`, `sessionStorage`, IndexedDB, trackers, fingerprinting, third-party scripts,
   fonts, images, or embeds? Each needs the owner's explicit approval first.
 - Does the production build make any request to another origin while a visitor uses it? Check the
-  browser's network panel: every request is same-origin, but for the engine node's origin once the
-  owner has approved it, and WalletConnect's relay and its Verify frame while a user connects a
+  browser's network panel: every request is same-origin, but for the engine nodes' origins the build
+  lists, as the owner approved them, and WalletConnect's relay and its Verify frame while a user connects a
   wallet app over it ([AGENTS.md](../AGENTS.md)).
 - Does anything a visitor types or does leave the browser? It must not, but for the orders,
   deposits, and withdrawals the app sends to the engine node.

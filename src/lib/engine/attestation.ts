@@ -65,8 +65,3 @@ export function readBlock(status: AttestationStatus, feed: FeedStatus): string |
   if (feed === "stale") return "the node's feed is stale";
   return feed === "connecting" ? "the node's feed has not started yet" : null;
 }
-
-/** Whether the console may sign a request now. */
-export function maySign(status: AttestationStatus, feed: FeedStatus): boolean {
-  return signBlock(status, feed) === null;
-}

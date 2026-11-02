@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import vectors from "../engine/eip712-vectors.json";
 import { ProviderWallet } from "../engine/provider-wallet";
-import { ACCOUNT, StubProvider } from "../engine/wallet-kit";
+import type { KeyStorage } from "../engine/session-key-store";
+import { ACCOUNT, memoryStorage, StubProvider } from "../engine/wallet-kit";
+import { loadChoice } from "../engine/wallet-persist";
 import type { Wallet } from "../engine/wallet";
 import { authorizeBrowser, connectWallet, disconnectWallet } from "./actions";
 import { ActionClient, BTC, NODE_TIME, VAULT } from "./live-kit";
@@ -13,12 +15,12 @@ import { ConsoleStore } from "./store";
 import { settle } from "../engine/test-kit";
 
 /** A started store over an ActionClient that records what it is sent. */
-async function setup(credited: boolean) {
+async function setup(credited: boolean, persistence?: KeyStorage) {
   const client = new ActionClient();
   client.credited = credited;
   const provider = new StubProvider();
   const walletA: Wallet = new ProviderWallet(ACCOUNT, "Test wallet", provider, { chainId: vectors.chain_id, vault: VAULT, usdc: null, add: null }, { wait: async () => {} });
-  const store = new ConsoleStore({ client, wallets: { options: [], connect: async () => walletA }, history: () => [], initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
+  const store = new ConsoleStore({ client, wallets: { options: [], connect: async () => walletA }, ...(persistence === undefined ? {} : { persistence }), history: () => [], initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
   store.start(0);
   await settle();
   return { client, provider, store, walletA };
@@ -38,6 +40,37 @@ describe("what a connect hands the node's client", () => {
     expect(chainsAtAccountRead).toBe(1);
     disconnectWallet(store);
     expect(client.chainsRead).toEqual([walletA.chainReads, null]);
+  });
+});
+
+describe("a connect that ended while the wallet answered the vault's read", () => {
+  it("stores nothing, adopts nothing and offers nothing once the wallet has been disconnected", async () => {
+    const storage = memoryStorage();
+    const { client, provider, store, walletA } = await setup(true, storage);
+    let answer = () => {};
+    client.readChainThrough = async (chain: unknown) => { if (chain !== null) await new Promise<void>((resolve) => { answer = resolve; }); };
+    walletA.suggestUsdc = async () => { provider.calls.push({ method: "offered" } as never); return false; };
+    const connecting = connectWallet(store, "injected");
+    await settle();
+    disconnectWallet(store);
+    answer();
+    await expect(connecting).resolves.toBe(false);
+    expect(loadChoice(storage)).toBeNull();
+    expect(provider.calls.some((c) => c.method === "offered")).toBe(false);
+    expect(store.getSnapshot().wallet).toBeNull();
+  });
+
+  it("offers the USDC only once the read has settled, so the prompt does not hold the wallet from answering it", async () => {
+    const { client, provider, store, walletA } = await setup(true);
+    let answer = () => {};
+    client.readChainThrough = async () => { await new Promise<void>((resolve) => { answer = resolve; }); };
+    walletA.suggestUsdc = async () => { provider.calls.push({ method: "offered" } as never); return false; };
+    const connecting = connectWallet(store, "injected");
+    await settle();
+    expect(provider.calls.some((c) => c.method === "offered")).toBe(false);
+    answer();
+    await connecting;
+    expect(provider.calls.some((c) => c.method === "offered")).toBe(true);
   });
 });
 

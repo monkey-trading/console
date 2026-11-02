@@ -7,13 +7,13 @@
  * delegates its whole stake to one candidate from here, or clears the choice.
  */
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { NO_CANDIDATE, type Candidate } from "@/lib/engine/registry";
 import { formatMonkey, formatRate, shortHex } from "@/lib/format";
 import { delegateStake } from "@/lib/monkey/actions";
 import { formatDuration, shareBps } from "@/lib/monkey/figures";
-import { hostnameListed, mirroredElection, OperatorReads, shownHostname } from "@/lib/monkey/operators";
+import { hostnameListed, mirroredElection, shownHostname, type OperatorReads } from "@/lib/monkey/operators";
 import { formatStamp } from "@/lib/time";
 
 import { useNodeFollow, useSession } from "../ConsoleProvider";
@@ -31,42 +31,40 @@ const nameOf = (hostname: string | null, address: string) => shownHostname(hostn
 /** The host of an `https://` origin. */
 const hostOf = (origin: string) => new URL(origin).host;
 
-export function OperatorPanel() {
-  const { store, deploy, node } = useSession();
+/** The operator card. Its reads run for as long as the page is open, node or no node: a staker can always see the election and move their vote. */
+export function OperatorPanel({ operators }: { operators: OperatorReads }) {
+  const { deploy, node } = useSession();
   const follow = useNodeFollow();
   const panel = useMonkeyPanel();
-  const [operators] = useState(() => new OperatorReads(store));
-  const { named, table, route } = useSyncExternalStore(operators.subscribe, operators.getSnapshot, operators.getSnapshot);
-  const { wallet: figures, settling } = usePanelState();
+  const { named, table, route, chosen: chosenRead } = useSyncExternalStore(operators.subscribe, operators.getSnapshot, operators.getSnapshot);
+  const { settling } = usePanelState();
   const wallet = useConsoleSelect((state) => state.wallet);
   const busy = useConsoleSelect((state) => state.busy);
   const nowMs = useConsoleSelect((state) => Math.floor(state.now / 60_000) * 60_000);
-  useEffect(() => operators.start(() => document.visibilityState === "hidden"), [operators]);
   useEffect(() => operators.walletChanged(), [operators, wallet]);
-  const mine = wallet !== null && figures.address === wallet.address;
-  const position = mine ? figures.position.value : null;
-  const chosen = position?.delegate ?? null;
+  const chosen = chosenRead.value;
   const operator = named.value;
+  const inEffect = table.value?.inEffect ?? null;
   const pending = operator?.pending ?? null;
   const mirrored = pending === null ? mirroredElection(route.value, nowMs) : null;
   const candidates = useMemo(() => [...(table.value?.candidates ?? [])].sort((a, b) => (a.votes === b.votes ? 0 : a.votes > b.votes ? -1 : 1)), [table.value]);
   const pendingName = pending === null ? null : nameOf(candidates.find((c) => c.address === pending.candidate)?.hostname ?? null, pending.candidate);
   const totalStaked = table.value?.totalStaked ?? 0n;
-  const canVote = wallet !== null && wallet.readOnly !== true && position !== null && position.stakingEnabled;
+  const canVote = wallet !== null && wallet.readOnly !== true && chosenRead.status === "ready";
   const send = (candidate: string, label: string) => {
     if (!busy && !settling) void delegateStake(panel, operators, candidate, label).then(() => focusHeading("operator-title"));
   };
   return (
     <Card id="operator-title" title="Operator" aside={wallet !== null && wallet.readOnly !== true && <button type="button" onClick={() => { void operators.refreshChain(); void operators.refreshNode(); void panel.refreshWallet(true); }} className={LINK_BUTTON}>Refresh<span className="sr-only"> the operator</span></button>}>
       <dl className="space-y-2">
-        <Row label="Operator in effect">{operator === null ? "—" : nameOf(operator.hostname, operator.candidate)}</Row>
+        <Row label="Operator in effect">{inEffect === null ? "—" : nameOf(inEffect.hostname, inEffect.candidate)}</Row>
         <Row label="Admin key the node applies">{route.value === null ? "—" : <span title={route.value.operator}>{shortHex(route.value.operator)}</span>}</Row>
-        <Row label="Rotation">{(operator?.rotationEnabled ?? route.value?.rotation_enabled ?? null) === null ? "—" : (operator?.rotationEnabled ?? route.value?.rotation_enabled) ? "On" : "Off, so the deployer is the operator"}</Row>
+        <Row label="Rotation">{(operator?.rotationEnabled ?? route.value?.rotation_enabled ?? null) === null ? "—" : (operator?.rotationEnabled ?? route.value?.rotation_enabled) ? "On" : "Off"}</Row>
         <Row label="This console talks to">{node !== null ? "The simulated node" : follow === null ? "—" : hostOf(follow.origin)}</Row>
       </dl>
       {pending !== null && (
         <p className="rounded border border-amber/40 bg-amber/10 p-3 text-caption leading-relaxed text-amber">
-          {pending.promoted ? `A liveness promotion names ${pendingName ?? ""}: its release applies now, and its admin key` : `An election named ${pendingName ?? ""}, which`} takes effect at {formatStamp(pending.effectiveAtMs)} UTC{pending.effectiveAtMs > nowMs ? `, in ${formatDuration(pending.effectiveAtMs - nowMs)}` : ""}.
+          {pending.promoted ? `A liveness promotion names ${pendingName ?? ""}: its release applies now, and its admin key` : `An election named ${pendingName ?? ""}, which`} takes effect at {formatStamp(pending.effectiveAtMs)} UTC{nowMs > 0 && pending.effectiveAtMs > nowMs ? `, in ${formatDuration(pending.effectiveAtMs - nowMs)}` : ""}.
         </p>
       )}
       {mirrored !== null && (
@@ -106,6 +104,7 @@ export function OperatorPanel() {
   );
 }
 
+/** One candidate: its hostname, delegated stake and eligibility, and the button that moves the account's vote to it. */
 function CandidateRow({ candidate, totalStaked, chosen, canVote, disabled, listed, onDelegate }: { candidate: Candidate; totalStaked: bigint; chosen: boolean; canVote: boolean; disabled: boolean; listed: boolean; onDelegate: (candidate: string, label: string) => void }) {
   const hostname = shownHostname(candidate.hostname);
   const label = nameOf(candidate.hostname, candidate.address);

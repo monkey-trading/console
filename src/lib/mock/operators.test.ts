@@ -24,6 +24,7 @@ describe("the simulated registry", () => {
     expect(named).toMatchObject({ rotationEnabled: true, hostname: "alpha.operators.example" });
     expect(named?.pending?.effectiveAtMs).toBe(state.now + 6 * 86_400_000);
     const table = await reads.candidates();
+    expect(table?.inEffect).toEqual({ candidate: named?.candidate, hostname: "alpha.operators.example" });
     expect(table?.candidates.find((c) => c.address === named?.pending?.candidate)?.hostname).toBe("bravo.operators.example");
   });
 
@@ -39,13 +40,13 @@ describe("the simulated registry", () => {
     if (alpha === undefined || bravo === undefined) throw new Error("the mock lists its candidates");
     controls.delegate(ME, alpha.address);
     expect((await reads.candidates())?.candidates[0]?.votes).toBe(alpha.votes + 500_000n * MONKEY_UNIT);
-    expect(controls.stakingPosition(ME).delegate).toBe(alpha.address);
+    await expect(reads.delegateOf(ME)).resolves.toBe(alpha.address);
     controls.delegate(ME, bravo.address);
     const moved = (await reads.candidates())?.candidates;
     expect([moved?.[0]?.votes, moved?.[1]?.votes]).toEqual([alpha.votes, bravo.votes + 500_000n * MONKEY_UNIT]);
     controls.delegate(ME, NO_CANDIDATE);
     expect((await reads.candidates())?.candidates[1]?.votes).toBe(bravo.votes);
-    expect(controls.stakingPosition(ME).delegate).toBeNull();
+    await expect(reads.delegateOf(ME)).resolves.toBeNull();
   });
 
   it("counts a delegator's votes as they follow its stake", async () => {

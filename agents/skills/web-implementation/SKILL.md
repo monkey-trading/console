@@ -348,8 +348,8 @@ The bar is WCAG 2.2 AA; the [development checklist](../../rules/development-chec
   accepting it, or the wallet disconnects, and reaches no snapshot, message or log; and the trading
   preferences and the last size placed in each market (monkey-trading/console#169) persist there
   (`monkeytrading.preferences`, `monkeytrading.last-sizes`), read tolerantly.
-- Every request the page makes is same-origin, but for the engine node's origin once the owner has
-  approved it, and WalletConnect's relay and its Verify frame while a user pairs or uses a wallet app over
+- Every request the page makes is same-origin, but for the engine nodes' origins the build lists, as
+  the owner approved them, and WalletConnect's relay and its Verify frame while a user pairs or uses a wallet app over
   it (approved in monkey-trading/console#7 and #27): the site serves its own fonts, images, and scripts. Check the production build's
   network panel after any change to what the page loads.
 - Links to other sites are plain links; nothing is fetched from them.

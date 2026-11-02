@@ -115,6 +115,11 @@ export class FakeScheduler implements Scheduler {
     this.timers.delete(handle as number);
   }
 
+  /** How many timers wait to run. */
+  pending(): number {
+    return this.timers.size;
+  }
+
   /** Moves the clock forward, running each timer that falls due in order. */
   advance(ms: number): void {
     const end = this.now + ms;

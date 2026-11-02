@@ -121,6 +121,36 @@ describe("OperatorReads", () => {
     stop();
   });
 
+  it("reads afresh for a wallet that arrives during another's read, and drops the other's figures", async () => {
+    const { operators, store, wallet, counts, stop } = await started();
+    const reads = wallet.chainReads as DeploymentReads;
+    let release = () => {};
+    wallet.chainReads = { ...reads, operator: () => new Promise((resolve) => { release = () => { void reads.operator().then(resolve); }; }) };
+    const stuck = operators.refreshChain();
+    await flush();
+    const other = { ...wallet, address: "0x00000000000000000000000000000000000000bb", chainReads: reads };
+    store.liveWallet = other;
+    const fresh = operators.refreshChain();
+    expect(fresh).not.toBe(stuck);
+    expect(operators.getSnapshot().table.status).toBe("loading");
+    release();
+    await Promise.all([stuck, fresh]);
+    await flush();
+    expect(operators.getSnapshot().table.status).toBe("ready");
+    expect(counts.candidates).toBe(2);
+    stop();
+  });
+
+  it("reads the registry and not the node's route while the node cannot be trusted", async () => {
+    const { operators, store, counts, stop } = await started();
+    store.patch({ attestation: { kind: "unverified", reason: "gone" } });
+    await operators.refreshNode();
+    await operators.refreshChain();
+    expect(counts).toEqual({ route: 1, operator: 2, candidates: 2 });
+    expect(operators.getSnapshot().table.status).toBe("ready");
+    stop();
+  });
+
   it("reads again at once on an election event in the stream, and not on other events", async () => {
     const { node, counts, stop } = await started();
     node.client.state.emit({ type: "tick" }, [{ type: "operator_elected", epoch: 1, candidate: "0xb", admin_key: "0xk", effective_at: 1 }]);
@@ -176,11 +206,11 @@ describe("OperatorReads", () => {
     expect(await delegateStake(panel, operators, before.address, "alpha")).toBe(true);
     await flush();
     expect(operators.getSnapshot().table.value?.candidates[0]?.votes).toBe(before.votes + staked);
-    expect(panel.getSnapshot().wallet.position.value?.delegate).toBe(before.address);
+    expect(operators.getSnapshot().chosen).toEqual({ status: "ready", value: before.address, message: null });
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("Your stake votes for alpha from the next close.");
     expect(await delegateStake(panel, operators, NO_CANDIDATE, "")).toBe(true);
     await flush();
-    expect(panel.getSnapshot().wallet.position.value?.delegate).toBeNull();
+    expect(operators.getSnapshot().chosen.value).toBeNull();
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("Your stake abstains from now on.");
     stop();
   });

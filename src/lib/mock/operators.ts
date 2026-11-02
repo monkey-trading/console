@@ -77,6 +77,7 @@ export function mockChainReads(state: MockState): DeploymentReads {
     vault: async () => ({ release: `0x${"0".repeat(64)}`, signer: NO_CANDIDATE }),
     operator: async () => state.operators.named(state.now),
     candidates: async () => candidateTable(state),
+    delegateOf: async (account) => state.operators.delegates.get(account.toLowerCase()) ?? null,
   };
 }
 
@@ -101,7 +102,8 @@ function candidateTable(state: MockState): CandidateTable {
     const cast = votes + delegatedTo(state, address);
     return { address, hostname, votes: cast, eligible: cast * 10_000n >= ELIGIBILITY_BPS * totalStaked };
   });
-  return { candidates, totalStaked };
+  const { candidate, hostname } = state.operators.named(state.now);
+  return { inEffect: { candidate, hostname }, candidates, totalStaked };
 }
 
 /**

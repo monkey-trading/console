@@ -149,9 +149,10 @@ describe("recheckNode", () => {
     store.liveWallet = wallet;
     let verifies = 0;
     client.verify = async () => { verifies += 1; return { kind: "mock" }; };
-    await recheckNode(store);
+    let checks = 0;
+    await recheckNode(store, { check: async () => { checks += 1; } });
     expect(provider.calls.some((c) => c.method === "eth_chainId")).toBe(true);
-    expect(verifies).toBe(1);
+    expect([verifies, checks]).toEqual([1, 1]);
   });
 
   it("says why when the wallet stays on another chain, and judges nothing", async () => {
@@ -160,8 +161,9 @@ describe("recheckNode", () => {
     wallet.ensureChain = async () => { throw new Error("Your wallet is on chain 1."); };
     let verifies = 0;
     client.verify = async () => { verifies += 1; return { kind: "mock" }; };
-    await recheckNode(store);
-    expect(verifies).toBe(0);
+    let checks = 0;
+    await recheckNode(store, { check: async () => { checks += 1; } });
+    expect([verifies, checks]).toEqual([0, 0]);
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("Your wallet is on chain 1.");
   });
 });

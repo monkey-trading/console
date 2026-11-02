@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { ClientEvent, EngineClient } from "./client";
 import { RETRY_MS, SLOW_READ_MS } from "./operator-follow";
 import { B, named, rig, TrialClient, VERIFIED } from "./operator-follow-kit";
+import type { NamedOperator } from "./registry";
 import { settle } from "./test-kit";
 import type { StreamMessage } from "./types";
 
@@ -48,6 +49,43 @@ describe("when the follower reads", () => {
     advance(1);
     await settle();
     expect(operatorReads.count).toBe(1);
+  });
+
+  it("slows down when an effective time has passed and the chain still answers that election, rather than read every 30 seconds", async () => {
+    const pending = { epoch: 1, candidate: "0xb", adminKey: "0xk", effectiveAtMs: 1_000_000, promoted: false };
+    const kit = rig({ operator: async () => named({ hostname: null, pending }) });
+    kit.follower.start(() => false);
+    await kit.follower.check();
+    for (const wait of [30_000, 60_000, 120_000, 240_000, 300_000]) {
+      const before = kit.operatorReads.count;
+      kit.advance(wait - 1);
+      await settle();
+      expect(kit.operatorReads.count, String(wait)).toBe(before);
+      kit.advance(1);
+      await settle();
+      expect(kit.operatorReads.count, String(wait)).toBe(before + 1);
+    }
+  });
+
+  it("starts its waits again once nothing has been waiting", async () => {
+    const pending = { epoch: 1, candidate: "0xb", adminKey: "0xk", effectiveAtMs: 1_000_000, promoted: false };
+    const kit = rig({ operator: async () => named({ hostname: null, pending }) });
+    kit.follower.start(() => false);
+    await kit.follower.check();
+    kit.advance(30_000); // the first wait, which doubles the next
+    await settle();
+    kit.setOperator(async () => named({ hostname: null }));
+    kit.advance(60_000); // the election has gone: this read settles
+    await settle();
+    kit.advance(SLOW_READ_MS); // and the slow read takes it from there, which is what resets the waits
+    await settle();
+    kit.setOperator(async () => named({ hostname: null, pending }));
+    kit.advance(SLOW_READ_MS);
+    await settle();
+    const before = kit.operatorReads.count;
+    kit.advance(30_000);
+    await settle();
+    expect(kit.operatorReads.count).toBe(before + 1);
   });
 
   it("tries a target that has not verified again, waiting twice as long each time up to the slow read, and no longer once it holds", async () => {
@@ -99,35 +137,33 @@ describe("when the follower reads", () => {
   });
 });
 
-describe("a move of the vault's signer", () => {
-  it("judges the node in use again, and a move of the release alone does not", async () => {
-    let facts = { release: "0x1", signer: "0xa" };
-    const kit = rig({ operator: async () => named({ rotationEnabled: false }) });
+describe("what the vault says", () => {
+  /** A rig watching a client in use, the vault answering `facts`. */
+  function inUse(operator: () => Promise<NamedOperator | null>, facts = { release: "0x1", signer: "0xa" }) {
+    const kit = rig({ operator });
     kit.reads.vault = async () => facts;
-    const inUse = new TrialClient();
-    kit.follower.watch(inUse as unknown as EngineClient); // the follower uses only what TrialClient has
-    await kit.follower.check();
-    expect(inUse.verifies).toBe(0);
-    facts = { release: "0x2", signer: "0xa" };
-    await kit.follower.check();
-    expect(inUse.verifies).toBe(0);
-    facts = { release: "0x2", signer: "0xb" };
-    await kit.follower.check();
-    expect(inUse.verifies).toBe(1);
-    await kit.follower.check();
-    expect(inUse.verifies).toBe(1);
-  });
+    const client = new TrialClient();
+    kit.follower.watch(client as unknown as EngineClient); // the follower uses only what TrialClient has
+    return { ...kit, client, facts };
+  }
 
-  it("is followed from a build that names no registry too", async () => {
-    let signer = "0xa";
-    const kit = rig({ operator: async () => null });
-    kit.reads.vault = async () => ({ release: "0x1", signer });
-    const inUse = new TrialClient();
-    kit.follower.watch(inUse as unknown as EngineClient); // the follower uses only what TrialClient has
-    await kit.follower.check();
-    signer = "0xb";
-    await kit.follower.check();
-    expect(inUse.verifies).toBe(1);
+  it("reaches the client in use on every path, whatever comes of the operator's node", async () => {
+    const paths: [string, () => Promise<NamedOperator | null>][] = [
+      ["no registry", async () => null],
+      ["the node in use is the operator's", async () => named({ hostname: null })],
+      ["a hostname the build does not list", async () => named({ hostname: "evil.example" })],
+      ["a move", async () => named()],
+    ];
+    for (const [path, operator] of paths) {
+      const { follower, client, facts } = inUse(operator);
+      await follower.check();
+      expect(client.heeded, path).toEqual([facts]);
+    }
+    const waiting = inUse(async () => named());
+    waiting.trial.verdict = { kind: "unverified", reason: "not yet" };
+    await waiting.follower.check();
+    expect(waiting.follower.getSnapshot().kind).toBe("waiting");
+    expect(waiting.client.heeded).toEqual([waiting.facts]);
   });
 
   it("says so when the read fails, and keeps the node in use", async () => {
