@@ -2,7 +2,7 @@
 
 import { checkAttestation, type AttestationStatus } from "../engine/attestation";
 import { EngineError, type ActionResult, type EngineClient, type SignatureChecks, type Unsubscribe } from "../engine/client";
-import { decodeSchedule, type EmissionSchedule } from "../engine/emission-schedule";
+import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
 import type { EligibilityClass, AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage, MarkResolution } from "../engine/mark-types";
@@ -10,13 +10,13 @@ import type { HouseState } from "../engine/house-state";
 import type { StatsReads } from "../engine/stats-types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
-import { absFixed, fixedFromWire, fixedToWire } from "../fixed";
-import { equityOf, houseNav, marginOf } from "./accounts";
+import { fixedToWire } from "../fixed";
+import { equityOf, marginOf } from "./accounts";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";
 import { queuePage, withdraw } from "./funds";
 import { registerSessionKey, revokeSessionKey } from "./session-keys";
 import { advance } from "./step";
-import { houseScan, marksPage, mockStats, monkeyView } from "./stats";
+import { emissionScheduleOf, houseFigures, marksPage, mockStats } from "./stats";
 import { CHECKPOINT_EVERY, type MockState } from "./state";
 
 const HEX = "0123456789abcdef";
@@ -135,10 +135,7 @@ export class MockEngineClient implements EngineClient {
   }
 
   houseView(): HouseView {
-    const scan = houseScan(this.state);
-    // The gross exposure is the sum of the markets' absolute nets, which the scan's book (the other traders and the accounts held here) gives.
-    const gross = (scan.markets ?? []).reduce((total, market) => total + absFixed(fixedFromWire(market.net ?? "0")), 0n);
-    return { cash: fixedToWire(this.state.houseCash), nav: fixedToWire(houseNav(this.state)), gross_exposure: fixedToWire(gross), ...scan };
+    return houseFigures(this.state);
   }
 
   /** The solvency parameters in force, as the mock's launch genesis set them, and the checkpoint its log would hold. */
@@ -279,10 +276,7 @@ export class MockEngineClient implements EngineClient {
 
   /** The emission schedule `GET /v1/monkey` serves: the mock's periods run from the epoch, and its open period is the one it accrues into. */
   async emissionSchedule(): Promise<EmissionSchedule> {
-    // The schedule is the emissions group of the one `/v1/monkey` answer the mock serves.
-    const schedule = decodeSchedule(monkeyView(this.state).emissions);
-    if (schedule === null) throw new Error("the mock's emission schedule cannot divide time into periods");
-    return schedule;
+    return emissionScheduleOf(this.state);
   }
 
   /** `GET /v1/accounts/{address}/history` now, without waiting. */

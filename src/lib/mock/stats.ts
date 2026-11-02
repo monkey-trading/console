@@ -3,8 +3,9 @@
 import { EngineError } from "../engine/client";
 import type { MarkPage } from "../engine/mark-types";
 import type { HouseMarketView, HouseScanView, LevelEntry, MonkeyView, PositionsView, SeriesPage, SeriesQuery, SideCounts, StatsReads, ValueEntry } from "../engine/stats-types";
-import type { MarketId } from "../engine/types";
-import { fixedFromInt, fixedToNumber } from "../fixed";
+import { decodeSchedule, type EmissionSchedule } from "../engine/emission-schedule";
+import type { HouseView, MarketId } from "../engine/types";
+import { absFixed, fixedFromInt, fixedFromWire, fixedToNumber, fixedToWire } from "../fixed";
 import { MONKEY_UNIT } from "../format";
 import { seedBars } from "../bars";
 import { SEED } from "../prng";
@@ -185,6 +186,23 @@ export function monkeyView(state: MockState): MonkeyView {
     staking: { total_staked: (2_450_000n * MONKEY_UNIT + BigInt(Math.floor(state.now / MINUTE_MS) % 5_000) * MONKEY_UNIT).toString(), stakers: 184 + Math.floor(wave(31, state.now) * 6), cooldown_ms: 7 * DAY_MS },
     distribution: { start_ms: MOCK_RECORD_BEGINS_MS, epoch_ms: epochMs, liquidity_floor: wire(fixedToNumber(floor)), nav: wire(fixedToNumber(nav)), excess_usd: nav > floor ? wire(fixedToNumber(nav - floor)) : null, excess_seq: state.seq, epoch, last_closed_epoch: epoch - 1, last_closed_ms: MOCK_RECORD_BEGINS_MS + epoch * epochMs, next_close_ms: MOCK_RECORD_BEGINS_MS + (epoch + 1) * epochMs, distributed_usdc_units: "1842500000" },
   };
+}
+
+/**
+ * `GET /v1/house` over `state`: the cash and NAV, the scan figures, and a gross exposure that is the sum of the markets'
+ * absolute nets, which the scan's book (the other traders and the accounts held here) gives.
+ */
+export function houseFigures(state: MockState): HouseView {
+  const scan = houseScan(state);
+  const gross = (scan.markets ?? []).reduce((total, market) => total + absFixed(fixedFromWire(market.net ?? "0")), 0n);
+  return { cash: fixedToWire(state.houseCash), nav: fixedToWire(houseNav(state)), gross_exposure: fixedToWire(gross), ...scan };
+}
+
+/** The emission schedule the ledger reads: the emissions group of the one `/v1/monkey` answer the mock serves. */
+export function emissionScheduleOf(state: MockState): EmissionSchedule {
+  const schedule = decodeSchedule(monkeyView(state).emissions);
+  if (schedule === null) throw new Error("the mock's emission schedule cannot divide time into periods");
+  return schedule;
 }
 
 /** The dashboard routes over `state`. */

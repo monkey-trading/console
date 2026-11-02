@@ -53,8 +53,7 @@ export class ConsoleStore {
   /** Seeds the chart's bars from the marks endpoint once per market and timeframe. */
   readonly barsSeed = new BarsSeed(this);
   /** The P&L tab's reads, and the House page's dashboard feeds: each runs only while its page is open. */
-  readonly ledger = new LedgerReads(this);
-  readonly houseStats = new HouseStats(this);
+  readonly ledger = new LedgerReads(this); readonly houseStats = new HouseStats(this);
   /** When each market's bar bucket was last ticked from the node's mark; a merge tells a stale candle from a fresh one. Not part of the snapshot. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
   /** Stand-down flags for pending history work, bumped on each start; not part of the snapshot. */
