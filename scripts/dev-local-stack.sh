@@ -319,11 +319,13 @@ governance="$(create --private-key "$house_key" \
   dependencies/@openzeppelin-contracts-5.7.0/governance/TimelockController.sol:TimelockController \
   --constructor-args 1 "[$deployer]" '[0x0000000000000000000000000000000000000000]' \
   0x0000000000000000000000000000000000000000)"
-# The MONKEY period budget, 1 MONKEY, is a development value, not an approved production parameter.
+# The MONKEY period budget, a development value and not an approved production parameter: 190,258
+# MONKEY, which caps the supply at about 10 billion (twice 26,280 periods of it).
+monkey_period_budget=190258000000000000000000
 # The exit period, claim window, and deposit staleness are thirty days each, past anything this
 # waits for, and past the timelock's one-second delay as the vault's constructor requires.
 deployed_vault="$(create --private-key "$deployer_key" src/Vault.sol:Vault \
-  --constructor-args "$deployed_usdc" "$enclave" "$governance" "$governance" 1000000000000000000 \
+  --constructor-args "$deployed_usdc" "$enclave" "$governance" "$governance" "$monkey_period_budget" \
   2592000 2592000 2592000)"
 lower() { tr '[:upper:]' '[:lower:]' <<<"$1"; }
 [[ "$(lower "$deployed_usdc")" == "$usdc" ]] || die "the mock USDC deployed at $deployed_usdc, not at $usdc as config/anvil.toml names"
@@ -419,7 +421,7 @@ emissions_applied=""
 for _attempt in 1 2 3; do
   emissions_start="$(python3 -c 'import time; print(time.strftime("%Y-%m-%dT%H:%M:00Z", time.gmtime((int(time.time()) // 60 + 1) * 60)))')"
   if "$engine" admin --config "$work/node.toml" --node "$api" --pin "$tls_pin" --key-file "$work/operator.key" \
-    init-emissions --start "$emissions_start" --period-budget 1000000000000000000 >>"$step_log" 2>&1; then
+    init-emissions --start "$emissions_start" --period-budget "$monkey_period_budget" >>"$step_log" 2>&1; then
     emissions_applied=yes
     break
   fi
