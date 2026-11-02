@@ -113,7 +113,8 @@ describe("how far the streams are read", () => {
   });
 
   it("is not short once the allocation of the oldest row's own period is held, whatever the cover", () => {
-    const rows = addPage(emptyLedger(), "fill", page([fill("9:0", 3 * 600_000 + 5, usd(-1))]));
+    // Both row streams are read to their start, so the check for a held allocation is the one that answers.
+    const rows = addPage(addPage(emptyLedger(), "fill", page([fill("9:0", 3 * 600_000 + 5, usd(-1))])), "corporate_cash_in_lieu", page([]));
     const held = addPage(rows, "emission_allocated", page([allocated("20:0", 4 * 600_000 + 1, 3, 1n)], "20:0"));
     expect(allocationsShort(held, SCHEDULE)).toBe(false);
   });
@@ -200,8 +201,30 @@ describe("what is held stays bounded", () => {
     for (let i = 1; i <= MAX_ROWS + 1; i += 1) data = addMessage(data, message(i, i * 1_000, [fill("x", 0, usd(-1))]), ME);
     expect(data.rows).toHaveLength(MAX_ROWS);
     expect(data.rows[data.rows.length - 1]?.cursor).toBe("2:0");
-    expect(data.cover.fill).toEqual({ oldest: 2_000, next: "2:0", done: false });
+    expect(data.cover.fill).toEqual({ oldest: 1_000, next: "1:0", done: false });
     expect(atBound(data)).toBe(true);
+  });
+
+  /** `count` fills at seqs 100.. and stamps 100_000.., newer than the cash in lieu rows below. */
+  const fills = (count: number) => Array.from({ length: count }, (_, i) => fill(`${100 + i}:0`, 100_000 + i, usd(-1))).reverse();
+
+  it("ends a stream's cover at its newest dropped row when every row of that stream was dropped", () => {
+    let data = addPage(emptyLedger(), "corporate_cash_in_lieu", page([lieu("1:0", 1_000, usd(-1))]));
+    data = addPage(data, "fill", page(fills(MAX_ROWS)));
+    expect(data.rows).toHaveLength(MAX_ROWS);
+    expect(data.rows.some((r) => r.kind === "corporate_cash_in_lieu")).toBe(false);
+    expect(data.cover.corporate_cash_in_lieu).toEqual({ oldest: 1_000, next: "1:0", done: false });
+    expect(data.cover.fill.done).toBe(true);
+    expect(rowsHeldFrom(data)).toBe(1_000);
+  });
+
+  it("does not move a sparse stream's cover forward to its next kept row", () => {
+    let data = addPage(emptyLedger(), "corporate_cash_in_lieu", page([lieu("5000:0", 5_000_000, usd(-1)), lieu("1:0", 1_000, usd(-1))]));
+    data = addPage(data, "fill", page(fills(MAX_ROWS - 1)));
+    expect(data.rows).toHaveLength(MAX_ROWS);
+    expect(data.rows[0]?.cursor).toBe("5000:0");
+    expect(data.cover.corporate_cash_in_lieu).toEqual({ oldest: 1_000, next: "1:0", done: false });
+    expect(rowsHeldFrom(data)).toBe(1_000);
   });
 
   it("leaves a stream that lost no row read to where it was, even when the other stream's rows are dropped", () => {
@@ -222,6 +245,6 @@ describe("what is held stays bounded", () => {
     let data = emptyLedger();
     for (let i = 1; i <= MAX_ALLOCATIONS + 1; i += 1) data = addMessage(data, message(i, i * 600_000, [allocated("x", 0, i, 1n)]), ME);
     expect(data.allocations).toHaveLength(MAX_ALLOCATIONS);
-    expect(data.cover.emission_allocated).toEqual({ oldest: 2 * 600_000, next: "2:0", done: false });
+    expect(data.cover.emission_allocated).toEqual({ oldest: 600_000, next: "1:0", done: false });
   });
 });

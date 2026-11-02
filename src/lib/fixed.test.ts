@@ -6,6 +6,7 @@ import {
   absFixed,
   bpsOf,
   divFixed,
+  divFixedDown,
   fixedFromInt,
   fixedFromWire,
   fixedToNumber,
@@ -14,6 +15,7 @@ import {
   formatUsd,
   moveBps,
   mulFixed,
+  mulFixedDown,
   parseFixed,
 } from "./fixed";
 
@@ -80,5 +82,31 @@ describe("formatUsd", () => {
     expect(formatUsd(parseFixed("-3.876") ?? 0n)).toBe("-$3.87");
     expect(formatUsd(parseFixed("1234.5") ?? 0n)).toBe("$1,234.50");
     expect(formatUsd(parseFixed("-0.004") ?? 0n)).toBe("$0.00");
+  });
+});
+
+// Known answers from the engine's `Fixed::mul_rounded` and `div_rounded` with `Rounding::Down` (crates/core/src/fixed/tests.rs).
+describe("mulFixedDown and divFixedDown", () => {
+  const f = (text: string) => fixedFromWire(text);
+
+  it("round a product toward negative infinity, where mulFixed truncates toward zero", () => {
+    expect(mulFixedDown(f("0.000000003"), f("1.5"))).toBe(f("0.000000004"));
+    expect(mulFixedDown(f("-0.000000003"), f("1.5"))).toBe(f("-0.000000005"));
+    expect(mulFixedDown(f("1.1"), f("0.000000001"))).toBe(1n);
+    expect(mulFixedDown(f("-1.1"), f("0.000000001"))).toBe(-2n);
+    expect(mulFixed(f("-1.1"), f("0.000000001"))).toBe(-1n);
+    expect(mulFixedDown(f("2.5"), f("-4"))).toBe(f("-10"));
+  });
+
+  it("round a quotient toward negative infinity, whatever the signs", () => {
+    expect(divFixedDown(f("1"), f("3"))).toBe(f("0.333333333"));
+    expect(divFixedDown(f("-1"), f("3"))).toBe(f("-0.333333334"));
+    expect(divFixedDown(f("1"), f("-3"))).toBe(f("-0.333333334"));
+    expect(divFixedDown(f("-1"), f("-3"))).toBe(f("0.333333333"));
+    expect(divFixedDown(f("-9"), f("3"))).toBe(f("-3"));
+  });
+
+  it("refuses a zero divisor", () => {
+    expect(() => divFixedDown(f("1"), 0n)).toThrow("division by zero");
   });
 });

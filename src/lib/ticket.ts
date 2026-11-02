@@ -1,6 +1,6 @@
 /** What an order ticket shows before the user places the order: the quote, the margin it uses, the limits. */
 
-import { absFixed, bpsOf, divFixed, fixedFromWire, fixedToWire, mulFixed, parseFixed, SCALE, type Fixed } from "./fixed";
+import { absFixed, bpsOf, divFixed, divFixedDown, fixedFromWire, fixedToWire, mulFixed, mulFixedDown, parseFixed, SCALE, type Fixed } from "./fixed";
 import { capFor } from "./house";
 import type { MarketView, Side } from "./engine/types";
 import type { AccountModel, MarketModel } from "./models";
@@ -138,10 +138,15 @@ export function truncateToStep(qty: Fixed): Fixed {
   return qty - (qty % QTY_STEP);
 }
 
-/** A position's unrealised profit or loss in USD at `mark`; null when its FX market has no price. */
+/**
+ * A position's unrealised profit or loss in USD at `mark`; null when its FX market has no price. Rounded
+ * down in both steps, as the engine's equity counts it: `Position::unrealised` (`mul_rounded(.., Rounding::Down)`,
+ * `crates/core/src/account.rs`), then `QuoteCurrency::to_usd` (`crates/core/src/market.rs`) called with
+ * `Rounding::Down` in `Engine::equity_and_margin_at` (`crates/core/src/engine/mod.rs`).
+ */
 export function unrealisedPnl(view: MarketView, qty: Fixed, entry: Fixed, mark: Fixed): Fixed | null {
-  const toUsd = usdConverter(view, mark);
-  return toUsd === null ? null : toUsd(mulFixed(qty, mark - entry));
+  const toUsd = usdConverter(view, mark, "down");
+  return toUsd === null ? null : toUsd(mulFixedDown(qty, mark - entry));
 }
 
 /** What one contract is: a unit of the market's base asset, or of the instrument itself when it has none. */
@@ -154,14 +159,16 @@ export function contractUnit(market: MarketModel): string {
  * Converts an amount in the market's quote currency to USD, as the engine does (`QuoteCurrency::to_usd`,
  * truncated; the engine's margin and cap figures round up, a difference of a billionth the ticket's
  * estimates ignore): through the market's FX mark, the pair's own listing (USD-JPY) at `price`
- * itself. Null when the market has no FX price to convert at; the identity for a USD market.
+ * itself. Null when the market has no FX price to convert at; the identity for a USD market. `rounding` is
+ * toward zero unless a caller says `"down"`, the rounding the engine's equity gives a profit or loss.
  */
-export function usdConverter(view: MarketView, price: Fixed): ((amount: Fixed) => Fixed) | null {
+export function usdConverter(view: MarketView, price: Fixed, rounding: "toward-zero" | "down" = "toward-zero"): ((amount: Fixed) => Fixed) | null {
   const currency = view.quote_currency;
   if (currency === undefined) return (amount) => amount;
   const fx = currency.fx_market === view.id ? price : view.fx_mark == null ? null : fixedFromWire(view.fx_mark);
   if (fx === null) return null;
-  return currency.currency === "jpy" ? (amount) => divFixed(amount, fx) : (amount) => mulFixed(amount, fx);
+  const [mul, div] = rounding === "down" ? [mulFixedDown, divFixedDown] : [mulFixed, divFixed];
+  return currency.currency === "jpy" ? (amount) => div(amount, fx) : (amount) => mul(amount, fx);
 }
 
 /** The bound a market order is shown and signed with: the user's choice, never past the market's own, which the engine clamps to (`execution/mod.rs`). */

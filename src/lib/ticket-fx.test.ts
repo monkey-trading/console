@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { fixedFromInt } from "./fixed";
+import { fixedFromInt, formatUsd } from "./fixed";
 import { NO_FX_PRICE, previewTicket, unrealisedPnl } from "./ticket";
 import { account, btcAt, heldIn, NAV, q, quotedIn } from "./ticket-fixtures";
 
@@ -94,5 +94,37 @@ describe("previewTicket for a market quoted in another currency", () => {
     expect(unrealisedPnl((await quotedIn("eur", 500, null)).view, q("2"), q("490"), q("500"))).toBeNull();
     // A dollar market is untouched.
     expect(unrealisedPnl((await btcAt(100)).view, q("2"), q("90"), q("100"))).toBe(fixedFromInt(20));
+  });
+
+  // The engine rounds a position's profit down, then its conversion down (`Position::unrealised`, then `to_usd` with
+  // `Rounding::Down` in `Engine::equity_and_margin_at`), so a loss shows the cent its equity counts.
+  describe("rounds a loss down in both steps, as the engine's equity does", () => {
+    it("through a euro market's multiplication: -0.1 EUR at 0.999999999 is -$0.10, not -$0.09", async () => {
+      const pnl = unrealisedPnl((await quotedIn("eur", "499.9", "0.999999999")).view, q("1"), q("500"), q("499.9"));
+      expect(pnl).toBe(q("-0.1"));
+      expect(formatUsd(pnl ?? 0n)).toBe("-$0.10");
+    });
+
+    it("through a pound market's multiplication, a loss a billionth over a whole cent", async () => {
+      // -0.000000003 GBP at 1.5 is -0.0000000045 USD: down to -0.000000005, where truncation gives -0.000000004.
+      expect(unrealisedPnl((await quotedIn("gbp", "100", "1.5")).view, q("1"), q("100.000000003"), q("100"))).toBe(q("-0.000000005"));
+    });
+
+    it("through a yen market's division: -1 JPY at 3 yen to the dollar is -$0.333333334", async () => {
+      expect(unrealisedPnl((await quotedIn("jpy", "29999", "3")).view, q("1"), q("30000"), q("29999"))).toBe(q("-0.333333334"));
+    });
+
+    it("rounds the multiplication down before converting, as the engine does in two steps", async () => {
+      // 1.5 contracts down a billionth is -1.5 raw units, down to -2; times 1.5 that is -3 raw units (truncating both gives -1).
+      expect(unrealisedPnl((await quotedIn("eur", "100", "1.5")).view, q("1.5"), q("100.000000001"), q("100"))).toBe(q("-0.000000003"));
+    });
+
+    it("rounds a dollar market's product down too", async () => {
+      expect(unrealisedPnl((await btcAt("100")).view, q("1.5"), q("100.000000001"), q("100"))).toBe(q("-0.000000002"));
+    });
+
+    it("rounds a profit down as well, toward the smaller gain", async () => {
+      expect(unrealisedPnl((await quotedIn("eur", "100", "1.5")).view, q("1"), q("99.999999997"), q("100"))).toBe(q("0.000000004"));
+    });
   });
 });

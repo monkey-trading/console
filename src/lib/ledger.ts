@@ -118,10 +118,9 @@ function fold(data: LedgerData, entries: readonly Entry[]): LedgerData {
   return { ...data, rows: newRows, allocations: newAllocations, closedThrough };
 }
 
-/** The cover after the oldest items of a kind were dropped to stay in bounds: reading resumes below the oldest one kept (`kept`, newest first). */
-function trimmedCover(kept: readonly { cursor: string; ts: number }[], was: LedgerCover): LedgerCover {
-  const last = kept[kept.length - 1];
-  return last === undefined ? was : { oldest: last.ts, next: last.cursor, done: false };
+/** The cover after items were dropped to stay in bounds: events strictly newer than the newest dropped one (`newest`, of this kind) are all held, and reading resumes below it. */
+function trimmedCover(newest: { cursor: string; ts: number }): LedgerCover {
+  return { oldest: newest.ts, next: newest.cursor, done: false };
 }
 
 /** Drops the oldest rows and allocations past the bounds. */
@@ -129,14 +128,18 @@ function bound(data: LedgerData): LedgerData {
   if (data.rows.length <= MAX_ROWS && data.allocations.length <= MAX_ALLOCATIONS) return data;
   let { rows, allocations, cover } = data;
   if (rows.length > MAX_ROWS) {
-    // Only a kind that lost a row resumes below its oldest kept one; the other is still read to where it was.
-    const dropped = new Set(rows.slice(MAX_ROWS).map((r) => r.kind));
+    // A kind that lost a row resumes below its newest dropped one, whether or not it keeps any; the other is still read to where it was.
+    const dropped = rows.slice(MAX_ROWS);
     rows = rows.slice(0, MAX_ROWS);
-    for (const kind of dropped) cover = { ...cover, [kind]: trimmedCover(rows.filter((r) => r.kind === kind), cover[kind]) };
+    for (const kind of ROW_KINDS) {
+      const newest = dropped.find((r) => r.kind === kind);
+      if (newest !== undefined) cover = { ...cover, [kind]: trimmedCover(newest) };
+    }
   }
-  if (allocations.length > MAX_ALLOCATIONS) {
+  const newestAllocation = allocations[MAX_ALLOCATIONS];
+  if (newestAllocation !== undefined) {
     allocations = allocations.slice(0, MAX_ALLOCATIONS);
-    cover = { ...cover, emission_allocated: trimmedCover(allocations, cover.emission_allocated) };
+    cover = { ...cover, emission_allocated: trimmedCover(newestAllocation) };
   }
   return { ...data, rows, allocations, cover };
 }

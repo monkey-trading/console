@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
-import { ACCRUES, coverageNote, monkeyCell, NO_ALLOCATION, scheduleNotice } from "./ledger-cell";
+import { ACCRUES, coverageNote, ledgerHeader, monkeyCell, NO_ALLOCATION, scheduleNotice } from "./ledger-cell";
 import { monkey } from "./ledger-kit";
 import type { LedgerTotals, Share } from "./ledger-share";
 
@@ -55,5 +55,27 @@ describe("coverageNote", () => {
 
   it("adds that the MONKEY total leaves losses out while some share is not known", () => {
     expect(coverageNote(7, totals(true), false, false)).toContain("leaves out losses shown as Pending, Loading or —");
+  });
+});
+
+describe("ledgerHeader", () => {
+  const note = coverageNote(300, totals(false), true, false);
+
+  it("gives the error together with the coverage note when a Load more failed, so the totals stay qualified", () => {
+    const header = ledgerHeader({ status: "ready", error: "The node did not answer.", scheduleStatus: "ready" }, 300, totals(false), true, false);
+    expect(header).toEqual({ blank: false, status: `The node did not answer. ${note}` });
+  });
+
+  it("gives the coverage note alone, with the schedule's notice after it, when nothing failed", () => {
+    expect(ledgerHeader({ status: "ready", error: null, scheduleStatus: "ready" }, 300, totals(false), true, false).status).toBe(note);
+    expect(ledgerHeader({ status: "ready", error: null, scheduleStatus: "unavailable" }, 300, totals(false), true, false).status).toBe(`${note} ${scheduleNotice("unavailable")}`);
+  });
+
+  it.each(["idle", "reading", "failed"] as const)("blanks the totals while the status is %s, though a stream row is held", (status) => {
+    expect(ledgerHeader({ status, error: null, scheduleStatus: "idle" }, 1, totals(false), true, false)).toEqual({ blank: true, status: "" });
+  });
+
+  it("gives a failed first read's error alone, with no coverage note for totals that are blank", () => {
+    expect(ledgerHeader({ status: "failed", error: "The node did not answer.", scheduleStatus: "idle" }, 1, totals(false), true, false)).toEqual({ blank: true, status: "The node did not answer." });
   });
 });
