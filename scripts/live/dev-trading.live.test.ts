@@ -20,7 +20,7 @@ import { divFixed, fixedFromInt, fixedFromWire, fixedToWire, parseFixed } from "
 import type { MarketModel } from "../../src/lib/models";
 import { closingPrice, ticketPrices } from "../../src/lib/quotes";
 import { parseSize, previewTicket, slippageBound } from "../../src/lib/ticket";
-import { attestEligibility, cancelOrder, placeOrder } from "../../src/lib/store/actions";
+import { attestEligibility, authorizeBrowser, cancelOrder, placeOrder } from "../../src/lib/store/actions";
 import { loadAccount } from "../../src/lib/store/account";
 import { followAccountFeeds, syncQuotes } from "../../src/lib/store/funds";
 import { ConsoleStore } from "../../src/lib/store/store";
@@ -185,6 +185,8 @@ describe("trading against a dev node", () => {
       const account = snapshot().account;
       return account !== null && account.balance === parseFixed(FUND);
     });
+    // Trading never registers a key: the setup popup's one signature does, and orders then sign with it.
+    expect(await authorizeBrowser(store)).toBe(true);
   });
 
   it("fills a market order at the streamed quote, sent as the quoted price with the slippage bound", async () => {

@@ -15,8 +15,8 @@ A build can instead talk to a real engine node: it checks the node's attestation
 attested enclave signed for the request, and follows the node's signed stream, which starts at the live end of the log and reconnects there, marking the feed stale
 (and disabling order entry) when it stops. With a browser wallet, or a wallet app over WalletConnect, it
 deposits USDC to the vault, signs the engine's typed requests (orders, cancels, cancel all and close all, withdrawals, the eligibility
-declaration) for a node whose attestation it accepts. Orders, cancels and the two batches sign with an ephemeral in-browser
-session key the wallet authorizes with one signature at connect; deposits, withdrawals and claims always use
+declaration) for a node whose attestation it accepts. Orders, cancels and the two batches sign with an in-browser
+session key the wallet authorizes with one signature in the setup that follows connecting, kept in the browser's storage until it expires; deposits, withdrawals and claims always use
 the wallet. It trades at the executable quote the node streams for the account, and claims approved
 withdrawals on the vault. The checks run
 in the engine's own verifier, built for the browser (`public/engine-verify/`, pinned by SHA-256 in
@@ -55,8 +55,8 @@ npm ci
 
 It prints how to add the Anvil network and import the dev wallet's key (a public test key) into a browser
 wallet, the mock USDC's address, and the console's address, `http://localhost:3000`; Ctrl-C stops everything
-it started. In the console, connect the wallet, deposit from Funding, sign the eligibility declaration once
-the node sees the deposit pending, and trade. A realised loss earns MONKEY once its ten-minute period closes:
+it started. In the console, connect the wallet and follow the setup popup (fund with Anvil, sign the eligibility
+declaration, authorize the browser), then deposit from Funding and trade. A realised loss earns MONKEY once its ten-minute period closes:
 claim it on the MONKEY page and stake it, and the epoch that closes next, every five minutes, pays stakers the
 house's USDC above its floor. The staking epoch, unstake cooldown and floor are development values that the
 script prints. Its header lists the variables that move its ports, fund

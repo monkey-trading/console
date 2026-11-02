@@ -7,7 +7,7 @@ import type { EngineEvent, Fill } from "../engine/types";
 import { ACCOUNT } from "../engine/wallet-kit";
 import { fixedFromInt, fixedFromWire } from "../fixed";
 import { disconnectWallet, placeOrder } from "./actions";
-import { ActionClient, connected, type Posted } from "./live-kit";
+import { ActionClient, connected, keyed, type Posted } from "./live-kit";
 import type { ConsoleStore } from "./store";
 
 const FILL: Fill = { account: ACCOUNT, order_id: 7, market: 1, side: "buy", qty: "0.5", price: "100000", index: "100000", spread_bps: 0, realised_pnl: "0", profit_fee: "0", position: "0.5", liquidation: false };
@@ -21,19 +21,19 @@ const send = (store: ConsoleStore) => placeOrder(store, { market: 1, side: "buy"
 
 describe("what placeOrder reports", () => {
   it("is true for a fill", async () => {
-    const { client, store } = await connected();
+    const { client, store } = await keyed();
     client.answer = answer([{ type: "fill", ...FILL }]);
     expect(await send(store)).toBe(true);
   });
 
   it("is true for an order left resting, with no fill", async () => {
-    const { client, store } = await connected();
+    const { client, store } = await keyed();
     client.answer = answer([]);
     expect(await send(store)).toBe(true);
   });
 
   it("is true for a partial fill whose remainder was cancelled", async () => {
-    const { client, store } = await connected();
+    const { client, store } = await keyed();
     client.answer = answer([{ type: "fill", ...FILL }, CANCELLED]);
     expect(await send(store)).toBe(true);
   });

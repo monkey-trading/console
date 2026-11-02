@@ -30,25 +30,27 @@ export default function Page() {
           while a console page is open, or when a reconnect does not complete.
         </p>
         <p className={P}>
+          Once you authorize this browser, with one wallet signature, the console also keeps the private
+          key of a session key there, with its address, your account&apos;s address, the chain, the vault
+          and the key&apos;s expiry, so a reload or a new tab trades without asking again. Anyone who can
+          read this browser&apos;s storage can use that key to place and cancel orders on your account until
+          it expires, within a day. It can never move funds, so deposits, withdrawals and claims still ask
+          your wallet each time. It is removed when you disconnect, when it expires or is revoked, when
+          your wallet app ends the WalletConnect session, or when the node stops accepting it, and the
+          console then disconnects your wallet in every tab. Disconnecting in the console also asks your
+          wallet to revoke it; a key left unrevoked expires on its own. A key for an account no console tab
+          has open stays until a wallet next connects in this browser and finds it expired. The console
+          never stores your wallet&apos;s own keys.
+        </p>
+        <p className={P}>
           The console also stores your trading preferences in your browser&apos;s storage: your default
           order type, slippage bound and size choice, whether Cancel all and Close all ask first,
           whether the chart shows entry and order lines, and the last size you placed in each market,
           which it writes each time you place an order. They never leave your browser, and unlike the
-          wallet choice they stay after you disconnect, until you clear this site&apos;s data. The
+          wallet choice and the session key they stay after you disconnect, until you clear this site&apos;s data. The
           Settings page lists your active sessions from the node&apos;s public record of session
           keys, which holds each key&apos;s address, start and expiry and nothing about the browser
           or the network it signed in from.
-        </p>
-        <p className={P}>
-          When trading becomes possible for your account, the console asks your wallet for one signature
-          that authorizes an ephemeral key held only in this page&apos;s memory — at connect for an account
-          the node already holds, or when your first deposit credits it. From then on that key signs your
-          orders and cancels, so trading asks for no further wallet prompts until the key expires or the
-          node stops accepting it; it can never move funds, so deposits, withdrawals
-          and claims still ask your wallet each time. Disconnecting revokes the key with one more
-          wallet signature; a key left unrevoked — for example when the wallet app ends the connection
-          first — expires on its own within the day. It is never written to your browser&apos;s storage: a
-          later page load reconnects the wallet silently and asks for that one signature again.
         </p>
         <p className={P}>
           What you do in the console leaves your browser only for the party that needs it. Your account&apos;s

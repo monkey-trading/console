@@ -6,7 +6,7 @@ import { cancelAllTypedData, closeAllTypedData } from "../engine/eip712";
 import type { MarketId } from "../engine/types";
 import type { CloseTarget } from "../close-all";
 import { fixedToWire } from "../fixed";
-import { sessionSigned } from "./session";
+import { sessionSigned } from "./session-signed";
 import { domainOf } from "./signing";
 import type { ConsoleStore } from "./store";
 

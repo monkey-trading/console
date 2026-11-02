@@ -160,7 +160,8 @@ export class MockEngineClient implements EngineClient {
   /** `GET /v1/accounts/{address}` now, without waiting; null for an account the node has never credited. */
   accountView(address: Address): AccountView | null {
     const account = this.state.accounts.get(address.toLowerCase());
-    if (!account) return null;
+    // A declared account the node has not credited answers 404 like any other: the engine's `accounts` map holds credits, not references.
+    if (!account || !this.state.credited.has(address.toLowerCase())) return null;
     const positions: AccountView["positions"] = {};
     for (const [id, held] of account.positions) positions[id] = { qty: fixedToWire(held.qty), entry: fixedToWire(held.entry) };
     const orders: AccountView["orders"] = {};

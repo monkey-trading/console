@@ -3,15 +3,19 @@
 import { signBlock } from "../engine/attestation";
 import { EngineError, type ActionResult } from "../engine/client";
 import { requestDomain, type Terms, type TypedRequest } from "../engine/eip712";
-import type { RequestAuth } from "../engine/types";
+import { declinedByUser } from "../engine/provider-errors";
+import type { Reject, RequestAuth } from "../engine/types";
 import { UntrustedError } from "../engine/trust";
-import type { Wallet } from "../engine/wallet";
+import type { Progress, Wallet } from "../engine/wallet";
 import { describeReject } from "../messages";
 import type { BlockReason } from "./state";
 import type { ConsoleStore } from "./store";
 
 /** A signed request stays valid this long past the node's signed time, within the engine's five-minute cap (`MAX_EXPIRY_AHEAD_MS`). */
 export const REQUEST_TTL_MS = 120_000;
+
+/** The sentinel an abandoned action throws when its connection ends between a wait and the send. */
+export const DISCONNECTED = new Error("The connection ended before the request was sent.");
 
 /** A refusal shown to the user, never thrown past an action. */
 export type Outcome = { ok: true; result: ActionResult } | { ok: false };
@@ -32,14 +36,31 @@ export function usableWallet(store: ConsoleStore, action: string): Wallet | null
   return wallet;
 }
 
-/** Runs one wallet step, showing `prompt` while the wallet waits for the user. */
-export async function prompting<T>(store: ConsoleStore, prompt: string, step: () => Promise<T>): Promise<T> {
-  store.patch({ prompt });
+/**
+ * Runs one wallet step for `owner`, the connection that asked, showing `prompt` while the wallet waits
+ * for the user; the step reports what each part of it waits for through the `Progress` it is given. A
+ * change of connection already cleared the prompt and the next wallet's may be showing, so a step of an
+ * old connection neither writes nor clears it. Null is a revocation, which runs once its connection has
+ * been dropped and until another adopts.
+ */
+export async function prompting<T>(store: ConsoleStore, owner: Wallet | null, prompt: string, step: (progress: Progress) => Promise<T>): Promise<T> {
+  const current = () => store.liveWallet === owner;
+  if (current()) store.patch({ prompt });
   try {
-    return await step();
+    return await step((waitingFor) => {
+      if (current()) store.patch({ prompt: waitingFor });
+    });
   } finally {
-    store.patch({ prompt: null });
+    if (current()) store.patch({ prompt: null });
   }
+}
+
+/** Whether `error` is the user declining in a wallet whose connection has since ended: nothing happened, and the connection that came next never asked. A transaction that failed is still told, whoever is connected. */
+export const abandoned = (store: ConsoleStore, wallet: Wallet, error: unknown): boolean => store.liveWallet !== wallet && declinedByUser(error);
+
+/** Ends `wallet`'s request's busy state. A change of connection already did, and the next wallet's own request may hold it now. */
+export function notBusy(store: ConsoleStore, wallet: Wallet): void {
+  if (store.liveWallet === wallet) store.patch({ busy: false });
 }
 
 /** How a request answered 409 (its nonce already used) is handled: a cancel or a declaration re-signs with the nonce the node names, since running it twice does nothing more; an order or a withdrawal does not, since a copy of it may have run first. */
@@ -69,8 +90,12 @@ export async function signed(
     const { next_nonce, time_ms } = await store.deps.client.nonce(wallet.address);
     const expiresAt = (time_ms ?? store.getSnapshot().now) + REQUEST_TTL_MS;
     const attempt = async (nonce: number) => {
+      // The connection may have ended while the nonce read waited: its wallet is not asked.
+      if (store.liveWallet !== wallet) throw DISCONNECTED;
       const typed = build({ nonce, expiresAt }, wallet.address);
-      const signature = await prompting(store, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
+      const signature = await prompting(store, wallet, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
+      // Or while the wallet asked: nothing goes out for a connection that ended.
+      if (store.liveWallet !== wallet) throw DISCONNECTED;
       sent = true;
       return send({ nonce, expires_at: expiresAt, signature }, wallet);
     };
@@ -82,6 +107,8 @@ export async function signed(
       return { ok: true, result: await attempt(error.reject.expected) };
     }
   } catch (error) {
+    // A wallet that declines or fails after its connection ended has nothing to tell the connection that came next.
+    if (error === DISCONNECTED || (!sent && store.liveWallet !== wallet)) return { ok: false };
     if (store.noteAccess(error)) return { ok: false };
     // A sent request the node refused, left unanswered, or answered unverifiably may still have run: read the account first.
     if (sent) await store.refresh(true);
@@ -91,7 +118,7 @@ export async function signed(
     store.toast("error", `${errorText(error)}${unknown}`);
     return { ok: false };
   } finally {
-    store.patch({ busy: false });
+    notBusy(store, wallet);
   }
 }
 
@@ -101,14 +128,16 @@ export function errorText(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
+/** Marks the caller as refused when `reject` names a region the node does not serve; true if it did. */
+export function noteRegionRefusal(store: ConsoleStore, reject: Reject): boolean {
+  if (reject.kind !== "access") return false;
+  const { reason } = reject;
+  if (reason !== "united_states" && reason !== "sanctioned_jurisdiction") return false;
+  store.patch({ blocked: reason satisfies BlockReason });
+  return true;
+}
+
 /** Marks the caller as refused when `error` is an access refusal; true if it was. */
 export function noteAccess(store: ConsoleStore, error: unknown): boolean {
-  if (error instanceof EngineError && error.reject?.kind === "access") {
-    const reason = error.reject.reason;
-    if (reason === "united_states" || reason === "sanctioned_jurisdiction") {
-      store.patch({ blocked: reason satisfies BlockReason });
-      return true;
-    }
-  }
-  return false;
+  return error instanceof EngineError && error.reject !== null && error.reject !== undefined && noteRegionRefusal(store, error.reject);
 }

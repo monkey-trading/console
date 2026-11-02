@@ -339,14 +339,14 @@ The bar is WCAG 2.2 AA; the [development checklist](../../rules/development-chec
 - No analytics (Vercel Web Analytics and Speed Insights included), cookies, `localStorage`,
   `sessionStorage`, IndexedDB, trackers, fingerprinting, third-party scripts, fonts, images,
   iframes, or embeds without the owner's explicit approval. A visitor's choices, such as the pause
-  switch, live in memory and end with the tab. The one exception, approved by the owner in
-  monkey-trading/console#82: the wallet connection choice (the connector kind and, for
-  WalletConnect, the session topic — never keys, addresses, or session secrets) persists in
-  `localStorage` across page loads, is forgotten when the connection ends, and is disclosed on
-  /notices.
-  A second, approved by the owner in monkey-trading/console#169: the trading preferences and the last size
-  placed in each market persist in `localStorage` (`monkeytrading.preferences`, `monkeytrading.last-sizes`),
-  read tolerantly, and are disclosed on /notices.
+  switch, live in memory and end with the tab. Three exceptions, approved by the owner and disclosed
+  on /notices: the wallet connection choice (monkey-trading/console#82: the connector kind and, for
+  WalletConnect, the session topic) persists in `localStorage` across page loads and is forgotten
+  when the connection ends; the session key (monkey-trading/console#168: its private key, scoped
+  to one account, chain and vault) persists there until it expires, is revoked, the node stops
+  accepting it, or the wallet disconnects, and reaches no snapshot, message or log; and the trading
+  preferences and the last size placed in each market (monkey-trading/console#169) persist there
+  (`monkeytrading.preferences`, `monkeytrading.last-sizes`), read tolerantly.
 - Every request the page makes is same-origin, but for the engine node's origin once the owner has
   approved it, and WalletConnect's relay and its Verify frame while a user pairs or uses a wallet app over
   it (approved in monkey-trading/console#7 and #27): the site serves its own fonts, images, and scripts. Check the production build's

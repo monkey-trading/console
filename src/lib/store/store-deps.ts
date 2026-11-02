@@ -1,7 +1,7 @@
 /** What a console store is built from: the node's client, the wallet connectors, and the page's starting state. */
 
 import type { EngineClient } from "../engine/client";
-import type { ChoiceStorage } from "../engine/wallet-persist";
+import type { KeyStorage } from "../engine/session-key-store";
 import type { AccountView, EligibilityClass, HistoryEvent, HouseView, MarketView, QueuedWithdrawal, StreamMessage } from "../engine/types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
@@ -26,10 +26,11 @@ export interface StoreDeps {
   /** What the chart-history scan's backoff waits on; a test substitutes one without real timers. */
   scanClock?: ScanClock;
   /**
-   * Where the wallet connection choice persists across page loads (monkey-trading/console#82);
-   * `window.localStorage` in a live page. Absent in the mock session and tests: nothing persists.
+   * Where the wallet connection choice (monkey-trading/console#82) and the session key
+   * (monkey-trading/console#168) persist across page loads; `window.localStorage` in a live page.
+   * Absent in the mock session, whose node starts afresh on every load, and in most tests: nothing persists.
    */
-  persistence?: ChoiceStorage;
+  persistence?: KeyStorage;
   /**
    * Starts the archive-scan fallback that seeds the chart for a node without the marks endpoint
    * (a 404 there asks for it once). False when the node has not named a log head yet, so the next

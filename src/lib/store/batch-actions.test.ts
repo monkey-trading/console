@@ -76,6 +76,7 @@ describe("cancel all", () => {
       kit.client.answer = (posted) => posted.route === "session_key"
         ? { seq: 1, events: [{ type: "session_key_rejected", account: ME, session_key: (posted.body as { session_key: string }).session_key, reason: { kind: "too_many_session_keys", max: 10 } }] }
         : { seq: 2, events: [cancelled(7)] };
+      await loginSession(kit.store); // setup's registration, which the node refuses
       return { ...kit, prompts: () => kit.provider.calls.filter((c) => c.method === "eth_signTypedData_v4" && JSON.stringify(c.params).includes("CancelAllRequest")).length };
     });
     await cancelAll(store);
@@ -129,6 +130,7 @@ describe("close all", () => {
     kit.client.answer = (posted) => posted.route === "session_key"
       ? { seq: 1, events: [{ type: "session_key_rejected", account: ME, session_key: (posted.body as { session_key: string }).session_key, reason: { kind: "too_many_session_keys", max: 10 } }] }
       : { seq: 2, events: [fill(1)] };
+    await loginSession(kit.store); // setup's registration, which the node refuses
     await closeAll(kit.store, [{ market: 1, quoted: fixedFromInt(100_000) }], BPS);
     expect(routes(kit.client)).toEqual(["close_all"]);
     expect(kit.provider.calls.filter((c) => c.method === "eth_signTypedData_v4" && JSON.stringify(c.params).includes("CloseAllRequest"))).toHaveLength(1);

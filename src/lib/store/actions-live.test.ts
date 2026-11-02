@@ -8,12 +8,12 @@ import vectors from "../engine/eip712-vectors.json";
 import { orderTypedData, registerSessionKeyTypedData, requestDomain } from "../engine/eip712";
 import { SESSION_KEY_TTL_MS } from "../engine/session-key";
 import type { CancelRequest, OrderRequest, SessionKeyRequest } from "../engine/types";
-import { ACCOUNT } from "../engine/wallet-kit";
-import { loadChoice, type ChoiceStorage } from "../engine/wallet-persist";
+import { ACCOUNT, memoryStorage } from "../engine/wallet-kit";
+import { loadChoice } from "../engine/wallet-persist";
 import { fixedFromInt, fixedFromWire } from "../fixed";import { settle } from "../engine/test-kit";
 import type { Wallet } from "../engine/wallet";
 import { cancelOrder, connectWallet, deposit, disconnectWallet, placeOrder, REQUEST_TTL_MS, withdraw } from "./actions";
-import { connected, NODE_TIME, signerOf, VAULT, ActionClient, BTC } from "./live-kit";
+import { connected, keyed, NODE_TIME, signerOf, VAULT, ActionClient, BTC } from "./live-kit";
 import { loginSession } from "./session";
 import { ConsoleStore } from "./store";
 
@@ -32,7 +32,7 @@ function registrationOf(client: ActionClient, last = false): { request: SessionK
 
 describe("signed actions with a fixed-key wallet", () => {
   it("logs in with the one wallet signature, then signs the order with the session key — no second wallet prompt", async () => {
-    const { client, provider, store } = await connected();
+    const { client, provider, store } = await keyed();
     await placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
     const { request, sessionKey } = registrationOf(client);
     // The registration is the account's signature: the one wallet prompt of the whole flow.
@@ -48,34 +48,6 @@ describe("signed actions with a fixed-key wallet", () => {
     expect(REQUEST_TTL_MS).toBeLessThanOrEqual(5 * 60_000);
     const typed = orderTypedData(DOMAIN, body, { nonce: 4, expiresAt: NODE_TIME + REQUEST_TTL_MS });
     expect(await signerOf(typed, body.auth?.signature)).toBe(sessionKey);
-  });
-
-  it("re-runs the login once when the node says the session key expired, and retries the order silently", async () => {
-    const { client, provider, store } = await connected();
-    await loginSession(store); // the connect-time login
-    let expiredOnce = true;
-    client.answer = (posted) => {
-      if (posted.route === "order" && expiredOnce) {
-        expiredOnce = false;
-        throw new EngineError(401, "session key expired", { kind: "invalid_signature" });
-      }
-      if (posted.route === "session_key") {
-        const body = posted.body as SessionKeyRequest;
-        return { seq: 1, events: [{ type: "session_key_registered", account: body.account, session_key: body.session_key, expires_at: body.expires_at }] };
-      }
-      return { seq: 1, events: [] };
-    };
-    await placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
-    // Two registrations (connect-time and the retry), two orders (refused, then retried)...
-    expect(client.posted.filter((p) => p.route === "session_key")).toHaveLength(2);
-    expect(client.posted.filter((p) => p.route === "order")).toHaveLength(2);
-    // ...and exactly one more wallet signature than the connect-time login spent.
-    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2);
-    const second = client.posted.at(-1);
-    if (!second || second.route !== "order") throw new Error("no retried order posted");
-    const retried = registrationOf(client, true);
-    const typed = orderTypedData(DOMAIN, second.body as OrderRequest, { nonce: (second.body as OrderRequest).auth?.nonce ?? 0, expiresAt: ((second.body as OrderRequest).auth?.expires_at ?? 0) });
-    expect(await signerOf(typed, (second.body as OrderRequest).auth?.signature)).toBe(retried.sessionKey);
   });
 
   it("re-signs the registration once more with the nonce a 409 names, and only once", async () => {
@@ -148,17 +120,22 @@ describe("signed actions with a fixed-key wallet", () => {
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node is not verified.");
   });
 
-  it("asks the wallet for the one login signature when trading needs it, then signs cancels silently", async () => {
-    const { store } = await connected();
+  it("never registers a key at the point of trading: with none, setup reopens and nothing is signed or sent", async () => {
+    const { client, provider, store } = await connected();
+    await cancelOrder(store, 42);
+    await placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
+    expect(client.posted).toEqual([]);
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toEqual([]);
+    expect(store.getSnapshot().setup.open).toBe(true);
+  });
+
+  it("asks the wallet nothing once the browser holds a key", async () => {
+    const { store } = await keyed();
     const prompts: (string | null)[] = [];
     store.subscribe(() => prompts.push(store.getSnapshot().prompt));
-    await cancelOrder(store, 42); // no key yet: this runs the login
-    const shown = prompts.filter((p) => p !== null);
-    expect(shown.some((p) => p.startsWith("Confirm in your wallet: authorize this browser to trade until"))).toBe(true);
-    expect(shown).toHaveLength(1);
-    expect(store.getSnapshot().prompt).toBeNull();
-    await cancelOrder(store, 43); // the key is live: no wallet prompt at all
-    expect(prompts.filter((p) => p !== null)).toHaveLength(1);
+    await cancelOrder(store, 42);
+    await cancelOrder(store, 43);
+    expect(prompts.filter((p) => p !== null)).toEqual([]);
   });
 
   it("signs nothing and reads no nonce for a node whose attestation is not accepted", async () => {
@@ -225,18 +202,13 @@ describe("a wallet change", () => {
   });
 
   it("persists the injected connector choice when the session has storage, and no other choice", async () => {
-    const held = new Map<string, string>();
-    const persistence: ChoiceStorage = {
-      getItem: (key) => held.get(key) ?? null,
-      setItem: (key, value) => void held.set(key, value),
-      removeItem: (key) => void held.delete(key),
-    };
+    const persistence = memoryStorage();
     const { store } = await connected();
     store.deps.persistence = persistence;
     expect(await connectWallet(store, "injected", true)).toBe(true);
     expect(loadChoice(persistence)).toEqual({ kind: "injected" });
     // A read-only watch account is not a connection the console persists.
-    held.clear();
+    persistence.held.clear();
     expect(await connectWallet(store, "watch", true)).toBe(true);
     expect(loadChoice(persistence)).toBeNull();
   });
@@ -265,12 +237,7 @@ describe("a wallet change", () => {
   it("a quiet connect never replaces a wallet that connected while it waited, and persists nothing for the refused one", async () => {
     const { store } = await connected();
     disconnectWallet(store); // no wallet connected when the quiet reconnect left its request pending
-    const held = new Map<string, string>();
-    const persistence: ChoiceStorage = {
-      getItem: (key) => held.get(key) ?? null,
-      setItem: (key, value) => void held.set(key, value),
-      removeItem: (key) => void held.delete(key),
-    };
+    const persistence = memoryStorage();
     store.deps.persistence = persistence;
     const newer: Wallet = { address: "0x00000000000000000000000000000000000000bb", label: "Newer", sign: async () => "0x", deposit: async () => "0x", claim: async () => "0x" };
     let released = 0;
@@ -283,7 +250,7 @@ describe("a wallet change", () => {
     expect(store.liveWallet).toBe(newer); // the newer wallet stays
     expect(store.getSnapshot().wallet?.address).toBe(newer.address); // the stale connect adopted nothing
     expect(released).toBe(1); // its session was ended
-    expect(held.size).toBe(0); // and its topic was not persisted over the newer connection
+    expect(persistence.held.size).toBe(0); // and its topic was not persisted over the newer connection
     // A connect the visitor started is not quiet and still replaces, adopting its topic as the choice.
     store.liveWallet = null;
     store.deps.wallets.connect = async () => newer;

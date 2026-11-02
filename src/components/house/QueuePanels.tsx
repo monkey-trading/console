@@ -13,7 +13,7 @@ import { useSelected } from "./use-feed";
 const SEGMENTS = 40;
 
 const selectQueue = (s: ConsoleState): { totals: QueueTotals | null; failed: boolean } => ({ totals: s.withdrawalTotals, failed: s.queueFailed });
-const selectPlace = (s: ConsoleState) => ({ queue: s.queue, read: s.accountQueueRead, wallet: s.wallet?.address ?? null, count: s.withdrawalTotals?.count ?? null, exact: exactTotals(s.withdrawalTotals, s.queueFailed) !== null });
+const selectPlace = (s: ConsoleState) => ({ queue: s.queue, read: s.accountRead, wallet: s.wallet?.address ?? null, count: s.withdrawalTotals?.count ?? null, exact: exactTotals(s.withdrawalTotals, s.queueFailed) !== null });
 
 const amount = (value: Fixed | null): string => (value === null ? "None" : formatUsd(value));
 

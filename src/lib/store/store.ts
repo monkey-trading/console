@@ -4,7 +4,7 @@ import type { TimeframeId } from "../bars";
 import { maySign } from "../engine/attestation";
 import type { ClientEvent } from "../engine/client";
 import type { SessionKeySigner } from "../engine/session-key";
-import type { MarketId, Reject, StreamMessage } from "../engine/types";
+import type { MarketId, StreamMessage } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
 import { MonkeySession } from "../monkey/wallet-queue";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
@@ -18,18 +18,16 @@ import { readHousePanelSoon } from "./house";
 import { HouseStats } from "./house-stats";
 import { PacedReads } from "./paced-reads";
 import { QuietReads } from "./quiet-reads";
-import { loginOnCredit, loginWhenLive } from "./session";
 import { noteAccess } from "./signing";
 import type { StoreDeps } from "./store-deps";
+import { followSessionKey, noteSessionRevoked } from "./wallet-session";
 
 export class ConsoleStore {
   readonly deps: StoreDeps;
   /** The connected wallet, which holds a signer and so is not part of the snapshot. */
   liveWallet: Wallet | null = null;
-  /** The ephemeral in-browser key trading signs with and its registration's expiry by the node's clock (console#68); the private key never enters the snapshot. */
-  sessionKey: SessionKeySigner | null = null; sessionKeyExpiresAt = 0;
-  /** Why the last login the node answered was refused, or null: a refused registration sends orders and cancels through the wallet instead. */
-  sessionLoginRefusal: Reject | null = null;
+  /** The in-browser key trading signs with (console#68, #168), or the connection's candidate until it is registered; never in the snapshot, which holds its expiry alone. */
+  sessionKey: SessionKeySigner | null = null;
   /** The login in flight, so concurrent callers share one attempt and one wallet prompt. */
   sessionLogin: Promise<boolean> | null = null;
   /** The previous disconnect's revocation and release, awaited before the next connect adopts. */
@@ -83,7 +81,7 @@ export class ConsoleStore {
       ...state,
       feed: feedFrom(deps.initial.recent ?? [], state.markets, this.viewer, () => this.id()),
       ...(session
-        ? { wallet: session.wallet, account: session.account ? decodeAccount(session.account) : null, eligibility: session.eligibility, queue: session.queue, accountQueueRead: true, history: session.history }
+        ? { wallet: session.wallet, account: session.account ? decodeAccount(session.account) : null, eligibility: session.eligibility, queue: session.queue, accountRead: true, history: session.history }
         : {}),
     };
   }
@@ -127,7 +125,7 @@ export class ConsoleStore {
     this.lastEmissionsReadError = null; // a new wallet's vault reads start fresh: no stale latch
     this.lastAccountError = null; // its account reads start fresh too: the same failure under a new wallet is reported
     const mine = wallet?.address.toLowerCase();
-    this.patch({ wallet, accountQueueRead: false, feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
+    this.patch({ wallet, accountRead: false, feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
   }
 
   setPaused(paused: boolean): void {
@@ -153,12 +151,14 @@ export class ConsoleStore {
     this.pacing?.stop(); // a restart (StrictMode) begins with no wait or held read from the cycle before
     this.barsSeed.reset();
     this.deps.drive?.(nowMs);
+    const unfollow = followSessionKey(this);
     this.patch({ now: nowMs, bars: seedAllBars(this.snapshot.markets, nowMs, this.deps.history) });
     this.unwatch = this.deps.client.watch((event) => this.onClientEvent(event));
     this.unsubscribe = this.deps.client.subscribe((message) => this.onMessage(message));
     void this.checkNode();
     return () => {
       this.stopped = true;
+      unfollow();
       this.pacing?.stop();
       this.unsubscribe?.();
       this.unwatch?.();
@@ -182,8 +182,6 @@ export class ConsoleStore {
       // The frame's signed time moves the node clock first, so a read it prompts plots marks at node time, not the pre-outage time.
       this.patch({ stream: event.status, ...(event.time !== undefined && event.time > this.snapshot.now ? { now: event.time } : {}) });
       if (read) {
-        // A connect that found the feed still starting runs the login now, when signing is possible.
-        loginWhenLive(this);
         this.ledger.invalidate(); // the stream resumes at the live end: events from the gap are read again
         this.quiet.reset(); // a node that was away may have restarted with the route, or credited the account
         void this.refresh(true);
@@ -218,9 +216,10 @@ export class ConsoleStore {
     if (this.snapshot.markets.length === 0 && maySign(this.snapshot.attestation, "live")) await this.refresh(true);
     try {
       await this.deps.client.accessProbe();
-      this.patch({ blocked: null });
+      this.patch({ blocked: null, accessChecked: true });
     } catch (error) {
       if (!this.noteAccess(error)) this.toast("error", "The node did not answer the access check.");
+      this.patch({ accessChecked: true });
     }
   }
 
@@ -245,8 +244,7 @@ export class ConsoleStore {
     const mine = this.snapshot.wallet?.address.toLowerCase();
     const own = mine !== undefined && message.events.some((e) => eventAccount(e) === mine);
     if (own) {
-      // A deposit or declaration that credits the account is the moment its one-signature login may run.
-      loginOnCredit(this, message.events, mine);
+      noteSessionRevoked(this, message.events);
       this.quiet.accountEvent(); // the credit this event may carry is read at once, not at the next rest's end
       void this.refresh(true);
     } else if (message.cmd.type === "tick") {

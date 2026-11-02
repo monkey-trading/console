@@ -1,22 +1,28 @@
 /**
  * Session keys as the engine's V41 rules model them (monkey-trading/console#68): an account-signed
- * registration authorizes an ephemeral key to place and cancel orders — never to move funds — until
+ * registration authorizes an in-browser key to place and cancel orders — never to move funds — until
  * its expiry or an account-signed revocation, and a request's signer is the account key or one of
- * its registered keys. The mock checks no signature, so `identifySigner` in `orders` names the
+ * its registered keys. As the node admits them (monkey-trading/engine#470), a never-credited account
+ * may register and revoke once it has declared. The mock checks no signature, so `identifySigner` in `orders` names the
  * signer the way the flow always presents it: the account's own nonce sequence first, then the
  * sequence of the registered key the nonce matches (the console asks each signer's next nonce
  * before signing).
  */
 
 import { EngineError, type ActionResult } from "../engine/client";
+import { MAX_SESSION_KEY_EXPIRY_MS, MAX_SESSION_KEYS_PER_ACCOUNT } from "../engine/session-key";
 import type { Reject, SessionKeyRequest, SessionKeyRevocationRequest } from "../engine/types";
 import { checkAccess, checkAuth } from "./orders";
 import type { MockSessionKey, MockState } from "./state";
 
-/** The engine's registration-expiry cap (`MAX_SESSION_KEY_EXPIRY_MS`). */
-export const MAX_SESSION_KEY_EXPIRY_MS = 24 * 60 * 60 * 1000;
-/** The engine's live-key cap (`MAX_SESSION_KEYS_PER_ACCOUNT`). */
-export const MAX_SESSION_KEYS_PER_ACCOUNT = 10;
+/**
+ * Refuses a never-credited account that has not declared, as the node's admission does, before the log.
+ * Error cases:
+ * - the account was never credited and has no declaration (403)
+ */
+function checkAdmitted(state: MockState, address: string): void {
+  if (!state.credited.has(address.toLowerCase()) && state.account(address).eligibility === null) throw new EngineError(403, "a never-credited account must declare first");
+}
 
 /** Drops the account's expired and revoked keys, as each registration prunes first. */
 function prune(state: MockState, accountKey: string): Map<string, MockSessionKey> {
@@ -41,8 +47,7 @@ function rejected(state: MockState, cmd: "register_session_key" | "revoke_sessio
  */
 export function registerSessionKey(state: MockState, req: SessionKeyRequest): ActionResult {
   checkAccess(state);
-  // As the node's authorise refuses any account-signed request for a never-credited account.
-  if (!state.credited.has(req.account.toLowerCase())) throw new EngineError(403, "account has never been credited");
+  checkAdmitted(state, req.account);
   const account = state.account(req.account);
   checkAuth(state, account, req.auth);
   const accountKey = req.account.toLowerCase();
@@ -64,6 +69,7 @@ export function registerSessionKey(state: MockState, req: SessionKeyRequest): Ac
 /** Revokes `session_key` for the account, account-signed; an unknown key refuses as the engine's `InvalidSessionKey`. */
 export function revokeSessionKey(state: MockState, req: SessionKeyRevocationRequest): ActionResult {
   checkAccess(state);
+  checkAdmitted(state, req.account);
   const account = state.account(req.account);
   checkAuth(state, account, req.auth);
   const key = state.sessionKeys.get(req.account.toLowerCase())?.get(req.session_key.toLowerCase());

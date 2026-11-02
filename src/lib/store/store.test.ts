@@ -7,7 +7,7 @@ import { createMockNode, SIM_EPOCH_MS } from "../mock";
 import { resetVault } from "../mock/test-helpers";
 import { parseSize, previewTicket } from "../ticket";
 import { mockHistory } from "../mock/history";
-import { attestEligibility, cancelOrder, connectWallet, deposit, placeOrder, withdraw } from "./actions";
+import { attestEligibility, authorizeBrowser, cancelOrder, connectWallet, deposit, placeOrder, withdraw } from "./actions";
 import { ConsoleStore } from "./store";
 
 // A Wednesday afternoon, when every market is open.
@@ -28,6 +28,7 @@ async function funded() {
   await ctx.store.checkNode();
   await connectWallet(ctx.store, "browser");
   await attestEligibility(ctx.store, "professional");
+  await authorizeBrowser(ctx.store);
   await deposit(ctx.store, fixedFromInt(50_000));
   ctx.store.tick(START + 1_000);
   ctx.store.tick(START + 8_000);

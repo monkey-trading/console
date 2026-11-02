@@ -9,15 +9,15 @@ import { parseDeploy, rawDeploy, type Deploy } from "@/lib/engine/deploy";
 import { InjectedConnector } from "@/lib/engine/injected";
 import { createLiveClient, GLUE_PATH } from "@/lib/engine/live-session";
 import type { Eip1193Provider } from "@/lib/engine/provider-wallet";
+import type { KeyStorage } from "@/lib/engine/session-key-store";
 import { WalletConnectConnector } from "@/lib/engine/walletconnect";
-import type { ChoiceStorage } from "@/lib/engine/wallet-persist";
 import type { VerifierModule } from "@/lib/engine/wasm-verifier";
 import { WatchConnector } from "@/lib/engine/watch-wallet";
 import { DEMO_ADDRESS } from "@/lib/mock/demo";
 import { queuePage } from "@/lib/mock/funds";
 import { mockHistory } from "@/lib/mock/history";
 import { createMockNode, SIM_EPOCH_MS, type MockNode } from "@/lib/mock";
-import { connectWallet, walletSessionEnded } from "@/lib/store/actions";
+import { connectWallet, storedKeyChanged, walletSessionEnded } from "@/lib/store/actions";
 import { reconnectWallet } from "@/lib/store/reconnect";
 import { scanBarsHistory } from "@/lib/store/bars-scan";
 import { followAccountFeeds, quoteSyncKey, syncQuotes } from "@/lib/store/funds";
@@ -72,12 +72,13 @@ function createLiveSession(deploy: Deploy): Session {
   if (deploy.chainId === null || deploy.vault === null) throw new Error("A live session needs the deployment's chain id and vault.");
   const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, staking: deploy.staking, add: deploy.rpcUrl === null ? null : { name: deploy.chainId === 31337 ? "Anvil (local)" : `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-  // The choice persists in localStorage, reached lazily: this function also runs on the server,
-  // where `window` does not exist, so the storage is touched only from effects and handlers.
-  const persistence: ChoiceStorage = {
+  // The choice and the session key persist in localStorage, reached lazily: this function also runs on
+  // the server, where `window` does not exist, so the storage is touched only from effects and handlers.
+  const persistence: KeyStorage = {
     getItem: (key) => window.localStorage.getItem(key),
     setItem: (key, value) => window.localStorage.setItem(key, value),
     removeItem: (key) => window.localStorage.removeItem(key),
+    keys: () => Object.keys(window.localStorage),
   };
   // When the wallet app ends the session, the console shows the wallet disconnected rather than
   // failing every action, and forgets the choice: the remembered connection has ended. (The dead
@@ -179,6 +180,15 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       stop();
     };
   }, [store, session]);
+  useEffect(() => {
+    if (session.node !== null) return;
+    // The session key is shared between this browser's tabs: another tab's write reaches this one here, and never its own.
+    const onStorage = (event: StorageEvent) => {
+      if (event.storageArea === window.localStorage) storedKeyChanged(store, event.key, event.newValue);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [store, session.node]);
   useEffect(() => {
     if (session.node !== null) return;
     // The node's quote subscription follows the account, the selected market and the markets held; a

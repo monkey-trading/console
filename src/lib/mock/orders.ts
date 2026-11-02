@@ -47,10 +47,12 @@ export type RequestSigner = { kind: "account" } | { kind: "session"; address: st
  * first, then the registered key whose sequence the nonce matches — the console asks each
  * signer's next nonce before signing).
  * Error cases:
+ * - a never-credited account (403): a declaration and its session key come before a deposit, and nothing else does (monkey-trading/engine#470)
  * - no signature (401), an unsigned-looking signature (401), or an expired request (400)
  * - a nonce no sequence matches (409), a revoked key (401 "session key revoked"), an expired key (401 "session key expired")
  */
 export function identifySigner(state: MockState, accountAddress: string, account: AccountState, auth: RequestAuth | undefined): RequestSigner {
+  if (!state.credited.has(accountAddress.toLowerCase())) throw new EngineError(403, "account has never been credited");
   if (!auth) throw new EngineError(401, "missing signature", { kind: "missing_signature" });
   if (!/^0x[0-9a-f]{130}$/i.test(auth.signature)) throw new EngineError(401, "invalid signature", { kind: "invalid_signature" });
   if (auth.expires_at <= state.now) throw new EngineError(400, "request expired");

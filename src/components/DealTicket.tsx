@@ -10,7 +10,9 @@ import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { ORDER_LABELS, ORDER_TYPES, type OrderType } from "@/lib/prefs";
 import { formatMark } from "@/lib/price-format";
 import { ticketPrices } from "@/lib/quotes";
+import { setupGate } from "@/lib/setup-steps";
 import { placeOrder } from "@/lib/store/actions";
+import { openSetup } from "@/lib/store/setup";
 import { belowMinimum, contractUnit, MARGIN_SHORT, NO_SIZE, parseSize, previewTicket, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
 
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -62,9 +64,12 @@ export function DealTicket() {
   if (kind !== "market" && triggerPrice === null) problems.push(price.trim() === "" ? "Enter a trigger price." : "Enter the trigger price in digits, such as 61250.50.");
   const sizeMissing = parsedSize.kind === "empty" || (parsedSize.kind === "qty" && qty === 0n);
   const blockSentence = (why: string | null) => (why === null ? null : `Trading is paused: ${why}.`);
-  // A read-only account is named as the cause before eligibility, which it could not attest.
   const readOnlyWhy = signBlock(state.attestation, state.stream, state.wallet?.readOnly === true);
-  const gate = !state.wallet ? "Connect a wallet to trade." : state.wallet.readOnly ? blockSentence(readOnlyWhy) : state.eligibility === null ? "Attest your eligibility before trading." : blockSentence(readOnlyWhy);
+  // Trading never registers a key: until setup is done, this button reopens it.
+  const setup = setupGate(state);
+  const setupNote = setup === null ? null : setup === "reading" ? "Reading your account…" : state.eligibility === null ? "Sign the declaration and authorize this browser to trade." : "Authorize this browser to trade.";
+  // Why the console cannot sign comes first: a node it does not trust may never answer the read that setup waits on.
+  const gate = !state.wallet ? "Connect a wallet to trade." : blockSentence(readOnlyWhy) ?? setupNote;
   const canPlace = gate === null && problems.length === 0 && sizeProblems.length === 0 && !sizeMissing && !state.busy;
   const places = market.places;
   const show = (value: bigint | null) => (value === null ? "—" : formatMark(value, places));
@@ -83,7 +88,7 @@ export function DealTicket() {
   };
   return (
     <>
-      <form className="p-4 sm:p-5" onSubmit={(event) => { event.preventDefault(); if (canPlace) submit(); }}>
+      <form className="p-4 sm:p-5" onSubmit={(event) => { event.preventDefault(); if (setup === "needed") openSetup(store); else if (canPlace) submit(); }}>
         <h2 className="text-label tracking-caps text-fg-3 uppercase">Deal ticket · {market.symbol}</h2>
         <fieldset className="mt-5 grid grid-cols-3 gap-2">
           <legend className="sr-only">Order type</legend>
@@ -132,12 +137,12 @@ export function DealTicket() {
             <p className="mt-2 text-label leading-relaxed text-fg-3">{kind === "market" ? "The node declines the order if the live price is more than this worse than the quote shown." : "Resting orders fill at the live price when triggered."}</p>
           </fieldset>
         </details>
-        <button type="submit" aria-disabled={!canPlace} className={`mt-4 min-h-12 w-full rounded border py-3 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 ${side === "buy" ? "border-glow bg-glow/10 text-glow hover:bg-glow/20" : "border-ember bg-ember/10 text-ember hover:bg-ember/20"}`}>
-          {state.busy ? "Signing…" : `Trade: ${side === "buy" ? "Buy" : "Sell"} ${market.symbol}`}
+        <button type="submit" aria-disabled={!canPlace && setup !== "needed"} className={`mt-4 min-h-12 w-full rounded border py-3 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 ${side === "buy" ? "border-glow bg-glow/10 text-glow hover:bg-glow/20" : "border-ember bg-ember/10 text-ember hover:bg-ember/20"}`}>
+          {state.busy ? "Signing…" : setup === "needed" ? "Finish setup" : `Trade: ${side === "buy" ? "Buy" : "Sell"} ${market.symbol}`}
         </button>
         {live && <div className="mt-3"><SigningFor /></div>}
         <div aria-live="polite" className="mt-3 space-y-1 text-label leading-relaxed text-ember">
-          {gate && <p className="text-fg-2">{gate} {state.wallet && !state.wallet.readOnly && state.eligibility === null && <FundingLink />}</p>}
+          {gate && <p className="text-fg-2">{gate}</p>}
           {!gate && problems.map((p) => <p key={p}>{p}{p === "Fund your account to trade." && <> <FundingLink /></>}</p>)}
         </div>
       </form>
