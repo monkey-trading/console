@@ -6,6 +6,7 @@ import type { ClientEvent } from "../engine/client";
 import type { SessionKeySigner } from "../engine/session-key";
 import type { MarketId, Reject, StreamMessage } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
+import { MonkeySession } from "../monkey/wallet-queue";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
 import { loadAccount } from "./account";
 import { tickBars } from "./bars-tick";
@@ -33,11 +34,11 @@ export class ConsoleStore {
   sessionLogin: Promise<boolean> | null = null;
   /** The previous disconnect's revocation and release, awaited before the next connect adopts. */
   walletCleanup: Promise<void> | null = null;
-  /** Bookkeeping for the background vault reads: `paidCheck`/`emissionsCheck` name the wallet each runs for, `lastEmissionsReadAt` throttles the MONKEY record's retries, `lastEmissionsReadError` dedupes its repeated failures. */
+  /** Bookkeeping for the background vault reads: `paidCheck`/`emissionsCheck` name the wallet each runs for, `lastEmissionsReadError` dedupes its repeated failures. */
   paidCheck: Wallet | null = null;
   emissionsCheck: Wallet | null = null;
-  lastEmissionsReadAt = -1;
   lastEmissionsReadError: string | null = null;
+  readonly monkeySession = new MonkeySession(); // the MONKEY page's wallet queue and, while it is on screen, its store
   private snapshot: ConsoleState;
   private readonly listeners = new Set<() => void>();
   private nextId = 1;
@@ -125,8 +126,7 @@ export class ConsoleStore {
   setWallet(wallet: { address: string; label: string; readOnly?: boolean } | null): void {
     this.ledger.walletChanged(wallet?.address);
     this.viewer = undefined; // once a wallet has been connected or left, the starting viewer no longer applies
-    this.lastEmissionsReadError = null; // a new wallet's vault reads start fresh: no stale latch or retry window
-    this.lastEmissionsReadAt = -1;
+    this.lastEmissionsReadError = null; // a new wallet's vault reads start fresh: no stale latch
     this.lastAccountError = null; // its account reads start fresh too: the same failure under a new wallet is reported
     const mine = wallet?.address.toLowerCase();
     this.patch({ wallet, accountQueueRead: false, feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });

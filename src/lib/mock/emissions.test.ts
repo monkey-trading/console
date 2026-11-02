@@ -57,7 +57,7 @@ describe("MONKEY emissions", () => {
   it("serves the schedule its allocations follow: the open period, and the period a stamp falls in", async () => {
     const node = createMockNode(START);
     const open = await node.client.emissionSchedule();
-    expect(open).toEqual({ startMs: 0, periodMs: EMISSION_PERIOD_MS, period: Math.floor(START / EMISSION_PERIOD_MS) });
+    expect(open).toEqual({ startMs: node.client.state.monkey.startMs, periodMs: EMISSION_PERIOD_MS, period: node.client.state.monkey.periodAt(START) });
     recordEmissionResult(node.client.state, ME, fixedFromInt(-1_000), 0n);
     node.client.tick(past(node.client.state.now));
     const allocation = allocations(node).find((e) => e.type === "emission_allocated");

@@ -1,6 +1,7 @@
 /** A wallet that lives in the page: it connects, "signs" and deposits against the mock node. */
 
 import type { EntitlementProof } from "../engine/emissions";
+import type { DistributionProof } from "../engine/stats-types";
 import type { Wallet, WalletConnector, WalletOption, SignRequest } from "../engine/wallet";
 import type { Fixed } from "../fixed";
 import { mockHex } from "./client";
@@ -41,6 +42,25 @@ export class MockWalletConnector implements WalletConnector {
       },
       async emissionsClaimed() {
         return { claimed: controls.monkeyClaimed(address), latestSeq: controls.postedSeq() };
+      },
+      staking: {
+        position: async () => controls.stakingPosition(address),
+        async stake(amount: bigint) {
+          controls.stake(address, amount);
+          return `0x${mockHex(`stake-${amount}-${address}`, 32)}`;
+        },
+        async startUnstake(amount: bigint) {
+          controls.startUnstake(address, amount);
+          return `0x${mockHex(`unstake-${amount}-${address}`, 32)}`;
+        },
+        async completeUnstake() {
+          controls.completeUnstake(address);
+          return `0x${mockHex(`complete-${address}`, 32)}`;
+        },
+        async claimDistribution(proof: DistributionProof) {
+          controls.claimDistribution(address, proof);
+          return `0x${mockHex(`distribution-${proof.entitled}-${address}`, 32)}`;
+        },
       },
       async claimed() {
         return true;

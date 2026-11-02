@@ -2,6 +2,7 @@
 export const PAGES = [
   { href: "/", label: "Trade" },
   { href: "/house", label: "House" },
+  { href: "/monkey", label: "MONKEY" },
   { href: "/funding", label: "Funding" },
 ] as const;
 

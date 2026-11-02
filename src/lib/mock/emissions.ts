@@ -10,10 +10,12 @@
 import type { EngineEvent } from "../engine/types";
 import { fixedToWire, type Fixed } from "../fixed";
 import { MONKEY_UNIT } from "../format";
+import { noteLossClose, notePeriodClose } from "./monkey";
+import { PERIOD_MS } from "./monkey-state";
 import type { MockState } from "./state";
 
 /** How long one emission period runs: the engine's ten-minute periods. */
-export const EMISSION_PERIOD_MS = 600_000;
+export const EMISSION_PERIOD_MS = PERIOD_MS;
 /** The development period budget the engine's own scenario uses: 1,000 MONKEY (`emissions_scenario.rs`). */
 export const EMISSION_PERIOD_BUDGET = 1_000n * MONKEY_UNIT;
 
@@ -47,7 +49,8 @@ function weightOf(result: { losses: Fixed; writtenOff: Fixed }): Fixed {
  */
 export function closeEmissionPeriods(state: MockState): EngineEvent[] {
   const events: EngineEvent[] = [];
-  const nowPeriod = Math.floor(state.now / EMISSION_PERIOD_MS);
+  // The schedule `GET /v1/monkey` serves: period 0 starts at the mock's `monkey.startMs`.
+  const nowPeriod = state.monkey.periodAt(state.now);
   while (state.emission.period < nowPeriod) {
     const { period, results } = state.emission;
     const weights = [...results.values()]
@@ -61,8 +64,10 @@ export function closeEmissionPeriods(state: MockState): EngineEvent[] {
       const key = address.toLowerCase();
       state.entitledMonkey.set(key, (state.entitledMonkey.get(key) ?? 0n) + amount);
       allocated += amount;
+      noteLossClose(state, address, period, amount);
       events.push({ type: "emission_allocated", account: address, period, weight: fixedToWire(weight), amount: amount.toString() });
     }
+    if (allocated > 0n) notePeriodClose(state, state.monkey.startMs + (period + 1) * EMISSION_PERIOD_MS, allocated, total);
     events.push({ type: "emission_period_closed", period, budget: EMISSION_PERIOD_BUDGET.toString(), allocated: allocated.toString(), cancelled: (EMISSION_PERIOD_BUDGET - allocated).toString() });
     // The simulated vault posts a checkpoint with the close; proofs are served against it from here on.
     state.postedSeq = state.seq;

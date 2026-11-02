@@ -57,7 +57,7 @@ function createLiveSession(deploy: Deploy): Session {
     loadGlue: () => import(/* webpackIgnore: true */ /* turbopackIgnore: true */ GLUE_PATH) as Promise<VerifierModule>,
   });
   if (deploy.chainId === null || deploy.vault === null) throw new Error("A live session needs the deployment's chain id and vault.");
-  const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, add: deploy.rpcUrl === null ? null : { name: deploy.chainId === 31337 ? "Anvil (local)" : `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
+  const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, staking: deploy.staking, add: deploy.rpcUrl === null ? null : { name: deploy.chainId === 31337 ? "Anvil (local)" : `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   // The choice persists in localStorage, reached lazily: this function also runs on the server,
   // where `window` does not exist, so the storage is touched only from effects and handlers.

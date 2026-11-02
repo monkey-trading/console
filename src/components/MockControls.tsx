@@ -50,6 +50,7 @@ function MockPanel({ node }: { node: MockNode }) {
     controls.resetAccount(wallet.address);
     store.ledger.invalidate(); // the P&L tab's rows belong to the account just cleared
     void store.refresh(true);
+    void store.monkeySession.panel?.refreshWallet(true); // the MONKEY page's stake and balance went with it
   };
   const changeRegion = (value: Region) => {
     setRegion(value);

@@ -12,7 +12,11 @@ import { isWholeUsdc, USDC_UNIT } from "../vault";
 import type { EntitlementProof } from "./emissions";
 import type { TypedRequest } from "./eip712";
 import { claimEmissionsTx, emissionsClaimedRead, suggestMonkeyToken, suggestTokenAsset } from "./provider-monkey";
+import { unknownChain, walletError } from "./provider-errors";
+import { ProviderStaking } from "./provider-staking";
 import { waitMined } from "./receipts";
+import { serialized } from "./serialized-provider";
+import type { StakingWallet } from "./staking";
 import type { Address, SignedWithdrawal } from "./types";
 import type { Progress, SignRequest, Wallet } from "./wallet";
 
@@ -29,6 +33,8 @@ export interface WalletChain {
   usdc: string | null;
   /** A name and RPC URL to offer the wallet when it does not know the chain, such as a local Anvil chain; null when it must know it. */
   add: { name: string; rpcUrl: string } | null;
+  /** The staking contract; null or absent when the build names none, and then staking is refused. */
+  staking?: string | null;
 }
 
 export interface ProviderWalletDeps {
@@ -52,36 +58,14 @@ const VAULT = parseAbi([
   "function usedNonces(address account, uint64 nonce) view returns (bool)",
 ]);
 
-/** EIP-1193's code for a request the user rejected, and EIP-3085's for a chain the wallet does not know. */
-const USER_REJECTED = 4001;
-const UNKNOWN_CHAIN = 4902;
-/** Some wallets answer an unknown chain as a JSON-RPC server error instead of EIP-3085's 4902. */
-const SERVER_ERROR = -32603;
 const NO_TRANSACTION = `0x${"0".repeat(64)}`;
 
 const hex = (n: number) => `0x${n.toString(16)}`;
-const errorCode = (error: unknown) => (typeof error === "object" && error !== null && "code" in error ? error.code : undefined);
 
 /** `value` as `0x` hex, as viem's encoders take it. Error cases: it is not hex, which a wallet or the node answered wrongly. */
 export function hexOf(value: unknown): Hex {
   if (typeof value !== "string" || !isHex(value)) throw new Error(`Expected 0x hex, got ${String(value)}.`);
   return value;
-}
-
-/** The error a wallet's refusal stands for, written for the user. */
-function walletError(error: unknown, action: string): Error {
-  if (errorCode(error) === USER_REJECTED) return new Error(`You declined to ${action} in your wallet.`, { cause: error });
-  const detail = error instanceof Error ? error.message : typeof error === "object" && error !== null && "message" in error ? String(error.message) : String(error);
-  return new Error(`Your wallet could not ${action}: ${detail}`, { cause: error });
-}
-
-/** Whether a chain-switch refusal says the wallet does not know the chain: EIP-3085's 4902, or a -32603 whose message names the chain and reports it unrecognized or unknown, which some wallets answer instead. A generic failure that says neither is a refusal, not an unknown chain. */
-function unknownChain(error: unknown): boolean {
-  const code = errorCode(error);
-  if (code === UNKNOWN_CHAIN) return true;
-  if (code !== SERVER_ERROR) return false;
-  const detail = error instanceof Error ? error.message : typeof error === "object" && error !== null && "message" in error ? String(error.message) : "";
-  return /chain/i.test(detail) && /unrecognized|unknown/i.test(detail);
 }
 
 /** USDC base units for `amount`, which must be a whole number of them. */
@@ -102,14 +86,22 @@ export function normaliseSignature(signature: string): Hex {
 export class ProviderWallet implements Wallet {
   /** The WalletConnect session topic, set by that connector's wallet so the console can persist the connection choice on adoption. */
   topic?: string;
+  /** The staking and distribution calls. */
+  readonly staking: StakingWallet;
+
+  /** The wallet's provider, asked one request at a time. */
+  private readonly provider: Eip1193Provider;
 
   constructor(
     readonly address: Address,
     readonly label: string,
-    private readonly provider: Eip1193Provider,
+    provider: Eip1193Provider,
     private readonly chain: WalletChain,
     private readonly deps: ProviderWalletDeps,
-  ) {}
+  ) {
+    this.provider = serialized(provider);
+    this.staking = new ProviderStaking(address, chain, this.provider, { send: (to, data, action, progress) => this.send(to, data, action, progress), ensureChain: () => this.ensureChain() });
+  }
 
   /**
    * Puts the wallet on the deployment's chain, offering to add a chain it does not know when the

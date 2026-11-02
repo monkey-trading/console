@@ -5,7 +5,7 @@ import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
 import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
-import type { MonkeyView, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "../engine/stats-types";
+import type { ActivityPage, MonkeyView, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "../engine/stats-types";
 import type { HistoryPage, MarketId, PriceRules, StreamMessage, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import type { CheckpointEntry } from "../engine/wire";
@@ -55,11 +55,14 @@ export class FakeClient implements EngineClient {
   positionsView: PositionsView | null = null;
   seriesPage: SeriesPage | null = null;
   monkeyView: MonkeyView | null = null;
+  activityPage: ActivityPage | null = null;
   statsReads: string[] = [];
   readonly stats: StatsReads = {
     positions: async (market: MarketId) => this.canned(`positions:${market}`, this.positionsView),
     series: async (query: SeriesQuery) => this.canned(`series:${query.metric}:${query.fromMs}:${query.limit}`, this.seriesPage),
     monkey: async () => this.canned("monkey", this.monkeyView),
+    activity: async () => this.canned("activity", this.activityPage),
+    distributions: async () => null,
   };
   private canned<T>(read: string, answer: T | null): T {
     this.statsReads.push(read);

@@ -16,6 +16,10 @@ export interface Deploy {
   /** The vault address, lowercase `0x` hex. */
   vault: string | null;
   usdc: string | null;
+  /** The staking contract the MONKEY page stakes into, lowercase `0x` hex; null leaves staking out. */
+  staking: string | null;
+  /** The MONKEY token the MONKEY page shows with a copy button; null when the build does not name it. */
+  monkey: string | null;
   /** The node's `[api] heartbeat_interval`, which the attestation binds. */
   heartbeatMs: number;
   /** Node origins a `live-dev` build may accept a mock attestation from. */
@@ -33,6 +37,8 @@ export interface RawDeploy {
   chainId?: string | undefined;
   vault?: string | undefined;
   usdc?: string | undefined;
+  staking?: string | undefined;
+  monkey?: string | undefined;
   heartbeatMs?: string | undefined;
   devOrigins?: string | undefined;
   rpcUrl?: string | undefined;
@@ -55,6 +61,8 @@ export function rawDeploy(): RawDeploy {
     chainId: process.env.NEXT_PUBLIC_ENGINE_CHAIN_ID,
     vault: process.env.NEXT_PUBLIC_ENGINE_VAULT,
     usdc: process.env.NEXT_PUBLIC_ENGINE_USDC,
+    staking: process.env.NEXT_PUBLIC_ENGINE_STAKING,
+    monkey: process.env.NEXT_PUBLIC_ENGINE_MONKEY,
     heartbeatMs: process.env.NEXT_PUBLIC_ENGINE_HEARTBEAT_MS,
     devOrigins: process.env.NEXT_PUBLIC_ENGINE_DEV_ORIGINS,
     rpcUrl: process.env.NEXT_PUBLIC_ENGINE_RPC_URL,
@@ -91,7 +99,7 @@ function address(value: string | undefined, name: string): string {
 export function parseDeploy(raw: RawDeploy): Deploy {
   const mode = raw.mode === undefined || raw.mode === "" ? "mock" : raw.mode;
   if (mode !== "mock" && mode !== "live-dev" && mode !== "live") throw new Error(`NEXT_PUBLIC_ENGINE_MODE must be mock, live-dev or live: ${mode}`);
-  if (mode === "mock") return { mode, origin: null, chainId: null, vault: null, usdc: null, heartbeatMs: DEFAULT_HEARTBEAT_MS, devOrigins: [], rpcUrl: null, walletConnectProjectId: null };
+  if (mode === "mock") return { mode, origin: null, chainId: null, vault: null, usdc: null, staking: null, monkey: null, heartbeatMs: DEFAULT_HEARTBEAT_MS, devOrigins: [], rpcUrl: null, walletConnectProjectId: null };
   if (raw.origin === undefined) throw new Error(`NEXT_PUBLIC_ENGINE_ORIGIN is required in ${mode} mode`);
   const origin = httpsOrigin(raw.origin, "NEXT_PUBLIC_ENGINE_ORIGIN");
   const chain = Number(raw.chainId);
@@ -104,7 +112,8 @@ export function parseDeploy(raw: RawDeploy): Deploy {
   if (projectId !== null && !/^[0-9a-f]{32}$/.test(projectId)) throw new Error(`NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID must be 32 lowercase hex characters: ${projectId}`);
   return {
     mode, origin, chainId: chain, vault: address(raw.vault, "NEXT_PUBLIC_ENGINE_VAULT"),
-    usdc: raw.usdc === undefined ? null : address(raw.usdc, "NEXT_PUBLIC_ENGINE_USDC"), heartbeatMs, devOrigins,
+    usdc: raw.usdc === undefined ? null : address(raw.usdc, "NEXT_PUBLIC_ENGINE_USDC"),
+    staking: raw.staking === undefined ? null : address(raw.staking, "NEXT_PUBLIC_ENGINE_STAKING"), monkey: raw.monkey === undefined ? null : address(raw.monkey, "NEXT_PUBLIC_ENGINE_MONKEY"), heartbeatMs, devOrigins,
     rpcUrl: raw.rpcUrl === undefined || raw.rpcUrl === "" ? null : httpUrl(raw.rpcUrl, "NEXT_PUBLIC_ENGINE_RPC_URL"), walletConnectProjectId: projectId,
   };
 }

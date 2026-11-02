@@ -36,6 +36,14 @@ describe("parseDeploy", () => {
     expect(() => parseDeploy({ ...live, walletConnectProjectId: "0123" })).toThrow("NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID must be 32 lowercase hex characters");
   });
 
+  it("reads the optional staking contract and MONKEY token, lowercased, refusing a malformed one", () => {
+    expect(parseDeploy(live)).toMatchObject({ staking: null, monkey: null });
+    expect(parseDeploy({ ...live, staking: "0x5FbDB2315678afecb367f032d93F642f64180aa3", monkey: "0xE7f1725E7734CE288F8367e1Bb143E90bb3F0512" })).toMatchObject({ staking: "0x5fbdb2315678afecb367f032d93f642f64180aa3", monkey: "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512" });
+    expect(() => parseDeploy({ ...live, staking: "0x12" })).toThrow("NEXT_PUBLIC_ENGINE_STAKING");
+    expect(() => parseDeploy({ ...live, monkey: "nope" })).toThrow("NEXT_PUBLIC_ENGINE_MONKEY");
+    expect(parseDeploy({})).toMatchObject({ staking: null, monkey: null });
+  });
+
   it("allows only a bare https origin", () => {
     for (const origin of ["http://node.example", "https://node.example/v1", "https://node.example?x=1", "https://user@node.example", "wss://node.example", "node.example"]) {
       expect(() => parseDeploy({ ...live, origin, devOrigins: origin })).toThrow();
