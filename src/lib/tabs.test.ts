@@ -2,7 +2,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { tabAfterKey } from "./tabs";
+import { tabAfterKey as moveFor, type TabKeyPress } from "./tabs";
+
+/** A press of `key`, with the modifiers named in `held` down. */
+const press = (key: string, held: Partial<TabKeyPress> = {}): TabKeyPress => ({ key, altKey: false, ctrlKey: false, metaKey: false, shiftKey: false, ...held });
+const tabAfterKey = (key: string, index: number, count: number, held: Partial<TabKeyPress> = {}) => moveFor(press(key, held), index, count);
 
 describe("tabAfterKey", () => {
   it("moves to the next tab on ArrowRight and wraps from the last to the first", () => {
@@ -24,5 +28,9 @@ describe("tabAfterKey", () => {
 
   it("leaves every other key alone, so Tab and Enter keep their meaning", () => {
     for (const key of ["Tab", "Enter", " ", "ArrowDown", "ArrowUp", "a"]) expect(tabAfterKey(key, 0, 2)).toBeNull();
+  });
+
+  it.each(["altKey", "ctrlKey", "metaKey", "shiftKey"] as const)("leaves ArrowLeft, ArrowRight, Home and End to the browser while %s is held", (modifier) => {
+    for (const key of ["ArrowLeft", "ArrowRight", "Home", "End"]) expect(tabAfterKey(key, 0, 2, { [modifier]: true })).toBeNull();
   });
 });

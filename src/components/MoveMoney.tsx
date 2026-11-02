@@ -29,7 +29,7 @@ export function MoveMoney() {
   const id = useId();
   const gate = useSignGate(`${id}-gate`);
   const onKeyDown = (event: React.KeyboardEvent) => {
-    const next = tabAfterKey(event.key, TABS.findIndex((t) => t.id === tab), TABS.length);
+    const next = tabAfterKey(event, TABS.findIndex((t) => t.id === tab), TABS.length);
     const target = next === null ? undefined : TABS[next];
     if (!target) return;
     event.preventDefault();

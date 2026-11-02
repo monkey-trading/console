@@ -43,6 +43,8 @@ export function Select<T extends string>({ label, value, options, onChange }: Pr
   };
 
   const onKey = (event: React.KeyboardEvent) => {
+    // The browser's shortcuts use these keys with a modifier (Alt+Home, Cmd+Down): leave them be.
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
     const last = options.length - 1;
     if (event.key === "ArrowDown") setActive(Math.min(active + 1, last));
     else if (event.key === "ArrowUp") setActive(Math.max(active - 1, 0));

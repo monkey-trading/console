@@ -42,6 +42,7 @@ function unread(status: ConsoleState["houseStateStatus"], none: string): string 
 /** Gross exposure against the total cap. */
 export function CapPanel() {
   const { nav, gross, params, status } = useSelected(selectCap);
+  const simulated = useSession().store.deps.client.signatures === "none";
   const totalCap = params === null ? null : capFor(nav, params.totalCapBps, params.totalCapFloor);
   const used = totalCap === null ? null : utilBps(gross, totalCap);
   return (
@@ -54,7 +55,7 @@ export function CapPanel() {
         <>
           <Meter bps={used} />
           <p aria-hidden="true" className="text-caption text-fg-2">{formatRate(used)} of a {formatUsd(totalCap)} cap</p>
-          <p className="sr-only">Exposure is {formatRate(used)} of a {formatUsd(totalCap)} cap at the current net asset value, refreshed from the node&apos;s signed answers.</p>
+          <p className="sr-only">Exposure is {formatRate(used)} of a {formatUsd(totalCap)} cap at the current net asset value, refreshed from {simulated ? "the simulation in this browser, which signs nothing" : "the node's signed answers"}.</p>
           <p className={NOTE}>The cap is the larger of {formatRate(params.totalCapBps)} of net asset value and a {formatUsd(params.totalCapFloor)} floor.</p>
         </>
       )}
@@ -121,13 +122,14 @@ export function Checkpoints() {
 /** What is owed in the queue, and how the figures were read. */
 export function WithdrawalHealth() {
   const { totals, failed } = useSelected(selectQueue);
+  const simulated = useSession().store.deps.client.signatures === "none";
   return (
     <Panel title="Withdrawal health" tip="Withdrawals are paid in the order asked, each up to the collateral the vault holds; one it cannot cover yet waits in a public first-in first-out queue.">
       <dl className="space-y-1">
         <Row label="Requests waiting" tip="How many requests wait in the queue." value={totals === null ? "—" : String(totals.count)} />
         <Row label="Queued" tip="What the queue still owes, in dollars." value={totals === null ? "—" : formatUsd(totals.remaining)} />
       </dl>
-      {totals === null ? <p className={NOTE}>The queue&apos;s size is read from the node&apos;s signed answers; that read {failed ? "keeps failing." : "has not finished."}</p> : queueCaveats(totals, failed).map((line) => <p key={line} className={NOTE}>{line}</p>)}
+      {totals === null ? <p className={NOTE}>The queue&apos;s size is read from {simulated ? "the simulation in this browser, which signs nothing" : "the node's signed answers"}; that read {failed ? "keeps failing." : "has not finished."}</p> : queueCaveats(totals, failed).map((line) => <p key={line} className={NOTE}>{line}</p>)}
       <p className={NOTE}>The node signs no flag that pauses withdrawals: custody-side pauses are the vault contract&apos;s own state, on chain, outside the node&apos;s signed answers.</p>
     </Panel>
   );
