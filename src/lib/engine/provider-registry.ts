@@ -30,7 +30,7 @@ const STAKING = parseAbi([
   "function delegates(address account) view returns (address)",
 ]);
 
-/** How long the wallet may take over one call, in milliseconds: a table of many candidates takes as long as it takes, one call after another. */
+/** How long the wallet may take over one call or chain check, in milliseconds: a table of many candidates takes as long as it takes, one call after another. */
 const CALL_MS = 30_000;
 
 /** Chain seconds as the milliseconds the console shows; beyond any time a chain could hold, so the conversion is exact. */
@@ -41,7 +41,7 @@ export class ProviderDeployment implements DeploymentReads {
 
   /** A background read: the wallet is not asked to switch chains, and the read is refused on another one. */
   private async onChain(): Promise<void> {
-    const current = Number(await this.provider.request({ method: "eth_chainId" }));
+    const current = Number(await withTimeout(this.provider.request({ method: "eth_chainId" }), CALL_MS));
     if (current !== this.chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chain.chainId}`);
   }
 

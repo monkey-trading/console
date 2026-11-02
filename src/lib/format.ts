@@ -16,11 +16,13 @@ export const MONKEY_UNIT = 10n ** 18n;
 
 /**
  * `units` MONKEY base units as whole MONKEY, grouped in thousands with up to two places and no
- * trailing zeros: `1,234.5 MONKEY`. The unit stays a bigint, never a float.
+ * trailing zeros, truncated: `1,234.5 MONKEY`. A non-zero amount under the last place reads
+ * `<0.01 MONKEY`, never `0 MONKEY`. The unit stays a bigint, never a float.
  */
 export function formatMonkey(units: bigint): string {
   const whole = units / MONKEY_UNIT;
   const frac = ((units % MONKEY_UNIT) * 100n) / MONKEY_UNIT;
+  if (whole === 0n && frac === 0n && units !== 0n) return "<0.01 MONKEY";
   const grouped = groupThousands(whole);
   return frac === 0n ? `${grouped} MONKEY` : `${grouped}.${frac.toString().padStart(2, "0").replace(/0+$/, "")} MONKEY`;
 }

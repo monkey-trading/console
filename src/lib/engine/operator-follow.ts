@@ -8,7 +8,8 @@
  *
  * Chain reads cost the wallet's provider money, so nothing here polls: it reads when a wallet
  * connects, on an election event in the stream, when the feed or the enclave fails, right after a
- * pending election's effective time, and otherwise every five minutes while the tab is visible.
+ * pending election's effective time, soon after a read that failed, waiting longer each time up to the
+ * slow read, and otherwise every five minutes while the tab is visible.
  */
 
 import type { AttestationStatus } from "./attestation";
@@ -19,7 +20,7 @@ import type { DeploymentReads, NamedOperator } from "./registry";
 
 /** The slow read, in milliseconds. */
 export const SLOW_READ_MS = 5 * 60_000;
-/** The first wait before a target that did not verify is tried again, and the least time between event-driven reads, in milliseconds; waits double up to the slow read. */
+/** The first wait before a target that did not verify or a read that failed is tried again, and the least time between event-driven reads, in milliseconds; waits double up to the slow read. */
 export const RETRY_MS = 30_000;
 /** How long after a pending election's effective time it is read again, so the chain has passed it, in milliseconds. */
 const AFTER_EFFECT_MS = 5_000;
@@ -154,6 +155,8 @@ export class OperatorFollower {
   resume(): void {
     if (!this.skipped) return;
     this.skipped = false;
+    // The waits a hidden tab skipped read nothing, so they say nothing of the wallet.
+    this.wait = RETRY_MS;
     void this.check();
   }
 
@@ -283,10 +286,10 @@ export class OperatorFollower {
     }, delay);
   }
 
-  /** What the last read said to wait for: a target coming up or an effective time just past, soon and then slower; the effective time ahead; or the slow read. */
+  /** What the last read said to wait for: a target coming up, a read that failed or an effective time just past, soon and then slower; the effective time ahead; or the slow read. */
   private nextDelay(): number {
     const untilEffect = this.effectiveAtMs === null ? null : this.effectiveAtMs - this.deps.nowMs();
-    if (this.state.kind === "waiting" || (untilEffect !== null && untilEffect <= 0)) {
+    if (this.state.kind === "waiting" || this.state.kind === "failed" || (untilEffect !== null && untilEffect <= 0)) {
       const delay = this.wait;
       this.wait = Math.min(this.wait * 2, SLOW_READ_MS);
       return delay;

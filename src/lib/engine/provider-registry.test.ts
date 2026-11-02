@@ -95,6 +95,36 @@ describe("a wallet that moves chain during a read", () => {
   });
 });
 
+describe("a chain check the wallet never answers", () => {
+  it("fails every read at thirty seconds, as a call does, whether it is the check before the calls or the one after", async () => {
+    vi.useFakeTimers();
+    try {
+      const reads: [string, (deployment: ProviderDeployment) => Promise<unknown>][] = [
+        ["vault", (deployment) => deployment.vault()],
+        ["operator", (deployment) => deployment.operator()],
+        ["candidates", (deployment) => deployment.candidates()],
+        ["delegateOf", (deployment) => deployment.delegateOf(KEY)],
+      ];
+      for (const [name, read] of reads) {
+        for (const answered of [0, 1]) {
+          const { provider } = rig({ list: [B as Hex] });
+          let asked = 0;
+          const silent: Eip1193Provider = { request: (args) => (args.method === "eth_chainId" && asked++ >= answered ? new Promise(() => {}) : provider.request(args)) };
+          let settled = false;
+          const reading = read(new ProviderDeployment(CHAIN, silent)).finally(() => { settled = true; });
+          const refused = expect(reading, name).rejects.toThrow("did not answer in time");
+          await vi.advanceTimersByTimeAsync(29_999);
+          expect(settled, `${name} before the limit`).toBe(false);
+          await vi.advanceTimersByTimeAsync(1);
+          await refused;
+        }
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("ProviderDeployment.vault", () => {
   it("reads the current release and the signer, lowercase, naming the contract's own getters", async () => {
     const { reads, order } = rig();

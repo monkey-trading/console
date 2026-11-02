@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EngineError } from "../engine/client";
+import { ProviderDeployment } from "../engine/provider-registry";
 import { NO_CANDIDATE, type DeploymentReads } from "../engine/registry";
 import type { OperatorRoute } from "../engine/stats-types";
 import { connectWallet, disconnectWallet } from "../store/actions";
@@ -88,6 +89,23 @@ describe("OperatorReads", () => {
     expect(counts).toEqual({ route: 2, operator: 1, candidates: 1 });
     await vi.advanceTimersByTimeAsync(FIVE_MINUTES - NODE_READ_MS);
     expect(counts).toEqual({ route: 11, operator: 2, candidates: 2 });
+    stop();
+  });
+
+  it("shows a failure, not a read that goes on for ever, when the wallet never answers the chain check", async () => {
+    const { store } = await setup();
+    const wallet = store.liveWallet;
+    if (wallet === null) throw new Error("the mock wallet connected");
+    const chain = { chainId: 31337, vault: "0x00000000000000000000000000000000000000dd", usdc: null, add: null, staking: "0x00000000000000000000000000000000000000cc", registry: "0x00000000000000000000000000000000000000ee" };
+    wallet.chainReads = new ProviderDeployment(chain, { request: () => new Promise(() => {}) });
+    const operators = new OperatorReads(store);
+    const stop = operators.start(() => false);
+    await flush();
+    expect(operators.getSnapshot().named.status).toBe("loading");
+    for (const read of ["named", "table", "chosen"] as const) {
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(operators.getSnapshot()[read], read).toMatchObject({ status: "failed", message: "Your wallet did not answer in time." });
+    }
     stop();
   });
 
