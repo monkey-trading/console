@@ -1,9 +1,10 @@
 /**
  * MONKEY emissions as the mock mirrors them: a fixed ten-minute budget shared by the period's
- * eligible net realised losses, finalised when the clock crosses a period boundary, as the engine
- * finalises periods (`engine_core::emissions`, `PeriodResult::weight`). The mock accrues from its
- * own start and has no halvings or cross-period emission debt; its simulated vault posts a
- * checkpoint at each period close, which the mock's entitlement proofs are taken against.
+ * eligible gross realised losses (engine#442: a win in the period does not offset a loss),
+ * finalised when the clock crosses a period boundary, as the engine finalises periods
+ * (`engine_core::emissions`, `PeriodResult::weight`). The mock accrues from its own start and has
+ * no halvings or cross-period emission debt; its simulated vault posts a checkpoint at each
+ * period close, which the mock's entitlement proofs are taken against.
  */
 
 import type { EngineEvent } from "../engine/types";
@@ -17,24 +18,24 @@ export const EMISSION_PERIOD_MS = 600_000;
 export const EMISSION_PERIOD_BUDGET = 1_000n * MONKEY_UNIT;
 
 /**
- * Records a fill's realised profit and loss and any bad debt written off against the open period,
- * as the engine's `record_period_result` does.
+ * Records a fill's realised result and any bad debt written off against the open period. Only a
+ * loss adds weight, by its magnitude; a profit adds nothing and takes nothing away.
  */
 export function recordEmissionResult(state: MockState, address: string, realised: Fixed, writtenOff: Fixed): void {
-  if (realised === 0n && writtenOff === 0n) return;
+  if (realised >= 0n && writtenOff === 0n) return;
   const { results } = state.emission;
   const key = address.toLowerCase();
   const held = results.get(key);
   results.set(key, {
     address: held?.address ?? address,
-    realised: (held?.realised ?? 0n) + realised,
+    losses: (held?.losses ?? 0n) + (realised < 0n ? -realised : 0n),
     writtenOff: (held?.writtenOff ?? 0n) + writtenOff,
   });
 }
 
-/** The account's weight: its net realised loss less what the house wrote off, or zero (`PeriodResult::weight`). */
-function weightOf(result: { realised: Fixed; writtenOff: Fixed }): Fixed {
-  const weight = -result.realised - result.writtenOff;
+/** The account's weight: its gross realised losses less what the house wrote off, or zero. */
+function weightOf(result: { losses: Fixed; writtenOff: Fixed }): Fixed {
+  const weight = result.losses - result.writtenOff;
   return weight > 0n ? weight : 0n;
 }
 

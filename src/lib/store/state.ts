@@ -11,6 +11,7 @@ import type { MarkProvenance } from "../engine/mark-types";
 import { fixedToNumber } from "../fixed";
 import { decodeHouse, decodeMarket, type AccountModel, type Eligibility, type HouseModel, type MarketModel } from "../models";
 import type { HousePanelInit } from "./store-deps";
+import { emptyLedgerState, type LedgerState } from "./ledger";
 
 export type BlockReason = "united_states" | "sanctioned_jurisdiction";
 
@@ -79,6 +80,8 @@ export interface ConsoleState {
   account: AccountModel | null;
   queue: QueuedWithdrawal[];
   history: HistoryEntry[];
+  /** The P&L tab's rows and the schedule that prices them; read only once that tab has opened. */
+  ledger: LedgerState;
   feed: FeedLine[];
   toasts: ToastMessage[];
   /** The node's executable quotes for the connected account, by market; the mock streams none and the ticket estimates. */
@@ -162,6 +165,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     account: null,
     queue: [],
     history: [],
+    ledger: emptyLedgerState(),
     feed: [],
     toasts: [],
     quotes: {},

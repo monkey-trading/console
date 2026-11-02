@@ -2,6 +2,7 @@
 
 import { checkAttestation, type AttestationStatus } from "../engine/attestation";
 import { EngineError, type ActionResult, type EngineClient, type SignatureChecks, type Unsubscribe } from "../engine/client";
+import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
 import type { EligibilityClass, AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
@@ -11,6 +12,7 @@ import type { HouseParams, QueueTotals } from "../house";
 import { fixedToWire } from "../fixed";
 import { equityOf, houseGross, houseNav, marginOf } from "./accounts";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";
+import { EMISSION_PERIOD_MS } from "./emissions";
 import { queuePage, withdraw } from "./funds";
 import { registerSessionKey, revokeSessionKey } from "./session-keys";
 import { advance } from "./step";
@@ -260,6 +262,11 @@ export class MockEngineClient implements EngineClient {
 
   async history(address: Address, params: { limit?: number; before?: string; kind?: string }): Promise<HistoryPage> {
     return this.historyPage(address, params);
+  }
+
+  /** The emission schedule `GET /v1/monkey` serves: the mock's periods run from the epoch, and its open period is the one it accrues into. */
+  async emissionSchedule(): Promise<EmissionSchedule> {
+    return { startMs: 0, periodMs: EMISSION_PERIOD_MS, period: this.state.emission.period };
   }
 
   /** `GET /v1/accounts/{address}/history` now, without waiting. */

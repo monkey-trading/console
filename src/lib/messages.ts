@@ -83,6 +83,8 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
     case "emission_allocated": return `MONKEY allocated: ${formatMonkey(BigInt(event.amount))} (period ${event.period})`;
     // Period housekeeping names no account; the allocations above are the viewer's lines.
     case "emission_period_closed": return null;
+    // Cash in lieu is a realised result: the P&L tab lists it, the activity log does not.
+    case "corporate_cash_in_lieu": return null;
     case "order_accepted": return null;
     case "prices_rejected": return null;
     // Operator housekeeping is not the viewer's activity.

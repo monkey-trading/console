@@ -84,6 +84,7 @@ export class ActionClient implements EngineClient {
   marksReads: number[] = [];
   async marks(market: number) { this.marksReads.push(market); return this.marksPage; }
   quotes(request: QuoteRequest | null) { this.quoteRequests.push(request); }
+  async emissionSchedule() { return null; }
   async withdrawalQueue() { return { seq: 77, queue: [], next: null }; }
   async history(_address: string, params: { kind?: string; before?: string }) {
     this.historyReads.push({ kind: params.kind });

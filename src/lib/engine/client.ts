@@ -1,6 +1,7 @@
 /** The interface the console talks to an engine node through: the in-browser mock or the live client. */
 
 import type { AttestationStatus, FeedStatus } from "./attestation";
+import type { EmissionSchedule } from "./emission-schedule";
 import type { EntitlementProof } from "./emissions";
 import type { QueueTotals } from "../house";
 import type { HouseState } from "./house-state";
@@ -128,6 +129,8 @@ export interface EngineClient {
   /** Asks for the account's executable quotes in up to four markets, or for none; they arrive through `watch`. */
   quotes(request: QuoteRequest | null): void;
   withdrawalQueue(address: Address): Promise<WithdrawalPage>;
+  /** The emission schedule from `GET /v1/monkey`; null from a node that predates the route (404) or reports none. */
+  emissionSchedule(): Promise<EmissionSchedule | null>;
   /** `kind` keeps only events of that `type`, as the node's `kind` query does. */
   history(address: Address, params: { limit?: number; before?: string; kind?: string }): Promise<HistoryPage>;
   /** Starts at the live end of the log and delivers each message once. */
