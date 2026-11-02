@@ -30,10 +30,10 @@ function nodeNow(store: ConsoleStore): number {
  * One metric over one range. The first read takes the whole window; later reads ask from the last
  * bucket held, so a live chart reads a few buckets, not the window again.
  */
-export function seriesFeed(store: ConsoleStore, metric: SeriesMetric, market: MarketId | null, range: RangeId, everyMs = HOUSE_CHART_EVERY_MS): FeedSpec<SeriesData> {
+export function seriesFeed(store: ConsoleStore, metric: SeriesMetric, market: MarketId | null, range: RangeId): FeedSpec<SeriesData> {
   return {
     key: `series:${metric}:${market ?? "-"}:${range}`,
-    everyMs,
+    everyMs: HOUSE_CHART_EVERY_MS,
     async read(previous) {
       const now = nodeNow(store);
       const full = seriesQuery(metric, market, range, now);
