@@ -1,18 +1,18 @@
 /**
  * A one-off signed read of the log from a seq for the index marks the chart backfills with: every
  * `prices` command folds into a per-market quote book, and the index the engine's rule gives at the
- * command's sequenced time becomes a mark. Like the withdrawal scan in `live-scan.ts`, the read is
- * bounded, and it resolves with the marks it kept when it stops short; completion follows the same
- * cursor the withdrawal scan uses, so a heartbeat ends the read only once the cursor has reached
- * the head it names. The listing in force at the read's start is the node's current one: an
- * `upsert_market` the window carries is honored from its seq, but marks before the first such
- * listing replay under today's rules and schedule, which a bounded read cannot rewind to check.
+ * command's sequenced time becomes a mark. The read is bounded, and it resolves with the marks it
+ * kept when it stops short; completion follows a cursor over log offsets (`log-scan.ts`), so a
+ * heartbeat ends the read only once the cursor has reached the head it names. The listing in force
+ * at the read's start is the node's current one: an `upsert_market` the window carries is honored
+ * from its seq, but marks before the first such listing replay under today's rules and schedule,
+ * which a bounded read cannot rewind to check.
  */
 
 import { fixedToNumber, type Fixed } from "../fixed";
 import { foldQuotes, indexFixed, type QuoteBook } from "./mark-index";
 import { sessionRule, type SessionRule } from "./mark-session";
-import { atOrPast, position, type ScanDeps } from "./live-scan";
+import { atOrPast, position, type ScanDeps } from "./log-scan";
 import type { MarketId, PriceRules, Schedule, SourceQuote } from "./types";
 import { parseFrameMessage, parseSignedFrame } from "./wire";
 

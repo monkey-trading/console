@@ -30,12 +30,12 @@ export interface FeedLine {
 
 export type HistoryEntry = HistoryEvent;
 
-/** Where a payout's newest authorization lies when the page has not seen it. */
-export interface PayoutHint {
-  /** The log head when the node took a reissue request, past which the new authorization lands. */
-  searchFrom?: number;
-  /** The expiry (Unix seconds) of an authorization the node says it signed, newer than any the page holds. */
-  newerUntil?: number;
+/** What the node's last complete, loaded list of the account's unpaid approvals covered. */
+export interface PayoutsRead {
+  /** The last sequenced command the list reflects: an approval at or before it, and not listed, is paid. */
+  seq: number;
+  /** The nonces of the unpaid approvals the list held. */
+  listed: number[];
 }
 
 export interface ConsoleState {
@@ -93,10 +93,12 @@ export interface ConsoleState {
   approvals: HistoryEvent[];
   /** The cursor of the next page of older approvals, when the reads so far stopped short of them. */
   approvalsNext: string | null;
-  /** What the page knows of a payout's authorizations beyond the one it holds, by payout nonce. */
-  payoutHints: Record<number, PayoutHint>;
-  /** The payout nonce whose authorization the log is being searched for. */
-  searching: number | null;
+  /** The node's latest complete list of the account's unpaid approvals; null until a read of it finished loaded. */
+  payoutsRead: PayoutsRead | null;
+  /** Why the last read of the node's payouts did not finish, written for the user; null when it did or the node has no such route. */
+  payoutsProblem: string | null;
+  /** Counts reads of the node's payouts, so an answer a later read has overtaken is dropped. */
+  payoutsGeneration: number;
   /** Counts reads of the approvals, so an answer a later read has overtaken is dropped. */
   approvalsGeneration: number;
   /** The connected account's payout nonces the vault has paid, as its wallet's chain reads them. */
@@ -168,8 +170,9 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     authorizations: [],
     approvals: [],
     approvalsNext: null,
-    payoutHints: {},
-    searching: null,
+    payoutsRead: null,
+    payoutsProblem: null,
+    payoutsGeneration: 0,
     approvalsGeneration: 0,
     paid: [],
     unpaid: [],

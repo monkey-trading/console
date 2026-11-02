@@ -9,11 +9,10 @@ import { QueueTotalsWalk } from "./live-queue";
 import { collateral, plainText, READ_TIMEOUT_MS } from "./live-plain";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
-import { scanForWithdrawal, type ScanResult } from "./live-scan";
 import { LiveStream, type QuoteRequest, type Scheduler, type Socket } from "./live-stream";
 import { SignedTransport } from "./transport";
 import { NodeTrust } from "./trust";
-import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PriceRules, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
+import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 import type { Verifier } from "./verifier";
 import { newChallenge, type CheckpointEntry } from "./wire";
@@ -232,9 +231,9 @@ export class LiveEngineClient implements EngineClient {
     await this.transport.post(`/v1/accounts/${account}/withdrawals/${nonce}/reissue`, body);
   }
 
-  async findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<ScanResult> {
-    const signer = await this.trust.signer();
-    return scanForWithdrawal({ ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) }, account, nonce, fromSeq);
+  async payouts(account: Address, page: { limit: number; after?: number }): Promise<PayoutsPage> {
+    const query = new URLSearchParams({ limit: String(page.limit), ...(page.after === undefined ? {} : { after: String(page.after) }) });
+    return (await this.transport.get(`/v1/accounts/${account}/payouts?${query}`)) as PayoutsPage;
   }
 
   async scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>, dead?: () => boolean): Promise<ScannedMark[]> {

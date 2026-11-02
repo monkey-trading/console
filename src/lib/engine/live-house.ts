@@ -1,16 +1,16 @@
 /**
  * A bounded signed read of the log from a seq for the house's solvency state: the latest
- * `set_params` command and the latest checkpoint, which no REST route serves. Like the withdrawal
- * scan in `live-scan.ts`, the read is bounded and resolves with what it found when it stops short;
- * completion follows the same cursor, so a heartbeat ends the read only once the cursor has
- * reached the head it names. The caller chains chunks from the seq a stopped read reached until
- * one reaches the head.
+ * `set_params` command and the latest checkpoint, which no REST route serves. Like the marks scan
+ * in `live-marks.ts`, the read is bounded and resolves with what it found when it stops short;
+ * completion follows a cursor over log offsets (`log-scan.ts`), so a heartbeat ends the read only
+ * once the cursor has reached the head it names. The caller chains chunks from the seq a stopped
+ * read reached until one reaches the head.
  */
 
 import { setParamsOf, type HouseParams } from "../house";
 import { fixedFromWire } from "../fixed";
 import type { SetParams } from "./types";
-import { atOrPast, position, type ScanDeps } from "./live-scan";
+import { atOrPast, position, type ScanDeps } from "./log-scan";
 import { parseFrameMessage, parseSignedFrame, type CheckpointEntry } from "./wire";
 
 /** When a chunk of the read stops: at either of these, whichever comes first. */

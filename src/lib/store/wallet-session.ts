@@ -6,7 +6,7 @@ import { errorText } from "./actions";
 import type { ConsoleStore } from "./store";
 
 /** The state a wallet change clears: everything read or streamed for the account before. */
-export const NO_ACCOUNT = { account: null, eligibility: null, queue: [], history: [], quotes: {}, quoteError: null, quoted: [], authorizations: [], approvals: [], approvalsNext: null, payoutHints: {}, searching: null, paid: [], unpaid: [], entitlement: null, emissionsVault: null };
+export const NO_ACCOUNT = { account: null, eligibility: null, queue: [], history: [], quotes: {}, quoteError: null, quoted: [], authorizations: [], approvals: [], approvalsNext: null, payoutsRead: null, payoutsProblem: null, paid: [], unpaid: [], entitlement: null, emissionsVault: null };
 
 /** Ends a wallet's connection in the background, telling the user if that fails. */
 export function release(store: ConsoleStore, wallet: Wallet | null): void {
