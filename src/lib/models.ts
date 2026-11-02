@@ -3,6 +3,7 @@
 import { metaFor } from "./engine/meta";
 import type { AccountView, EligibilityClass, HouseView, MarketId, MarketView, PriceRules, RestingOrder } from "./engine/types";
 import { fixedFromWire, type Fixed } from "./fixed";
+import { decodeHouseScan, type HouseScan } from "./house-scan";
 
 export interface MarketModel {
   view: MarketView;
@@ -67,10 +68,12 @@ export interface HouseModel {
   cash: Fixed;
   nav: Fixed;
   grossExposure: Fixed;
+  /** The node's scan figures; null from a node that predates them. */
+  scan: HouseScan | null;
 }
 
 export function decodeHouse(view: HouseView): HouseModel {
-  return { cash: fixedFromWire(view.cash), nav: fixedFromWire(view.nav), grossExposure: fixedFromWire(view.gross_exposure) };
+  return { cash: fixedFromWire(view.cash), nav: fixedFromWire(view.nav), grossExposure: fixedFromWire(view.gross_exposure), scan: decodeHouseScan(view) };
 }
 
 export type Eligibility = EligibilityClass | null;

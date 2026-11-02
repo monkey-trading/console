@@ -8,6 +8,7 @@ import { decodeHouseState, HouseFold, type HouseState, type HouseStateWire } fro
 import { QueueTotalsWalk } from "./live-queue";
 import { historyPath, readEmissionSchedule } from "./live-ledger";
 import type { EmissionSchedule } from "./emission-schedule";
+import { liveStats } from "./live-stats";
 import { collateral, plainText, READ_TIMEOUT_MS } from "./live-plain";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
@@ -62,6 +63,8 @@ export class LiveEngineClient implements EngineClient {
   /** The public withdrawal queue's size, walked within a page cap and cached for its TTL. */
   private readonly totalsWalk: QueueTotalsWalk;
   readonly withdrawalTotals: () => Promise<QueueTotals>;
+  /** The dashboard's reads, each over a signed read of its route. */
+  readonly stats = liveStats((path) => this.transport.get(path));
   readonly emissions: (address: Address) => Promise<EntitlementProof | null>;
 
   constructor(private readonly deps: LiveDeps) {
@@ -190,7 +193,7 @@ export class LiveEngineClient implements EngineClient {
     return (await this.transport.get(historyPath(address, params))) as HistoryPage;
   }
 
-  emissionSchedule(): Promise<EmissionSchedule | null> { return readEmissionSchedule((path) => this.transport.get(path)); }
+  emissionSchedule(): Promise<EmissionSchedule | null> { return readEmissionSchedule(() => this.stats.monkey()); }
 
   /** Sends a signed action — `POST`, or `DELETE` for the session-key revocation — and answers with the events its command produced, signed for this request. */
   private async action(method: "POST" | "DELETE", path: string, body: unknown): Promise<ActionResult> {

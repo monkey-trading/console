@@ -19,9 +19,7 @@ const wire = { start_ms: 1_000, period_ms: 600_000, period: 12 };
 
 describe("readEmissionSchedule", () => {
   it("reads the emissions group of the signed answer", async () => {
-    const asked: string[] = [];
-    const schedule = await readEmissionSchedule(async (path) => { asked.push(path); return { emissions: wire, staking: null }; });
-    expect(asked).toEqual(["/v1/monkey"]);
+    const schedule = await readEmissionSchedule(async () => ({ emissions: wire }));
     expect(schedule).toEqual({ startMs: 1_000, periodMs: 600_000, period: 12 });
   });
 

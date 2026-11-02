@@ -1,10 +1,11 @@
 /** Tests for the store's house panel state: the node's house state (parameters and latest checkpoint) and the withdrawal queue's totals. */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { fixedFromWire } from "../fixed";
 import { QueueTotalsRetrying } from "../engine/live-queue";
 import { settle } from "../engine/test-kit";
+import { loadAccount } from "./account";
 import { openHousePanel } from "./house";
 import { ACCOUNT, setup as setupClosed } from "./live-fake";
 
@@ -29,7 +30,7 @@ describe("the store's house panel state", () => {
     const { client, store } = setup();
     client.params = PARAMS;
     client.checkpoint = CHECKPOINT;
-    client.totals = { count: 2, remaining: fixedFromWire("30.5"), seq: 9, complete: true, stable: true };
+    client.totals = { count: 2, remaining: fixedFromWire("30.5"), largest: null, head: null, seq: 9, complete: true, stable: true };
     store.start(0);
     await settle();
     const state = store.getSnapshot();
@@ -37,7 +38,7 @@ describe("the store's house panel state", () => {
     expect(state.house.cash).toBe(fixedFromWire("5"));
     expect(state.houseParams).toEqual(PARAMS);
     expect(state.checkpoint).toEqual(CHECKPOINT);
-    expect(state.withdrawalTotals).toEqual({ count: 2, remaining: fixedFromWire("30.5"), seq: 9, complete: true, stable: true });
+    expect(state.withdrawalTotals).toEqual({ count: 2, remaining: fixedFromWire("30.5"), largest: null, head: null, seq: 9, complete: true, stable: true });
   });
 
   it("marks the house figures ready once a refresh has read them", async () => {
@@ -111,7 +112,7 @@ describe("the store's house panel state", () => {
     // this asserts.
     client.params = PARAMS;
     client.checkpoint = CHECKPOINT;
-    client.totals = { count: 2, remaining: fixedFromWire("30.5"), seq: 9, complete: true, stable: true };
+    client.totals = { count: 2, remaining: fixedFromWire("30.5"), largest: null, head: null, seq: 9, complete: true, stable: true };
     client.marketError = new Error("markets down");
     await store.refresh(false);
     await settle();
@@ -120,7 +121,7 @@ describe("the store's house panel state", () => {
     const state = store.getSnapshot();
     expect(state.houseParams).toEqual(PARAMS);
     expect(state.checkpoint).toEqual(CHECKPOINT);
-    expect(state.withdrawalTotals).toEqual({ count: 2, remaining: fixedFromWire("30.5"), seq: 9, complete: true, stable: true });
+    expect(state.withdrawalTotals).toEqual({ count: 2, remaining: fixedFromWire("30.5"), largest: null, head: null, seq: 9, complete: true, stable: true });
     expect(state.houseFresh).toBe(false);
   });
 
@@ -231,7 +232,7 @@ describe("the house panel's reads, by whether the page is on screen", () => {
     const { client, store } = setupClosed();
     client.params = PARAMS;
     client.checkpoint = CHECKPOINT;
-    client.totals = { count: 2, remaining: fixedFromWire("30.5"), seq: 9, complete: true, stable: true };
+    client.totals = { count: 2, remaining: fixedFromWire("30.5"), largest: null, head: null, seq: 9, complete: true, stable: true };
     store.start(0);
     await settle();
     await store.refresh(false);
@@ -256,5 +257,38 @@ describe("the house panel's reads, by whether the page is on screen", () => {
     await settle();
     expect(store.getSnapshot().houseParams).toEqual(PARAMS); // closed: the newer answer was never read
     expect(client.houseStateReads).toBe(1);
+  });
+
+  it("starts the dashboard feeds with the page and stops them when it closes", async () => {
+    vi.useFakeTimers();
+    try {
+      const { store } = setupClosed();
+      const reads: string[] = [];
+      store.houseStats.follow({ key: "probe", everyMs: 30_000, read: async () => { reads.push("read"); return 1; } });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(reads).toEqual([]); // followed, but the page is not open
+      const close = openHousePanel(store);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(reads).toHaveLength(1);
+      close();
+      await vi.advanceTimersByTimeAsync(300_000);
+      expect(reads).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not call the connected account's queue read until a read of it has succeeded", async () => {
+    const { client, store } = setupClosed();
+    store.setWallet({ address: ACCOUNT, label: "watch" });
+    expect(store.getSnapshot().accountQueueRead).toBe(false);
+    client.accountError = new Error("the node stalled");
+    await loadAccount(store, false);
+    expect(store.getSnapshot()).toMatchObject({ accountQueueRead: false, queue: [] });
+    client.accountError = null;
+    await loadAccount(store, false);
+    expect(store.getSnapshot().accountQueueRead).toBe(true);
+    store.setWallet(null);
+    expect(store.getSnapshot().accountQueueRead).toBe(false);
   });
 });

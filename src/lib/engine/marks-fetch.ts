@@ -59,13 +59,18 @@ interface WindowRead {
 }
 
 /** One pass over `[fromMs, toMs]`, following `next` until none, the budget, or a stall. */
-async function readWindow(client: EngineClient, market: number, timeframe: TimeframeId, fromMs: number, toMs: number): Promise<WindowRead> {
+async function readWindow(client: EngineClient, market: number, timeframe: TimeframeId, fromMs: number, toMs: number, alive: () => boolean): Promise<WindowRead> {
   const candles: Candle[] = [];
   let provenance: MarkProvenance | null = null;
   let cursor = fromMs;
   let complete = true;
   let retryable = false;
   for (let page = 0; ; page++) {
+    // A caller that has stopped wanting the window gets what was read, and no further request.
+    if (page > 0 && !alive()) {
+      complete = false;
+      break;
+    }
     const answer = await client.marks(market, resolutionFor(timeframe), cursor, toMs);
     for (const entry of answer.entries) {
       candles.push({
@@ -99,14 +104,15 @@ async function readWindow(client: EngineClient, market: number, timeframe: Timef
  * span it reached, which needs fewer pages; a window denser near its recent edge still ends near
  * `toMs` within the pass cap. A narrowed pass that finds no marks — a market closed through that
  * span, say — keeps the last span read rather than emptying the result.
+ * `alive` is asked before each further request, so a read nobody waits for any more stops asking.
  * Error cases:
  * - as `EngineClient.marks`: the node's refusal or an unverifiable answer rejects, and no bars are returned
  */
-export async function fetchBarsHistory(client: EngineClient, market: number, timeframe: TimeframeId, fromMs: number, toMs: number): Promise<FetchedBars> {
-  let read = await readWindow(client, market, timeframe, fromMs, toMs);
+export async function fetchBarsHistory(client: EngineClient, market: number, timeframe: TimeframeId, fromMs: number, toMs: number, alive: () => boolean = () => true): Promise<FetchedBars> {
+  let read = await readWindow(client, market, timeframe, fromMs, toMs, alive);
   let kept = read.result;
-  for (let pass = 1; pass < MARKS_PASSES && !read.result.complete && read.retryable && read.fetchedMs > 1; pass++) {
-    read = await readWindow(client, market, timeframe, toMs - Math.floor(read.fetchedMs / 2), toMs);
+  for (let pass = 1; pass < MARKS_PASSES && alive() && !read.result.complete && read.retryable && read.fetchedMs > 1; pass++) {
+    read = await readWindow(client, market, timeframe, toMs - Math.floor(read.fetchedMs / 2), toMs, alive);
     // A narrowed window can fall entirely inside a closure; its empty page keeps the span already read.
     if (read.result.bars.length > 0) kept = read.result;
   }

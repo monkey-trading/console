@@ -5,7 +5,8 @@ import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
 import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
-import type { HistoryPage, PriceRules, StreamMessage, MarketView } from "../engine/types";
+import type { MonkeyView, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "../engine/stats-types";
+import type { HistoryPage, MarketId, PriceRules, StreamMessage, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
@@ -49,10 +50,27 @@ export class FakeClient implements EngineClient {
   }
   marketList: MarketView[] = [BTC];
   async house() { return { cash: "5", nav: "5", gross_exposure: "0" }; }
+  /** The dashboard reads a test canned: each answers its field, or rejects with `statsError`. */
+  statsError: Error | null = null;
+  positionsView: PositionsView | null = null;
+  seriesPage: SeriesPage | null = null;
+  monkeyView: MonkeyView | null = null;
+  statsReads: string[] = [];
+  readonly stats: StatsReads = {
+    positions: async (market: MarketId) => this.canned(`positions:${market}`, this.positionsView),
+    series: async (query: SeriesQuery) => this.canned(`series:${query.metric}:${query.fromMs}:${query.limit}`, this.seriesPage),
+    monkey: async () => this.canned("monkey", this.monkeyView),
+  };
+  private canned<T>(read: string, answer: T | null): T {
+    this.statsReads.push(read);
+    if (this.statsError !== null) throw this.statsError;
+    if (answer === null) throw new EngineError(404, "not found");
+    return answer;
+  }
   /** Canned house-state reads, patched by a test; nulls answer "not read yet". */
   params: HouseParams | null = null;
   checkpoint: CheckpointEntry | null = null;
-  totals: QueueTotals = { count: 0, remaining: 0n, seq: null, complete: true, stable: true };
+  totals: QueueTotals = { count: 0, remaining: 0n, largest: null, head: null, seq: null, complete: true, stable: true };
   /** When set, the queue totals read rejects with it, as a failing node answers. */
   totalsError: Error | null = null;
   /** The log head the house state read answers at. */

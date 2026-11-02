@@ -5,17 +5,18 @@ import { EngineError, type ActionResult, type EngineClient, type SignatureChecks
 import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
 import type { EligibilityClass, AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
-import type { MarkPage } from "../engine/mark-types";
+import type { MarkPage, MarkResolution } from "../engine/mark-types";
 import type { HouseState } from "../engine/house-state";
+import type { StatsReads } from "../engine/stats-types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
 import { fixedToWire } from "../fixed";
-import { equityOf, houseGross, houseNav, marginOf } from "./accounts";
+import { equityOf, marginOf } from "./accounts";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";
-import { EMISSION_PERIOD_MS } from "./emissions";
 import { queuePage, withdraw } from "./funds";
 import { registerSessionKey, revokeSessionKey } from "./session-keys";
 import { advance } from "./step";
+import { emissionScheduleOf, houseFigures, marksPage, mockStats } from "./stats";
 import { CHECKPOINT_EVERY, type MockState } from "./state";
 
 const HEX = "0123456789abcdef";
@@ -47,8 +48,12 @@ export function mockCheckpoint(headSeq: number): CheckpointEntry | null {
 /** The public withdrawal queue's size, summed from its entries. */
 export function mockTotals(state: MockState): QueueTotals {
   let remaining = 0n;
-  for (const entry of state.queue) remaining += entry.remaining;
-  return { count: state.queue.length, remaining, seq: state.seq, complete: true, stable: true };
+  let largest: bigint | null = null;
+  for (const entry of state.queue) {
+    remaining += entry.remaining;
+    if (largest === null || entry.remaining > largest) largest = entry.remaining;
+  }
+  return { count: state.queue.length, remaining, largest, head: state.queue[0]?.remaining ?? null, seq: state.seq, complete: true, stable: true };
 }
 
 /** How the node's attestation presents: the node's own mock quote, or a hardware quote nothing here can verify. */
@@ -64,7 +69,12 @@ export class MockEngineClient implements EngineClient {
   }
   attestationMode: AttestationMode = "mock";
 
-  constructor(readonly state: MockState) {}
+  /** The dashboard routes: the mock answers every one, as the node does. */
+  readonly stats: StatsReads;
+
+  constructor(readonly state: MockState) {
+    this.stats = mockStats(state);
+  }
 
   /** Advances the node's clock to `ms`. */
   tick(ms: number): void {
@@ -125,7 +135,7 @@ export class MockEngineClient implements EngineClient {
   }
 
   houseView(): HouseView {
-    return { cash: fixedToWire(this.state.houseCash), nav: fixedToWire(houseNav(this.state)), gross_exposure: fixedToWire(houseGross(this.state)) };
+    return houseFigures(this.state);
   }
 
   /** The solvency parameters in force, as the mock's launch genesis set them, and the checkpoint its log would hold. */
@@ -241,11 +251,11 @@ export class MockEngineClient implements EngineClient {
   }
 
   /**
-   * The mock's charts seed from its own history, not from a marks read, so it serves none; the
-   * store asks only a signature-checking client for history this way.
+   * The mock's price charts seed from its own history, and the store asks only a signature-checking
+   * client for marks; the House page's close-out map reads candles ending at the mock's index here.
    */
-  async marks(): Promise<MarkPage> {
-    return { entries: [], next: null };
+  async marks(market: number, resolution: MarkResolution, fromMs: number, toMs: number): Promise<MarkPage> {
+    return marksPage(this.state, market, resolution, fromMs, toMs);
   }
 
   /** The mock streams no executable quotes; the ticket shows its own estimate. */
@@ -266,7 +276,7 @@ export class MockEngineClient implements EngineClient {
 
   /** The emission schedule `GET /v1/monkey` serves: the mock's periods run from the epoch, and its open period is the one it accrues into. */
   async emissionSchedule(): Promise<EmissionSchedule> {
-    return { startMs: 0, periodMs: EMISSION_PERIOD_MS, period: this.state.emission.period };
+    return emissionScheduleOf(this.state);
   }
 
   /** `GET /v1/accounts/{address}/history` now, without waiting. */
