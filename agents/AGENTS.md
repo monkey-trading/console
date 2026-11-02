@@ -58,7 +58,7 @@ matches the current action.
   parameters, caps from the engine's rule (the larger of a NAV share and a floor), utilisation, and the
   withdrawal queue's totals with its largest entry and head; `house-scan.ts` decodes the scan figures `/v1/house` adds;
   `house-series.ts` the chart timeframes, the read each asks for and the points a page folds into (bounded);
-  `house-bands.ts` the close-out bands, profit density and the house's result at a price move; `chart-format.ts` compact dollars and USDC; `tooltip.ts` where a tooltip sits against the viewport.
+  `house-bands.ts` the close-out bands, the map's offered ranges and the one it opens on, profit density and the house's result at a price move; `chart-format.ts` compact dollars and USDC, and the least span a chart's price scale takes so a flat series does not repeat a label; `tooltip.ts` where a tooltip sits against the viewport.
   `engine/` holds the node's wire shapes (`types.ts`, and the dashboard routes' in `stats-types.ts`, read by `live-stats.ts` through `client.stats`; its `/v1/monkey` read also gives the ledger's emission schedule), the display facts the console keeps per
   market (`meta.ts`: names, places, and the mock's base quote spread, a simplification of the engine's
   own formula that the owner has yet to settle), the `EngineClient` and wallet interfaces,

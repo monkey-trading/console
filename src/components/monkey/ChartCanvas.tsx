@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { minimumSpanRange } from "@/lib/chart-format";
 import type { ChartData, ChartPoint } from "@/lib/monkey/feed";
 
 /** The canvas's height, which a chart's loading and failed states reserve too so nothing moves when data arrives. */
@@ -46,6 +47,8 @@ interface Live {
   plots: Record<string, Plot>;
   setMarkers(times: readonly number[], first: readonly ChartPoint[]): void;
   key: string;
+  /** The price range a flat series is fixed to, or null to let the scale fit the values. */
+  span: { min: number; max: number } | null;
 }
 
 /** A theme token's value, read from the document. */
@@ -76,6 +79,11 @@ export function ChartCanvas({ kind, lines, data, seriesKey, format, marks, label
         handleScroll: { vertTouchDrag: false },
         handleScale: { mouseWheel: false },
       });
+      // A flat series fits a range of its own, so the axis does not repeat one label.
+      const autoscaleInfoProvider = (base: () => { priceRange: { minValue: number; maxValue: number } | null } | null) => {
+        const span = live.current?.span ?? null;
+        return span === null ? base() : { priceRange: { minValue: span.min, maxValue: span.max } };
+      };
       const priceFormat = { type: "custom" as const, formatter: format, minMove: 0.01 };
       const plots: Record<string, Plot> = {};
       let setMarkers: Live["setMarkers"] = () => {};
@@ -87,10 +95,10 @@ export function ChartCanvas({ kind, lines, data, seriesKey, format, marks, label
           const series = chart.addSeries(HistogramSeries, { color, priceFormat, lastValueVisible: false, priceLineVisible: false });
           plots[spec.metric] = { setData: (points) => series.setData(toData(points)) };
         } else if (kind === "area") {
-          const series = chart.addSeries(AreaSeries, { lineColor: color, topColor: `${color}55`, bottomColor: `${color}05`, lineWidth: 2, priceFormat });
+          const series = chart.addSeries(AreaSeries, { lineColor: color, topColor: `${color}55`, bottomColor: `${color}05`, lineWidth: 2, priceFormat, autoscaleInfoProvider });
           plots[spec.metric] = { setData: (points) => series.setData(toData(points)) };
         } else {
-          const series = chart.addSeries(LineSeries, { color, lineWidth: 2, priceFormat, ...(kind === "steps" ? { lineType: LineType.WithSteps } : {}) });
+          const series = chart.addSeries(LineSeries, { color, lineWidth: 2, priceFormat, autoscaleInfoProvider, ...(kind === "steps" ? { lineType: LineType.WithSteps } : {}) });
           plots[spec.metric] = { setData: (points) => series.setData(toData(points)) };
           if (index === 0) {
             const markers = createSeriesMarkers(series, []);
@@ -104,7 +112,7 @@ export function ChartCanvas({ kind, lines, data, seriesKey, format, marks, label
       });
       // The attribution link opens another site in a new tab; it gets the same rel as every other such link.
       for (const link of el.querySelectorAll("a")) link.rel = "noopener noreferrer";
-      live.current = { chart, plots, setMarkers, key: "" };
+      live.current = { chart, plots, setMarkers, key: "", span: null };
       dispose = () => chart.remove();
       setReady((n) => n + 1);
     }).catch(() => {
@@ -121,6 +129,9 @@ export function ChartCanvas({ kind, lines, data, seriesKey, format, marks, label
   useEffect(() => {
     const c = live.current;
     if (!c || data === null) return;
+    // Bars rise from zero, so only the line and area kinds are fitted to a minimum span.
+    const values = kind === "bars" ? [] : lines.flatMap((spec) => (data.lines[spec.metric] ?? []).map((point) => point.value));
+    c.span = values.length === 0 ? null : minimumSpanRange(Math.min(...values), Math.max(...values));
     for (const spec of lines) c.plots[spec.metric]?.setData(data.lines[spec.metric] ?? []);
     const first = lines[0] === undefined ? [] : (data.lines[lines[0].metric] ?? []);
     c.setMarkers(marks, first);
@@ -128,7 +139,7 @@ export function ChartCanvas({ kind, lines, data, seriesKey, format, marks, label
       c.chart.timeScale().fitContent();
       c.key = seriesKey;
     }
-  }, [ready, data, seriesKey, marks, lines]);
+  }, [ready, data, seriesKey, marks, lines, kind]);
 
   return (
     <div className={`relative w-full ${CHART_HEIGHT}`}>

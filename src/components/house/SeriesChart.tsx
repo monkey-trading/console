@@ -10,6 +10,7 @@
 import type { IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts";
 import { memo, useEffect, useRef, useState } from "react";
 
+import { minimumSpanRange } from "@/lib/chart-format";
 import type { SeriesPoint } from "@/lib/house-series";
 
 import { chartOptions, hardenLinks, token, withOpacity, type Tone } from "./chart-theme";
@@ -39,6 +40,8 @@ interface Live {
   floor: ISeriesApi<"Area">;
   area: AreaSeriesType;
   viewKey: string;
+  /** The price range a flat series is fixed to, or null to let the scale fit the values. */
+  span: { min: number; max: number } | null;
 }
 
 type AreaSeriesType = (typeof import("lightweight-charts"))["AreaSeries"];
@@ -65,7 +68,7 @@ function SeriesChartView({ lines, floor = null, viewKey, format, label }: Props)
         topColor: withOpacity(token("ember"), 0.16), bottomColor: withOpacity(token("ember"), 0.02),
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
-      live.current = { chart, series: new Map(), floor: floorSeries, area: AreaSeries, viewKey: "" };
+      live.current = { chart, series: new Map(), floor: floorSeries, area: AreaSeries, viewKey: "", span: null };
       dispose = () => chart.remove();
       setReady((n) => n + 1);
     }).catch(() => {
@@ -87,6 +90,8 @@ function SeriesChartView({ lines, floor = null, viewKey, format, label }: Props)
   useEffect(() => {
     const c = live.current;
     if (!c) return;
+    const values = lines.flatMap((line) => line.points.map((p) => p.value));
+    c.span = values.length === 0 ? null : minimumSpanRange(Math.min(...values), Math.max(...values));
     const wanted = new Set(lines.map((line) => line.id));
     for (const [id, series] of c.series) {
       if (!wanted.has(id)) {
@@ -101,6 +106,11 @@ function SeriesChartView({ lines, floor = null, viewKey, format, label }: Props)
         series = c.chart.addSeries(c.area, {
           lineColor: colour, lineWidth: 2, topColor: line.area === true ? withOpacity(colour, 0.22) : "transparent", bottomColor: line.area === true ? withOpacity(colour, 0.02) : "transparent",
           priceLineVisible: false, crosshairMarkerRadius: 3,
+          // A flat series fits a range of its own, so the axis does not repeat one label; the floor line still counts through its own series.
+          autoscaleInfoProvider: (base: () => { priceRange: { minValue: number; maxValue: number } | null } | null) => {
+            const span = live.current?.span ?? null;
+            return span === null ? base() : { priceRange: { minValue: span.min, maxValue: span.max } };
+          },
         });
         c.series.set(line.id, series);
       }

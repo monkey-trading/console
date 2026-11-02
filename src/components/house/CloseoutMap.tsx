@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TimeframeId } from "@/lib/bars";
 import { formatCompactUsd } from "@/lib/chart-format";
 import type { MarketId } from "@/lib/engine/types";
-import { bandsWithin, bandUsd, closeoutBands, type Band } from "@/lib/house-bands";
+import { bandsWithin, bandUsd, closeoutBands, DEFAULT_RANGE_BPS, emptyMapNote, neededRangeBps, offeredRanges, settledRangeBps, type Band } from "@/lib/house-bands";
 import { fixedFromWire, fixedToNumber } from "@/lib/fixed";
 import { formatPrice } from "@/lib/price-format";
 import { feedProblem } from "@/lib/store/house-feed-text";
@@ -31,7 +31,8 @@ import { useFeed, useSelected } from "./use-feed";
 import { useMarketOptions } from "./use-markets";
 
 const TIMEFRAME_OPTIONS = [{ value: "15m", label: "15m" }, { value: "1h", label: "1h" }, { value: "1D", label: "1D" }] as const satisfies readonly { value: TimeframeId; label: string }[];
-const RANGE_OPTIONS = [{ value: 100, label: "±1%" }, { value: 200, label: "±2%" }, { value: 500, label: "±5%" }, { value: 1000, label: "±10%" }] as const;
+/** The ranges offered before the node has answered: the widest it serves today. */
+const UNKNOWN_NODE_RANGE_BPS = 2_000;
 /** The bands the keyboard-reachable table lists. */
 const TABLE_BANDS = 40;
 
@@ -57,7 +58,9 @@ export function CloseoutMap({ className }: { className?: string }) {
   const markets = useMarketOptions();
   const [picked, setPicked] = useState<MarketId | null>(null);
   const [timeframe, setTimeframe] = useState<TimeframeId>("15m");
-  const [rangeBps, setRangeBps] = useState<number>(500);
+  // The range the trader chose, and the one chosen for them: each belongs to one market and is dropped when the market changes.
+  const [chosen, setChosen] = useState<{ market: MarketId; bps: number } | null>(null);
+  const [opened, setOpened] = useState<{ market: MarketId; bps: number } | null>(null);
   const market = picked !== null && markets.some((m) => m.id === picked) ? picked : (markets[0]?.id ?? null);
   const positions = useFeed(useMemo(() => (market === null ? null : positionsFeed(store, market)), [store, market]));
   const candles = useFeed(useMemo(() => (market === null ? null : candlesFeed(store, market, timeframe)), [store, market, timeframe]));
@@ -68,10 +71,17 @@ export function CloseoutMap({ className }: { className?: string }) {
   const [failed, setFailed] = useState(false);
   const [hover, setHover] = useState<Band | null>(null);
   const view = positions.data;
+  // The range opens once per market on the narrowest that holds its bands, and only widens when a refresh brings a band it hides.
+  const heldBps = opened !== null && opened.market === market ? opened.bps : null;
+  const openedBps = market !== null && view !== null && view.market === market ? settledRangeBps(heldBps, neededRangeBps(view)) : heldBps;
+  if (market !== null && openedBps !== null && openedBps !== heldBps) setOpened({ market, bps: openedBps });
+  const rangeBps = chosen !== null && chosen.market === market ? chosen.bps : (openedBps ?? DEFAULT_RANGE_BPS);
   const markText = view?.mark ?? null;
   const mark = markText === null ? null : fixedToNumber(fixedFromWire(markText));
   const effectiveBps = view === null ? rangeBps : Math.min(rangeBps, view.closeout_range_bps);
   const bands = useMemo(() => (view === null || mark === null ? [] : bandsWithin(closeoutBands(view), mark, effectiveBps)), [view, mark, effectiveBps]);
+  const rangeOptions = useMemo(() => offeredRanges(view?.closeout_range_bps ?? UNKNOWN_NODE_RANGE_BPS).map((bps) => ({ value: bps, label: `±${bps / 100}%` })), [view?.closeout_range_bps]);
+  const emptyNote = view === null ? null : emptyMapNote(view, effectiveBps);
   const maxUsd = useMemo(() => Math.max(0, ...bands.map(bandUsd)), [bands]);
   const candleBars = candles.data?.bars;
   const places = useSelected(useCallback((state) => state.markets.find((m) => m.id === market)?.places ?? placesOf(mark ?? 1), [market, mark]));
@@ -169,9 +179,9 @@ export function CloseoutMap({ className }: { className?: string }) {
       className={className}
       controls={
         <>
-          <Pick label="Close-out map market" value={market ?? 0} options={markets.map((m) => ({ value: m.id, label: m.label }))} onChange={setPicked} />
+          <Pick label="Close-out map market" value={market ?? 0} options={markets.map((m) => ({ value: m.id, label: m.label }))} onChange={(id) => { setPicked(id); setChosen(null); }} />
           <Pick label="Close-out map candle size" value={timeframe} options={TIMEFRAME_OPTIONS} onChange={setTimeframe} />
-          <Pick label="Close-out map price range" value={rangeBps} options={RANGE_OPTIONS} onChange={setRangeBps} />
+          <Pick label="Close-out map price range" value={effectiveBps} options={rangeOptions} onChange={(bps) => market !== null && setChosen({ market, bps })} />
         </>
       }
     >
@@ -190,8 +200,9 @@ export function CloseoutMap({ className }: { className?: string }) {
           rows={bands.slice(0, TABLE_BANDS).map((b) => ({ key: b.fromPrice, head: `${formatPrice(b.fromPrice, places)} to ${formatPrice(b.toPrice, places)}`, cells: [`${formatCompactUsd(b.longUsd)}, ${b.longCount} positions`, `${formatCompactUsd(b.shortUsd)}, ${b.shortCount} positions`] }))}
         />
       </div>
+      {emptyNote !== null && <p className="text-label text-fg-2">{emptyNote}</p>}
       <p className="sr-only">
-        {view === null || mark === null ? "" : bands.length === 0 ? "No positions close out within this range." : `${bands.length} close-out bands within ${effectiveBps / 100} percent of the mark; the heaviest holds ${formatCompactUsd(maxUsd)}.`}
+        {view === null || mark === null ? "" : bands.length === 0 ? "" : `${bands.length} close-out bands within ${effectiveBps / 100} percent of the mark; the heaviest holds ${formatCompactUsd(maxUsd)}.`}
       </p>
       {view !== null && (
         <p className="text-label text-fg-3">

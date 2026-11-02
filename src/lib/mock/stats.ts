@@ -141,11 +141,11 @@ export function positionsView(state: MockState, id: MarketId): PositionsView {
   const minute = Math.floor(at / MINUTE_MS);
   const closeoutFrom: number[] = [];
   for (let from = -CLOSEOUT_RANGE_BPS; from < CLOSEOUT_RANGE_BPS; from += CLOSEOUT_BUCKET_BPS) closeoutFrom.push(from);
-  // Longs close out below the mark and shorts above it; the last two weights are the positions beyond the range and those due now.
+  // Longs close out below the mark and shorts above it, well out from it as on a real node (cross-margined and levered positions close out at -18% and -7%); the last two weights are the positions beyond the range and those due now.
   const closeoutWeights = (side: "long" | "short") => [
     ...closeoutFrom.map((from) => {
       const middle = from + CLOSEOUT_BUCKET_BPS / 2;
-      return bell(middle, side === "long" ? -380 : 380, 190) * (0.1 + 1.9 * noise(id * 3 + (side === "long" ? 1 : 2), middle / CLOSEOUT_BUCKET_BPS + minute) ** 2) + 0.004;
+      return bell(middle, (side === "long" ? -1 : 1) * (1_100 + 200 * (id % 3)), 260) * (0.1 + 1.9 * noise(id * 3 + (side === "long" ? 1 : 2), middle / CLOSEOUT_BUCKET_BPS + minute) ** 2) + 0.004;
     }),
     0.25,
     0.05,

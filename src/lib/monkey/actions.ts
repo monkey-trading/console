@@ -20,7 +20,7 @@ const CLAIM_ATTEMPTS = 3;
  * Runs one wallet transaction. `step` returns the sentence to report when it succeeded, or null
  * when it has already reported why nothing was sent. Resolves true once a transaction landed.
  */
-async function run(panel: MonkeyPanel, action: string, step: (wallet: Wallet, staking: StakingWallet, progress: Progress) => Promise<string | null>): Promise<boolean> {
+async function run(panel: MonkeyPanel, action: string, step: (wallet: Wallet, staking: StakingWallet, progress: Progress) => Promise<string | null>, movesStake = false): Promise<boolean> {
   const { store } = panel;
   const wallet = store.liveWallet;
   if (wallet === null) {
@@ -67,6 +67,8 @@ async function run(panel: MonkeyPanel, action: string, step: (wallet: Wallet, st
   // may not be the one the transaction started on.
   const open = store.monkeySession.panel;
   if (open !== null) {
+    // The node's total follows the chain a little later than the wallet's read does.
+    if (landed && movesStake) open.holdShare();
     await open.refreshWallet(true);
     void open.refreshNode();
   }
@@ -78,7 +80,7 @@ export function stakeMonkey(panel: MonkeyPanel, amount: bigint): Promise<boolean
   return run(panel, `stake ${monkeyExact(amount)}`, async (_wallet, staking, progress) => {
     await staking.stake(amount, progress);
     return `Staked ${monkeyExact(amount)}.`;
-  });
+  }, true);
 }
 
 /** Starts unstaking `amount`; it can be completed, and then returns to the wallet, once the cooldown has passed. */
@@ -93,7 +95,7 @@ export function completeUnstake(panel: MonkeyPanel): Promise<boolean> {
   return run(panel, "complete the unstake", async (_wallet, staking, progress) => {
     await staking.completeUnstake(progress);
     return "Unstake complete. The MONKEY is back in your wallet.";
-  });
+  }, true);
 }
 
 /**
