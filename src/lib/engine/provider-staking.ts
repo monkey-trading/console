@@ -5,6 +5,7 @@
 
 import { decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "viem";
 
+import { claimFailure } from "./claim-refusal";
 import type { DistributionProof } from "./stats-types";
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
 import { NO_CANDIDATE } from "./registry";
@@ -137,6 +138,8 @@ export class ProviderStaking implements StakingWallet {
     const entitled = BigInt(proof.entitled);
     if (entitled <= 0n) throw new Error("The distribution proof names nothing to claim.");
     const data = encodeFunctionData({ abi: VAULT, functionName: "claimDistribution", args: [hexOf(this.address), entitled, BigInt(proof.seq), proof.siblings.map(hexOf)] });
-    return this.transport.send(this.chain.vault, data, "claim your USDC distribution", progress);
+    return this.transport.send(this.chain.vault, data, "claim your USDC distribution", progress).catch((error: unknown) => {
+      throw claimFailure(error);
+    });
   }
 }

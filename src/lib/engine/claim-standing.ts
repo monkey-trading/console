@@ -32,3 +32,18 @@ export function carryAccrued<T extends ClaimAnswer>(held: ClaimAnswer | null | u
   const before = accruedOf(held);
   return before > accruedOf(next) ? { ...next, newest_entitled: before.toString() } : next;
 }
+
+/** Where the vault stands against a proof: `unknown` while nothing can say, `waiting` until a claim can land, `posted` once one can. */
+export type Checkpoint = "unknown" | "waiting" | "posted";
+
+/**
+ * Whether a claim with `proof` can land now. The node's `claimable` decides it, since it states
+ * whether the proof is against a checkpoint the vault accepted and a later checkpoint never
+ * unsettles that. A node that predates the field gives no answer, and then the proof's `seq`
+ * is compared with the vault's latest posted one, `null` while that is unread.
+ */
+export function checkpointOf(proof: ClaimStanding & { seq: number }, vaultLatestSeq: number | null): Checkpoint {
+  if (proof.claimable !== undefined) return proof.claimable ? "posted" : "waiting";
+  if (vaultLatestSeq === null) return "unknown";
+  return proof.seq <= vaultLatestSeq ? "posted" : "waiting";
+}

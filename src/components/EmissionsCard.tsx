@@ -9,7 +9,6 @@ import { emissionsPosition } from "@/lib/store/emissions";
 
 import { useConsole } from "./ConsoleProvider";
 import { focusHeading } from "./monkey/Card";
-import { useVerdict } from "./monkey/use-verdict";
 import { Notice } from "./Notice";
 import { useReadOnlyNote, useSignGate } from "./SignGate";
 
@@ -28,7 +27,6 @@ export function EmissionsCard({ claim }: { claim: () => Promise<unknown> }) {
   const gate = useSignGate(useId());
   const proof = state.entitlement;
   const position = emissionsPosition(proof, state.emissionsVault);
-  const checkpoint = useVerdict(position.checkpoint);
   const act = () => {
     if (state.busy) return;
     void claim().then(() => focusHeading("monkey-title"));
@@ -65,11 +63,8 @@ export function EmissionsCard({ claim }: { claim: () => Promise<unknown> }) {
           {position.awaiting > 0n && (
             <p className="mt-2 text-fg-3">{formatMonkey(position.awaiting)} of this is not claimable yet; the rest follows once the vault reaches the newest checkpoint.</p>
           )}
-          {position.claimed !== null && checkpoint === "checking" && (
-            <p role="status" className="mt-2 text-fg-3">Checking the vault&apos;s latest checkpoint against the node&apos;s proof…</p>
-          )}
-          {position.claimed !== null && checkpoint === "waiting" && position.accrued > position.claimed && (
-            <p className="mt-2 text-fg-3">The vault has not posted a checkpoint covering this yet; the claim unlocks once one posts. It is checked again by itself.</p>
+          {position.claimed !== null && position.checkpoint === "waiting" && position.accrued > position.claimed && (
+            <p className="mt-2 text-fg-3">The vault has not accepted a checkpoint covering this yet; the claim unlocks once it does. It is checked again by itself.</p>
           )}
           {position.claimed !== null && position.checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && (
             <p className="mt-2 text-fg-3">All accrued MONKEY is claimed.</p>

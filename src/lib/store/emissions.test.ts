@@ -9,7 +9,7 @@ import type { EntitlementProof } from "../engine/emissions";
 import { ACCOUNT } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
 import { MONKEY_UNIT } from "../format";
-import { checkEmissionsClaimed, claimEmissions, emissionsPosition } from "./emissions";
+import { checkEmissionsClaimed, claimEmissions, emissionsPosition, WAITING_ON_VAULT } from "./emissions";
 import { connected, VAULT } from "./live-kit";
 
 const VAULT_ABI = parseAbi(["function claimEmissions(address account, uint256 entitled, uint64 checkpointSeq, bytes32[] siblings) returns (uint256)"]);
@@ -158,7 +158,7 @@ describe("claimEmissions", () => {
     expect(store.getSnapshot().notices.emissions).toBeUndefined();
   });
 
-  it("keeps the waiting state after a bounded number of attempts while the vault has not reached the proof", async () => {
+  it("keeps the waiting state after a bounded number of attempts against a node that does not say, while the vault has not reached the proof", async () => {
     const { client, provider, store } = await connected({ emissionsClaimed: 0n, latestSeq: 39 });
     const at = proof(5n * MONKEY_UNIT, 40);
     client.entitlement = at;
@@ -169,7 +169,7 @@ describe("claimEmissions", () => {
     await claimEmissions(store);
     expect(provider.sent).toHaveLength(0);
     expect(proofReads).toBe(3); // bounded: the claim does not spin on a vault that stays behind
-    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "The vault has not reached the checkpoint of the node's latest proof yet; the claim unlocks once it does." });
+    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: WAITING_ON_VAULT });
     // A node that now holds no proof at all says so instead of blaming the lag.
     client.emissions = original;
     client.entitlement = null;
@@ -192,14 +192,14 @@ describe("claimEmissions", () => {
     expect(other.provider.sent).toHaveLength(0);
   });
 
-  it("sends nothing while the vault is behind the proof, and reports nothing due once it has reached it", async () => {
+  it("sends nothing against a node that does not say while the vault is behind the proof, and reports nothing due once it has reached it", async () => {
     const { client, provider, store } = await connected({ emissionsClaimed: 5n * MONKEY_UNIT, latestSeq: 40 });
     // The vault is behind the proof: waiting.
     client.entitlement = proof(5n * MONKEY_UNIT, 40);
     provider.vault.latestSeq = 39;
     await claimEmissions(store);
     expect(provider.sent).toHaveLength(0);
-    expect(store.getSnapshot().notices.emissions?.text).toContain("has not reached");
+    expect(store.getSnapshot().notices.emissions?.text).toBe(WAITING_ON_VAULT);
     // The vault has reached the proof and already minted it all: nothing is due.
     provider.vault.latestSeq = 40;
     await claimEmissions(store);

@@ -15,7 +15,6 @@ import { ReadNote } from "./ReadNote";
 import { Row } from "./Row";
 import { BUTTON, NOTE } from "./styles";
 import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
-import { useVerdict } from "./use-verdict";
 
 export function DistributionClaim() {
   const panel = useMonkeyPanel();
@@ -29,7 +28,6 @@ export function DistributionClaim() {
   const proof = mine ? figures.proof.value : null;
   const held = mine ? figures.position.value : null;
   const position = distributionPosition(proof, held);
-  const checkpoint = useVerdict(position.checkpoint);
   return (
     <Card
       id="distributions-title"
@@ -63,9 +61,8 @@ export function DistributionClaim() {
       <Notice surface="distribution" />
       {mine && !readOnly && proof !== null && held === null && figures.position.status === "loading" && <p className={NOTE}>Reading the vault&apos;s record of what it has paid…</p>}
       {mine && !readOnly && proof !== null && held === null && figures.position.status === "failed" && <p className={NOTE}>The vault&apos;s record of what it has paid could not be read; it is read again by itself.</p>}
-      {mine && !readOnly && position.claimed !== null && checkpoint === "checking" && <p role="status" className={NOTE}>Checking the vault&apos;s latest checkpoint against the node&apos;s proof…</p>}
-      {mine && !readOnly && position.claimed !== null && checkpoint === "waiting" && position.accrued > position.claimed && <p className={NOTE}>The vault has not posted a checkpoint covering this yet; the claim unlocks once one posts. It is checked again by itself.</p>}
-      {mine && !readOnly && position.claimed !== null && checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && <p className={NOTE}>All distributed USDC is claimed.</p>}
+      {mine && !readOnly && position.claimed !== null && position.checkpoint === "waiting" && position.accrued > position.claimed && <p className={NOTE}>The vault has not accepted a checkpoint covering this yet; the claim unlocks once it does. It is checked again by itself.</p>}
+      {mine && !readOnly && position.claimed !== null && position.checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && <p className={NOTE}>All distributed USDC is claimed.</p>}
     </Card>
   );
 }
