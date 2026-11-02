@@ -18,16 +18,16 @@ import { usePrefs } from "./use-prefs";
 /**
  * The lines drawn across the chart: the open position's entry and close-out price, and resting orders.
  * Each line's colour follows its direction: a buy order or a long's entry is green, a sell order or a
- * short's entry is red. The close-out is red too, and dashed. With `lines` off (a Settings preference) the entry and the orders are not
- * drawn; the close-out estimate is a risk figure and stays.
+ * short's entry is red. The close-out is grey and dashed. With `lines` off (a Settings preference) the entry and the orders are not
+ * drawn; the close-out is a risk figure and stays.
  */
 export function markersFor(state: ConsoleState, market: MarketModel, lines = true): PriceMarker[] {
   const out: PriceMarker[] = [];
   const position = state.account?.positions.find((p) => p.market === market.id);
   if (state.account && position) {
     if (lines) out.push({ price: fixedToNumber(position.entry), tone: position.qty > 0n ? "glow" : "ember", style: "dotted", title: `${position.qty > 0n ? "Long" : "Short"} entry` });
-    const liq = closeOutMarker(state.signatures, state.account, market);
-    if (liq !== null) out.push({ price: fixedToNumber(liq), tone: "ember", style: "dashed", title: "Close-out (est.)" });
+    const liq = closeOutMarker(state.account, market);
+    if (liq !== null) out.push({ price: fixedToNumber(liq), tone: "fg-3", style: "dashed", title: "Close-out" });
   }
   for (const order of lines ? (state.account?.orders ?? []) : []) {
     if (order.market === market.id && order.kind.kind !== "market") out.push({ price: Number(order.kind.price), tone: order.side === "buy" ? "glow" : "ember", style: "dotted", title: `${order.kind.kind} ${order.side}` });

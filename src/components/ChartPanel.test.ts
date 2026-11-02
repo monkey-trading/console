@@ -30,7 +30,7 @@ const account = (qty: bigint, orders: RestingOrder[]): AccountModel => ({
   positions: qty === 0n ? [] : [{ market: 1, qty, entry: fixedFromInt(60_000), closeout: { reach: "at", price: fixedFromInt(qty > 0n ? 59_000 : 61_000) } }], orders,
 });
 
-const withAccount = (base: ConsoleState, a: AccountModel, signatures: ConsoleState["signatures"] = "none"): ConsoleState => ({ ...base, signatures, account: a });
+const withAccount = (base: ConsoleState, a: AccountModel): ConsoleState => ({ ...base, account: a });
 
 describe("markersFor", () => {
   it("draws a buy order green and a sell order red, for limit and stop alike", async () => {
@@ -51,30 +51,30 @@ describe("markersFor", () => {
     }
   });
 
-  it("keeps the close-out red and dashed on either side, apart from a sell order by style and title", async () => {
+  it("draws the close-out grey and dashed at the node's price on either side, apart from a sell order by style and title", async () => {
     const { market, base } = await fixture();
-    for (const qty of [fixedFromInt(1), fixedFromInt(-1)]) {
+    for (const [qty, price] of [[fixedFromInt(1), 59_000], [fixedFromInt(-1), 61_000]] as const) {
       const lines = markersFor(withAccount(base, account(qty, [order(1, "sell", "limit")])), market);
-      const closeOut = lines.find((l) => l.title === "Close-out (est.)");
-      expect(closeOut).toMatchObject({ tone: "ember", style: "dashed" });
+      const closeOut = lines.find((l) => l.title === "Close-out");
+      expect(closeOut).toMatchObject({ price, tone: "fg-3", style: "dashed" });
       expect(lines.find((l) => l.title === "limit sell")?.style).toBe("dotted");
     }
   });
 
-  it("draws no close-out against a live node, no market order, and no other market's order", async () => {
+  it("draws no market order, and no other market's order", async () => {
     const { market, base } = await fixture();
     const marketOrder: RestingOrder = { ...order(1, "buy", "limit"), kind: { kind: "market", quoted: "60000" } };
-    const lines = markersFor(withAccount(base, account(fixedFromInt(1), [marketOrder, order(2, "buy", "limit", 2)]), "checked"), market);
-    expect(lines.map((l) => l.title)).toEqual(["Long entry"]);
+    const lines = markersFor(withAccount(base, account(fixedFromInt(1), [marketOrder, order(2, "buy", "limit", 2)])), market);
+    expect(lines.map((l) => l.title)).toEqual(["Long entry", "Close-out"]);
     expect(markersFor(base, market)).toEqual([]);
   });
 
-  it("with lines off leaves out the entry and the resting orders and keeps the close-out estimate", async () => {
+  it("with lines off leaves out the entry and the resting orders and keeps the close-out", async () => {
     const { market, base } = await fixture();
     const held = withAccount(base, account(fixedFromInt(1), [order(1, "sell", "limit")]));
     const titles = (lines: boolean) => markersFor(held, market, lines).map((l) => l.title);
-    expect(titles(true)).toEqual(expect.arrayContaining(["Long entry", "limit sell", "Close-out (est.)"]));
-    expect(titles(false)).toEqual(["Close-out (est.)"]);
+    expect(titles(true)).toEqual(expect.arrayContaining(["Long entry", "limit sell", "Close-out"]));
+    expect(titles(false)).toEqual(["Close-out"]);
     expect(markersFor(withAccount(base, account(0n, [order(1, "sell", "limit")])), market, false)).toEqual([]);
   });
 });
