@@ -1,6 +1,11 @@
 /** Which enclave address the console trusts the node's answers to come from, and how it got it. */
 
+import type { Hex } from "viem";
+
 import { MOCK_REFUSED, type AttestationStatus } from "./attestation";
+import type { PinnedRelease } from "./manifests";
+import type { VaultFacts } from "./registry";
+import { digestNamed, isConfigHash, manifestText } from "./release-check";
 import type { Verifier } from "./verifier";
 
 /** Something the node sent cannot be trusted; the reason is written for the user. */
@@ -23,6 +28,15 @@ export class SignatureError extends UntrustedError {
 const RECHECK_COOLDOWN_MS = 30_000;
 /** The messages the verifier gives when a certificate or list is outside its dates, which a wrong device clock also causes. */
 const DATE_FAILURE = /validity period|not yet valid|is expired/;
+/** What the console says when a quote is not for the release the vault names. */
+export const NOT_NAMED = "The node does not run the release the vault names, or this console does not pin that release yet and needs updating.";
+/** What the console says when the quote's enclave is not the one the vault pays out on. */
+export const NOT_THE_SIGNER = "The node's enclave is not the signer the vault names.";
+/** Why a quote that verified is not trusted to sign for: no wallet has read the vault. */
+export const CONNECT_TO_CHECK = "Connect a wallet to check the vault's current release before anything is signed.";
+
+/** What a read of the vault came to: no wallet to read it through, the facts, or the reason it failed. */
+type VaultRead = { kind: "none" } | { kind: "read"; facts: VaultFacts } | { kind: "failed"; reason: string };
 
 export interface TrustDeps {
   /** `GET /v1/attestation`, as text. */
@@ -31,8 +45,12 @@ export interface TrustDeps {
   collateral(): Promise<string | null>;
   /** The verifier, loaded on first use. */
   verifier(): Promise<Verifier>;
-  /** The release manifests this build pins. */
-  manifests: readonly string[];
+  /** The releases this build pins. */
+  releases: readonly PinnedRelease[];
+  /** A dev build's stand-ins for the launch digest a mock quote cannot measure; with none, its mock node is not checked against the vault. */
+  devDigests: readonly string[];
+  /** The vault's facts through the connected wallet, bounded in time; null with no wallet that reads a chain. */
+  vaultFacts(): Promise<VaultFacts> | null;
   acceptsMock: boolean;
   nowMs(): number;
   onStatus(status: AttestationStatus): void;
@@ -102,6 +120,11 @@ export class NodeTrust {
     return changed;
   }
 
+  /** Whether connecting a wallet changes this verdict: a quote the vault can judge, which a dev build's mock node with no stand-in digests is not. */
+  get judgedByVault(): boolean {
+    return this.current.kind !== "mock" || this.deps.devDigests.length > 0;
+  }
+
   /** The device clock disagrees with the node's signed time by `skewMs`; nothing the node says can be judged. */
   clockWrong(skewMs: number): void {
     this.setStatus({ kind: "clock", skewMs });
@@ -118,7 +141,7 @@ export class NodeTrust {
 
   private setStatus(status: AttestationStatus): void {
     this.current = status;
-    if (status.kind === "mock" || status.kind === "verified") this.verifiedStatus = status;
+    if (status.kind === "mock" || status.kind === "verified" || status.kind === "attested") this.verifiedStatus = status;
     this.deps.onStatus(status);
   }
 
@@ -128,6 +151,32 @@ export class NodeTrust {
     if (changed) this.deps.onEnclaveChanged();
   }
 
+  /** The vault's facts through the connected wallet; a failed read says why, and never counts as the vault's word. */
+  private async readVault(): Promise<VaultRead> {
+    const read = this.deps.vaultFacts();
+    if (read === null) return { kind: "none" };
+    try {
+      return { kind: "read", facts: await read };
+    } catch (error) {
+      return { kind: "failed", reason: error instanceof Error ? error.message : "the read failed" };
+    }
+  }
+
+  /**
+   * Why a dev build refuses its mock node, or null. With stand-in digests named, the mock node passes
+   * the same two checks a hardware quote does once a wallet can read the vault; a mock quote proves
+   * no enclave, so this exercises the path and vouches for nothing.
+   */
+  private async mockRefusal(configHash: unknown, address: string): Promise<string | null> {
+    if (this.deps.devDigests.length === 0) return null;
+    const vault = await this.readVault();
+    if (vault.kind === "none") return null;
+    if (vault.kind === "failed") return `Your wallet could not read the vault's current release: ${vault.reason}`;
+    const digests = this.deps.devDigests.map((digest) => ({ launchDigest: digest as Hex })); // deploy.ts checked each is 0x hex
+    if (!isConfigHash(configHash) || digestNamed(digests, vault.facts.release, configHash) === null) return NOT_NAMED;
+    return address === vault.facts.signer ? null : NOT_THE_SIGNER;
+  }
+
   private async run(): Promise<void> {
     this.signerAddress = null;
     this.verifiedStatus = null;
@@ -135,25 +184,37 @@ export class NodeTrust {
       const verifier = await this.deps.verifier();
       const text = await this.deps.attestation();
       // The node's own JSON: a body that is not an object has no provider, and the verifier then rejects it.
-      const { provider } = (JSON.parse(text) ?? {}) as { provider?: unknown };
+      const { provider, config_sha256: configHash } = (JSON.parse(text) ?? {}) as { provider?: unknown; config_sha256?: unknown };
       if (provider === "mock") {
         // Only the dev-only entry point reads a mock quote, and a build that refuses one never has it.
         if (!this.deps.acceptsMock || !verifier.verifyMockAttestation) return this.setStatus({ kind: "unverified", reason: MOCK_REFUSED });
         const mock = verifier.verifyMockAttestation(text);
         if (!mock.ok) return this.setStatus({ kind: "unverified", reason: mock.reason });
-        this.trust(mock.enclave.address.toLowerCase());
+        const address = mock.enclave.address.toLowerCase();
+        const refused = await this.mockRefusal(configHash, address);
+        if (refused !== null) return this.setStatus({ kind: "unverified", reason: refused });
+        this.trust(address);
         return this.setStatus({ kind: "mock" });
       }
+      // The node's own text until the verifier binds it to the quote: checked first, so it cannot add a line to a manifest.
+      if (!isConfigHash(configHash)) return this.setStatus({ kind: "unverified", reason: "The node's attestation names no configuration hash, so it cannot be verified." });
+      const vault = await this.readVault();
+      const pinned = vault.kind === "read" ? digestNamed(this.deps.releases, vault.facts.release, configHash) : null;
+      if (vault.kind === "read" && pinned === null) return this.setStatus({ kind: "unverified", reason: NOT_NAMED });
+      const manifests = (pinned === null ? this.deps.releases : [pinned]).map((release) => manifestText(release, configHash));
       const collateral = await this.deps.collateral();
       if (collateral === null) return this.setStatus({ kind: "unverified", reason: "The node serves no collateral for its attestation, so it cannot be verified." });
-      const verdict = verifier.verifyAttestation({ attestation: text, manifests: this.deps.manifests, collateral, nowMs: this.deps.nowMs() });
+      const verdict = verifier.verifyAttestation({ attestation: text, manifests, collateral, nowMs: this.deps.nowMs() });
       if (!verdict.ok) {
         const hint = DATE_FAILURE.test(verdict.reason) ? ". If the device clock is wrong, correct it and reload." : "";
         return this.setStatus({ kind: "unverified", reason: verdict.reason + hint });
       }
-      const { address, release, config } = verdict.enclave;
-      this.trust(address.toLowerCase());
-      this.setStatus({ kind: "verified", release: release ?? "", config: config ?? "", address: address.toLowerCase() });
+      const address = verdict.enclave.address.toLowerCase();
+      const { release, config } = verdict.enclave;
+      if (vault.kind === "read" && address !== vault.facts.signer) return this.setStatus({ kind: "unverified", reason: NOT_THE_SIGNER });
+      this.trust(address);
+      if (vault.kind === "read") this.setStatus({ kind: "verified", release: release ?? "", config: config ?? "", address });
+      else this.setStatus({ kind: "attested", release: release ?? "", address, why: vault.kind === "none" ? CONNECT_TO_CHECK : `Your wallet could not read the vault's current release: ${vault.reason}` });
     } catch (error) {
       this.setStatus({ kind: "unverified", reason: error instanceof Error ? error.message : "The attestation could not be read." });
     }

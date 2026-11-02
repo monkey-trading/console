@@ -6,8 +6,10 @@ export type AttestationStatus =
   | { kind: "checking" }
   /** The node's own mock quote, accepted only where the build allows it. */
   | { kind: "mock" }
-  /** A hardware quote that verified against a pinned release manifest. */
+  /** A hardware quote that verified against a pinned release and the vault's current release, from the vault's signer. */
   | { kind: "verified"; release: string; config: string; address: string }
+  /** A hardware quote whose code, policy and TCB verified against a pinned release, with the vault's current release not read: answers may be read and nothing is signed. `why` says what the read needs. */
+  | { kind: "attested"; release: string; address: string; why: string }
   /** The enclave changed or a signature failed, and the console is checking the node again. */
   | { kind: "reverifying" }
   /** The device clock and the verified enclave's signed time disagree, so nothing the node says can be judged. */
@@ -51,8 +53,15 @@ export function checkAttestation(attestation: Attestation, acceptsMock: boolean)
 export function signBlock(status: AttestationStatus, feed: FeedStatus, readOnly = false): string | null {
   if (readOnly) return "this account is read-only, so nothing can be signed for it";
   if (status.kind === "clock") return "your device clock differs from the node's signed time";
+  if (status.kind === "attested") return "the vault's current release has not been checked";
+  return readBlock(status, feed);
+}
+
+/** Why the node's answers may not be read now, as a clause, or null when they may: a verified attestation of the pinned code is enough to read, and only the vault's release to sign. */
+export function readBlock(status: AttestationStatus, feed: FeedStatus): string | null {
+  if (status.kind === "clock") return "your device clock differs from the node's signed time";
   if (status.kind === "reverifying") return "the node is being verified again";
-  if (status.kind !== "mock" && status.kind !== "verified") return "the node's attestation is not verified";
+  if (status.kind !== "mock" && status.kind !== "verified" && status.kind !== "attested") return "the node's attestation is not verified";
   if (feed === "stale") return "the node's feed is stale";
   return feed === "connecting" ? "the node's feed has not started yet" : null;
 }

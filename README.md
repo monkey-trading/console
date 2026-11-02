@@ -98,16 +98,27 @@ A live build is configured by environment variables at build time, all pinned in
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional WalletConnect project id (32 lowercase hex characters); without it the build offers no WalletConnect |
 | `NEXT_PUBLIC_ENGINE_HEARTBEAT_MS` | The node's `[api] heartbeat_interval`, in milliseconds (default 5000) |
 | `NEXT_PUBLIC_ENGINE_DEV_ORIGINS` | Comma-separated node origins a `live-dev` build may accept a mock attestation from |
+| `NEXT_PUBLIC_ENGINE_REGISTRY` | Optional operator registry; without it the build does not follow the operator, and the MONKEY page lists no candidates |
+| `NEXT_PUBLIC_ENGINE_CANDIDATE_ORIGINS` | Comma-separated bare `https://` origins of every timelock-approved candidate's registered hostname: the nodes the build can follow beside its own, named one by one |
+| `NEXT_PUBLIC_ENGINE_DEV_LAUNCH_DIGESTS` | Comma-separated 48-byte stand-ins, in a `live-dev` build only, for the launch digest a mock quote cannot measure, so a local stack runs the vault's release check |
 
-The node's origin is added to the Content Security Policy's `connect-src` (with its `wss:` form), and
+The node's origin and each candidate's are added to the Content Security Policy's `connect-src` (each with its `wss:` form), with no wildcard or scheme source, and
 `'wasm-unsafe-eval'` to `script-src`; a build with a WalletConnect project id also adds WalletConnect's relay,
 `wss://relay.walletconnect.org`, to `connect-src`, and its Verify service, `https://verify.walletconnect.org`, to
 `frame-src`. Chain reads go through the user's wallet, never to an RPC of the console's
 own; the one exception is the `live-dev` build's dev faucet, which tops the wallet's gas up with
 `anvil_setBalance` on the build's pinned `NEXT_PUBLIC_ENGINE_RPC_URL` (its `connect-src` only in that
 build) while the USDC mint still goes through the wallet. `/notices` says what leaves the browser. A `live` build refuses a mock attestation, and the console's wrapper of the verifier does
-not expose the mock entry point there (the served package still exports it); with no release manifests pinned yet
+not expose the mock entry point there (the served package still exports it); with no releases pinned yet
 (`src/lib/engine/manifests.ts`), it trusts no hardware node either.
+
+A hardware quote must show a pinned release's launch digest, guest policy and minimum TCB. With a wallet connected, the
+attested launch digest and config hash must also hash to the vault's `currentRelease()`, and the attested enclave must be the
+vault's `checkpointSigner()`; until then the node may be read and nothing is signed for it. While the operator registry has
+rotation on, a connected wallet's reads name the operator's registered hostname, and the console moves to it once that node
+passes the whole check and answers a signed read, without a rebuild. Rotation among listed candidates needs no release; a newly
+approved candidate needs one, and a console that does not list the elected operator stays out and says it needs updating. A code
+upgrade needs a console release first, which pins the new release.
 
 `scripts/dev-live-client.sh` (Node, `curl`, and `ENGINE_DIR`, the engine checkout, with `ENGINE_BIN`
 or Cargo) starts a dev node and runs the live client in Node against it through a tampering proxy,

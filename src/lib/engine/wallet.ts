@@ -3,6 +3,7 @@
 import type { Fixed } from "../fixed";
 import type { EntitlementProof } from "./emissions";
 import type { TypedRequest } from "./eip712";
+import type { DeploymentReads } from "./registry";
 import type { StakingWallet } from "./staking";
 import type { Address, SignedWithdrawal } from "./types";
 
@@ -53,6 +54,8 @@ export interface Wallet {
   suggestMonkey?(): Promise<boolean>;
   /** Staking, unstaking and USDC distribution claims; absent from a wallet that reads no chain, such as a watched account's. */
   staking?: StakingWallet;
+  /** The vault's and the operator registry's reads; absent from a wallet that reads no chain, such as a watched account's. */
+  chainReads?: DeploymentReads;
   /**
    * Dev-only, live-dev builds: mints `amount` of the deployment's mock USDC to this account through
    * the wallet and resolves with the transaction hash; `progress` as for `deposit`. Absent on
@@ -66,6 +69,8 @@ export interface Wallet {
    * true when the wallet added it. Absent from a wallet with no token to suggest, such as the mock's.
    */
   suggestUsdc?(): Promise<boolean>;
+  /** Puts the wallet on the deployment's chain, asking it if need be; absent from a wallet with no chain to move. */
+  ensureChain?(): Promise<void>;
   /** Ends the wallet's connection, such as a WalletConnect session, when the user disconnects; absent when there is nothing to end. */
   disconnect?(): Promise<void>;
   /** The WalletConnect session topic, when the wallet connects over one: persisted as the connection choice only once the wallet is adopted, never for a connect the console refused. */

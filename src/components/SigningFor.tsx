@@ -15,7 +15,9 @@ export function SigningFor() {
     ? `The console asks it to sign only for the enclave of release ${attestation.release}.`
     : attestation.kind === "mock"
       ? "The console asks it to sign only for a development node whose mock attestation proves no enclave."
-      : "The console asks it to sign nothing until the node's attestation verifies.";
+      : attestation.kind === "attested"
+        ? "The console asks it to sign nothing until the vault's current release has been checked."
+        : "The console asks it to sign nothing until the node's attestation verifies.";
   return (
     <p className="text-label leading-relaxed text-fg-3">
       Every signature names chain {chainId} and vault <span title={vault} className="text-fg-2">{shortHex(vault)}</span> — the wallet&rsquo;s and the session key&rsquo;s alike. {node}

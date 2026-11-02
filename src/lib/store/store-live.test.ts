@@ -216,7 +216,7 @@ describe("a live client that keeps failing its signature checks", () => {
     const verifier = await realVerifier();
     const live = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 1, vault: market.vault, heartbeatMs: 5_000, loadVerifier: async () => verifier,
-      manifests: [], acceptsMock: true, fetch: node.fetch, openSocket: () => new FakeSocket("wss://node.test"), scheduler: new FakeScheduler(), nowMs: () => market.time_ms,
+      releases: [], acceptsMock: true, fetch: node.fetch, openSocket: () => new FakeSocket("wss://node.test"), scheduler: new FakeScheduler(), nowMs: () => market.time_ms,
     });
     const store = new ConsoleStore({ client: live, wallets: new WatchConnector(() => ""), history: () => [], initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
     store.start(0);
@@ -241,7 +241,7 @@ describe("a live node that is down at first", () => {
     const sockets: FakeSocket[] = [];
     const live = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: ACCOUNT, heartbeatMs: 5_000, loadVerifier: async () => acceptAll,
-      manifests: [], acceptsMock: true, fetch: node.fetch, openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; }, scheduler, nowMs: () => 1,
+      releases: [], acceptsMock: true, fetch: node.fetch, openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; }, scheduler, nowMs: () => 1,
     });
     const store = new ConsoleStore({ client: live, wallets: new WatchConnector(() => ""), history: () => [], initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
     store.start(0);

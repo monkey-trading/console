@@ -33,5 +33,9 @@ export type EngineEvent =
   | { type: "session_key_registered"; account: Address; session_key: Address; expires_at: number }
   | { type: "session_key_revoked"; account: Address; session_key: Address }
   | { type: "session_key_rejected"; account: Address; session_key: Address; reason: Reject }
+  /** The operator registry turned rotation on or off, mirrored. */
+  | { type: "rotation_switched"; enabled: boolean; election_cancelled: boolean }
+  /** An election the operator registry made, mirrored; `admin_key` signs admin commands from `effective_at`. */
+  | { type: "operator_elected"; epoch: number; candidate: Address; admin_key: Address; effective_at: number }
   | { type: "admin_applied" }
   | { type: "admin_rejected"; reason: string };

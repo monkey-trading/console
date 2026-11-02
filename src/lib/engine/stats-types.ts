@@ -216,6 +216,25 @@ export interface DistributionProof extends ClaimStanding {
 }
 
 /** The dashboard's reads, kept apart from the rest of the client so a node without the routes answers 404 to them alone. */
+/** An election as the engine mirrors it (`GET /v1/operator`'s `last_election`). */
+export interface ElectionView {
+  epoch: number;
+  candidate: Address;
+  admin_key: Address;
+  /** When the key takes effect in sequenced time, in milliseconds. */
+  effective_at: number;
+  registry_effective_at: number;
+  cancelled?: boolean;
+}
+
+/** `GET /v1/operator`: the key in effect, its pending rotation, and the registry as the log mirrors it. */
+export interface OperatorRoute {
+  operator: Address;
+  pending_rotation: { address: Address; effective_at: number } | null;
+  rotation_enabled: boolean;
+  last_election: ElectionView | null;
+}
+
 export interface StatsReads {
   positions(market: MarketId): Promise<PositionsView>;
   series(query: SeriesQuery): Promise<SeriesPage>;
@@ -224,6 +243,8 @@ export interface StatsReads {
   activity(params: { limit?: number; before?: string }): Promise<ActivityPage>;
   /** The account's distribution proof, or null when the node holds none for it. */
   distributions(address: Address): Promise<DistributionProof | null>;
+  /** `GET /v1/operator`; rejects with a 404 `EngineError` from a node that predates it. */
+  operator(): Promise<OperatorRoute>;
   /** Contract addresses a client knows without a deployment config; only the mock names any. */
   readonly contracts?: { token: string; staking: string };
 }

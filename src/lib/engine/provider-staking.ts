@@ -10,7 +10,7 @@ import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet
 import type { StakingPosition, StakingWallet } from "./staking";
 import type { Progress } from "./wallet";
 
-/** The vault that has not deployed its token yet names the zero address. */
+/** The zero address: the vault that has not deployed its token yet names it, and so does the account that delegates to no one. */
 const NO_TOKEN = "0x0000000000000000000000000000000000000000";
 
 const ERC20 = parseAbi([
@@ -23,6 +23,8 @@ const STAKING = parseAbi([
   "function stake(uint256 amount)",
   "function startUnstake(uint256 amount)",
   "function completeUnstake()",
+  "function delegate(address candidate)",
+  "function delegates(address account) view returns (address)",
   "function stakes(address account) view returns (uint256)",
   "function unstakes(address account) view returns (uint256 amount, uint256 claimableAt)",
 ]);
@@ -88,14 +90,17 @@ export class ProviderStaking implements StakingWallet {
     const staking = this.stakingAddress();
     let staked = 0n;
     let unstaking: StakingPosition["unstaking"] = null;
+    let delegate: string | null = null;
     if (staking !== null) {
       staked = decodeFunctionResult({ abi: STAKING, functionName: "stakes", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "stakes", args: [owner] })) });
       const [amount, claimableAt] = decodeFunctionResult({ abi: STAKING, functionName: "unstakes", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "unstakes", args: [owner] })) });
       unstaking = amount > 0n ? { amount, claimableAtMs: Number(claimableAt) * 1000 } : null;
+      const chosen = decodeFunctionResult({ abi: STAKING, functionName: "delegates", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegates", args: [owner] })) });
+      delegate = chosen === NO_TOKEN ? null : chosen.toLowerCase();
     }
     const token = await this.tokenAddress();
     const balance = token === null ? 0n : decodeFunctionResult({ abi: ERC20, functionName: "balanceOf", data: await this.call(token, encodeFunctionData({ abi: ERC20, functionName: "balanceOf", args: [owner] })) });
-    return { stakingEnabled: staking !== null, staked, unstaking, balance, distributionsClaimed: paid, latestSeq: Number(latestSeq) };
+    return { stakingEnabled: staking !== null, staked, unstaking, balance, distributionsClaimed: paid, latestSeq: Number(latestSeq), delegate };
   }
 
   async stake(amount: bigint, progress: Progress = () => undefined): Promise<string> {
@@ -120,6 +125,11 @@ export class ProviderStaking implements StakingWallet {
 
   async completeUnstake(progress: Progress = () => undefined): Promise<string> {
     return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "completeUnstake" }), "complete the unstake", progress);
+  }
+
+  async delegate(candidate: string, progress: Progress = () => undefined): Promise<string> {
+    const action = candidate === NO_TOKEN ? "clear your delegation" : "delegate your stake";
+    return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "delegate", args: [hexOf(candidate)] }), action, progress);
   }
 
   /** The proof names this account: the node signed it for the account's own route. */

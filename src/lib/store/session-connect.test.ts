@@ -6,7 +6,7 @@ import vectors from "../engine/eip712-vectors.json";
 import { ProviderWallet } from "../engine/provider-wallet";
 import { ACCOUNT, StubProvider } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
-import { authorizeBrowser, connectWallet } from "./actions";
+import { authorizeBrowser, connectWallet, disconnectWallet } from "./actions";
 import { ActionClient, BTC, NODE_TIME, VAULT } from "./live-kit";
 import { liveSessionKey } from "./session";
 import { ConsoleStore } from "./store";
@@ -25,6 +25,21 @@ async function setup(credited: boolean) {
 }
 
 const signatures = (provider: StubProvider) => provider.calls.filter((c) => c.method === "eth_signTypedData_v4");
+
+describe("what a connect hands the node's client", () => {
+  it("gives it the wallet's chain reads before the account is read, and takes them back at a disconnect", async () => {
+    const { client, store, walletA } = await setup(true);
+    let chainsAtAccountRead = -1;
+    const read = client.account.bind(client);
+    client.account = () => { chainsAtAccountRead = client.chainsRead.length; return read(); };
+    await connectWallet(store, "injected");
+    expect(walletA.chainReads).toBeDefined();
+    expect(client.chainsRead).toEqual([walletA.chainReads]);
+    expect(chainsAtAccountRead).toBe(1);
+    disconnectWallet(store);
+    expect(client.chainsRead).toEqual([walletA.chainReads, null]);
+  });
+});
 
 describe("what a connect asks of the wallet", () => {
   it("asks for no signature and registers nothing at connect, credited or not", async () => {

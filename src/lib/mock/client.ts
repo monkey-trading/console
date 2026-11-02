@@ -12,6 +12,7 @@ import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
 import { fixedToWire } from "../fixed";
 import { equityOf, marginOf } from "./accounts";
+import { mockHex } from "./hex";
 import { cancelAll, closeAll } from "./batch";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";
 import { mockTotals, queuePage, withdraw } from "./funds";
@@ -21,18 +22,7 @@ import { advance } from "./step";
 import { emissionScheduleOf, houseFigures, marksPage, mockStats } from "./stats";
 import { CHECKPOINT_EVERY, type MockState } from "./state";
 
-const HEX = "0123456789abcdef";
-
-/** A deterministic hex string of `bytes` bytes derived from `seed`, for the mock's fixed fields. */
-export function mockHex(seed: string, bytes: number): string {
-  let h = 2166136261;
-  let out = "";
-  for (let i = 0; i < bytes * 2; i++) {
-    h = Math.imul(h ^ (seed.charCodeAt(i % seed.length) + i), 16777619) >>> 0;
-    out += HEX[h % 16];
-  }
-  return out;
-}
+export { mockHex };
 
 const MOCK_QUOTE_PREFIX = "MOCK-ATTESTATION-NOT-A-TEE:";
 const toHex = (text: string) => Array.from(text, (c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
@@ -100,6 +90,9 @@ export class MockEngineClient implements EngineClient {
       reason: `The ${attestation.provider} quote cannot be verified here: this build does not check vendor certificate chains or a release manifest.`,
     };
   }
+
+  /** The mock vouches for itself and has no vault to read. */
+  async readChainThrough(): Promise<void> {}
 
   /** The mock's trust and feed never change, so there is nothing to report. */
   watch(): Unsubscribe {

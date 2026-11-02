@@ -61,7 +61,12 @@ export class MockWalletConnector implements WalletConnector {
           controls.claimDistribution(address, proof);
           return `0x${mockHex(`distribution-${proof.entitled}-${address}`, 32)}`;
         },
+        async delegate(candidate: string) {
+          controls.delegate(address, candidate);
+          return `0x${mockHex(`delegate-${candidate}-${address}`, 32)}`;
+        },
       },
+      chainReads: controls.chainReads(),
       async claimed() {
         return true;
       },

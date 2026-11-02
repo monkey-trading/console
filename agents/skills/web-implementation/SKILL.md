@@ -197,11 +197,12 @@ in a test file: a test cannot reset it, and a second instance of a component can
 - `Content-Security-Policy`: `default-src 'self'`; `script-src 'self' 'unsafe-inline'`, plus
   `'wasm-unsafe-eval'` in a live build (the engine's verifier is WebAssembly) and
   `'unsafe-eval'` in development only; `style-src 'self' 'unsafe-inline'`; `img-src 'self' data:`;
-  `font-src 'self'`; `connect-src 'self'`, plus the approved engine node's `https:` and `wss:` host once there is one;
+  `font-src 'self'`; `connect-src 'self'`, plus the `https:` and `wss:` origin of the build's engine node and of each
+  timelock-approved candidate's registered hostname (owner decision, monkey-trading/console#37), named one by one;
   `object-src 'none'`; `base-uri 'self'`;
   `form-action 'self'`; `frame-ancestors 'none'`. A statically rendered page is built once for
   every visitor, so its inline bootstrap scripts cannot carry a per-request nonce;
-  `'unsafe-inline'` covers them, and the policy allows nothing from another origin but the approved engine node's
+  `'unsafe-inline'` covers them, and the policy allows nothing from another origin but those engine nodes'
   and, in a build with a WalletConnect project id, WalletConnect's relay (`wss://relay.walletconnect.org`,
   approved in monkey-trading/console#7) in `connect-src` and its Verify service
   (`https://verify.walletconnect.org`, approved by the owner as monkey-trading/console#27 records) in
@@ -213,7 +214,7 @@ in a test file: a test cannot reset it, and a second instance of a component can
   error.
 - `poweredByHeader: false`.
 - Never widen the CSP with a wildcard, a scheme source such as `https:`, or another origin
-  without the owner's approval; the engine node's origin is the one expected. A new origin is a
+  without the owner's approval; the listed engine nodes' origins are the ones expected. A new kind of origin is a
   privacy change and needs that approval first ([Privacy](#privacy)).
 - Read the headers from the production build, not only the config: `npm run build`, then
   `npm start -- --port <port>` on a free port (`next start` exits rather than move when the port

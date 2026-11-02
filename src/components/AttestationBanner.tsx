@@ -3,9 +3,12 @@
 /** Compact lines saying what the console found when it checked the node, and what it cannot vouch for. */
 
 import { shortHex } from "@/lib/format";
+import { CONNECT_TO_CHECK } from "@/lib/engine/trust";
 import { describeMockAttestation, describeReverifying } from "@/lib/messages";
 
-import { useConsole } from "./ConsoleProvider";
+import { recheckNode } from "@/lib/store/node-move";
+
+import { useConsole, useNodeFollow, useSession } from "./ConsoleProvider";
 
 const LINE = "border-b px-4 py-1 text-center text-label";
 const WARN = `${LINE} border-amber/40 bg-amber/10 text-amber`;
@@ -16,6 +19,7 @@ export function AttestationBanner() {
   return (
     <section aria-label="Node attestation">
       <Status attestation={attestation} signatures={signatures} />
+      <NodeLine />
       {stream === "stale" && attestation.kind !== "unverified" && (
         <div role="alert" className={BAD}>
           <strong className="font-medium">The node&apos;s feed is stale.</strong> It stopped or failed a check (see the last message), so orders are disabled until it recovers.
@@ -23,6 +27,30 @@ export function AttestationBanner() {
       )}
     </section>
   );
+}
+
+/** What the chain says about the node, when it says something other than the node in use. */
+function NodeLine() {
+  const follow = useNodeFollow();
+  if (follow === null) return null;
+  switch (follow.kind) {
+    case "pinned":
+    case "following":
+    case "failed":
+      return null;
+    case "unlisted":
+      return <div role="alert" className={BAD}><strong className="font-medium">This console needs updating.</strong> The elected operator{follow.hostname === null ? " registered no plain hostname" : `'s host, ${follow.hostname}, is not one this build lists`}, so the console does not connect to it.</div>;
+    case "waiting":
+      return <div role="status" className={WARN}><strong className="font-medium">The operator is changing.</strong> The console stays on {new URL(follow.origin).host} until {new URL(follow.target).host} verifies: {follow.reason}</div>;
+    default:
+      return follow satisfies never;
+  }
+}
+
+/** The check of the vault's release through the wallet: what a wallet that left the chain and came back asks for. */
+function CheckAgain() {
+  const { store } = useSession();
+  return <button type="button" onClick={() => void recheckNode(store)} className="ml-2 min-h-6 rounded border border-amber/60 px-1.5 hover:bg-amber/20 focus-visible:outline-2 focus-visible:outline-glow">Check again</button>;
 }
 
 function Status({ attestation, signatures }: { attestation: ReturnType<typeof useConsole>["attestation"]; signatures: ReturnType<typeof useConsole>["signatures"] }) {
@@ -39,6 +67,13 @@ function Status({ attestation, signatures }: { attestation: ReturnType<typeof us
       return (
         <div role="status" className={`${LINE} border-line text-fg-3`}>
           <strong className="font-medium text-glow">Attestation verified.</strong> Release {attestation.release}, enclave <span title={attestation.address}>{shortHex(attestation.address)}</span>.
+        </div>
+      );
+    case "attested":
+      return (
+        <div role="status" className={WARN}>
+          <strong className="font-medium">Node&apos;s code verified.</strong> Release {attestation.release}, enclave <span title={attestation.address}>{shortHex(attestation.address)}</span>. {attestation.why}
+          {attestation.why !== CONNECT_TO_CHECK && <CheckAgain />}
         </div>
       );
     case "clock":

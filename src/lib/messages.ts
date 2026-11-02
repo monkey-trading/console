@@ -89,8 +89,10 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
     case "corporate_cash_in_lieu": return null;
     case "order_accepted": return null;
     case "prices_rejected": return null;
-    // Operator housekeeping is not the viewer's activity.
+    // Operator housekeeping is not the viewer's activity; the MONKEY page shows the election.
     case "admin_applied": return null;
+    case "rotation_switched": return null;
+    case "operator_elected": return null;
     // The deposit's custody steps are not the viewer's activity; `deposited` is the credit's line.
     case "custody_deposit_changed": return null;
     // A screened deposit waiting or held is custody bookkeeping, and a house deposit names no account.

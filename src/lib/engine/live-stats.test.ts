@@ -12,7 +12,7 @@ function client() {
   node.attestation(() => VECTORS.signer);
   const live = new LiveEngineClient({
     origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: vectorResponse("markets").vault, heartbeatMs: 5_000,
-    loadVerifier: async () => acceptAll, manifests: [], acceptsMock: true, fetch: node.fetch,
+    loadVerifier: async () => acceptAll, releases: [], acceptsMock: true, fetch: node.fetch,
     openSocket: (url) => new FakeSocket(url), scheduler: new FakeScheduler(), nowMs: () => 1, challenge: () => "ab".repeat(32),
   });
   const reply = (path: string, status: number, body: object) => node.signed(path, () => ({ status, body: JSON.stringify(body), signature: "0x", timeMs: 1, seq: 1 }));

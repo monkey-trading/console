@@ -9,7 +9,7 @@
 
 import { useEffect } from "react";
 
-import { signBlock } from "@/lib/engine/attestation";
+import { readBlock } from "@/lib/engine/attestation";
 import { openHousePanel } from "@/lib/store/house";
 import type { ConsoleState } from "@/lib/store/state";
 
@@ -23,7 +23,7 @@ import { QueuePlace, QueueStats } from "./house/QueuePanels";
 import { HouseFigures, MonkeyFigures, OpenPositions } from "./house/Stats";
 import { useSelected } from "./house/use-feed";
 
-const selectGate = (s: ConsoleState) => ({ blocked: signBlock(s.attestation, s.stream) !== null, ready: s.houseReady, fresh: s.houseFresh });
+const selectGate = (s: ConsoleState) => ({ blocked: readBlock(s.attestation, s.stream) !== null, ready: s.houseReady, fresh: s.houseFresh });
 const STACK = "flex min-w-0 flex-col gap-2";
 
 /** The House dashboard. */

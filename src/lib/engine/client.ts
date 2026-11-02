@@ -8,6 +8,7 @@ import type { HouseState } from "./house-state";
 import type { ScanBudget, ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import type { QuoteRequest } from "./live-stream";
+import type { DeploymentReads } from "./registry";
 import type { StatsReads } from "./stats-types";
 import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
@@ -75,6 +76,11 @@ export interface EngineClient {
   attestation(): Promise<Attestation>;
   /** Judges the node's attestation; a live client does so again whenever the enclave changes. */
   verify(): Promise<AttestationStatus>;
+  /**
+   * The connected wallet's chain reads, or null: a live client checks the vault's current release
+   * and signer through them, and judges the node again when a wallet arrives, resolving once it has.
+   */
+  readChainThrough(chain: DeploymentReads | null): Promise<void>;
   /** Reports each change of attestation status and of the feed. */
   watch(listener: (event: ClientEvent) => void): Unsubscribe;
   markets(): Promise<MarketView[]>;

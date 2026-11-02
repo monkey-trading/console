@@ -56,8 +56,9 @@ export default function Page() {
           What you do in the console leaves your browser only for the party that needs it. Your account&apos;s
           address, your signed orders, cancels, withdrawals and eligibility declaration, the session
           key&apos;s address with its signed registration and revocation, and the reads of your account go
-          to the engine node the console is built for. Deposits, claims and the chain reads around them go
-          to the chain through your own wallet.
+          to the engine node the console is built for or, once your wallet&apos;s chain reads name another
+          operator, to that operator&apos;s node, which this build must list. Deposits, delegation, claims and the chain
+          reads around them, the operator registry&apos;s and the vault&apos;s included, go to the chain through your own wallet.
         </p>
         <p className={P}>
           A development build of the console (one built for a local node) may show a dev faucet that tops your

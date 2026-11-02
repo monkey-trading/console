@@ -17,6 +17,8 @@ export interface StakingPosition {
   distributionsClaimed: bigint;
   /** The seq of the vault's latest posted checkpoint, at which a distribution proof's claim works. */
   latestSeq: number;
+  /** The candidate the account's whole stake votes for, lowercase; null while it abstains. */
+  delegate: string | null;
 }
 
 /**
@@ -33,6 +35,8 @@ export interface StakingWallet {
   /** Starts unstaking `amount`; it stops earning once the cooldown completes and the engine mirrors it. */
   startUnstake(amount: bigint, progress?: Progress): Promise<string>;
   completeUnstake(progress?: Progress): Promise<string>;
+  /** Moves the account's whole stake, now and as it changes, to `candidate`'s votes; the zero address clears the choice, so the stake abstains. */
+  delegate(candidate: string, progress?: Progress): Promise<string>;
   /** Claims the USDC `proof`'s cumulative distribution adds to what the vault has paid. */
   claimDistribution(proof: DistributionProof, progress?: Progress): Promise<string>;
 }

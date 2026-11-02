@@ -28,6 +28,12 @@ export interface Deploy {
   rpcUrl: string | null;
   /** The WalletConnect project id; null leaves WalletConnect out of the build. */
   walletConnectProjectId: string | null;
+  /** The operator registry that elects the operator, lowercase `0x` hex; null leaves delegation and following the operator out. */
+  registry: string | null;
+  /** The origins of the timelock-approved candidates' registered hostnames: the nodes this build can follow, beside `origin`. */
+  candidateOrigins: readonly string[];
+  /** A `live-dev` build's stand-ins for the launch digest a mock quote cannot measure; empty leaves its mock node unchecked against the vault. */
+  devLaunchDigests: readonly string[];
 }
 
 /** The raw `NEXT_PUBLIC_ENGINE_*` values. */
@@ -43,6 +49,9 @@ export interface RawDeploy {
   devOrigins?: string | undefined;
   rpcUrl?: string | undefined;
   walletConnectProjectId?: string | undefined;
+  registry?: string | undefined;
+  candidateOrigins?: string | undefined;
+  devLaunchDigests?: string | undefined;
 }
 
 const DEFAULT_HEARTBEAT_MS = 5_000;
@@ -67,6 +76,9 @@ export function rawDeploy(): RawDeploy {
     devOrigins: process.env.NEXT_PUBLIC_ENGINE_DEV_ORIGINS,
     rpcUrl: process.env.NEXT_PUBLIC_ENGINE_RPC_URL,
     walletConnectProjectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID,
+    registry: process.env.NEXT_PUBLIC_ENGINE_REGISTRY,
+    candidateOrigins: process.env.NEXT_PUBLIC_ENGINE_CANDIDATE_ORIGINS,
+    devLaunchDigests: process.env.NEXT_PUBLIC_ENGINE_DEV_LAUNCH_DIGESTS,
   };
 }
 
@@ -83,6 +95,41 @@ function httpsOrigin(value: string, name: string): string {
   return url.origin;
 }
 
+/** A DNS name or IPv4 address with an optional port: every character a registered hostname may hold, so a wildcard, a path, credentials or a homograph never parse as one. */
+const HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]{1,5})?$/;
+/** The registry's bound on a hostname, with room for nothing more. */
+const MAX_HOSTNAME_CHARS = 253;
+
+/**
+ * The `https://` origin of `hostname`, as a candidate registered it on chain, or null for anything
+ * but a plain host and port. It is untrusted text: only `listedOrigins` decides whether the console
+ * connects to the origin this names.
+ */
+export function hostnameOrigin(hostname: string): string | null {
+  const host = hostname.toLowerCase();
+  if (host.length > MAX_HOSTNAME_CHARS || !HOST.test(host)) return null;
+  try {
+    return new URL(`https://${host}`).origin;
+  } catch {
+    return null; // a port out of range passes the pattern and fails here
+  }
+}
+
+/** Every node origin the build may talk to, which is exactly what its CSP names: the build's node and the approved candidates'. */
+export function listedOrigins(deploy: Pick<Deploy, "origin" | "candidateOrigins">): readonly string[] {
+  return [...new Set([...(deploy.origin === null ? [] : [deploy.origin]), ...deploy.candidateOrigins])];
+}
+
+/** One entry of the candidate list: a bare origin whose host is a plain host and port, never a wildcard. */
+function candidateOrigin(value: string): string {
+  const origin = httpsOrigin(value, "NEXT_PUBLIC_ENGINE_CANDIDATE_ORIGINS");
+  if (hostnameOrigin(new URL(origin).host) === null) throw new Error(`NEXT_PUBLIC_ENGINE_CANDIDATE_ORIGINS names a host that is not a plain host and port: ${value}`);
+  return origin;
+}
+
+/** The comma-separated items of `value`, trimmed, without empty ones. */
+const listOf = (value: string | undefined): string[] => (value ?? "").split(",").map((item) => item.trim()).filter((item) => item !== "");
+
 function address(value: string | undefined, name: string): string {
   if (value === undefined || !/^0x[0-9a-fA-F]{40}$/.test(value)) throw new Error(`${name} must be a 20-byte 0x address: ${value ?? "unset"}`);
   return value.toLowerCase();
@@ -95,26 +142,31 @@ function address(value: string | undefined, name: string): string {
  * - an unknown mode, or a live mode missing or misspelling a pinned value
  * - a `live-dev` origin that is not listed as a dev origin
  * - an RPC URL that is not http(s), or a WalletConnect project id that is not 32 hex characters
+ * - a candidate origin with a wildcard or anything but a plain host and port, or dev launch digests outside a `live-dev` build
  */
 export function parseDeploy(raw: RawDeploy): Deploy {
   const mode = raw.mode === undefined || raw.mode === "" ? "mock" : raw.mode;
   if (mode !== "mock" && mode !== "live-dev" && mode !== "live") throw new Error(`NEXT_PUBLIC_ENGINE_MODE must be mock, live-dev or live: ${mode}`);
-  if (mode === "mock") return { mode, origin: null, chainId: null, vault: null, usdc: null, staking: null, monkey: null, heartbeatMs: DEFAULT_HEARTBEAT_MS, devOrigins: [], rpcUrl: null, walletConnectProjectId: null };
+  if (mode === "mock") return { mode, origin: null, chainId: null, vault: null, usdc: null, staking: null, monkey: null, heartbeatMs: DEFAULT_HEARTBEAT_MS, devOrigins: [], rpcUrl: null, walletConnectProjectId: null, registry: null, candidateOrigins: [], devLaunchDigests: [] };
   if (raw.origin === undefined) throw new Error(`NEXT_PUBLIC_ENGINE_ORIGIN is required in ${mode} mode`);
   const origin = httpsOrigin(raw.origin, "NEXT_PUBLIC_ENGINE_ORIGIN");
   const chain = Number(raw.chainId);
   if (raw.chainId === undefined || !Number.isSafeInteger(chain) || chain <= 0) throw new Error(`NEXT_PUBLIC_ENGINE_CHAIN_ID must be a positive integer: ${raw.chainId ?? "unset"}`);
   const heartbeatMs = raw.heartbeatMs === undefined ? DEFAULT_HEARTBEAT_MS : Number(raw.heartbeatMs);
   if (!Number.isSafeInteger(heartbeatMs) || heartbeatMs < 1_000) throw new Error(`NEXT_PUBLIC_ENGINE_HEARTBEAT_MS must be at least 1000: ${raw.heartbeatMs ?? ""}`);
-  const devOrigins = (raw.devOrigins ?? "").split(",").map((item) => item.trim()).filter((item) => item !== "").map((item) => httpsOrigin(item, "NEXT_PUBLIC_ENGINE_DEV_ORIGINS"));
+  const devOrigins = listOf(raw.devOrigins).map((item) => httpsOrigin(item, "NEXT_PUBLIC_ENGINE_DEV_ORIGINS"));
   if (mode === "live-dev" && !devOrigins.includes(origin)) throw new Error(`NEXT_PUBLIC_ENGINE_ORIGIN ${origin} is not in NEXT_PUBLIC_ENGINE_DEV_ORIGINS, so a dev build will not talk to it`);
   const projectId = raw.walletConnectProjectId === undefined || raw.walletConnectProjectId === "" ? null : raw.walletConnectProjectId;
   if (projectId !== null && !/^[0-9a-f]{32}$/.test(projectId)) throw new Error(`NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID must be 32 lowercase hex characters: ${projectId}`);
+  const devLaunchDigests = listOf(raw.devLaunchDigests).map((item) => item.toLowerCase());
+  if (mode !== "live-dev" && devLaunchDigests.length > 0) throw new Error("NEXT_PUBLIC_ENGINE_DEV_LAUNCH_DIGESTS applies only to a live-dev build: a production build trusts only the releases manifests.ts pins");
+  for (const digest of devLaunchDigests) if (!/^0x[0-9a-f]{96}$/.test(digest)) throw new Error(`NEXT_PUBLIC_ENGINE_DEV_LAUNCH_DIGESTS must hold 48-byte 0x values: ${digest}`);
   return {
     mode, origin, chainId: chain, vault: address(raw.vault, "NEXT_PUBLIC_ENGINE_VAULT"),
     usdc: raw.usdc === undefined ? null : address(raw.usdc, "NEXT_PUBLIC_ENGINE_USDC"),
     staking: raw.staking === undefined ? null : address(raw.staking, "NEXT_PUBLIC_ENGINE_STAKING"), monkey: raw.monkey === undefined ? null : address(raw.monkey, "NEXT_PUBLIC_ENGINE_MONKEY"), heartbeatMs, devOrigins,
     rpcUrl: raw.rpcUrl === undefined || raw.rpcUrl === "" ? null : httpUrl(raw.rpcUrl, "NEXT_PUBLIC_ENGINE_RPC_URL"), walletConnectProjectId: projectId,
+    registry: raw.registry === undefined || raw.registry === "" ? null : address(raw.registry, "NEXT_PUBLIC_ENGINE_REGISTRY"), candidateOrigins: listOf(raw.candidateOrigins).map(candidateOrigin), devLaunchDigests,
   };
 }
 
@@ -135,7 +187,7 @@ export function streamOrigin(origin: string): string {
   return `wss://${new URL(origin).host}`;
 }
 
-/** Whether a build in this deployment accepts a node's mock attestation: only the mock itself, or a dev build for a listed dev origin. */
-export function acceptsMockAttestation(deploy: Deploy): boolean {
-  return deploy.mode === "mock" || (deploy.mode === "live-dev" && deploy.origin !== null && deploy.devOrigins.includes(deploy.origin));
+/** Whether a build in this deployment accepts a mock attestation from the node at `origin`: only the mock itself, or a dev build for a listed dev origin. */
+export function acceptsMockAttestation(deploy: Deploy, origin: string | null = deploy.origin): boolean {
+  return deploy.mode === "mock" || (deploy.mode === "live-dev" && origin !== null && deploy.devOrigins.includes(origin));
 }

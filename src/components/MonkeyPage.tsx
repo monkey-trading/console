@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { formatCompactUsd } from "@/lib/chart-format";
-import { signBlock } from "@/lib/engine/attestation";
+import { readBlock } from "@/lib/engine/attestation";
 import { compactNumber, halvingsBetween, monkeyText } from "@/lib/monkey/figures";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import { formatStamp } from "@/lib/time";
@@ -20,6 +20,7 @@ import { ActivityTable } from "./monkey/ActivityTable";
 import { ChartCard } from "./monkey/ChartCard";
 import type { LineSpec } from "./monkey/ChartCanvas";
 import { ClaimPanel } from "./monkey/ClaimPanel";
+import { OperatorPanel } from "./monkey/OperatorPanel";
 import { DistributionPanel } from "./monkey/DistributionPanel";
 import { RewardsPanel } from "./monkey/RewardsPanel";
 import { TokenPanel } from "./monkey/TokenPanel";
@@ -69,7 +70,7 @@ function Charts({ panel }: { panel: MonkeyPanel }) {
 export function MonkeyPage() {
   const { store } = useSession();
   const [panel] = useState(() => new MonkeyPanel(store));
-  const trusted = useConsoleSelect((state) => signBlock(state.attestation, state.stream) === null);
+  const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
   // The wallet object changes whenever a wallet connects, even to the same address, and the chain reads follow it.
   const wallet = useConsoleSelect((state) => state.wallet);
   // Reads start once the node's answers can be trusted and stop when the page is left.
@@ -89,6 +90,7 @@ export function MonkeyPage() {
             <div className="flex min-w-0 flex-col gap-4">
               <ClaimPanel />
               <StakePanel />
+              {trusted && <OperatorPanel />}
               <div className="grid min-w-0 gap-4 xl:grid-cols-2">
                 <RewardsPanel />
                 <TokenPanel />

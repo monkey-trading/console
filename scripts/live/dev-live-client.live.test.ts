@@ -37,7 +37,7 @@ afterAll(async () => {
 function clientFor(origin: string, options: { production?: boolean } = {}) {
   const client = new LiveEngineClient({
     origin, streamOrigin: origin.replace(/^http/, "ws"), chainId: 31337, vault: VAULT, heartbeatMs: 5_000,
-    loadVerifier: async () => (options.production ? production : dev), manifests: [], acceptsMock: !options.production,
+    loadVerifier: async () => (options.production ? production : dev), releases: [], acceptsMock: !options.production,
     fetch: (input, init) => fetch(input, init), openSocket: (url) => new WebSocket(url),
     scheduler: { setTimeout: (run, ms) => setTimeout(run, ms), clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
     nowMs: () => Date.now(),

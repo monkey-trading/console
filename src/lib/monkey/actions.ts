@@ -11,6 +11,8 @@ import { formatUsdc } from "../vault";
 import { abandoned, errorText, notBusy, prompting } from "../store/signing";
 import { claimEmissions, emissionsPosition } from "../store/emissions";
 import { usdcFixed } from "./figures";
+import { NO_CANDIDATE } from "../engine/registry";
+import type { OperatorReads } from "./operators";
 import type { MonkeyPanel } from "./panel";
 
 /** How many rounds a claim re-reads the vault and the node's proof before it keeps the waiting state; as the MONKEY claim does. */
@@ -100,6 +102,17 @@ export function completeUnstake(panel: MonkeyPanel): Promise<boolean> {
     await staking.completeUnstake(progress);
     return "Unstake complete. The MONKEY is back in your wallet.";
   }, true);
+}
+
+/** Delegates the account's whole stake to `candidate`, or clears the choice with `NO_CANDIDATE`, then reads the candidates' votes again. */
+export async function delegateStake(panel: MonkeyPanel, operators: OperatorReads, candidate: string, label: string): Promise<boolean> {
+  const clearing = candidate === NO_CANDIDATE;
+  const landed = await run(panel, clearing ? "clear your delegation" : `delegate your stake to ${label}`, async (_wallet, staking, progress) => {
+    await staking.delegate(candidate, progress);
+    return clearing ? "Your stake abstains from now on." : `Your stake votes for ${label} from the next close.`;
+  });
+  await operators.refreshChain();
+  return landed;
 }
 
 /**

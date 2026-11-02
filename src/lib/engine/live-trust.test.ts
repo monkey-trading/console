@@ -67,7 +67,7 @@ describe("a restarted enclave", () => {
 });
 
 describe("a node whose attestation cannot be judged", () => {
-  const hardware = (node: FakeNode) => node.routes.set("/v1/attestation", () => new Response(JSON.stringify({ provider: "sev_snp", enclave_address: VECTORS.signer, quote: "0xab" })));
+  const hardware = (node: FakeNode) => node.routes.set("/v1/attestation", () => new Response(JSON.stringify({ provider: "sev_snp", enclave_address: VECTORS.signer, config_sha256: `0x${"c0".repeat(32)}`, quote: "0xab" })));
 
   it("adds the clock hint when the verifier fails on dates, and only then", async () => {
     const dated: Verifier = { ...acceptAll, verifyAttestation: () => ({ ok: false, reason: "certificate VCEK is outside its validity period" }) };
@@ -99,7 +99,7 @@ describe("a verifier that never loads", () => {
     const client = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000,
       loadVerifier: () => (++loads === 1 ? new Promise<Verifier>(() => {}) : Promise.resolve(dev)),
-      manifests: [], acceptsMock: true, fetch: node.fetch, openSocket: () => { throw new Error("unused"); }, scheduler, nowMs: () => markets.time_ms,
+      releases: [], acceptsMock: true, fetch: node.fetch, openSocket: () => { throw new Error("unused"); }, scheduler, nowMs: () => markets.time_ms,
     });
     const first = client.verify();
     await settle();
@@ -125,7 +125,7 @@ describe("a stalled node", () => {
           });
     const client = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000, loadVerifier: async () => dev,
-      manifests: [], acceptsMock: true, fetch: hanging, openSocket: () => { throw new Error("unused"); }, scheduler: new FakeScheduler(), nowMs: () => markets.time_ms,
+      releases: [], acceptsMock: true, fetch: hanging, openSocket: () => { throw new Error("unused"); }, scheduler: new FakeScheduler(), nowMs: () => markets.time_ms,
       signal: () => deadline.signal,
     });
     const read = client.markets();

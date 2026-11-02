@@ -1,7 +1,7 @@
 /** The dashboard routes over a signed read: the House and MONKEY pages' positions, series and totals. */
 
 import { EngineError } from "./client";
-import type { ActivityPage, DistributionProof, MonkeyView, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "./stats-types";
+import type { ActivityPage, DistributionProof, MonkeyView, OperatorRoute, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "./stats-types";
 
 /** Reads the routes through `get`, which answers only what the attested enclave signed for that request. */
 export function liveStats(get: (path: string) => Promise<unknown>): StatsReads {
@@ -29,6 +29,7 @@ export function liveStats(get: (path: string) => Promise<unknown>): StatsReads {
         throw error;
       }
     },
+    operator: async () => (await get("/v1/operator")) as OperatorRoute,
   };
 }
 
@@ -39,4 +40,5 @@ export const NO_STATS: StatsReads = {
   monkey: () => Promise.reject(new EngineError(404, "not found")),
   activity: () => Promise.reject(new EngineError(404, "not found")),
   distributions: () => Promise.resolve(null),
+  operator: () => Promise.reject(new EngineError(404, "not found")),
 };

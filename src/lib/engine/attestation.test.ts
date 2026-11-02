@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { checkAttestation, maySign, signBlock } from "./attestation";
+import { checkAttestation, maySign, readBlock, signBlock } from "./attestation";
 import type { Attestation } from "./types";
 
 const toHex = (text: string) => Array.from(text, (c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
@@ -44,6 +44,17 @@ describe("maySign", () => {
     }
     expect(maySign(verified, "stale")).toBe(false);
     expect(maySign(verified, "connecting")).toBe(false);
+  });
+
+  it("reads under a quote the vault has not judged, and signs nothing", () => {
+    const attested = { kind: "attested", release: "r", address: "0x1", why: "w" } as const;
+    expect(readBlock(attested, "live")).toBeNull();
+    expect(signBlock(attested, "live")).toContain("vault's current release");
+    expect(maySign(attested, "live")).toBe(false);
+    expect(readBlock(attested, "stale")).toContain("stale");
+    for (const status of [{ kind: "checking" }, { kind: "reverifying" }, { kind: "clock", skewMs: 60_000 }, { kind: "unverified", reason: "x" }] as const) {
+      expect(readBlock(status, "live")).not.toBeNull();
+    }
   });
 
   it("says why it may not", () => {
