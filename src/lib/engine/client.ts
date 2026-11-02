@@ -2,13 +2,13 @@
 
 import type { AttestationStatus, FeedStatus } from "./attestation";
 import type { EntitlementProof } from "./emissions";
-import type { HouseParams, QueueTotals } from "../house";
+import type { QueueTotals } from "../house";
+import type { HouseState } from "./house-state";
 import type { ScanBudget, ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import type { QuoteRequest } from "./live-stream";
 import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
-import type { CheckpointEntry } from "./wire";
 
 /**
  * An error response from the node: the HTTP status and the `{ "error": … }` message, plus the typed
@@ -78,17 +78,10 @@ export interface EngineClient {
   markets(): Promise<MarketView[]>;
   house(): Promise<HouseView>;
   /**
-   * The latest `set_params` the node's log records — the profit fee, close-out level and total
-   * exposure cap — or null before a read of the signed log has found one. A live client reads the
-   * log in bounded chunks from its start and follows the stream; the mock answers from its state.
+   * The house's latest `set_params` and checkpoint from `GET /v1/house/state`, kept at least as new
+   * as the stream's; null from a node that predates the route.
    */
-  houseParams(): Promise<HouseParams | null>;
-  /** The latest checkpoint the node's log records, or null before one has been read. */
-  latestCheckpoint(): Promise<CheckpointEntry | null>;
-  /** The state of the log read the parameters and checkpoint come from: `current` once a read has reached the head, `reading` while it catches up, `failed` after a read that keeps failing. */
-  houseLogStatus(): Promise<"current" | "reading" | "failed">;
-  /** Whether anything shows the log read's result: a live client reads the log only while it does. */
-  setHouseLogOpen(open: boolean): void;
+  houseState(): Promise<HouseState | null>;
   /** The public FIFO withdrawal queue's size, walked to its end within a page cap. */
   withdrawalTotals(): Promise<QueueTotals>;
   /** Rejects with a 404 `EngineError` for an account the engine has never credited. */

@@ -64,12 +64,12 @@ export interface ConsoleState {
   houseReady: boolean;
   /** Whether the markets and house figures come from a current read; false after a failed refresh, so retained figures say they may be behind. */
   houseFresh: boolean;
-  /** The latest `set_params` the log records, from a bounded read of the signed log; null before one has been found. */
+  /** The latest `set_params` the node's log records, from its house state; null before one is set or read. */
   houseParams: HouseParams | null;
-  /** The latest checkpoint the log records; null before one has been read. */
+  /** The latest checkpoint the node's log holds; null before one is posted or read. */
   checkpoint: CheckpointEntry | null;
-  /** The state of the log read the parameters and checkpoint come from. */
-  houseStatus: "current" | "reading" | "failed";
+  /** Whether the parameters and checkpoint have been read: `unavailable` from a node that predates the route that serves them. */
+  houseStateStatus: "pending" | "read" | "unavailable";
   /** The public FIFO withdrawal queue's size; null before the first read. */
   withdrawalTotals: QueueTotals | null;
   /** Whether the queue read failed; true between a failed walk and its recovery. */
@@ -154,7 +154,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     houseFresh: true,
     houseParams: housePanel?.params ?? null,
     checkpoint: housePanel?.checkpoint ?? null,
-    houseStatus: signatures === "none" ? "current" : "reading",
+    houseStateStatus: signatures === "none" ? "read" : "pending",
     withdrawalTotals: housePanel?.totals ?? null,
     queueFailed: false,
     wallet: null,

@@ -206,4 +206,12 @@ describe("market hours and stress", () => {
     node.client.tick(START + 1_000);
     expect((await node.client.markets()).every((m) => m.stress_level === 2)).toBe(true);
   });
+
+  it("serves the house state as the node does: the launch parameters and the checkpoint at the head", async () => {
+    const node = createMockNode(START);
+    node.client.tick(START + 1_000);
+    const state = await node.client.houseState();
+    expect(state).toMatchObject({ seq: node.client.headSeq, params: { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, seq: null } });
+    expect(state?.checkpoint).toEqual(node.client.housePanelSnapshot().checkpoint);
+  });
 });

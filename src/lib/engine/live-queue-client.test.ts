@@ -1,15 +1,14 @@
-/** Tests for the live client's folds of the log's house state and the withdrawal queue's walked totals. */
+/** Tests for the live client's walk of the public withdrawal queue's totals. */
 
 import { describe, expect, it } from "vitest";
 
 import { LiveEngineClient } from "./live";
 import { QueueTotalsRetrying } from "./live-queue";
-import { checkpoint, command, frame, SET_PARAMS } from "./live-house-kit";
-import { acceptAll, FakeNode, FakeScheduler, FakeSocket, settle } from "./test-kit";
+import { acceptAll, FakeNode, FakeScheduler, FakeSocket } from "./test-kit";
 import { VECTORS, vectorResponse } from "./test-vectors";
 
-describe("the live client's house folds", () => {
-  it("folds the set_params and checkpoint the stream carries, and walks the withdrawal queue's pages for their totals", async () => {
+describe("the live client's queue totals", () => {
+  it("walks the withdrawal queue's pages for their totals", async () => {
     const markets = vectorResponse("markets");
     const node = new FakeNode();
     node.attestation(() => VECTORS.signer);
@@ -18,31 +17,15 @@ describe("the live client's house folds", () => {
     const queueB = [{ position: 2, account: "0x00b2", amount: "3", remaining: "3", requested_seq: 4 }];
     node.signed("/v1/withdrawals?limit=200", () => page(queueA, 7));
     node.signed("/v1/withdrawals?limit=200&after=7", () => page(queueB, null));
-    const sockets: FakeSocket[] = [];
     const live = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000,
       loadVerifier: async () => acceptAll, manifests: [], acceptsMock: true, fetch: node.fetch,
-      openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
-      scheduler: new FakeScheduler(), nowMs: () => 1, challenge: () => "ab".repeat(32),
+      openSocket: (url) => new FakeSocket(url), scheduler: new FakeScheduler(), nowMs: () => 1, challenge: () => "ab".repeat(32),
     });
-    const stop = live.subscribe(() => {});
-    await settle();
-    const stream = sockets[0];
-    if (!stream) throw new Error("no stream socket");
-    stream.open();
-    await settle();
-    stream.receive(frame(0, { type: "heartbeat", head: "2:0" }));
-    stream.receive(frame(1, command(1, { type: "admin", ...SET_PARAMS })));
-    stream.receive(frame(2, checkpoint(2)));
-    await expect(live.houseParams()).resolves.toEqual({
-      profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, totalCapFloor: 2_000_000_000_000_000n, seq: 1, fresh: "reading",
-    });
-    await expect(live.latestCheckpoint()).resolves.toEqual({ type: "checkpoint", offset: "2:1", seq: 2, root: `0x${"ab".repeat(32)}` });
     await expect(live.withdrawalTotals()).resolves.toEqual({ count: 2, remaining: 9_000_000_000n, seq: 5, complete: true, stable: true });
     // A second read within the walk's TTL reuses the answer instead of re-walking the queue's pages.
     await expect(live.withdrawalTotals()).resolves.toEqual({ count: 2, remaining: 9_000_000_000n, seq: 5, complete: true, stable: true });
     expect(node.requests.filter((r) => r.path.startsWith("/v1/withdrawals?limit=200"))).toHaveLength(2);
-    stop();
   });
 
   it("reports a lower bound at the walk's page cap, flags pages from different log seqs, and re-walks after the cache expires", async () => {
