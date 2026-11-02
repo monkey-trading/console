@@ -53,8 +53,9 @@ export default function Page() {
           or the network it signed in from.
         </p>
         <p className={P}>
-          While your account holds something in the vault, the console keeps a copy of its latest exit
-          proof in your browser&apos;s storage, one per account, chain and vault: the proof of your
+          While your account holds something in the vault, or the vault&apos;s latest checkpoint leaves
+          out a deposit that may be yours, the console keeps a copy of its latest exit proof in your
+          browser&apos;s storage, one per account, chain and vault: the proof of your
           balance, positions, withdrawals, staking distribution and pending deposits at the vault&apos;s
           latest checkpoint, with when that checkpoint was posted. The console reads it from the engine
           node, and at the vault&apos;s last checkpoint it lets you claim from the vault if the node is

@@ -75,7 +75,7 @@ export class ConsoleStore {
       ...state,
       feed: feedFrom(deps.initial.recent ?? [], state.markets, this.viewer, () => this.id()),
       ...(session
-        ? { wallet: session.wallet, account: session.account ? decodeAccount(session.account) : null, eligibility: session.eligibility, queue: session.queue, accountRead: true, history: session.history }
+        ? { wallet: session.wallet, account: session.account ? decodeAccount(session.account) : null, eligibility: session.eligibility, queue: session.queue, accountRead: true, accountHistory: "read" as const, history: session.history }
         : {}),
     };
   }
@@ -122,7 +122,7 @@ export class ConsoleStore {
     this.viewer = undefined; // once a wallet has been connected or left, the starting viewer no longer applies
     this.quiet.accountEvent(); // its account reads start fresh: no rest of the last wallet's reads holds
     const mine = wallet?.address.toLowerCase();
-    this.patch({ wallet, accountRead: false, notices: Object.fromEntries(Object.entries(this.snapshot.notices).filter(([surface]) => KEPT_ON_WALLET_CHANGE.includes(surface as NoticeSurface))), feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
+    this.patch({ wallet, accountRead: false, accountHistory: "waiting", notices: Object.fromEntries(Object.entries(this.snapshot.notices).filter(([surface]) => KEPT_ON_WALLET_CHANGE.includes(surface as NoticeSurface))), feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
   }
 
   setPaused(paused: boolean): void {

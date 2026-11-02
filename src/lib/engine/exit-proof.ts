@@ -70,6 +70,16 @@ const siblings = (value: unknown, path: string): string[] => list(value, path, M
 
 const mapped = <T>(value: unknown, path: string, read: (item: unknown, at: string) => T): T[] => list(value, path).map((item, index) => read(item, `${path}[${index}]`));
 
+/** `items`, once none repeats an id: each copy of a leaf passes the verifier alone, and would count again in what the proof comes to. */
+function distinct<T>(items: T[], path: string, id: (item: T) => number): T[] {
+  const seen = new Set<number>();
+  items.forEach((item, index) => {
+    if (seen.has(id(item))) refuse(`${path}[${index}]`, "repeats an earlier entry");
+    seen.add(id(item));
+  });
+  return items;
+}
+
 /** The `seq` and `root` every part of a proof names, which must be the whole proof's. */
 function stamp(fields: Record<string, unknown>, path: string, seq: number, root: string): { seq: number; root: string } {
   if (whole(fields.seq, `${path}.seq`) !== seq || hash(fields.root, `${path}.root`) !== root) return refuse(path, "is for another checkpoint than the rest of the proof");
@@ -173,7 +183,7 @@ function pending(value: unknown, at: string, seq: number, root: string): ExitPen
  * The exit proof `value` holds, normalized: lowercase hex, and each optional field the engine leaves
  * out at its zero. Fields it does not know are dropped.
  * Error cases:
- * - `value` is not an exit proof, or its parts name different checkpoints or accounts: `ExitProofError`
+ * - `value` is not an exit proof, its parts name different checkpoints or accounts, or it repeats an approval, a queued request or a pending deposit: `ExitProofError`
  */
 export function parseExitProof(value: unknown): ExitProof {
   const fields = object(value, "the proof");
@@ -183,10 +193,10 @@ export function parseExitProof(value: unknown): ExitProof {
     seq, root,
     terms: terms(fields.terms, seq, root),
     account: fields.account === null ? null : account(fields.account, seq, root),
-    approvals: mapped(fields.approvals, "approvals", (item, at) => approval(item, at, seq, root)),
-    queued: mapped(fields.queued, "queued", (item, at) => queued(item, at, seq, root)),
+    approvals: distinct(mapped(fields.approvals, "approvals", (item, at) => approval(item, at, seq, root)), "approvals", (held) => held.approval.nonce),
+    queued: distinct(mapped(fields.queued, "queued", (item, at) => queued(item, at, seq, root)), "queued", (held) => held.queued.requested_seq),
     distribution: fields.distribution === null ? null : distribution(fields.distribution, seq, root),
-    pending_deposits: mapped(fields.pending_deposits, "pending_deposits", (item, at) => pending(item, at, seq, root)),
+    pending_deposits: distinct(mapped(fields.pending_deposits, "pending_deposits", (item, at) => pending(item, at, seq, root)), "pending_deposits", (held) => held.deposit.deposit_id),
   };
   exitProofAccount(proof);
   return proof;
@@ -214,7 +224,12 @@ export function approvalUnits(amount: string): bigint | null {
   return raw === null || raw <= 0n || raw % USDC_UNIT !== 0n ? null : raw / USDC_UNIT;
 }
 
-/** Whether a verified `proof`, with `accountClaim`, `distributionOwed` and the approvals the vault has paid, gives the account anything: nothing else is worth keeping or reading again. */
-export function holdsAnything(proof: ExitProof, accountClaim: bigint, distributionOwed: bigint, paidApprovals: readonly number[]): boolean {
-  return accountClaim > 0n || (proof.account?.positions.length ?? 0) > 0 || proof.approvals.some((held) => !paidApprovals.includes(held.approval.nonce)) || proof.queued.some((held) => (parseFixed(held.queued.remaining) ?? 0n) > 0n) || distributionOwed > 0n || proof.pending_deposits.length > 0;
+/**
+ * Whether a verified `proof`, with `accountClaim` and what a finalized block shows paid of its
+ * distribution and approvals, gives the account anything: nothing else is worth keeping or reading
+ * again. A payment only the chain's head shows can still be undone, so it leaves the proof standing,
+ * and so do gaps its exit terms name, any of which may be a deposit of this account's to refund.
+ */
+export function holdsAnything(proof: ExitProof, accountClaim: bigint, finalDistributionOwed: bigint, finalPaidApprovals: readonly number[]): boolean {
+  return accountClaim > 0n || (proof.account?.positions.length ?? 0) > 0 || proof.approvals.some((held) => !finalPaidApprovals.includes(held.approval.nonce)) || proof.queued.some((held) => (parseFixed(held.queued.remaining) ?? 0n) > 0n) || finalDistributionOwed > 0n || proof.pending_deposits.length > 0 || proof.terms.terms.gaps.length > 0;
 }

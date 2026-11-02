@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ACCOUNT, factsAt, fullProof, NO_CLAIMS, recordAt } from "../engine/exit-kit";
+import { acceptedState, ACCOUNT, factsAt, fullProof, NO_CLAIMS, recordAt } from "../engine/exit-kit";
 import { NO_EXIT, type ExitState } from "./exit-state";
 import { exitUrgent, exitView, stepKey, stepLabel } from "./exit-view";
 
@@ -23,22 +23,22 @@ describe("exitView, before anything goes wrong", () => {
     expect(text({ ...NO_EXIT, vault: factsAt(0, { hasCheckpoint: false, latestRoot: `0x${"0".repeat(64)}` }) })).toMatch(/no checkpoint yet/);
   });
   it("says how old a proof at the vault's latest root is, and what it proves, without any warning", () => {
-    const view = exitView({ ...NO_EXIT, vault: factsAt(100, { chainNow: 1_300 }), record: recordAt(100) }, WALLET);
+    const view = exitView({ ...NO_EXIT, vault: factsAt(100, { chainNow: 1_300 }), ...acceptedState(recordAt(100)) }, WALLET);
     expect(view.lines).toEqual([{ tone: "calm", text: "Saved in this browser: checkpoint 100, posted 5 min ago. It proves 5,083 USDC, and a deposit still pending." }]);
     expect(view.notice).toBeNull();
     expect(view.rebuild).toBeNull();
   });
   it("says a proof holds only a pending deposit when that is all it holds", () => {
     const record = { ...recordAt(100), accountClaim: 0n, distributionOwed: 0n, proof: { ...recordAt(100).proof, approvals: [], queued: [] } };
-    expect(text({ ...NO_EXIT, vault: factsAt(100), record })).toMatch(/It proves a deposit still pending\.$/);
+    expect(text({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(record) })).toMatch(/It proves a deposit still pending\.$/);
   });
   it("stops counting a pending deposit once the vault has refunded it", () => {
     const record = recordAt(100);
-    expect(text({ ...NO_EXIT, vault: factsAt(100), record, claims: { ...NO_CLAIMS, refunded: [2] } })).toMatch(/It proves 5,083 USDC\.$/);
+    expect(text({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(record), claims: { ...NO_CLAIMS, refunded: [2] } })).toMatch(/It proves 5,083 USDC\.$/);
   });
   it("says a proof has nothing left once all of it is paid or refunded", () => {
     const record = { ...recordAt(100), accountClaim: 0n, distributionOwed: 0n, paidApprovals: [1], proof: { ...recordAt(100).proof, queued: [] } };
-    expect(text({ ...NO_EXIT, vault: factsAt(100), record, claims: { ...NO_CLAIMS, refunded: [2] } })).toMatch(/It has nothing left to claim\.$/);
+    expect(text({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(record), claims: { ...NO_CLAIMS, refunded: [2] } })).toMatch(/It has nothing left to claim\.$/);
   });
   it("is calm about an account with nothing at stake", () => {
     const exit = { ...NO_EXIT, vault: factsAt(100), nothing: true };
@@ -78,6 +78,7 @@ describe("exitView, when the proof has gone stale", () => {
     ["a refused proof", { kind: "refused", reason: "its exit terms do not prove" }, /did not pass the vault's check, so it was not saved: its exit terms do not prove/, "bad"],
     ["a wallet that could not check", { kind: "wallet-failed", reason: "no answer" }, /Your wallet could not check the proof: no answer\. It is checked again by itself\./, "calm"],
     ["no proof at the node yet", { kind: "no-proof" }, /has no proof to give yet/, "calm"],
+    ["the node behind the vault", { kind: "node-behind", nodeSeq: 50 }, /The node is behind the vault: its newest checkpoint is 50\. It is read again by itself\./, "calm"],
   ])("says why for %s", (_name, attempt, message, tone) => {
     const view = exitView({ ...behind, attempt }, WALLET);
     expect(view.lines.map((line) => line.text).join(" ")).toMatch(message);
@@ -162,7 +163,7 @@ describe("exitView, as the vault's exit comes", () => {
 
   const open = factsAt(100, { exitStartedAt: 5_000, chainNow: 6_000 });
   it("offers each registration while the window is open, with a proof at the exit's root", () => {
-    const view = exitView({ ...NO_EXIT, vault: open, record: recordAt(100), claims: NO_CLAIMS }, WALLET);
+    const view = exitView({ ...NO_EXIT, vault: open, ...acceptedState(recordAt(100)), claims: NO_CLAIMS }, WALLET);
     expect(view.phase).toBe("open");
     expect(view.register.map((step) => step.kind)).toEqual(["account", "approval", "queued", "distribution"]);
     expect(view.refunds.map((step) => step.kind === "refund" && step.proof.deposit.deposit_id)).toEqual([2]);
@@ -190,7 +191,7 @@ describe("exitView, as the vault's exit comes", () => {
     expect(view.register).toEqual([]);
   });
   it("says what is registered, and that it is paid once the window closes", () => {
-    const view = exitView({ ...NO_EXIT, vault: open, record: recordAt(100), claims: { ...NO_CLAIMS, accountRegistered: true, approvalsUsed: [1], queuedRegistered: [95], distributionRegistered: true, exitClaim: 7n, exitDistributionClaim: 1n } }, WALLET);
+    const view = exitView({ ...NO_EXIT, vault: open, ...acceptedState(recordAt(100)), claims: { ...NO_CLAIMS, accountRegistered: true, approvalsUsed: [1], queuedRegistered: [95], distributionRegistered: true, exitClaim: 7n, exitDistributionClaim: 1n } }, WALLET);
     expect(view.register).toEqual([]);
     expect(view.registered).toBe(8n);
     expect(view.canClaim).toBe(false);
@@ -240,7 +241,7 @@ describe("exitView, as the vault's exit comes", () => {
     expect(view.notice).toBeNull();
   });
   it("still offers a refund once the window has closed", () => {
-    expect(exitView({ ...NO_EXIT, vault: closed, record: recordAt(100), claims: NO_CLAIMS }, WALLET).refunds.length).toBe(1);
+    expect(exitView({ ...NO_EXIT, vault: closed, ...acceptedState(recordAt(100)), claims: NO_CLAIMS }, WALLET).refunds.length).toBe(1);
   });
 });
 
@@ -265,7 +266,7 @@ describe("stepKey", () => {
 
 describe("stepLabel", () => {
   it("names each registration with its worth", () => {
-    const view = exitView({ ...NO_EXIT, vault: factsAt(100, { exitStartedAt: 5_000, chainNow: 6_000 }), record: recordAt(100), claims: NO_CLAIMS }, WALLET);
+    const view = exitView({ ...NO_EXIT, vault: factsAt(100, { exitStartedAt: 5_000, chainNow: 6_000 }), ...acceptedState(recordAt(100)), claims: NO_CLAIMS }, WALLET);
     expect(view.register.map(stepLabel)).toEqual(["Balance and positions: 5,010 USDC", "Withdrawal 1: 50 USDC", "Queued withdrawal: 20 USDC", "Staking distribution: 3 USDC"]);
     expect(view.refunds.map(stepLabel)).toEqual(["Deposit 2: 25 USDC back to 0x709979…79c8"]);
   });
@@ -273,6 +274,6 @@ describe("stepLabel", () => {
 
 describe("tones", () => {
   it("keep the whole panel calm while nothing is wrong", () => {
-    expect(tones({ ...NO_EXIT, vault: factsAt(100), record: recordAt(100) })).toEqual(["calm"]);
+    expect(tones({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(recordAt(100)) })).toEqual(["calm"]);
   });
 });

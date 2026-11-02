@@ -67,6 +67,9 @@ export function preferredRecord(stored: ExitRecord | null, held: ExitRecord | nu
   return stored.proof.seq > held.proof.seq ? stored : held;
 }
 
+/** Whether two records hold one proof, whatever the figures read with each. Both were read through `parseExitProof`, which sets the fields' order. */
+export const sameProof = (a: ExitRecord, b: ExitRecord): boolean => JSON.stringify(a.proof) === JSON.stringify(b.proof);
+
 /** The JSON a record is written as, in storage and in a file alike. */
 export function exitFileText(record: ExitRecord): string {
   return JSON.stringify({

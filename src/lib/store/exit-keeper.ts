@@ -11,7 +11,7 @@ import { preferredRecord, readStoredExit, removeStoredExit, type ExitRecord, typ
 import type { ExitProof, ExitWallet } from "../engine/exit-types";
 import type { Wallet } from "../engine/wallet";
 import { ExitAdopter } from "./exit-adopt";
-import { holdsNow, mayHold, newestEventSeq, nodeWait, stakeKey, type AdoptOutcome, type ExitState } from "./exit-state";
+import { heldSince, holdsNow, mayHold, newestEventSeq, nodeWait, stakeKey, type AdoptOutcome, type ExitState } from "./exit-state";
 import { errorText } from "./signing";
 import type { ConsoleState } from "./state";
 import type { ConsoleStore } from "./store";
@@ -23,6 +23,8 @@ export class ExitKeeper {
   private emptyKey: string | null = null;
   /** The node's answer the wallet could not check yet: the next read of the vault tries it, with no new signature. */
   private answer: ExitProof | null = null;
+  /** The node's empty answer at a time the account's history had not landed. */
+  private emptyAnswer: ExitProof | null = null;
   /** Holds each proof to the vault's own check. */
   readonly adopter: ExitAdopter;
   /** Whether the account has a distribution, once the node has said, for a connection with nothing else to go on. */
@@ -60,13 +62,18 @@ export class ExitKeeper {
     this.triedRoot = null;
     this.emptyKey = null;
     this.answer = null;
-    this.adopter.reset();
+    this.emptyAnswer = null;
     this.distributed = null;
   }
 
   /** Lets a read of the node that failed be made again; one that answered costs a signature, and is not. */
   retryNode(): void {
     if (this.store.getSnapshot().exit.attempt?.kind === "node-failed") this.triedRoot = null;
+  }
+
+  /** A node behind the vault may have caught up, so each read of the vault asks it again. */
+  retryBehind(): void {
+    if (this.store.getSnapshot().exit.attempt?.kind === "node-behind") this.triedRoot = null;
   }
 
   /** Lets the node be read again for the root it was last read for: it was away, and may answer what it could not. An answer it gave already stays, which costs no signature to check. */
@@ -112,12 +119,16 @@ export class ExitKeeper {
     }
   }
 
-  /** Marks when this page first had no proof at the vault's latest root, which every page says once it has lasted. */
+  /** Marks how long the account has had no proof at the vault's latest root, which every page says once it has lasted: since this page first saw so, or since the funds its reads show, whichever is earlier. */
   private noteMissing(): void {
-    const { vault, record, nothing, missingSince } = this.store.getSnapshot().exit;
-    const missing = vault !== null && vault.hasCheckpoint && record?.proof.root !== vault.latestRoot && !nothing;
-    if (missing && missingSince === null) this.patch({ missingSince: vault.chainNow });
-    else if (!missing && missingSince !== null) this.patch({ missingSince: null });
+    const state = this.store.getSnapshot();
+    const { vault, record, nothing, missingSince } = state.exit;
+    if (vault === null || !vault.hasCheckpoint || record?.proof.root === vault.latestRoot || nothing) {
+      if (missingSince !== null) this.patch({ missingSince: null });
+      return;
+    }
+    const since = Math.min(missingSince ?? vault.chainNow, heldSince(state) ?? vault.chainNow);
+    if (since !== missingSince) this.patch({ missingSince: since });
   }
 
   /** Brings the saved proof up to the vault's latest root if the node can and it is worth a signature; whatever else happens, the last verified proof stays. */
@@ -139,6 +150,11 @@ export class ExitKeeper {
     }
     // An answer that held nothing says nothing of what has been credited since: the next root may hold it.
     if (state.exit.nothing && holdsNow(state)) this.patch({ nothing: false, attempt: { kind: "not-covered" } });
+    if (this.emptyAnswer !== null && state.accountHistory === "read") {
+      const answer = this.emptyAnswer;
+      this.emptyAnswer = null;
+      if (answer.root === vault.latestRoot) this.heldNothing(this.store.getSnapshot(), scope, answer);
+    }
     if (this.triedRoot === vault.latestRoot) return;
     const wait = nodeWait(state.attestation, state.stream);
     if (wait === "wait") return;
@@ -147,8 +163,10 @@ export class ExitKeeper {
       if (this.store.getSnapshot().exit.attempt?.kind !== "saved-refused") this.patch({ attempt: { kind: "node-away", reason: wait.away } });
       return;
     }
-    if (!state.accountRead) return; // its read is under way, and hearing it brings this back
-    if (!holdsNow(state) && (await this.hasNothing(wallet, exit, record))) return;
+    if (!state.accountRead || (!holdsNow(state) && state.accountHistory === "waiting")) return; // its read is under way, and hearing it brings this back
+    // Once the exit has started, only the root's terms can show a deposit of this account's among the gaps they name, which nothing the page has read shows.
+    const termsOwed = vault.exitStartedAt !== 0 && state.exit.terms?.root !== vault.latestRoot;
+    if (!termsOwed && !holdsNow(state) && (await this.hasNothing(wallet, exit, record))) return;
     if (this.store.liveWallet === wallet) await this.readNode(wallet, scope, vault.latestRoot);
   }
 
@@ -163,7 +181,7 @@ export class ExitKeeper {
       return true;
     }
     const now = this.store.getSnapshot(); // the account's reads may have landed while the wallet answered
-    let held = mayHold(now, record);
+    let held = now.accountHistory !== "read" || mayHold(now, record); // a history that could not be read says nothing of what it would have shown
     if (!held) {
       // A past staker can be owed a distribution nothing else shows. One signed read per connection settles it, which is what spares the rest.
       if (this.distributed === null) {
@@ -219,8 +237,9 @@ export class ExitKeeper {
     if (outcome.kind !== "other-root" || outcome.proofSeq <= outcome.vaultSeq) this.answer = null;
     const now = this.store.getSnapshot();
     if (outcome.kind === "other-root" && outcome.proofSeq <= outcome.vaultSeq) {
-      this.patch({ attempt: null });
-      this.settleAgain = true; // this answer is older than the vault's latest, which the node has not been asked for
+      // Older than a vault that moved while it was read says only that the node has not been asked for the new root; a vault that did not move has a node behind it.
+      this.patch({ attempt: this.triedRoot === now.exit.vault?.latestRoot ? { kind: "node-behind", nodeSeq: outcome.proofSeq } : null });
+      this.settleAgain = true;
       return;
     }
     this.triedRoot = now.exit.vault?.latestRoot ?? this.triedRoot; // the node has answered for the vault as it is now, or past it: the next read is for the vault's next root
@@ -232,11 +251,20 @@ export class ExitKeeper {
   /** The node's answer at the vault's latest root held nothing: that says the account has nothing only if it covers all the account has done. */
   private heldNothing(now: ConsoleState, scope: ExitScope, proof: ExitProof): void {
     if (holdsNow(now) || proof.seq < newestEventSeq(now)) return this.patch({ attempt: { kind: "not-covered" } });
+    if (now.accountHistory !== "read") {
+      this.emptyAnswer = proof; // a history still to land may hold what this answer does not: it is judged again once it has, at no signature
+      return this.patch({ attempt: null });
+    }
+    const stored = readStoredExit(this.storage, scope).record;
+    // Another tab may have saved a later proof while this answer was checked, which this one says nothing of.
+    if ([stored, now.exit.record].some((held) => held !== null && held.proof.seq > proof.seq)) {
+      this.settleAgain = true;
+      return this.patch({ attempt: null });
+    }
     this.emptyKey = stakeKey(now);
-    // A saved proof at another root could never be claimed from again, and an answer that names nothing is no proof of anything, so only that one goes.
-    const obsolete = now.exit.record !== null && now.exit.record.proof.root !== proof.root;
-    if (obsolete) removeStoredExit(this.storage, scope);
-    this.patch({ attempt: null, nothing: true, record: obsolete ? null : now.exit.record });
+    // A saved proof at an older root could never be claimed from again, and an answer that names nothing is no proof of anything, so only that one goes.
+    if (stored !== null && stored.proof.root !== proof.root) removeStoredExit(this.storage, scope);
+    this.patch({ attempt: null, nothing: true, record: now.exit.record?.proof.root === proof.root ? now.exit.record : null });
   }
 
   /** Tries an answer the wallet could not check before. */

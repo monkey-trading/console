@@ -21,6 +21,10 @@ export class Chain {
     exitVerifier: word("address", VERIFIER), distributionsClaimed: word("uint256", 1_000_000n), exitAccountRegistered: word("bool", false), exitDistributionRegistered: word("bool", false), exitClaims: word("uint256", 7n), exitDistributionClaims: word("uint256", 2n),
     exitQueuedRegistered: word("bool", true), depositRefunded: word("bool", false), exitDepositCursor: word("uint256", 3n), depositCount: word("uint256", 3n),
   };
+  /** What a vault getter answers at a finalized block, where it differs from the head. */
+  finalVault: Record<string, Hex> = {};
+  /** False for a wallet that cannot read a finalized block. */
+  readsFinalized = true;
   paidNonces = new Set<bigint>();
   finalNonces = new Set<bigint>();
   deposits = new Map<bigint, { payer: Hex; amount: bigint }>();
@@ -52,12 +56,13 @@ export class Chain {
     const { functionName, args } = decodeFunctionData({ abi: EXIT_VAULT, data });
     this.asked.push(functionName);
     if (this.failing === functionName) throw new Error("the wallet's RPC failed");
+    if (list[1] === "finalized" && !this.readsFinalized) throw new Error("this wallet does not read finalized blocks");
     if (functionName === "usedNonces") return word("bool", (list[1] === "finalized" ? this.finalNonces : this.paidNonces).has((args as readonly unknown[])[1] as bigint));
     if (functionName === "depositRecords") {
       const deposit = this.deposits.get((args as readonly unknown[])[0] as bigint);
       return encodeAbiParameters([{ type: "address" }, { type: "uint96" }], [deposit?.payer ?? "0x0000000000000000000000000000000000000000", deposit?.amount ?? 0n]);
     }
-    const answer = this.vault[functionName];
+    const answer = (list[1] === "finalized" ? this.finalVault[functionName] : undefined) ?? this.vault[functionName];
     if (answer === undefined) throw new Error(`no answer for ${functionName}`);
     return answer;
   };

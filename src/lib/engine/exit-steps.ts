@@ -41,10 +41,10 @@ export function registerSteps(record: ExitRecord, claims: ExitClaimFacts): ExitS
   return steps;
 }
 
-/** The deposits that can still be refunded, to the address that paid each, any time after the exit starts: those a proof at the exit's root holds pending, null with no such proof, and those the root does not hold, which need none. */
+/** The deposits that can still be refunded, to the address that paid each, any time after the exit starts: those a proof at the exit's root holds pending and the vault's record agrees with, null with no such proof, and those the root does not hold, which need none. */
 export function refundSteps(record: ExitRecord | null, claims: ExitClaimFacts): Extract<ExitStep, { kind: "refund" | "refund-unheld" }>[] {
   const pending = (record?.proof.pending_deposits ?? [])
-    .filter((held) => !claims.refunded.includes(held.deposit.deposit_id))
+    .filter((held) => !claims.refunded.includes(held.deposit.deposit_id) && !claims.mismatched.includes(held.deposit.deposit_id))
     .map((held) => ({ kind: "refund" as const, proof: held, amount: baseUnits(held.deposit.amount) }));
   return [...pending, ...claims.unheld.map(({ id, amount }) => ({ kind: "refund-unheld" as const, id, amount }))];
 }

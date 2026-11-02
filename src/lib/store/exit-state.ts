@@ -11,6 +11,8 @@ export type AdoptOutcome =
   | { kind: "saved"; record: ExitRecord; storageProblem: string | null }
   /** It proves, and gives the account nothing. */
   | { kind: "empty" }
+  /** It proves, and holds a part the proof saved at its root holds and it does not, so it was not saved. */
+  | { kind: "holds-less" }
   /** Its root is not the vault's latest, or another tab has saved a later one. */
   | { kind: "other-root"; proofSeq: number; vaultSeq: number }
   | { kind: "refused"; reason: string };
@@ -19,6 +21,8 @@ export type AdoptOutcome =
 export type ExitAttempt =
   /** The node answered at another root than the vault holds: it stays until the vault's next checkpoint. */
   | { kind: "node-ahead"; nodeSeq: number }
+  /** The node's newest checkpoint is older than the vault's latest, as on a restarted or elected node: it is read again at each read of the vault until it has caught up. */
+  | { kind: "node-behind"; nodeSeq: number }
   /** The node has no proof yet: its first checkpoint under the exit's protocol has not been made. */
   | { kind: "no-proof" }
   /** The read of the node failed. */
@@ -44,10 +48,14 @@ export interface ExitState {
   vaultProblem: string | null;
   /** How many reads of the vault have failed in a row. */
   vaultFailures: number;
-  /** When this page first saw no proof at the vault's latest root and no sign the account has nothing, in chain seconds; null otherwise. */
+  /** When this account is known to have been without a proof at the vault's latest root and no sign it has nothing, in chain seconds; null otherwise. */
   missingSince: number | null;
-  /** The last proof the vault's verifier accepted, whether it is still the vault's latest or not. */
+  /** The last proof the vault's verifier accepted, in this connection or when it was saved, whether it is still the vault's latest or not. */
   record: ExitRecord | null;
+  /** The record the vault's verifier has accepted in this connection, which storage alone does not vouch for. */
+  checked: ExitRecord | null;
+  /** How many checks of the saved proof have failed in a row since one last answered. */
+  checkFailures: number;
   /** The exit terms of the last proof the verifier accepted, which start the exit even from a proof that gives this account nothing. */
   terms: ExitTermsProof | null;
   /** Why the proof could not be saved in, or read from, this browser; `record` then holds the one in this page, if any. */
@@ -71,7 +79,13 @@ export interface ExitState {
 }
 
 /** The state for a connection nothing has been read for. */
-export const NO_EXIT: ExitState = { vault: null, vaultProblem: null, vaultFailures: 0, missingSince: null, record: null, terms: null, storageProblem: null, attempt: null, reading: false, nothing: false, claims: null, claimsProblem: null, claimsFailures: 0, paid: null, announced: "" };
+export const NO_EXIT: ExitState = { vault: null, vaultProblem: null, vaultFailures: 0, missingSince: null, record: null, checked: null, checkFailures: 0, terms: null, storageProblem: null, attempt: null, reading: false, nothing: false, claims: null, claimsProblem: null, claimsFailures: 0, paid: null, announced: "" };
+
+/** `exit`'s record once this connection's verifier has accepted it at the vault's latest root: only then does anything in it count for a claim, a refund or a figure. */
+export function acceptedRecord(exit: Pick<ExitState, "vault" | "record" | "checked">): ExitRecord | null {
+  const { vault, record, checked } = exit;
+  return record !== null && record === checked && record.proof.root === vault?.latestRoot ? record : null;
+}
 
 /** Whether a read failed that reading again can mend: of the vault, of what it holds for the account, of the node, or the wallet's check of a proof. */
 export const readFailed = (exit: ExitState): boolean => exit.vaultProblem !== null || exit.claimsProblem !== null || exit.attempt?.kind === "node-failed" || exit.attempt?.kind === "wallet-failed";
@@ -92,16 +106,28 @@ export function holdsNow(state: Pick<ConsoleState, "account" | "queue">): boolea
 
 /**
  * Whether the node's answer could hold anything for the account, from what the page has read: what it
- * holds now, an unpaid withdrawal, a pending deposit, or a saved proof whose contents may still be
- * owed. Without any of those only a stake, which the chain says, could. An answer is the node's
- * signature for nothing otherwise, so this is what spares it; it errs towards a read.
+ * holds now, a withdrawal, a pending deposit, or a saved proof whose contents may still be owed.
+ * Without any of those only a stake, which the chain says, could. An answer is the node's signature
+ * for nothing otherwise, so this is what spares it; it errs towards a read. A withdrawal the vault
+ * shows paid counts too: that read is of the chain's head, which can still undo it, and only the
+ * answer's own check at a finalized block says otherwise.
  */
-export function mayHold(state: Pick<ConsoleState, "account" | "queue" | "authorizations" | "history" | "approvals" | "paid">, record: ExitRecord | null): boolean {
-  if (holdsNow(state) || record !== null) return true;
-  const unpaid = (nonce: number) => !state.paid.includes(nonce);
-  if (state.authorizations.some((held) => unpaid(held.nonce))) return true;
+export function mayHold(state: Pick<ConsoleState, "account" | "queue" | "authorizations" | "history" | "approvals">, record: ExitRecord | null): boolean {
+  if (holdsNow(state) || record !== null || state.authorizations.length > 0) return true;
   // `queue` is one page of a bounded scan, which can come back empty with the account's request further on, so its event counts too.
-  return [...state.history, ...state.approvals].some((event) => (event.type === "withdrawal_approved" && unpaid(event.nonce)) || event.type === "deposit_pending" || event.type === "withdrawal_queued");
+  return [...state.history, ...state.approvals].some((event) => event.type === "withdrawal_approved" || event.type === "deposit_pending" || event.type === "withdrawal_queued");
+}
+
+/**
+ * How far back the page's reads show a funded account going, in seconds, once a read has failed to
+ * bring its proof: a trader with short sessions has been without one that long, whatever this page
+ * saw. An answer that says the vault's root predates its funds is the next checkpoint's to mend.
+ */
+export function heldSince(state: Pick<ConsoleState, "account" | "queue" | "history"> & { exit: Pick<ExitState, "attempt"> }): number | null {
+  const { attempt } = state.exit;
+  const oldest = state.history.at(-1)?.ts;
+  if (attempt === null || attempt.kind === "not-covered" || !holdsNow(state) || oldest === undefined) return null;
+  return Math.floor(oldest / 1000);
 }
 
 /** What changes when the account's stake may have: an answer that found nothing holds until this does. */

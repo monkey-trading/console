@@ -3,7 +3,7 @@
  * (monkey-trading/console#36), so the account can leave through the vault with no node at all.
  *
  * The node signs every answer, so it is read only when the vault is seen to hold a new root
- * (`exit-keeper.ts`), and not at all for an account with nothing at stake. The vault's reads go
+ * (`exit-keeper.ts`), and, until the exit starts, not at all for an account with nothing at stake. The vault's reads go
  * through the wallet's provider: when a wallet connects, soon after the stream carries a new
  * checkpoint, when the feed stops, when the tab is seen again, and otherwise every five minutes while
  * the tab is visible. A read that fails is made again by itself, further apart each time, and nobody
@@ -15,7 +15,7 @@ import type { ExitWallet } from "../engine/exit-types";
 import type { Scheduler } from "../engine/live-stream";
 import type { Wallet } from "../engine/wallet";
 import { ExitKeeper } from "./exit-keeper";
-import { NO_EXIT, nodeWait, readFailed, stakeKey, type ExitResult, type ExitState } from "./exit-state";
+import { acceptedRecord, NO_EXIT, nodeWait, readFailed, stakeKey, type ExitResult, type ExitState } from "./exit-state";
 import { errorText } from "./signing";
 import type { ConsoleStore } from "./store";
 
@@ -158,7 +158,7 @@ export class ExitWatch {
     const ready = wait === "ready";
     if (ready && !this.ready) this.keeper.forgetTried(); // a node back from away may answer what it could not
     this.ready = ready;
-    const key = `${typeof wait === "string" ? wait : "away"}|${state.accountRead}|${stakeKey(state)}`;
+    const key = `${typeof wait === "string" ? wait : "away"}|${state.accountRead}|${state.accountHistory}|${stakeKey(state)}`;
     if (key === this.lastKey || state.exit.vault === null) return;
     this.lastKey = key;
     void this.keeper.settle();
@@ -205,6 +205,7 @@ export class ExitWatch {
       return;
     }
     await this.keeper.retryAnswer();
+    this.keeper.retryBehind();
     await this.keeper.settle();
     await this.readClaims();
   }
@@ -212,11 +213,11 @@ export class ExitWatch {
   /** Reads what the vault holds for the account once the exit has started; the page shows why a read failed. False when it failed, so nothing is sent on what it held before. */
   async readClaims(): Promise<boolean> {
     const wallet = this.store.liveWallet;
-    const { vault, record } = this.store.getSnapshot().exit;
+    const state = this.store.getSnapshot().exit;
     const exit = wallet?.exit;
-    if (wallet === null || exit === undefined || vault === null || vault.exitStartedAt === 0) return false;
-    // A proof at another root registers nothing, but what is registered already can be paid without one.
-    const proof = record?.proof.root === vault.latestRoot ? record.proof : null;
+    if (wallet === null || exit === undefined || state.vault === null || state.vault.exitStartedAt === 0) return false;
+    // A proof at another root, or one the verifier has not accepted, counts for nothing, but what is registered already can be paid without one, and a deposit past the root's cursor refunded.
+    const proof = acceptedRecord(state)?.proof ?? null;
     try {
       const claims = await this.store.monkeySession.walletWork.work(wallet, () => exit.claims(proof));
       if (this.store.liveWallet !== wallet) return false;

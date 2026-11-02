@@ -30,6 +30,7 @@ describe("what the panel says of an exit action", () => {
     await refundExitDeposit(kit.store, { kind: "refund-unheld", id: 7, amount: 9n });
     expect(exit().announced).toBe("Deposit 7 was refunded to the address that paid it.");
     kit.exit.vault = factsAt(100, { exitStartedAt: 5_000, chainNow: CLOSED });
+    kit.exit.claimsHeld = { ...NO_CLAIMS, exitClaim: 5_000_000_000n };
     await kit.store.exit.refresh();
     await claimVaultExit(kit.store);
     expect(exit().announced).toBe("The vault paid 4,800 USDC to your wallet.");

@@ -12,6 +12,8 @@ describe("ProviderExit", () => {
   let chain: Chain;
   let exit: ProviderExit;
   const proof: ExitProof = parseExitProof(fullProof(100));
+  /** The vault's record of the fixture's pending deposit, in USDC base units. */
+  const HELD = { payer: ACCOUNT as Hex, amount: 25_000_000n };
 
   beforeEach(() => {
     chain = new Chain();
@@ -49,7 +51,7 @@ describe("ProviderExit", () => {
 
   describe("check", () => {
     it("asks the vault's own verifier about every part of the proof, against the given root", async () => {
-      expect(await exit.check(proof, rootAt(100))).toEqual({ ok: true, paidApprovals: [], accountClaim: 5_010_000_000n, distributionOwed: 2_000_000n });
+      expect(await exit.check(proof, rootAt(100))).toEqual({ ok: true, paidApprovals: [], accountClaim: 5_010_000_000n, distributionOwed: 2_000_000n, finalPaidApprovals: [], finalDistributionOwed: 2_000_000n });
       expect(chain.asked.filter((name) => /^proves|accountClaim/.test(name))).toEqual(["provesTerms", "accountClaim", "provesApproval", "provesQueued", "provesDistribution", "provesPending"]);
     });
     it.each([
@@ -85,6 +87,24 @@ describe("ProviderExit", () => {
       const second = await exit.check(proof, rootAt(100));
       expect(second.ok && second.paidApprovals).toEqual([]);
     });
+    it("tells what a finalized block shows paid from what only the head does", async () => {
+      chain.paidNonces.add(1n);
+      chain.vault.distributionsClaimed = word("uint256", 9_000_000n);
+      chain.finalVault.distributionsClaimed = word("uint256", 1_000_000n);
+      expect(await exit.check(proof, rootAt(100))).toMatchObject({ paidApprovals: [1], finalPaidApprovals: [], distributionOwed: 0n, finalDistributionOwed: 2_000_000n });
+      chain.finalNonces.add(1n);
+      chain.finalVault.distributionsClaimed = word("uint256", 9_000_000n);
+      expect(await exit.check(proof, rootAt(100))).toMatchObject({ paidApprovals: [1], finalPaidApprovals: [1], distributionOwed: 0n, finalDistributionOwed: 0n });
+    });
+    it.each<[string, (chain: Chain) => void]>([
+      ["reads no finalized block", (held) => { held.readsFinalized = false; }],
+      ["answers nothing there, as the vault was not deployed by then", (held) => { held.finalVault.distributionsClaimed = "0x"; }],
+    ])("counts nothing as finally paid from a wallet that %s", async (_name, set) => {
+      chain.paidNonces.add(1n);
+      chain.vault.distributionsClaimed = word("uint256", 9_000_000n);
+      set(chain);
+      expect(await exit.check(proof, rootAt(100))).toMatchObject({ paidApprovals: [1], finalPaidApprovals: [], distributionOwed: 0n, finalDistributionOwed: 3_000_000n });
+    });
     it("names an approval the vault has paid, which no claim can use now, without asking the verifier about it", async () => {
       chain.paidNonces.add(1n);
       const verdict = await exit.check(proof, rootAt(100));
@@ -116,10 +136,11 @@ describe("ProviderExit", () => {
     it("reads each part's standing from the vault", async () => {
       chain.paidNonces.add(1n);
       chain.vault.exitAccountRegistered = word("bool", true);
-      expect(await exit.claims(proof)).toEqual({ accountRegistered: true, distributionRegistered: false, queuedRegistered: [95], approvalsUsed: [1], refunded: [], exitClaim: 7n, exitDistributionClaim: 2n, distributionPaid: 1_000_000n, unheld: [], unheldComplete: true });
+      chain.deposits.set(2n, HELD);
+      expect(await exit.claims(proof)).toEqual({ accountRegistered: true, distributionRegistered: false, queuedRegistered: [95], approvalsUsed: [1], refunded: [], mismatched: [], exitClaim: 7n, exitDistributionClaim: 2n, distributionPaid: 1_000_000n, unheld: [], unheldComplete: true });
     });
     it("reads what is registered with no proof", async () => {
-      expect(await exit.claims(null)).toEqual({ accountRegistered: false, distributionRegistered: false, queuedRegistered: [], approvalsUsed: [], refunded: [], exitClaim: 7n, exitDistributionClaim: 2n, distributionPaid: 1_000_000n, unheld: [], unheldComplete: true });
+      expect(await exit.claims(null)).toEqual({ accountRegistered: false, distributionRegistered: false, queuedRegistered: [], approvalsUsed: [], refunded: [], mismatched: [], exitClaim: 7n, exitDistributionClaim: 2n, distributionPaid: 1_000_000n, unheld: [], unheldComplete: true });
     });
     it("finds this account's deposits from the exit's cursor on, once, and leaves the refunded out", async () => {
       chain.vault.depositCount = word("uint256", 6n);
@@ -142,6 +163,29 @@ describe("ProviderExit", () => {
       expect((await exit.claims(null)).unheld).toEqual([]);
       const gapped = { ...proof, terms: { ...proof.terms, terms: { ...proof.terms.terms, gaps: [1] } } };
       expect((await exit.claims(gapped)).unheld).toEqual([{ id: 1, amount: 25n }]);
+    });
+    it.each<[string, { payer: Hex; amount: bigint } | undefined]>([
+      ["another payer", { ...HELD, payer: OTHER as Hex }],
+      ["another amount", { ...HELD, amount: 24_000_000n }],
+      ["a fraction of a base unit less", { ...HELD, amount: 24_999_999n }],
+      ["no record at all", undefined],
+    ])("names a pending deposit the vault's record shows with %s, whose refund would revert", async (_name, record) => {
+      if (record !== undefined) chain.deposits.set(2n, record);
+      const facts = await exit.claims(proof);
+      expect(facts.mismatched).toEqual([2]);
+      expect(facts.refunded).toEqual([]);
+    });
+    it("takes a pending deposit the vault's record agrees with, and does not ask about one refunded", async () => {
+      chain.deposits.set(2n, HELD);
+      expect((await exit.claims(proof)).mismatched).toEqual([]);
+      const asked = chain.asked.filter((name) => name === "depositRecords").length;
+      chain.vault.depositRefunded = word("bool", true);
+      expect(await exit.claims({ ...proof, pending_deposits: proof.pending_deposits.map((held) => ({ ...held, deposit: { ...held.deposit, deposit_id: 8 } })) })).toMatchObject({ refunded: [8], mismatched: [] });
+      expect(chain.asked.filter((name) => name === "depositRecords").length).toBe(asked);
+    });
+    it("takes no pending deposit whose payer the proof does not name, which the vault would refuse", async () => {
+      chain.deposits.set(2n, HELD);
+      expect((await exit.claims({ ...proof, pending_deposits: proof.pending_deposits.map((held) => ({ ...held, deposit: { ...held.deposit, payer: null } })) })).mismatched).toEqual([2]);
     });
     it("says when the vault holds more deposits than one read goes through", async () => {
       chain.vault.depositCount = word("uint256", 5_000n);

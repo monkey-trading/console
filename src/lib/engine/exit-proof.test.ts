@@ -89,6 +89,29 @@ describe("approvalUnits", () => {
   });
 });
 
+describe("parseExitProof, of a list that repeats an id", () => {
+  const { approvals, queued, pending_deposits: pending } = fullProof(100);
+  it.each<[string, Record<string, unknown>, string]>([
+    ["an approval", { approvals: [...approvals, ...approvals] }, "approvals[1] repeats an earlier entry"],
+    ["a queued request", { queued: [...queued, ...queued] }, "queued[1] repeats an earlier entry"],
+    ["a pending deposit", { pending_deposits: [...pending, ...pending] }, "pending_deposits[1] repeats an earlier entry"],
+  ])("refuses %s named twice, whose copies would each pass the verifier", (_name, change, message) => {
+    expect(() => parseExitProof(changed(change))).toThrow(new ExitProofError(message));
+  });
+  it("takes entries that differ by id, though every other field matches", () => {
+    const [approval] = approvals;
+    if (approval === undefined) throw new Error("the fixture holds an approval");
+    const [deposit] = pending;
+    if (deposit === undefined) throw new Error("the fixture holds a pending deposit");
+    const parsed = parseExitProof(changed({
+      approvals: [approval, { ...approval, approval: { ...approval.approval, nonce: 2 } }],
+      pending_deposits: [deposit, { ...deposit, deposit: { ...deposit.deposit, deposit_id: 3 } }],
+    }));
+    expect(parsed.approvals.map((held) => held.approval.nonce)).toEqual([1, 2]);
+    expect(parsed.pending_deposits.map((held) => held.deposit.deposit_id)).toEqual([2, 3]);
+  });
+});
+
 describe("holdsAnything", () => {
   const empty = emptyProof(100);
   it("says an answer with nothing in it holds nothing", () => {
@@ -103,7 +126,10 @@ describe("holdsAnything", () => {
     expect(holdsAnything({ ...empty, queued: full.queued }, 0n, 0n, [])).toBe(true);
     expect(holdsAnything({ ...empty, pending_deposits: full.pending_deposits }, 0n, 0n, [])).toBe(true);
   });
-  it("does not count an approval the vault has paid", () => {
+  it("counts exit terms that name a gap, which may be a deposit of the account's to refund", () => {
+    expect(holdsAnything({ ...empty, terms: { ...empty.terms, terms: { ...empty.terms.terms, gaps: [1] } } }, 0n, 0n, [])).toBe(true);
+  });
+  it("does not count an approval a finalized block shows paid", () => {
     const { approvals } = fullProof(100);
     expect(holdsAnything({ ...empty, approvals }, 0n, 0n, [1])).toBe(false);
     expect(holdsAnything({ ...empty, approvals }, 0n, 0n, [2])).toBe(true);

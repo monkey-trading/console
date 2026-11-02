@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { exitFileText, exitStorageKey, writeStoredExit } from "../engine/exit-file";
-import { ACCOUNT, emptyProof, exitStorage, factsAt, FakeExitWallet, fullProof, OTHER, recordAt, SCOPE, VAULT } from "../engine/exit-kit";
+import { exitFileText, exitStorageKey, parseExitFile, writeStoredExit } from "../engine/exit-file";
+import { accepts, ACCOUNT, emptyProof, exitStorage, factsAt, FakeExitWallet, fullProof, OTHER, recordAt, SCOPE, VAULT } from "../engine/exit-kit";
 import { parseExitProof } from "../engine/exit-proof";
 import { settle } from "../engine/test-kit";
 import type { Wallet } from "../engine/wallet";
@@ -96,6 +96,49 @@ describe("importing a file, with no node", () => {
 
     it("refuses a file that holds less than the proof saved at its root, which proves too", () => {
       return keeps(JSON.stringify({ kind: "monkeytrading.exit-proof", version: 1, chain_id: 31337, vault: VAULT, account: ACCOUNT, proof: { ...fullProof(100), account: null, approvals: [], pending_deposits: [], distribution: null } }), /it holds less than the proof already saved for that checkpoint/);
+    });
+
+    describe("at the root of a proof this page has not seen", () => {
+      /** The node's whole proof at 100, with the approval and the deposit trimmed out. */
+      const TRIMMED = JSON.stringify({ kind: "monkeytrading.exit-proof", version: 1, chain_id: 31337, vault: VAULT, account: ACCOUNT, proof: { ...fullProof(100), approvals: [], pending_deposits: [] } });
+
+      it("refuses a file that holds less than what another tab saved while it was checked", async () => {
+        exit.verdict = () => {
+          holding(100);
+          return accepts({ accountClaim: 1n });
+        };
+        await importExitFile(store, TRIMMED);
+        expect(refused()?.text).toMatch(/it holds less than the proof already saved for that checkpoint/);
+        expect(store.getSnapshot().exit.record?.proof.approvals.length).toBe(1);
+        expect(parseExitFile(storage.held.get(exitStorageKey(SCOPE)) ?? "").proof.approvals.length).toBe(1);
+      });
+
+      it("refuses one that holds less than what storage holds, from a page behind it", async () => {
+        holding(50);
+        await store.exit.refresh();
+        expect(store.getSnapshot().exit.record?.proof.seq).toBe(50);
+        holding(100);
+        await importExitFile(store, TRIMMED);
+        expect(refused()?.text).toMatch(/it holds less than the proof already saved for that checkpoint/);
+        await settle();
+        expect(store.getSnapshot().exit.record?.proof.approvals.length).toBe(1); // the page catches up with storage
+      });
+
+      it("refuses one that holds less than what the page holds, with storage gone", async () => {
+        holding(100);
+        await store.exit.refresh();
+        storage.held.clear();
+        await importExitFile(store, TRIMMED);
+        expect(refused()?.text).toMatch(/it holds less than the proof already saved for that checkpoint/);
+        expect(storage.held.size).toBe(0);
+      });
+
+      it("takes a file that holds as much, or more", async () => {
+        writeStoredExit(() => storage, { ...recordAt(100), proof: parseExitProof({ ...fullProof(100), approvals: [] }) });
+        await importExitFile(store, FILE(100));
+        expect(refused()).toBeNull();
+        expect(parseExitFile(storage.held.get(exitStorageKey(SCOPE)) ?? "").proof.approvals.length).toBe(1);
+      });
     });
 
     it("refuses a file whose seq is not the vault's for that root", async () => {
