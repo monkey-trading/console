@@ -28,7 +28,7 @@ const IDLE: PairingState = { status: "idle" };
 const WC_CHOICE = { kind: "walletconnect", topic: "topic-1" } as const;
 /** A WalletConnect connector whose pairing state is `pairing`, and which resumes to `resumed`. */
 const connectorOf = (resumed: Wallet | null, pairing: PairingState = IDLE) => ({ resume: async () => resumed, pairing: () => pairing });
-const errorToasts = (store: ReturnType<typeof rig>["store"]) => store.getSnapshot().toasts.filter((toast) => toast.tone === "error");
+const errorNotices = (store: ReturnType<typeof rig>["store"]) => Object.values(store.getSnapshot().notices).filter((notice) => notice.tone === "error");
 
 describe("the stored connection choice's reconnect", () => {
   it("reconnects an injected choice through the provider flow and keeps it", async () => {
@@ -153,7 +153,7 @@ describe("the stored connection choice's reconnect", () => {
         await reconnectWallet(store, connectorOf(resumed, pairing), () => false);
         expect(asked).toEqual([]);
         expect(store.getSnapshot().wallet).toBeNull();
-        expect(errorToasts(store)).toEqual([]);
+        expect(errorNotices(store)).toEqual([]);
         expect(loadChoice(persistence)).toEqual(WC_CHOICE);
       }
     }
@@ -164,7 +164,7 @@ describe("the stored connection choice's reconnect", () => {
     const r = rig(WC_CHOICE, () => env.connector.connect());
     const visitor = env.connector.connect(); // the visitor picked WalletConnect; their dialog opens while the SDK loads
     await reconnectWallet(r.store, env.connector, () => false);
-    expect(errorToasts(r.store)).toEqual([]); // not "A WalletConnect pairing is already open."
+    expect(errorNotices(r.store)).toEqual([]); // not "A WalletConnect pairing is already open."
     expect(r.asked).toEqual([]);
     expect(loadChoice(r.persistence)).toEqual(WC_CHOICE);
     env.fake.emit("display_uri", URI);

@@ -136,19 +136,13 @@ describe("a live client's trust and feed", () => {
     expect(client.marketReads).toBe(3);
   });
 
-  it("shows a read failure that repeats on every tick once, and again after a read succeeds", async () => {
+  it("keeps a read failure that repeats on every tick silent", async () => {
     const { client, store } = setup();
     store.start(0);
     await settle();
-    const markets = client.markets.bind(client);
     client.markets = async () => { throw new Error("The node's answer did not verify: x."); };
     for (let i = 0; i < 3; i++) await store.refresh(false);
-    expect(store.getSnapshot().toasts.filter((t) => t.text.includes("did not verify"))).toHaveLength(1);
-    client.markets = markets;
-    await store.refresh(false);
-    client.markets = async () => { throw new Error("The node's answer did not verify: x."); };
-    await store.refresh(false);
-    expect(store.getSnapshot().toasts.filter((t) => t.text.includes("did not verify"))).toHaveLength(2);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 
   it("selects the first listed market when the selected one is not listed, and builds bars for a market first seen after the node's clock is known", async () => {
@@ -169,16 +163,16 @@ describe("a live client's trust and feed", () => {
     const { client, store } = setup();
     store.start(0);
     client.listener?.({ type: "problem", reason: "The stream skipped from frame 0 to 2." });
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "error", text: "The stream skipped from frame 0 to 2." });
+    expect(store.getSnapshot().notices.feed).toMatchObject({ tone: "error", text: "The stream skipped from frame 0 to 2." });
   });
 
-  it("shows an untrusted answer as an error, never as data", async () => {
+  it("shows an untrusted answer as no data, never as data", async () => {
     const { client, store } = setup();
     client.markets = async () => { throw new Error("The node's answer did not verify: wrong_signer."); };
     store.start(0);
     await settle();
     expect(store.getSnapshot().markets).toEqual([]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("did not verify");
+    expect(store.getSnapshot().notices).toEqual({});
   });
 
   it("says why it will not sign an action while the feed is stale", async () => {
@@ -190,7 +184,7 @@ describe("a live client's trust and feed", () => {
     store.patch({ wallet: { address: ACCOUNT, label: "Test wallet" } });
     client.listener?.({ type: "feed", status: "stale" });
     await cancelOrder(store, 1);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not sign: the node's feed is stale.");
+    expect(store.getSnapshot().notices.orders?.text).toBe("The console will not sign: the node's feed is stale.");
   });
 
   it("says why it will not send a deposit while the feed is stale", async () => {
@@ -202,12 +196,12 @@ describe("a live client's trust and feed", () => {
     store.patch({ wallet: { address: ACCOUNT, label: "Test wallet" } });
     client.listener?.({ type: "feed", status: "stale" });
     await deposit(store, 10n);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not send a deposit: the node's feed is stale.");
+    expect(store.getSnapshot().notices.deposit?.text).toBe("The console will not send a deposit: the node's feed is stale.");
   });
 });
 
 describe("a live client that keeps failing its signature checks", () => {
-  it("reads once and shows the refusal, without reading again by itself", async () => {
+  it("reads once and shows no data, without reading again by itself", async () => {
     const node = new FakeNode();
     node.attestation(() => VECTORS.signer);
     const market = vectorResponse("markets");
@@ -223,9 +217,7 @@ describe("a live client that keeps failing its signature checks", () => {
     for (let i = 0; i < 20; i++) await settle();
     expect(node.requests.filter((r) => r.path === "/v1/markets")).toHaveLength(1);
     expect(store.getSnapshot().markets).toEqual([]);
-    // The house panel's reads fail the same check and report on their own latches, so the markets
-    // refusal is one of the toasts, not the last.
-    expect(store.getSnapshot().toasts.some((t) => t.text.includes("did not verify"))).toBe(true);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 });
 

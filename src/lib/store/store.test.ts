@@ -28,7 +28,7 @@ async function funded() {
   await ctx.store.checkNode();
   await connectWallet(ctx.store, "browser");
   await attestEligibility(ctx.store, "professional");
-  await authorizeBrowser(ctx.store);
+  await authorizeBrowser(ctx.store, "setup");
   await deposit(ctx.store, fixedFromInt(50_000));
   ctx.store.tick(START + 1_000);
   ctx.store.tick(START + 8_000);
@@ -70,7 +70,7 @@ describe("the user's path", () => {
     expect(state.account?.balance).toBe(fixedFromInt(50_000));
     await buy(store, "0.25");
     expect(store.getSnapshot().account?.positions).toHaveLength(1);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("Filled");
+    expect(store.getSnapshot().notices.ticket).toBeUndefined();
     expect(store.getSnapshot().history[0]?.type).toBe("fill");
   });
 
@@ -86,7 +86,7 @@ describe("the user's path", () => {
     expect(mine()).toBe(parseFixed("-0.123457"));
     await closePosition(store);
     expect(mine()).toBeUndefined();
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("Filled");
+    expect(store.getSnapshot().notices.ticket).toBeUndefined();
   });
 
   it("refuses to sign for a node whose attestation it cannot verify", async () => {
@@ -97,7 +97,7 @@ describe("the user's path", () => {
     await attestEligibility(store, "professional");
     expect(store.getSnapshot().attestation.kind).toBe("unverified");
     expect(store.getSnapshot().eligibility).toBeNull();
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("will not sign");
+    expect(store.getSnapshot().notices.setup?.text).toContain("will not sign");
   });
 
   it("shows the geo-block when the node refuses the region, and clears it when the region changes", async () => {
@@ -113,7 +113,7 @@ describe("the user's path", () => {
   it("explains a refused order and cancels a resting one", async () => {
     const { store } = await funded();
     await buy(store, "74");
-    expect(store.getSnapshot().toasts.at(-1)?.text).toMatch(/equity|house|too|Not enough/i);
+    expect(store.getSnapshot().notices.ticket?.text).toMatch(/equity|house|too|Not enough/i);
     await buy(store, "0.2", { kind: "limit", price: parseFixed("1000") ?? 0n });
     const order = store.getSnapshot().account?.orders[0];
     expect(order).toBeDefined();
@@ -137,7 +137,7 @@ describe("what the store refuses or hides", () => {
     node.controls.setAttestationMode("unverifiable");
     await store.checkNode();
     await deposit(store, fixedFromInt(1_000));
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("will not send a deposit");
+    expect(store.getSnapshot().notices.deposit?.text).toContain("will not send a deposit");
     expect(node.client.state.account(store.getSnapshot().wallet?.address ?? "").pending).toEqual([]);
   });
 
@@ -187,13 +187,13 @@ describe("what the store refuses or hides", () => {
     const { node, store } = await funded();
     const me = store.getSnapshot().wallet?.address ?? "";
     node.client.state.emit({ type: "tick" }, [{ type: "order_cancelled", account: me, order_id: 7, reason: "unfillable" }]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("could not be filled and was cancelled");
+    expect(store.getSnapshot().notices.account?.text).toContain("could not be filled and was cancelled");
     node.client.state.emit({ type: "tick" }, [{ type: "close_out", account: me, equity: "1", margin: "10" }]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("closed out");
+    expect(store.getSnapshot().notices.account?.text).toContain("closed out");
     // Another account's close-out or cancelled order is not the user's news.
-    const before = store.getSnapshot().toasts;
+    const before = store.getSnapshot().notices.account;
     node.client.state.emit({ type: "tick" }, [{ type: "close_out", account: "0x2222222222222222222222222222222222222222", equity: "1", margin: "10" }]);
     node.client.state.emit({ type: "tick" }, [{ type: "order_cancelled", account: "0x2222222222222222222222222222222222222222", order_id: 9, reason: "unfillable" }]);
-    expect(store.getSnapshot().toasts).toEqual(before);
+    expect(store.getSnapshot().notices.account).toEqual(before);
   });
 });

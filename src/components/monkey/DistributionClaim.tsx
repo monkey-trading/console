@@ -8,6 +8,7 @@ import { claimDistribution, distributionPosition } from "@/lib/monkey/actions";
 import { usdcFixed } from "@/lib/monkey/figures";
 import { formatUsdc } from "@/lib/vault";
 
+import { Notice } from "../Notice";
 import { useSignGate } from "../SignGate";
 import { Card, focusHeading } from "./Card";
 import { ReadNote } from "./ReadNote";
@@ -59,6 +60,7 @@ export function DistributionClaim() {
           {gate.note}
         </div>
       )}
+      <Notice surface="distribution" />
       {mine && !readOnly && proof !== null && held === null && figures.position.status === "loading" && <p className={NOTE}>Reading the vault&apos;s record of what it has paid…</p>}
       {mine && !readOnly && proof !== null && held === null && figures.position.status === "failed" && <p className={NOTE}>The vault&apos;s record of what it has paid could not be read; it is read again by itself.</p>}
       {mine && !readOnly && position.claimed !== null && checkpoint === "checking" && <p role="status" className={NOTE}>Checking the vault&apos;s latest checkpoint against the node&apos;s proof…</p>}

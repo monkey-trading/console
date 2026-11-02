@@ -21,7 +21,7 @@ async function stored(label: string, choice: WalletChoice | null, readOnly = fal
 const T1: WalletChoice = { kind: "walletconnect", topic: "topic-1" };
 const T2: WalletChoice = { kind: "walletconnect", topic: "topic-2" };
 const INJECTED: WalletChoice = { kind: "injected" };
-const ENDED_TOAST = "Your wallet ended the WalletConnect session, so the console disconnected it.";
+const ENDED_NOTICE = "Your wallet ended the WalletConnect session, so the console disconnected it.";
 
 describe("Disconnect", () => {
   it("drops the wallet and forgets the stored choice, so a reload does not reconnect it", async () => {
@@ -55,7 +55,7 @@ describe("a wallet-ended session", () => {
     expect(store.liveWallet).toBeNull();
     expect(store.getSnapshot().wallet).toBeNull();
     expect(loadChoice(persistence)).toBeNull();
-    expect(store.getSnapshot().toasts).toContainEqual({ id: expect.any(Number), tone: "info", text: ENDED_TOAST });
+    expect(store.getSnapshot().notices.wallet).toEqual({ id: expect.any(Number), tone: "info", text: ENDED_NOTICE });
   });
 
   it("keeps a newer choice another tab saved under the same key, and still disconnects this tab", async () => {
@@ -65,7 +65,7 @@ describe("a wallet-ended session", () => {
     expect(store.liveWallet).toBeNull();
     expect(store.getSnapshot().wallet).toBeNull();
     expect(loadChoice(persistence)).toEqual(T2);
-    expect(store.getSnapshot().toasts).toContainEqual({ id: expect.any(Number), tone: "info", text: ENDED_TOAST });
+    expect(store.getSnapshot().notices.wallet).toEqual({ id: expect.any(Number), tone: "info", text: ENDED_NOTICE });
   });
 
   it("keeps an injected choice, which names no session, and still disconnects", async () => {
@@ -92,6 +92,6 @@ describe("a wallet-ended session", () => {
     expect(store.liveWallet).not.toBeNull();
     expect(store.getSnapshot().wallet?.label).toBe("Browser wallet");
     expect(loadChoice(persistence)).toEqual(T1);
-    expect(store.getSnapshot().toasts).toEqual([]);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 });

@@ -10,7 +10,8 @@ import { SESSION_KEY_TTL_MS } from "../engine/session-key";
 import type { CancelRequest, OrderRequest, SessionKeyRequest } from "../engine/types";
 import { ACCOUNT, memoryStorage } from "../engine/wallet-kit";
 import { loadChoice } from "../engine/wallet-persist";
-import { fixedFromInt, fixedFromWire } from "../fixed";import { settle } from "../engine/test-kit";
+import { fixedFromInt, fixedFromWire } from "../fixed";
+import { settle } from "../engine/test-kit";
 import type { Wallet } from "../engine/wallet";
 import { cancelOrder, connectWallet, deposit, disconnectWallet, placeOrder, REQUEST_TTL_MS, withdraw } from "./actions";
 import { connected, keyed, NODE_TIME, signerOf, VAULT, ActionClient, BTC } from "./live-kit";
@@ -53,16 +54,16 @@ describe("signed actions with a fixed-key wallet", () => {
   it("re-signs the registration once more with the nonce a 409 names, and only once", async () => {
     const { client, provider, store } = await connected();
     client.answer = () => { throw new EngineError(409, "invalid nonce", { kind: "invalid_nonce", expected: 9 }); };
-    await loginSession(store);
+    await loginSession(store, "setup");
     expect(client.posted.map((p) => ("auth" in p.body ? p.body.auth?.nonce : undefined))).toEqual([4, 9]);
     expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2);
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "error", text: "The request was out of order. Try again." });
+    expect(store.getSnapshot().notices.setup).toMatchObject({ tone: "error", text: "The request was out of order. Try again." });
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
   });
 
   it("re-signs a session-signed cancel with the nonce a 409 names, silently, and only once", async () => {
     const { client, provider, store } = await connected();
-    await loginSession(store);
+    await loginSession(store, "setup");
     client.answer = (posted) => {
       if (posted.route === "cancel") throw new EngineError(409, "invalid nonce", { kind: "invalid_nonce", expected: 9 });
       return new ActionClient().answer(posted);
@@ -71,7 +72,7 @@ describe("signed actions with a fixed-key wallet", () => {
     expect(client.posted.filter((p) => p.route === "cancel").map((p) => (p.body as CancelRequest).auth?.nonce)).toEqual([4, 9]);
     // No wallet signature beyond the connect-time login's: the retry is the key's.
     expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(1);
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "error", text: "The request was out of order. Try again." });
+    expect(store.getSnapshot().notices.orders).toMatchObject({ tone: "error", text: "The request was out of order. Try again." });
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
   });
   it("does not sign an order or a withdrawal again after a 409, since a copy may have run, and reads the account before saying so", async () => {
@@ -81,7 +82,7 @@ describe("signed actions with a fixed-key wallet", () => {
       ["order", (store: Parameters<typeof withdraw>[0]) => placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false })],
     ] as const) {
       const { client, provider, store } = await connected();
-      await loginSession(store); // the connect-time login, so the 409 below is the action's own
+      await loginSession(store, "setup"); // the connect-time login, so the 409 below is the action's own
       client.answer = () => { throw new EngineError(409, "invalid nonce", { kind: "invalid_nonce", expected: 9 }); };
       const reads = client.marketReads;
       await run(store);
@@ -89,13 +90,13 @@ describe("signed actions with a fixed-key wallet", () => {
       // The login spent one wallet signature; only the withdrawal asks for another.
       expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(route === "withdraw" ? 2 : 1);
       expect(client.marketReads).toBeGreaterThan(reads);
-      expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node had already used nonce 4 for this account, so it did not take this request as sent. If it was sent twice it may have run: check your positions, orders, withdrawals and history before trying again.");
+      expect(store.getSnapshot().notices[route === "withdraw" ? "withdraw" : "ticket"]?.text).toBe("The node had already used nonce 4 for this account, so it did not take this request as sent. If it was sent twice it may have run: check your positions, orders, withdrawals and history before trying again.");
     }
   });
 
   it("reads the account again and says a sent request may have run when the node does not answer", async () => {
     const { client, store } = await connected();
-    await loginSession(store); // the connect-time login, so the failure below is the cancel's own
+    await loginSession(store, "setup"); // the connect-time login, so the failure below is the cancel's own
     client.answer = (posted) => {
       if (posted.route === "cancel") throw new EngineError(0, "The node did not answer.");
       return new ActionClient().answer(posted);
@@ -103,7 +104,7 @@ describe("signed actions with a fixed-key wallet", () => {
     const reads = client.marketReads;
     await cancelOrder(store, 42);
     expect(client.marketReads).toBeGreaterThan(reads);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node did not answer. It may have run: check your positions, orders, withdrawals and history before trying again.");
+    expect(store.getSnapshot().notices.orders?.text).toBe("The node did not answer. It may have run: check your positions, orders, withdrawals and history before trying again.");
   });
 
   it("reads the account and says a sent request may have run when its answer does not verify, but not for a failure before sending", async () => {
@@ -112,12 +113,12 @@ describe("signed actions with a fixed-key wallet", () => {
     const reads = client.marketReads;
     await withdraw(store, fixedFromInt(10));
     expect(client.marketReads).toBeGreaterThan(reads);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node's answer (HTTP 200) was not signed by the attested enclave, so it was discarded. It may have run: check your positions, orders, withdrawals and history before trying again.");
+    expect(store.getSnapshot().notices.withdraw?.text).toBe("The node's answer (HTTP 200) was not signed by the attested enclave, so it was discarded. It may have run: check your positions, orders, withdrawals and history before trying again.");
     const before = client.marketReads;
     client.nonce = async () => { throw new UntrustedError("The node is not verified."); };
     await withdraw(store, fixedFromInt(10));
     expect(client.marketReads).toBe(before);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node is not verified.");
+    expect(store.getSnapshot().notices.withdraw?.text).toBe("The node is not verified.");
   });
 
   it("never registers a key at the point of trading: with none, setup reopens and nothing is signed or sent", async () => {
@@ -145,14 +146,14 @@ describe("signed actions with a fixed-key wallet", () => {
     await deposit(store, fixedFromInt(10));
     expect(client.nonceReads).toBe(0);
     expect(provider.calls).toEqual([]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not send a deposit: the node's attestation is not verified.");
+    expect(store.getSnapshot().notices.deposit?.text).toBe("The console will not send a deposit: the node's attestation is not verified.");
   });
 
   it("tells the user when they decline in the wallet, and posts nothing", async () => {
     const { client, store } = await connected({ fail: { eth_signTypedData_v4: { code: 4001, message: "User rejected" } } });
     await withdraw(store, fixedFromInt(10));
     expect(client.posted).toEqual([]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("You declined to sign in your wallet.");
+    expect(store.getSnapshot().notices.withdraw).toMatchObject({ tone: "error", text: "You declined to sign in your wallet." });
   });
 });
 
@@ -181,24 +182,24 @@ describe("a wallet change", () => {
     wallet.disconnect = async () => { throw new Error("offline"); };
     disconnectWallet(store);
     await settle();
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The wallet's session did not close: offline");
+    expect(store.getSnapshot().notices.wallet?.text).toBe("The wallet's session did not close: offline");
   });
 
-  it("offers to add the deployment's USDC once connected, toasting only when the wallet adds it", async () => {
+  it("offers to add the deployment's USDC once connected, and says nothing whether the wallet adds it or declines", async () => {
+    const offered: boolean[] = [];
     const stub = (suggestUsdc: () => Promise<boolean>): Wallet => ({ address: ACCOUNT, label: "Test wallet", suggestUsdc, sign: async () => "0x", deposit: async () => "0x0", claim: async () => "0x0" });
     const offering = (suggestUsdc: () => Promise<boolean>) =>
       new ConsoleStore({
         client: new ActionClient(), wallets: { options: [], connect: async () => stub(suggestUsdc) }, history: () => [],
         initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 },
       });
-    const store = offering(async (): Promise<boolean> => true);
-    await connectWallet(store, "browser");
-    await settle();
-    expect(store.getSnapshot().toasts).toContainEqual({ id: expect.any(Number), tone: "info", text: "USDC was added to your wallet, so its balance shows there." });
-    const declined = offering(async (): Promise<boolean> => false);
-    await connectWallet(declined, "browser");
-    await settle();
-    expect(declined.getSnapshot().toasts.some((t) => t.text.includes("USDC"))).toBe(false);
+    for (const added of [true, false]) {
+      const store = offering(async (): Promise<boolean> => { offered.push(added); return added; });
+      await connectWallet(store, "browser");
+      await settle();
+      expect(store.getSnapshot().notices.wallet).toBeUndefined();
+    }
+    expect(offered).toEqual([true, false]);
   });
 
   it("persists the injected connector choice when the session has storage, and no other choice", async () => {

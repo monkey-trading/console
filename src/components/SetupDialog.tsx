@@ -67,8 +67,6 @@ export function SetupDialog() {
           ))}
         </ol>
       )}
-      {/* The page behind a modal dialog is inert, so what the wallet asks and how a step ended are announced from here too. */}
-      <p role="status" className="sr-only">{state.prompt ?? state.toasts.at(-1)?.text}</p>
     </dialog>
   );
 }

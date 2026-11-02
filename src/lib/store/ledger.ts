@@ -137,7 +137,7 @@ export class LedgerReads {
       else this.set({ scheduleStatus: "ready", schedule, data: closedBefore(this.state.data, schedule) });
     } catch {
       if (this.scheduleEpoch === epoch) this.scheduleEpoch = null;
-      // The rows show without MONKEY; the next open of the tab asks again. Nothing is toasted, so a node that is down is not announced twice.
+      // The rows show without MONKEY; the next open of the tab asks again.
       if (this.live(account, epoch)) this.set({ scheduleStatus: "failed" });
       return;
     }

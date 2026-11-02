@@ -50,7 +50,7 @@ async function until(done: () => boolean, ms = 30_000, what = "the node"): Promi
   while (!done()) {
     if (Date.now() > end) {
       const state = snapshot();
-      throw new Error(`timed out waiting for ${what}: ${JSON.stringify({ attestation: state.attestation, stream: state.stream, markets: state.markets.length, wallet: state.wallet?.address ?? null, account: state.account !== null, quotes: Object.keys(state.quotes), quoteError: state.quoteError, toasts: state.toasts.map((t) => t.text) })}`);
+      throw new Error(`timed out waiting for ${what}: ${JSON.stringify({ attestation: state.attestation, stream: state.stream, markets: state.markets.length, wallet: state.wallet?.address ?? null, account: state.account !== null, quotes: Object.keys(state.quotes), quoteError: state.quoteError, notices: Object.fromEntries(Object.entries(state.notices).map(([surface, notice]) => [surface, notice?.text])) })}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -186,7 +186,7 @@ describe("trading against a dev node", () => {
       return account !== null && account.balance === parseFixed(FUND);
     });
     // Trading never registers a key: the setup popup's one signature does, and orders then sign with it.
-    expect(await authorizeBrowser(store)).toBe(true);
+    expect(await authorizeBrowser(store, "setup")).toBe(true);
   });
 
   it("fills a market order at the streamed quote, sent as the quoted price with the slippage bound", async () => {
@@ -255,6 +255,6 @@ describe("trading against a dev node", () => {
     if (closeOut === undefined || closeOut.type !== "close_out") throw new Error("no close_out event");
     // The raised tier makes the position's margin its whole notional, over twice the funded equity.
     expect(fixedFromWire(closeOut.margin)).toBeGreaterThan(2n * fixedFromWire(closeOut.equity));
-    expect(snapshot().toasts.some((t) => t.text.includes("closed out"))).toBe(true);
+    expect(snapshot().notices.account?.text).toContain("closed out");
   });
 });

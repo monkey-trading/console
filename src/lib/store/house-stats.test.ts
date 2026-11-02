@@ -65,7 +65,7 @@ describe("the House page's dashboard feeds", () => {
     expect(reads).toHaveLength(3);
   });
 
-  it("shows a route the node does not serve as unavailable and asks again only after minutes, with no toast", async () => {
+  it("shows a route the node does not serve as unavailable and asks again only after minutes, with no notice", async () => {
     const { client, store } = setup();
     store.houseStats.setOpen(true);
     const spec404 = positionsFeed(store, 1);
@@ -76,7 +76,7 @@ describe("the House page's dashboard feeds", () => {
     expect(client.statsReads).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(client.statsReads).toHaveLength(2);
-    expect(store.getSnapshot().toasts).toEqual([]);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 
   it("waits for the node's first scan on a 503 and then shows the positions", async () => {
@@ -243,13 +243,13 @@ describe("the House page's dashboard feeds", () => {
     expect((await feed.read(null, () => false)).complete).toBe(false);
   });
 
-  it("marks the page blocked when a feed's read is refused for the caller's region, and shows no toast", async () => {
+  it("marks the page blocked when a feed's read is refused for the caller's region, and shows no notice", async () => {
     const { client, store } = setup();
     client.statsError = new EngineError(403, "not available in your region", { kind: "access", reason: "united_states" });
     store.houseStats.setOpen(true);
     store.houseStats.follow(positionsFeed(store, 1));
     await vi.advanceTimersByTimeAsync(0);
     expect(store.getSnapshot().blocked).toBe("united_states");
-    expect(store.getSnapshot().toasts).toEqual([]);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 });

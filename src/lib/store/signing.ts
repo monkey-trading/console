@@ -8,7 +8,7 @@ import type { Reject, RequestAuth } from "../engine/types";
 import { NotSentError, UntrustedError } from "../engine/trust";
 import type { Progress, Wallet } from "../engine/wallet";
 import { describeReject } from "../messages";
-import type { BlockReason } from "./state";
+import type { BlockReason, NoticeSurface } from "./state";
 import type { ConsoleStore } from "./store";
 
 /** A signed request stays valid this long past the node's signed time, within the engine's five-minute cap (`MAX_EXPIRY_AHEAD_MS`). */
@@ -20,38 +20,38 @@ export const DISCONNECTED = new Error("The connection ended before the request w
 /** A refusal shown to the user, never thrown past an action. */
 export type Outcome = { ok: true; result: ActionResult } | { ok: false };
 
-/** The connected wallet when the console may use it now; otherwise tells the user why not and returns null. */
-export function usableWallet(store: ConsoleStore, action: string): Wallet | null {
+/** The connected wallet when the console may use it now; otherwise says why on `surface`, the control the user pressed, and returns null. */
+export function usableWallet(store: ConsoleStore, action: string, surface: NoticeSurface): Wallet | null {
   const wallet = store.liveWallet;
   const state = store.getSnapshot();
   if (!wallet) {
-    store.toast("error", "Connect a wallet first.");
+    store.notify(surface, "Connect a wallet first.");
     return null;
   }
   const blocked = signBlock(state.attestation, state.stream, state.wallet?.readOnly === true);
   if (blocked !== null) {
-    store.toast("error", `The console will not ${action}: ${blocked}.`);
+    store.notify(surface, `The console will not ${action}: ${blocked}.`);
     return null;
   }
   return wallet;
 }
 
 /**
- * Runs one wallet step for `owner`, the connection that asked, showing `prompt` while the wallet waits
+ * Runs one wallet step for `owner`, the connection that asked, showing `prompt` on `surface` while the wallet waits
  * for the user; the step reports what each part of it waits for through the `Progress` it is given. A
  * change of connection already cleared the prompt and the next wallet's may be showing, so a step of an
  * old connection neither writes nor clears it. Null is a revocation, which runs once its connection has
  * been dropped and until another adopts.
  */
-export async function prompting<T>(store: ConsoleStore, owner: Wallet | null, prompt: string, step: (progress: Progress) => Promise<T>): Promise<T> {
+export async function prompting<T>(store: ConsoleStore, owner: Wallet | null, surface: NoticeSurface, prompt: string, step: (progress: Progress) => Promise<T>): Promise<T> {
   const current = () => store.liveWallet === owner;
-  if (current()) store.patch({ prompt });
+  if (current()) store.patch({ prompt, promptAt: surface });
   try {
     return await step((waitingFor) => {
-      if (current()) store.patch({ prompt: waitingFor });
+      if (current()) store.patch({ prompt: waitingFor, promptAt: surface });
     });
   } finally {
-    if (current()) store.patch({ prompt: null });
+    if (current()) store.patch({ prompt: null, promptAt: null });
   }
 }
 
@@ -72,16 +72,19 @@ export const domainOf = (store: ConsoleStore) => requestDomain(store.deps.client
 /**
  * Signs and sends one request for a node whose attestation the console accepts: the nonce from
  * its signed answer, the expiry from that answer's signed time. A refusal shows only after the
- * account is read again, so the screen holds what the node holds when the user reads why.
+ * account is read again, so the screen holds what the node holds when the user reads why. A refusal
+ * or failure is put on `surface`, the control the user pressed.
  */
 export async function signed(
   store: ConsoleStore,
+  surface: NoticeSurface,
   summary: string,
   build: (terms: Terms, account: string) => TypedRequest,
   send: (auth: RequestAuth, wallet: Wallet) => Promise<ActionResult>,
   onNonceTaken: OnNonceTaken,
 ): Promise<Outcome> {
-  const wallet = usableWallet(store, "sign");
+  store.clearNotice(surface);
+  const wallet = usableWallet(store, "sign", surface);
   if (!wallet) return { ok: false };
   store.patch({ busy: true });
   /** Whether the request was handed to `send`: from then on it may have run, unless the last gate stopped it (`wentOut`). */
@@ -93,7 +96,7 @@ export async function signed(
       // The connection may have ended while the nonce read waited: its wallet is not asked.
       if (store.liveWallet !== wallet) throw DISCONNECTED;
       const typed = build({ nonce, expiresAt }, wallet.address);
-      const signature = await prompting(store, wallet, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
+      const signature = await prompting(store, wallet, surface, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
       // Or while the wallet asked: nothing goes out for a connection that ended.
       if (store.liveWallet !== wallet) throw DISCONNECTED;
       sent = true;
@@ -113,7 +116,7 @@ export async function signed(
     if (store.noteAccess(error)) return { ok: false };
     // A sent request the node refused, left unanswered, or answered unverifiably may still have run: read the account first.
     if (left) await store.refresh(true);
-    store.toast("error", `${errorText(error)}${left && mayHaveRun(error) ? MAY_HAVE_RUN : ""}`);
+    store.notify(surface, `${errorText(error)}${left && mayHaveRun(error) ? MAY_HAVE_RUN : ""}`);
     return { ok: false };
   } finally {
     notBusy(store, wallet);
@@ -139,8 +142,8 @@ export function errorText(error: unknown): string {
 
 /**
  * Whether a failed background read is the node not being verified (yet, or any longer): the
- * attestation banner says so, once, and the read runs again when trust returns, so it must not
- * toast. A wallet reattaches on page load before the node has attested, so every read that
+ * attestation banner says so, once, and the read runs again when trust returns, so it must say
+ * nothing itself. A wallet reattaches on page load before the node has attested, so every read that
  * starts there meets this (monkey-trading/console#202).
  */
 export const awaitsTrust = (error: unknown): boolean => error instanceof UntrustedError;

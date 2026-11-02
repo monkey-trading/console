@@ -167,10 +167,10 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       stop();
     };
   }, [follower]);
-  // After a move every screen has remounted: its log exists to announce this, and focus that fell with the old screens goes somewhere deliberate.
+  // After a move every screen has remounted: the notice row announces this, and focus that fell with the old screens goes somewhere deliberate.
   useEffect(() => {
     if (session.moves === 0 || follower === null) return;
-    store.toast("info", moveNotice(new URL(follower.getSnapshot().origin).host));
+    store.notify("node", moveNotice(new URL(follower.getSnapshot().origin).host), "info");
     if (document.activeElement === null || document.activeElement === document.body) document.getElementById("main")?.focus();
   }, [session.moves, store, follower]);
   useEffect(() => (follower === null ? undefined : followNode(store, follower)), [follower, store]);

@@ -11,6 +11,7 @@ import { readWalletUsdc } from "@/lib/store/wallet-usdc";
 import { isWholeUsdc, MAX_DEPOSIT, MIN_DEPOSIT, plainUsdc } from "@/lib/vault";
 
 import { useConsole, useSession } from "./ConsoleProvider";
+import { Notice } from "./Notice";
 import { useSignGate } from "./SignGate";
 import { useWalletUsdc } from "./useWalletUsdc";
 
@@ -32,6 +33,8 @@ export function DepositForm({ embedded = false }: { embedded?: boolean }) {
   const valid = value !== null && value >= MIN_DEPOSIT && value <= MAX_DEPOSIT && isWholeUsdc(value) && !over;
   const chain = chainName(deploy.chainId);
   const watching = wallet === null || wallet.readOnly === true;
+  // In the setup popup the step is the surface, so the Funding page behind it does not repeat the message.
+  const surface = embedded ? "setup" : "deposit";
   const title = embedded ? null : <h4 id={`${id}-title`} className="text-label tracking-caps text-fg-3 uppercase">Deposit USDC</h4>;
   return (
     <section aria-labelledby={embedded ? undefined : `${id}-title`} className={embedded ? "mt-3" : "p-4"}>
@@ -50,7 +53,7 @@ export function DepositForm({ embedded = false }: { embedded?: boolean }) {
           </>}
         </p>
       )}
-      <form onSubmit={(event) => { event.preventDefault(); if (valid && value && !busy && wallet && !gate.blocked) void deposit(store, value); }}>
+      <form onSubmit={(event) => { event.preventDefault(); if (valid && value && !busy && wallet && !gate.blocked) void deposit(store, value, surface); }}>
         <label htmlFor={id} className="mt-3 block text-caption text-fg-2">Amount (USDC)</label>
         <div className="mt-1 flex flex-col gap-2 sm:flex-row">
           <input id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} aria-describedby={`${id}-hint`} className={INPUT} />
@@ -58,6 +61,7 @@ export function DepositForm({ embedded = false }: { embedded?: boolean }) {
         </div>
         <p id={`${id}-hint`} className="mt-2 text-label leading-relaxed text-fg-3">10 to 1,000,000,000 USDC. Your wallet approves the vault for the amount, if it needs to, then deposits it. The node counts a deposit as collateral once it is credited and releases it for withdrawal when it is final.</p>
         {gate.note}
+        <Notice surface={surface} />
         {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet first.</p>}
         {wallet && over && held !== null && <p className="mt-2 text-label text-ember">That is more than the {formatFixedPlaces(held, 2)} USDC your wallet holds on {chain}.</p>}
         {wallet && !over && amount.trim() !== "" && !valid && <p className="mt-2 text-label text-ember">Enter an amount from 10 to 1,000,000,000 USDC, to at most six decimal places.</p>}

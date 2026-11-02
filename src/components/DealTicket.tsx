@@ -18,6 +18,7 @@ import { belowMinimum, contractUnit, MARGIN_SHORT, NO_SIZE, parseSize, previewTi
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { MarketInfo } from "./MarketInfo";
+import { Notice } from "./Notice";
 import { SigningFor } from "./SigningFor";
 import { usePrefs } from "./use-prefs";
 
@@ -141,6 +142,7 @@ export function DealTicket() {
         <button type="submit" aria-disabled={!canPlace && setup !== "needed"} className={`mt-4 min-h-12 w-full rounded border py-3 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 ${side === "buy" ? "border-glow bg-glow/10 text-glow hover:bg-glow/20" : "border-ember bg-ember/10 text-ember hover:bg-ember/20"}`}>
           {state.busy ? "Signing…" : setup === "needed" ? "Finish setup" : `Trade: ${side === "buy" ? "Buy" : "Sell"} ${market.symbol}`}
         </button>
+        <Notice surface="ticket" />
         {live && <div className="mt-3"><SigningFor /></div>}
         <div aria-live="polite" className="mt-3 space-y-1 text-label leading-relaxed text-ember">
           {gate && <p className="text-fg-2">{gate}</p>}

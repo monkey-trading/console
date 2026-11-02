@@ -19,7 +19,7 @@ async function refused(reason: Reject) {
   kit.client.answer = (posted) => (posted.route === "session_key"
     ? { seq: 1, events: [{ type: "session_key_rejected", account: ACCOUNT, session_key: "0x0", reason }] }
     : { seq: 1, events: [{ type: "session_key_revoked", account: ACCOUNT, session_key: OTHER_KEY }] });
-  expect(await authorizeBrowser(kit.store)).toBe(false);
+  expect(await authorizeBrowser(kit.store, "setup")).toBe(false);
   return kit;
 }
 

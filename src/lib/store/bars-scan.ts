@@ -71,12 +71,12 @@ async function attempt(store: ConsoleStore, epoch: number, markets: readonly Mar
   }
 }
 
-/** Shows a scan that spent its retries; development also logs the reason where the owner can see it. */
+/** Says on the chart that a scan spent its retries; development also logs the reason where the owner can see it. */
 function report(store: ConsoleStore, error: unknown): void {
   if (awaitsTrust(error)) return;
   const reason = error instanceof Error ? error.message : String(error);
   if (process.env.NODE_ENV === "development") console.error(`The chart history scan failed: ${reason}`, error);
-  store.toast("error", `Chart history unavailable: ${reason}`);
+  store.notify("chart", `Chart history is unavailable: ${reason.replace(/\.$/, "")}. The chart shows the prices received since this page opened.`);
 }
 
 /**

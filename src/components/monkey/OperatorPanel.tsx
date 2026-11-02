@@ -18,6 +18,7 @@ import { hostnameListed, mirroredElection, shownHostname, type OperatorReads } f
 import { formatStamp } from "@/lib/time";
 
 import { useNodeFollow, useSession } from "../ConsoleProvider";
+import { Notice } from "../Notice";
 import { Card, focusHeading } from "./Card";
 import { ReadNote } from "./ReadNote";
 import { Row } from "./Row";
@@ -92,6 +93,7 @@ export function OperatorPanel({ operators }: { operators: OperatorReads }) {
               </ul>
             </>
           )}
+          <Notice surface="operator" />
           <ReadNote read={table} loading="Reading the candidates…" />
           <ReadNote read={chosenRead} loading="Reading your vote…" />
           {canVote && (

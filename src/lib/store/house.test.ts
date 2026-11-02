@@ -75,7 +75,7 @@ describe("the store's house panel state", () => {
     expect(store.getSnapshot().houseFresh).toBe(true);
   });
 
-  it("leaves fresh figures fresh when an account read fails, reporting the failure once", async () => {
+  it("leaves fresh figures fresh when an account read fails, noticing it once per text until a read succeeds", async () => {
     const { client, store } = setup();
     store.start(0);
     await settle();
@@ -86,21 +86,20 @@ describe("the store's house panel state", () => {
     await settle();
     // The account failure cannot stale the figures the markets and house reads just refreshed.
     expect(store.getSnapshot().houseFresh).toBe(true);
-    expect(store.getSnapshot().toasts.some((t) => t.text === "account unavailable")).toBe(true);
-    // The same failure on the next refresh is not shown twice.
+    const first = store.getSnapshot().notices.accountRead;
+    expect(first).toMatchObject({ tone: "error", text: "Your account could not be read: account unavailable. The console tries again by itself." });
+    // The same failure on the next refresh is the same notice, not a new one.
     await store.refresh(false);
     await settle();
-    expect(store.getSnapshot().toasts.filter((t) => t.text === "account unavailable")).toHaveLength(1);
-    // Recovery clears the latch: a different failure shows again.
+    expect(store.getSnapshot().notices.accountRead).toEqual(first);
+    // A different failure replaces it.
     client.accountError = new Error("account still unavailable");
     await store.refresh(false);
     await settle();
-    expect(store.getSnapshot().toasts.some((t) => t.text === "account still unavailable")).toBe(true);
-    // A new wallet's identical failure is reported: the latch does not carry over.
+    expect(store.getSnapshot().notices.accountRead?.text).toContain("account still unavailable");
+    // A new wallet starts clean.
     store.setWallet({ address: "0x00000000000000000000000000000000000000bb", label: "Other" });
-    await store.refresh(false);
-    await settle();
-    expect(store.getSnapshot().toasts.filter((t) => t.text === "account still unavailable")).toHaveLength(2);
+    expect(store.getSnapshot().notices.accountRead).toBeUndefined();
   });
 
   it("still refreshes the house panel when the markets read fails", async () => {
@@ -125,22 +124,18 @@ describe("the store's house panel state", () => {
     expect(state.houseFresh).toBe(false);
   });
 
-  it("latches the queue walk's original failure through its backoff waits", async () => {
+  it("fails the queue walk silently, through its backoff waits, and recovers", async () => {
     const { client, store } = setup();
     client.totalsError = new Error("queue down");
     store.start(0);
     await settle();
-    expect(store.getSnapshot().toasts.filter((t) => t.text === "queue down")).toHaveLength(1);
-    // The backoff waits reject with their own marker: the original failure stays latched and the
-    // wait's message never toasts, however many refreshes the backoff spans.
+    expect(store.getSnapshot().queueFailed).toBe(true);
     client.totalsError = new QueueTotalsRetrying();
     await store.refresh(false);
     await settle();
     await store.refresh(false);
     await settle();
-    expect(store.getSnapshot().toasts.filter((t) => t.text === "queue down")).toHaveLength(1);
-    expect(store.getSnapshot().toasts.filter((t) => t.text.includes("waiting to retry"))).toHaveLength(0);
-    // Recovery clears the latch, so the next failure shows again.
+    expect(store.getSnapshot().notices).toEqual({});
     client.totalsError = null;
     await store.refresh(false);
     await settle();
@@ -148,7 +143,8 @@ describe("the store's house panel state", () => {
     client.totalsError = new Error("queue down");
     await store.refresh(false);
     await settle();
-    expect(store.getSnapshot().toasts.filter((t) => t.text === "queue down")).toHaveLength(2);
+    expect(store.getSnapshot().queueFailed).toBe(true);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 
   it("starts no house reads once the session has stopped", async () => {
@@ -177,7 +173,7 @@ describe("the store's house panel state", () => {
     expect(store.getSnapshot()).toMatchObject({ houseStateStatus: "read", houseParams: { seq: null, profitFeeBps: 1000 } });
   });
 
-  it("reports a failed read once and shows the panels as waiting, then reads on recovery", async () => {
+  it("says the first read failed on the panels, with no notice, keeps what a later failure finds, and reads on recovery", async () => {
     const { client, store } = setup();
     client.houseStateError = new Error("house state down");
     store.start(0);
@@ -185,8 +181,8 @@ describe("the store's house panel state", () => {
     await store.refresh(false);
     await settle();
     const state = store.getSnapshot();
-    expect(state.toasts.filter((t) => t.text === "house state down")).toHaveLength(1);
-    expect(state).toMatchObject({ houseStateStatus: "pending", houseParams: null, checkpoint: null });
+    expect(state.notices).toEqual({});
+    expect(state).toMatchObject({ houseStateStatus: "failed", houseParams: null, checkpoint: null });
     client.houseStateError = null;
     client.params = PARAMS;
     await store.refresh(false);
@@ -195,10 +191,11 @@ describe("the store's house panel state", () => {
     client.houseStateError = new Error("house state down");
     await store.refresh(false);
     await settle();
-    expect(store.getSnapshot().toasts.filter((t) => t.text === "house state down")).toHaveLength(2); // recovery cleared the latch
+    expect(store.getSnapshot().notices).toEqual({});
+    expect(store.getSnapshot().houseStateStatus).toBe("read");
   });
 
-  it("shows a node that predates the route as not available, with no toast and no failure", async () => {
+  it("shows a node that predates the route as not available, with no notice and no failure", async () => {
     const { client, store } = setup();
     client.unavailable = true;
     client.params = PARAMS;
@@ -208,7 +205,7 @@ describe("the store's house panel state", () => {
     await settle();
     const state = store.getSnapshot();
     expect(state).toMatchObject({ houseStateStatus: "unavailable", houseParams: null, checkpoint: null, houseReady: true });
-    expect(state.toasts).toHaveLength(0);
+    expect(state.notices).toEqual({});
     expect(state.withdrawalTotals).not.toBeNull(); // the rest of the page still reads
   });
 
@@ -223,7 +220,8 @@ describe("the store's house panel state", () => {
     expect(state.houseParams).toEqual(PARAMS);
     expect(state.checkpoint).toEqual(CHECKPOINT);
     expect(state.withdrawalTotals).toBeNull();
-    expect(state.toasts.some((t) => t.text === "queue unavailable")).toBe(true);
+    expect(state.queueFailed).toBe(true);
+    expect(state.notices).toEqual({});
   });
 });
 

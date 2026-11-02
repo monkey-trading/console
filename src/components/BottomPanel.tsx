@@ -8,6 +8,7 @@ import { formatClock } from "@/lib/time";
 
 import { useConsole } from "./ConsoleProvider";
 import { HistoryList } from "./HistoryList";
+import { Notice } from "./Notice";
 import { OrdersView } from "./OrdersView";
 import { PnlLedger } from "./PnlLedger";
 import { PositionsView } from "./PositionsView";
@@ -38,6 +39,7 @@ export function BottomPanel() {
   const counts: Partial<Record<Tab, number>> = { positions: account?.positions.length, orders: account?.orders.length };
   return (
     <section aria-label="Account activity" className="flex min-h-80 min-w-0 flex-1 shrink-0 flex-col border-t border-line lg:h-60 lg:min-h-0 lg:flex-none">
+      <div className="px-4 has-[p]:pb-2"><Notice surface="accountRead" /></div>
       <div role="tablist" aria-label="Account panels" className="grid grid-cols-3 border-b border-line sm:grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] lg:flex lg:flex-wrap lg:gap-x-1 lg:px-2">
         {TABS.map((t) => (
           <button key={t} type="button" role="tab" id={`${id}-${t}`} aria-selected={tab === t} aria-controls={`${id}-panel`} onClick={() => setTab(t)}

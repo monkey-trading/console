@@ -10,10 +10,10 @@ import { EngineError, type ActionResult } from "../engine/client";
 import type { Terms, TypedRequest } from "../engine/eip712";
 import type { RequestAuth } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
-import { describeReject } from "../messages";
 import { authorizeBrowser, liveSessionKey } from "./session";
 import { openSetup } from "./setup";
 import { DISCONNECTED, errorText, MAY_HAVE_RUN, mayHaveRun, notBusy, REQUEST_TTL_MS, signed, type OnNonceTaken, type Outcome, usableWallet, wentOut } from "./signing";
+import type { NoticeSurface } from "./state";
 import type { ConsoleStore } from "./store";
 import { KEY_REFUSED, sessionEnded } from "./wallet-session";
 
@@ -35,23 +35,22 @@ function nonceLostInLog(result: ActionResult): number | null {
  */
 export async function sessionSigned(
   store: ConsoleStore,
+  surface: NoticeSurface,
   summary: string,
   build: (terms: Terms, account: string) => TypedRequest,
   send: (auth: RequestAuth, wallet: Wallet) => Promise<ActionResult>,
   onNonceTaken: OnNonceTaken,
 ): Promise<Outcome> {
-  const wallet = usableWallet(store, "sign");
+  store.clearNotice(surface);
+  const wallet = usableWallet(store, "sign", surface);
   if (!wallet) return { ok: false };
   const key = liveSessionKey(store);
   if (key === null) {
-    const refusal = store.getSnapshot().sessionRefusal;
-    if (refusal !== null) {
-      store.toast("info", `${describeReject(refusal)} This request will ask your wallet instead.`);
-      return signed(store, summary, build, send, onNonceTaken);
-    }
+    // The ticket's note already says why a refused registration sends each request through the wallet.
+    if (store.getSnapshot().sessionRefusal !== null) return signed(store, surface, summary, build, send, onNonceTaken);
     // An undeclared wallet starts with the popup. A declared one is asked for the signature itself, and presses again.
     if (store.getSnapshot().eligibility === null) openSetup(store);
-    else if (await authorizeBrowser(store)) store.toast("ok", "This browser can trade now. Send the request again.");
+    else if (await authorizeBrowser(store, surface)) store.notify(surface, "This browser can trade now. Send the request again.", "info");
     return { ok: false };
   }
   store.patch({ busy: true });
@@ -86,17 +85,17 @@ export async function sessionSigned(
     if (keyDied(error)) {
       // Only the key that signed has died. The connection may have ended, or another tab's newer key been adopted, while the answer came.
       if (store.liveWallet === wallet && store.sessionKey?.address === key.address) sessionEnded(store, KEY_REFUSED);
-      else if (store.liveWallet === wallet) store.toast("error", "This browser's trading authorization changed while the request was on its way, and the node refused it. Try again.");
+      else if (store.liveWallet === wallet) store.notify(surface, "This browser's trading authorization changed while the request was on its way, and the node refused it. Try again.");
       return { ok: false };
     }
     if (error instanceof EngineError && error.status === 429) {
-      store.toast("error", "The node is limiting requests; try again in a moment.");
+      store.notify(surface, "The node is limiting requests; try again in a moment.");
       return { ok: false };
     }
     if (store.noteAccess(error)) return { ok: false };
     // A sent request the node refused, left unanswered, or answered unverifiably may still have run: read the account first.
     if (left) await store.refresh(true);
-    store.toast("error", `${errorText(error)}${left && mayHaveRun(error) ? MAY_HAVE_RUN : ""}`);
+    store.notify(surface, `${errorText(error)}${left && mayHaveRun(error) ? MAY_HAVE_RUN : ""}`);
     return { ok: false };
   } finally {
     notBusy(store, wallet);

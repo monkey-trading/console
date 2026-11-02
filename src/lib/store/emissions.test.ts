@@ -79,36 +79,16 @@ describe("checkEmissionsClaimed", () => {
     expect(store.getSnapshot().emissionsVault).toEqual({ claimed: 7n * MONKEY_UNIT, latestSeq: 40 });
   });
 
-  it("refuses the read on another chain, reports it once, and clears the latch when that wallet reads cleanly", async () => {
+  it("stays silent when the read is refused on another chain, and reads again once the wallet is back", async () => {
     const { provider, store } = await connected({ chainId: 1, emissionsClaimed: 7n * MONKEY_UNIT, latestSeq: 40 });
     store.patch({ entitlement: proof(9n * MONKEY_UNIT) });
     await checkEmissionsClaimed(store);
     expect(store.getSnapshot().emissionsVault).toBeNull();
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The vault's MONKEY record could not be read: your wallet is on chain 1, not chain 31337");
-    // The effect asks again on the next refresh; the same failure is not shown twice.
-    await checkEmissionsClaimed(store);
-    expect(store.getSnapshot().toasts.filter((t) => t.text.includes("MONKEY record could not be read"))).toHaveLength(1);
-    // The same wallet back on the chain reads cleanly; the latch clears, so a later failure shows again.
+    expect(store.getSnapshot().notices).toEqual({});
     provider.chainId = 31337;
     await checkEmissionsClaimed(store);
     expect(store.getSnapshot().emissionsVault).toEqual({ claimed: 7n * MONKEY_UNIT, latestSeq: 40 });
-    provider.chainId = 1;
-    await checkEmissionsClaimed(store);
-    expect(store.getSnapshot().toasts.filter((t) => t.text.includes("MONKEY record could not be read"))).toHaveLength(2);
-  });
-
-  it("resets the read latches when the wallet changes, so a new wallet's identical failure is reported", async () => {
-    const { store } = await connected({ chainId: 1, emissionsClaimed: 7n * MONKEY_UNIT, latestSeq: 40 });
-    store.patch({ entitlement: proof(9n * MONKEY_UNIT) });
-    await checkEmissionsClaimed(store); // fails: warms the error latch
-    expect(store.lastEmissionsReadError).not.toBeNull();
-    const shown = () => store.getSnapshot().toasts.filter((t) => t.text.includes("MONKEY record could not be read")).length;
-    expect(shown()).toBe(1);
-    // The wallet changes: neither latch may carry over, and the identical failure toasts anew.
-    store.setWallet({ address: "0x00000000000000000000000000000000000000bb", label: "Other" });
-    expect(store.lastEmissionsReadError).toBeNull();
-    await checkEmissionsClaimed(store);
-    expect(shown()).toBe(2);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 
   it("ignores a failure that lands after the wallet it ran for was replaced", async () => {
@@ -126,7 +106,7 @@ describe("checkEmissionsClaimed", () => {
     store.liveWallet = wallet; // replaced before the read settles
     fail(new Error("your wallet is on chain 1, not chain 31337"));
     await reading;
-    expect(store.getSnapshot().toasts.filter((t) => t.text.includes("MONKEY record could not be read"))).toHaveLength(0);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 });
 
@@ -144,7 +124,7 @@ describe("claimEmissions", () => {
     expect(decoded.functionName).toBe("claimEmissions");
     expect(String(decoded.args[0]).toLowerCase()).toBe(ACCOUNT);
     expect(decoded.args.slice(1)).toEqual([5n * MONKEY_UNIT, []]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The vault minted 3 MONKEY to your wallet.");
+    expect(store.getSnapshot().notices.emissions).toBeUndefined();
     expect(store.getSnapshot().emissionsVault).toBeNull();
     expect(store.getSnapshot().busy).toBe(false);
   });
@@ -165,7 +145,7 @@ describe("claimEmissions", () => {
     expect(decoded.functionName).toBe("claimEmissions");
     // The fresh proof's cumulative entitlement, less the fresh record's claimed: 8 - 2.
     expect(decoded.args.slice(1)).toEqual([8n * MONKEY_UNIT, []]);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The vault minted 6 MONKEY to your wallet.");
+    expect(store.getSnapshot().notices.emissions).toBeUndefined();
   });
 
   it("keeps the waiting state after a bounded number of attempts when the pair never meets", async () => {
@@ -179,12 +159,12 @@ describe("claimEmissions", () => {
     await claimEmissions(store);
     expect(provider.sent).toHaveLength(0);
     expect(proofReads).toBe(3); // bounded: the claim does not spin on a pair that never meets
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The vault's latest checkpoint and the node's latest proof have not met yet; the claim unlocks once they do.");
+    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "The vault's latest checkpoint and the node's latest proof have not met yet; the claim unlocks once they do." });
     // A node that now holds no proof at all says so instead of blaming the lag.
     client.emissions = original;
     client.entitlement = null;
     await claimEmissions(store);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node holds no entitlement proof for this account right now.");
+    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "The node holds no entitlement proof for this account right now." });
   });
 
   it("refuses a claim without a wallet or with a proof for another account, and sends nothing", async () => {
@@ -193,12 +173,12 @@ describe("claimEmissions", () => {
     bare.store.patch({ entitlement: proof(5n * MONKEY_UNIT), emissionsVault: { claimed: 0n, latestSeq: 40 } });
     bare.store.liveWallet = null;
     await claimEmissions(bare.store);
-    expect(bare.store.getSnapshot().toasts.at(-1)?.text).toBe("Connect a wallet first.");
+    expect(bare.store.getSnapshot().notices.emissions).toMatchObject({ tone: "error", text: "Connect a wallet first." });
     const other = await connected();
     other.client.entitlement = { ...proof(5n * MONKEY_UNIT), account: "0x00000000000000000000000000000000000000aa" };
     other.provider.vault.latestSeq = 40;
     await claimEmissions(other.store);
-    expect(other.store.getSnapshot().toasts.at(-1)?.text).toBe("The entitlement proof is for another account.");
+    expect(other.store.getSnapshot().notices.emissions).toMatchObject({ tone: "error", text: "The entitlement proof is for another account." });
     expect(other.provider.sent).toHaveLength(0);
   });
 
@@ -209,12 +189,12 @@ describe("claimEmissions", () => {
     provider.vault.latestSeq = 39;
     await claimEmissions(store);
     expect(provider.sent).toHaveLength(0);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("have not met yet");
+    expect(store.getSnapshot().notices.emissions?.text).toContain("have not met yet");
     // The pair meets but the vault already minted it all: nothing is due.
     provider.vault.latestSeq = 40;
     await claimEmissions(store);
     expect(provider.sent).toHaveLength(0);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("All accrued MONKEY is claimed.");
+    expect(store.getSnapshot().notices.emissions).toBeUndefined();
   });
 
   it("waits on a verdict that may sign, says why, and sends nothing: the transaction would be built from the node's proof", async () => {
@@ -230,7 +210,7 @@ describe("claimEmissions", () => {
       store.patch({ attestation });
       await claimEmissions(store);
       expect(provider.sent).toHaveLength(0);
-      expect(store.getSnapshot().toasts.at(-1)?.text).toBe(`The console will not claim MONKEY: ${why}.`);
+      expect(store.getSnapshot().notices.emissions?.text).toBe(`The console will not claim MONKEY: ${why}.`);
       expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
     }
   });
@@ -243,7 +223,7 @@ describe("claimEmissions", () => {
     };
     await claimEmissions(store);
     expect(provider.sent).toHaveLength(0);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The console will not claim MONKEY: the vault's current release has not been checked.");
+    expect(store.getSnapshot().notices.emissions?.text).toBe("The console will not claim MONKEY: the vault's current release has not been checked.");
   });
 
   it("stands down when the wallet changes while the fresh reads run", async () => {

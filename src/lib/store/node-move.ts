@@ -54,7 +54,7 @@ export async function recheckNode(store: ConsoleStore, follower: Pick<OperatorFo
   try {
     await store.liveWallet?.ensureChain?.();
   } catch (error) {
-    store.toast("error", error instanceof Error ? error.message : "The wallet stayed on another chain.");
+    store.notify("node", error instanceof Error ? error.message : "The wallet stayed on another chain.");
     return;
   }
   await store.deps.client.verify();

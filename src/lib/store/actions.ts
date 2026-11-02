@@ -14,6 +14,7 @@ import { loadAccount } from "./account";
 import { authorizeBrowser, ensureLogin, liveSessionKey } from "./session";
 import { sessionSigned } from "./session-signed";
 import { abandoned, domainOf, errorText, notBusy, noteRegionRefusal, prompting, REQUEST_TTL_MS, signed, usableWallet } from "./signing";
+import type { NoticeSurface } from "./state";
 import type { ConsoleStore } from "./store";
 import { noteDeposit } from "./setup";
 import { readWalletUsdc } from "./wallet-usdc";
@@ -23,16 +24,14 @@ export { REQUEST_TTL_MS, STATEMENTS };
 export { disconnectWallet, storedKeyChanged, walletSessionEnded } from "./wallet-session";
 export { authorizeBrowser } from "./session";
 
-/** Offers to add the deployment's USDC to the wallet that just connected; one small toast when the wallet adds it, silence on a decline or a wallet that cannot. */
-function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
+/** Offers to add the deployment's USDC to the wallet that just connected. The wallet shows its own balance, and a decline or a wallet that cannot needs no word. */
+function offerUsdcImport(wallet: Wallet): void {
   if (wallet.readOnly || wallet.suggestUsdc === undefined) return;
-  void wallet.suggestUsdc().then(
-    (added) => { if (added) store.toast("info", "USDC was added to your wallet, so its balance shows there."); },
-    () => undefined,
-  );
+  void wallet.suggestUsdc().then(() => undefined, () => undefined);
 }
 
 export async function connectWallet(store: ConsoleStore, optionId: string, quiet = false, connected?: Wallet): Promise<boolean> {
+  store.clearNotice("wallet"); // how the last connection ended stays beside the Connect button until the next connect
   try {
     // A previous disconnect's revocation and release run to the end before a new wallet adopts the
     // store, so a WalletConnect relay is never closed under a fresh pairing. The promise stays
@@ -74,7 +73,7 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     await store.deps.client.readChainThrough(wallet.chainReads ?? null);
     // The connection may have ended while the wallet answered: nothing of it is stored or adopted.
     if (store.liveWallet !== wallet) return false;
-    if (!quiet) offerUsdcImport(store, wallet);
+    if (!quiet) offerUsdcImport(wallet);
     // The choice persists only now that the wallet is adopted: a refused connect, quiet or not, leaves storage alone.
     const choice = wallet.topic !== undefined ? { kind: "walletconnect" as const, topic: wallet.topic } : optionId === "injected" ? { kind: "injected" as const } : null;
     if (store.deps.persistence !== undefined && choice !== null) saveChoice(store.deps.persistence, choice);
@@ -87,16 +86,15 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
       return false;
     }
     // The mock's demo account, connected on load, holds a key as a returning trader does. Everything else asks through setup.
-    if (quiet && store.deps.client.signatures === "none") await ensureLogin(store);
+    if (quiet && store.deps.client.signatures === "none") await ensureLogin(store, "wallet");
     void readWalletUsdc(store);
     await loadAccount(store, true);
-    if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);
     // A declared wallet has no popup, so the signature that lets this browser trade is asked for here, but only for a connect the user made.
-    if (!reattached && store.liveWallet === wallet && store.getSnapshot().eligibility !== null && liveSessionKey(store) === null) void authorizeBrowser(store);
+    if (!reattached && store.liveWallet === wallet && store.getSnapshot().eligibility !== null && liveSessionKey(store) === null) void authorizeBrowser(store, "wallet");
     return true;
   } catch (error) {
     // A node that cannot be trusted is reported by the attestation banner and the stream, once; the account read waiting on the same check does not repeat it.
-    if (!store.noteAccess(error) && !(error instanceof UntrustedError)) store.toast("error", error instanceof Error ? error.message : "The wallet did not connect.");
+    if (!store.noteAccess(error) && !(error instanceof UntrustedError)) store.notify("wallet", error instanceof Error ? error.message : "The wallet did not connect.");
     if (!store.getSnapshot().wallet) store.liveWallet = null;
     return false;
   }
@@ -106,35 +104,33 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
 /** Signs and sends the declaration, then reads the account again, so what comes next sees it. True when this connection's declaration was recorded. */
 export async function attestEligibility(store: ConsoleStore, cls: EligibilityClass): Promise<boolean> {
   const wallet = store.liveWallet;
-  const out = await signed(store, `declare "${STATEMENTS[cls]}"`, (t, account) => eligibilityTypedData(domainOf(store), account, cls, t), (auth, wallet) =>
+  const out = await signed(store, "setup", `declare "${STATEMENTS[cls]}"`, (t, account) => eligibilityTypedData(domainOf(store), account, cls, t), (auth, wallet) =>
     store.deps.client.attestEligibility({ account: wallet.address, class: cls, auth }), "sign-again",
   );
   if (!out.ok) return false;
   const refused = out.result.events.find((e) => e.type === "eligibility_rejected");
   // The node screens a declaration in the log: a region it does not serve answers here, not as a 403.
   if (refused && refused.type === "eligibility_rejected") {
-    if (!noteRegionRefusal(store, refused.reason)) store.toast("error", describeReject(refused.reason));
-  } else store.toast("ok", "Eligibility recorded.");
+    if (!noteRegionRefusal(store, refused.reason)) store.notify("setup", describeReject(refused.reason));
+  }
   await store.refresh(true);
   return refused === undefined && store.liveWallet === wallet;
 }
 
 /** Sends a deposit from the wallet to the vault, approving the vault first if needed; the node credits it once it is final. */
-export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void> {
-  const wallet = usableWallet(store, "send a deposit");
+export async function deposit(store: ConsoleStore, amount: Fixed, surface: NoticeSurface = "deposit"): Promise<void> {
+  store.clearNotice(surface);
+  const wallet = usableWallet(store, "send a deposit", surface);
   if (!wallet) return;
   const shown = formatUsdc(amount);
   store.patch({ busy: true });
   try {
-    await prompting(store, wallet, `Confirm in your wallet: deposit ${shown} to the vault (an approval first, if the vault needs one).`, (progress) => wallet.deposit(amount, progress));
-    store.toast("info", store.deps.client.signatures === "none"
-      ? `Deposit of ${shown} sent. It counts as collateral now and can be withdrawn once the vault's transaction is final.`
-      : `Deposit of ${shown} sent. The node sees it a few blocks after it is mined and credits it; it can be withdrawn once the vault's transaction is final.`);
+    await prompting(store, wallet, surface, `Confirm in your wallet: deposit ${shown} to the vault (an approval first, if the vault needs one).`, (progress) => wallet.deposit(amount, progress));
     noteDeposit(store, amount);
     void readWalletUsdc(store, true);
     await store.refresh(true);
   } catch (error) {
-    if (!abandoned(store, wallet, error) && !store.noteAccess(error)) store.toast("error", errorText(error));
+    if (!abandoned(store, wallet, error) && !store.noteAccess(error)) store.notify(surface, errorText(error));
   } finally {
     notBusy(store, wallet);
   }
@@ -146,14 +142,15 @@ export async function deposit(store: ConsoleStore, amount: Fixed): Promise<void>
  * wallet. A pinned RPC that is not Anvil is named, not guessed at, and nothing is minted then. True
  * when the mint went through and this wallet is still the one connected.
  */
-export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy): Promise<boolean> {
+export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy, surface: NoticeSurface = "faucet"): Promise<boolean> {
   if (!faucetAvailable(deploy)) return false;
-  // usableWallet toasts its own reason when it refuses; only an able wallet that cannot mint reaches the toast below.
-  const wallet = usableWallet(store, "fund the wallet");
+  store.clearNotice(surface);
+  // usableWallet says its own reason when it refuses; only an able wallet that cannot mint reaches the notice below.
+  const wallet = usableWallet(store, "fund the wallet", surface);
   if (!wallet) return false;
   const rpcUrl = deploy.rpcUrl;
   if (wallet.fund === undefined || rpcUrl === null) {
-    store.toast("error", "This build's faucet is not available for the connected wallet.");
+    store.notify(surface, "This build's faucet is not available for the connected wallet.");
     return false;
   }
   // Bound to the wallet: calling the method without a receiver unbinds `this` in the provider wallet.
@@ -162,17 +159,16 @@ export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy): Promis
   try {
     const gas = await topUpGas(rpcUrl, wallet.address, postJsonRpc);
     if (!gas.ok) {
-      store.toast("error", gas.notAnvil
+      store.notify(surface, gas.notAnvil
         ? `The build's RPC is not an Anvil node (${gas.detail}), so the faucet cannot fund this wallet.`
         : `The faucet could not top up gas: ${gas.detail}.`);
       return false;
     }
-    await prompting(store, wallet, `Confirm in your wallet: mint ${formatUsdc(FAUCET_USDC)} from the Anvil faucet.`, (progress) => fund(FAUCET_USDC, progress));
-    store.toast("ok", `${formatUsdc(FAUCET_USDC)} minted${gas.toppedUp ? " and the wallet holds 1 ETH for gas" : ""}. Deposit into the vault to trade it.`);
+    await prompting(store, wallet, surface, `Confirm in your wallet: mint ${formatUsdc(FAUCET_USDC)} from the Anvil faucet.`, (progress) => fund(FAUCET_USDC, progress));
     void readWalletUsdc(store, true);
     return store.liveWallet === wallet; // a mint the old wallet finished settles nothing for the connection that came next
   } catch (error) {
-    if (!abandoned(store, wallet, error) && !store.noteAccess(error)) store.toast("error", errorText(error));
+    if (!abandoned(store, wallet, error) && !store.noteAccess(error)) store.notify(surface, errorText(error));
     return false;
   } finally {
     notBusy(store, wallet);
@@ -198,8 +194,9 @@ export interface OrderParams {
 /**
  * Places an order. A market order carries the quote shown to the user and their slippage bound.
  * True when the order filled or rests; false when it was refused, cancelled unfilled, or never reached the node.
+ * A fill or a resting order is the screen's to show; a refusal says why on `surface`, the control that placed it.
  */
-export async function placeOrder(store: ConsoleStore, params: OrderParams): Promise<boolean> {
+export async function placeOrder(store: ConsoleStore, params: OrderParams, surface: NoticeSurface = "ticket"): Promise<boolean> {
   const market = store.getSnapshot().markets.find((m) => m.id === params.market);
   if (!market || params.qty <= 0n) return false;
   const qty = fixedToWire(params.qty);
@@ -210,48 +207,43 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams): Prom
   const order = { client_id: store.id(), market: market.id, side: params.side, qty, kind, reduce_only: params.reduceOnly };
   const at = params.kind.kind === "market" ? `at ${formatFixedPlaces(params.kind.quoted, market.places)}, up to ${params.kind.slippageBps} bps worse` : `${params.kind.kind} at ${formatFixedPlaces(params.kind.price, market.places)}`;
   const summary = `${params.side} ${qty} ${market.symbol} ${at}${params.reduceOnly ? ", reduce only" : ""}`;
-  const out = await sessionSigned(store, summary, (t, account) => orderTypedData(domainOf(store), { ...order, account }, t), (auth, wallet) =>
+  const out = await sessionSigned(store, surface, summary, (t, account) => orderTypedData(domainOf(store), { ...order, account }, t), (auth, wallet) =>
     store.deps.client.placeOrder({ ...order, account: wallet.address, auth }), "report",
   );
   if (!out.ok) return false;
   const rejected = out.result.events.find((e) => e.type === "order_rejected");
   const filled = out.result.events.some((e) => e.type === "fill");
   const cancelled = out.result.events.some((e) => e.type === "order_cancelled");
-  if (rejected && rejected.type === "order_rejected") store.toast("error", describeReject(rejected.reason));
-  else if (filled) store.toast("ok", `Filled: ${summary}.`);
-  else if (cancelled) store.toast("error", "The order was accepted but could not be filled, so it was cancelled.");
-  else store.toast("ok", "Order placed and resting.");
+  if (rejected && rejected.type === "order_rejected") store.notify(surface, describeReject(rejected.reason));
+  else if (!filled && cancelled) store.notify(surface, "The order was accepted but could not be filled, so it was cancelled.");
   await store.refresh(true);
   return rejected === undefined && (filled || !cancelled);
 }
 
 export async function cancelOrder(store: ConsoleStore, orderId: number): Promise<void> {
-  const out = await sessionSigned(store, `cancel order ${orderId}`, (t, account) => cancelTypedData(domainOf(store), { account, order_id: orderId }, t), (auth, wallet) =>
+  const out = await sessionSigned(store, "orders", `cancel order ${orderId}`, (t, account) => cancelTypedData(domainOf(store), { account, order_id: orderId }, t), (auth, wallet) =>
     store.deps.client.cancelOrder({ account: wallet.address, order_id: orderId, auth }), "sign-again",
   );
   if (!out.ok) return;
   const refused = out.result.events.find((e) => e.type === "order_rejected");
-  if (refused && refused.type === "order_rejected") store.toast("error", describeReject(refused.reason));
-  else store.toast("ok", `Order ${orderId} cancelled.`);
+  if (refused && refused.type === "order_rejected") store.notify("orders", describeReject(refused.reason));
   await store.refresh(true);
 }
 
 /** Asks to withdraw `amount`; true when the node took the request, false when it refused it. */
 export async function withdraw(store: ConsoleStore, amount: Fixed): Promise<boolean> {
   const wire = fixedToWire(amount);
-  const out = await signed(store, `withdraw ${wire} USDC`, (t, account) => withdrawalTypedData(domainOf(store), account, wire, t), (auth, wallet) =>
+  const out = await signed(store, "withdraw", `withdraw ${wire} USDC`, (t, account) => withdrawalTypedData(domainOf(store), account, wire, t), (auth, wallet) =>
     store.deps.client.withdraw({ account: wallet.address, amount: wire, auth }), "report",
   );
   if (!out.ok) return false;
   const refused = out.result.events.find((e) => e.type === "withdrawal_rejected");
   if (refused && refused.type === "withdrawal_rejected") {
-    store.toast("error", describeReject(refused.reason));
+    store.notify("withdraw", describeReject(refused.reason));
     await store.refresh(true);
     return false;
   }
-  if (out.result.events.some((e) => e.type === "withdrawal_queued")) store.toast("info", "Withdrawal queued. The vault pays the queue in order as it has liquidity.");
-  // The mock pays an approved withdrawal itself; a live node's needs a claim on the vault.
-  else store.toast("ok", store.deps.client.signatures === "none" ? "Withdrawal approved." : "Withdrawal approved. Its authorization arrives once a checkpoint covers it; then claim it on the vault.");
+  // A queued or approved withdrawal is the queue's and the claims' to show.
   await store.refresh(true);
   return true;
 }

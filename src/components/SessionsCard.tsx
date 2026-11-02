@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { SessionList, type SessionListStatus } from "@/lib/store/session-list";
 
 import { useConsoleValue, useSession } from "./ConsoleProvider";
+import { Notice } from "./Notice";
 import { SessionRow } from "./SessionRow";
 
 /** The sentence a status that shows no list gives, or null when the list shows. */
@@ -58,6 +59,7 @@ export function SessionsCard() {
         {!complete && <p className="mt-3 text-caption leading-relaxed text-amber">The node has recorded too many registrations in the last day to read them all, so this list may be missing some sessions.</p>}
         {watchOnly && keys.length > 0 && <p className="mt-3 text-caption text-fg-3">This account is watched, so only its own wallet can revoke a session.</p>}
       </div>
+      <div className="px-4 sm:px-5"><Notice surface="settings" /></div>
       {keys.length > 0 && status.kind !== "no-wallet" && (
         <ul aria-label="Active sessions" className="mt-4 border-t border-line">
           {keys.map((key) => (

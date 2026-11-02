@@ -119,19 +119,18 @@ export class SessionList {
     if (wallet === null || this.state.revoking !== null) return;
     this.patch({ revoking: address });
     try {
-      const out = await signed(store, `revoke the trading authorization of session key ${shortHex(address)}`, (terms, account) => revokeSessionKeyTypedData(domainOf(store), account, address, terms), (auth, signer) =>
+      const out = await signed(store, "settings", `revoke the trading authorization of session key ${shortHex(address)}`, (terms, account) => revokeSessionKeyTypedData(domainOf(store), account, address, terms), (auth, signer) =>
         store.deps.client.revokeSessionKey({ account: signer.address, session_key: address, auth }), "sign-again");
       if (!out.ok || store.liveWallet !== wallet) return;
       const refused = out.result.events.find((e) => e.type === "session_key_rejected");
       if (refused && refused.type === "session_key_rejected") {
-        store.toast("error", describeReject(refused.reason));
+        store.notify("settings", describeReject(refused.reason));
       } else if (out.result.events.some((e) => e.type === "session_key_revoked")) {
         this.patch({ keys: this.state.keys.filter((k) => k.address !== address.toLowerCase()) });
         revocationFreesSlot(store);
         // Worked out after the signature: a login in another tab may have replaced the key meanwhile, and then only the old one was revoked.
         // The stream's copy of this revocation may already have ended the session, in which case this does nothing.
-        if (store.sessionKey?.address.toLowerCase() === address.toLowerCase()) return sessionEnded(store, "You revoked this browser's trading authorization, so the console disconnected the wallet.");
-        store.toast("ok", `Session key ${shortHex(address)} revoked.`);
+        if (store.sessionKey?.address.toLowerCase() === address.toLowerCase()) return sessionEnded(store, null);
       }
       if (this.mayRead()) void this.read();
     } finally {

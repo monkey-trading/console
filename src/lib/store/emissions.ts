@@ -50,7 +50,7 @@ const CLAIM_PROOF_ATTEMPTS = 3;
 /**
  * Reads the vault's record of the connected account's MONKEY through the wallet's chain provider:
  * what it has minted and its latest posted checkpoint seq. One read per wallet at a time; a failed
- * read is reported once, and the MONKEY page's next wallet read tries it again.
+ * read leaves the record unread, which the card says, and the MONKEY page's next wallet read tries it again.
  */
 export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> {
   const wallet = store.liveWallet;
@@ -60,20 +60,9 @@ export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> 
   try {
     const record = await wallet.emissionsClaimed();
     // The wallet may have changed while the read ran; another account's record is not shown.
-    if (current()) {
-      store.lastEmissionsReadError = null;
-      store.patch({ emissionsVault: record });
-    }
-  } catch (error) {
-    // A failure of a wallet that is no longer connected belongs to that wallet's session, not this one.
-    if (current()) {
-      // The read is asked again on the next refresh, so a failure that keeps repeating is shown once.
-      const message = errorText(error);
-      if (store.lastEmissionsReadError !== message) {
-        store.lastEmissionsReadError = message;
-        store.toast("error", `The vault's MONKEY record could not be read: ${message}`);
-      }
-    }
+    if (current()) store.patch({ emissionsVault: record });
+  } catch {
+    // The card says the vault's record has not been read, and the next refresh asks again.
   } finally {
     if (store.emissionsCheck === wallet) store.emissionsCheck = null;
   }
@@ -85,12 +74,13 @@ export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> 
  * node it has not judged could cost the user a reverted transaction's gas.
  */
 export async function claimEmissions(store: ConsoleStore): Promise<void> {
+  store.clearNotice("emissions");
   const wallet = store.liveWallet;
-  if (!wallet) return store.toast("error", "Connect a wallet first.");
+  if (!wallet) return store.notify("emissions", "Connect a wallet first.");
   // Bound to the wallet: calling the method without a receiver unbinds `this` in the provider wallet.
   const claim = wallet.claimEmissions?.bind(wallet);
   const readRecord = wallet.emissionsClaimed?.bind(wallet);
-  if (claim === undefined || readRecord === undefined) return store.toast("error", "This wallet cannot claim MONKEY.");
+  if (claim === undefined || readRecord === undefined) return store.notify("emissions", "This wallet cannot claim MONKEY.");
   store.patch({ busy: true });
   // Set once the mint has landed: the token offer is made after the claim has finished, so a caller that queues the claim holds the wallet until the offer has been answered too.
   let offered: Wallet | null = null;
@@ -103,40 +93,34 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
       const [record, proof] = await Promise.all([readRecord(), store.deps.client.emissions(wallet.address)]);
       if (store.liveWallet !== wallet) return; // the wallet changed while the reads ran; its claim is not this one's
       store.patch({ entitlement: proof === null ? null : carryAccrued(store.getSnapshot().entitlement, proof), emissionsVault: record });
-      if (proof === null) return store.toast("info", "The node holds no entitlement proof for this account right now.");
+      if (proof === null) return store.notify("emissions", "The node holds no entitlement proof for this account right now.", "info");
       if (proof.seq === record.latestSeq) {
         const due = BigInt(proof.entitled) - record.claimed;
-        if (due <= 0n) return store.toast("info", "All accrued MONKEY is claimed.");
+        if (due <= 0n) return; // the card already says all of it is claimed
         // Checked last: the verdict may have ended while the reads above waited on the wallet.
-        if (usableWallet(store, "claim MONKEY") === null) return;
+        if (usableWallet(store, "claim MONKEY", "emissions") === null) return;
         const amount = formatMonkey(due);
-        await prompting(store, wallet, `Confirm in your wallet: claim ${amount} from the vault.`, (progress) => claim(proof, progress));
-        // The mint belongs to the account that claimed it, which may no longer be the one connected.
-        const after = store.getSnapshot();
-        store.toast("ok", `The vault minted ${amount} to ${after.wallet?.address === wallet.address ? "your wallet" : wallet.address}.`);
+        await prompting(store, wallet, "emissions", `Confirm in your wallet: claim ${amount} from the vault.`, (progress) => claim(proof, progress));
         offered = wallet;
         break;
       }
       if (attempt >= CLAIM_PROOF_ATTEMPTS) {
         // Genuine lag: the card's waiting line stands; say why the claim did not fire.
-        return store.toast("info", "The vault's latest checkpoint and the node's latest proof have not met yet; the claim unlocks once they do.");
+        return store.notify("emissions", "The vault's latest checkpoint and the node's latest proof have not met yet; the claim unlocks once they do.", "info");
       }
     }
   } catch (error) {
-    if (!abandoned(store, wallet, error)) store.toast("error", errorText(error));
+    if (!abandoned(store, wallet, error)) store.notify("emissions", errorText(error));
   } finally {
     // The vault's record changed with the claim, or the reads above refreshed it; the page reads it
     // again once the claim has finished, which settles the claimed-versus-accrued line.
     if (store.liveWallet === wallet) store.patch({ busy: false, emissionsVault: null });
   }
-  if (offered !== null) await offerMonkeyImport(store, offered);
+  if (offered !== null) await offerMonkeyImport(offered);
 }
 
-/** Offers to add the vault's MONKEY to the wallet that just claimed; one small toast when it is added, silence on a decline. */
-function offerMonkeyImport(store: ConsoleStore, wallet: Wallet): Promise<void> {
+/** Offers to add the vault's MONKEY to the wallet that just claimed. The wallet shows its own balance and a decline needs no word. */
+function offerMonkeyImport(wallet: Wallet): Promise<void> {
   if (wallet.readOnly || wallet.suggestMonkey === undefined) return Promise.resolve();
-  return wallet.suggestMonkey().then(
-    (added) => { if (added) store.toast("info", "MONKEY was added to your wallet, so its balance shows there."); },
-    () => undefined,
-  );
+  return wallet.suggestMonkey().then(() => undefined, () => undefined);
 }

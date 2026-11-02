@@ -24,7 +24,7 @@ async function twoTabs() {
   const a = await tab(storage);
   a.client.credited = true;
   await connectWallet(a.store, "injected");
-  await authorizeBrowser(a.store);
+  await authorizeBrowser(a.store, "setup");
   const b = await tab(storage);
   b.client.credited = true;
   await connectWallet(b.store, "injected", true);
@@ -44,7 +44,7 @@ describe("one tab's removal of the shared key", () => {
     storedKeyChanged(b.store, NAME); // the storage event, as the browser fires it in the other tab
     await settle();
     expect(b.store.getSnapshot().wallet).toBeNull();
-    expect(b.store.getSnapshot().toasts.at(-1)?.text).toBe("This browser's trading authorization ended in another tab, so your wallet was disconnected here too. Connect again to renew it.");
+    expect(b.store.getSnapshot().notices.wallet?.text).toBe("This browser's trading authorization ended in another tab, so your wallet was disconnected here too. Connect again to renew it.");
     expect(signatures(b.provider)).toEqual([]);
     expect(b.client.posted).toEqual([]);
   });
@@ -64,7 +64,7 @@ describe("one tab's removal of the shared key", () => {
     storedKeyChanged(b.store, NAME);
     expect(b.store.getSnapshot().wallet?.address).toBe(ACCOUNT);
     expect(liveSessionKey(b.store)?.address).toBe(newer.address);
-    expect(b.store.getSnapshot().toasts).toEqual([]);
+    expect(b.store.getSnapshot().notices).toEqual({});
   });
 
   it("keeps a tab that has since stored a newer key when a whole-storage clear event runs late", async () => {
@@ -191,7 +191,7 @@ describe("a refusal of a key another tab has since replaced", () => {
     expect(a.store.getSnapshot().wallet?.address).toBe(ACCOUNT);
     expect(liveSessionKey(a.store)?.address).toBe(newer.address);
     expect(JSON.parse(storage.held.get(NAME) ?? "{}")).toMatchObject({ address: newer.address });
-    expect(a.store.getSnapshot().toasts.at(-1)?.text).toContain("Try again.");
+    expect(a.store.getSnapshot().notices.ticket?.text).toContain("Try again.");
   });
 });
 
@@ -218,7 +218,7 @@ describe("the race for the shared key's nonce", () => {
     orders.b.client.answer = () => lost;
     await placeOrder(orders.b.store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
     expect(orders.b.client.posted.filter((p) => p.route === "order")).toHaveLength(1);
-    expect(orders.b.store.getSnapshot().toasts.at(-1)?.text).toBe("The request was out of order. Try again.");
+    expect(orders.b.store.getSnapshot().notices.ticket?.text).toBe("The request was out of order. Try again.");
   });
 
   it("reports an order and never sends it again, since a copy may have run, and stays connected", async () => {
@@ -226,7 +226,7 @@ describe("the race for the shared key's nonce", () => {
     b.client.answer = () => { throw new EngineError(409, "invalid nonce", { kind: "invalid_nonce", expected: 5 }); };
     expect(await placeOrder(b.store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false })).toBe(false);
     expect(b.client.posted.filter((p) => p.route === "order")).toHaveLength(1);
-    expect(b.store.getSnapshot().toasts.at(-1)?.text).toContain("had already used nonce 4");
+    expect(b.store.getSnapshot().notices.ticket?.text).toContain("had already used nonce 4");
     expect(b.store.getSnapshot().wallet?.address).toBe(ACCOUNT);
     expect(liveSessionKey(b.store)).not.toBeNull();
   });

@@ -7,8 +7,8 @@ import { awaitsTrust } from "./signing";
 
 /**
  * Reads the house's parameters and checkpoint from the node into the store. Called on every
- * refresh, like the markets and house reads; a failure is reported once, deduplicated like the
- * queue's. A node that predates the route answers null: the panels say so, nothing is reported, and
+ * refresh, like the markets and house reads; a failure says nothing here, the panels wait for the next
+ * read. A node that predates the route answers null: the panels say so, and
  * the route is not asked again until the page reopens, the node restarts or `ROUTE_ABSENT_MS` passes.
  * Resolves true when the read succeeded.
  */
@@ -26,7 +26,9 @@ export function readHouseState(store: ConsoleStore): Promise<boolean> {
       return true;
     },
     (error: unknown) => {
-      report(store, error, "state");
+      store.noteAccess(error);
+      // Until a read has landed the panels would wait for ever; they say it failed, and the next read tries again.
+      if (!awaitsTrust(error) && store.getSnapshot().houseStateStatus === "pending") store.patch({ houseStateStatus: "failed" });
       return false;
     },
   );
@@ -40,7 +42,7 @@ export function readHouseQueue(store: ConsoleStore): Promise<boolean> {
       return true;
     },
     (error: unknown) => {
-      report(store, error, "queue");
+      if (!(error instanceof QueueTotalsRetrying)) store.noteAccess(error);
       store.patch({ queueFailed: true });
       return false;
     },
@@ -63,36 +65,18 @@ export function openHousePanel(store: ConsoleStore): () => void {
 /**
  * Starts the house panel's reads without awaiting them, so a slow queue walk never holds up the
  * next market or account read. The house state read and the queue walk guard themselves separately, so a
- * slow walk cannot delay newer parameters or checkpoints; at most one of each runs at a time. The
- * failure latch clears only when a round of reads recovers, so a failure that repeats on every
- * refresh is shown once.
+ * slow walk cannot delay newer parameters or checkpoints; at most one of each runs at a time.
  */
 export function readHousePanelSoon(store: ConsoleStore): void {
   if (store.stopped || !store.housePanelOpen) return;
   if (store.houseRead === null) {
-    store.houseRead = readHouseState(store).then((ok) => {
-      if (ok) store.lastHouseReadError = null;
+    store.houseRead = readHouseState(store).then(() => {
       store.houseRead = null;
     });
   }
   if (store.queueRead === null) {
-    store.queueRead = readHouseQueue(store).then((ok) => {
-      if (ok) store.lastQueueReadError = null;
+    store.queueRead = readHouseQueue(store).then(() => {
       store.queueRead = null;
     });
   }
-}
-
-/**
- * Reports one house panel read failure, deduplicated so a failure that repeats on every refresh is
- * shown once. The state read and the queue walk keep their own latches, cleared only when that read
- * recovers. A backoff wait is not a new failure: the walk's original rejection stays latched, so a
- * persistent outage toasts once and the wait's own message never alternates with it.
- */
-function report(store: ConsoleStore, error: unknown, which: "state" | "queue"): void {
-  if (error instanceof QueueTotalsRetrying || awaitsTrust(error)) return;
-  const message = error instanceof Error ? error.message : "The node did not answer the house panel's reads.";
-  const latch = which === "state" ? "lastHouseReadError" : "lastQueueReadError";
-  if (!store.noteAccess(error) && message !== store[latch]) store.toast("error", message);
-  store[latch] = message;
 }

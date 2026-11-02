@@ -10,6 +10,7 @@ import { formatStamp } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
 
 import { useConsole, useSession } from "./ConsoleProvider";
+import { Notice } from "./Notice";
 import { useReadOnlyNote } from "./SignGate";
 
 const BUTTON = "mt-3 min-h-11 w-full rounded border border-glow bg-glow/10 px-3 py-2 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 lg:min-h-0";
@@ -46,6 +47,8 @@ export function Payouts() {
     <section aria-labelledby="payouts-title" className="p-4">
       <h4 ref={heading} id="payouts-title" tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">Claims on the vault</h4>
       {readOnly.note}
+      <Notice surface="payoutReads" />
+      <Notice surface="payoutVault" />
       {payouts.length === 0 ? (
         <p className="mt-3 text-caption text-fg-3">{state.wallet ? "No approved withdrawals yet." : "Connect a wallet to see your withdrawals."}</p>
       ) : (
@@ -53,6 +56,7 @@ export function Payouts() {
           {payouts.map((payout) => <PayoutRow key={payout.nonce} payout={payout} idle={idle} signs={!readOnly.readOnly} describedBy={readOnly.describedBy} problem={state.payoutsProblem} act={act} />)}
         </ul>
       )}
+      <Notice surface="payouts" />
       {state.approvalsNext !== null && (
         <button type="button" aria-disabled={!idle} onClick={() => act(() => loadApprovals(store, true))} className={BUTTON}>Load older withdrawals</button>
       )}

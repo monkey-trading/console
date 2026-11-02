@@ -12,6 +12,7 @@ import { formatClock } from "@/lib/time";
 import { useConsole, useSession } from "./ConsoleProvider";
 import { LogoMark } from "./Logo";
 import { MockControls } from "./MockControls";
+import { Notice } from "./Notice";
 import { WalletButton } from "./WalletButton";
 
 const usd = (value: Fixed) => `$${formatFixedPlaces(value, 2)}`;
@@ -66,6 +67,8 @@ export function TopBar() {
         </dl>
         <WalletButton />
       </div>
+      {/* How a connection ended, and what the wallet is asked while one closes, sit beside the Connect button; the row takes room only while there is something to say. */}
+      <div className="hidden basis-full text-right has-[p]:block"><Notice surface="wallet" /></div>
     </header>
   );
 }

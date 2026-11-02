@@ -1,8 +1,8 @@
 "use client";
 
-/** The body of the setup popup's current step. A step that fails or is declined stays on screen, with the reason in the toast over it. */
+/** The body of the setup popup's current step. A step that fails or is declined stays on screen, with the reason under its button. */
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { FAUCET_USDC } from "@/lib/engine/faucet";
 import type { EligibilityClass } from "@/lib/engine/types";
@@ -13,6 +13,7 @@ import { formatUsdc } from "@/lib/vault";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { DepositForm } from "./DepositForm";
+import { Notice } from "./Notice";
 import { SessionRefusalNote } from "./SessionRefusalNote";
 import { useSignGate } from "./SignGate";
 
@@ -23,6 +24,9 @@ const SECONDARY = "min-h-11 rounded border border-line-2 px-4 py-2.5 text-captio
 
 /** The current step's text and controls. */
 export function SetupSteps({ step }: { step: SetupStep }) {
+  const { store } = useSession();
+  // A step's failure belongs to that step: the next one starts clean.
+  useEffect(() => store.clearNotice("setup"), [store, step]);
   switch (step) {
     case "fund": return <FundStep />;
     case "declare": return <DeclareStep />;
@@ -45,10 +49,11 @@ function FundStep() {
     <>
       <p className={NOTE}>Mint {formatUsdc(FAUCET_USDC)} to this wallet (mock tokens) and top its gas up to 1 ETH. Dev builds only.</p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" aria-disabled={!able} aria-describedby={gate.describedBy} onClick={() => { if (able) void fundWithAnvil(store, deploy).then((funded) => { if (funded) settleFund(store, "minted"); }); }} className={PRIMARY}>{busy ? "Waiting for your wallet…" : "Fund with Anvil"}</button>
+        <button type="button" aria-disabled={!able} aria-describedby={gate.describedBy} onClick={() => { if (able) void fundWithAnvil(store, deploy, "setup").then((funded) => { if (funded) settleFund(store, "minted"); }); }} className={PRIMARY}>{busy ? "Waiting for your wallet…" : "Fund with Anvil"}</button>
         <button type="button" onClick={() => settleFund(store, "skipped")} className={SECONDARY}>Skip</button>
       </div>
       {gate.note}
+      <Notice surface="setup" />
     </>
   );
 }
@@ -71,6 +76,7 @@ function DeclareStep() {
       </fieldset>
       <button type="submit" aria-disabled={!able} aria-describedby={gate.describedBy} className={`mt-4 ${PRIMARY}`}>{busy ? "Waiting for your wallet…" : "Sign the declaration"}</button>
       {gate.note}
+      <Notice surface="setup" />
     </form>
   );
 }
@@ -84,8 +90,9 @@ function AuthorizeStep() {
   return (
     <>
       <p className={NOTE}>One wallet signature lets this browser place and cancel orders for 24 hours with no more prompts. It can&apos;t move funds: deposits, withdrawals and claims still ask your wallet.</p>
-      <button type="button" aria-disabled={!able} aria-describedby={gate.describedBy} onClick={() => { if (able) void authorizeBrowser(store); }} className={`mt-4 ${PRIMARY}`}>{busy ? "Waiting for your wallet…" : "Authorize this browser"}</button>
+      <button type="button" aria-disabled={!able} aria-describedby={gate.describedBy} onClick={() => { if (able) void authorizeBrowser(store, "setup"); }} className={`mt-4 ${PRIMARY}`}>{busy ? "Waiting for your wallet…" : "Authorize this browser"}</button>
       {gate.note}
+      <Notice surface="setup" />
       <SessionRefusalNote onNavigate={() => dismissSetup(store)} />
     </>
   );

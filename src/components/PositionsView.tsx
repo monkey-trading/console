@@ -15,6 +15,7 @@ import { previewTicket, unrealisedPnl } from "@/lib/ticket";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
+import { Notice } from "./Notice";
 import { useReadOnlyNote } from "./SignGate";
 import { useConfirmWindow } from "./use-confirm-window";
 import { usePrefs } from "./use-prefs";
@@ -28,7 +29,7 @@ const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-g
 const CLOSE_SLIPPAGE_BPS = 25;
 
 export function PositionsView() {
-  const { account, markets, busy, signatures, quotes, house, quoted: asked } = useConsole();
+  const { account, markets, busy, signatures, quotes, house, quoted: asked, notices } = useConsole();
   const { store } = useSession();
   const id = useId();
   const readOnly = useReadOnlyNote(id, "Close");
@@ -52,7 +53,7 @@ export function PositionsView() {
     const close = (event: { currentTarget: HTMLElement }) => {
       if (quoted === null) return;
       keepFocus(event.currentTarget);
-      void placeOrder(store, { market: p.market, side, qty, kind: { kind: "market", quoted, slippageBps }, reduceOnly: true });
+      void placeOrder(store, { market: p.market, side, qty, kind: { kind: "market", quoted, slippageBps }, reduceOnly: true }, "positions");
     };
     return {
       key: p.market,
@@ -80,7 +81,9 @@ export function PositionsView() {
   // The window confirms the list it was armed for: when the markets Close all would send change, it closes and the next press arms again.
   const listed = targetsKey(targets);
   useEffect(() => cancel(), [listed, cancel]);
-  if (positions.length === 0) return <p className="px-4 py-6 text-caption text-fg-3">No open positions.</p>;
+  // An account that could not be read (the panel above says so) shows no positions, rather than none as if it had none.
+  if (account === null && notices.accountRead !== undefined) return <p className="px-4 py-6 text-caption text-fg-3">Your positions show once your account can be read.</p>;
+  if (positions.length === 0) return <><p className="px-4 py-6 text-caption text-fg-3">No open positions.</p><div className="px-4 has-[p]:pb-3"><Notice surface="positions" /></div></>;
   const closeEverything = (event: { currentTarget: HTMLElement }) => {
     const press = pressBatch(confirmBatch, state(), count);
     if (press === "arm") arm();
@@ -103,6 +106,7 @@ export function PositionsView() {
         <p role="status" className="sr-only">{confirming ? `Press again within five seconds to close ${count} ${count === 1 ? "position" : "positions"}.` : ""}</p>
         {leftOutNote !== null && <p id={noteId} className="text-label leading-relaxed text-fg-3">{leftOutNote}</p>}
       </div>
+      <div className="px-4 has-[p]:border-b has-[p]:border-line has-[p]:pb-3"><Notice surface="positions" /></div>
       <ul className="lg:hidden">
         {rows.map((r) => (
           <li key={r.key} className="border-b border-line px-4 py-3 text-caption last:border-b-0">

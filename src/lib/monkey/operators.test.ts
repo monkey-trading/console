@@ -266,11 +266,11 @@ describe("OperatorReads", () => {
     await flush();
     expect(operators.getSnapshot().table.value?.candidates[0]?.votes).toBe(before.votes + staked);
     expect(operators.getSnapshot().chosen).toEqual({ status: "ready", value: before.address, message: null });
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("Your stake votes for alpha from the next close.");
+    expect(store.getSnapshot().notices.operator).toBeUndefined();
     expect(await delegateStake(panel, operators, NO_CANDIDATE, "")).toBe(true);
     await flush();
     expect(operators.getSnapshot().chosen.value).toBeNull();
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("Your stake abstains from now on.");
+    expect(store.getSnapshot().notices.operator).toBeUndefined();
     stop();
   });
 
@@ -280,7 +280,7 @@ describe("OperatorReads", () => {
     if (wallet === null) throw new Error("the kit connects a wallet");
     wallet.readOnly = true;
     expect(await delegateStake(panel, operators, NO_CANDIDATE, "")).toBe(false);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("This wallet cannot send transactions.");
+    expect(store.getSnapshot().notices.operator).toMatchObject({ tone: "error", text: "This wallet cannot send transactions." });
     stop();
   });
 });

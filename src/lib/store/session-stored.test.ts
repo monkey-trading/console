@@ -27,13 +27,13 @@ describe("storing the key", () => {
     const { client, store } = await tab(storage);
     await connectWallet(store, "injected");
     client.answer = () => { throw new EngineError(0, "The node did not answer."); };
-    await authorizeBrowser(store);
+    await authorizeBrowser(store, "setup");
     expect(storage.held.has(NAME)).toBe(false); // a registration whose answer never came
     client.answer = () => ({ seq: 1, events: [{ type: "session_key_rejected", account: ACCOUNT, session_key: "0x0", reason: { kind: "too_many_session_keys", max: 10 } }] });
-    await authorizeBrowser(store);
+    await authorizeBrowser(store, "setup");
     expect(storage.held.has(NAME)).toBe(false); // a refused one
     client.answer = (posted) => ({ seq: 1, events: [{ type: "session_key_registered", account: ACCOUNT, session_key: (posted.body as { session_key: string }).session_key, expires_at: EXPIRES }] });
-    await authorizeBrowser(store);
+    await authorizeBrowser(store, "setup");
     const key = liveSessionKey(store);
     if (key === null) throw new Error("no key");
     expect(JSON.parse(storage.held.get(NAME) ?? "{}")).toEqual({ privateKey: key.exportPrivateKey(), address: key.address, account: ACCOUNT, chainId: vectors.chain_id, vault: VAULT.toLowerCase(), expiresAt: EXPIRES });
@@ -99,7 +99,7 @@ describe("a reload or a new tab", () => {
     const denied = { ...memoryStorage(), setItem(): void { throw new Error("denied"); }, getItem(): string { throw new Error("denied"); } };
     const { store } = await tab(denied);
     await connectWallet(store, "injected");
-    expect(await authorizeBrowser(store)).toBe(true);
+    expect(await authorizeBrowser(store, "setup")).toBe(true);
     expect(liveSessionKey(store)).not.toBeNull();
     const reloaded = await tab(denied);
     await connectWallet(reloaded.store, "injected", true);
@@ -130,7 +130,7 @@ describe("leaving", () => {
     expect(storage.held.has(NAME)).toBe(false);
     await settle();
     expect(signatures(provider)).toHaveLength(1); // the registration's alone: the declined revocation never reached the provider
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The trading authorization was not revoked; it expires on its own.");
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ text: "The trading authorization was not revoked; it expires on its own." });
   });
 
   it("revokes a key adopted from storage through a WalletConnect pairing before it ends that pairing", async () => {

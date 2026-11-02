@@ -6,6 +6,7 @@ import { formatMonkey, formatRate } from "@/lib/format";
 import { completeUnstake, stakeMonkey, startUnstake } from "@/lib/monkey/actions";
 import { formatDuration, shareBps } from "@/lib/monkey/figures";
 
+import { Notice } from "../Notice";
 import { AmountForm } from "./AmountForm";
 import { Card, focusHeading } from "./Card";
 import { ReadNote } from "./ReadNote";
@@ -57,6 +58,7 @@ export function StakePanel() {
           <ReadNote read={figures.position} />
           <AmountForm field="stake" label="Stake" action="Stake" max={position.balance} maxLabel="your wallet balance" disabled={busy || settling} onSubmit={(amount, onLanded) => stakeMonkey(panel, amount, onLanded)} />
           <AmountForm field="unstake" label="Unstake" action="Start unstake" max={position.staked} maxLabel="your stake" disabled={busy || settling} onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)} />
+          <Notice surface="stake" />
           <p className={NOTE}>
             {staking === null ? "An unstake waits out a cooldown before it can be completed." : `An unstake waits ${formatDuration(staking.cooldown_ms)} before it can be completed.`} Until then it still counts as staked, so it stays in your share.
           </p>

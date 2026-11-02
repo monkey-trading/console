@@ -4,12 +4,11 @@ import type { ReactNode } from "react";
 
 import { AccessGate } from "./AccessGate";
 import { AttestationBanner } from "./AttestationBanner";
+import { PageNotices } from "./PageNotices";
 import { RiskStrip } from "./RiskStrip";
 import { SetupDialog } from "./SetupDialog";
-import { Toasts } from "./Toasts";
 import { TopBar } from "./TopBar";
 import { WalletConnectPairing } from "./WalletConnectPairing";
-import { WalletPrompt } from "./WalletPrompt";
 
 /** Fills the viewport on large screens and scrolls as one page on small ones. */
 export function Shell({ children }: { children: ReactNode }) {
@@ -20,14 +19,13 @@ export function Shell({ children }: { children: ReactNode }) {
       </a>
       <TopBar />
       <AttestationBanner />
+      <PageNotices />
       <main id="main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col outline-none">
         <AccessGate>{children}</AccessGate>
       </main>
       <RiskStrip />
       <WalletConnectPairing />
       <SetupDialog />
-      <Toasts />
-      <WalletPrompt />
     </div>
   );
 }

@@ -30,7 +30,7 @@ describe("the session-key login", () => {
   it("generates a key, asks the wallet for the one registration signature, and keeps the key out of the snapshot", async () => {
     const { client, provider, store } = await connected();
     expect(liveSessionKey(store)).toBeNull();
-    expect(await loginSession(store)).toBe(true);
+    expect(await loginSession(store, "setup")).toBe(true);
     const request = registrationOf(client);
     const key = store.sessionKey;
     if (key === null) throw new Error("no session key after login");
@@ -45,7 +45,7 @@ describe("the session-key login", () => {
 
   it("treats the key as dead once its registration expires by the node's clock", async () => {
     const { store } = await connected();
-    await loginSession(store);
+    await loginSession(store, "setup");
     store.patch({ now: NODE_TIME + SESSION_KEY_TTL_MS });
     expect(liveSessionKey(store)).toBeNull();
   });
@@ -53,31 +53,31 @@ describe("the session-key login", () => {
   it("shows the node's refusal when the registration is refused, and keeps no key", async () => {
     const { client, store } = await connected();
     client.answer = () => ({ seq: 1, events: [{ type: "session_key_rejected", account: ACCOUNT, session_key: "0x0000000000000000000000000000000000000abc", reason: { kind: "session_key_unsupported" } }] });
-    expect(await loginSession(store)).toBe(false);
+    expect(await loginSession(store, "wallet")).toBe(false);
     expect(liveSessionKey(store)).toBeNull(); // the candidate stays for the connection's next attempt; nothing is authorized
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("This node does not support session keys yet.");
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "error", text: "This node does not support session keys yet." });
   });
 
   it("says why a node refuses a registration before the log, and keeps no key", async () => {
     const { client, store } = await connected();
     client.answer = () => { throw new EngineError(403, "a never-credited account must declare first"); };
-    expect(await loginSession(store)).toBe(false);
+    expect(await loginSession(store, "wallet")).toBe(false);
     expect(liveSessionKey(store)).toBeNull();
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "error", text: "a never-credited account must declare first" });
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "error", text: "a never-credited account must declare first" });
   });
 
   it("tells the user when they decline the login signature, and keeps no key", async () => {
     const { store } = await connected({ fail: { eth_signTypedData_v4: { code: 4001, message: "User rejected" } } });
-    expect(await loginSession(store)).toBe(false);
+    expect(await loginSession(store, "wallet")).toBe(false);
     expect(liveSessionKey(store)).toBeNull();
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("You declined to sign in your wallet.");
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "error", text: "You declined to sign in your wallet." });
   });
 
   it("revokes the key with one wallet signature at disconnect, then ends the wallet's session", async () => {
     const { client, provider, store, wallet } = await connected();
     let ended = 0;
     wallet.disconnect = async () => void (ended += 1);
-    await loginSession(store);
+    await loginSession(store, "setup");
     const key = store.sessionKey;
     if (key === null) throw new Error("no session key after login");
     disconnectWallet(store);
@@ -91,13 +91,13 @@ describe("the session-key login", () => {
     const typed = revokeSessionKeyTypedData(DOMAIN, revocation.account, revocation.session_key, { nonce: revocation.auth.nonce, expiresAt: revocation.auth.expires_at });
     expect(await signerOf(typed, revocation.auth.signature)).toBe(ACCOUNT);
     expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2);
-    expect(store.getSnapshot().toasts.some((t) => t.text === "The trading authorization was not revoked; it expires on its own.")).toBe(false);
+    expect(store.getSnapshot().notices.wallet).toBeUndefined();
   });
 
   it("skips the revocation prompt when the wallet app already ended the session", async () => {
     const { client, store } = await connected();
     store.liveWallet = { address: ACCOUNT, label: "WalletConnect", sign: async () => "0x", deposit: async () => "0x0", claim: async () => "0x0" };
-    await loginSession(store);
+    await loginSession(store, "setup");
     expect(liveSessionKey(store)).not.toBeNull(); // the login signed once
     walletSessionEnded(store, "topic-1"); // as the WalletConnect-ended path does
     await settle();
@@ -109,24 +109,24 @@ describe("the session-key login", () => {
     const { client, store, wallet } = await connected();
     let ended = 0;
     wallet.disconnect = async () => void (ended += 1);
-    await loginSession(store);
+    await loginSession(store, "setup");
     // The wallet now declines: only the revocation's signature is left to ask for.
     wallet.sign = async () => { throw new Error("You declined to sign in your wallet."); };
     disconnectWallet(store);
     await settle();
     expect(ended).toBe(1);
     expect(client.posted.some((p) => p.route === "session_key_revoke")).toBe(false);
-    expect(store.getSnapshot().toasts.some((t) => t.text === "The trading authorization was not revoked; it expires on its own.")).toBe(true);
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ text: "The trading authorization was not revoked; it expires on its own." });
   });
 
   it("reuses one candidate key across a connection's failed login attempts, as the client contract settles", async () => {
     const { client, store } = await connected();
     client.answer = () => { throw new EngineError(0, "The node did not answer."); };
-    expect(await loginSession(store)).toBe(false);
+    expect(await loginSession(store, "setup")).toBe(false);
     const candidate = store.sessionKey?.address;
     if (candidate === undefined) throw new Error("no candidate kept");
     client.answer = () => ({ seq: 1, events: [{ type: "session_key_rejected", account: ACCOUNT, session_key: candidate, reason: { kind: "session_key_unsupported" } }] });
-    expect(await loginSession(store)).toBe(false);
+    expect(await loginSession(store, "setup")).toBe(false);
     expect(store.sessionKey?.address).toBe(candidate); // the same key, re-registered: never counts again
   });
 
@@ -134,7 +134,7 @@ describe("the session-key login", () => {
     const { client, store, wallet } = await connected();
     let proceed!: () => void;
     wallet.sign = () => new Promise<string>((resolve) => { proceed = () => resolve("0x" + "11".repeat(65)); });
-    const loggingIn = loginSession(store);
+    const loggingIn = loginSession(store, "setup");
     await settle();
     disconnectWallet(store); // the user leaves while the wallet decides
     proceed(); // ...and approves anyway
@@ -158,12 +158,12 @@ describe("the session-key login", () => {
     const declarations = client.posted.filter((p) => p.route === "eligibility");
     expect(declarations.map((p) => (p.body as EligibilityRequest).auth.nonce)).toEqual([4, 9]);
     expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2); // the declaration's two attempts; a declaration runs no login
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "ok", text: "Eligibility recorded." });
+    expect(store.getSnapshot().notices.setup).toBeUndefined();
   });
 
   it("abandons an order silently when the wallet disconnects between the nonce read and the send", async () => {
     const { client, store, wallet } = await connected();
-    await loginSession(store);
+    await loginSession(store, "setup");
     const waiters: (() => void)[] = [];
     const original = client.nonce.bind(client);
     client.nonce = () => new Promise<Awaited<ReturnType<typeof original>>>((resolve) => { waiters.push(() => void resolve(original())); });
@@ -173,7 +173,7 @@ describe("the session-key login", () => {
     for (const proceed of waiters.splice(0)) proceed();
     await ordering;
     expect(client.posted.some((p) => p.route === "order")).toBe(false);
-    expect(store.getSnapshot().toasts.filter((t) => t.tone === "error")).toEqual([]);
+    expect(store.getSnapshot().notices).toEqual({});
     void wallet;
   });
 
@@ -193,13 +193,13 @@ describe("the session-key login", () => {
   it("falls back to the wallet-signed path when the node refuses registrations, so a position can always close", async () => {
     const { client, provider, store } = await connected();
     client.answer = () => ({ seq: 1, events: [{ type: "session_key_rejected", account: ACCOUNT, session_key: "0x0000000000000000000000000000000000000abc", reason: { kind: "too_many_session_keys", max: 10 } }] });
-    await loginSession(store); // setup's registration, which the node refuses
+    await loginSession(store, "setup"); // setup's registration, which the node refuses
     expect(store.getSnapshot().sessionRefusal).toEqual({ kind: "too_many_session_keys", max: 10 });
     await cancelOrder(store, 42);
     const cancel = client.posted.find((p) => p.route === "cancel");
     if (!cancel) throw new Error("no cancel posted");
     expect(await signerOf(cancelTypedData(DOMAIN, cancel.body as CancelRequest, { nonce: 4, expiresAt: NODE_TIME + REQUEST_TTL_MS }), (cancel.body as CancelRequest).auth?.signature)).toBe(ACCOUNT);
     expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2); // the refused registration, then the wallet signing the cancel itself
-    expect(store.getSnapshot().toasts.some((t) => t.text.includes("This request will ask your wallet instead."))).toBe(true);
+    expect(store.getSnapshot().notices.orders).toBeUndefined(); // the ticket's refusal note says so; the request just goes through the wallet
   });
 });

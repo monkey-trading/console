@@ -44,7 +44,7 @@ export function serve(client: ActionClient, events: () => HistoryEvent[]) {
 export async function opened(login = true) {
   const kit = await connected();
   kit.store.patch({ now: NODE_TIME });
-  if (login) await loginSession(kit.store);
+  if (login) await loginSession(kit.store, "setup");
   const own = kit.store.sessionKey?.address ?? "0x00000000000000000000000000000000000000ee";
   let events: HistoryEvent[] = [registered("9:0", OTHER_KEY, NODE_TIME - H, NODE_TIME + 20 * H), registered("5:0", own, NODE_TIME - 3 * H, NODE_TIME + 20 * H)];
   const reads = serve(kit.client, () => events);

@@ -56,7 +56,7 @@ describe("MonkeyPanel", () => {
     stop();
   });
 
-  it("shows a node without the routes as unavailable, with no toast, and stops asking for the totals", async () => {
+  it("shows a node without the routes as unavailable, with no notice, and stops asking for the totals", async () => {
     const { node } = await setup();
     const quiet = Object.assign(Object.create(Object.getPrototypeOf(node.client)), node.client, { stats: NO_STATS });
     const bare = new ConsoleStore({ client: quiet, wallets: node.wallets, history: mockHistory, initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS } });
@@ -67,7 +67,7 @@ describe("MonkeyPanel", () => {
     expect(panel.getSnapshot().overview.status).toBe("unavailable");
     expect(panel.getSnapshot().activity.status).toBe("unavailable");
     expect(panel.feeds.supply.getSnapshot().read.status).toBe("unavailable");
-    expect(bare.getSnapshot().toasts).toEqual([]);
+    expect(bare.getSnapshot().notices).toEqual({});
     await vi.advanceTimersByTimeAsync(120_000);
     expect(overview).toHaveBeenCalledTimes(1);
     stop();
@@ -166,11 +166,10 @@ describe("MonkeyPanel", () => {
     stop();
   });
 
-  it("backs a failing totals read off, showing it on the panel with no toast, and reads again by itself once the node answers", async () => {
+  it("backs a failing totals read off, showing it on the panel with no notice, and reads again by itself once the node answers", async () => {
     const { node, store, panel, stop } = await setup();
     const real = node.client.stats.monkey.bind(node.client.stats);
     const failing = vi.spyOn(node.client.stats, "monkey").mockRejectedValue(new Error("The node did not answer."));
-    const toasts = store.getSnapshot().toasts.length;
     await vi.advanceTimersByTimeAsync(30_000);
     expect(failing).toHaveBeenCalledTimes(1);
     expect(panel.getSnapshot().overview.status).toBe("failed");
@@ -180,7 +179,7 @@ describe("MonkeyPanel", () => {
     failing.mockImplementation(real);
     await vi.advanceTimersByTimeAsync(30_000);
     expect(panel.getSnapshot().overview.status).toBe("ready");
-    expect(store.getSnapshot().toasts.length).toBe(toasts);
+    expect(store.getSnapshot().notices).toEqual({});
     stop();
   });
 

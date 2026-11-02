@@ -24,7 +24,7 @@ const order = (store: ConsoleStore) => placeOrder(store, { market: 1, side: "buy
 const signatures = (provider: { calls: { method: string }[] }) => provider.calls.filter((c) => c.method === "eth_signTypedData_v4");
 
 describe("a stored key that expired", () => {
-  it("ends a reload that knows the clock: no prompt, the choice forgotten, and a toast", async () => {
+  it("ends a reload that knows the clock: no prompt, the choice forgotten, and a notice", async () => {
     const storage = memoryStorage();
     saveSessionKey(storage, SCOPE, SessionKeySigner.generate(), EXPIRES);
     saveChoice(storage, { kind: "injected" });
@@ -34,7 +34,7 @@ describe("a stored key that expired", () => {
     expect(store.getSnapshot().wallet).toBeNull();
     expect(loadChoice(storage)).toBeNull();
     expect(storage.held.has(NAME)).toBe(false);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("expired");
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: expect.stringContaining("expired") });
     expect(client.posted).toEqual([]);
     expect(provider.calls.filter((c) => c.method !== "eth_requestAccounts")).toEqual([]);
   });
@@ -67,7 +67,7 @@ describe("a stored key that expired", () => {
     expect(liveSessionKey(store)?.address).not.toBe(old.address);
     expect(signatures(provider)).toHaveLength(1);
     expect(store.getSnapshot().setup.open).toBe(false);
-    expect(store.getSnapshot().toasts.filter((t) => t.text.includes("expired"))).toEqual([]);
+    expect(store.getSnapshot().notices.wallet).toBeUndefined();
   });
 
   it("ends a WalletConnect session a reload re-attached by itself, as any expiry does", async () => {
@@ -80,7 +80,7 @@ describe("a stored key that expired", () => {
     await reconnectWallet(store, { resume: async () => wallet, pairing: () => ({ status: "idle" }) }, () => false);
     expect(store.getSnapshot().wallet).toBeNull();
     expect(loadChoice(storage)).toBeNull();
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("expired");
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: expect.stringContaining("expired") });
   });
 
   it("is discarded for a connect the user pressed, which goes straight to the wallet's signature for a new key, with no popup", async () => {
@@ -100,7 +100,7 @@ describe("a stored key that expired", () => {
 });
 
 describe("a key that dies while connected", () => {
-  it("disconnects when the sequenced clock reaches its expiry, at the exact instant: no prompt, the choice and key gone, and a toast", async () => {
+  it("disconnects when the sequenced clock reaches its expiry, at the exact instant: no prompt, the choice and key gone, and a notice", async () => {
     const { client, provider, storage, store } = await authorizedTab();
     saveChoice(storage, { kind: "injected" });
     client.deliver({ offset: "1:0", type: "command", seq: 1, ts: EXPIRES - 1, cmd: { type: "tick" }, events: [] });
@@ -112,7 +112,7 @@ describe("a key that dies while connected", () => {
     expect(store.liveWallet).toBeNull();
     expect(loadChoice(storage)).toBeNull();
     expect(storage.held.has(NAME)).toBe(false);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("This browser's trading authorization expired, so your wallet was disconnected. Connect again to renew it.");
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: "This browser's trading authorization expired, so your wallet was disconnected. Connect again to renew it." });
     expect(signatures(provider)).toHaveLength(prompts);
     expect(client.posted.some((p) => p.route === "session_key_revoke")).toBe(false);
   });
@@ -131,7 +131,7 @@ describe("a key that dies while connected", () => {
     expect(store.getSnapshot()).toMatchObject({ busy: false });
     expect(loadChoice(storage)).toBeNull();
     expect(storage.held.has(NAME)).toBe(false);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node no longer accepts this browser's trading authorization, so your wallet was disconnected. Connect again to renew it.");
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: "The node no longer accepts this browser's trading authorization, so your wallet was disconnected. Connect again to renew it." });
     expect(signatures(provider)).toHaveLength(prompts);
     await connectWallet(store, "injected");
     await settle();
@@ -166,7 +166,7 @@ describe("a key that dies while connected", () => {
     expect(store.getSnapshot().wallet).toBeNull();
     expect(loadChoice(storage)).toBeNull();
     expect(storage.held.has(NAME)).toBe(false);
-    expect(store.getSnapshot().toasts.at(-1)?.text).toContain("was revoked");
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: expect.stringContaining("was revoked") });
     expect(signatures(provider)).toHaveLength(prompts);
   });
 });

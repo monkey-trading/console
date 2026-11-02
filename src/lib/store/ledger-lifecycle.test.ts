@@ -13,7 +13,7 @@ import { opened } from "./ledger-store-kit";
 const usd = fixedFromInt;
 
 describe("the emission schedule", () => {
-  it("leaves the rows showing and the MONKEY unknown from a node without the route, with no toast", async () => {
+  it("leaves the rows showing and the MONKEY unknown from a node without the route, with no notice", async () => {
     const { store, client, ledger } = await opened({ fill: { "": page([fill("20:0", 100, usd(-4))]) } });
     client.schedule = null;
     store.ledger.open(ACCOUNT);
@@ -21,17 +21,17 @@ describe("the emission schedule", () => {
     expect(ledger().scheduleStatus).toBe("unavailable");
     expect(ledger().data.rows).toHaveLength(1);
     expect(sharesOf(ledger().data, ledger().schedule).get("20:0")).toEqual({ kind: "unknown" });
-    expect(store.getSnapshot().toasts).toEqual([]);
+    expect(store.getSnapshot().notices).toEqual({});
   });
 
-  it("is a failure, not a toast, when the node does not answer, and is asked again at the next open", async () => {
+  it("is a failure, not a notice, when the node does not answer, and is asked again at the next open", async () => {
     const { store, client, ledger } = await opened();
     client.schedule = new EngineError(503, "history is catching up with the log");
     const close = store.ledger.open(ACCOUNT);
     await settle();
     expect(ledger().scheduleStatus).toBe("failed");
     expect(ledger().status).toBe("ready");
-    expect(store.getSnapshot().toasts).toEqual([]);
+    expect(store.getSnapshot().notices).toEqual({});
     close();
     client.schedule = SCHEDULE;
     store.ledger.open(ACCOUNT);
@@ -49,14 +49,14 @@ describe("the emission schedule", () => {
 });
 
 describe("a read that fails", () => {
-  it("reports the failure in the tab, not as a toast, and the next open reads again", async () => {
+  it("reports the failure in the tab, not as a notice, and the next open reads again", async () => {
     const { store, client, ledger, reads } = await opened({ fill: { "": page([fill("20:0", 100, usd(-4))]) } });
     const answer = client.historyAnswer;
     client.historyAnswer = () => { throw new Error("The node did not answer."); };
     const close = store.ledger.open(ACCOUNT);
     await settle();
     expect(ledger()).toMatchObject({ status: "failed", error: "The node did not answer." });
-    expect(store.getSnapshot().toasts).toEqual([]);
+    expect(store.getSnapshot().notices).toEqual({});
     close();
     client.historyAnswer = answer;
     store.ledger.open(ACCOUNT);

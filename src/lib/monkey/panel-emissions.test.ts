@@ -41,7 +41,7 @@ describe("claimMonkeyEmissions", () => {
     held.release();
     await claimed;
     expect(node.client.state.claimedMonkey.get(DEMO_ADDRESS)).toBeUndefined();
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "info", text: "The wallet changed while this was waiting, so nothing was sent." });
+    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "The wallet changed while this was waiting, so nothing was sent." });
     stop();
   });
 
@@ -54,7 +54,7 @@ describe("claimMonkeyEmissions", () => {
     await flush();
     const claimed = claimMonkeyEmissions(panel);
     await flush();
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "info", text: "Your earlier request is still with your wallet." });
+    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "Your earlier request is still with your wallet." });
     held.release();
     await claimed;
     await staked;
@@ -73,7 +73,7 @@ describe("claimMonkeyEmissions", () => {
     held.release();
     await claimed;
     expect(node.client.state.claimedMonkey.get(DEMO_ADDRESS)).toBeUndefined();
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ text: "Another request is in progress, so nothing was sent." });
+    expect(store.getSnapshot().notices.emissions).toMatchObject({ text: "Another request is in progress, so nothing was sent." });
     stop();
   });
 
@@ -92,7 +92,7 @@ describe("claimMonkeyEmissions", () => {
     expect(settled).toBe(false);
     answer(true);
     await claimed;
-    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "info", text: "MONKEY was added to your wallet, so its balance shows there." });
+    expect(store.getSnapshot().notices.emissions).toBeUndefined();
     stop();
   });
 

@@ -107,13 +107,13 @@ describe("what a connect asks of the wallet", () => {
     expect(store.getSnapshot().setup.open).toBe(true);
   });
 
-  it("leaves a declined prompt alone: no key, no popup, the reason in a toast", async () => {
+  it("leaves a declined prompt alone: no key, no popup, the reason in a notice", async () => {
     const { client, store } = await setup(true, undefined, { fail: { eth_signTypedData_v4: { code: 4001, message: "User rejected" } } });
     await connectWallet(store, "injected");
     await settle();
     expect(liveSessionKey(store)).toBeNull();
     expect(store.getSnapshot()).toMatchObject({ busy: false, setup: { open: false } });
-    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("You declined to sign in your wallet.");
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "error", text: "You declined to sign in your wallet." });
     expect(client.posted).toEqual([]);
   });
 
@@ -144,7 +144,7 @@ describe("what a connect asks of the wallet", () => {
     const { client, store } = await setup(true);
     const walletB: Wallet = { address: "0x0000000000000000000000000000000000000bbb", label: "Other", sign: async () => "0x", deposit: async () => "0x0", claim: async () => "0x0" };
     await connectWallet(store, "injected");
-    await authorizeBrowser(store);
+    await authorizeBrowser(store, "setup");
     await settle();
     const keyOfA = liveSessionKey(store);
     if (keyOfA === null) throw new Error("no key for wallet A");

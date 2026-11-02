@@ -10,6 +10,7 @@ import { emissionsPosition } from "@/lib/store/emissions";
 import { useConsole } from "./ConsoleProvider";
 import { focusHeading } from "./monkey/Card";
 import { useVerdict } from "./monkey/use-verdict";
+import { Notice } from "./Notice";
 import { useReadOnlyNote, useSignGate } from "./SignGate";
 
 const BUTTON = "mt-3 min-h-11 w-full rounded border border-glow bg-glow/10 px-3 py-2 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 lg:min-h-0";
@@ -78,6 +79,7 @@ export function EmissionsCard({ claim }: { claim: () => Promise<unknown> }) {
           )}
         </div>
       )}
+      <Notice surface="emissions" />
     </section>
   );
 }
