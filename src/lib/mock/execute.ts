@@ -98,8 +98,8 @@ export function fillOrder(state: MockState, order: FillRequest): FillOutcome {
     state.houseCash -= badDebt;
     account.balance = 0n;
   }
-  // The fill's net realised result and any write-off weight the account's share of the open
-  // emission period, as the engine records them (`record_period_result`, emissions.rs).
+  // The fill's realised result (a loss adds weight, a profit none) and any write-off feed the account's
+  // weight in the open emission period, as the engine records them (`record_period_result`, emissions.rs).
   recordEmissionResult(state, req.address, pnl, badDebt);
   return {
     ok: true,

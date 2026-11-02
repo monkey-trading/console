@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { formatMonkey, formatMovePercent, formatRate, groupThousands, MONKEY_UNIT, shortHex } from "./format";
+import { formatMonkey, formatMonkeyFigure, formatMovePercent, formatRate, groupThousands, MONKEY_UNIT, shortHex } from "./format";
 
 describe("format", () => {
   it("shortens long hex and leaves short hex alone", () => {
@@ -41,5 +41,24 @@ describe("formatRate", () => {
     expect(formatRate(1000)).toBe("10.00%");
     expect(formatRate(25)).toBe("0.25%");
     expect(formatRate(0)).toBe("0.00%");
+  });
+});
+
+describe("formatMonkeyFigure", () => {
+  it("groups the whole part and trims trailing zeros to at most four places", () => {
+    expect(formatMonkeyFigure(1_234n * MONKEY_UNIT + MONKEY_UNIT / 2n)).toBe("1,234.5");
+    expect(formatMonkeyFigure(7n * MONKEY_UNIT)).toBe("7");
+    expect(formatMonkeyFigure(MONKEY_UNIT / 8n)).toBe("0.125");
+  });
+
+  it("truncates beyond the fourth place and never rounds up", () => {
+    expect(formatMonkeyFigure(MONKEY_UNIT + (MONKEY_UNIT * 99_999n) / 100_000n)).toBe("1.9999");
+  });
+
+  it("reads zero as 0 and a non-zero amount under the last place as <0.0001", () => {
+    expect(formatMonkeyFigure(0n)).toBe("0");
+    expect(formatMonkeyFigure(1n)).toBe("<0.0001");
+    expect(formatMonkeyFigure(MONKEY_UNIT / 10_000n - 1n)).toBe("<0.0001");
+    expect(formatMonkeyFigure(MONKEY_UNIT / 10_000n)).toBe("0.0001");
   });
 });

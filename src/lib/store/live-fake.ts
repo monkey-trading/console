@@ -1,10 +1,11 @@
 /** Tests only: a live client with canned reads, and a store over it. */
 
 import { EngineError, type ClientEvent, type EngineClient, type SignatureChecks } from "../engine/client";
+import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
 import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
-import type { PriceRules, StreamMessage, MarketView } from "../engine/types";
+import type { HistoryPage, PriceRules, StreamMessage, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
@@ -89,7 +90,14 @@ export class FakeClient implements EngineClient {
   }
   quotes() {}
   async withdrawalQueue() { return { seq: 1, queue: [], next: null }; }
-  async history() { return { events: [], next: null }; }
+  /** Canned history, replaced by a test: what each `history` read answers, and the reads made. */
+  historyAnswer: (params: { kind?: string; before?: string; limit?: number }) => HistoryPage = () => ({ events: [], next: null });
+  historyReads: { address: string; kind?: string; before?: string; limit?: number }[] = [];
+  async history(address: string, params: { kind?: string; before?: string; limit?: number } = {}) { this.historyReads.push({ address, ...params }); return this.historyAnswer(params); }
+  /** What `emissionSchedule` answers: a schedule, null for a node without the route, or an error. */
+  schedule: EmissionSchedule | null | Error = null;
+  scheduleReads = 0;
+  async emissionSchedule() { this.scheduleReads++; if (this.schedule instanceof Error) throw this.schedule; return this.schedule; }
   subscribe(onMessage: (message: StreamMessage) => void) { this.onMessage = onMessage; return () => { this.onMessage = null; }; }
 }
 

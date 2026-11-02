@@ -6,6 +6,8 @@ import type { EntitlementProof } from "./emissions";
 import { setParamsOf, type QueueTotals } from "../house";
 import { decodeHouseState, HouseFold, type HouseState, type HouseStateWire } from "./house-state";
 import { QueueTotalsWalk } from "./live-queue";
+import { historyPath, readEmissionSchedule } from "./live-ledger";
+import type { EmissionSchedule } from "./emission-schedule";
 import { collateral, plainText, READ_TIMEOUT_MS } from "./live-plain";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
@@ -186,13 +188,10 @@ export class LiveEngineClient implements EngineClient {
   }
 
   async history(address: Address, params: { limit?: number; before?: string; kind?: string }): Promise<HistoryPage> {
-    const query = new URLSearchParams();
-    if (params.kind !== undefined) query.set("kind", params.kind);
-    if (params.limit !== undefined) query.set("limit", String(params.limit));
-    if (params.before !== undefined) query.set("before", params.before);
-    const suffix = query.size > 0 ? `?${query}` : "";
-    return (await this.transport.get(`/v1/accounts/${address}/history${suffix}`)) as HistoryPage;
+    return (await this.transport.get(historyPath(address, params))) as HistoryPage;
   }
+
+  emissionSchedule(): Promise<EmissionSchedule | null> { return readEmissionSchedule((path) => this.transport.get(path)); }
 
   /** Posts a signed action; the node answers with the events its command produced, signed for this request. */
   private async action(path: string, body: unknown): Promise<ActionResult> {

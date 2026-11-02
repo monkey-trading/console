@@ -25,6 +25,19 @@ export function formatMonkey(units: bigint): string {
   return frac === 0n ? `${grouped} MONKEY` : `${grouped}.${frac.toString().padStart(2, "0").replace(/0+$/, "")} MONKEY`;
 }
 
+/**
+ * `units` MONKEY base units as a bare figure for a column headed MONKEY, grouped in thousands with
+ * up to four places and no trailing zeros, truncated: `1,234.5`. A non-zero amount under the
+ * last place reads `<0.0001`, never `0`.
+ */
+export function formatMonkeyFigure(units: bigint): string {
+  const places = 4n;
+  const scaled = (units * 10n ** places) / MONKEY_UNIT;
+  if (scaled === 0n) return units === 0n ? "0" : "<0.0001";
+  const frac = (scaled % 10n ** places).toString().padStart(Number(places), "0").replace(/0+$/, "");
+  return `${groupThousands(scaled / 10n ** places)}${frac === "" ? "" : `.${frac}`}`;
+}
+
 /** `abs` basis points as a percentage string with two places. */
 function formatPercentBps(abs: number): string {
   return `${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}%`;

@@ -10,6 +10,7 @@ import { loadAccount } from "./account";
 import { tickBars } from "./bars-tick";
 import { BarsSeed } from "./bars-seed";
 import { FEED_LIMIT, feedFrom, isMine } from "./feed";
+import { LedgerReads } from "./ledger";
 import { initialState, seedAllBars, type BlockReason, type ConsoleState, type ToastMessage } from "./state";
 import { readHousePanelSoon } from "./house";
 import { PacedReads } from "./paced-reads";
@@ -38,6 +39,8 @@ export class ConsoleStore {
   private readonly pacing: PacedReads | null;
   /** Seeds the chart's bars from the marks endpoint once per market and timeframe. */
   readonly barsSeed = new BarsSeed(this);
+  /** The P&L tab's reads, run only while that tab is open. */
+  readonly ledger = new LedgerReads(this);
   /** When each market's bar bucket was last ticked from the node's mark, so a history merge can tell a stale live candle from a fresh one; derived bookkeeping, not part of the snapshot. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
   /** Set when the store stops following the node so pending history work stands down; bumped on each start so an earlier cycle's scans stand down (StrictMode re-runs the effect). Neither is part of the snapshot. */
@@ -110,6 +113,7 @@ export class ConsoleStore {
 
   /** Sets the connected wallet (or none) and drops activity lines that belong to another account. */
   setWallet(wallet: { address: string; label: string; readOnly?: boolean } | null): void {
+    this.ledger.walletChanged(wallet?.address);
     this.viewer = undefined; // once a wallet has been connected or left, the starting viewer no longer applies
     this.lastEmissionsReadError = null; // a new wallet's vault reads start fresh: no stale latch or retry window
     this.lastEmissionsReadAt = -1;
@@ -179,7 +183,10 @@ export class ConsoleStore {
       const read = event.status === "live" && (was === "stale" || was === "connecting");
       // The frame's signed time moves the node clock first, so a read it prompts plots marks at node time, not the pre-outage time.
       this.patch({ stream: event.status, ...(event.time !== undefined && event.time > this.snapshot.now ? { now: event.time } : {}) });
-      if (read) void this.refresh(true);
+      if (read) {
+        this.ledger.invalidate(); // the stream resumes at the live end: events from the gap are read again
+        void this.refresh(true);
+      }
     } else if (event.type === "problem") this.toast("error", event.reason);
     // Data read under the old enclave is read again once the new one is trusted; a check that ends
     // at the same address changes nothing, so a read that keeps failing is not repeated by it.
@@ -228,6 +235,7 @@ export class ConsoleStore {
       }
     }
     this.pacing?.observe(message);
+    this.ledger.ingest(message);
     const lines = feedFrom([message], this.snapshot.markets, viewer, () => this.id());
     // Price updates change nothing on screen by themselves; only the node's tick moves the clock and the log.
     if (message.cmd.type === "prices" && lines.length === 0) return;

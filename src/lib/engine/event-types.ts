@@ -19,6 +19,8 @@ export type EngineEvent =
   | { type: "emission_period_closed"; period: number; budget: string; allocated: string; cancelled: string }
   | { type: "financing"; account: Address; market: MarketId; amount: string }
   | { type: "bad_debt"; account: Address; amount: string }
+  /** Signed USD realised by closing the fraction a split rounded off a position; counts toward emission weight like a fill's result. */
+  | { type: "corporate_cash_in_lieu"; id: string; market: MarketId; account: Address; amount: string }
   | { type: "eligibility_rejected"; account: Address; reason: Reject }
   | { type: "prices_rejected"; market: MarketId; reason: string }
   | { type: "market_opened"; market: MarketId }
