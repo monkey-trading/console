@@ -184,7 +184,7 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
     if (session.node !== null) return;
     // The session key is shared between this browser's tabs: another tab's write reaches this one here, and never its own.
     const onStorage = (event: StorageEvent) => {
-      if (event.storageArea === window.localStorage) storedKeyChanged(store, event.key, event.newValue);
+      if (event.storageArea === window.localStorage) storedKeyChanged(store, event.key);
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);

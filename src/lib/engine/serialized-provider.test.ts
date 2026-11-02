@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "../fixed";
 import { CHAIN } from "./provider-wallet-fixtures";
+import { InjectedConnector } from "./injected";
 import { ProviderWallet } from "./provider-wallet";
 import { serialized } from "./serialized-provider";
 import { ACCOUNT, StubProvider } from "./wallet-kit";
@@ -98,5 +99,69 @@ describe("a wallet over a provider that is busy", () => {
     await deposit;
     expect(await reading).toEqual({ claimed: 0n, latestSeq: 7 });
     expect(peak).toBe(1);
+  });
+});
+
+describe("a reconnect over the same browser provider", () => {
+  /** A provider whose chain reads wait for `open`, recording how many requests are outstanding at once. */
+  function holdingReads() {
+    const stub = new StubProvider({ latestSeq: 7 });
+    const asked: string[] = [];
+    let outstanding = 0;
+    let peak = 0;
+    let open: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { open = resolve; });
+    const provider: Eip1193Provider = {
+      request: async (args) => {
+        asked.push(args.method);
+        outstanding += 1;
+        peak = Math.max(peak, outstanding);
+        try {
+          if (args.method === "eth_call") await gate;
+          return await stub.request(args);
+        } finally {
+          outstanding -= 1;
+        }
+      },
+    };
+    return { provider, asked, open: () => open(), peak: () => peak };
+  }
+  const ticks = async () => { for (let i = 0; i < 10; i += 1) await Promise.resolve(); };
+
+  it("does not ask the wallet for its account while the earlier wallet's chain read is unanswered", async () => {
+    const { provider, asked, open, peak } = holdingReads();
+    const connector = new InjectedConnector(() => provider, CHAIN, { wait: async () => {} });
+    const first = await connector.connect();
+    const reading = first.emissionsClaimed?.();
+    await ticks();
+    const reconnecting = connector.connect();
+    await ticks();
+    expect(asked.filter((m) => m === "eth_requestAccounts")).toHaveLength(1); // the reconnect's request is still waiting
+    open();
+    expect(await reading).toEqual({ claimed: 0n, latestSeq: 7 });
+    const second = await reconnecting;
+    expect(second.address).toBe(first.address);
+    expect(peak()).toBe(1);
+  });
+
+  it("keeps the wallets of one connector to one queue, and a different provider to its own", async () => {
+    const { provider, asked, open } = holdingReads();
+    const other = new StubProvider();
+    let current: Eip1193Provider = provider;
+    const connector = new InjectedConnector(() => current, CHAIN, { wait: async () => {} });
+    const first = await connector.connect();
+    const reading = first.emissionsClaimed?.();
+    await ticks();
+    current = other; // the page now gives another provider, which owes nothing to the first
+    await connector.connect();
+    expect(other.calls.some((c) => c.method === "eth_requestAccounts")).toBe(true);
+    expect(asked.filter((m) => m === "eth_call")).toHaveLength(1);
+    open();
+    await reading;
+  });
+
+  it("wraps a provider once: serializing a serialized provider returns it", () => {
+    const once = serialized(new StubProvider());
+    expect(serialized(once)).toBe(once);
   });
 });

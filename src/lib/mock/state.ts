@@ -180,7 +180,7 @@ export class MockState {
     this.log.push(message);
     if (this.log.length > LOG_LIMIT) this.log.shift();
     events.forEach((event, index) => {
-      if ("account" in event) {
+      if ("account" in event && event.account !== null) {
         const key = event.account.toLowerCase();
         const items = this.history.get(key) ?? [];
         items.push({ cursor: `${message.seq}:${index}`, seq: message.seq, index, ts: this.now, event });

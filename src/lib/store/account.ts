@@ -4,7 +4,7 @@ import { carryAccrued } from "../engine/claim-standing";
 import { EngineError } from "../engine/client";
 import { UntrustedError } from "../engine/trust";
 import { decodeAccount } from "../models";
-import { NOT_CREDITED_MS, uncreditedKey } from "./quiet-reads";
+import { emptyHistoryKey, NOT_CREDITED_MS, uncreditedKey, UNTIL_EVENT } from "./quiet-reads";
 import { decideSetup } from "./setup";
 import type { ConsoleStore } from "./store";
 
@@ -14,8 +14,11 @@ import type { ConsoleStore } from "./store";
  * is reported on the store and never thrown: it says nothing about the markets and house figures
  * the same refresh read, so it must not reach that read's error handling.
  * A node across the network answers 404 for the account and its entitlement until the account is
- * credited: both are read again at most every `NOT_CREDITED_MS`, and at once on an event for the
- * account (`QuietReads`). A credited account's reads are never held back.
+ * credited: the account, its entitlement, eligibility and withdrawal queue are then read again at most
+ * every `NOT_CREDITED_MS`, and at once on an event for the account (`QuietReads`); an eligibility
+ * change reaches the console as the `eligibility_attested` event for the account, which is one. The
+ * history of an account that has none is not read again until an event for the account. A credited
+ * account's reads other than that empty history are never held back.
  */
 export async function loadAccount(store: ConsoleStore, withHistory: boolean): Promise<void> {
   const wallet = store.getSnapshot().wallet;
@@ -25,26 +28,29 @@ export async function loadAccount(store: ConsoleStore, withHistory: boolean): Pr
   const mark = store.quiet.mark();
   const keyAtRead = store.sessionKey;
   const key = uncreditedKey(wallet.address);
+  const emptyHistory = emptyHistoryKey(wallet.address);
   try {
-    const held = quiet?.resting(key) === true;
+    // A read asked for with history follows an event, an action or a return of the feed: it reads everything. Otherwise what is held is the last read's, and nothing in it changes without an event.
+    if (!withHistory && quiet?.resting(key) === true) return;
     const [eligibility, queue, entitlement] = await Promise.all([
-      client.eligibility(wallet.address), client.withdrawalQueue(wallet.address), held ? null : client.emissions(wallet.address),
+      client.eligibility(wallet.address), client.withdrawalQueue(wallet.address), client.emissions(wallet.address),
     ]);
     let account = null;
-    if (!held) {
-      try {
-        account = decodeAccount(await client.account(wallet.address));
-      } catch (error) {
-        if (!(error instanceof EngineError && error.status === 404)) throw error;
-        quiet?.rest(key, NOT_CREDITED_MS, mark);
-      }
+    try {
+      account = decodeAccount(await client.account(wallet.address));
+    } catch (error) {
+      if (!(error instanceof EngineError && error.status === 404)) throw error;
+      quiet?.rest(key, NOT_CREDITED_MS, mark);
     }
     if (store.getSnapshot().wallet?.address !== wallet.address) return;
     store.patch({ eligibility: eligibility.class, queue: queue.queue, accountRead: true, account, entitlement: entitlement === null ? null : carryAccrued(store.getSnapshot().entitlement, entitlement) });
     decideSetup(store, keyAtRead);
-    if (withHistory || store.getSnapshot().history.length === 0) {
+    if (withHistory || (store.getSnapshot().history.length === 0 && quiet?.resting(emptyHistory) !== true)) {
       const history = (await client.history(wallet.address, { limit: 100 })).events;
-      if (store.getSnapshot().wallet?.address === wallet.address) store.patch({ history });
+      if (store.getSnapshot().wallet?.address === wallet.address) {
+        store.patch({ history });
+        if (history.length === 0) quiet?.rest(emptyHistory, UNTIL_EVENT, mark);
+      }
     }
     store.lastAccountError = null;
   } catch (error) {

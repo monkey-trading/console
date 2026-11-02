@@ -51,9 +51,9 @@ export function loadChoice(storage: ChoiceStorage): WalletChoice | null {
 }
 
 /**
- * Writes the choice, which holds nothing else; `session-key-store.ts` holds the console's only other
- * entry. Best-effort: a quota or permission failure leaves nothing stored and never interrupts the
- * wallet flow that asked for the write.
+ * Writes the choice under its own key and nothing else; the session key (`session-key-store.ts`) and
+ * the preferences (`prefs.ts`) keep their own entries. Best-effort: a quota or permission failure
+ * leaves nothing stored and never interrupts the wallet flow that asked for the write.
  */
 export function saveChoice(storage: ChoiceStorage, choice: WalletChoice): void {
   try {

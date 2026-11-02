@@ -3,11 +3,13 @@
 import { describe, expect, it } from "vitest";
 
 import { revokeSessionKeyTypedData } from "../engine/eip712";
+import { SessionKeySigner } from "../engine/session-key";
 import { settle } from "../engine/test-kit";
 import type { SessionKeyRevocationRequest } from "../engine/types";
 import { ACCOUNT } from "../engine/wallet-kit";
 import { NODE_TIME, signerOf } from "./live-kit";
 import { DOMAIN, H, message, opened, OTHER_KEY, registered, registeredReads, revokedAt, walletSignatures } from "./session-list-kit";
+import { installKey } from "./session";
 import { sessionEnded } from "./wallet-session";
 
 describe("revoking a session key", () => {
@@ -57,6 +59,25 @@ describe("revoking a session key", () => {
     expect(store.sessionKey).toBeNull();
     expect(walletSignatures(provider)).toBe(2);
     expect(client.posted.filter((p) => p.route === "session_key_revoke")).toHaveLength(1);
+  });
+
+  it("keeps the connection and the newer key when another tab's login replaced the revoked key while the wallet asked", async () => {
+    const { client, store, list, own } = await opened();
+    client.answer = () => ({ seq: 2, events: [{ type: "session_key_revoked", account: ACCOUNT, session_key: own }] });
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => { release = resolve; });
+    const original = client.revokeSessionKey.bind(client);
+    client.revokeSessionKey = async (body) => { await hold; return original(body); };
+    const revoking = list.revoke(own);
+    await settle();
+    const newer = SessionKeySigner.generate();
+    installKey(store, newer, NODE_TIME + 20 * H); // the other tab's registration, adopted here
+    release();
+    await revoking;
+    expect(store.getSnapshot().wallet?.address).toBe(ACCOUNT);
+    expect(store.sessionKey?.address).toBe(newer.address);
+    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "ok" });
+    expect(store.getSnapshot().toasts.filter((t) => t.tone === "info")).toEqual([]);
   });
 
   it("starts no read and no timer when the page closed while the revocation was out", async () => {

@@ -12,6 +12,7 @@ import type { Wallet } from "../engine/wallet";
 import { clearChoice, clearChoiceIf, type WalletChoice } from "../engine/wallet-persist";
 import { errorText } from "./signing";
 import { installKey, keyScope, liveSessionKey, revokeSession } from "./session";
+import { revokeClears } from "../setup-steps";
 import { NO_SETUP } from "./state";
 import type { ConsoleStore } from "./store";
 
@@ -106,33 +107,54 @@ export function adoptStoredKey(store: ConsoleStore, wallet: Wallet): StoredKey["
   return found.kind;
 }
 
-/** The stream said `session_key_revoked`: disconnects when it names this browser's key for this account. */
+/** A key of this account was revoked: a refusal for the live-key cap no longer holds, so setup asks for a key again. Another kind of refusal stays. */
+export function revocationFreesSlot(store: ConsoleStore): void {
+  const refusal = store.getSnapshot().sessionRefusal;
+  if (refusal !== null && revokeClears(refusal)) store.patch({ sessionRefusal: null });
+}
+
+/**
+ * The stream said `session_key_revoked` for this account: a freed key slot clears a cap refusal, and
+ * a revocation that names this browser's key disconnects.
+ */
 export function noteSessionRevoked(store: ConsoleStore, events: StreamMessage["events"]): void {
-  const held = store.sessionKey?.address.toLowerCase();
   const account = store.liveWallet?.address.toLowerCase();
-  if (held === undefined || account === undefined) return;
-  if (events.some((e) => e.type === "session_key_revoked" && e.session_key.toLowerCase() === held && e.account.toLowerCase() === account)) sessionEnded(store, KEY_REVOKED);
+  if (account === undefined) return;
+  const revoked = events.flatMap((e) => (e.type === "session_key_revoked" && e.account.toLowerCase() === account ? [e.session_key.toLowerCase()] : []));
+  if (revoked.length === 0) return;
+  revocationFreesSlot(store);
+  const held = store.sessionKey?.address.toLowerCase();
+  if (held !== undefined && revoked.includes(held)) sessionEnded(store, KEY_REVOKED);
 }
 
 /**
  * Another tab wrote `name` (null when it cleared the whole storage), as the `storage` event reports
- * it. A new key for this account is adopted, so a tab finishes setup with the tab that did it. A
- * removal, or a value this console would not use, disconnects a tab that held a key, with no prompt,
- * and forgets the stored choice if it names this connection; the tab that removed the key revokes it.
+ * it. The event is queued, so its value may predate a write this tab has made since; the handler
+ * reads the scope's entry as storage holds it now. A live key for this account is adopted, so a tab
+ * finishes setup with the tab that did it. Storage holding no key, or one this console would not
+ * use, disconnects a tab that held a key, with no prompt, and forgets the stored choice if it names
+ * this connection; the tab that removed the key revokes it.
  */
-export function storedKeyChanged(store: ConsoleStore, name: string | null, value: string | null): void {
+export function storedKeyChanged(store: ConsoleStore, name: string | null): void {
   const wallet = store.liveWallet;
-  if (wallet === null || wallet.readOnly === true || store.deps.persistence === undefined) return;
+  const storage = store.deps.persistence;
+  if (wallet === null || wallet.readOnly === true || storage === undefined) return;
   const scope = keyScope(store, wallet);
   if (name !== null && name !== sessionKeyName(scope)) return;
   const { now, sessionExpiresAt } = store.getSnapshot();
-  const found = name === null ? null : readStoredKey(value, scope, now);
-  if (found?.kind === "live") {
+  let raw: string | null;
+  try {
+    raw = storage.getItem(sessionKeyName(scope));
+  } catch {
+    return; // storage denied: what it holds cannot be told, so this tab keeps its key
+  }
+  const found = readStoredKey(raw, scope, now);
+  if (found.kind === "live") {
     if (found.signer.address !== store.sessionKey?.address || found.expiresAt !== sessionExpiresAt) installKey(store, found.signer, found.expiresAt);
     return;
   }
   if (sessionExpiresAt === 0) return; // this tab holds no key, so nothing of it has ended
-  clearChoiceIf(store.deps.persistence, ownChoice(wallet));
+  clearChoiceIf(storage, ownChoice(wallet));
   dropWallet(store, false);
   store.toast("info", KEY_ENDED_ELSEWHERE);
 }

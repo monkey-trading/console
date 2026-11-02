@@ -2,8 +2,9 @@
  * Reads the node answered 404, held back so the refresh that prompts them (about once a second, and
  * on every event for the account) does not repeat them. The node signs every answer, so each repeat
  * costs it work per connected trader. Two kinds of 404 rest differently: a route the node does not
- * have rests long, and an account it has not credited yet rests a few seconds and is read at once
- * when an event for the account arrives.
+ * have rests long, and an account it has not credited yet rests a few seconds, with its eligibility
+ * and withdrawal queue, and is read at once when an event for the account arrives. So is the history
+ * of an account that has none, which rests until then.
  */
 
 /** The House state route's key; a node that answers 404 there predates the route. */
@@ -13,8 +14,14 @@ export const ROUTE_ABSENT_MS = 300_000;
 /** How long an account the node has not credited is left alone; an event for the account ends it at once. */
 export const NOT_CREDITED_MS = 3_000;
 
+/** How long a rest lasts when only an event for the account, or a reset, ends it. */
+export const UNTIL_EVENT = Number.POSITIVE_INFINITY;
+
 /** An account the node answered 404 for: neither it nor its entitlement exists there yet. */
 export const uncreditedKey = (address: string): string => `uncredited:${address.toLowerCase()}`;
+
+/** An account whose history the node answered empty: it has nothing to read until an event for the account. */
+export const emptyHistoryKey = (address: string): string => `empty-history:${address.toLowerCase()}`;
 
 export class QuietReads {
   private readonly until = new Map<string, number>();

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseDeploy, type RawDeploy } from "../engine/deploy";
 import vectors from "../engine/eip712-vectors.json";
+import { settle } from "../engine/test-kit";
 import { fundWithAnvil } from "./actions";
 import { connected, VAULT } from "./live-kit";
 
@@ -39,7 +40,8 @@ describe("fundWithAnvil", () => {
   it("tops gas up to 1 ETH and mints 10,000 USDC through the connected wallet", async () => {
     const bodies = stubRpc({ eth_getBalance: { result: "0x0" }, anvil_setBalance: { result: null } });
     const { provider, store } = await connected();
-    await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    const funded = await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    expect(funded).toBe(true);
     expect(bodies).toEqual([
       { jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "latest"] },
       { jsonrpc: "2.0", id: 1, method: "anvil_setBalance", params: ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "0xde0b6b3a7640000"] },
@@ -55,7 +57,8 @@ describe("fundWithAnvil", () => {
   it("mints without touching gas when the wallet already holds 1 ETH", async () => {
     const bodies = stubRpc({ eth_getBalance: { result: "0xde0b6b3a7640000" } });
     const { provider, store } = await connected();
-    await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    const funded = await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    expect(funded).toBe(true);
     expect(bodies.map((b) => (b as { method: string }).method)).toEqual(["eth_getBalance"]);
     expect(provider.sent).toHaveLength(1);
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("10,000 USDC minted. Deposit into the vault to trade it.");
@@ -68,7 +71,8 @@ describe("fundWithAnvil", () => {
       anvil_setBalance: { error: { code: -32601, message: "the method anvil_setBalance does not exist" } },
     });
     const { provider, store } = await connected();
-    await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    const funded = await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    expect(funded).toBe(false);
     expect(provider.sent).toEqual([]);
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The build's RPC is not an Anvil node (the method anvil_setBalance does not exist), so the faucet cannot fund this wallet.");
   });
@@ -76,7 +80,8 @@ describe("fundWithAnvil", () => {
   it("does nothing outside a live-dev build: no RPC, no mint, no toast", async () => {
     const bodies = stubRpc({ eth_getBalance: { result: "0x0" }, anvil_setBalance: { result: null } });
     const { provider, store } = await connected();
-    await fundWithAnvil(store, parseDeploy({ ...LIVE_DEV, mode: "live" }));
+    const funded = await fundWithAnvil(store, parseDeploy({ ...LIVE_DEV, mode: "live" }));
+    expect(funded).toBe(false);
     expect(bodies).toEqual([]);
     expect(provider.sent).toEqual([]);
     expect(store.getSnapshot().toasts).toEqual([]);
@@ -86,14 +91,16 @@ describe("fundWithAnvil", () => {
     stubRpc({ eth_getBalance: { result: "0x0" }, anvil_setBalance: { result: null } });
     const { store, wallet } = await connected();
     store.liveWallet = { address: wallet.address, label: wallet.label, sign: wallet.sign, deposit: wallet.deposit, claim: wallet.claim };
-    await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    const funded = await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    expect(funded).toBe(false);
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("This build's faucet is not available for the connected wallet.");
   });
 
   it("reports a balance read the RPC refuses, mints nothing, and settles busy and prompt", async () => {
     stubRpc({ eth_getBalance: { error: { code: -32000, message: "missing trie node" } } });
     const { provider, store } = await connected();
-    await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    const funded = await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    expect(funded).toBe(false);
     expect(provider.sent).toEqual([]);
     const toasts = store.getSnapshot().toasts;
     expect(toasts.at(-1)?.text).toBe("The chain's RPC answered with -32000: missing trie node.");
@@ -104,7 +111,8 @@ describe("fundWithAnvil", () => {
   it("reports a declined mint after the gas top-up, and settles busy and prompt", async () => {
     stubRpc({ eth_getBalance: { result: "0x0" }, anvil_setBalance: { result: null } });
     const { store } = await connected({ fail: { eth_sendTransaction: { code: 4001, message: "User rejected" } } });
-    await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    const funded = await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    expect(funded).toBe(false);
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("You declined to mint USDC in your wallet.");
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
   });
@@ -114,10 +122,26 @@ describe("fundWithAnvil", () => {
     const { provider, store, wallet } = await connected();
     store.liveWallet = { ...wallet, readOnly: true };
     store.patch({ wallet: { address: wallet.address, label: wallet.label, readOnly: true } });
-    await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    const funded = await fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    expect(funded).toBe(false);
     expect(provider.sent).toEqual([]);
     const toasts = store.getSnapshot().toasts;
     expect(toasts.at(-1)?.text).toBe("The console will not fund the wallet: this account is read-only, so nothing can be signed for it.");
     expect(toasts.filter((t) => t.text.includes("faucet is not available"))).toEqual([]);
+  });
+
+  it("is false for a mint the old wallet finished after another wallet connected, and leaves the new connection's busy state alone", async () => {
+    stubRpc({ eth_getBalance: { result: "0x0" }, anvil_setBalance: { result: null } });
+    const { store, wallet } = await connected();
+    let finish!: () => void;
+    wallet.fund = () => new Promise<string>((resolve) => { finish = () => resolve("0x1"); });
+    const funding = fundWithAnvil(store, parseDeploy(LIVE_DEV));
+    await settle();
+    const next = { ...wallet, address: wallet.address };
+    store.liveWallet = next; // the next connection, which starts its own request
+    store.patch({ busy: true });
+    finish();
+    expect(await funding).toBe(false);
+    expect(store.getSnapshot().busy).toBe(true);
   });
 });
