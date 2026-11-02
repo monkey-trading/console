@@ -79,8 +79,9 @@ if [[ "$second_engine" == 1 ]]; then staking_floor_usdc=$house_usdc; fi
 # larger one would take a share of every distribution), and the seven-day notice the contract fixes.
 registry_epoch_secs=60
 candidate_bond_monkey=1
-# Each staking wallet's MONKEY, minted by the vault in place of emission claims; the token's cap
-# (a period budget's worth, 52,560 MONKEY) bounds the total.
+# Each staking wallet's MONKEY, minted by the vault in place of emission claims; the token's cap,
+# which follows the period budget, bounds the total. The election's thresholds are shares of the
+# stake, not of the supply, so they need no scaling with the budget.
 wallet_monkey=20000
 # The two releases' launch measurements: the mock TEE's stand-ins, which its sealing derives keys from.
 first_digest_byte=5a
