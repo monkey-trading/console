@@ -50,6 +50,19 @@ const TYPES = {
     { name: "expiresAt", type: "int64" },
     { name: "statement", type: "string" },
   ],
+  RegisterSessionKey: [
+    { name: "account", type: "address" },
+    { name: "nonce", type: "uint64" },
+    { name: "expiresAt", type: "int64" },
+    { name: "sessionKey", type: "address" },
+    { name: "sessionExpiresAt", type: "int64" },
+  ],
+  RevokeSessionKey: [
+    { name: "account", type: "address" },
+    { name: "nonce", type: "uint64" },
+    { name: "expiresAt", type: "int64" },
+    { name: "sessionKey", type: "address" },
+  ],
   ReissueRequest: [
     { name: "account", type: "address" },
     { name: "payoutNonce", type: "uint64" },
@@ -126,6 +139,16 @@ export function withdrawalTypedData(domain: RequestDomain, account: Address, amo
 /** `eligibility_hash`'s struct: the declaration signs the class's exact statement. */
 export function eligibilityTypedData(domain: RequestDomain, account: Address, cls: EligibilityClass, terms: Terms): TypedRequest {
   return typed(domain, "EligibilityRequest", { account: hexAddress(account), nonce: BigInt(terms.nonce), expiresAt: BigInt(terms.expiresAt), statement: STATEMENTS[cls] });
+}
+
+/** `session_key_registration_hash`'s struct: the account authorizes `sessionKey` to trade until `sessionExpiresAt`. */
+export function registerSessionKeyTypedData(domain: RequestDomain, account: Address, sessionKey: Address, sessionExpiresAt: number, terms: Terms): TypedRequest {
+  return typed(domain, "RegisterSessionKey", { account: hexAddress(account), nonce: BigInt(terms.nonce), expiresAt: BigInt(terms.expiresAt), sessionKey: hexAddress(sessionKey), sessionExpiresAt: BigInt(sessionExpiresAt) });
+}
+
+/** `session_key_revocation_hash`'s struct. */
+export function revokeSessionKeyTypedData(domain: RequestDomain, account: Address, sessionKey: Address, terms: Terms): TypedRequest {
+  return typed(domain, "RevokeSessionKey", { account: hexAddress(account), nonce: BigInt(terms.nonce), expiresAt: BigInt(terms.expiresAt), sessionKey: hexAddress(sessionKey) });
 }
 
 /**

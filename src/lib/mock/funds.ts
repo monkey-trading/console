@@ -5,7 +5,7 @@ import type { EngineEvent, QueuedWithdrawal, WithdrawalPage, WithdrawalRequest }
 import { fixedToWire, minFixed, parseFixed, type Fixed } from "../fixed";
 import { equityOf, marginOf } from "./accounts";
 import { MAX_DEPOSIT, MIN_DEPOSIT, MIN_WITHDRAWAL, USDC_UNIT, withdrawableNow } from "../vault";
-import { checkAccess, checkAuth } from "./orders";
+import { checkAccess, identifySigner } from "./orders";
 import { FINALITY_MS, type MockState } from "./state";
 
 /** Rounds toward zero to whole USDC base units, as the engine does; the dust stays in account cash. */
@@ -25,6 +25,7 @@ export function chainDeposit(state: MockState, address: string, amount: Fixed): 
   if (amount !== wholeUsdc(amount)) throw new EngineError(400, "USDC has six decimal places");
   account.pending.push({ amount, readyAt: state.now + FINALITY_MS });
   account.balance += amount;
+  state.credited.add(address.toLowerCase());
   state.emit({ type: "deposit" }, [{ type: "deposited", account: address, amount: fixedToWire(amount) }]);
 }
 
@@ -57,7 +58,13 @@ export function withdrawable(state: MockState, address: string): Fixed {
 export function withdraw(state: MockState, req: WithdrawalRequest): ActionResult {
   checkAccess(state);
   const account = state.account(req.account);
-  checkAuth(state, account, req.auth);
+  const signer = identifySigner(state, req.account, account, req.auth);
+  // The engine spends the key's nonce, then refuses a session key's funds request in the log:
+  // session keys trade and never move collateral.
+  if (signer.kind === "session") {
+    const events: EngineEvent[] = [{ type: "withdrawal_rejected", account: req.account, amount: req.amount, reason: { kind: "session_key_scope" } }];
+    return { seq: state.emit({ type: "withdraw" }, events).seq, events };
+  }
   const requested = parseFixed(req.amount);
   // The engine reserves whole USDC base units; any finer dust of the request stays in account cash.
   const amount = requested === null ? null : wholeUsdc(requested);

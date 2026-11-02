@@ -1,29 +1,23 @@
 /** What the user can do: connect a wallet, deposit, declare eligibility, trade, and withdraw. */
 
-import { signBlock } from "../engine/attestation";
-import { EngineError, type ActionResult } from "../engine/client";
 import type { Deploy } from "../engine/deploy";
 import { FAUCET_USDC, faucetAvailable, topUpGas } from "../engine/faucet";
-import { UntrustedError } from "../engine/trust";
-import { cancelTypedData, eligibilityTypedData, orderTypedData, requestDomain, STATEMENTS, withdrawalTypedData, type Terms, type TypedRequest } from "../engine/eip712";
-import type { EligibilityClass, OrderKind, RequestAuth, Side } from "../engine/types";
+import { cancelTypedData, eligibilityTypedData, orderTypedData, STATEMENTS, withdrawalTypedData } from "../engine/eip712";
+import type { EligibilityClass, OrderKind, Side } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
 import { saveChoice } from "../engine/wallet-persist";
+import { UntrustedError } from "../engine/trust";
 import { fixedToWire, formatFixedPlaces, parseFixed, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
 import { describeReject } from "../messages";
 import { loadAccount } from "./account";
+import { ensureLogin, sessionSigned } from "./session";
+import { domainOf, errorText, prompting, REQUEST_TTL_MS, signed, usableWallet } from "./signing";
 import type { ConsoleStore } from "./store";
 import { NO_ACCOUNT, release } from "./wallet-session";
 
-export { STATEMENTS };
+export { REQUEST_TTL_MS, STATEMENTS };
 export { disconnectWallet, walletSessionEnded } from "./wallet-session";
-
-/** A signed request stays valid this long past the node's signed time, within the engine's five-minute cap (`MAX_EXPIRY_AHEAD_MS`). */
-export const REQUEST_TTL_MS = 120_000;
-
-/** A refusal shown to the user, never thrown past an action. */
-type Outcome = { ok: true; result: ActionResult } | { ok: false };
 
 /** Offers to add the deployment's USDC to the wallet that just connected; one small toast when the wallet adds it, silence on a decline or a wallet that cannot. */
 function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
@@ -36,12 +30,29 @@ function offerUsdcImport(store: ConsoleStore, wallet: Wallet): void {
 
 export async function connectWallet(store: ConsoleStore, optionId: string, quiet = false, connected?: Wallet): Promise<boolean> {
   try {
+    // A previous disconnect's revocation and release run to the end before a new wallet adopts the
+    // store, so a WalletConnect relay is never closed under a fresh pairing. The promise stays
+    // installed until it settles: a second connect waits on the same cleanup, not a cleared slot.
+    if (store.walletCleanup !== null) {
+      const cleanup = store.walletCleanup;
+      // Bounded by the revocation's own request expiry: past it the signature could not be accepted,
+      // so the connect proceeds and the late cleanup settles in the background.
+      await Promise.race([cleanup, new Promise((resolve) => setTimeout(resolve, REQUEST_TTL_MS))]);
+      if (store.walletCleanup === cleanup) store.walletCleanup = null;
+    }
     const wallet = connected ?? (await store.deps.wallets.connect(optionId));
     if (quiet && store.liveWallet !== null && store.liveWallet !== wallet) {
       release(store, wallet); // a quiet connect never replaces a wallet that connected while it waited; the stale one ends
       return false;
     }
-    if (store.liveWallet !== wallet) release(store, store.liveWallet); // the wallet this one replaces keeps no session open
+    if (store.liveWallet !== wallet) {
+      release(store, store.liveWallet); // the wallet this one replaces keeps no session open
+      // The old connection's key, expiry, in-flight login and refusal do not carry to the new wallet.
+      store.sessionKey = null;
+      store.sessionKeyExpiresAt = 0;
+      store.sessionLogin = null;
+      store.sessionLoginRefusal = null;
+    }
     store.liveWallet = wallet;
     store.patch(NO_ACCOUNT);
     store.setWallet({ address: wallet.address, label: wallet.label, ...(wallet.readOnly ? { readOnly: true } : {}) });
@@ -50,6 +61,10 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     const choice = wallet.topic !== undefined ? { kind: "walletconnect" as const, topic: wallet.topic } : optionId === "injected" ? { kind: "injected" as const } : null;
     if (store.deps.persistence !== undefined && choice !== null) saveChoice(store.deps.persistence, choice);
     await loadAccount(store, true);
+    // The one-signature login (console#68): trading signs with the ephemeral key it authorizes. A
+    // not-yet-credited account skips it (the engine refuses until the first deposit credits, and the
+    // deposit's event runs the login then); the first order asks if the account still is not credited.
+    if (!wallet.readOnly && store.getSnapshot().account !== null) await ensureLogin(store);
     if (!quiet) store.toast("ok", `Connected ${wallet.label}.`);
     return true;
   } catch (error) {
@@ -60,89 +75,6 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
   }
 }
 
-/** The connected wallet when the console may use it now; otherwise tells the user why not and returns null. */
-export function usableWallet(store: ConsoleStore, action: string): Wallet | null {
-  const wallet = store.liveWallet;
-  const state = store.getSnapshot();
-  if (!wallet) {
-    store.toast("error", "Connect a wallet first.");
-    return null;
-  }
-  const blocked = signBlock(state.attestation, state.stream, state.wallet?.readOnly === true);
-  if (blocked !== null) {
-    store.toast("error", `The console will not ${action}: ${blocked}.`);
-    return null;
-  }
-  return wallet;
-}
-
-/** Runs one wallet step, showing `prompt` while the wallet waits for the user. */
-export async function prompting<T>(store: ConsoleStore, prompt: string, step: () => Promise<T>): Promise<T> {
-  store.patch({ prompt });
-  try {
-    return await step();
-  } finally {
-    store.patch({ prompt: null });
-  }
-}
-
-/** How a request answered 409 (its nonce already used) is handled: a cancel or declaration re-signs with the nonce the node names, since running it twice does nothing more; an order or withdrawal does not, since a copy of it may have run first. */
-type OnNonceTaken = "sign-again" | "report";
-
-/**
- * Signs and sends one request for a node whose attestation the console accepts: the nonce from
- * its signed answer, the expiry from that answer's signed time. A refusal shows only after the
- * account is read again, so the screen holds what the node holds when the user reads why.
- */
-async function signed(
-  store: ConsoleStore,
-  summary: string,
-  build: (terms: Terms, account: string) => TypedRequest,
-  send: (auth: RequestAuth, wallet: Wallet) => Promise<ActionResult>,
-  onNonceTaken: OnNonceTaken,
-): Promise<Outcome> {
-  const wallet = usableWallet(store, "sign");
-  if (!wallet) return { ok: false };
-  store.patch({ busy: true });
-  /** Whether the request left the page: from then on it may have run, whatever comes back. */
-  let sent = false;
-  try {
-    const { next_nonce, time_ms } = await store.deps.client.nonce(wallet.address);
-    const expiresAt = (time_ms ?? store.getSnapshot().now) + REQUEST_TTL_MS;
-    const attempt = async (nonce: number) => {
-      const typed = build({ nonce, expiresAt }, wallet.address);
-      const signature = await prompting(store, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
-      sent = true;
-      return send({ nonce, expires_at: expiresAt, signature }, wallet);
-    };
-    try {
-      return { ok: true, result: await attempt(next_nonce) };
-    } catch (error) {
-      if (!(error instanceof EngineError) || error.reject?.kind !== "invalid_nonce") throw error;
-      if (onNonceTaken === "report") throw new EngineError(error.status, `The node had already used nonce ${next_nonce} for this account, so it did not take this request as sent. If it was sent twice it may have run: check your positions, orders, withdrawals and history before trying again.`);
-      return { ok: true, result: await attempt(error.reject.expected) };
-    }
-  } catch (error) {
-    if (store.noteAccess(error)) return { ok: false };
-    // A sent request the node refused, left unanswered, or answered unverifiably may still have run: read the account first.
-    if (sent) await store.refresh(true);
-    // Only a refusal the node signed says the request did not run; no answer, or one that does not verify, says nothing.
-    const unanswered = error instanceof UntrustedError || (error instanceof EngineError && error.status === 0);
-    const unknown = sent && unanswered ? " It may have run: check your positions, orders, withdrawals and history before trying again." : "";
-    store.toast("error", `${errorText(error)}${unknown}`);
-    return { ok: false };
-  } finally {
-    store.patch({ busy: false });
-  }
-}
-
-export function errorText(error: unknown): string {
-  if (error instanceof EngineError) return error.reject ? describeReject(error.reject) : error.message;
-  return error instanceof Error ? error.message : "Something went wrong.";
-}
-
-/** The domain the client's deployment signs under. */
-export const domainOf = (store: ConsoleStore) => requestDomain(store.deps.client.deployment.chainId, store.deps.client.deployment.vault);
 
 export async function attestEligibility(store: ConsoleStore, cls: EligibilityClass): Promise<void> {
   const out = await signed(store, `declare "${STATEMENTS[cls]}"`, (t, account) => eligibilityTypedData(domainOf(store), account, cls, t), (auth, wallet) =>
@@ -240,7 +172,7 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams): Prom
   const order = { client_id: store.id(), market: market.id, side: params.side, qty, kind, reduce_only: params.reduceOnly };
   const at = params.kind.kind === "market" ? `at ${formatFixedPlaces(params.kind.quoted, market.places)}, up to ${params.kind.slippageBps} bps worse` : `${params.kind.kind} at ${formatFixedPlaces(params.kind.price, market.places)}`;
   const summary = `${params.side} ${qty} ${market.symbol} ${at}${params.reduceOnly ? ", reduce only" : ""}`;
-  const out = await signed(store, summary, (t, account) => orderTypedData(domainOf(store), { ...order, account }, t), (auth, wallet) =>
+  const out = await sessionSigned(store, summary, (t, account) => orderTypedData(domainOf(store), { ...order, account }, t), (auth, wallet) =>
     store.deps.client.placeOrder({ ...order, account: wallet.address, auth }), "report",
   );
   if (!out.ok) return false;
@@ -256,7 +188,7 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams): Prom
 }
 
 export async function cancelOrder(store: ConsoleStore, orderId: number): Promise<void> {
-  const out = await signed(store, `cancel order ${orderId}`, (t, account) => cancelTypedData(domainOf(store), { account, order_id: orderId }, t), (auth, wallet) =>
+  const out = await sessionSigned(store, `cancel order ${orderId}`, (t, account) => cancelTypedData(domainOf(store), { account, order_id: orderId }, t), (auth, wallet) =>
     store.deps.client.cancelOrder({ account: wallet.address, order_id: orderId, auth }), "sign-again",
   );
   if (!out.ok) return;

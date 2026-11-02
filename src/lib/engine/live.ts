@@ -14,7 +14,7 @@ import type { SessionRule } from "./mark-session";
 import { LiveStream, type QuoteRequest, type Scheduler, type Socket } from "./live-stream";
 import { SignedTransport } from "./transport";
 import { NodeTrust } from "./trust";
-import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
+import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 import type { Verifier } from "./verifier";
 import { newChallenge } from "./wire";
@@ -61,9 +61,7 @@ export class LiveEngineClient implements EngineClient {
   private readonly houseFold = new HouseFold();
   /** The public withdrawal queue's size, walked within a page cap and cached for its TTL. */
   private readonly totalsWalk: QueueTotalsWalk;
-  /** The public withdrawal queue's size, from the walk cached for its TTL. */
   readonly withdrawalTotals: () => Promise<QueueTotals>;
-  /** The account's MONKEY entitlement proof, or null before the node holds one. */
   readonly emissions: (address: Address) => Promise<EntitlementProof | null>;
 
   constructor(private readonly deps: LiveDeps) {
@@ -100,8 +98,6 @@ export class LiveEngineClient implements EngineClient {
     };
   }
 
-  private readonly signal = (): AbortSignal => this.deps.signal?.() ?? AbortSignal.timeout(READ_TIMEOUT_MS);
-
   /** The verifier, loading it the first time. */
   private verifier(): Promise<Verifier> {
     if (this.verifierReady === null) {
@@ -123,6 +119,8 @@ export class LiveEngineClient implements EngineClient {
     }
     return this.verifierReady;
   }
+
+  private readonly signal = (): AbortSignal => this.deps.signal?.() ?? AbortSignal.timeout(READ_TIMEOUT_MS);
 
   /** The loaded verifier; the trust check that precedes every use has loaded it. */
   private requireVerifier(): Verifier {
@@ -166,11 +164,12 @@ export class LiveEngineClient implements EngineClient {
     return { seq: read.seq, ...this.houseFold.current() };
   }
 
+
   async account(address: Address): Promise<AccountView> {
     return (await this.transport.get(`/v1/accounts/${address}`)) as AccountView;
   }
 
-  /** The engine has no region route: it screens each action, so a live client learns of a refusal from the action. */
+  /** The engine has no region route: it screens each action, so a refusal reaches a live client as the action's. */
   async accessProbe(): Promise<void> {}
 
   async nonce(address: Address): Promise<{ next_nonce: number; time_ms: number }> {
@@ -193,28 +192,37 @@ export class LiveEngineClient implements EngineClient {
 
   emissionSchedule(): Promise<EmissionSchedule | null> { return readEmissionSchedule((path) => this.transport.get(path)); }
 
-  /** Posts a signed action; the node answers with the events its command produced, signed for this request. */
-  private async action(path: string, body: unknown): Promise<ActionResult> {
-    const answer = await this.transport.post(path, body);
+  /** Sends a signed action — `POST`, or `DELETE` for the session-key revocation — and answers with the events its command produced, signed for this request. */
+  private async action(method: "POST" | "DELETE", path: string, body: unknown): Promise<ActionResult> {
+    const answer = method === "POST" ? await this.transport.post(path, body) : await this.transport.delete(path, body);
     if (!Array.isArray(answer.body)) throw new EngineError(0, "The node's signed answer to the action was not a list of events.");
     // The attested enclave signed this list for this request, so its events are the engine's.
     return { seq: answer.seq ?? 0, events: answer.body as ActionResult["events"] };
   }
 
   attestEligibility(request: EligibilityRequest): Promise<ActionResult> {
-    return this.action("/v1/eligibility", request);
+    return this.action("POST", "/v1/eligibility", request);
   }
 
   placeOrder(request: OrderRequest): Promise<ActionResult> {
-    return this.action("/v1/orders", request);
+    return this.action("POST", "/v1/orders", request);
   }
 
   cancelOrder(request: CancelRequest): Promise<ActionResult> {
-    return this.action("/v1/orders/cancel", request);
+    return this.action("POST", "/v1/orders/cancel", request);
   }
 
   withdraw(request: WithdrawalRequest): Promise<ActionResult> {
-    return this.action("/v1/withdrawals", request);
+    return this.action("POST", "/v1/withdrawals", request);
+  }
+
+  registerSessionKey(request: SessionKeyRequest): Promise<ActionResult> {
+    return this.action("POST", "/v1/session-keys", request);
+  }
+
+  /** The node's route is `DELETE` with the same signed body shape as the registration, minus the expiry. */
+  revokeSessionKey(request: SessionKeyRevocationRequest): Promise<ActionResult> {
+    return this.action("DELETE", "/v1/session-keys", request);
   }
 
   async reissue(account: Address, nonce: number, body: { replaces_expires_at: number; signature: string }): Promise<void> {
@@ -228,14 +236,17 @@ export class LiveEngineClient implements EngineClient {
 
   async scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>, dead?: () => boolean): Promise<ScannedMark[]> {
     // The backfill reads the signed log only: every mark the console plots derives from an enclave-signed frame.
-    const signer = await this.trust.signer();
-    return scanForMarks({ ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) }, fromSeq, budget, rules, sessions, dead);
+    return scanForMarks(this.scanDeps(await this.trust.signer()), fromSeq, budget, rules, sessions, dead);
+  }
+
+  /** The deps a signed log scan takes: the stream origin, a verified signer, and a fresh challenge. */
+  private scanDeps(signer: string): import("./log-scan").ScanDeps {
+    return { ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) };
   }
 
   /** The market's index-mark history, one signed page; the enclave signs the shape, as every answer. */
   async marks(market: MarketId, resolution: MarkResolution, fromMs: number, toMs: number): Promise<MarkPage> {
-    const query = new URLSearchParams({ resolution, from_ms: String(fromMs), to_ms: String(toMs) });
-    return (await this.transport.get(`/v1/markets/${market}/marks?${query}`)) as MarkPage;
+    return (await this.transport.get(`/v1/markets/${market}/marks?${new URLSearchParams({ resolution, from_ms: String(fromMs), to_ms: String(toMs) })}`)) as MarkPage;
   }
 
   quotes(request: QuoteRequest | null): void {
@@ -249,6 +260,7 @@ export class LiveEngineClient implements EngineClient {
       const stream = new LiveStream({
         ...this.deps, verifier: () => this.requireVerifier(), origin: this.deps.streamOrigin, trust: this.trust, challenge: this.deps.challenge ?? (() => newChallenge()),
         onMessage: (message) => {
+
           const entry = setParamsOf(message.cmd, message.events);
           if (entry !== null) this.houseFold.foldStreamParams(message.seq, entry);
           for (const subscriber of this.subscribers) subscriber(message);

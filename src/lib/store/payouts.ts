@@ -9,7 +9,7 @@ import { reissueTypedData } from "../engine/eip712";
 import type { HistoryEvent, PayoutEntry, SignedWithdrawal } from "../engine/types";
 import { fixedFromWire, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
-import { domainOf, errorText, prompting, usableWallet } from "./actions";
+import { domainOf, errorText, prompting, usableWallet } from "./signing";
 import { formatStamp } from "../time";
 import { authorizationFor, keepLatest } from "./funds";
 import type { ConsoleState } from "./state";

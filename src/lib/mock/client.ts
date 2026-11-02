@@ -4,7 +4,7 @@ import { checkAttestation, type AttestationStatus } from "../engine/attestation"
 import { EngineError, type ActionResult, type EngineClient, type SignatureChecks, type Unsubscribe } from "../engine/client";
 import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
-import type { EligibilityClass, AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
+import type { EligibilityClass, AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import type { HouseState } from "../engine/house-state";
 import type { CheckpointEntry } from "../engine/wire";
@@ -14,6 +14,7 @@ import { equityOf, houseGross, houseNav, marginOf } from "./accounts";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";
 import { EMISSION_PERIOD_MS } from "./emissions";
 import { queuePage, withdraw } from "./funds";
+import { registerSessionKey, revokeSessionKey } from "./session-keys";
 import { advance } from "./step";
 import { CHECKPOINT_EVERY, type MockState } from "./state";
 
@@ -181,7 +182,10 @@ export class MockEngineClient implements EngineClient {
   }
 
   async nonce(address: Address): Promise<{ next_nonce: number }> {
-    return { next_nonce: this.state.accounts.get(address.toLowerCase())?.nextNonce ?? 0 };
+    const key = address.toLowerCase();
+    const held = this.state.sessionKeyNonces.get(key);
+    if (held !== undefined) return { next_nonce: held };
+    return { next_nonce: this.state.accounts.get(key)?.nextNonce ?? 0 };
   }
 
   async eligibility(address: Address): Promise<EligibilityView> {
@@ -211,6 +215,14 @@ export class MockEngineClient implements EngineClient {
 
   async withdraw(request: WithdrawalRequest): Promise<ActionResult> {
     return withdraw(this.state, request);
+  }
+
+  async registerSessionKey(request: SessionKeyRequest): Promise<ActionResult> {
+    return registerSessionKey(this.state, request);
+  }
+
+  async revokeSessionKey(request: SessionKeyRevocationRequest): Promise<ActionResult> {
+    return revokeSessionKey(this.state, request);
   }
 
   /** The mock pays approved withdrawals itself, so it signs no authorization to reissue. */

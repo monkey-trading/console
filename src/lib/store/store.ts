@@ -2,8 +2,9 @@
 
 import type { TimeframeId } from "../bars";
 import { maySign } from "../engine/attestation";
-import { EngineError, type ClientEvent } from "../engine/client";
-import type { MarketId, StreamMessage } from "../engine/types";
+import type { ClientEvent } from "../engine/client";
+import type { SessionKeySigner } from "../engine/session-key";
+import type { MarketId, Reject, StreamMessage } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
 import { loadAccount } from "./account";
@@ -11,15 +12,26 @@ import { tickBars } from "./bars-tick";
 import { BarsSeed } from "./bars-seed";
 import { FEED_LIMIT, feedFrom, isMine } from "./feed";
 import { LedgerReads } from "./ledger";
-import { initialState, seedAllBars, type BlockReason, type ConsoleState, type ToastMessage } from "./state";
+import { initialState, seedAllBars, type ConsoleState, type ToastMessage } from "./state";
 import { readHousePanelSoon } from "./house";
 import { PacedReads } from "./paced-reads";
+import { loginOnCredit, loginWhenLive } from "./session";
+import { noteAccess } from "./signing";
 import type { StoreDeps } from "./store-deps";
 
 export class ConsoleStore {
   readonly deps: StoreDeps;
   /** The connected wallet, which holds a signer and so is not part of the snapshot. */
   liveWallet: Wallet | null = null;
+  /** The ephemeral in-browser key trading signs with and its registration's expiry by the node's clock (console#68); the private key never enters the snapshot. */
+  sessionKey: SessionKeySigner | null = null;
+  sessionKeyExpiresAt = 0;
+  /** Why the last login the node answered was refused, or null: a refused registration sends orders and cancels through the wallet instead. */
+  sessionLoginRefusal: Reject | null = null;
+  /** The login in flight, so concurrent callers share one attempt and one wallet prompt. */
+  sessionLogin: Promise<boolean> | null = null;
+  /** The previous disconnect's revocation and release, awaited before the next connect adopts. */
+  walletCleanup: Promise<void> | null = null;
   /** Bookkeeping for the background vault reads: `paidCheck`/`emissionsCheck` name the wallet each runs for, `lastEmissionsReadAt` throttles the MONKEY record's retries, `lastEmissionsReadError` dedupes its repeated failures. */
   paidCheck: Wallet | null = null;
   emissionsCheck: Wallet | null = null;
@@ -41,9 +53,9 @@ export class ConsoleStore {
   readonly barsSeed = new BarsSeed(this);
   /** The P&L tab's reads, run only while that tab is open. */
   readonly ledger = new LedgerReads(this);
-  /** When each market's bar bucket was last ticked from the node's mark, so a history merge can tell a stale live candle from a fresh one; derived bookkeeping, not part of the snapshot. */
+  /** When each market's bar bucket was last ticked from the node's mark; a merge tells a stale candle from a fresh one. Not part of the snapshot. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
-  /** Set when the store stops following the node so pending history work stands down; bumped on each start so an earlier cycle's scans stand down (StrictMode re-runs the effect). Neither is part of the snapshot. */
+  /** Stand-down flags for pending history work, bumped on each start; not part of the snapshot. */
   stopped = false;
   scanEpoch = 0;
   /** Whether trust in the node was lost (a failed check or a wrong clock) and not yet regained. */
@@ -62,7 +74,6 @@ export class ConsoleStore {
   lastQueueReadError: string | null = null;
   /** The last account read failure shown, deduplicated like the main read's. Not part of the snapshot. */
   lastAccountError: string | null = null;
-
   constructor(deps: StoreDeps) {
     this.deps = deps;
     this.viewer = deps.initial.viewer;
@@ -77,7 +88,6 @@ export class ConsoleStore {
         : {}),
     };
   }
-
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => {
@@ -133,20 +143,10 @@ export class ConsoleStore {
 
   /** Marks the caller as refused when `error` is an access refusal; true if it was. */
   noteAccess(error: unknown): boolean {
-    if (error instanceof EngineError && error.reject?.kind === "access") {
-      const reason = error.reject.reason;
-      if (reason === "united_states" || reason === "sanctioned_jurisdiction") {
-        this.patch({ blocked: reason satisfies BlockReason });
-        return true;
-      }
-    }
-    return false;
+    return noteAccess(this, error);
   }
 
-  /**
-   * Starts following the node at `nowMs`: checks its attestation and access, redraws the charts
-   * from that instant, and subscribes to the stream.
-   */
+  /** Starts following the node at `nowMs`: checks its attestation and access, redraws the charts, and subscribes to the stream. */
   start(nowMs: number): () => void {
     // A restart (React StrictMode re-runs the effect) cancels the previous cycle's pending
     // history work and scans anew: its results were discarded when the cycle stopped.
@@ -184,6 +184,8 @@ export class ConsoleStore {
       // The frame's signed time moves the node clock first, so a read it prompts plots marks at node time, not the pre-outage time.
       this.patch({ stream: event.status, ...(event.time !== undefined && event.time > this.snapshot.now ? { now: event.time } : {}) });
       if (read) {
+        // A connect that found the feed still starting runs the login now, when signing is possible.
+        loginWhenLive(this);
         this.ledger.invalidate(); // the stream resumes at the live end: events from the gap are read again
         void this.refresh(true);
       }
@@ -243,19 +245,18 @@ export class ConsoleStore {
     // An event for the connected account, from any command, may have changed its history too.
     const mine = this.snapshot.wallet?.address.toLowerCase();
     const own = mine !== undefined && message.events.some((e) => "account" in e && e.account.toLowerCase() === mine);
-    if (own) void this.refresh(true);
-    else if (message.cmd.type === "tick") {
+    if (own) {
+      // A deposit or declaration that credits the account is the moment its one-signature login may run.
+      loginOnCredit(this, message.events, mine);
+      void this.refresh(true);
+    } else if (message.cmd.type === "tick") {
       const accountChanged = message.events.some((e) => "account" in e);
       if (this.pacing) this.pacing.readOnTick(accountChanged);
       else void this.refresh(accountChanged);
     }
   }
 
-  /**
-   * Re-reads markets, house, and the connected account. A call made while one runs waits for it and
-   * then reads again, since the running read may predate the change that prompted the call. The house
-   * panel's reads are not part of the lock: `readHousePanelSoon` runs them aside.
-   */
+  /** Re-reads markets, house, and the connected account; a call made while one runs waits, then reads again. */
   refresh(accountChanged: boolean): Promise<void> {
     if (this.inflight) {
       this.rerun = { accountChanged: accountChanged || (this.rerun?.accountChanged ?? false) };

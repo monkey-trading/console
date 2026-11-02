@@ -9,7 +9,7 @@ import type { TypedRequest } from "../engine/eip712";
 import type { QuoteRequest } from "../engine/live-stream";
 import { ProviderWallet } from "../engine/provider-wallet";
 import { settle } from "../engine/test-kit";
-import type { CancelRequest, EligibilityRequest, HistoryPage, OrderRequest, PayoutsPage, WithdrawalRequest, MarketView } from "../engine/types";
+import type { AccountView, CancelRequest, EligibilityRequest, HistoryPage, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import { ACCOUNT, StubProvider, type StubOptions } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
@@ -19,7 +19,7 @@ export const VAULT = vectors.vault;
 export const BTC = { id: 1, symbol: "BTC-USD", open: true, reduce_only: false, mark: "100000", stress_level: 0, max_slippage_bps: 25, min_order_notional: "10", margin_tiers: [], spread_tiers: [], house_cap_bps: 0, schedule: { kind: "always_open" }, asset_class: "crypto" } as unknown as MarketView;
 export const NODE_TIME = 1_792_540_800_000;
 
-export type Posted = { route: string; body: OrderRequest | CancelRequest | WithdrawalRequest | EligibilityRequest | { replaces_expires_at: number; signature: string } };
+export type Posted = { route: string; body: OrderRequest | CancelRequest | WithdrawalRequest | EligibilityRequest | SessionKeyRequest | SessionKeyRevocationRequest | { replaces_expires_at: number; signature: string } };
 
 /** A live client whose actions record what they were sent and answer as the test says. */
 export class ActionClient implements EngineClient {
@@ -41,7 +41,11 @@ export class ActionClient implements EngineClient {
   payoutsReads: { limit: number; after?: number | undefined }[] = [];
   /** Set to make every payouts read fail with it. */
   payoutsError: Error | null = null;
-  answer: (posted: Posted) => ActionResult = () => ({ seq: 1, events: [] });
+  found: SignedWithdrawal | null = null;
+  answer: (posted: Posted) => ActionResult = (posted) =>
+    posted.route === "session_key"
+      ? { seq: 1, events: [{ type: "session_key_registered", account: (posted.body as SessionKeyRequest).account, session_key: (posted.body as SessionKeyRequest).session_key, expires_at: (posted.body as SessionKeyRequest).expires_at }] }
+      : { seq: 1, events: [] };
   async attestation(): Promise<never> { throw new Error("unused"); }
   async verify() { return { kind: "mock" } as const; }
   watch(listener: (event: ClientEvent) => void) { listener({ type: "feed", status: "live" }); return () => {}; }
@@ -49,7 +53,12 @@ export class ActionClient implements EngineClient {
   async house() { return { cash: "0", nav: "0", gross_exposure: "0" }; }
   async houseState() { return { seq: null, params: null, checkpoint: null }; }
   async withdrawalTotals() { return { count: 0, remaining: 0n, seq: null, complete: true, stable: true }; }
-  async account(): Promise<never> { throw new EngineError(404, "not found"); }
+  /** Whether the account read answers as a credited account; false answers the node's 404. */
+  credited = false;
+  async account(): Promise<AccountView> {
+    if (!this.credited) throw new EngineError(404, "not found");
+    return { balance: "1000", equity: "1000", margin: "0", positions: {}, orders: {}, toxicity_bps: 0 };
+  }
   async accessProbe() {}
   async nonce() { this.nonceReads++; return { next_nonce: 4, time_ms: NODE_TIME }; }
   async eligibility() { return { class: null, statement: null }; }
@@ -61,6 +70,8 @@ export class ActionClient implements EngineClient {
   placeOrder(body: OrderRequest) { return this.act("order", body); }
   cancelOrder(body: CancelRequest) { return this.act("cancel", body); }
   withdraw(body: WithdrawalRequest) { return this.act("withdraw", body); }
+  registerSessionKey(body: SessionKeyRequest) { return this.act("session_key", body); }
+  revokeSessionKey(body: SessionKeyRevocationRequest) { return this.act("session_key_revoke", body); }
   async reissue(_account: string, nonce: number, body: { replaces_expires_at: number; signature: string }) { await this.act(`reissue ${nonce}`, body); }
   async payouts(_account: string, page: { limit: number; after?: number }) {
     this.payoutsReads.push(page);
@@ -79,7 +90,10 @@ export class ActionClient implements EngineClient {
     this.historyReads.push({ kind: params.kind });
     return this.historyPages?.[params.before ?? ""] ?? this.historyPage;
   }
-  subscribe() { return () => {}; }
+  private subscriber: ((message: StreamMessage) => void) | null = null;
+  subscribe(onMessage: (message: StreamMessage) => void) { this.subscriber = onMessage; return () => { this.subscriber = null; }; }
+  /** Delivers one stream message to the store, as the node would. */
+  deliver(message: StreamMessage) { this.subscriber?.(message); }
 }
 
 /** A started store over an `ActionClient`, connected to a wallet over a stub provider with Anvil's account 0. */

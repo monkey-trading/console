@@ -2,7 +2,8 @@
 
 import type { Wallet } from "../engine/wallet";
 import { clearChoice, clearChoiceIf } from "../engine/wallet-persist";
-import { errorText } from "./actions";
+import { errorText } from "./signing";
+import { liveSessionKey, revokeSession } from "./session";
 import type { ConsoleStore } from "./store";
 
 /** The state a wallet change clears: everything read or streamed for the account before. */
@@ -31,13 +32,32 @@ export function disconnectWallet(store: ConsoleStore): void {
 export function walletSessionEnded(store: ConsoleStore, topic: string): void {
   if (store.liveWallet?.label !== "WalletConnect") return;
   if (store.deps.persistence !== undefined) clearChoiceIf(store.deps.persistence, { kind: "walletconnect", topic });
-  dropWallet(store);
+  // The dead session cannot sign a revocation, so the key's registration is left to expire.
+  dropWallet(store, false);
   store.toast("info", "Your wallet ended the WalletConnect session, so the console disconnected it.");
 }
 
-function dropWallet(store: ConsoleStore): void {
-  release(store, store.liveWallet);
+/**
+ * Drops the wallet and any session key. With `revoke` (the user's Disconnect), a live session key
+ * is revoked first, best effort, while the wallet's session can still sign; the revocation and
+ * release are the store's `walletCleanup`, which the next connect awaits so a WalletConnect relay
+ * is never closed under a fresh pairing.
+ */
+function dropWallet(store: ConsoleStore, revoke = true): void {
+  const wallet = store.liveWallet;
+  const key = liveSessionKey(store);
   store.liveWallet = null;
+  store.sessionKey = null;
+  store.sessionKeyExpiresAt = 0;
+  store.sessionLogin = null; // a login in flight installs nothing: its wallet no longer matches
+  store.sessionLoginRefusal = null;
   store.setWallet(null);
   store.patch(NO_ACCOUNT);
+  store.walletCleanup = revoke && wallet && !wallet.readOnly && key !== null ? revokeThenRelease(store, wallet, key) : Promise.resolve(release(store, wallet));
+}
+
+/** Revokes the session key, then ends the wallet's session; the wallet is gone either way. */
+async function revokeThenRelease(store: ConsoleStore, wallet: Wallet, key: NonNullable<ConsoleStore["sessionKey"]>): Promise<void> {
+  await revokeSession(store, wallet, key);
+  release(store, wallet);
 }

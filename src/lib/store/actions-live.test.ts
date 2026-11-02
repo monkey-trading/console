@@ -5,14 +5,16 @@ import { describe, expect, it } from "vitest";
 import { EngineError } from "../engine/client";
 import { UntrustedError } from "../engine/trust";
 import vectors from "../engine/eip712-vectors.json";
-import { cancelTypedData, eligibilityTypedData, orderTypedData, requestDomain, withdrawalTypedData } from "../engine/eip712";
-import type { CancelRequest, EligibilityRequest, OrderRequest, WithdrawalRequest } from "../engine/types";
+import { orderTypedData, registerSessionKeyTypedData, requestDomain } from "../engine/eip712";
+import { SESSION_KEY_TTL_MS } from "../engine/session-key";
+import type { CancelRequest, OrderRequest, SessionKeyRequest } from "../engine/types";
 import { ACCOUNT } from "../engine/wallet-kit";
 import { loadChoice, type ChoiceStorage } from "../engine/wallet-persist";
 import { fixedFromInt, fixedFromWire } from "../fixed";import { settle } from "../engine/test-kit";
 import type { Wallet } from "../engine/wallet";
-import { attestEligibility, cancelOrder, connectWallet, deposit, disconnectWallet, placeOrder, REQUEST_TTL_MS, withdraw } from "./actions";
+import { cancelOrder, connectWallet, deposit, disconnectWallet, placeOrder, REQUEST_TTL_MS, withdraw } from "./actions";
 import { connected, NODE_TIME, signerOf, VAULT, ActionClient, BTC } from "./live-kit";
+import { loginSession } from "./session";
 import { ConsoleStore } from "./store";
 
 const DOMAIN = requestDomain(vectors.chain_id, VAULT);
@@ -20,54 +22,100 @@ const DOMAIN = requestDomain(vectors.chain_id, VAULT);
 /** A connected-wallet shape for connect tests that only count what the wallet was asked. */
 const WALLET_STUB: Wallet = { address: ACCOUNT, label: "Test wallet", sign: async () => "0x", deposit: async () => "0x0", claim: async () => "0x0" };
 
+/** The registration the login posted and the key it named, from a client that recorded one. */
+function registrationOf(client: ActionClient, last = false): { request: SessionKeyRequest; sessionKey: string } {
+  const posted = (last ? client.posted.filter((p) => p.route === "session_key").at(-1) : undefined) ?? client.posted.find((p) => p.route === "session_key");
+  if (!posted) throw new Error("no session-key registration posted");
+  const request = posted.body as SessionKeyRequest;
+  return { request, sessionKey: request.session_key.toLowerCase() };
+}
+
 describe("signed actions with a fixed-key wallet", () => {
-  it("signs an order with the node's nonce and an expiry two minutes past its signed time, carrying the price shown and the bound", async () => {
-    const { client, store } = await connected();
+  it("logs in with the one wallet signature, then signs the order with the session key — no second wallet prompt", async () => {
+    const { client, provider, store } = await connected();
     await placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
-    const posted = client.posted[0];
-    if (!posted || posted.route !== "order") throw new Error("no order posted");
-    const order = posted.body as OrderRequest;
-    expect(order).toMatchObject({ account: ACCOUNT, market: 1, side: "buy", qty: "0.5", kind: { kind: "market", quoted: "100000", max_slippage_bps: 10 }, reduce_only: false, auth: { nonce: 4, expires_at: NODE_TIME + REQUEST_TTL_MS } });
+    const { request, sessionKey } = registrationOf(client);
+    // The registration is the account's signature: the one wallet prompt of the whole flow.
+    expect(request).toMatchObject({ account: ACCOUNT, expires_at: NODE_TIME + SESSION_KEY_TTL_MS, auth: { nonce: 4, expires_at: NODE_TIME + REQUEST_TTL_MS } });
+    const registerTyped = registerSessionKeyTypedData(DOMAIN, request.account, request.session_key, request.expires_at, { nonce: request.auth.nonce, expiresAt: request.auth.expires_at });
+    expect(await signerOf(registerTyped, request.auth.signature)).toBe(ACCOUNT);
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(1);
+    // The order is byte-identical to an account-signed one but for the signer: the session key.
+    const order = client.posted.at(-1);
+    if (!order || order.route !== "order") throw new Error("no order posted");
+    const body = order.body as OrderRequest;
+    expect(body).toMatchObject({ account: ACCOUNT, market: 1, side: "buy", qty: "0.5", kind: { kind: "market", quoted: "100000", max_slippage_bps: 10 }, reduce_only: false, auth: { nonce: 4, expires_at: NODE_TIME + REQUEST_TTL_MS } });
     expect(REQUEST_TTL_MS).toBeLessThanOrEqual(5 * 60_000);
-    const typed = orderTypedData(DOMAIN, order, { nonce: 4, expiresAt: NODE_TIME + REQUEST_TTL_MS });
-    expect(await signerOf(typed, order.auth?.signature)).toBe(ACCOUNT);
+    const typed = orderTypedData(DOMAIN, body, { nonce: 4, expiresAt: NODE_TIME + REQUEST_TTL_MS });
+    expect(await signerOf(typed, body.auth?.signature)).toBe(sessionKey);
   });
 
-  it("signs a cancel, a withdrawal and a declaration over exactly the body it posts", async () => {
-    const { client, store } = await connected();
-    await cancelOrder(store, 42);
-    await withdraw(store, fixedFromInt(10));
-    await attestEligibility(store, "eligible_client");
-    const terms = { nonce: 4, expiresAt: NODE_TIME + REQUEST_TTL_MS };
-    // The three actions post these request types, in this order.
-    const [cancel, withdrawal, declaration] = client.posted.map((p) => p.body) as [CancelRequest, WithdrawalRequest, EligibilityRequest];
-    expect(await signerOf(cancelTypedData(DOMAIN, cancel, terms), cancel.auth?.signature)).toBe(ACCOUNT);
-    expect(await signerOf(withdrawalTypedData(DOMAIN, ACCOUNT, withdrawal.amount, terms), withdrawal.auth?.signature)).toBe(ACCOUNT);
-    expect(declaration).toMatchObject({ account: ACCOUNT, class: "eligible_client" });
-    expect(await signerOf(eligibilityTypedData(DOMAIN, ACCOUNT, "eligible_client", terms), declaration.auth.signature)).toBe(ACCOUNT);
+  it("re-runs the login once when the node says the session key expired, and retries the order silently", async () => {
+    const { client, provider, store } = await connected();
+    await loginSession(store); // the connect-time login
+    let expiredOnce = true;
+    client.answer = (posted) => {
+      if (posted.route === "order" && expiredOnce) {
+        expiredOnce = false;
+        throw new EngineError(401, "session key expired", { kind: "invalid_signature" });
+      }
+      if (posted.route === "session_key") {
+        const body = posted.body as SessionKeyRequest;
+        return { seq: 1, events: [{ type: "session_key_registered", account: body.account, session_key: body.session_key, expires_at: body.expires_at }] };
+      }
+      return { seq: 1, events: [] };
+    };
+    await placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
+    // Two registrations (connect-time and the retry), two orders (refused, then retried)...
+    expect(client.posted.filter((p) => p.route === "session_key")).toHaveLength(2);
+    expect(client.posted.filter((p) => p.route === "order")).toHaveLength(2);
+    // ...and exactly one more wallet signature than the connect-time login spent.
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2);
+    const second = client.posted.at(-1);
+    if (!second || second.route !== "order") throw new Error("no retried order posted");
+    const retried = registrationOf(client, true);
+    const typed = orderTypedData(DOMAIN, second.body as OrderRequest, { nonce: (second.body as OrderRequest).auth?.nonce ?? 0, expiresAt: ((second.body as OrderRequest).auth?.expires_at ?? 0) });
+    expect(await signerOf(typed, (second.body as OrderRequest).auth?.signature)).toBe(retried.sessionKey);
   });
 
-  it("signs a cancel once more with the nonce a 409 names, and only once", async () => {
+  it("re-signs the registration once more with the nonce a 409 names, and only once", async () => {
     const { client, provider, store } = await connected();
     client.answer = () => { throw new EngineError(409, "invalid nonce", { kind: "invalid_nonce", expected: 9 }); };
-    await cancelOrder(store, 42);
+    await loginSession(store);
     expect(client.posted.map((p) => ("auth" in p.body ? p.body.auth?.nonce : undefined))).toEqual([4, 9]);
     expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2);
     expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "error", text: "The request was out of order. Try again." });
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
   });
 
+  it("re-signs a session-signed cancel with the nonce a 409 names, silently, and only once", async () => {
+    const { client, provider, store } = await connected();
+    await loginSession(store);
+    client.answer = (posted) => {
+      if (posted.route === "cancel") throw new EngineError(409, "invalid nonce", { kind: "invalid_nonce", expected: 9 });
+      return new ActionClient().answer(posted);
+    };
+    await cancelOrder(store, 42);
+    expect(client.posted.filter((p) => p.route === "cancel").map((p) => (p.body as CancelRequest).auth?.nonce)).toEqual([4, 9]);
+    // No wallet signature beyond the connect-time login's: the retry is the key's.
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(1);
+    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "error", text: "The request was out of order. Try again." });
+    expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
+  });
   it("does not sign an order or a withdrawal again after a 409, since a copy may have run, and reads the account before saying so", async () => {
-    for (const run of [
-      (store: Parameters<typeof withdraw>[0]) => withdraw(store, fixedFromInt(10)),
-      (store: Parameters<typeof withdraw>[0]) => placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false }),
-    ]) {
+    // The wallet-signed withdrawal posts alone; the order's on-demand login registers first, then the order refuses once.
+    for (const [route, run] of [
+      ["withdraw", (store: Parameters<typeof withdraw>[0]) => withdraw(store, fixedFromInt(10))],
+      ["order", (store: Parameters<typeof withdraw>[0]) => placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false })],
+    ] as const) {
       const { client, provider, store } = await connected();
+      await loginSession(store); // the connect-time login, so the 409 below is the action's own
       client.answer = () => { throw new EngineError(409, "invalid nonce", { kind: "invalid_nonce", expected: 9 }); };
       const reads = client.marketReads;
       await run(store);
-      expect(client.posted.map((p) => ("auth" in p.body ? p.body.auth?.nonce : undefined))).toEqual([4]);
-      expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(1);
+      expect(client.posted.filter((p) => p.route === route).map((p) => ("auth" in p.body ? p.body.auth?.nonce : undefined))).toEqual([4]);
+      // The login spent one wallet signature; only the withdrawal asks for another.
+      expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(route === "withdraw" ? 2 : 1);
       expect(client.marketReads).toBeGreaterThan(reads);
       expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node had already used nonce 4 for this account, so it did not take this request as sent. If it was sent twice it may have run: check your positions, orders, withdrawals and history before trying again.");
     }
@@ -75,7 +123,11 @@ describe("signed actions with a fixed-key wallet", () => {
 
   it("reads the account again and says a sent request may have run when the node does not answer", async () => {
     const { client, store } = await connected();
-    client.answer = () => { throw new EngineError(0, "The node did not answer."); };
+    await loginSession(store); // the connect-time login, so the failure below is the cancel's own
+    client.answer = (posted) => {
+      if (posted.route === "cancel") throw new EngineError(0, "The node did not answer.");
+      return new ActionClient().answer(posted);
+    };
     const reads = client.marketReads;
     await cancelOrder(store, 42);
     expect(client.marketReads).toBeGreaterThan(reads);
@@ -96,13 +148,17 @@ describe("signed actions with a fixed-key wallet", () => {
     expect(store.getSnapshot().toasts.at(-1)?.text).toBe("The node is not verified.");
   });
 
-  it("shows what the wallet is asked to sign while it waits, and clears it after", async () => {
+  it("asks the wallet for the one login signature when trading needs it, then signs cancels silently", async () => {
     const { store } = await connected();
     const prompts: (string | null)[] = [];
     store.subscribe(() => prompts.push(store.getSnapshot().prompt));
-    await cancelOrder(store, 42);
-    expect(prompts.filter((p) => p !== null)).toContain("Confirm in your wallet: cancel order 42.");
+    await cancelOrder(store, 42); // no key yet: this runs the login
+    const shown = prompts.filter((p) => p !== null);
+    expect(shown.some((p) => p.startsWith("Confirm in your wallet: authorize this browser to trade until"))).toBe(true);
+    expect(shown).toHaveLength(1);
     expect(store.getSnapshot().prompt).toBeNull();
+    await cancelOrder(store, 43); // the key is live: no wallet prompt at all
+    expect(prompts.filter((p) => p !== null)).toHaveLength(1);
   });
 
   it("signs nothing and reads no nonce for a node whose attestation is not accepted", async () => {

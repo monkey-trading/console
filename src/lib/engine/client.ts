@@ -8,7 +8,7 @@ import type { HouseState } from "./house-state";
 import type { ScanBudget, ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import type { QuoteRequest } from "./live-stream";
-import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
+import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 
 /**
@@ -102,6 +102,10 @@ export interface EngineClient {
   placeOrder(request: OrderRequest): Promise<ActionResult>;
   cancelOrder(request: CancelRequest): Promise<ActionResult>;
   withdraw(request: WithdrawalRequest): Promise<ActionResult>;
+  /** Registers the account's session key (monkey-trading/console#68); the events name `session_key_registered`, or a `session_key_rejected` refusal. */
+  registerSessionKey(request: SessionKeyRequest): Promise<ActionResult>;
+  /** Revokes the account's session key; the events name `session_key_revoked`, or a `session_key_rejected` refusal. */
+  revokeSessionKey(request: SessionKeyRevocationRequest): Promise<ActionResult>;
   /** Asks for a fresh authorization of payout `nonce`, whose last one expired at `replacesExpiresAt` (0 if none); it arrives on the stream. */
   reissue(account: Address, nonce: number, body: { replaces_expires_at: number; signature: string }): Promise<void>;
   /**

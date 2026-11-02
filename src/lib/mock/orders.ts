@@ -38,6 +38,37 @@ export function checkAuth(state: MockState, account: AccountState, auth: Request
   account.nextNonce += 1;
 }
 
+/** Which signer a request carries: the account key itself, or one of its registered session keys. */
+export type RequestSigner = { kind: "account" } | { kind: "session"; address: string };
+
+/**
+ * Names a request's signer and spends its nonce, mirroring the engine's V41 authorization (the
+ * mock checks no signature, so it names the signer the flow presents: the account's own sequence
+ * first, then the registered key whose sequence the nonce matches — the console asks each
+ * signer's next nonce before signing).
+ * Error cases:
+ * - no signature (401), an unsigned-looking signature (401), or an expired request (400)
+ * - a nonce no sequence matches (409), a revoked key (401 "session key revoked"), an expired key (401 "session key expired")
+ */
+export function identifySigner(state: MockState, accountAddress: string, account: AccountState, auth: RequestAuth | undefined): RequestSigner {
+  if (!auth) throw new EngineError(401, "missing signature", { kind: "missing_signature" });
+  if (!/^0x[0-9a-f]{130}$/i.test(auth.signature)) throw new EngineError(401, "invalid signature", { kind: "invalid_signature" });
+  if (auth.expires_at <= state.now) throw new EngineError(400, "request expired");
+  if (auth.nonce === account.nextNonce) {
+    account.nextNonce += 1;
+    return { kind: "account" };
+  }
+  const keys = state.sessionKeys.get(accountAddress.toLowerCase());
+  const found = keys === undefined ? undefined : [...keys.keys()].find((address) => state.sessionKeyNonces.get(address) === auth.nonce);
+  const key = found === undefined ? undefined : keys?.get(found);
+  if (found === undefined || key === undefined) throw new EngineError(409, "invalid nonce", { kind: "invalid_nonce", expected: account.nextNonce });
+  // The nonce is spent whatever refuses next, as the engine's `authorise_signer` spends it.
+  state.sessionKeyNonces.set(found, auth.nonce + 1);
+  if (key.revoked) throw new EngineError(401, "session key revoked", { kind: "invalid_signature" });
+  if (state.now > key.expiresAt) throw new EngineError(401, "session key expired", { kind: "invalid_signature" });
+  return { kind: "session", address: found };
+}
+
 function rejected(req: OrderRequest, reason: Reject): EngineEvent[] {
   return [{ type: "order_rejected", account: req.account, client_id: req.client_id, reason }];
 }
@@ -47,7 +78,7 @@ export function placeOrder(state: MockState, req: OrderRequest): ActionResult {
   checkAccess(state);
   const account = state.account(req.account);
   if (account.eligibility === null) throw new EngineError(403, "eligibility attestation required", { kind: "access", reason: "eligibility_required" });
-  checkAuth(state, account, req.auth);
+  identifySigner(state, req.account, account, req.auth);
   const events = orderEvents(state, req, account);
   return { seq: state.emit({ type: "place_order" }, events).seq, events };
 }
@@ -85,7 +116,7 @@ function orderEvents(state: MockState, req: OrderRequest, account: AccountState)
 export function cancelOrder(state: MockState, req: CancelRequest): ActionResult {
   // The engine authenticates a cancel but does not screen the caller's region, so neither does the mock.
   const account = state.account(req.account);
-  checkAuth(state, account, req.auth);
+  identifySigner(state, req.account, account, req.auth);
   const events: EngineEvent[] = [];
   if (account.orders.delete(req.order_id)) events.push({ type: "order_cancelled", account: req.account, order_id: req.order_id, reason: "client" });
   else events.push({ type: "order_rejected", account: req.account, client_id: 0, reason: { kind: "unknown_order" } });

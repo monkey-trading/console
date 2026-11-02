@@ -1,0 +1,260 @@
+/** Tests for the session-key login: the one wallet signature at connect, the silent trading it enables, and the revocation at disconnect. */
+
+import { describe, expect, it } from "vitest";
+
+import { EngineError } from "../engine/client";
+import vectors from "../engine/eip712-vectors.json";
+import { cancelTypedData, eligibilityTypedData, registerSessionKeyTypedData, requestDomain, revokeSessionKeyTypedData, withdrawalTypedData } from "../engine/eip712";
+import { SESSION_KEY_TTL_MS } from "../engine/session-key";
+import type { CancelRequest, EligibilityRequest, OrderRequest, SessionKeyRequest, SessionKeyRevocationRequest, WithdrawalRequest } from "../engine/types";
+import { ACCOUNT } from "../engine/wallet-kit";
+import { fixedFromInt, fixedFromWire } from "../fixed";
+import { attestEligibility, cancelOrder, disconnectWallet, placeOrder, REQUEST_TTL_MS, walletSessionEnded, withdraw } from "./actions";
+import { connected, NODE_TIME, signerOf, VAULT, ActionClient } from "./live-kit";
+
+import { liveSessionKey, loginOnCredit, loginSession } from "./session";
+import { settle } from "../engine/test-kit";
+
+const DOMAIN = requestDomain(vectors.chain_id, VAULT);
+/** The request expiry the tests' canned node time gives every signed request. */
+const REQUEST_TTL = REQUEST_TTL_MS;
+
+/** The registration request a client recorded, and the key address it named. */
+function registrationOf(client: { posted: { route: string; body: unknown }[] }): SessionKeyRequest {
+  const posted = client.posted.find((p) => p.route === "session_key");
+  if (!posted) throw new Error("no session-key registration posted");
+  return posted.body as SessionKeyRequest;
+}
+
+describe("the session-key login", () => {
+  it("generates an ephemeral key, asks the wallet for the one registration signature, and keeps the key in memory only", async () => {
+    const { client, provider, store } = await connected();
+    expect(liveSessionKey(store)).toBeNull();
+    expect(await loginSession(store)).toBe(true);
+    const request = registrationOf(client);
+    const key = store.sessionKey;
+    if (key === null) throw new Error("no session key after login");
+    expect(request).toMatchObject({ account: ACCOUNT, session_key: key.address, expires_at: NODE_TIME + SESSION_KEY_TTL_MS, auth: { nonce: 4, expires_at: NODE_TIME + REQUEST_TTL } });
+    const typed = registerSessionKeyTypedData(DOMAIN, request.account, request.session_key, request.expires_at, { nonce: request.auth.nonce, expiresAt: request.auth.expires_at });
+    expect(await signerOf(typed, request.auth.signature)).toBe(ACCOUNT);
+    // Exactly one wallet signature, and the keypair sits on the store — never the snapshot.
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(1);
+    expect(Object.values(store.getSnapshot()).some((value) => value === key)).toBe(false);
+    expect(liveSessionKey(store)).toBe(key);
+  });
+
+  it("treats the key as dead once its registration expires by the node's clock", async () => {
+    const { store } = await connected();
+    await loginSession(store);
+    store.patch({ now: NODE_TIME + SESSION_KEY_TTL_MS });
+    expect(liveSessionKey(store)).toBeNull();
+  });
+
+  it("shows the node's refusal when the registration is refused, and keeps no key", async () => {
+    const { client, store } = await connected();
+    client.answer = () => ({ seq: 1, events: [{ type: "session_key_rejected", account: ACCOUNT, session_key: "0x0000000000000000000000000000000000000abc", reason: { kind: "session_key_unsupported" } }] });
+    expect(await loginSession(store)).toBe(false);
+    expect(liveSessionKey(store)).toBeNull(); // the candidate stays for the connection's next attempt; nothing is authorized
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("This node does not support session keys yet.");
+  });
+
+  it("treats a never-credited account's refused registration as expected: no key, no error shown", async () => {
+    const { client, store } = await connected();
+    client.answer = () => { throw new EngineError(403, "account has never been credited"); };
+    expect(await loginSession(store)).toBe(false);
+    expect(liveSessionKey(store)).toBeNull();
+    expect(store.getSnapshot().toasts).toEqual([]);
+  });
+
+  it("runs the login when one of the account's events says it is credited", async () => {
+    const { provider, store } = await connected(); // connected() already holds the wallet
+    expect(liveSessionKey(store)).toBeNull();
+    loginOnCredit(store, [{ type: "deposited", account: ACCOUNT, amount: "1000" }], ACCOUNT);
+    await settle();
+    expect(liveSessionKey(store)).not.toBeNull();
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(1);
+    // Already logged in, or the event is not the account's: nothing more is asked.
+    loginOnCredit(store, [{ type: "deposited", account: ACCOUNT, amount: "1000" }], ACCOUNT);
+    loginOnCredit(store, [{ type: "deposited", account: "0x0000000000000000000000000000000000000abc", amount: "1" }], ACCOUNT);
+    await settle();
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(1);
+  });
+
+  it("tells the user when they decline the login signature, and keeps no key", async () => {
+    const { store } = await connected({ fail: { eth_signTypedData_v4: { code: 4001, message: "User rejected" } } });
+    expect(await loginSession(store)).toBe(false);
+    expect(liveSessionKey(store)).toBeNull();
+    expect(store.getSnapshot().toasts.at(-1)?.text).toBe("You declined to sign in your wallet.");
+  });
+
+  it("revokes the key with one wallet signature at disconnect, then ends the wallet's session", async () => {
+    const { client, provider, store, wallet } = await connected();
+    let ended = 0;
+    wallet.disconnect = async () => void (ended += 1);
+    await loginSession(store);
+    const key = store.sessionKey;
+    if (key === null) throw new Error("no session key after login");
+    disconnectWallet(store);
+    await settle();
+    expect(store.sessionKey).toBeNull();
+    expect(ended).toBe(1);
+    const posted = client.posted.find((p) => p.route === "session_key_revoke");
+    if (!posted) throw new Error("no revocation posted");
+    const revocation = posted.body as SessionKeyRevocationRequest;
+    expect(revocation).toMatchObject({ account: ACCOUNT, session_key: key.address });
+    const typed = revokeSessionKeyTypedData(DOMAIN, revocation.account, revocation.session_key, { nonce: revocation.auth.nonce, expiresAt: revocation.auth.expires_at });
+    expect(await signerOf(typed, revocation.auth.signature)).toBe(ACCOUNT);
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2);
+    expect(store.getSnapshot().toasts.some((t) => t.text === "The trading authorization was not revoked; it expires on its own.")).toBe(false);
+  });
+
+  it("skips the revocation prompt when the wallet app already ended the session", async () => {
+    const { client, store } = await connected();
+    store.liveWallet = { address: ACCOUNT, label: "WalletConnect", sign: async () => "0x", deposit: async () => "0x0", claim: async () => "0x0" };
+    await loginSession(store);
+    expect(liveSessionKey(store)).not.toBeNull(); // the login signed once
+    walletSessionEnded(store, "topic-1"); // as the WalletConnect-ended path does
+    await settle();
+    expect(client.posted.some((p) => p.route === "session_key_revoke")).toBe(false);
+    expect(store.sessionKey).toBeNull();
+  });
+
+  it("revokes best effort: a declined revocation still disconnects, and says the key expires on its own", async () => {
+    const { client, store, wallet } = await connected();
+    let ended = 0;
+    wallet.disconnect = async () => void (ended += 1);
+    await loginSession(store);
+    // The wallet now declines: only the revocation's signature is left to ask for.
+    wallet.sign = async () => { throw new Error("You declined to sign in your wallet."); };
+    disconnectWallet(store);
+    await settle();
+    expect(ended).toBe(1);
+    expect(client.posted.some((p) => p.route === "session_key_revoke")).toBe(false);
+    expect(store.getSnapshot().toasts.some((t) => t.text === "The trading authorization was not revoked; it expires on its own.")).toBe(true);
+  });
+
+  it("re-runs the one-signature login once on a 401 that says the key died, then retries the order", async () => {
+    const { client, provider, store } = await connected();
+    await loginSession(store);
+    let diedOnce = true;
+    client.answer = (posted) => {
+      if (posted.route === "order" && diedOnce) {
+        diedOnce = false;
+        throw new EngineError(401, "session key expired", { kind: "invalid_signature" });
+      }
+      return new ActionClient().answer(posted);
+    };
+    await placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
+    expect(client.posted.filter((p) => p.route === "session_key")).toHaveLength(2);
+    expect(client.posted.filter((p) => p.route === "order")).toHaveLength(2);
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2);
+  });
+
+  it("reuses one candidate key across a connection's failed login attempts, as the client contract settles", async () => {
+    const { client, store } = await connected();
+    client.answer = () => { throw new EngineError(0, "The node did not answer."); };
+    expect(await loginSession(store)).toBe(false);
+    const candidate = store.sessionKey?.address;
+    if (candidate === undefined) throw new Error("no candidate kept");
+    client.answer = () => ({ seq: 1, events: [{ type: "session_key_rejected", account: ACCOUNT, session_key: candidate, reason: { kind: "session_key_unsupported" } }] });
+    expect(await loginSession(store)).toBe(false);
+    expect(store.sessionKey?.address).toBe(candidate); // the same key, re-registered: never counts again
+  });
+
+  it("installs nothing when the wallet disconnects while the login prompt waits", async () => {
+    const { client, store, wallet } = await connected();
+    let proceed!: () => void;
+    wallet.sign = () => new Promise<string>((resolve) => { proceed = () => resolve("0x" + "11".repeat(65)); });
+    const loggingIn = loginSession(store);
+    await settle();
+    disconnectWallet(store); // the user leaves while the wallet decides
+    proceed(); // ...and approves anyway
+    expect(await loggingIn).toBe(false);
+    expect(liveSessionKey(store)).toBeNull(); // approved after the disconnect: registered at the node, but never installed here
+    expect(store.sessionKeyExpiresAt).toBe(0);
+    expect(client.posted.some((p) => p.route === "session_key")).toBe(true);
+  });
+
+  it("re-login after a key died builds the retry's terms from the fresh nonce answer", async () => {
+    const { client, store } = await connected();
+    await loginSession(store);
+    let diedOnce = true;
+    client.answer = (posted) => {
+      if (posted.route === "order" && diedOnce) {
+        diedOnce = false;
+        throw new EngineError(401, "session key expired", { kind: "invalid_signature" });
+      }
+      return new ActionClient().answer(posted);
+    };
+    const original = client.nonce.bind(client);
+    let reads = 0;
+    client.nonce = async () => {
+      reads += 1;
+      // The read after the re-login names a later signed time: the retry must use it.
+      return reads >= 3 ? { next_nonce: 7, time_ms: NODE_TIME + 60_000 } : original();
+    };
+    await placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
+    const retried = client.posted.at(-1);
+    if (!retried || retried.route !== "order") throw new Error("no retried order posted");
+    expect((retried.body as OrderRequest).auth?.expires_at).toBe(NODE_TIME + 60_000 + REQUEST_TTL_MS);
+  });
+
+  it("re-signs a declaration with the nonce a 409 names, and only once", async () => {
+    const { client, provider, store } = await connected();
+    let taken = false;
+    client.answer = (posted) => {
+      if (posted.route === "eligibility" && !taken) {
+        taken = true;
+        throw new EngineError(409, "invalid nonce", { kind: "invalid_nonce", expected: 9 });
+      }
+      return new ActionClient().answer(posted);
+    };
+    await attestEligibility(store, "eligible_client");
+    const declarations = client.posted.filter((p) => p.route === "eligibility");
+    expect(declarations.map((p) => (p.body as EligibilityRequest).auth.nonce)).toEqual([4, 9]);
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2); // the declaration's two attempts; the login never ran: the account is uncredited
+    expect(store.getSnapshot().toasts.at(-1)).toMatchObject({ tone: "ok", text: "Eligibility recorded." });
+  });
+
+  it("abandons an order silently when the wallet disconnects between the nonce read and the send", async () => {
+    const { client, store, wallet } = await connected();
+    await loginSession(store);
+    const waiters: (() => void)[] = [];
+    const original = client.nonce.bind(client);
+    client.nonce = () => new Promise<Awaited<ReturnType<typeof original>>>((resolve) => { waiters.push(() => void resolve(original())); });
+    const ordering = placeOrder(store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
+    await settle();
+    disconnectWallet(store); // the user leaves while the nonce read waits (the revocation's nonce read queues behind it)
+    for (const proceed of waiters.splice(0)) proceed();
+    await ordering;
+    expect(client.posted.some((p) => p.route === "order")).toBe(false);
+    expect(store.getSnapshot().toasts.filter((t) => t.tone === "error")).toEqual([]);
+    void wallet;
+  });
+
+  it("signs the cancel with the session key and the withdrawal and declaration with the wallet, over the bodies posted", async () => {
+    const { client, store } = await connected();
+    await cancelOrder(store, 42);
+    await withdraw(store, fixedFromInt(10));
+    await attestEligibility(store, "eligible_client");
+    const registration = registrationOf(client);
+    const terms = { nonce: 4, expiresAt: NODE_TIME + REQUEST_TTL_MS };
+    const [cancel, withdrawal, declaration] = client.posted.filter((p) => p.route !== "session_key").map((p) => p.body) as [CancelRequest, WithdrawalRequest, EligibilityRequest];
+    expect(await signerOf(cancelTypedData(DOMAIN, cancel, terms), cancel.auth?.signature)).toBe(registration.session_key.toLowerCase());
+    expect(await signerOf(withdrawalTypedData(DOMAIN, ACCOUNT, withdrawal.amount, terms), withdrawal.auth?.signature)).toBe(ACCOUNT);
+    expect(await signerOf(eligibilityTypedData(DOMAIN, ACCOUNT, "eligible_client", terms), declaration.auth.signature)).toBe(ACCOUNT);
+  });
+
+  it("falls back to the wallet-signed path when the node refuses registrations, so a position can always close", async () => {
+    const { client, provider, store } = await connected();
+    client.answer = () => ({ seq: 1, events: [{ type: "session_key_rejected", account: ACCOUNT, session_key: "0x0000000000000000000000000000000000000abc", reason: { kind: "too_many_session_keys", max: 10 } }] });
+    await cancelOrder(store, 42);
+    const cancel = client.posted.find((p) => p.route === "cancel");
+    if (!cancel) throw new Error("no cancel posted");
+    expect(await signerOf(cancelTypedData(DOMAIN, cancel.body as CancelRequest, { nonce: 4, expiresAt: NODE_TIME + REQUEST_TTL_MS }), (cancel.body as CancelRequest).auth?.signature)).toBe(ACCOUNT);
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2); // the refused registration, then the wallet signing the cancel itself
+    expect(store.getSnapshot().toasts.some((t) => t.text.includes("This request will ask your wallet instead."))).toBe(true);
+  });
+
+
+});
