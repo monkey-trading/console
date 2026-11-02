@@ -9,7 +9,7 @@ import { reissueTypedData } from "../engine/eip712";
 import type { HistoryEvent, PayoutEntry, SignedWithdrawal } from "../engine/types";
 import { fixedFromWire, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
-import { abandoned, domainOf, errorText, notBusy, prompting, usableWallet } from "./signing";
+import { abandoned, awaitsTrust, domainOf, errorText, notBusy, prompting, usableWallet } from "./signing";
 import { formatStamp } from "../time";
 import { authorizationFor, keepLatest } from "./funds";
 import type { ConsoleState } from "./state";
@@ -107,7 +107,7 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
     // A read started later answers for the account as it is now; this one's answer is older.
     if (state.wallet?.address === address && state.approvalsGeneration === generation) store.patch({ approvals, approvalsNext: next });
   } catch (error) {
-    store.toast("error", `Your approved withdrawals could not be read: ${errorText(error)}`);
+    if (!awaitsTrust(error)) store.toast("error", `Your approved withdrawals could not be read: ${errorText(error)}`);
   }
 }
 
@@ -154,8 +154,8 @@ export async function loadPayouts(store: ConsoleStore): Promise<void> {
     });
   } catch (error) {
     if (!current()) return;
-    // A node that predates the route has no list to read; its rows wait for the stream, as they do between checkpoints.
-    store.patch({ payoutsProblem: error instanceof EngineError && error.status === 404 ? null : `The node's list of your payouts could not be read: ${errorText(error)} ${READ_AGAIN}` });
+    // A node that predates the route has no list to read; its rows wait for the stream, as they do between checkpoints. A node not verified yet is the banner's to say, and the read runs again once it is.
+    store.patch({ payoutsProblem: (error instanceof EngineError && error.status === 404) || awaitsTrust(error) ? null : `The node's list of your payouts could not be read: ${errorText(error)} ${READ_AGAIN}` });
   }
 }
 
@@ -192,7 +192,7 @@ export async function checkPaid(store: ConsoleStore): Promise<void> {
       store.patch(paid ? { paid: [...new Set([...now.paid, nonce])] } : { unpaid: [...new Set([...now.unpaid, nonce])] });
     }
   } catch (error) {
-    if (current()) store.toast("error", `The vault's payouts could not be read: ${errorText(error)}`);
+    if (current() && !awaitsTrust(error)) store.toast("error", `The vault's payouts could not be read: ${errorText(error)}`);
   } finally {
     if (store.paidCheck === wallet) store.paidCheck = null;
   }

@@ -47,15 +47,12 @@ describe("MonkeyPanel", () => {
     expect(overview).toHaveBeenCalledTimes(1);
   });
 
-  it("reads a chart again every five seconds only while its Live switch is on", async () => {
+  it("reads every chart again every five seconds with no switch, as Live did", async () => {
     const { node, panel, stop } = await setup();
     await vi.advanceTimersByTimeAsync(0);
     const series = vi.spyOn(node.client.stats, "series");
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(series).not.toHaveBeenCalled();
-    panel.feeds.rewards.setLive(true);
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(series).toHaveBeenCalledTimes(2);
+    expect(series.mock.calls.length).toBeGreaterThanOrEqual(2 * Object.keys(panel.feeds).length);
     stop();
   });
 
@@ -129,4 +126,71 @@ describe("MonkeyPanel", () => {
     expect(panel.feeds.supply.getSnapshot().read.status).toBe("loading");
   });
 
+
+  it("re-reads the totals and the wallet's figures at once on a stake event from the stream, and not on a tick", async () => {
+    const { node, panel, stop } = await setup();
+    const overview = vi.spyOn(node.client.stats, "monkey");
+    const proof = vi.spyOn(node.client.stats, "distributions");
+    node.client.state.emit({ type: "tick" }, []);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(overview).not.toHaveBeenCalled();
+    node.client.state.emit({ type: "stake" } as never, []);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(overview).toHaveBeenCalledTimes(1);
+    expect(proof).toHaveBeenCalledTimes(0); // no account of the wallet's in it, and not a global event
+    node.client.state.emit({ type: "close_epoch" } as never, []);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(overview).toHaveBeenCalledTimes(2);
+    expect(proof).toHaveBeenCalled();
+    expect(panel.getSnapshot().overview.status).toBe("ready");
+    stop();
+  });
+
+  it("stops reading on the timer, and on events, while the tab is hidden", async () => {
+    const { node, store, stop: stopFirst } = await setup();
+    stopFirst();
+    const fresh = new MonkeyPanel(store);
+    let hidden = true;
+    const stop = fresh.start(() => hidden);
+    await flush();
+    const overview = vi.spyOn(node.client.stats, "monkey");
+    const series = vi.spyOn(node.client.stats, "series");
+    await vi.advanceTimersByTimeAsync(120_000);
+    node.client.state.emit({ type: "close_epoch" } as never, []);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(overview).not.toHaveBeenCalled();
+    expect(series).not.toHaveBeenCalled();
+    hidden = false;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(overview).toHaveBeenCalled();
+    stop();
+  });
+
+  it("backs a failing totals read off, showing it on the panel with no toast, and reads again by itself once the node answers", async () => {
+    const { node, store, panel, stop } = await setup();
+    const real = node.client.stats.monkey.bind(node.client.stats);
+    const failing = vi.spyOn(node.client.stats, "monkey").mockRejectedValue(new Error("The node did not answer."));
+    const toasts = store.getSnapshot().toasts.length;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(failing).toHaveBeenCalledTimes(1);
+    expect(panel.getSnapshot().overview.status).toBe("failed");
+    // The timer's next tries wait: 5 s after the first failure, so the 60 s tick tries, then 10 s.
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(failing).toHaveBeenCalledTimes(2);
+    failing.mockImplementation(real);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(panel.getSnapshot().overview.status).toBe("ready");
+    expect(store.getSnapshot().toasts.length).toBe(toasts);
+    stop();
+  });
+
+  it("tries a totals read that keeps failing less and less often, up to every two minutes", async () => {
+    const { node, panel, stop } = await setup();
+    const failing = vi.spyOn(node.client.stats, "monkey").mockRejectedValue(new Error("The node did not answer."));
+    await vi.advanceTimersByTimeAsync(20 * 60_000);
+    expect(failing.mock.calls.length).toBeGreaterThanOrEqual(8);
+    expect(failing.mock.calls.length).toBeLessThanOrEqual(14); // twenty minutes of thirty-second ticks would be forty tries
+    expect(panel.getSnapshot().overview.status).toBe("failed");
+    stop();
+  });
 });

@@ -83,12 +83,12 @@ describe("OperatorReads", () => {
     stop();
   });
 
-  it("keeps the page's pace: the route every 30 seconds, the registry only every five minutes", async () => {
+  it("keeps the page's pace: the route every 30 seconds, the registry every 15, and neither in a hidden tab", async () => {
     const { counts, stop } = await started();
     await vi.advanceTimersByTimeAsync(NODE_READ_MS);
-    expect(counts).toEqual({ route: 2, operator: 1, candidates: 1 });
+    expect(counts).toEqual({ route: 2, operator: 3, candidates: 3 });
     await vi.advanceTimersByTimeAsync(FIVE_MINUTES - NODE_READ_MS);
-    expect(counts).toEqual({ route: 11, operator: 2, candidates: 2 });
+    expect(counts).toEqual({ route: 11, operator: 21, candidates: 21 });
     stop();
   });
 

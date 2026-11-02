@@ -1,6 +1,6 @@
 "use client";
 
-/** A MONKEY chart's card: its title, timeframe and Live switch, the chart, the latest values, and where its data begins. */
+/** A MONKEY chart's card: its title and timeframe, the chart, the latest values, and where its data begins. */
 
 import { useSyncExternalStore, type ReactNode } from "react";
 
@@ -43,7 +43,7 @@ function beginsText(begins: number | null, fromGenesis: boolean, retained: numbe
 }
 
 export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MARKS, caption, footer }: Props) {
-  const { timeframe, live, read } = useSyncExternalStore(feed.subscribe, feed.getSnapshot, feed.getSnapshot);
+  const { timeframe, read } = useSyncExternalStore(feed.subscribe, feed.getSnapshot, feed.getSnapshot);
   const data = read.value;
   return (
     <section aria-labelledby={id} className="min-w-0 rounded-xl border border-line-2 bg-ink-1 p-4">
@@ -53,7 +53,6 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
           <div className="w-24 [&>div>span:first-child]:sr-only">
             <Select<TimeframeId> label={`${title} timeframe`} value={timeframe} options={OPTIONS} onChange={(value) => feed.setTimeframe(value)} />
           </div>
-          <button type="button" aria-pressed={live} onClick={() => feed.setLive(!live)} className={`min-h-11 rounded border px-2 text-label tracking-caps uppercase focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0 ${live ? "border-glow text-glow" : "border-line-2 text-fg-3 hover:text-fg"}`}>Live<span className="sr-only">: refresh this chart every few seconds</span></button>
         </div>
       </div>
       {caption !== undefined && <p className={`${NOTE} mt-1`}>{caption}</p>}

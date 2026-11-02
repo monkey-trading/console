@@ -14,12 +14,12 @@ import type { MarketId } from "@/lib/engine/types";
 import { formatCompactUsd } from "@/lib/chart-format";
 import { beginsText, DEFAULT_RANGE, payoutMarks, payoutsText, RANGES, tableRows, type RangeId } from "@/lib/house-series";
 import { feedProblem } from "@/lib/store/house-feed-text";
-import { seriesFeed } from "@/lib/store/house-feeds";
+import { SCAN_EVERY_MS, seriesFeed } from "@/lib/store/house-feeds";
 import { formatStamp } from "@/lib/time";
 
 import { useSession } from "../ConsoleProvider";
 import { Chart, type ChartSeries, type Tone } from "../charts/Chart";
-import { LiveToggle, Pick } from "./Controls";
+import { Pick } from "./Controls";
 import { DataTable } from "./DataTable";
 import { Panel, Quiet, Term } from "./Panel";
 import { useFeed, useFeeds } from "./use-feed";
@@ -67,15 +67,14 @@ const TABLE_POINTS = 30;
 function SeriesPanelView({ title, tip, lines, markets, currents, floor = null, note = null, stakerPayouts = false, className }: Props) {
   const { store } = useSession();
   const [range, setRange] = useState<RangeId>(DEFAULT_RANGE);
-  const [live, setLive] = useState(false);
   const [picked, setPicked] = useState<MarketId | null>(null);
   const market = markets === null ? null : (picked !== null && markets.some((m) => m.id === picked) ? picked : (markets[0]?.id ?? null));
   const first = lines[0];
   const current = (id: string): number | null => currents?.[markets === null ? id : `${market}:${id}`] ?? null;
-  const specs = useMemo(() => (markets !== null && market === null ? [] : lines.map((line) => seriesFeed(store, line.metric, market, range, live))), [store, lines, markets, market, range, live]);
+  const specs = useMemo(() => (markets !== null && market === null ? [] : lines.map((line) => seriesFeed(store, line.metric, market, range))), [store, lines, markets, market, range]);
   const states = useFeeds(specs);
   const plotted: ChartSeries[] = useMemo(() => lines.map((line, i) => ({ id: `${line.id}:${market ?? "-"}`, label: line.label, tone: line.tone, kind: line.area === true ? "area" as const : "line" as const, points: states[i]?.data?.points ?? [] })), [lines, market, states]);
-  const payoutFeed = useFeed(useMemo(() => (stakerPayouts ? seriesFeed(store, "distributed_per_epoch", null, range, live) : null), [store, stakerPayouts, range, live]));
+  const payoutFeed = useFeed(useMemo(() => (stakerPayouts ? seriesFeed(store, "distributed_per_epoch", null, range, SCAN_EVERY_MS) : null), [store, stakerPayouts, range]));
   const payouts = payoutFeed.data?.points ?? null;
   const marks = useMemo(() => (payouts === null ? [] : payoutMarks(payouts)), [payouts]);
   const nonNegative = lines.every((line) => line.nonNegative === true);
@@ -94,7 +93,6 @@ function SeriesPanelView({ title, tip, lines, markets, currents, floor = null, n
         <>
           {markets !== null && <Pick label={`${title} market`} value={market ?? 0} options={markets.map((m) => ({ value: m.id, label: m.label }))} onChange={setPicked} />}
           <Pick label={`${title} timeframe`} value={range} options={RANGES.map((r) => ({ value: r.id, label: r.label }))} onChange={setRange} />
-          <LiveToggle live={live} onChange={setLive} />
         </>
       }
     >

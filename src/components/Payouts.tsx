@@ -4,6 +4,7 @@
 
 import { useEffect, useId, useRef } from "react";
 
+import { readBlock } from "@/lib/engine/attestation";
 import { checkPaid, claim, loadApprovals, loadPayouts, payoutsOf, reissue, unreadPayouts, type Payout } from "@/lib/store/payouts";
 import { formatStamp } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
@@ -24,11 +25,13 @@ export function Payouts() {
   // A new approval reaches the recent history first; it prompts a fresh read of every approval and of the node's payouts.
   const latest = state.history.find((e) => e.type === "withdrawal_approved")?.cursor ?? "";
   const unread = unreadPayouts(state).join(",");
+  // A wallet reattaches on page load before the node has attested: the reads wait for it, then run.
+  const trusted = readBlock(state.attestation, state.stream) === null;
   useEffect(() => {
-    if (address === undefined) return;
+    if (address === undefined || !trusted) return;
     void loadApprovals(store);
     void loadPayouts(store);
-  }, [store, address, latest]);
+  }, [store, address, latest, trusted]);
   useEffect(() => {
     // The vault's own record says whether it has paid each payout the page can act on, including by a claim made elsewhere before the read.
     if (unread !== "") void checkPaid(store);

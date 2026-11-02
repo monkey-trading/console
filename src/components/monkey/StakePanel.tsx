@@ -10,7 +10,7 @@ import { AmountForm } from "./AmountForm";
 import { Card, focusHeading } from "./Card";
 import { ReadNote } from "./ReadNote";
 import { Row } from "./Row";
-import { BUTTON, LINK_BUTTON, NOTE } from "./styles";
+import { BUTTON, NOTE } from "./styles";
 import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
 
 export function StakePanel() {
@@ -34,7 +34,6 @@ export function StakePanel() {
     <Card
       id="stake-title"
       title="Your stake"
-      aside={wallet !== null && !readOnly && <button type="button" onClick={() => void panel.refreshWallet(true)} className={LINK_BUTTON}>Refresh<span className="sr-only"> your stake</span></button>}
     >
       {wallet === null ? (
         <p className={NOTE}>Connect a wallet to stake or unstake MONKEY.</p>

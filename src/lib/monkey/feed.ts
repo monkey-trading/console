@@ -1,6 +1,6 @@
 /**
  * One MONKEY chart's data: the series it plots read for a timeframe, kept bounded, and refreshed
- * while its Live switch is on. A feed is its own small store, so a chart redraws only when its own
+ * on the page's tick. A feed is its own small store, so a chart redraws only when its own
  * data changes, never on the console's stream.
  */
 
@@ -41,7 +41,6 @@ export interface ChartData {
 
 export interface FeedState {
   timeframe: TimeframeId;
-  live: boolean;
   read: Read<ChartData>;
 }
 
@@ -84,7 +83,7 @@ export class ChartFeed {
     private readonly active: () => boolean,
     initial: TimeframeId,
   ) {
-    this.state = { timeframe: initial, live: false, read: LOADING };
+    this.state = { timeframe: initial, read: LOADING };
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -107,10 +106,6 @@ export class ChartFeed {
     // The chart keeps what it holds until the new window answers.
     this.set({ timeframe: id, read: this.state.read.value === null ? LOADING : { status: "loading", value: this.state.read.value, message: null } });
     return this.load();
-  }
-
-  setLive(live: boolean): void {
-    this.set({ live });
   }
 
   /** Stands down any read in flight and forgets what was read; the page closing calls it. */
@@ -164,7 +159,7 @@ export class ChartFeed {
   /** Reads the newest buckets and lays them over the held ones; one at a time, and nothing before the first load has answered. */
   async tickLive(): Promise<void> {
     const held = this.state.read.value;
-    if (!this.state.live || this.reading || !this.active()) return;
+    if (this.reading || !this.active()) return;
     // A first read that failed has nothing to refresh: try it whole again. A node without the route is left alone.
     if (held === null) return this.state.read.status === "failed" ? this.load() : undefined;
     // The held points are another window's, as after a timeframe change whose read failed: read this one whole.

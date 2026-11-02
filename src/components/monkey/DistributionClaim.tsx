@@ -12,8 +12,9 @@ import { useSignGate } from "../SignGate";
 import { Card, focusHeading } from "./Card";
 import { ReadNote } from "./ReadNote";
 import { Row } from "./Row";
-import { BUTTON, LINK_BUTTON, NOTE } from "./styles";
+import { BUTTON, NOTE } from "./styles";
 import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
+import { useVerdict } from "./use-verdict";
 
 export function DistributionClaim() {
   const panel = useMonkeyPanel();
@@ -27,11 +28,11 @@ export function DistributionClaim() {
   const proof = mine ? figures.proof.value : null;
   const held = mine ? figures.position.value : null;
   const position = distributionPosition(proof, held);
+  const checkpoint = useVerdict(position.checkpoint);
   return (
     <Card
       id="distributions-title"
       title="USDC distributions"
-      aside={wallet !== null && <button type="button" onClick={() => void panel.refreshWallet(true)} className={LINK_BUTTON}>Refresh<span className="sr-only"> your distributions</span></button>}
     >
       {wallet === null ? (
         <p className={NOTE}>Connect a wallet to see your USDC distributions.</p>
@@ -58,10 +59,12 @@ export function DistributionClaim() {
           {gate.note}
         </div>
       )}
-      {mine && !readOnly && proof !== null && held === null && figures.position.status !== "loading" && <p className={NOTE}>The vault&apos;s record of what it has paid has not been read. Refresh to read it.</p>}
-      {mine && !readOnly && position.claimed !== null && position.checkpoint === "waiting" && position.accrued > position.claimed && <p className={NOTE}>The vault has not posted a checkpoint covering this yet. Refresh to check again; the claim unlocks once one posts.</p>}
-      {mine && !readOnly && position.claimed !== null && position.checkpoint === "superseded" && <p className={NOTE}>A newer checkpoint has posted on the vault. Refresh to read the node&apos;s proof against it; the claim unlocks once it serves one.</p>}
-      {mine && !readOnly && position.claimed !== null && position.checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && <p className={NOTE}>All distributed USDC is claimed.</p>}
+      {mine && !readOnly && proof !== null && held === null && figures.position.status === "loading" && <p className={NOTE}>Reading the vault&apos;s record of what it has paid…</p>}
+      {mine && !readOnly && proof !== null && held === null && figures.position.status === "failed" && <p className={NOTE}>The vault&apos;s record of what it has paid could not be read; it is read again by itself.</p>}
+      {mine && !readOnly && position.claimed !== null && checkpoint === "checking" && <p role="status" className={NOTE}>Checking the vault&apos;s latest checkpoint against the node&apos;s proof…</p>}
+      {mine && !readOnly && position.claimed !== null && checkpoint === "waiting" && position.accrued > position.claimed && <p className={NOTE}>The vault has not posted a checkpoint covering this yet; the claim unlocks once one posts. It is checked again by itself.</p>}
+      {mine && !readOnly && position.claimed !== null && checkpoint === "superseded" && <p className={NOTE}>A newer checkpoint has posted on the vault; the claim unlocks once the node serves a proof against it. It is checked again by itself.</p>}
+      {mine && !readOnly && position.claimed !== null && checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && <p className={NOTE}>All distributed USDC is claimed.</p>}
     </Card>
   );
 }

@@ -21,7 +21,7 @@ import { useNodeFollow, useSession } from "../ConsoleProvider";
 import { Card, focusHeading } from "./Card";
 import { ReadNote } from "./ReadNote";
 import { Row } from "./Row";
-import { BUTTON, LINK_BUTTON, NOTE } from "./styles";
+import { BUTTON, NOTE } from "./styles";
 import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
 
 const NOT_A_HOSTNAME = "Not a plain hostname";
@@ -57,7 +57,7 @@ export function OperatorPanel({ operators }: { operators: OperatorReads }) {
     if (!busy && !settling) void delegateStake(panel, operators, candidate, label).then(() => focusHeading("operator-title"));
   };
   return (
-    <Card id="operator-title" title="Operator" aside={wallet !== null && wallet.readOnly !== true && <button type="button" onClick={() => { void operators.refreshChain(); void operators.refreshNode(); void panel.refreshWallet(true); }} className={LINK_BUTTON}>Refresh<span className="sr-only"> the operator</span></button>}>
+    <Card id="operator-title" title="Operator">
       <dl className="space-y-2">
         <Row label="Operator in effect">{inEffect === null ? "—" : nameOf(inEffect.hostname, inEffect.candidate)}</Row>
         <Row label="Admin key the node applies">{route.value === null ? "—" : <span title={route.value.operator}>{shortHex(route.value.operator)}</span>}</Row>

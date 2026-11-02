@@ -2,8 +2,8 @@
  * The operator card's reads. The node's signed `GET /v1/operator` is read at the page's 30-second
  * pace; the registry's reads go through the connected wallet, one call at a time behind the wallet's
  * other work, on open, when the wallet changes, on an election event in the stream, after a
- * delegation, on the visitor's Refresh, and otherwise every five minutes while the tab is visible,
- * since each read costs the wallet's provider money.
+ * delegation, and otherwise every 15 seconds while the tab is visible (monkey-trading/console#202),
+ * bounded in time and never asking the wallet to do anything.
  */
 
 import { readBlock } from "../engine/attestation";
@@ -13,10 +13,9 @@ import type { OperatorRoute } from "../engine/stats-types";
 import type { Wallet } from "../engine/wallet";
 import type { ConsoleStore } from "../store/store";
 import { failed, LOADING, ready, type Read } from "./figures";
+import { WALLET_READ_EVERY_MS } from "./live-reads";
 import { NODE_READ_MS } from "./panel";
 
-/** The registry's slow read, as a count of the node read's ticks: five minutes. */
-const CHAIN_READ_TICKS = 10;
 
 /** A read that has no chain to go through. */
 const NO_CHAIN = { status: "unavailable", value: null, message: null } as const;
@@ -104,13 +103,12 @@ export class OperatorReads {
         this.set({ route: LOADING });
       }
     });
-    let ticks = 0;
     const timer = setInterval(() => {
-      if (isHidden()) return;
-      ticks += 1;
-      if (this.state.route.status !== "unavailable") void this.refreshNode();
-      if (ticks % CHAIN_READ_TICKS === 0) void this.refreshChain();
+      if (!isHidden() && this.state.route.status !== "unavailable") void this.refreshNode();
     }, NODE_READ_MS);
+    const chainTimer = setInterval(() => {
+      if (!isHidden()) void this.refreshChain();
+    }, WALLET_READ_EVERY_MS);
     const unsubscribe = this.store.deps.client.subscribe((message) => {
       if (!message.events.some((event) => event.type === "operator_elected" || event.type === "rotation_switched")) return;
       void this.refreshNode();
@@ -120,6 +118,7 @@ export class OperatorReads {
       this.open = false;
       this.cycle += 1;
       clearInterval(timer);
+      clearInterval(chainTimer);
       unsubscribe();
       stopFollowing();
       this.readFor = null;

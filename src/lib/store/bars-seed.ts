@@ -11,6 +11,7 @@ import { EngineError } from "../engine/client";
 import { fetchBarsHistory, windowSecondsFor } from "../engine/marks-fetch";
 import type { MarketId } from "../engine/types";
 import type { ConsoleStore } from "./store";
+import { awaitsTrust } from "./signing";
 
 /** The most tries one series gets before its fetch gives up and reports. */
 const SEED_ATTEMPTS = 3;
@@ -93,6 +94,8 @@ export class BarsSeed {
         this.askHistoryScan();
         return;
       }
+      // A node not verified yet says so in the banner, and the next trigger reads again; it does not count as an attempt.
+      if (awaitsTrust(error)) return;
       // A transient failure retries on the next trigger; the last one reports once and stops.
       if (attempt >= SEED_ATTEMPTS && !this.seeded.has(key) && !this.reported.has(key)) {
         this.reported.add(key);
