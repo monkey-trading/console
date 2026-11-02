@@ -22,7 +22,7 @@ import { candlesFeed, positionsFeed } from "@/lib/store/house-feeds";
 import { formatClock, formatStamp } from "@/lib/time";
 
 import { useSession } from "../ConsoleProvider";
-import { chartOptions, hardenLinks, token, withOpacity } from "./chart-theme";
+import { chartOptions, token, withOpacity } from "./chart-theme";
 import { BandsPrimitive } from "./closeout-primitive";
 import { Pick } from "./Controls";
 import { DataTable } from "./DataTable";
@@ -94,7 +94,6 @@ export function CloseoutMap({ className }: { className?: string }) {
       const el = host.current;
       if (cancelled || !el) return;
       const chart = createChart(el, { ...chartOptions(), grid: { vertLines: { color: token("line") }, horzLines: { visible: false } } });
-      hardenLinks(el);
       // The price window is the mark and the chosen range around it, whatever the candles reach.
       const autoscaleInfoProvider = (base: () => { priceRange: { minValue: number; maxValue: number } | null } | null) => {
         const range = live.current?.bounds ?? null;

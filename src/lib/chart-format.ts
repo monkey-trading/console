@@ -33,6 +33,17 @@ export function minimumSpanRange(min: number, max: number): { min: number; max: 
   return max - min >= span ? null : { min: middle - span / 2, max: middle + span / 2 };
 }
 
+/**
+ * The price range to fix the scale of a series that cannot go below zero (a long or short notional, a
+ * queue, a volume, a supply or stake): `minimumSpanRange`'s, moved up so it starts at zero when it
+ * would have run below it (a flat series at zero fits $0 to $1, never -$0.50 to $0.50), and the
+ * values' own otherwise.
+ */
+export function nonNegativeRange(min: number, max: number): { min: number; max: number } {
+  const fitted = minimumSpanRange(min, max) ?? { min, max };
+  return fitted.min >= 0 ? fitted : { min: 0, max: fitted.max - fitted.min };
+}
+
 /** Whole base units from the wire's decimal text, or null for anything else. */
 export function parseUnits(text: string): bigint | null {
   return /^\d+$/.test(text) ? BigInt(text) : null;

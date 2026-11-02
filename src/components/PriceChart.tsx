@@ -2,8 +2,8 @@
 
 /**
  * The candlestick chart, drawn by TradingView Lightweight Charts, which is loaded in the browser
- * only. It takes its colours from the theme tokens, fills its pane, and carries the library's
- * attribution as its licence asks.
+ * only, where this chart is on screen. It takes its colours from the theme tokens and fills its
+ * pane; the library's attribution is on /notices.
  */
 
 import type { IChartApi, IPriceLine, ISeriesApi, LineStyle as LineStyleEnum } from "lightweight-charts";
@@ -78,7 +78,7 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
       if (cancelled || !el) return;
       const chart = createChart(el, {
         autoSize: true,
-        layout: { background: { color: token("ink-1") }, textColor: token("fg-3"), fontFamily: getComputedStyle(document.body).fontFamily, fontSize: 11, attributionLogo: true },
+        layout: { background: { color: token("ink-1") }, textColor: token("fg-3"), fontFamily: getComputedStyle(document.body).fontFamily, fontSize: 11, attributionLogo: false },
         grid: { vertLines: { color: token("line") }, horzLines: { color: token("line") } },
         crosshair: {
           mode: CrosshairMode.Normal,
@@ -108,8 +108,6 @@ export function PriceChart({ symbol, places, bars, seriesKey, markers }: Props) 
           observedLow: "observedLow" in point && typeof point.observedLow === "number" ? point.observedLow : point.low,
         } : null);
       });
-      // The attribution link opens another site in a new tab; it gets the same rel as every other such link.
-      for (const link of el.querySelectorAll("a")) link.rel = "noopener noreferrer";
       live.current = { chart, series, lineStyle: LineStyle, lines: [], key: "", count: 0, first: 0, last: 0, bars: null };
       dispose = () => chart.remove();
       setReady((n) => n + 1);

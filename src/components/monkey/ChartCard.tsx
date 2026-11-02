@@ -70,7 +70,7 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
             <p role="status" className={`flex flex-wrap content-center items-center gap-2 text-caption text-amber ${CHART_HEIGHT}`}>Could not read this chart: {(read.message ?? "the read failed").replace(/\.+$/, "")}. <button type="button" onClick={() => void feed.load().then(() => focusHeading(id))} className="min-h-6 rounded border border-line-2 px-2 text-fg-2 hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Try again</button></p>
           ) : <p className={`${NOTE} flex items-center ${CHART_HEIGHT}`}>Reading the chart&apos;s data…</p>
         ) : (
-          <ChartCanvas kind={kind} lines={lines} data={data} seriesKey={data.timeframe} format={format} marks={marks} label={`${title} chart`} />
+          <ChartCanvas kind={kind} lines={lines} data={data} format={format} marks={marks} label={`${title} chart`} />
         )}
       </div>
       {data !== null && (
