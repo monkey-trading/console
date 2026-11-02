@@ -31,7 +31,8 @@ export class ExitKeeper {
   private distributed: boolean | null = null;
   /** What a move from another node's store brought with it. */
   private carried: (Pick<ExitState, "record" | "storageProblem"> & { answer: ExitProof | null }) | null = null;
-  private settling = false;
+  /** The wallet whose settle is running: one since replaced holds up nothing. */
+  private settling: Wallet | null = null;
   private settleAgain = false;
 
   constructor(private readonly store: ConsoleStore) {
@@ -103,19 +104,20 @@ export class ExitKeeper {
 
   /** Runs the work below, and again if it was asked for while it ran. */
   async settle(): Promise<void> {
-    if (this.settling) {
+    const wallet = this.store.liveWallet;
+    if (wallet !== null && this.settling === wallet) {
       this.settleAgain = true;
       return;
     }
-    this.settling = true;
+    this.settling = wallet;
     try {
       do {
         this.settleAgain = false;
         await this.bringUp();
-        this.noteMissing();
-      } while (this.settleAgain);
+        if (this.store.liveWallet === wallet) this.noteMissing();
+      } while (this.settleAgain && this.settling === wallet);
     } finally {
-      this.settling = false;
+      if (this.settling === wallet) this.settling = null;
     }
   }
 

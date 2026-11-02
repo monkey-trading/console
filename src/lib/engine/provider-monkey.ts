@@ -8,6 +8,7 @@ import { decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "vi
 
 import type { EntitlementProof } from "./emissions";
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
+import { WALLET_READ_MS, withinMs } from "./serialized-provider";
 import type { Address } from "./types";
 import type { Progress } from "./wallet";
 
@@ -68,9 +69,9 @@ export async function claimEmissionsTx(
  * - the wallet is on another chain than the deployment's
  */
 export async function emissionsClaimedRead(address: Address, chain: WalletChain, provider: Eip1193Provider): Promise<{ claimed: bigint; latestSeq: number }> {
-  const current = Number(await provider.request({ method: "eth_chainId" }));
+  const current = Number(await withinMs(provider, { method: "eth_chainId" }, WALLET_READ_MS));
   if (current !== chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${chain.chainId}`);
-  const read = async (data: Hex) => hexOf(await provider.request({ method: "eth_call", params: [{ to: chain.vault, data }, "latest"] }));
+  const read = async (data: Hex) => hexOf(await withinMs(provider, { method: "eth_call", params: [{ to: chain.vault, data }, "latest"] }, WALLET_READ_MS));
   const claimedData = encodeFunctionData({ abi: VAULT, functionName: "emissionsClaimed", args: [hexOf(address)] });
   const claimed = decodeFunctionResult({ abi: VAULT, functionName: "emissionsClaimed", data: await read(claimedData) });
   const seqData = encodeFunctionData({ abi: VAULT, functionName: "latestSeq" });
@@ -88,7 +89,7 @@ export async function suggestMonkeyToken(ensureChain: () => Promise<void>, chain
   await ensureChain();
   try {
     const data = encodeFunctionData({ abi: VAULT, functionName: "monkey" });
-    const monkey = decodeFunctionResult({ abi: VAULT, functionName: "monkey", data: hexOf(await provider.request({ method: "eth_call", params: [{ to: chain.vault, data }, "latest"] })) });
+    const monkey = decodeFunctionResult({ abi: VAULT, functionName: "monkey", data: hexOf(await withinMs(provider, { method: "eth_call", params: [{ to: chain.vault, data }, "latest"] }, WALLET_READ_MS)) });
     if (monkey === NO_TOKEN) return false;
     const added: unknown = await provider.request({ method: "wallet_watchAsset", params: { type: "ERC20", options: { address: monkey, symbol: "MONKEY", decimals: 18 } } });
     return added === true;

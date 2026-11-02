@@ -2,8 +2,8 @@
 
 import { decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "viem";
 
-import { withTimeout } from "./provider-errors";
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
+import { withinMs } from "./serialized-provider";
 import { CANDIDATE_LIMIT, NO_CANDIDATE, type CandidateTable, type DeploymentReads, type NamedOperator, type PendingElection, type VaultFacts } from "./registry";
 import type { Address } from "./types";
 
@@ -41,12 +41,12 @@ export class ProviderDeployment implements DeploymentReads {
 
   /** A background read: the wallet is not asked to switch chains, and the read is refused on another one. */
   private async onChain(): Promise<void> {
-    const current = Number(await withTimeout(this.provider.request({ method: "eth_chainId" }), CALL_MS));
+    const current = Number(await withinMs(this.provider, { method: "eth_chainId" }, CALL_MS));
     if (current !== this.chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chain.chainId}`);
   }
 
   private async call(to: string, data: Hex): Promise<Hex> {
-    return hexOf(await withTimeout(this.provider.request({ method: "eth_call", params: [{ to, data }, "latest"] }), CALL_MS));
+    return hexOf(await withinMs(this.provider, { method: "eth_call", params: [{ to, data }, "latest"] }, CALL_MS));
   }
 
   /** `read`, whose calls all come from the deployment's chain: a wallet that moved while they ran gives no answer, rather than one from two chains. */
