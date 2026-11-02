@@ -72,7 +72,8 @@ export function pointsOf(entries: readonly (LevelEntry | ValueEntry)[]): SeriesP
 export function foldSeries(prev: SeriesData | null, page: SeriesPage, windowFromMs: number): SeriesData {
   const fresh = pointsOf(page.entries);
   const first = fresh[0];
-  const kept = prev === null || first === undefined ? [] : prev.points.filter((p) => p.ts < first.ts);
+  // An empty page replaces nothing: what is held stays, and the window filter ages it out.
+  const kept = prev === null ? [] : first === undefined ? prev.points : prev.points.filter((p) => p.ts < first.ts);
   const points = [...kept, ...fresh].filter((p) => p.ts >= windowFromMs).slice(-MAX_POINTS);
   return { points, beginsMs: page.begins_ms, fromGenesis: page.from_genesis, retainedFromMs: page.retained_from_ms, resolution: page.resolution };
 }

@@ -31,6 +31,7 @@ export function HousePage() {
   const { store } = useSession();
   useEffect(() => openHousePanel(store), [store]);
   const { blocked, ready, fresh } = useSelected(selectGate);
+  const simulated = store.deps.client.signatures === "none";
   // A hidden tab, or a node that is not trusted right now, reads nothing: the feeds pause with it and resume at their own pace when it shows again.
   useEffect(() => {
     const sync = () => store.houseStats.setVisible(document.visibilityState !== "hidden" && !blocked);
@@ -49,13 +50,14 @@ export function HousePage() {
         <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-1">
           <h2 className="text-lead tracking-caps text-glow uppercase">House</h2>
           <p className="text-caption text-fg-3">
-            The house takes the other side of every trade. Every figure comes from an answer the node&apos;s enclave signed for this
-            page&apos;s request; an answer that does not verify is discarded, never shown.
+            {simulated
+              ? "The house takes the other side of every trade. This build simulates the node in the browser, so every figure here is generated and unsigned."
+              : "The house takes the other side of every trade. Every figure comes from an answer the node's enclave signed for this page's request; an answer that does not verify is discarded, never shown."}
           </p>
         </header>
         {blocked && <p className="px-1 text-data text-fg-2">Figures appear once the node&apos;s attestation is verified and its feed is live.</p>}
         {!blocked && ready && !fresh && <p className="px-1 text-data text-fg-2">The node&apos;s answers have stopped refreshing, so the figures on this page may be behind.</p>}
-        {!blocked && !ready && <p className="px-1 text-data text-fg-2">Reading the node&apos;s first signed answers…</p>}
+        {!blocked && !ready && <p className="px-1 text-data text-fg-2">{simulated ? "Reading the simulated node's first answers…" : "Reading the node's first signed answers…"}</p>}
         {ready && (
           // The panels stay mounted while the node is not trusted, hidden, so each keeps its market, timeframe and Live choice.
           <div hidden={blocked} className="flex flex-col gap-2">

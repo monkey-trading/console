@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { EngineCommand, EngineEvent } from "./engine/types";
 import { fixedFromInt } from "./fixed";
-import { capFor, exactTotals, paramsSource, queueMarks, queueTotals, setParamsOf, utilBps } from "./house";
+import { capFor, exactTotals, queueCaveats, paramsSource, queueMarks, queueTotals, setParamsOf, utilBps } from "./house";
 
 const SET_PARAMS = {
   action: "set_params",
@@ -143,6 +143,21 @@ describe("paramsSource", () => {
   it("calls the values the launch values only in the simulation, and says nothing for a live node that does not know their source", () => {
     expect(paramsSource({ seq: null }, true)).toBe("These are the launch values.");
     expect(paramsSource({ seq: null }, false)).toBeNull();
+  });
+});
+
+describe("queueCaveats", () => {
+  const totals = { count: 2, remaining: 5n, largest: 3n, head: 3n, seq: 1, complete: true, stable: true };
+
+  it("says nothing exactly when exactTotals gives the totals", () => {
+    expect(queueCaveats(totals, false)).toEqual([]);
+  });
+
+  it("names a lower bound, an approximation and a read that may be behind, each from its own cause", () => {
+    expect(queueCaveats({ ...totals, complete: false }, false)).toEqual([expect.stringContaining("lower bounds")]);
+    expect(queueCaveats({ ...totals, stable: false }, false)).toEqual([expect.stringContaining("approximate")]);
+    expect(queueCaveats(totals, true)).toEqual([expect.stringContaining("may be behind")]);
+    expect(queueCaveats({ ...totals, complete: false, stable: false }, true)).toHaveLength(2);
   });
 });
 

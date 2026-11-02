@@ -3,7 +3,7 @@
 /** The withdrawal queue's panels: what it owes in total, and where the connected account stands in it. */
 
 import { fixedFromWire, formatUsd, type Fixed } from "@/lib/fixed";
-import { exactTotals, queueMarks, type QueueTotals } from "@/lib/house";
+import { exactTotals, queueCaveats, queueMarks, type QueueTotals } from "@/lib/house";
 import type { ConsoleState } from "@/lib/store/state";
 
 import { Panel, Quiet, Row } from "./Panel";
@@ -32,9 +32,7 @@ export function QueueStats() {
             <Row label="Largest entry" tip="The most any one waiting request still owes." value={amount(totals.largest)} />
             <Row label="Next to be paid" tip="What the request at the head of the queue still owes. It is paid first when the vault has funds." value={amount(totals.head)} />
           </dl>
-          {!totals.complete && <p className="text-label text-fg-3">The queue&apos;s first pages only are counted, so these are lower bounds.</p>}
-          {totals.complete && !totals.stable && <p className="text-label text-fg-3">The queue changed while it was read, so these figures are approximate.</p>}
-          {failed && <p className="text-label text-fg-3">The last read failed, so these figures may be behind.</p>}
+          {queueCaveats(totals, failed).map((line) => <p key={line} className="text-label text-fg-3">{line}</p>)}
         </>
       )}
     </Panel>

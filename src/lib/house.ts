@@ -121,6 +121,19 @@ export function queueMarks(positions: readonly number[], waiting: number, segmen
   return new Set(positions.map((position) => Math.min(segments, Math.max(1, Math.ceil(position * scale)))));
 }
 
+/**
+ * What a panel showing the queue's walked totals says about how far to trust them, one line for each caveat: a walk
+ * that stopped at its page cap gives lower bounds, a queue that changed while read gives approximations, and a failed
+ * last read leaves figures that may be behind. Empty when `exactTotals` would give the totals.
+ */
+export function queueCaveats(totals: QueueTotals, failed: boolean): string[] {
+  return [
+    !totals.complete ? "The queue's first pages only are counted, so these are lower bounds." : null,
+    totals.complete && !totals.stable ? "The queue changed while it was read, so these figures are approximate." : null,
+    failed ? "The last read failed, so these figures may be behind." : null,
+  ].filter((line) => line !== null);
+}
+
 /** The queue's totals when they can be taken as its true size: a complete walk over a steady queue whose last read succeeded; null otherwise. */
 export function exactTotals(totals: QueueTotals | null, failed: boolean): QueueTotals | null {
   return totals !== null && totals.complete && totals.stable && !failed ? totals : null;
