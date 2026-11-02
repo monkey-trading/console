@@ -16,6 +16,7 @@ import { sessionSigned } from "./session-signed";
 import { abandoned, domainOf, errorText, notBusy, noteRegionRefusal, prompting, REQUEST_TTL_MS, signed, usableWallet } from "./signing";
 import type { NoticeSurface } from "./state";
 import type { ConsoleStore } from "./store";
+import { noteSentDeposit, readPendingDeposits } from "./deposits";
 import { noteDeposit } from "./setup";
 import { readWalletUsdc } from "./wallet-usdc";
 import { adoptStoredKey, KEY_EXPIRED, NO_ACCOUNT, NO_SESSION, release, sessionEnded } from "./wallet-session";
@@ -88,6 +89,7 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     // The mock's demo account, connected on load, holds a key as a returning trader does. Everything else asks through setup.
     if (quiet && store.deps.client.signatures === "none") await ensureLogin(store, "wallet");
     void readWalletUsdc(store);
+    void readPendingDeposits(store);
     await loadAccount(store, true);
     // A declared wallet has no popup, so the signature that lets this browser trade is asked for here, but only for a connect the user made.
     if (!reattached && store.liveWallet === wallet && store.getSnapshot().eligibility !== null && liveSessionKey(store) === null) void authorizeBrowser(store, "wallet");
@@ -127,6 +129,7 @@ export async function deposit(store: ConsoleStore, amount: Fixed, surface: Notic
   try {
     await prompting(store, wallet, surface, `Confirm in your wallet: deposit ${shown} to the vault (an approval first, if the vault needs one).`, (progress) => wallet.deposit(amount, progress));
     noteDeposit(store, amount);
+    noteSentDeposit(store, amount);
     void readWalletUsdc(store, true);
     await store.refresh(true);
   } catch (error) {

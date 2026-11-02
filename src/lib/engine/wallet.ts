@@ -4,6 +4,7 @@ import type { Fixed } from "../fixed";
 import type { EntitlementProof } from "./emissions";
 import type { ExitWallet } from "./exit-types";
 import type { TypedRequest } from "./eip712";
+import type { VaultDeposit } from "./provider-deposits";
 import type { DeploymentReads } from "./registry";
 import type { StakingWallet } from "./staking";
 import type { Address, SignedWithdrawal } from "./types";
@@ -77,6 +78,8 @@ export interface Wallet {
   suggestUsdc?(): Promise<boolean>;
   /** The wallet's USDC on the custody chain, read without asking it to switch chain; rejects when it cannot be read. Absent from a wallet that reads no chain, such as a watched account's. */
   usdcBalance?(): Promise<UsdcBalance>;
+  /** The vault's deposits to this account in the last few blocks, read without asking the wallet to switch chain; null when they cannot be read, which is no error. Absent from a wallet that reads no chain, such as a watched account's or the mock's. */
+  vaultDeposits?(): Promise<VaultDeposit[] | null>;
   /** Puts the wallet on the deployment's chain, asking it if need be; absent from a wallet with no chain to move. */
   ensureChain?(): Promise<void>;
   /** Ends the wallet's connection, such as a WalletConnect session, when the user disconnects; absent when there is nothing to end. */

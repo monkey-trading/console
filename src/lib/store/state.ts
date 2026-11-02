@@ -65,6 +65,12 @@ export interface SetupState {
   deposit: { amount: Fixed; balanceBefore: Fixed } | null;
 }
 
+/** A deposit the wallet sent to the vault that the node has not credited yet: `id` is the vault's, null until the chain has been read for it. */
+export interface PendingDeposit {
+  id: string | null;
+  amount: Fixed;
+}
+
 /** A connection before anything has been read for it. */
 export const NO_SETUP: SetupState = { open: false, decided: false, fund: null, deposit: null };
 
@@ -131,6 +137,8 @@ export interface ConsoleState {
   /** Why the last registration the node answered was refused, or null: orders and cancels then ask the wallet instead. */
   sessionRefusal: Reject | null;
   setup: SetupState;
+  /** The deposits to the connected account that the node has not credited, from the wallet's send and, after a reload, from the vault's own events. */
+  pendingDeposits: PendingDeposit[];
   /** The connected wallet's USDC on the custody chain, as its own provider reports it; never a node figure. */
   walletUsdc: WalletUsdc;
   history: HistoryEntry[];
@@ -229,6 +237,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     sessionExpiresAt: 0,
     sessionRefusal: null,
     setup: NO_SETUP,
+    pendingDeposits: [],
     walletUsdc: NO_USDC,
     history: [],
     ledger: emptyLedgerState(),

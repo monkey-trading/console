@@ -13,7 +13,7 @@ import type { EntitlementProof } from "./emissions";
 import type { TypedRequest } from "./eip712";
 import { claimEmissionsTx, emissionsClaimedRead, suggestMonkeyToken, suggestTokenAsset } from "./provider-monkey";
 import { unknownChain, walletError } from "./provider-errors";
-import { usdcBalanceRead } from "./provider-balance";
+import { usdcBalanceRead, vaultDepositsRead } from "./provider-balance";
 import { ProviderExit } from "./provider-exit";
 import { ProviderDeployment } from "./provider-registry";
 import { ProviderStaking } from "./provider-staking";
@@ -162,9 +162,9 @@ export class ProviderWallet implements Wallet {
   /** Offers to add the vault's MONKEY token to the wallet; best-effort, as `suggestUsdc`. */
   async suggestMonkey(): Promise<boolean> { return suggestMonkeyToken(() => this.ensureChain(), this.chain, this.provider); }
 
-  /** The wallet's USDC on the custody chain, read without a chain switch; see `usdcBalanceRead`. */
+  /** The wallet's USDC and the vault's recent deposits to it, read without a chain switch; see `usdcBalanceRead` and `vaultDepositsRead`. */
   usdcBalance(): Promise<UsdcBalance> { return usdcBalanceRead(this.address, this.chain, this.provider); }
-
+  vaultDeposits() { return vaultDepositsRead(this.address, this.chain, this.provider); }
   /**
    * Error cases:
    * - the request is for another chain or vault than the deployment's, or the wallet is on another chain

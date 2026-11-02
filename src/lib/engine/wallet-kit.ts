@@ -1,6 +1,6 @@
 /** Tests only: a stub EIP-1193 provider whose account is a fixed key, as a browser wallet answers the console. */
 
-import { decodeFunctionData, encodeAbiParameters, parseAbi, type Hex } from "viem";
+import { decodeFunctionData, encodeAbiParameters, encodeEventTopics, parseAbi, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 import type { Eip1193Provider } from "./provider-wallet";
@@ -44,6 +44,8 @@ const ABI = parseAbi([
   "function latestSeq() view returns (uint64)",
 ]);
 
+const DEPOSITED = parseAbi(["event Deposited(uint256 indexed id, address indexed account, address indexed from, uint256 amount)"]);
+
 export interface StubOptions {
   chainId?: number;
   /** The key that signs; another than the connected account's makes the wallet sign for someone else. */
@@ -61,6 +63,9 @@ export interface StubOptions {
   pendingReceipts?: number;
   /** Answers a method with an error, such as `{ code: 4001 }` for a declined request. */
   fail?: Partial<Record<string, { code: number; message: string }>>;
+  /** The vault's `Deposited` events, which `eth_getLogs` answers by the account topic, with the chain's latest block. */
+  deposits?: { id: bigint; account: string; from: string; amount: bigint }[];
+  blockNumber?: bigint;
   /** What `wallet_watchAsset` resolves; true by default. */
   watchAsset?: boolean;
 }
@@ -73,7 +78,7 @@ export class StubProvider implements Eip1193Provider {
   /** The vault's MONKEY record, read on each call; a test may move it between reads. */
   readonly vault: { claimed: bigint; latestSeq: number };
 
-  constructor(private readonly options: StubOptions = {}) {
+  constructor(readonly options: StubOptions = {}) {
     this.chainId = options.chainId ?? 31337;
     this.vault = { claimed: options.emissionsClaimed ?? 0n, latestSeq: options.latestSeq ?? 0 };
   }
@@ -105,6 +110,8 @@ export class StubProvider implements Eip1193Provider {
         const pending = String(list[0]) !== `0x${"0".repeat(64)}` && this.receiptPolls++ < (this.options.pendingReceipts ?? 0);
         return pending ? null : { status: this.options.receiptStatus ?? "0x1" };
       }
+      case "eth_blockNumber": return `0x${(this.options.blockNumber ?? 1_000_000n).toString(16)}`;
+      case "eth_getLogs": return this.logs((list[0] as { topics: (string | null)[] }).topics[2]);
       case "eth_call": return this.call((list[0] as { data: Hex }).data);
       case "wallet_watchAsset": {
         // The request contract is the asset object itself; an array-wrapped param is refused.
@@ -113,6 +120,14 @@ export class StubProvider implements Eip1193Provider {
       }
       default: throw new Error(`stub provider has no ${method}`);
     }
+  }
+
+  /** The `Deposited` logs whose indexed account is `accountTopic`. */
+  private logs(accountTopic: string | null | undefined) {
+    return (this.options.deposits ?? []).flatMap((d) => {
+      const topics = encodeEventTopics({ abi: DEPOSITED, eventName: "Deposited", args: { id: d.id, account: d.account as Hex, from: d.from as Hex } });
+      return String(topics[2]).toLowerCase() === String(accountTopic).toLowerCase() ? [{ topics, data: encodeAbiParameters([{ type: "uint256" }], [d.amount]) }] : [];
+    });
   }
 
   private call(data: Hex): Hex {
