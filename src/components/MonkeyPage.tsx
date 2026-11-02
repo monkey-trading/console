@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { formatCompactUsd } from "@/lib/chart-format";
 import { readBlock } from "@/lib/engine/attestation";
-import { compactNumber, halvingsBetween, monkeyText } from "@/lib/monkey/figures";
+import { compactNumber, halvingsBetween, monkeyText, perUsdFigure } from "@/lib/monkey/figures";
 import { OperatorReads } from "@/lib/monkey/operators";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import { formatStamp } from "@/lib/time";
@@ -53,8 +53,8 @@ function Charts({ panel }: { panel: MonkeyPanel }) {
     <>
       <ChartCard id="chart-epochs" title="USDC distributed per epoch" caption="What each epoch close shared between stakers." feed={panel.feeds.epochs} kind="bars" lines={EPOCH_LINES} format={formatCompactUsd} />
       <ChartCard
-        id="chart-per-loss" title="MONKEY per $1 of realised loss" feed={panel.feeds.perLoss} kind="steps" lines={PER_LOSS_LINES} format={compactNumber} marks={marks}
-        caption="By emission period: each ten-minute budget is shared between that period's realised losses, less write-offs."
+        id="chart-per-loss" title="MONKEY per $1 of realised loss" feed={panel.feeds.perLoss} kind="steps" lines={PER_LOSS_LINES} format={perUsdFigure} marks={marks}
+        caption="By emission period: each ten-minute budget is shared between that period's realised losses, less write-offs, so the rate is set by how much was lost in the period and a small loss in a quiet period reads high."
         footer={emissions === null ? null : (
           <p className="mt-1 text-caption leading-relaxed text-fg-3">
             The budget is {monkeyText(emissions.current_budget)} per period{emissions.next_halving_ms === null ? "" : `, and halves at ${formatStamp(emissions.next_halving_ms)} UTC`}. Halvings that have passed are marked.

@@ -112,7 +112,8 @@ export function plotValue(text: string, unit: string): number | null {
   // MONKEY base units per dollar of realised loss, written with nine places as `Fixed` is.
   if (unit === "monkey_base_units_per_usd") {
     const fixed = parseFixed(text);
-    return fixed === null ? null : toNumber(fixed / SCALE, 18);
+    // Twelve places, not six: a rate can be a small fraction of a MONKEY per dollar.
+    return fixed === null ? null : Number((fixed / SCALE * 1_000_000_000_000n) / 10n ** 18n) / 1_000_000_000_000;
   }
   return null;
 }
@@ -127,9 +128,24 @@ export function latestText(unit: string, text: string | null | undefined): strin
   if (text === null || text === undefined) return "—";
   if (unit === "usdc_base_units") return /^\d+$/.test(text) ? formatUsdc(usdcFixed(BigInt(text))) : "—";
   if (unit === "monkey_base_units") return monkeyText(text);
-  // MONKEY base units per dollar, written with up to nine places: the whole base units are the figure.
-  if (unit === "monkey_base_units_per_usd") return /^\d+(\.\d+)?$/.test(text) ? `${formatMonkey(BigInt(text.split(".")[0] ?? "0"))} per $1` : "—";
+  // MONKEY base units per dollar: the chart's own figure, so the line and the value tag round alike.
+  if (unit === "monkey_base_units_per_usd") {
+    const value = plotValue(text, unit);
+    return value === null ? "—" : `${perUsdFigure(value)} MONKEY per $1`;
+  }
   return "—";
+}
+
+/**
+ * A MONKEY-per-dollar rate for the axis, the value tag, the crosshair, the table and the Latest line, all rounded here and
+ * nowhere else: two places from 1, and two significant digits below it, so 0.0034 is not drawn as 0.00. Layout only.
+ */
+export function perUsdFigure(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1) return compactNumber(value);
+  if (abs < 1e-12) return "0.00";
+  const places = Math.min(12, 1 - Math.floor(Math.log10(abs)));
+  return value.toFixed(places);
 }
 
 /** A chart axis label: `1.2K`, `3.46M`, `9.14B`, or two places below a thousand, with no sign on a value that prints as zero (an axis padded below zero labels its tick `-0.00`). Layout only. */

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { EngineError } from "../engine/client";
 import { MONKEY_UNIT } from "../format";
-import { compactNumber, monkeyExact, failed, formatAgo, formatDuration, halvingsBetween, latestText, monkeyInputText, parseMonkeyAmount, plotValue, shareBps } from "./figures";
+import { compactNumber, monkeyExact, failed, formatAgo, formatDuration, halvingsBetween, latestText, monkeyInputText, parseMonkeyAmount, perUsdFigure, plotValue, shareBps } from "./figures";
 
 describe("shareBps", () => {
   it("truncates a share to basis points and never passes 100%", () => {
@@ -80,7 +80,7 @@ describe("plotValue and latestText", () => {
   it("writes the latest value in its unit's words", () => {
     expect(latestText("usdc_base_units", "1007000000")).toBe("1,007 USDC");
     expect(latestText("monkey_base_units", "2072000000000000000000000")).toBe("2,072,000 MONKEY");
-    expect(latestText("monkey_base_units_per_usd", "10100000000000000000.5")).toBe("10.1 MONKEY per $1");
+    expect(latestText("monkey_base_units_per_usd", "10100000000000000000.5")).toBe("10.10 MONKEY per $1");
     expect(latestText("usdc_base_units", null)).toBe("—");
     expect(latestText("monkey_base_units", "1.5")).toBe("—");
   });
@@ -104,5 +104,37 @@ describe("failed", () => {
   it("keeps the last answer through another failure", () => {
     expect(failed(new EngineError(500, "boom"), 5)).toEqual({ status: "failed", value: 5, message: "boom" });
     expect(failed("odd", null).message).toBe("The read failed.");
+  });
+});
+
+describe("the MONKEY per dollar rate", () => {
+  it("keeps two significant digits below one, and two places from one", () => {
+    expect(perUsdFigure(0.0034)).toBe("0.0034");
+    expect(perUsdFigure(0.00340123)).toBe("0.0034");
+    expect(perUsdFigure(0.5)).toBe("0.50");
+    expect(perUsdFigure(0.012)).toBe("0.012");
+    expect(perUsdFigure(0.0000123)).toBe("0.000012");
+    expect(perUsdFigure(16.666666667)).toBe("16.67");
+    expect(perUsdFigure(1500)).toBe("1.5K");
+  });
+
+  it("writes zero without a sign or exponent", () => {
+    expect(perUsdFigure(0)).toBe("0.00");
+    expect(perUsdFigure(-0)).toBe("0.00");
+    expect(perUsdFigure(1e-15)).toBe("0.00");
+  });
+
+  it("reads a small rate from the node's text without rounding it to zero", () => {
+    // 0.0034 MONKEY per dollar, as the node writes base units per dollar.
+    expect(plotValue("3400000000000000.000000000", "monkey_base_units_per_usd")).toBe(0.0034);
+    expect(latestText("monkey_base_units_per_usd", "3400000000000000.000000000")).toBe("0.0034 MONKEY per $1");
+  });
+
+  it("rounds the Latest line and the value tag the same way", () => {
+    const text = "16666666666666666666.666666667";
+    const value = plotValue(text, "monkey_base_units_per_usd");
+    expect(value).not.toBeNull();
+    expect(latestText("monkey_base_units_per_usd", text)).toBe(`${perUsdFigure(value ?? 0)} MONKEY per $1`);
+    expect(latestText("monkey_base_units_per_usd", text)).toBe("16.67 MONKEY per $1");
   });
 });
