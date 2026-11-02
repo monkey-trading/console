@@ -13,7 +13,7 @@ import type { Address } from "./types";
 import type { Progress } from "./wallet";
 
 const VAULT = parseAbi([
-  "function claimEmissions(address account, uint256 entitled, bytes32[] siblings) returns (uint256)",
+  "function claimEmissions(address account, uint256 entitled, uint64 checkpointSeq, bytes32[] siblings) returns (uint256)",
   "function emissionsClaimed(address account) view returns (uint256)",
   "function latestSeq() view returns (uint64)",
   "function monkey() view returns (address)",
@@ -39,9 +39,9 @@ export async function suggestTokenAsset(ensureChain: () => Promise<void>, provid
 }
 
 /**
- * Builds the vault's `claimEmissions` for `proof` and sends it through `sendVault`, which
- * transmits the call and waits for it to be mined. The proof names this account: the node signed
- * it for the account's own route.
+ * Builds the vault's `claimEmissions` for `proof`, at the checkpoint its `seq` names, and sends it
+ * through `sendVault`, which transmits the call and waits for it to be mined. The proof names this
+ * account: the node signed it for the account's own route.
  * Error cases:
  * - the proof is for another account or nothing to claim
  * - the user declines, or the transaction reverts or is not confirmed after 180 receipt polls a second apart
@@ -56,7 +56,7 @@ export async function claimEmissionsTx(
   // `BigInt` throws on a malformed string; the enclave signed this shape for the account's route.
   const entitled = BigInt(proof.entitled);
   if (entitled <= 0n) throw new Error("The entitlement proof names nothing to claim.");
-  const data = encodeFunctionData({ abi: VAULT, functionName: "claimEmissions", args: [hexOf(address), entitled, proof.siblings.map(hexOf)] });
+  const data = encodeFunctionData({ abi: VAULT, functionName: "claimEmissions", args: [hexOf(address), entitled, BigInt(proof.seq), proof.siblings.map(hexOf)] });
   return sendVault(data, "claim your MONKEY emissions", progress);
 }
 

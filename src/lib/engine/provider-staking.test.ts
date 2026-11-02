@@ -24,7 +24,7 @@ const ABI = parseAbi([
   "function startUnstake(uint256)",
   "function completeUnstake()",
   "function delegate(address)",
-  "function claimDistribution(address, uint256, bytes32[]) returns (uint256)",
+  "function claimDistribution(address, uint256, uint64, bytes32[]) returns (uint256)",
 ]);
 
 interface World { balance: bigint; allowance: bigint; staked: bigint; pending: [bigint, bigint]; paid: bigint; seq: bigint; chainId: number }
@@ -158,7 +158,7 @@ describe("ProviderStaking transactions", () => {
     expect(sent[0]?.name).toBe("claimDistribution");
     // viem decodes addresses checksummed.
     expect(String(sent[0]?.args[0]).toLowerCase()).toBe(ME);
-    expect(sent[0]?.args.slice(1)).toEqual([123n, [sibling]]);
+    expect(sent[0]?.args.slice(1)).toEqual([123n, 9n, [sibling]]);
     await expect(staking.claimDistribution({ seq: 9, root: "0x", account: "0x00000000000000000000000000000000000000ee", entitled: "1", siblings: [] })).rejects.toThrow("another account");
     await expect(staking.claimDistribution({ seq: 9, root: "0x", account: ME, entitled: "0", siblings: [] })).rejects.toThrow("nothing to claim");
   });

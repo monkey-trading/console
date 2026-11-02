@@ -15,7 +15,7 @@ export interface StakingPosition {
   balance: bigint;
   /** The USDC base units the vault has paid this account's distributions. */
   distributionsClaimed: bigint;
-  /** The seq of the vault's latest posted checkpoint, at which a distribution proof's claim works. */
+  /** The seq of the vault's latest posted checkpoint, at or past which a distribution proof's claim works. */
   latestSeq: number;
 }
 

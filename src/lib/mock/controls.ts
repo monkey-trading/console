@@ -139,9 +139,9 @@ export class MockControls {
   }
 
   claimDistribution(address: string, proof: DistributionProof): void {
-    // The simulated vault, like the real one, checks the proof is the one it holds for the account.
+    // The simulated vault, like the real one, takes a proof at any checkpoint it has reached; a distribution only grows, so none names more than its newest does.
     const held = distributionProof(this.client.state, address);
-    if (held.seq !== proof.seq || held.entitled !== proof.entitled) throw new Error("The simulated vault holds another proof for this account.");
+    if (proof.seq > held.seq || BigInt(proof.entitled) > BigInt(held.entitled)) throw new Error("The simulated vault holds no such proof for this account.");
     claimDistribution(this.client.state, address, BigInt(proof.entitled));
   }
 

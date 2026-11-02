@@ -13,7 +13,7 @@ import type { Address } from "./types";
  * newest. Optional, since a node that predates them leaves them out.
  */
 export interface ClaimStanding {
-  /** The latest checkpoint the node has seen the vault accept; null before it has seen one. */
+  /** The latest checkpoint the node has seen the vault accept in its signer epoch in force; null before it has seen one, and while the signer that recorded it is replaced or retired. */
   accepted_seq?: number | null;
   /** The newest checkpoint the node has created. */
   newest_seq?: number;
@@ -25,7 +25,7 @@ export interface ClaimStanding {
 
 /** `GET /v1/accounts/{address}/emissions`: the proof the vault's `claimEmissions` takes, against the vault's accepted checkpoint when the node kept it, else its newest. */
 export interface EntitlementProof extends ClaimStanding {
-  /** The seq of the last command applied when the root was computed; a claim works only while the vault's `latestSeq` equals it, since the vault verifies a proof against its latest root. */
+  /** The seq of the last command applied when the root was computed, which a claim names; it works once the vault's `latestSeq` has reached it. */
   seq: number;
   /** The root the proof was taken against. */
   root: string;

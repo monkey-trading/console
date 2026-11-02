@@ -12,15 +12,16 @@ afterEach(() => { vi.useRealTimers(); });
 const proofAt = (seq: number) => ({ seq, entitled: "100", root: "0x", account: "0x", siblings: [] as string[], period: 1, newest_seq: seq, newest_entitled: "100" });
 
 describe("a pair that disagrees", () => {
-  it("is told apart from one that meets, for the emissions panel", async () => {
+  it("is told apart from one the vault has reached, for the emissions panel", async () => {
     const { store, panel, stop } = await setup();
     await flush();
     store.patch({ entitlement: proofAt(10) as never, emissionsVault: { claimed: 0n, latestSeq: 9 } });
     expect(pairDisagrees(store, panel.getSnapshot())).toBe(true);
     store.patch({ emissionsVault: { claimed: 0n, latestSeq: 10 } });
     expect(pairDisagrees(store, panel.getSnapshot())).toBe(false);
+    // Past the proof's seq the vault still takes the claim, so there is nothing to read again.
     store.patch({ emissionsVault: { claimed: 0n, latestSeq: 11 } });
-    expect(pairDisagrees(store, panel.getSnapshot())).toBe(true);
+    expect(pairDisagrees(store, panel.getSnapshot())).toBe(false);
     stop();
   });
 

@@ -107,7 +107,7 @@ describe("the page's transactions", () => {
     stop();
   });
 
-  it("claims the USDC a close distributed, once the vault's checkpoint and the node's proof meet", async () => {
+  it("claims the USDC a close distributed, once the vault's checkpoint has reached the node's proof", async () => {
     const { node, store, panel, stop } = await setup();
     node.client.tick(SIM_EPOCH_MS + EPOCH_MS);
     await panel.refreshWallet();
@@ -122,7 +122,21 @@ describe("the page's transactions", () => {
     stop();
   });
 
-  it("sends no claim, and says why, while the vault's checkpoint and the node's proof have not met", async () => {
+  it("claims with a proof older than the vault's latest checkpoint", async () => {
+    const { node, panel, stop } = await setup();
+    node.client.tick(SIM_EPOCH_MS + EPOCH_MS);
+    const real = node.client.stats.distributions;
+    node.client.stats.distributions = async (address) => {
+      const proof = await real(address);
+      return proof === null ? null : { ...proof, seq: proof.seq - 1 };
+    };
+    const claims = vi.spyOn(node.controls, "claimDistribution");
+    expect(await claimDistribution(panel)).toBe(true);
+    expect(claims).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it("sends no claim, and says why, while the vault has not reached the node's proof", async () => {
     const { node, store, panel, stop } = await setup();
     const real = node.client.stats.distributions;
     node.client.stats.distributions = async (address) => {
@@ -132,7 +146,7 @@ describe("the page's transactions", () => {
     const claims = vi.spyOn(node.controls, "claimDistribution");
     expect(await claimDistribution(panel)).toBe(false);
     expect(claims).not.toHaveBeenCalled();
-    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: expect.stringContaining("have not met yet") });
+    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: expect.stringContaining("has not reached") });
     stop();
   });
 
