@@ -23,18 +23,16 @@ const held = (closeout: CloseoutModel | null): AccountModel => ({
 });
 
 describe("closeOutMarker", () => {
-  it("draws the position's close-out price for the in-browser node and none for a live one", async () => {
+  it("draws the position's close-out price", async () => {
     const btc = await btcMarket();
-    const at = held({ reach: "at", price: fixedFromInt(58_000) });
-    expect(closeOutMarker("none", at, btc)).toBe(fixedFromInt(58_000));
-    expect(closeOutMarker("checked", at, btc)).toBeNull();
+    expect(closeOutMarker(held({ reach: "at", price: fixedFromInt(58_000) }), btc)).toBe(fixedFromInt(58_000));
   });
 
   it("draws nothing for Due, None, an unknown close-out or no position", async () => {
     const btc = await btcMarket();
-    expect(closeOutMarker("none", held({ reach: "due" }), btc)).toBeNull();
-    expect(closeOutMarker("none", held({ reach: "beyond" }), btc)).toBeNull();
-    expect(closeOutMarker("none", held(null), btc)).toBeNull();
-    expect(closeOutMarker("none", { ...held(null), positions: [] }, btc)).toBeNull();
+    expect(closeOutMarker(held({ reach: "due" }), btc)).toBeNull();
+    expect(closeOutMarker(held({ reach: "beyond" }), btc)).toBeNull();
+    expect(closeOutMarker(held(null), btc)).toBeNull();
+    expect(closeOutMarker({ ...held(null), positions: [] }, btc)).toBeNull();
   });
 });

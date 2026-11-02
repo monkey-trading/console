@@ -66,7 +66,7 @@ export function PreferencesCard() {
       <Switch label="Ask before Cancel all and Close all" on={prefs.confirmBatch} onChange={(on) => store.set("confirmBatch", on)}
         note={`On, the button asks for a second press within ${CONFIRM_MS / 1000} seconds. Off, one press sends the request.`} />
       <Switch label="Show entry and order lines on the chart" on={prefs.chartLines} onChange={(on) => store.set("chartLines", on)}
-        note="Your position's entry price and your resting orders. The close-out estimate always shows." />
+        note="Your position's entry price and your resting orders. The close-out price always shows." />
     </section>
   );
 }
