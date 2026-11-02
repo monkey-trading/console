@@ -233,16 +233,16 @@ export class LiveEngineClient implements EngineClient {
   }
 
   async findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<ScanResult> {
-    return scanForWithdrawal(await this.scanDeps(await this.trust.signer()), account, nonce, fromSeq);
+    return scanForWithdrawal(this.scanDeps(await this.trust.signer()), account, nonce, fromSeq);
   }
 
   async scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>, dead?: () => boolean): Promise<ScannedMark[]> {
     // The backfill reads the signed log only: every mark the console plots derives from an enclave-signed frame.
-    return scanForMarks(await this.scanDeps(await this.trust.signer()), fromSeq, budget, rules, sessions, dead);
+    return scanForMarks(this.scanDeps(await this.trust.signer()), fromSeq, budget, rules, sessions, dead);
   }
 
   /** The deps a signed log scan takes: the stream origin, a verified signer, and a fresh challenge. */
-  private async scanDeps(signer: string): Promise<ScanDeps> {
+  private scanDeps(signer: string): ScanDeps {
     return { ...this.deps, origin: this.deps.streamOrigin, signer, verifier: this.requireVerifier(), challenge: this.deps.challenge ?? (() => newChallenge()) };
   }
 

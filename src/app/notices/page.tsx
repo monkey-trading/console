@@ -30,9 +30,11 @@ export default function Page() {
           while a console page is open, or when a reconnect does not complete.
         </p>
         <p className={P}>
-          When your wallet connects, the console asks it for one signature that authorizes an ephemeral
-          key held only in this page&apos;s memory. From then on that key signs your orders and cancels, so
-          trading asks for no further wallet prompts; it can never move funds, so deposits, withdrawals
+          When trading becomes possible for your account, the console asks your wallet for one signature
+          that authorizes an ephemeral key held only in this page&apos;s memory — at connect for an account
+          the node already holds, or when your first deposit credits it. From then on that key signs your
+          orders and cancels, so trading asks for no further wallet prompts until the key expires or the
+          node stops accepting it; it can never move funds, so deposits, withdrawals
           and claims still ask your wallet each time. Disconnecting revokes the key with one more
           wallet signature; a key left unrevoked — for example when the wallet app ends the connection
           first — expires on its own within the day. It is never written to your browser&apos;s storage: a

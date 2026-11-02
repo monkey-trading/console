@@ -18,7 +18,7 @@ export function SigningFor() {
       : "The console asks it to sign nothing until the node's attestation verifies.";
   return (
     <p className="text-label leading-relaxed text-fg-3">
-      Your wallet signs for chain {chainId} and vault <span title={vault} className="text-fg-2">{shortHex(vault)}</span>. {node}
+      Every signature names chain {chainId} and vault <span title={vault} className="text-fg-2">{shortHex(vault)}</span> — the wallet&rsquo;s and the session key&rsquo;s alike. {node}
     </p>
   );
 }

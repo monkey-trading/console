@@ -9,7 +9,7 @@ import type { TypedRequest } from "../engine/eip712";
 import type { QuoteRequest } from "../engine/live-stream";
 import { ProviderWallet } from "../engine/provider-wallet";
 import { settle } from "../engine/test-kit";
-import type { CancelRequest, EligibilityRequest, HistoryPage, OrderRequest, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, WithdrawalRequest, MarketView } from "../engine/types";
+import type { AccountView, CancelRequest, EligibilityRequest, HistoryPage, OrderRequest, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import { ACCOUNT, StubProvider, type StubOptions } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
@@ -49,7 +49,12 @@ export class ActionClient implements EngineClient {
   async latestCheckpoint() { return null; }
   async houseLogStatus() { return "reading" as const; }
   async withdrawalTotals() { return { count: 0, remaining: 0n, seq: null, complete: true, stable: true }; }
-  async account(): Promise<never> { throw new EngineError(404, "not found"); }
+  /** Whether the account read answers as a credited account; false answers the node's 404. */
+  credited = false;
+  async account(): Promise<AccountView> {
+    if (!this.credited) throw new EngineError(404, "not found");
+    return { balance: "1000", equity: "1000", margin: "0", positions: {}, orders: {}, toxicity_bps: 0 };
+  }
   async accessProbe() {}
   async nonce() { this.nonceReads++; return { next_nonce: 4, time_ms: NODE_TIME }; }
   async eligibility() { return { class: null, statement: null }; }
@@ -81,7 +86,10 @@ export class ActionClient implements EngineClient {
     this.historyReads.push({ kind: params.kind });
     return this.historyPages?.[params.before ?? ""] ?? this.historyPage;
   }
-  subscribe() { return () => {}; }
+  private subscriber: ((message: StreamMessage) => void) | null = null;
+  subscribe(onMessage: (message: StreamMessage) => void) { this.subscriber = onMessage; return () => { this.subscriber = null; }; }
+  /** Delivers one stream message to the store, as the node would. */
+  deliver(message: StreamMessage) { this.subscriber?.(message); }
 }
 
 /** A started store over an `ActionClient`, connected to a wallet over a stub provider with Anvil's account 0. */

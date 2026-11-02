@@ -50,6 +50,7 @@ function dropWallet(store: ConsoleStore, revoke = true): void {
   store.sessionKey = null;
   store.sessionKeyExpiresAt = 0;
   store.sessionLogin = null; // a login in flight installs nothing: its wallet no longer matches
+  store.sessionLoginRefusal = null;
   store.setWallet(null);
   store.patch(NO_ACCOUNT);
   store.walletCleanup = revoke && wallet && !wallet.readOnly && key !== null ? revokeThenRelease(store, wallet, key) : Promise.resolve(release(store, wallet));

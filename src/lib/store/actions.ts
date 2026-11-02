@@ -35,7 +35,9 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     // installed until it settles: a second connect waits on the same cleanup, not a cleared slot.
     if (store.walletCleanup !== null) {
       const cleanup = store.walletCleanup;
-      await cleanup;
+      // Bounded by the revocation's own request expiry: past it the signature could not be accepted,
+      // so the connect proceeds and the late cleanup settles in the background.
+      await Promise.race([cleanup, new Promise((resolve) => setTimeout(resolve, REQUEST_TTL_MS))]);
       if (store.walletCleanup === cleanup) store.walletCleanup = null;
     }
     const wallet = connected ?? (await store.deps.wallets.connect(optionId));
@@ -43,7 +45,14 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
       release(store, wallet); // a quiet connect never replaces a wallet that connected while it waited; the stale one ends
       return false;
     }
-    if (store.liveWallet !== wallet) release(store, store.liveWallet); // the wallet this one replaces keeps no session open
+    if (store.liveWallet !== wallet) {
+      release(store, store.liveWallet); // the wallet this one replaces keeps no session open
+      // The old connection's key, expiry, in-flight login and refusal do not carry to the new wallet.
+      store.sessionKey = null;
+      store.sessionKeyExpiresAt = 0;
+      store.sessionLogin = null;
+      store.sessionLoginRefusal = null;
+    }
     store.liveWallet = wallet;
     store.patch(NO_ACCOUNT);
     store.setWallet({ address: wallet.address, label: wallet.label, ...(wallet.readOnly ? { readOnly: true } : {}) });
@@ -67,7 +76,6 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
 }
 
 
-/** The connected wallet when the console may use it now; otherwise tells the user why not and returns null. */
 export async function attestEligibility(store: ConsoleStore, cls: EligibilityClass): Promise<void> {
   const out = await signed(store, `declare "${STATEMENTS[cls]}"`, (t, account) => eligibilityTypedData(domainOf(store), account, cls, t), (auth, wallet) =>
     store.deps.client.attestEligibility({ account: wallet.address, class: cls, auth }), "sign-again",

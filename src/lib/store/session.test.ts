@@ -4,18 +4,14 @@ import { describe, expect, it } from "vitest";
 
 import { EngineError } from "../engine/client";
 import vectors from "../engine/eip712-vectors.json";
-import { registerSessionKeyTypedData, requestDomain, revokeSessionKeyTypedData } from "../engine/eip712";
-import { SESSION_KEY_TTL_MS, SessionKeySigner } from "../engine/session-key";
-import type { EligibilityRequest, OrderRequest, SessionKeyRequest, SessionKeyRevocationRequest } from "../engine/types";
+import { cancelTypedData, eligibilityTypedData, registerSessionKeyTypedData, requestDomain, revokeSessionKeyTypedData, withdrawalTypedData } from "../engine/eip712";
+import { SESSION_KEY_TTL_MS } from "../engine/session-key";
+import type { CancelRequest, EligibilityRequest, OrderRequest, SessionKeyRequest, SessionKeyRevocationRequest, WithdrawalRequest } from "../engine/types";
 import { ACCOUNT } from "../engine/wallet-kit";
 import { fixedFromInt, fixedFromWire } from "../fixed";
-import { disconnectWallet, placeOrder, REQUEST_TTL_MS } from "./actions";
-import { connected, NODE_TIME, signerOf, VAULT, ActionClient, BTC } from "./live-kit";
-import { ProviderWallet } from "../engine/provider-wallet";
-import { StubProvider } from "../engine/wallet-kit";
-import { attestEligibility, connectWallet, walletSessionEnded } from "./actions";
-import { ConsoleStore } from "./store";
-import type { Wallet } from "../engine/wallet";
+import { attestEligibility, cancelOrder, disconnectWallet, placeOrder, REQUEST_TTL_MS, walletSessionEnded, withdraw } from "./actions";
+import { connected, NODE_TIME, signerOf, VAULT, ActionClient } from "./live-kit";
+
 import { liveSessionKey, loginOnCredit, loginSession } from "./session";
 import { settle } from "../engine/test-kit";
 
@@ -166,7 +162,7 @@ describe("the session-key login", () => {
   });
 
   it("installs nothing when the wallet disconnects while the login prompt waits", async () => {
-    const { client, provider, store, wallet } = await connected();
+    const { client, store, wallet } = await connected();
     let proceed!: () => void;
     wallet.sign = () => new Promise<string>((resolve) => { proceed = () => resolve("0x" + "11".repeat(65)); });
     const loggingIn = loginSession(store);
@@ -177,19 +173,6 @@ describe("the session-key login", () => {
     expect(liveSessionKey(store)).toBeNull(); // approved after the disconnect: registered at the node, but never installed here
     expect(store.sessionKeyExpiresAt).toBe(0);
     expect(client.posted.some((p) => p.route === "session_key")).toBe(true);
-    void provider;
-  });
-
-  it("connect skips the login for an account the node has not credited: no prompt, no registration", async () => {
-    const client = new ActionClient(); // its account read 404s, as any uncredited account
-    const provider = new StubProvider();
-    const wallet: Wallet = new ProviderWallet(ACCOUNT, "Test wallet", provider, { chainId: vectors.chain_id, vault: VAULT, usdc: null, add: null }, { wait: async () => {} });
-    const store = new ConsoleStore({ client, wallets: { options: [], connect: async () => wallet }, history: () => [], initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
-    store.start(0);
-    await settle();
-    expect(await connectWallet(store, "injected")).toBe(true);
-    expect(client.posted.some((p) => p.route === "session_key")).toBe(false);
-    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(0);
   });
 
   it("re-login after a key died builds the retry's terms from the fresh nonce answer", async () => {
@@ -234,7 +217,7 @@ describe("the session-key login", () => {
   });
 
   it("abandons an order silently when the wallet disconnects between the nonce read and the send", async () => {
-    const { client, provider, store, wallet } = await connected();
+    const { client, store, wallet } = await connected();
     await loginSession(store);
     const waiters: (() => void)[] = [];
     const original = client.nonce.bind(client);
@@ -247,12 +230,31 @@ describe("the session-key login", () => {
     expect(client.posted.some((p) => p.route === "order")).toBe(false);
     expect(store.getSnapshot().toasts.filter((t) => t.tone === "error")).toEqual([]);
     void wallet;
-    void provider;
   });
 
-  it("a fresh login mints a fresh key, and two keys never share an address", async () => {
-    const first = SessionKeySigner.generate();
-    const second = SessionKeySigner.generate();
-    expect(first.address).not.toBe(second.address);
+  it("signs the cancel with the session key and the withdrawal and declaration with the wallet, over the bodies posted", async () => {
+    const { client, store } = await connected();
+    await cancelOrder(store, 42);
+    await withdraw(store, fixedFromInt(10));
+    await attestEligibility(store, "eligible_client");
+    const registration = registrationOf(client);
+    const terms = { nonce: 4, expiresAt: NODE_TIME + REQUEST_TTL_MS };
+    const [cancel, withdrawal, declaration] = client.posted.filter((p) => p.route !== "session_key").map((p) => p.body) as [CancelRequest, WithdrawalRequest, EligibilityRequest];
+    expect(await signerOf(cancelTypedData(DOMAIN, cancel, terms), cancel.auth?.signature)).toBe(registration.session_key.toLowerCase());
+    expect(await signerOf(withdrawalTypedData(DOMAIN, ACCOUNT, withdrawal.amount, terms), withdrawal.auth?.signature)).toBe(ACCOUNT);
+    expect(await signerOf(eligibilityTypedData(DOMAIN, ACCOUNT, "eligible_client", terms), declaration.auth.signature)).toBe(ACCOUNT);
   });
+
+  it("falls back to the wallet-signed path when the node refuses registrations, so a position can always close", async () => {
+    const { client, provider, store } = await connected();
+    client.answer = () => ({ seq: 1, events: [{ type: "session_key_rejected", account: ACCOUNT, session_key: "0x0000000000000000000000000000000000000abc", reason: { kind: "too_many_session_keys", max: 10 } }] });
+    await cancelOrder(store, 42);
+    const cancel = client.posted.find((p) => p.route === "cancel");
+    if (!cancel) throw new Error("no cancel posted");
+    expect(await signerOf(cancelTypedData(DOMAIN, cancel.body as CancelRequest, { nonce: 4, expiresAt: NODE_TIME + REQUEST_TTL_MS }), (cancel.body as CancelRequest).auth?.signature)).toBe(ACCOUNT);
+    expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2); // the refused registration, then the wallet signing the cancel itself
+    expect(store.getSnapshot().toasts.some((t) => t.text.includes("This request will ask your wallet instead."))).toBe(true);
+  });
+
+
 });

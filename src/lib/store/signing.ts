@@ -42,7 +42,7 @@ export async function prompting<T>(store: ConsoleStore, prompt: string, step: ()
   }
 }
 
-/** How a request answered 409 (its nonce already used) is handled: a cancel re-signs with the nonce the node names, since running it twice does nothing more; an order does not, since a copy of it may have run first. */
+/** How a request answered 409 (its nonce already used) is handled: a cancel or a declaration re-signs with the nonce the node names, since running it twice does nothing more; an order or a withdrawal does not, since a copy of it may have run first. */
 export type OnNonceTaken = "sign-again" | "report";
 
 /** The domain the client's deployment signs under. */

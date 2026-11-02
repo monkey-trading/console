@@ -14,7 +14,7 @@ import { UntrustedError } from "../engine/trust";
 import type { Wallet } from "../engine/wallet";
 import { formatStamp } from "../time";
 import { describeReject } from "../messages";
-import { domainOf, errorText, prompting, REQUEST_TTL_MS, usableWallet, type OnNonceTaken, type Outcome } from "./signing";
+import { domainOf, errorText, prompting, REQUEST_TTL_MS, signed, usableWallet, type OnNonceTaken, type Outcome } from "./signing";
 import type { ConsoleStore } from "./store";
 
 /** What the login asks the wallet to sign, shown in the prompt and passed to the wallet. */
@@ -35,8 +35,12 @@ export function liveSessionKey(store: ConsoleStore): SessionKeySigner | null {
  * client contract settles it: re-registering a known key never counts against the caps.
  */
 export async function loginSession(store: ConsoleStore): Promise<boolean> {
-  const wallet = usableWallet(store, "authorize trading");
-  if (!wallet) return false;
+  // Silent gate: user actions toast their own refusal, and the feed-live hook retries here once signing is possible.
+  const wallet = store.liveWallet;
+  if (wallet === null || wallet.readOnly === true) return false;
+  const blocked = signBlock(store.getSnapshot().attestation, store.getSnapshot().stream, false);
+  if (blocked !== null) return false;
+  store.sessionLoginRefusal = null;
   const key = (store.sessionKey ??= SessionKeySigner.generate());
   try {
     const { next_nonce, time_ms } = await store.deps.client.nonce(wallet.address);
@@ -57,15 +61,16 @@ export async function loginSession(store: ConsoleStore): Promise<boolean> {
       if (!(error instanceof EngineError) || error.reject?.kind !== "invalid_nonce") throw error;
       result = await attempt(error.reject.expected);
     }
+    // The wallet may have disconnected (or another connected) while the prompt waited: only this
+    // connection's wallet may take the answer.
+    if (store.liveWallet !== wallet) return false;
     const refused = result.events.find((e) => e.type === "session_key_rejected");
     if (refused && refused.type === "session_key_rejected") {
+      store.sessionLoginRefusal = refused.reason;
       store.toast("error", describeReject(refused.reason));
       return false;
     }
     if (!result.events.some((e) => e.type === "session_key_registered")) throw new Error("The node did not register the session key.");
-    // The wallet may have disconnected (or another connected) while the prompt waited: only this
-    // connection's wallet may install the key.
-    if (store.liveWallet !== wallet) return false;
     store.sessionKeyExpiresAt = sessionExpiresAt;
     return true;
   } catch (error) {
@@ -104,6 +109,16 @@ export function ensureLogin(store: ConsoleStore, force = false): Promise<boolean
 export function loginOnCredit(store: ConsoleStore, events: StreamMessage["events"], mine: string | undefined): void {
   if (mine === undefined || store.liveWallet === null || store.liveWallet.readOnly === true || liveSessionKey(store) !== null) return;
   if (events.some((e) => e.type === "deposited" && e.account.toLowerCase() === mine)) void ensureLogin(store);
+}
+
+/**
+ * Runs the login when the feed first turns live, for a connect that found it still starting: the
+ * account was credited but the prompt waited for a verified feed.
+ */
+export function loginWhenLive(store: ConsoleStore): void {
+  const state = store.getSnapshot();
+  if (state.account === null || store.liveWallet === null || store.liveWallet.readOnly === true || liveSessionKey(store) !== null || store.sessionLogin !== null) return;
+  void ensureLogin(store);
 }
 
 /**
@@ -152,9 +167,20 @@ export async function sessionSigned(
   /** Whether the request left the page: from then on it may have run, whatever comes back. */
   let sent = false;
   try {
-    if (liveSessionKey(store) === null && !(await ensureLogin(store))) return { ok: false };
-    // The login waited on the wallet: this connection must still be the one that asked.
-    if (store.liveWallet !== wallet) return { ok: false };
+    if (liveSessionKey(store) === null) {
+      const loggedIn = await ensureLogin(store);
+      // The login waited on the wallet: this connection must still be the one that asked.
+      if (store.liveWallet !== wallet) return { ok: false };
+      if (liveSessionKey(store) === null) {
+        // The node refuses registrations (for example the ten-key cap): the wallet signs, as before
+        // this feature, so a position can always close and an order always has a way through.
+        if (!loggedIn && store.sessionLoginRefusal !== null) {
+          store.toast("info", `${describeReject(store.sessionLoginRefusal)} This request will ask your wallet instead.`);
+          return signed(store, summary, build, send, onNonceTaken);
+        }
+        return { ok: false };
+      }
+    }
     const key = liveSessionKey(store);
     if (key === null) return { ok: false };
     /** Signs and sends once, abandoning silently when the connection ended or changed while the nonce read waited. */

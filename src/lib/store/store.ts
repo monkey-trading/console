@@ -4,7 +4,7 @@ import { MAX_BARS, pushTick, TIMEFRAMES, type Bar, type TimeframeId } from "../b
 import { maySign } from "../engine/attestation";
 import type { ClientEvent } from "../engine/client";
 import type { SessionKeySigner } from "../engine/session-key";
-import type { MarketId, StreamMessage } from "../engine/types";
+import type { MarketId, Reject, StreamMessage } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
 import { fixedToNumber } from "../fixed";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
@@ -13,7 +13,7 @@ import { BarsSeed } from "./bars-seed";
 import { FEED_LIMIT, feedFrom, isMine } from "./feed";
 import { initialState, seedAllBars, type ConsoleState, type ToastMessage } from "./state";
 import { readHousePanelSoon } from "./house";
-import { loginOnCredit } from "./session";
+import { loginOnCredit, loginWhenLive } from "./session";
 import { noteAccess } from "./signing";
 import type { StoreDeps } from "./store-deps";
 
@@ -21,9 +21,11 @@ export class ConsoleStore {
   readonly deps: StoreDeps;
   /** The connected wallet, which holds a signer and so is not part of the snapshot. */
   liveWallet: Wallet | null = null;
-  /** The ephemeral in-browser key trading signs with after the one-signature login (console#68), and its registration's expiry by the node's clock; the private key never enters the snapshot. */
+  /** The ephemeral in-browser key trading signs with and its registration's expiry by the node's clock (console#68); the private key never enters the snapshot. */
   sessionKey: SessionKeySigner | null = null;
   sessionKeyExpiresAt = 0;
+  /** Why the last login the node answered was refused, or null: a refused registration sends orders and cancels through the wallet instead. */
+  sessionLoginRefusal: Reject | null = null;
   /** The login in flight, so concurrent callers share one attempt and one wallet prompt. */
   sessionLogin: Promise<boolean> | null = null;
   /** The previous disconnect's revocation and release, awaited before the next connect adopts. */
@@ -45,9 +47,9 @@ export class ConsoleStore {
   private unwatch: (() => void) | null = null;
   /** Seeds the chart's bars from the marks endpoint once per market and timeframe. */
   readonly barsSeed = new BarsSeed(this);
-  /** When each market's bar bucket was last ticked from the node's mark, so a history merge can tell a stale live candle from a fresh one; not part of the snapshot. */
+  /** When each market's bar bucket was last ticked from the node's mark; a merge tells a stale candle from a fresh one. Not part of the snapshot. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
-  /** Stand-down flags for pending history work, bumped on each start so an earlier cycle's scans stand down (StrictMode re-runs the effect); not part of the snapshot. */
+  /** Stand-down flags for pending history work, bumped on each start so an earlier cycle's scans stand down; not part of the snapshot. */
   stopped = false;
   scanEpoch = 0;
   /** Whether trust in the node was lost (a failed check or a wrong clock) and not yet regained. */
@@ -171,7 +173,8 @@ export class ConsoleStore {
       const read = event.status === "live" && (was === "stale" || was === "connecting");
       // The frame's signed time moves the node clock first, so a read it prompts plots marks at node time, not the pre-outage time.
       this.patch({ stream: event.status, ...(event.time !== undefined && event.time > this.snapshot.now ? { now: event.time } : {}) });
-      if (read) void this.refresh(true);
+      // A connect that found the feed still starting runs the login now, when signing is possible.
+      if (read) { loginWhenLive(this); void this.refresh(true); }
     } else if (event.type === "problem") this.toast("error", event.reason);
     // Data read under the old enclave is read again once the new one is trusted; a check that ends
     // at the same address changes nothing, so a read that keeps failing is not repeated by it.
