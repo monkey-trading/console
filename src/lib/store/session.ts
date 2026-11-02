@@ -1,7 +1,7 @@
 /**
  * The session-key login (monkey-trading/console#68): one wallet signature at connect authorizes an
- * ephemeral in-browser key, and orders and cancels then sign with it — no wallet prompt per
- * request. Deposits, withdrawals and vault claims never use it: the engine refuses a session key's
+ * ephemeral in-browser key, and orders, cancels, and the cancel-all and close-all batches then sign
+ * with it — no wallet prompt per request. Deposits, withdrawals and vault claims never use it: the engine refuses a session key's
  * funds request. The keypair lives only in the store, never in the snapshot or browser storage.
  */
 
@@ -147,7 +147,7 @@ const keyDied = (error: unknown): boolean =>
   error instanceof EngineError && error.status === 401 && ["invalid signature", "session key revoked", "session key expired"].includes(error.message);
 
 /**
- * Signs and sends one order or cancel with the session key: silent, no wallet prompt. When the
+ * Signs and sends one order, cancel, or batch of them with the session key: silent, no wallet prompt. When the
  * login has not run or its key has died, the one-signature login runs first; a 401 that says the
  * key died mid-flight re-runs the login once and retries with the fresh key. A 429 asks the user
  * to wait. Error cases: as `signed` in `signing`, plus no session key when the wallet will not

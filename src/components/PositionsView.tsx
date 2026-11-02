@@ -1,31 +1,41 @@
 "use client";
 
-/** Open positions with their profit and loss and a Close button: a table from 1024 px, cards below. */
+/** Open positions with their profit and loss, a Close button each and a Close all above them: a table from 1024 px, cards below. */
 
-import { useId } from "react";
+import { useEffect, useId } from "react";
 
+import { describeLeftOut, planCloseAll, pressCloseAll, targetsKey } from "@/lib/close-all";
 import { formatMark } from "@/lib/price-format";
 import { absFixed, formatFixedPlaces, formatUsd } from "@/lib/fixed";
 import { closingPrice } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
+import { closeAll } from "@/lib/store/batch-actions";
 import { previewTicket, unrealisedPnl } from "@/lib/ticket";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
 import { useReadOnlyNote } from "./SignGate";
+import { useConfirmWindow } from "./use-confirm-window";
 
 const TH = "px-4 py-3 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
 const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
+/** The button while it waits for its second press: the hover colours, held. */
+const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 
 /** The slippage bound a Close sends, capped at the market's own. */
 const CLOSE_SLIPPAGE_BPS = 25;
 
+/** How long Close all waits for its second press, and how soon after the first a press is taken as the same click's double. */
+const CONFIRM_MS = 5_000;
+const CONFIRM_MIN_GAP_MS = 400;
+
 export function PositionsView() {
   const { account, markets, busy, signatures, quotes, house, quoted: asked } = useConsole();
   const { store } = useSession();
-  const readOnly = useReadOnlyNote(useId(), "Close");
+  const id = useId();
+  const readOnly = useReadOnlyNote(id, "Close");
+  const { armed, state, arm, cancel } = useConfirmWindow(CONFIRM_MS, CONFIRM_MIN_GAP_MS);
   const positions = account?.positions ?? [];
-  if (positions.length === 0) return <p className="px-4 py-6 text-caption text-fg-3">No open positions.</p>;
   const rows = positions.map((p) => {
     const market = markets.find((m) => m.id === p.market);
     // An unpriced market shows no mark and no profit, not the entry price as if it were the mark.
@@ -54,15 +64,46 @@ export function PositionsView() {
       mark: known === null ? "—" : formatMark(known, places),
       pnl: pnl === null ? "—" : formatUsd(pnl),
       loss: pnl !== null && pnl < 0n,
+      open: market?.open === true,
+      // An unpriced market has no closing price, whatever a quote says.
+      quoted: known === null ? null : quoted,
       closable: !busy && !readOnly.readOnly && market?.open === true && known !== null && quoted !== null,
       // The node quotes at most four markets at once, the selected one first; a held market left out has no closing price until it is selected.
       unquoted: signatures === "checked" && !asked.includes(p.market) && market?.open === true && known !== null,
       close,
     };
   });
+  // Close all sends what each Close button would: its market and its quote, under the same bound.
+  const { targets, leftOut } = planCloseAll(rows.map((r) => ({ market: r.key, symbol: r.symbol, open: r.open, quoted: r.quoted })));
+  const count = targets.length;
+  const leftOutNote = describeLeftOut(leftOut);
+  const confirming = armed && count > 0;
+  // The window confirms the list it was armed for: when the markets Close all would send change, it closes and the next press arms again.
+  const listed = targetsKey(targets);
+  useEffect(() => cancel(), [listed, cancel]);
+  if (positions.length === 0) return <p className="px-4 py-6 text-caption text-fg-3">No open positions.</p>;
+  const closeEverything = (event: { currentTarget: HTMLElement }) => {
+    const press = pressCloseAll(state(), count);
+    if (press === "arm") arm();
+    if (press !== "send") return;
+    cancel();
+    keepFocus(event.currentTarget);
+    void closeAll(store, targets, CLOSE_SLIPPAGE_BPS);
+  };
+  // A held Enter repeats its click: only a separate press may confirm.
+  const holdsDown = (event: { repeat: boolean; preventDefault: () => void }) => { if (event.repeat) event.preventDefault(); };
+  const noteId = `${id}-left-out`;
+  const describedBy = readOnly.describedBy ?? (leftOutNote === null ? undefined : noteId);
   return (
     <>
       {readOnly.note}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-4 py-3 lg:py-2">
+        <button type="button" disabled={busy || readOnly.readOnly || count === 0} className={`${confirming ? ARMED : BUTTON} w-full lg:w-auto`} aria-describedby={describedBy} onClick={closeEverything} onKeyDown={holdsDown}>
+          {confirming ? `Confirm: close ${count} ${count === 1 ? "position" : "positions"}` : `Close all (${count})`}
+        </button>
+        <p role="status" className="sr-only">{confirming ? `Press again within five seconds to close ${count} ${count === 1 ? "position" : "positions"}.` : ""}</p>
+        {leftOutNote !== null && <p id={noteId} className="text-label leading-relaxed text-fg-3">{leftOutNote}</p>}
+      </div>
       <ul className="lg:hidden">
         {rows.map((r) => (
           <li key={r.key} className="border-b border-line px-4 py-3 text-caption last:border-b-0">

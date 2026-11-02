@@ -2,11 +2,12 @@
  * The engine's EIP-712 client requests as typed data for `eth_signTypedData_v4`, field for field as
  * `crates/core/src/eip712.rs` defines them (and `ReissueRequest` as `crates/node/src/api/reissue.rs`
  * does): amounts and prices are `int128` in `Fixed`'s raw units, `expiresAt` is Unix milliseconds,
- * and sides and order kinds are their JSON names.
+ * and sides and order kinds are their JSON names. `CancelAllRequest` and `CloseAllRequest` (with its
+ * `CloseEntry`) are the V44 batch forms.
  */
 
 import { fixedFromWire } from "../fixed";
-import type { Address, CancelRequest, EligibilityClass, OrderRequest } from "./types";
+import type { Address, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityClass, OrderRequest } from "./types";
 
 export const DOMAIN_NAME = "monkeytrading";
 export const DOMAIN_VERSION = "1";
@@ -37,6 +38,23 @@ const TYPES = {
     { name: "nonce", type: "uint64" },
     { name: "expiresAt", type: "int64" },
     { name: "orderId", type: "uint64" },
+  ],
+  CancelAllRequest: [
+    { name: "account", type: "address" },
+    { name: "nonce", type: "uint64" },
+    { name: "expiresAt", type: "int64" },
+  ],
+  CloseAllRequest: [
+    { name: "account", type: "address" },
+    { name: "nonce", type: "uint64" },
+    { name: "expiresAt", type: "int64" },
+    { name: "closes", type: "CloseEntry[]" },
+    { name: "hasMaxSlippage", type: "bool" },
+    { name: "maxSlippageBps", type: "int64" },
+  ],
+  CloseEntry: [
+    { name: "market", type: "uint32" },
+    { name: "quoted", type: "int128" },
   ],
   WithdrawalRequest: [
     { name: "account", type: "address" },
@@ -70,7 +88,8 @@ const TYPES = {
   ],
 } as const;
 
-export type RequestType = keyof typeof TYPES;
+/** A request's primary type; `CloseEntry` is only ever nested in `CloseAllRequest`. */
+export type RequestType = Exclude<keyof typeof TYPES, "CloseEntry">;
 
 /** The deployment a signature is bound to: the custody chain and vault. */
 export interface RequestDomain {
@@ -80,12 +99,12 @@ export interface RequestDomain {
   verifyingContract: `0x${string}`;
 }
 
-/** One request as typed data, ready for `eth_signTypedData_v4`: `types` holds the primary type's fields alone. */
+/** One request as typed data, ready for `eth_signTypedData_v4`: `types` holds the primary type's fields and any struct it nests. */
 export interface TypedRequest {
   domain: RequestDomain;
   types: { readonly [name: string]: readonly { readonly name: string; readonly type: string }[] };
   primaryType: RequestType;
-  message: Record<string, string | number | bigint | boolean>;
+  message: Record<string, string | number | bigint | boolean | readonly { market: number; quoted: bigint }[]>;
 }
 
 /** A signature's nonce and expiry. */
@@ -111,7 +130,9 @@ function hexAddress(value: string): `0x${string}` {
 }
 
 function typed(domain: RequestDomain, primaryType: RequestType, message: TypedRequest["message"]): TypedRequest {
-  return { domain, types: { [primaryType]: TYPES[primaryType] }, primaryType, message };
+  // A struct that nests another lists it beside the primary type, as the engine's fixtures do.
+  const types: TypedRequest["types"] = primaryType === "CloseAllRequest" ? { [primaryType]: TYPES[primaryType], CloseEntry: TYPES.CloseEntry } : { [primaryType]: TYPES[primaryType] };
+  return { domain, types, primaryType, message };
 }
 
 /** `order_hash`'s struct: a market order signs its quoted price, a limit or stop order its trigger price. */
@@ -129,6 +150,25 @@ export function orderTypedData(domain: RequestDomain, order: Omit<OrderRequest, 
 /** `cancel_hash`'s struct. */
 export function cancelTypedData(domain: RequestDomain, cancel: Omit<CancelRequest, "auth">, terms: Terms): TypedRequest {
   return typed(domain, "CancelRequest", { account: hexAddress(cancel.account), nonce: BigInt(terms.nonce), expiresAt: BigInt(terms.expiresAt), orderId: BigInt(cancel.order_id) });
+}
+
+/** `cancel_all_hash`'s struct. */
+export function cancelAllTypedData(domain: RequestDomain, cancel: Omit<CancelAllRequest, "auth">, terms: Terms): TypedRequest {
+  return typed(domain, "CancelAllRequest", { account: hexAddress(cancel.account), nonce: BigInt(terms.nonce), expiresAt: BigInt(terms.expiresAt) });
+}
+
+/**
+ * `close_all_hash`'s struct: the entries are signed in the order given, each `quoted` as its raw
+ * `Fixed` (the wire decimal times 10^9, so `"3000"` signs as 3000000000000); an omitted bound signs
+ * `hasMaxSlippage` false and 0.
+ */
+export function closeAllTypedData(domain: RequestDomain, close: Omit<CloseAllRequest, "auth">, terms: Terms): TypedRequest {
+  const bound = close.max_slippage_bps;
+  return typed(domain, "CloseAllRequest", {
+    account: hexAddress(close.account), nonce: BigInt(terms.nonce), expiresAt: BigInt(terms.expiresAt),
+    closes: close.closes.map((entry) => ({ market: entry.market, quoted: fixedFromWire(entry.quoted) })),
+    hasMaxSlippage: bound !== undefined, maxSlippageBps: BigInt(bound ?? 0),
+  });
 }
 
 /** `withdrawal_hash`'s struct; `amount` is a wire decimal. */

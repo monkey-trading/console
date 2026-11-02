@@ -4,7 +4,7 @@ import { checkAttestation, type AttestationStatus } from "../engine/attestation"
 import { EngineError, type ActionResult, type EngineClient, type SignatureChecks, type Unsubscribe } from "../engine/client";
 import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
-import type { EligibilityClass, AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
+import type { EligibilityClass, AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage, MarkResolution } from "../engine/mark-types";
 import type { HouseState } from "../engine/house-state";
 import type { StatsReads } from "../engine/stats-types";
@@ -12,8 +12,9 @@ import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
 import { fixedToWire } from "../fixed";
 import { equityOf, marginOf } from "./accounts";
+import { cancelAll, closeAll } from "./batch";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";
-import { queuePage, withdraw } from "./funds";
+import { mockTotals, queuePage, withdraw } from "./funds";
 import { registerSessionKey, revokeSessionKey } from "./session-keys";
 import { advance } from "./step";
 import { emissionScheduleOf, houseFigures, marksPage, mockStats } from "./stats";
@@ -43,17 +44,6 @@ export function mockCheckpoint(headSeq: number): CheckpointEntry | null {
   const seq = headSeq - (headSeq % CHECKPOINT_EVERY);
   if (seq === 0) return null;
   return { type: "checkpoint", offset: `${seq}:1`, seq, root: `0x${mockHex(`checkpoint:${seq}`, 32)}` };
-}
-
-/** The public withdrawal queue's size, summed from its entries. */
-export function mockTotals(state: MockState): QueueTotals {
-  let remaining = 0n;
-  let largest: bigint | null = null;
-  for (const entry of state.queue) {
-    remaining += entry.remaining;
-    if (largest === null || entry.remaining > largest) largest = entry.remaining;
-  }
-  return { count: state.queue.length, remaining, largest, head: state.queue[0]?.remaining ?? null, seq: state.seq, complete: true, stable: true };
 }
 
 /** How the node's attestation presents: the node's own mock quote, or a hardware quote nothing here can verify. */
@@ -221,6 +211,14 @@ export class MockEngineClient implements EngineClient {
 
   async cancelOrder(request: CancelRequest): Promise<ActionResult> {
     return cancelOrder(this.state, request);
+  }
+
+  async cancelAll(request: CancelAllRequest): Promise<ActionResult> {
+    return cancelAll(this.state, request);
+  }
+
+  async closeAll(request: CloseAllRequest): Promise<ActionResult> {
+    return closeAll(this.state, request);
   }
 
   async withdraw(request: WithdrawalRequest): Promise<ActionResult> {

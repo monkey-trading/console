@@ -83,7 +83,7 @@ export function placeOrder(state: MockState, req: OrderRequest): ActionResult {
   return { seq: state.emit({ type: "place_order" }, events).seq, events };
 }
 
-function orderEvents(state: MockState, req: OrderRequest, account: AccountState): EngineEvent[] {
+export function orderEvents(state: MockState, req: OrderRequest, account: AccountState): EngineEvent[] {
   const qty = parseFixed(req.qty);
   if (qty === null || qty <= 0n || qty > MAX_INPUT) return rejected(req, { kind: "invalid_amount" });
   const runtime = state.markets.get(req.market);
@@ -92,7 +92,7 @@ function orderEvents(state: MockState, req: OrderRequest, account: AccountState)
   const accepted: EngineEvent = { type: "order_accepted", account: req.account, client_id: req.client_id, order_id: orderId };
   if (req.kind.kind === "market") {
     const quoted = parseFixed(req.kind.quoted);
-    if (quoted === null || quoted <= 0n) return rejected(req, { kind: "invalid_order", reason: "quoted price" });
+    if (quoted === null || quoted <= 0n || quoted > MAX_INPUT) return rejected(req, { kind: "invalid_order", reason: "price out of range" });
     const outcome = fillOrder(state, {
       address: req.account, market: req.market, side: req.side, qty, reduceOnly: req.reduce_only ?? false, orderId,
       slippage: { quoted, maxBps: req.kind.max_slippage_bps ?? runtime.listed.spec.max_slippage_bps },

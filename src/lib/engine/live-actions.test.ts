@@ -50,6 +50,8 @@ describe("signed actions", () => {
   it.each([
     ["placeOrder", "/v1/orders"],
     ["cancelOrder", "/v1/orders/cancel"],
+    ["cancelAll", "/v1/orders/cancel-all"],
+    ["closeAll", "/v1/positions/close-all"],
     ["withdraw", "/v1/withdrawals"],
     ["attestEligibility", "/v1/eligibility"],
   ] as const)("%s posts the request to %s and returns the events with the seq the node signed", async (method, path) => {
@@ -72,6 +74,13 @@ describe("signed actions", () => {
     await expect(client.attestEligibility({} as never)).rejects.toMatchObject({ status: 403, reject: { kind: "access", reason: "united_states" } });
     reply("/v1/eligibility", 403, { error: "a never-credited account declares only once a deposit for it is pending" });
     await expect(client.attestEligibility({} as never)).rejects.toMatchObject({ status: 403, reject: null, message: "a never-credited account declares only once a deposit for it is pending" });
+  });
+
+  it("reads a signed 404 from a node without the batch routes as an engine error with no refusal kind", async () => {
+    const { node, client } = accepting();
+    // An older node's router answers an unknown route with an empty signed 404.
+    node.signed("/v1/positions/close-all", () => ({ status: 404, body: "", signature: "0x00", timeMs: 1_000, seq: 9 }));
+    await expect(client.closeAll({ account: ACCOUNT, closes: [{ market: 1, quoted: "1" }] })).rejects.toMatchObject({ status: 404, reject: null, message: "The node answered HTTP 404." });
   });
 
   it("refuses a 2xx action answer that is not a list of events", async () => {

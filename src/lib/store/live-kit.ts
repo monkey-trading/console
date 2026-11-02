@@ -9,7 +9,7 @@ import type { TypedRequest } from "../engine/eip712";
 import type { QuoteRequest } from "../engine/live-stream";
 import { ProviderWallet } from "../engine/provider-wallet";
 import { settle } from "../engine/test-kit";
-import type { AccountView, CancelRequest, EligibilityRequest, HistoryPage, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalRequest, MarketView } from "../engine/types";
+import type { AccountView, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, HistoryPage, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import { ACCOUNT, StubProvider, type StubOptions } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
@@ -19,7 +19,7 @@ export const VAULT = vectors.vault;
 export const BTC = { id: 1, symbol: "BTC-USD", open: true, reduce_only: false, mark: "100000", stress_level: 0, max_slippage_bps: 25, min_order_notional: "10", margin_tiers: [], spread_tiers: [], house_cap_bps: 0, schedule: { kind: "always_open" }, asset_class: "crypto" } as unknown as MarketView;
 export const NODE_TIME = 1_792_540_800_000;
 
-export type Posted = { route: string; body: OrderRequest | CancelRequest | WithdrawalRequest | EligibilityRequest | SessionKeyRequest | SessionKeyRevocationRequest | { replaces_expires_at: number; signature: string } };
+export type Posted = { route: string; body: OrderRequest | CancelRequest | CancelAllRequest | CloseAllRequest | WithdrawalRequest | EligibilityRequest | SessionKeyRequest | SessionKeyRevocationRequest | { replaces_expires_at: number; signature: string } };
 
 /** A live client whose actions record what they were sent and answer as the test says. */
 export class ActionClient implements EngineClient {
@@ -57,9 +57,11 @@ export class ActionClient implements EngineClient {
   readonly stats = { positions: this.absent, series: this.absent, monkey: this.absent, activity: this.absent, distributions: async () => null };
   /** Whether the account read answers as a credited account; false answers the node's 404. */
   credited = false;
+  /** What the credited account holds; a test sets it and reads the account again. */
+  orders: AccountView["orders"] = {};
   async account(): Promise<AccountView> {
     if (!this.credited) throw new EngineError(404, "not found");
-    return { balance: "1000", equity: "1000", margin: "0", positions: {}, orders: {}, toxicity_bps: 0 };
+    return { balance: "1000", equity: "1000", margin: "0", positions: {}, orders: this.orders, toxicity_bps: 0 };
   }
   async accessProbe() {}
   async nonce() { this.nonceReads++; return { next_nonce: 4, time_ms: NODE_TIME }; }
@@ -71,6 +73,8 @@ export class ActionClient implements EngineClient {
   attestEligibility(body: EligibilityRequest) { return this.act("eligibility", body); }
   placeOrder(body: OrderRequest) { return this.act("order", body); }
   cancelOrder(body: CancelRequest) { return this.act("cancel", body); }
+  cancelAll(body: CancelAllRequest) { return this.act("cancel_all", body); }
+  closeAll(body: CloseAllRequest) { return this.act("close_all", body); }
   withdraw(body: WithdrawalRequest) { return this.act("withdraw", body); }
   registerSessionKey(body: SessionKeyRequest) { return this.act("session_key", body); }
   revokeSessionKey(body: SessionKeyRevocationRequest) { return this.act("session_key_revoke", body); }

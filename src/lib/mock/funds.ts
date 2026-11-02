@@ -2,6 +2,7 @@
 
 import { EngineError, type ActionResult } from "../engine/client";
 import type { EngineEvent, QueuedWithdrawal, WithdrawalPage, WithdrawalRequest } from "../engine/types";
+import type { QueueTotals } from "../house";
 import { fixedToWire, minFixed, parseFixed, type Fixed } from "../fixed";
 import { equityOf, marginOf } from "./accounts";
 import { MAX_DEPOSIT, MIN_DEPOSIT, MIN_WITHDRAWAL, USDC_UNIT, withdrawableNow } from "../vault";
@@ -119,4 +120,15 @@ export function queuePage(state: MockState, address: string): WithdrawalPage {
     }
   });
   return { seq: state.seq, queue, next: null };
+}
+
+/** The public withdrawal queue's size, summed from its entries. */
+export function mockTotals(state: MockState): QueueTotals {
+  let remaining = 0n;
+  let largest: bigint | null = null;
+  for (const entry of state.queue) {
+    remaining += entry.remaining;
+    if (largest === null || entry.remaining > largest) largest = entry.remaining;
+  }
+  return { count: state.queue.length, remaining, largest, head: state.queue[0]?.remaining ?? null, seq: state.seq, complete: true, stable: true };
 }

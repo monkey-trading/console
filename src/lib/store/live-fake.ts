@@ -99,6 +99,8 @@ export class FakeClient implements EngineClient {
   async attestEligibility(): Promise<never> { throw new EngineError(501, "no"); }
   async placeOrder(): Promise<never> { throw new EngineError(501, "no"); }
   async cancelOrder(): Promise<never> { throw new EngineError(501, "no"); }
+  async cancelAll(): Promise<never> { throw new EngineError(501, "no"); }
+  async closeAll(): Promise<never> { throw new EngineError(501, "no"); }
   async withdraw(): Promise<never> { throw new EngineError(501, "no"); }
   /** Canned session-key registration and revocation answers; a test may replace them. */
   sessionKeyResult: ActionResult = { seq: 1, events: [{ type: "session_key_registered", account: "0x0", session_key: "0x0", expires_at: 0 }] };

@@ -182,7 +182,9 @@ export type Reject =
   | { kind: "session_key_unsupported" }
   | { kind: "expired"; expires_at: number }
   | { kind: "expiry_too_far"; latest: number }
-  | { kind: "too_many_session_keys"; max: number };
+  | { kind: "too_many_session_keys"; max: number }
+  /** A cancel-all or close-all sequenced before the node's protocol reached V44; it used no nonce. */
+  | { kind: "batch_unsupported" };
 
 export interface Fill {
   account: Address;
@@ -225,7 +227,7 @@ export type EngineCommand =
   | { type: "tick" }
   | ({ type: "admin"; action?: string } & UpsertMarket)
   | { type: "signed_admin"; command?: { action?: string } & UpsertMarket }
-  | { type: "place_order" | "cancel_order" | "withdraw" | "deposit" | "attest_eligibility" | "register_session_key" | "revoke_session_key" };
+  | { type: "place_order" | "cancel_order" | "cancel_all" | "close_all" | "withdraw" | "deposit" | "attest_eligibility" | "register_session_key" | "revoke_session_key" };
 
 /** The `set_params` fields of an `AdminCommand::SetParams` as the log serializes them, flat beside `action`. */
 export interface SetParams {
@@ -266,6 +268,7 @@ export interface HistoryPage {
   next: string | null;
 }
 
+export type { CancelAllRequest, CloseAllRequest, CloseEntry } from "./batch-types";
 export type { PayoutEntry, PayoutsPage, QueuedWithdrawal, SignedWithdrawal, WithdrawalAuthorization, WithdrawalPage } from "./withdrawal-types";
 
 /** One step of an executable quote: the average price of an order of up to `qty`. */

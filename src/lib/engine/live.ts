@@ -15,7 +15,7 @@ import type { SessionRule } from "./mark-session";
 import { LiveStream, type QuoteRequest, type Scheduler, type Socket } from "./live-stream";
 import { SignedTransport } from "./transport";
 import { NodeTrust } from "./trust";
-import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
+import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 import type { Verifier } from "./verifier";
 import { newChallenge } from "./wire";
@@ -213,6 +213,14 @@ export class LiveEngineClient implements EngineClient {
 
   cancelOrder(request: CancelRequest): Promise<ActionResult> {
     return this.action("POST", "/v1/orders/cancel", request);
+  }
+
+  cancelAll(request: CancelAllRequest): Promise<ActionResult> {
+    return this.action("POST", "/v1/orders/cancel-all", request);
+  }
+
+  closeAll(request: CloseAllRequest): Promise<ActionResult> {
+    return this.action("POST", "/v1/positions/close-all", request);
   }
 
   withdraw(request: WithdrawalRequest): Promise<ActionResult> {
