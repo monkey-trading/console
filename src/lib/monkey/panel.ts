@@ -18,6 +18,7 @@ import type { ConsoleStore } from "../store/store";
 import { ChartFeed } from "./feed";
 import { failed, LOADING, ready, type Read } from "./figures";
 import { Backoff, followLive } from "./live-reads";
+import { proofAwaited, readEntitlement } from "./pending";
 
 /** The activity table's length, and how often the page's totals and activity are read, in milliseconds. */
 export const ACTIVITY_LIMIT = 25;
@@ -120,6 +121,9 @@ export class MonkeyPanel {
       nodeDue: () => this.nodeBackoff.ready() && !(this.state.overview.status === "unavailable" && this.state.activity.status === "unavailable"),
       walletDue: () => this.walletBackoff.ready(),
       tickCharts: () => { for (const feed of Object.values(this.feeds)) void feed.tickLive(); },
+      awaitingProof: () => this.store.liveWallet !== null && proofAwaited({ ...this.state, ...this.state.wallet, account: this.store.liveWallet.address, entitlement: this.store.getSnapshot().entitlement, proof: this.state.wallet.proof, position: this.state.wallet.position }),
+      readProofs: () => { const wallet = this.store.liveWallet; if (wallet !== null) void this.readProof(wallet, this.cycle); void readEntitlement(this.store, () => this.open); },
+      watchCheckpoints: (onCheckpoint) => this.store.deps.client.watch((event) => { if (event.type === "checkpoint") onCheckpoint(); }),
       tickMs: LIVE_READ_MS, nodeEveryMs: NODE_READ_MS,
     });
     return () => {

@@ -6,6 +6,7 @@ import { useId } from "react";
 
 import { claimDistribution, distributionPosition } from "@/lib/monkey/actions";
 import { usdcFixed } from "@/lib/monkey/figures";
+import { pendingDistribution } from "@/lib/monkey/pending";
 import { formatUsdc } from "@/lib/vault";
 
 import { Notice } from "../Notice";
@@ -17,9 +18,19 @@ import { Row } from "./Row";
 import { BUTTON, NOTE } from "./styles";
 import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
 
+/** What the card says while the node holds no proof: what is known of the last paying epoch, never that nothing was distributed because no proof exists yet. */
+function PendingLine({ pending }: { pending: ReturnType<typeof pendingDistribution> }) {
+  if (pending.kind === "reading") return <p className={NOTE}>Reading the epochs that have paid stakers…</p>;
+  if (pending.kind === "none") return <p className={NOTE}>No USDC has been distributed to you yet. Stakers share the house&apos;s excess above its floor at each epoch close.</p>;
+  const paid = `Epoch ${pending.epoch} closed and paid ${formatUsdc(usdcFixed(pending.paid))} to stakers.`;
+  if (pending.staker === null) return <p role="status" className={NOTE}>{paid} If you staked, your share shows here once the vault has the checkpoint covering it.</p>;
+  const share = pending.share === null ? "" : ` Your share is about ${formatUsdc(usdcFixed(pending.share))}, estimated from your stake.`;
+  return <p role="status" className={NOTE}>{paid}{share} It becomes claimable once the vault has the checkpoint covering it, and is read again by itself.</p>;
+}
+
 export function DistributionClaim() {
   const panel = useMonkeyPanel();
-  const { wallet: figures } = usePanelState();
+  const { wallet: figures, overview, unmirroredTotal } = usePanelState();
   const wallet = useConsoleSelect((state) => state.wallet);
   const busy = useConsoleSelect((state) => state.busy);
   const gate = useSignGate(useId());
@@ -29,6 +40,7 @@ export function DistributionClaim() {
   const proof = mine ? figures.proof.value : null;
   const held = mine ? figures.position.value : null;
   const position = distributionPosition(proof, held);
+  const pending = pendingDistribution(overview, figures.position, unmirroredTotal);
   return (
     <Card
       id="distributions-title"
@@ -40,7 +52,7 @@ export function DistributionClaim() {
       ) : !mine || figures.proof.status === "loading" ? (
         <p className={NOTE}>Reading your distributions…</p>
       ) : proof === null && figures.proof.status === "ready" ? (
-        <p className={NOTE}>No USDC has been distributed to you yet. Stakers share the house&apos;s excess above its floor at each epoch close.</p>
+        <PendingLine pending={pending} />
       ) : proof === null ? null : (
         <dl className="space-y-2">
           <Row label="Distributed to you">{formatUsdc(usdcFixed(position.accrued))}</Row>

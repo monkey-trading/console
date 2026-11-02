@@ -135,3 +135,62 @@ describe("followLive", () => {
     expect(none.calls.wallet).toBe(0);
   });
 });
+
+describe("followLive while a claim proof is awaited", () => {
+  function waiting(over: Partial<LiveDeps> = {}) {
+    let awaited = true;
+    let checkpoint: () => void = () => {};
+    let proofs = 0;
+    const stop = followLive({
+      isHidden: () => false, open: () => true, account: () => ME, subscribe: () => () => {},
+      readNode: () => {}, readWallet: () => {}, nodeDue: () => true, walletDue: () => true, tickCharts: () => {}, tickMs: 5_000, nodeEveryMs: 30_000,
+      awaitingProof: () => awaited, readProofs: () => { proofs += 1; },
+      watchCheckpoints: (on) => { checkpoint = on; return () => { checkpoint = () => {}; }; }, ...over,
+    });
+    return { stop, proofs: () => proofs, settle: () => { awaited = false; }, checkpoint: () => checkpoint() };
+  }
+
+  it("reads the proofs on every tick while one is awaited, and stops the tick it exists", async () => {
+    const { stop, proofs, settle } = waiting();
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(proofs()).toBe(3);
+    settle();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(proofs()).toBe(3);
+    stop();
+  });
+
+  it("reads them again when the stream carries a checkpoint, at most once a second, and not when none is awaited", async () => {
+    const { stop, proofs, settle, checkpoint } = waiting();
+    checkpoint();
+    checkpoint();
+    checkpoint();
+    expect(proofs()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(proofs()).toBe(2);
+    settle();
+    await vi.advanceTimersByTimeAsync(2_000);
+    checkpoint();
+    expect(proofs()).toBe(2);
+    stop();
+  });
+
+  it("reads nothing in a hidden tab, for no account, or once stopped", async () => {
+    const hidden = waiting({ isHidden: () => true });
+    hidden.checkpoint();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(hidden.proofs()).toBe(0);
+    hidden.stop();
+    const anonymous = waiting({ account: () => null });
+    anonymous.checkpoint();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(anonymous.proofs()).toBe(0);
+    anonymous.stop();
+    const stopped = waiting();
+    stopped.stop();
+    stopped.checkpoint();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(stopped.proofs()).toBe(0);
+  });
+});
+
