@@ -294,7 +294,9 @@ The bar is WCAG 2.2 AA; the [development checklist](../../rules/development-chec
   static description of what it shows. A result the visitor caused, such as a replay verdict or a
   shell response, is announced through an `aria-live="polite"` region that exists before it
   changes.
-- Text for screen readers only uses `sr-only`, as the pause control's " animations" does.
+- Text for screen readers only uses `sr-only`, as the pause control's " animations" does. An
+  `sr-only` element is absolutely positioned, so a scroller that holds one is `relative`, or the
+  text escapes it and lengthens the document.
 - `lang="en"` on `html`.
 - `eslint-plugin-jsx-a11y` runs its strict config at error. Lint is not conformance: check a change
   in a browser with the keyboard alone, the accessibility tree (Playwright's `getByRole`, or the

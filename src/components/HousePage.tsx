@@ -45,7 +45,7 @@ export function HousePage() {
   return (
     // Keyboard scrolling needs a tab stop on the scroll container (the WAI-APG scrollable-region
     // pattern), which also reaches a dashboard whose panels hold only labels and a few controls.
-    <div role="region" aria-label="House dashboard" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
+    <div role="region" aria-label="House dashboard" tabIndex={0} className="relative min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
       <div className="mx-auto flex w-full max-w-[120rem] flex-col gap-2 p-2 sm:p-3">
         <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-1">
           <h2 className="text-lead tracking-caps text-glow uppercase">House</h2>

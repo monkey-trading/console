@@ -46,7 +46,7 @@ export function BottomPanel() {
           </button>
         ))}
       </div>
-      <div role="tabpanel" tabIndex={0} id={`${id}-panel`} aria-labelledby={`${id}-${tab}`} className="min-h-0 flex-1 overflow-y-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
+      <div role="tabpanel" tabIndex={0} id={`${id}-panel`} aria-labelledby={`${id}-${tab}`} className="relative min-h-0 flex-1 overflow-y-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
         {tab === "positions" && <PositionsView />}
         {tab === "orders" && <OrdersView />}
         {tab === "history" && <HistoryList />}

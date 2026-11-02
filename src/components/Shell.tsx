@@ -11,14 +11,10 @@ import { TopBar } from "./TopBar";
 import { WalletConnectPairing } from "./WalletConnectPairing";
 import { WalletPrompt } from "./WalletPrompt";
 
-/**
- * Fills the viewport on large screens and scrolls as one page on small ones. Large screens clip at
- * the shell, which also holds absolutely positioned `sr-only` text, so nothing lengthens or scrolls
- * the document under a page's own scroller.
- */
+/** Fills the viewport on large screens and scrolls as one page on small ones. */
 export function Shell({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col bg-ink-1 max-lg:has-[[data-phone-nav]]:pb-(--bar-height,var(--spacing-bar)) lg:relative lg:h-dvh lg:overflow-clip">
+    <div className="flex min-h-dvh flex-col bg-ink-1 max-lg:has-[[data-phone-nav]]:pb-(--bar-height,var(--spacing-bar)) lg:h-dvh lg:overflow-hidden">
       <a href="#main" className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2 focus-visible:z-50 focus-visible:rounded focus-visible:border focus-visible:border-glow focus-visible:bg-ink focus-visible:px-3 focus-visible:py-2 focus-visible:text-caption">
         Skip to content
       </a>
