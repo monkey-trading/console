@@ -114,6 +114,8 @@ describe("the MONKEY per dollar rate", () => {
     expect(perUsdFigure(0.5)).toBe("0.50");
     expect(perUsdFigure(0.012)).toBe("0.012");
     expect(perUsdFigure(0.0000123)).toBe("0.000012");
+    expect(perUsdFigure(1)).toBe("1.00");
+    expect(perUsdFigure(1.5)).toBe("1.50");
     expect(perUsdFigure(16.666666667)).toBe("16.67");
     expect(perUsdFigure(1500)).toBe("1.5K");
   });
@@ -128,6 +130,11 @@ describe("the MONKEY per dollar rate", () => {
     // 0.0034 MONKEY per dollar, as the node writes base units per dollar.
     expect(plotValue("3400000000000000.000000000", "monkey_base_units_per_usd")).toBe(0.0034);
     expect(latestText("monkey_base_units_per_usd", "3400000000000000.000000000")).toBe("0.0034 MONKEY per $1");
+  });
+
+  it("reads a rate far below a millionth of a MONKEY", () => {
+    // 3.4e-7 MONKEY per dollar.
+    expect(latestText("monkey_base_units_per_usd", "340000000000.000000000")).toBe("0.00000034 MONKEY per $1");
   });
 
   it("rounds the Latest line and the value tag the same way", () => {
