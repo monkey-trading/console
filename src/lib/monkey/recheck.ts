@@ -7,7 +7,7 @@ import { distributionPosition } from "./actions";
 import type { PanelState } from "./panel";
 import { CHECK_GRACE_MS, disagrees, RECHECK_MS } from "./verdict";
 
-/** Whether either claim panel holds a vault record and a proof that do not meet. */
+/** Whether either claim panel holds a proof its vault record has not reached. */
 export function pairDisagrees(store: ConsoleStore, state: PanelState): boolean {
   const { entitlement, emissionsVault } = store.getSnapshot();
   const proof = state.wallet.proof.value;

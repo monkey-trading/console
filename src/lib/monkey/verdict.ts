@@ -11,10 +11,10 @@ export const CHECK_GRACE_MS = 20_000;
 /** How soon a pair that disagrees is read again, in milliseconds. */
 export const RECHECK_MS = 2_000;
 
-export type Checkpoint = "unknown" | "waiting" | "posted" | "superseded";
+export type Checkpoint = "unknown" | "waiting" | "posted";
 
-/** Whether the vault's checkpoint and the node's proof disagree: the vault is behind the proof, or has passed it. */
-export const disagrees = (checkpoint: Checkpoint): boolean => checkpoint === "waiting" || checkpoint === "superseded";
+/** Whether the vault's checkpoint and the node's proof disagree: the vault is behind the proof. One past it still takes the claim. */
+export const disagrees = (checkpoint: Checkpoint): boolean => checkpoint === "waiting";
 
 /** What to say of `checkpoint` when its disagreement, if any, has lasted `elapsed` or not: `checking` for a young one. */
 export const verdict = (checkpoint: Checkpoint, elapsed: boolean): Checkpoint | "checking" => (disagrees(checkpoint) && !elapsed ? "checking" : checkpoint);
