@@ -44,12 +44,15 @@ export function recordAt(seq: number, checkpointAt = 1_000): ExitRecord {
   return { ...SCOPE, proof: fullProof(seq), checkpointAt, accountClaim: 5_010_000_000n, distributionOwed: 3_000_000n, paidApprovals: [] };
 }
 
+/** The state of a page whose verifier has accepted `record` in this connection. */
+export const acceptedState = (record: ExitRecord) => ({ record, checked: record });
+
 /** A vault at checkpoint `seq`, in no exit, with the stack's thirty-day exit schedule. */
 export function factsAt(seq: number, change: Partial<VaultExitFacts> = {}): VaultExitFacts {
   return { hasCheckpoint: true, latestSeq: seq, latestRoot: rootAt(seq), lastCheckpointAt: 1_000, exitPeriod: 2_592_000, claimWindow: 2_592_000, exitStartedAt: 0, chainNow: 1_060, ...change };
 }
 
-export const NO_CLAIMS: ExitClaimFacts = { accountRegistered: false, distributionRegistered: false, queuedRegistered: [], approvalsUsed: [], refunded: [], exitClaim: 0n, exitDistributionClaim: 0n, distributionPaid: 0n, unheld: [], unheldComplete: true };
+export const NO_CLAIMS: ExitClaimFacts = { accountRegistered: false, distributionRegistered: false, queuedRegistered: [], approvalsUsed: [], refunded: [], mismatched: [], exitClaim: 0n, exitDistributionClaim: 0n, distributionPaid: 0n, unheld: [], unheldComplete: true };
 
 /** A browser storage in a map, which can be made to refuse. */
 export function exitStorage(): ExitStorage & { held: Map<string, string>; refuseWrites: boolean } {
@@ -67,18 +70,28 @@ export function exitStorage(): ExitStorage & { held: Map<string, string>; refuse
   return storage;
 }
 
+/** The verifier's answer for a proof it accepts: with nothing but the head's paid, a finalized block shows the same. */
+export function accepts(answer: { accountClaim: bigint; distributionOwed?: bigint; paidApprovals?: number[]; finalPaidApprovals?: number[]; finalDistributionOwed?: bigint }): ExitCheck {
+  const { accountClaim, distributionOwed = 0n, paidApprovals = [] } = answer;
+  return { ok: true, accountClaim, distributionOwed, paidApprovals, finalPaidApprovals: answer.finalPaidApprovals ?? paidApprovals, finalDistributionOwed: answer.finalDistributionOwed ?? distributionOwed };
+}
+
 /** A vault as a wallet reads it: a test moves `vault` and `claimsHeld`, and says what `check` answers. */
 export class FakeExitWallet implements ExitWallet {
   vault: VaultExitFacts = factsAt(100);
   claimsHeld: ExitClaimFacts = NO_CLAIMS;
+  /** The account's deposits below the exit's cursor: a read finds one only when the proof it is asked about names its id as a gap. */
+  gapDeposits: { id: number; amount: bigint }[] = [];
   staked = false;
   /** What the verifier says; by default it accepts the proof as it stands. */
-  verdict: (proof: ExitProof, root: string) => ExitCheck = (proof) => ({ ok: true, paidApprovals: [], accountClaim: proof.account === null ? 0n : 5_010_000_000n, distributionOwed: proof.distribution === null ? 0n : BigInt(proof.distribution.entitled) });
+  verdict: (proof: ExitProof, root: string) => ExitCheck = (proof) => accepts({ accountClaim: proof.account === null ? 0n : 5_010_000_000n, distributionOwed: proof.distribution === null ? 0n : BigInt(proof.distribution.entitled) });
   factsError: Error | null = null;
   checkError: Error | null = null;
   sendError: Error | null = null;
   claimsError: Error | null = null;
   claimsReads = 0;
+  /** The proof each read of `claims` asked about. */
+  claimsProofs: (ExitProof | null)[] = [];
   factsReads = 0;
   checks: string[] = [];
   sent: ExitStep[] = [];
@@ -94,11 +107,13 @@ export class FakeExitWallet implements ExitWallet {
     if (this.checkError !== null) throw this.checkError;
     return this.verdict(proof, root);
   }
-  /** As the vault answers it: what it holds of a proof's parts only when asked about that proof. */
+  /** As the vault answers it: what it holds of a proof's parts only when asked about that proof, the gaps of its exit terms among them. */
   async claims(proof: ExitProof | null): Promise<ExitClaimFacts> {
     this.claimsReads++;
+    this.claimsProofs.push(proof);
     if (this.claimsError !== null) throw this.claimsError;
-    return proof === null ? { ...this.claimsHeld, accountRegistered: false, distributionRegistered: false, queuedRegistered: [], approvalsUsed: [], refunded: [] } : this.claimsHeld;
+    if (proof === null) return { ...this.claimsHeld, accountRegistered: false, distributionRegistered: false, queuedRegistered: [], approvalsUsed: [], refunded: [], mismatched: [] };
+    return { ...this.claimsHeld, unheld: [...this.claimsHeld.unheld, ...this.gapDeposits.filter(({ id }) => proof.terms.terms.gaps.includes(id))] };
   }
   async stakeHeld(): Promise<boolean> { return this.staked; }
   async send(step: ExitStep): Promise<{ hash: string; paid: bigint | null }> {

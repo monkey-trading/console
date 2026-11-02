@@ -112,6 +112,8 @@ export interface ExitClaimFacts {
   approvalsUsed: number[];
   /** The pending deposits refunded, by `deposit_id`. */
   refunded: number[];
+  /** The pending deposits not refunded whose record on the vault is not the proof's payer and amount, by `deposit_id`: `refundPendingDeposit` refuses these. */
+  mismatched: number[];
   /** What is registered and unpaid for the account, in USDC base units. */
   exitClaim: bigint;
   exitDistributionClaim: bigint;
@@ -125,8 +127,13 @@ export interface ExitClaimFacts {
 
 /** What the vault's verifier says of a proof; a refusal is an outcome, and a rejected promise is a read that failed. */
 export type ExitCheck =
-  /** Every leaf proves against the root, but for the approvals the vault shows paid, which no claim can use now and which `paidApprovals` names. `accountClaim` and `distributionOwed` are USDC base units. */
-  | { ok: true; paidApprovals: number[]; accountClaim: bigint; distributionOwed: bigint }
+  /**
+   * Every leaf proves against the root, but for the approvals the vault shows paid at the chain's head,
+   * which no claim can use now and which `paidApprovals` names. `accountClaim` and `distributionOwed`
+   * are USDC base units. The `final` pair is the same reading at a finalized block, which no
+   * reorganisation can undo; a wallet that cannot read one counts nothing paid there.
+   */
+  | { ok: true; paidApprovals: number[]; accountClaim: bigint; distributionOwed: bigint; finalPaidApprovals: number[]; finalDistributionOwed: bigint }
   | { ok: false; reason: string };
 
 /** One transaction of the exit, in the order the vault takes them. */

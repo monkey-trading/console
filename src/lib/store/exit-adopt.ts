@@ -5,7 +5,8 @@
  */
 
 import { exitProofAccount, holdsAnything } from "../engine/exit-proof";
-import { readStoredExit, removeStoredExit, writeStoredExit, type ExitRecord, type ExitScope, type ExitStorage } from "../engine/exit-file";
+import { readStoredExit, removeStoredExit, sameProof, writeStoredExit, type ExitRecord, type ExitScope, type ExitStorage } from "../engine/exit-file";
+import { holdsLess } from "../engine/exit-steps";
 import type { ExitProof, ExitWallet, VaultExitFacts } from "../engine/exit-types";
 import type { Wallet } from "../engine/wallet";
 import type { AdoptOutcome, ExitState } from "./exit-state";
@@ -13,9 +14,6 @@ import { errorText } from "./signing";
 import type { ConsoleStore } from "./store";
 
 export class ExitAdopter {
-  /** The record the vault's verifier has accepted in this connection, which storage alone does not vouch for. */
-  private checked: ExitRecord | null = null;
-
   constructor(private readonly store: ConsoleStore) {}
 
   private get storage(): () => ExitStorage | null {
@@ -28,16 +26,6 @@ export class ExitAdopter {
 
   private work<T>(wallet: Wallet, task: () => Promise<T>): Promise<T> {
     return this.store.monkeySession.walletWork.work(wallet, task);
-  }
-
-  /** Forgets what the last connection's verifier accepted. */
-  reset(): void {
-    this.checked = null;
-  }
-
-  /** Whether the vault's verifier has accepted `record` in this connection. */
-  isChecked(record: ExitRecord): boolean {
-    return this.checked === record;
   }
 
   /** The vault's facts with `proof`'s root, or as they are when its root is not the latest: its seq is only metadata to the verifier, so it must be the vault's own. Read twice when they disagree, as a post can land between two reads. */
@@ -53,10 +41,13 @@ export class ExitAdopter {
 
   /** Has the vault's verifier judge a saved proof at its latest root, once per connection, and takes its figures from that answer. */
   async checkSaved(wallet: Wallet, exit: ExitWallet, scope: ExitScope, record: ExitRecord, held: VaultExitFacts): Promise<"good" | "unknown" | "refused"> {
-    if (this.checked === record) return "good";
+    if (this.store.getSnapshot().exit.checked === record) return "good";
+    // Only the proof the verifier refused goes: another tab or an import may have saved a good one while it was checked.
     const refuse = (reason: string): "refused" => {
-      removeStoredExit(this.storage, scope);
-      this.patch({ record: null, attempt: { kind: "saved-refused", reason } });
+      const stored = readStoredExit(this.storage, scope).record;
+      if (stored !== null && sameProof(stored, record)) removeStoredExit(this.storage, scope);
+      const held = this.store.getSnapshot().exit.record;
+      this.patch({ record: held !== null && sameProof(held, record) ? null : held, attempt: { kind: "saved-refused", reason }, checkFailures: 0 });
       return "refused";
     };
     try {
@@ -68,19 +59,19 @@ export class ExitAdopter {
       if (this.store.liveWallet !== wallet) return "unknown";
       if (!verdict.ok) return refuse(verdict.reason);
       const good: ExitRecord = { ...record, accountClaim: verdict.accountClaim, distributionOwed: verdict.distributionOwed, paidApprovals: verdict.paidApprovals, checkpointAt: vault.lastCheckpointAt };
-      this.checked = good;
-      this.patch({ record: good, terms: good.proof.terms, attempt: null, nothing: false });
+      this.patch({ record: good, checked: good, terms: good.proof.terms, attempt: null, nothing: false, checkFailures: 0 });
+      await this.store.exit.readClaims(); // what it read before this could not ask about the proof's parts
       return "good";
     } catch (error) {
-      if (this.store.liveWallet === wallet) this.patch({ attempt: { kind: "wallet-failed", reason: errorText(error) } });
+      if (this.store.liveWallet === wallet) this.patch({ attempt: { kind: "wallet-failed", reason: errorText(error) }, checkFailures: this.store.getSnapshot().exit.checkFailures + 1 });
       return "unknown";
     }
   }
 
   /**
    * Takes `proof` if its root is the vault's latest, read afresh, and the vault's verifier accepts it:
-   * saves it unless another tab has saved a later one, and tells the page if the browser would not.
-   * Anything else leaves what is saved alone.
+   * saves it unless another tab has saved a later one, or it holds less than what is saved at its root,
+   * and tells the page if the browser would not. Anything else leaves what is saved alone.
    * Error cases:
    * - the wallet could not read the vault or check the proof, or the proof names two accounts
    */
@@ -96,8 +87,6 @@ export class ExitAdopter {
     const verdict = await this.work(wallet, () => exit.check(proof, latestRoot));
     if (!verdict.ok) return { kind: "refused", reason: verdict.reason };
     if (this.store.liveWallet === wallet) this.patch({ terms: proof.terms });
-    const { accountClaim, distributionOwed, paidApprovals } = verdict;
-    if (!holdsAnything(proof, accountClaim, distributionOwed, paidApprovals)) return { kind: "empty" };
     const later = readStoredExit(this.storage, scope).record;
     if (later !== null && later.proof.seq > proof.seq) {
       // Another tab may have saved the vault's next proof while this one was checked. What storage says of itself decides nothing: the vault does.
@@ -107,11 +96,18 @@ export class ExitAdopter {
         return { kind: "other-root", proofSeq: proof.seq, vaultSeq: now.latestSeq };
       }
     }
+    // The verifier proves only the parts a file carries, so a trimmed file proves too. From here to the write nothing waits, so a tab that saved while this one checked is seen.
+    const held = [readStoredExit(this.storage, scope).record, this.store.liveWallet === wallet ? this.store.getSnapshot().exit.record : null];
+    if (held.some((saved) => saved?.proof.root === proof.root && holdsLess(proof, saved.proof))) {
+      void this.store.exit.keeper.settle(); // this page may be behind what storage holds
+      return { kind: "holds-less" };
+    }
+    const { accountClaim, distributionOwed, paidApprovals } = verdict;
+    if (!holdsAnything(proof, accountClaim, verdict.finalDistributionOwed, verdict.finalPaidApprovals)) return { kind: "empty" };
     const record: ExitRecord = { ...scope, proof, checkpointAt: lastCheckpointAt, accountClaim, distributionOwed, paidApprovals };
     const storageProblem = writeStoredExit(this.storage, record);
     if (this.store.liveWallet === wallet) {
-      this.checked = record;
-      this.patch({ record, storageProblem, attempt: null, nothing: false });
+      this.patch({ record, checked: record, checkFailures: 0, storageProblem, attempt: null, nothing: false });
       if (vault.exitStartedAt !== 0) await this.store.exit.readClaims();
     }
     return { kind: "saved", record, storageProblem };

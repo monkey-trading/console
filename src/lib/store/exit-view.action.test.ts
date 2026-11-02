@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ACCOUNT, factsAt, NO_CLAIMS, recordAt } from "../engine/exit-kit";
+import { acceptedState, ACCOUNT, factsAt, NO_CLAIMS, recordAt } from "../engine/exit-kit";
 import { NO_EXIT, type ExitState } from "./exit-state";
 import { exitView } from "./exit-view";
 
@@ -10,12 +10,12 @@ const text = (exit: ExitState) => exitView(exit, WALLET).lines.map((line) => lin
 describe("exitView, after an action", () => {
   it("gives no figure from the proof once the vault holds a registration, as registering spends an approval's nonce", () => {
     const record = { ...recordAt(100), paidApprovals: [1], proof: { ...recordAt(100).proof, pending_deposits: [] } };
-    expect(text({ ...NO_EXIT, vault: factsAt(100), record, claims: { ...NO_CLAIMS, accountRegistered: true, exitClaim: 5n } })).toMatch(/posted [^.]* ago\.$/);
-    expect(text({ ...NO_EXIT, vault: factsAt(100), record: recordAt(100), claims: { ...NO_CLAIMS, exitClaim: 5n } })).toMatch(/ago\. It proves a deposit still pending\.$/);
+    expect(text({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(record), claims: { ...NO_CLAIMS, accountRegistered: true, exitClaim: 5n } })).toMatch(/posted [^.]* ago\.$/);
+    expect(text({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(recordAt(100)), claims: { ...NO_CLAIMS, exitClaim: 5n } })).toMatch(/ago\. It proves a deposit still pending\.$/);
   });
   it("does not count an approval the vault shows used, once it is paid and nothing is left registered", () => {
     const record = { ...recordAt(100), accountClaim: 0n, distributionOwed: 0n, proof: { ...recordAt(100).proof, queued: [], pending_deposits: [] } };
-    expect(text({ ...NO_EXIT, vault: factsAt(100), record, claims: { ...NO_CLAIMS, approvalsUsed: [1] } })).toMatch(/It has nothing left to claim\.$/);
+    expect(text({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(record), claims: { ...NO_CLAIMS, approvalsUsed: [1] } })).toMatch(/It has nothing left to claim\.$/);
   });
   it("says a read that failed even of an account known to hold nothing", () => {
     const exit = { ...NO_EXIT, vault: factsAt(100), nothing: true };

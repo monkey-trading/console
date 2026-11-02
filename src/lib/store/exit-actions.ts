@@ -7,12 +7,12 @@
 
 import { ExitProofError } from "../engine/exit-proof";
 import { MAX_EXIT_FILE_BYTES, parseExitFile } from "../engine/exit-file";
-import { exitPhase, holdsLess, NO_TERMS, refundSteps, registerSteps } from "../engine/exit-steps";
+import { exitPhase, NO_TERMS, refundSteps, registeredTotal, registerSteps } from "../engine/exit-steps";
 import type { ExitStep, ExitWallet } from "../engine/exit-types";
 import type { Wallet } from "../engine/wallet";
 import { shortHex } from "../format";
 import { formatUsdc, USDC_UNIT } from "../vault";
-import type { ExitResult } from "./exit-state";
+import { acceptedRecord, type ExitResult } from "./exit-state";
 import { clause } from "./exit-view";
 import { abandoned, errorText, notBusy, prompting } from "./signing";
 import type { ConsoleStore } from "./store";
@@ -53,8 +53,6 @@ export async function importExitFile(store: ConsoleStore, text: string): Promise
     const file = parseExitFile(text);
     if ((file.chainId !== null && file.chainId !== scope.chainId) || (file.vault !== null && file.vault !== scope.vault)) return refuse(`it is for another deployment (chain ${file.chainId ?? "unnamed"}, vault ${shortHex(file.vault ?? "unnamed")})`);
     if (file.account !== null && file.account !== scope.account) return refuse(`it is for account ${shortHex(file.account)}. Connect that wallet to import it`);
-    const saved = store.getSnapshot().exit.record;
-    if (saved?.proof.root === file.proof.root && holdsLess(file.proof, saved.proof)) return refuse("it holds less than the proof already saved for that checkpoint");
     const offChain = await onChain(wallet);
     if (offChain !== null) return refuse(`your wallet could not check it: ${offChain}`);
     const outcome = await store.exit.keeper.adopter.adopt(wallet, scope, file.proof);
@@ -66,6 +64,7 @@ export async function importExitFile(store: ConsoleStore, text: string): Promise
         const now = store.getSnapshot().exit.vault;
         return now !== null && exitPhase(now) === "due" ? finish({ ok: true, text: "It holds nothing for this account, but the vault accepts its exit terms, so it can start the exit." }) : refuse("it gives this account nothing");
       }
+      case "holds-less": return refuse("it holds less than the proof already saved for that checkpoint");
       case "other-root": return refuse(`it is for checkpoint ${outcome.proofSeq}, and the vault's latest is checkpoint ${outcome.vaultSeq}, so the vault would refuse a claim from it`);
       case "refused": return refuse(`the vault's verifier refused it: ${outcome.reason}`);
       default: return outcome satisfies never;
@@ -146,9 +145,11 @@ export async function registerExitClaims(store: ConsoleStore): Promise<void> {
   const { wallet, exit } = held;
   await holding(store, wallet, async () => {
     if (!(await store.exit.readFresh()) || !(await store.exit.readClaims())) return { failed: "The vault's record could not be read, so nothing was sent." };
-    const { vault, record, claims } = store.getSnapshot().exit;
+    const state = store.getSnapshot().exit;
+    const { vault, claims } = state;
+    const record = acceptedRecord(state);
     if (vault === null || exitPhase(vault) !== "open") return { failed: "The claim window is not open, so nothing was sent." };
-    if (record?.proof.root !== vault.latestRoot || !store.exit.keeper.adopter.isChecked(record) || claims === null) return { failed: "The vault has not accepted a proof at its latest checkpoint, so nothing was sent." };
+    if (record === null || claims === null) return { failed: "The vault has not accepted a proof at its latest checkpoint, so nothing was sent." };
     const steps = registerSteps(record, claims);
     if (steps.length === 0) return { did: "Everything this proof holds is registered." }; // that read has taken the rows off the panel
     return (await sendSteps(store, wallet, exit, steps, (step) => `Confirm in your wallet: register step ${steps.indexOf(step) + 1} of ${steps.length} of your claim.`)).ended("Your claim is registered. The vault pays it once the claim window closes.");
@@ -168,18 +169,26 @@ export async function refundExitDeposit(store: ConsoleStore, step: RefundStep): 
   const id = depositId(step);
   await holding(store, wallet, async () => {
     if (!(await store.exit.readClaims())) return { failed: "The vault's record could not be read, so nothing was sent." };
-    const { record, claims } = store.getSnapshot().exit;
+    const state = store.getSnapshot().exit;
+    const { claims } = state;
+    const record = acceptedRecord(state);
+    if (step.kind === "refund" && (record === null || claims === null)) return { failed: "The vault has not accepted a proof at its latest checkpoint, so nothing was sent." };
+    if (step.kind === "refund" && claims?.mismatched.includes(id) === true) return { failed: `The vault's record of deposit ${id} is not what this proof says, so nothing was sent.` };
     if (claims === null || !refundSteps(record, claims).some((left) => depositId(left) === id)) return { did: `Deposit ${id} has been refunded already.` }; // that read has taken its row off the panel
     return (await sendSteps(store, wallet, exit, [step], () => `Confirm in your wallet: refund deposit ${id} to the address that paid it.`)).ended(`Deposit ${id} was refunded to the address that paid it.`);
   });
 }
 
-/** Claims what is registered, once the window has closed; the vault pays the account, whoever sends it. */
+/** Claims what is registered, once the window has closed and the vault's record, read now, still holds it; the vault pays the account, whoever sends it, so another tab or a relayer may have claimed it. */
 export async function claimVaultExit(store: ConsoleStore): Promise<void> {
   const held = exitWallet(store);
   if (held === null) return;
   const { wallet, exit } = held;
   await holding(store, wallet, async () => {
+    if (!(await store.exit.readFresh()) || !(await store.exit.readClaims())) return { failed: "The vault's record could not be read, so nothing was sent." };
+    const { vault, claims } = store.getSnapshot().exit;
+    if (vault === null || exitPhase(vault) !== "closed") return { failed: "The vault's claim window has not closed, so nothing was sent." };
+    if (claims === null || registeredTotal(claims) === 0n) return { failed: "Nothing is registered for this account, or the vault has paid it, so nothing was sent." };
     const { ended, done, paid } = await sendSteps(store, wallet, exit, [{ kind: "claim" }], () => "Confirm in your wallet: claim your exit from the vault.");
     if (done && store.liveWallet === wallet) store.exit.notePaid(paid);
     return ended(paid === null ? "The vault paid your claim." : `The vault paid ${formatUsdc(paid * USDC_UNIT)} to your wallet.`);

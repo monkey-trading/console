@@ -150,6 +150,53 @@ describe("ExitKeeper, and what it spares the node", () => {
       expect(kit.store.getSnapshot().exit.record?.proof.seq).toBe(200);
     });
 
+    describe("before its history has landed", () => {
+      const PENDING = { cursor: "90:0", seq: 90, index: 0, ts: 0, type: "deposit_pending", chain_ref: "x", account: ACCOUNT, payer: ACCOUNT, amount: "10", reason: "x" };
+      const waiting = (accountHistory: "waiting" | "failed") => kit.attach({ attestation: { kind: "mock" }, stream: "live", accountRead: true, accountHistory, account: null });
+
+      it("says nothing of it, and spends no read, while the first read is out", async () => {
+        await waiting("waiting");
+        expect(kit.store.getSnapshot().exit.nothing).toBe(false);
+        expect(kit.client.distributionReads).toBe(0);
+        expect(kit.client.exitReads).toBe(0);
+      });
+      it("reads the proof once the history shows a pending deposit, with no distribution read", async () => {
+        await waiting("waiting");
+        kit.client.exitAnswer = fullProof(100);
+        kit.store.patch({ history: [PENDING] as never, accountHistory: "read" });
+        await settle();
+        expect(kit.client.exitReads).toBe(1);
+        expect(kit.client.distributionReads).toBe(0);
+        expect(kit.store.getSnapshot().exit.nothing).toBe(false);
+      });
+      it("says it holds nothing once an empty history lands", async () => {
+        await waiting("waiting");
+        kit.store.patch({ accountHistory: "read" });
+        await settle();
+        expect(kit.store.getSnapshot().exit.nothing).toBe(true);
+        expect(kit.client.distributionReads).toBe(1);
+      });
+      it("does not count a history that could not be read as empty, and asks the node instead", async () => {
+        kit.client.exitAnswer = emptyProof(100);
+        await waiting("failed");
+        expect(kit.client.exitReads).toBe(1);
+        expect(kit.client.distributionReads).toBe(0);
+        expect(kit.store.getSnapshot().exit.nothing).toBe(false);
+      });
+      it("says it holds nothing once a history that could not be read has landed empty", async () => {
+        kit.client.exitAnswer = emptyProof(100);
+        await waiting("failed");
+        kit.store.patch({ accountHistory: "read" });
+        await settle();
+        expect(kit.store.getSnapshot().exit.nothing).toBe(true);
+      });
+      it("does not make an account that shows funds wait for it", async () => {
+        await kit.attach({ attestation: { kind: "mock" }, stream: "live", accountRead: true, account: { balance: 100_000n, unfinalised: 0n, equity: 100_000n, margin: 0n, positions: [], orders: [] } });
+        expect(kit.store.getSnapshot().accountHistory).toBe("waiting");
+        expect(kit.client.exitReads).toBe(1);
+      });
+    });
+
     it("removes the saved proof once the vault's root shows it holds nothing", async () => {
       writeStoredExit(() => kit.storage, { ...SCOPE, proof: parsed(50), checkpointAt: 900, accountClaim: 1n, distributionOwed: 0n, paidApprovals: [] });
       kit.client.exitAnswer = emptyProof(100);

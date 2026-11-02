@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { factsAt, fullProof, SCOPE } from "../engine/exit-kit";
-import { exitStorageKey, writeStoredExit } from "../engine/exit-file";
+import { accepts, emptyProof, factsAt, fullProof, SCOPE } from "../engine/exit-kit";
+import { exitStorageKey, parseExitFile, writeStoredExit } from "../engine/exit-file";
 import { parseExitProof } from "../engine/exit-proof";
 import { settle } from "../engine/test-kit";
 import { exitWatchKit } from "./exit-watch-kit";
@@ -53,12 +53,12 @@ describe("ExitKeeper, and what a browser keeps", () => {
       await kit.store.exit.refresh();
       expect(kit.exit.checks).toEqual([fullProof(100).root]);
       expect(kit.client.exitReads).toBe(0);
-      expect(record !== null && kit.store.exit.keeper.adopter.isChecked(record)).toBe(true);
+      expect(record !== null && kit.store.getSnapshot().exit.checked === record).toBe(true);
     });
 
     it("removes a stored proof the vault's verifier refuses, says so, and reads the node for a good one", async () => {
       writeStoredExit(() => kit.storage, { ...SCOPE, proof: parsed(100), checkpointAt: 900, accountClaim: 1n, distributionOwed: 0n, paidApprovals: [] });
-      kit.exit.verdict = (_proof, root) => (kit.exit.checks.length === 1 ? { ok: false, reason: `the root ${root} does not prove it` } : { ok: true, paidApprovals: [], accountClaim: 7n, distributionOwed: 0n });
+      kit.exit.verdict = (_proof, root) => (kit.exit.checks.length === 1 ? { ok: false, reason: `the root ${root} does not prove it` } : accepts({ accountClaim: 7n }));
       await kit.connect();
       expect(kit.client.exitReads).toBe(1);
       expect(kit.store.getSnapshot().exit.record?.accountClaim).toBe(7n);
@@ -79,7 +79,7 @@ describe("ExitKeeper, and what a browser keeps", () => {
       await kit.connect();
       const { record, attempt } = kit.store.getSnapshot().exit;
       expect(attempt).toEqual({ kind: "wallet-failed", reason: "no answer" });
-      expect(record !== null && kit.store.exit.keeper.adopter.isChecked(record)).toBe(false);
+      expect(record !== null && kit.store.getSnapshot().exit.checked === record).toBe(false);
       expect(kit.client.exitReads).toBe(0);
     });
 
@@ -90,7 +90,7 @@ describe("ExitKeeper, and what a browser keeps", () => {
       kit.exit.verdict = () => {
         kit.exit.vault = factsAt(300);
         writeStoredExit(() => kit.storage, { ...SCOPE, proof: parsed(300), checkpointAt: 1_300, accountClaim: 9n, distributionOwed: 0n, paidApprovals: [] });
-        return { ok: true, paidApprovals: [], accountClaim: 1n, distributionOwed: 0n };
+        return accepts({ accountClaim: 1n });
       };
       await kit.store.exit.refresh();
       expect(kit.storage.held.get(exitStorageKey(SCOPE))).toContain(`"seq":300`);
@@ -139,6 +139,60 @@ describe("ExitKeeper, and what a browser keeps", () => {
       await kit.connect();
       expect(kit.store.getSnapshot().exit.storageProblem).toBe("this browser's storage is not available: denied");
       expect(kit.store.getSnapshot().exit.record?.proof.seq).toBe(100);
+    });
+  });
+
+  describe("what it deletes, with another tab saving meanwhile", () => {
+    const saving = (seq: number) => writeStoredExit(() => kit.storage, { ...SCOPE, proof: parsed(seq), checkpointAt: 1_100, accountClaim: 1n, distributionOwed: 0n, paidApprovals: [] });
+    const savedSeq = () => parseExitFile(kit.storage.held.get(exitStorageKey(SCOPE)) ?? "").proof.seq;
+    /** A proof at the vault's root the verifier refuses, with `meanwhile` run as it does. */
+    const refusing = (meanwhile: () => void) => {
+      saving(100);
+      kit.exit.verdict = () => {
+        meanwhile();
+        return { ok: false, reason: "the root does not prove it" };
+      };
+    };
+
+    it("keeps a later proof saved while an empty answer was checked, and does not say the account holds nothing", async () => {
+      saving(50);
+      kit.client.exitAnswer = emptyProof(100);
+      kit.exit.verdict = () => {
+        saving(200);
+        return accepts({ accountClaim: 0n });
+      };
+      await kit.connect(0n);
+      expect(savedSeq()).toBe(200);
+      expect(kit.store.getSnapshot().exit.nothing).toBe(false);
+    });
+    it("still removes an older proof when nothing later was saved", async () => {
+      saving(50);
+      kit.client.exitAnswer = emptyProof(100);
+      await kit.connect(0n);
+      expect(kit.storage.held.size).toBe(0);
+      expect(kit.store.getSnapshot().exit.record).toBeNull();
+    });
+    it("removes the saved proof the verifier refused", async () => {
+      refusing(() => undefined);
+      kit.client.exitError = new Error("the node is gone");
+      await kit.connect();
+      expect(kit.storage.held.size).toBe(0);
+      expect(kit.store.getSnapshot().exit.record).toBeNull();
+    });
+    it("keeps a proof saved while the verifier was refusing an older copy", async () => {
+      refusing(() => saving(200));
+      kit.client.exitError = new Error("the node is gone");
+      await kit.connect();
+      expect(savedSeq()).toBe(200);
+    });
+    it("keeps the page's record when it has moved on from the proof refused", async () => {
+      refusing(() => {
+        const { exit } = kit.store.getSnapshot();
+        kit.store.patch({ exit: { ...exit, record: { ...SCOPE, proof: parsed(200), checkpointAt: 1_100, accountClaim: 1n, distributionOwed: 0n, paidApprovals: [] } } });
+      });
+      kit.client.exitError = new Error("the node is gone");
+      await kit.connect();
+      expect(kit.store.getSnapshot().exit.record?.proof.seq).toBe(200);
     });
   });
 });

@@ -6,7 +6,7 @@ import type { ExitClaimFacts, ExitPhase, ExitStep } from "../engine/exit-types";
 import { groupThousands, shortHex } from "../format";
 import { formatSpan, formatStamp } from "../time";
 import { formatUsdc, USDC_UNIT } from "../vault";
-import type { ExitAttempt, ExitState } from "./exit-state";
+import { acceptedRecord, type ExitAttempt, type ExitState } from "./exit-state";
 
 /** How long the account may be without a proof at the vault's latest root before every page says so, in chain seconds. */
 const STALE_NOTICE_SECONDS = 3_600;
@@ -52,6 +52,7 @@ function attemptLine(attempt: ExitAttempt, started: boolean): ExitLine {
   const again = started ? "The vault takes no more checkpoints now." : "It is read again at the vault's next checkpoint.";
   switch (attempt.kind) {
     case "node-ahead": return { tone: "warn", text: `The node's answer was for checkpoint ${groupThousands(attempt.nodeSeq)}, which the vault does not hold. ${again}` };
+    case "node-behind": return { tone: "calm", text: `The node is behind the vault: its newest checkpoint is ${groupThousands(attempt.nodeSeq)}. It is read again by itself.` };
     case "no-proof": return { tone: "calm", text: `The node has no proof to give yet. ${again}` };
     case "not-covered": return { tone: "calm", text: started ? "The vault's final checkpoint is older than what this account holds now, so it holds none of it. A deposit it does not hold is refunded below." : "The vault's latest checkpoint is older than what this account holds now, so the next one brings its proof." };
     case "node-failed": return { tone: "calm", text: `The node's proof could not be read: ${clause(attempt.reason)}. It is read again by itself.` };
@@ -73,7 +74,7 @@ function provesLine(held: ExitRecord, claims: ExitClaimFacts | null): string {
   const record = { ...held, paidApprovals: [...held.paidApprovals, ...(claims?.approvalsUsed ?? [])] };
   const registered = claims !== null && (registeredTotal(claims) > 0n || claims.accountRegistered || claims.distributionRegistered || claims.queuedRegistered.length > 0);
   const total = registered ? 0n : provenTotal(record);
-  const pending = record.proof.pending_deposits.filter((held) => claims?.refunded.includes(held.deposit.deposit_id) !== true).length;
+  const pending = record.proof.pending_deposits.filter(({ deposit }) => claims?.refunded.includes(deposit.deposit_id) !== true && claims?.mismatched.includes(deposit.deposit_id) !== true).length;
   const deposits = pending === 1 ? "a deposit still pending" : `${pending} deposits still pending`;
   if (pending !== 0) return total === 0n ? ` It proves ${deposits}.` : ` It proves ${usdc(total)}, and ${deposits}.`;
   if (registered) return "";
@@ -81,6 +82,12 @@ function provesLine(held: ExitRecord, claims: ExitClaimFacts | null): string {
 }
 
 const NOTHING: ExitView = { phase: "none", lines: [], canImport: false, rebuild: null, canStart: false, register: [], refunds: [], registered: null, canClaim: false, windowEnd: null, notice: null };
+
+/** What the panel says of pending deposits the vault's record disagrees with, which its refund would revert on. */
+function mismatchLine(ids: readonly number[]): ExitLine {
+  const one = ids.length === 1;
+  return { tone: "warn", text: `${one ? "Deposit" : "Deposits"} ${ids.join(", ")} ${one ? "is" : "are"} not on the vault as this proof says, so the vault would refuse ${one ? "its refund" : "their refunds"}. The proof stays saved.` };
+}
 
 /** The one line every page shows for `exit`, or null; the later rules outrank the earlier. */
 function noticeOf(exit: ExitState, phase: ExitPhase, current: boolean, canClaim: boolean, allRegistered: boolean): ExitLine | null {
@@ -94,6 +101,7 @@ function noticeOf(exit: ExitState, phase: ExitPhase, current: boolean, canClaim:
   const missingFor = exit.missingSince === null ? 0 : vault.chainNow - exit.missingSince;
   if (record === null && !exit.nothing && vault.hasCheckpoint && missingFor >= STALE_NOTICE_SECONDS) notice = { tone: "warn", text: "This browser holds no exit proof at the vault's latest checkpoint." };
   if (attempt?.kind === "refused" || attempt?.kind === "saved-refused") notice = { tone: "warn", text: "Your exit proof did not pass the vault's check." };
+  if (current && acceptedRecord(exit) === null && exit.checkFailures >= FAILURES_NOTICED) notice = { tone: "warn", text: "Your wallet could not check your exit proof against the vault." };
   // Its age alone is no alarm while the keeper has yet to try for a newer one, as on a returning trader's first read.
   if (record !== null && !current && age >= STALE_NOTICE_SECONDS && !exit.nothing && !exit.reading && (attempt !== null || missingFor >= STALE_NOTICE_SECONDS)) notice = { tone: "warn", text: `Your exit proof is ${spanOf(age)} old, behind the vault's latest checkpoint.` };
   // An account known to hold nothing has no part in the exit, so no page interrupts it; the panel still says where the vault stands.
@@ -120,6 +128,7 @@ export function exitView(exit: ExitState, wallet: { address: string; readOnly?: 
   const phase = exitPhase(vault);
   const windowEnd = vault.exitStartedAt === 0 ? null : claimWindowEnd(vault);
   const current = record?.proof.root === vault.latestRoot;
+  const accepted = acceptedRecord(exit);
   const registered = claims === null ? null : registeredTotal(claims);
   const age = record === null ? 0 : vault.chainNow - record.checkpointAt;
   const lines: ExitLine[] = [];
@@ -127,7 +136,7 @@ export function exitView(exit: ExitState, wallet: { address: string; readOnly?: 
   if (phase === "open" && windowEnd !== null) lines.push({ tone: "bad", text: `The vault's exit has started. Claims register until ${stamp(windowEnd)}, then the vault pays each one, pro rata if it is short.` });
   if (phase === "closed" && windowEnd !== null) lines.push({ tone: "warn", text: `The vault's claim window closed at ${stamp(windowEnd)}. Registered claims can be paid now, and nothing more can register.` });
   if (!vault.hasCheckpoint) lines.push({ tone: "calm", text: "The vault has no checkpoint yet, so there is nothing to prove against." });
-  else if (current) lines.push({ tone: "calm", text: `Saved in this browser: checkpoint ${groupThousands(record.proof.seq)}, posted ${spanOf(age)} ago.${provesLine(record, claims)}` });
+  else if (current) lines.push({ tone: "calm", text: `Saved in this browser: checkpoint ${groupThousands(record.proof.seq)}, posted ${spanOf(age)} ago.${accepted === null ? " Your wallet has not checked it against the vault yet." : provesLine(accepted, claims)}` });
   else if (exit.reading) lines.push({ tone: "calm", text: "Updating your proof to the vault's latest checkpoint…" });
   else if (record !== null) lines.push({ tone: "warn", text: `Your saved proof is from checkpoint ${groupThousands(record.proof.seq)}, posted ${spanOf(age)} ago. The vault's latest is checkpoint ${groupThousands(vault.latestSeq)}, so the vault would refuse a claim from it.` });
   else if (exit.nothing) lines.push({ tone: "calm", text: "Nothing to save: this account holds nothing in the vault." });
@@ -138,15 +147,16 @@ export function exitView(exit: ExitState, wallet: { address: string; readOnly?: 
   if (!exit.reading && (!exit.nothing || failedRead) && attempt !== null && (!current || attempt.kind === "wallet-failed")) lines.push(attemptLine(attempt, vault.exitStartedAt !== 0));
   if (exit.vaultProblem !== null) lines.push({ tone: readTone, text: `Your wallet could not read the vault just now, so this is from its last read: ${clause(exit.vaultProblem)}. It is read again by itself.` });
   const started = phase === "open" || phase === "closed";
+  if (started && accepted !== null && claims !== null && claims.mismatched.length > 0) lines.push(mismatchLine(claims.mismatched));
   const canClaim = phase === "closed" && registered !== null && registered > 0n;
-  const left = phase === "open" && current && claims !== null ? registerSteps(record, claims) : [];
-  const allRegistered = phase === "open" && current && claims !== null && left.length === 0 && registered !== null && registered > 0n;
+  const left = phase === "open" && accepted !== null && claims !== null ? registerSteps(accepted, claims) : [];
+  const allRegistered = phase === "open" && accepted !== null && claims !== null && left.length === 0 && registered !== null && registered > 0n;
   return {
     ...base, phase, windowEnd, lines: [...lines, ...extras],
     rebuild: phase !== "none" && vault.hasCheckpoint && !current && !exit.nothing ? `engine exit-proof --log <mirrored log> --seq ${vault.latestSeq} --account ${wallet.address}` : null,
     canStart: phase === "due" && (!vault.hasCheckpoint || exit.terms?.root === vault.latestRoot),
     register: left,
-    refunds: started && claims !== null ? refundSteps(current ? record : null, claims) : [],
+    refunds: started && claims !== null ? refundSteps(accepted, claims) : [],
     registered, canClaim,
     notice: noticeOf(exit, phase, current, canClaim, allRegistered),
   };

@@ -6,8 +6,10 @@
 
 import { decodeAbiParameters, decodeEventLog, encodeFunctionData, type Hex } from "viem";
 
+import { fixedFromWire } from "../fixed";
+import { USDC_UNIT } from "../vault";
 import { accountArgs, approvalArgs, EXIT_STAKING, EXIT_VAULT, EXIT_VERIFIER, pendingArgs, queuedArgs, termsArgs } from "./exit-abi";
-import type { ExitCheck, ExitClaimFacts, ExitProof, ExitStep, ExitWallet, VaultExitFacts } from "./exit-types";
+import type { ExitCheck, ExitClaimFacts, ExitPendingProof, ExitProof, ExitStep, ExitWallet, VaultExitFacts } from "./exit-types";
 import { isRevert } from "./provider-errors";
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
 import { WALLET_READ_MS, withinMs } from "./serialized-provider";
@@ -59,7 +61,7 @@ export class ProviderExit implements ExitWallet {
   private readonly finallyPaid = new Set<number>();
   /** The span of deposits from the exit's cursor on, fixed once the exit has started, as the vault takes no deposit after it. */
   private span: { cursor: number; end: number; complete: boolean } | null = null;
-  /** Each deposit's payer and amount read so far, which never change. */
+  /** Each deposit's payer and amount read so far. */
   private readonly depositRecords = new Map<number, { payer: string; amount: bigint }>();
 
   constructor(private readonly address: Address, private readonly chain: WalletChain, private readonly provider: Eip1193Provider, private readonly sendVault: SendVault) {}
@@ -83,6 +85,16 @@ export class ProviderExit implements ExitWallet {
   private async uint(to: string, data: Hex): Promise<bigint> {
     const [value] = decodeAbiParameters([{ type: "uint256" }], await this.call(to, data));
     return value;
+  }
+
+  /** The vault's one-word answer at a finalized block; null when the wallet cannot say, as it reads no such block or the vault was not deployed by then, which only costs a proof being kept. */
+  private async finalWord(data: Hex): Promise<bigint | null> {
+    try {
+      const [value] = decodeAbiParameters([{ type: "uint256" }], await this.call(this.chain.vault, data, "finalized"));
+      return value;
+    } catch {
+      return null;
+    }
   }
 
   /** The chain's own clock. A WalletConnect session allows only the methods the console asks of it, which do not read blocks, so the clock falls back to a call that returns the block's timestamp. */
@@ -159,17 +171,21 @@ export class ProviderExit implements ExitWallet {
       if (!(await proves(encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "provesQueued", args: [bytes, ...queuedArgs(held)] })))) return refused(`queued withdrawal ${held.queued.requested_seq}`);
     }
     let distributionOwed = 0n;
+    let finalDistributionOwed = 0n;
     if (proof.distribution !== null) {
       const entitled = BigInt(proof.distribution.entitled);
       if (!(await proves(encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "provesDistribution", args: [bytes, account, entitled, proof.distribution.siblings.map(hexOf)] })))) return refused("distribution");
-      const paid = await this.uint(this.chain.vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "distributionsClaimed", args: [account] }));
+      const claimed = encodeFunctionData({ abi: EXIT_VAULT, functionName: "distributionsClaimed", args: [account] });
+      const paid = await this.uint(this.chain.vault, claimed);
       distributionOwed = entitled > paid ? entitled - paid : 0n;
+      const finalPaid = paid === 0n ? 0n : ((await this.finalWord(claimed)) ?? 0n);
+      finalDistributionOwed = entitled > finalPaid ? entitled - finalPaid : 0n;
     }
     for (const held of proof.pending_deposits) {
       if (!(await proves(encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "provesPending", args: [bytes, ...pendingArgs(held)] })))) return refused(`pending deposit ${held.deposit.deposit_id}`);
     }
     await this.onChain();
-    return { ok: true, paidApprovals, accountClaim, distributionOwed };
+    return { ok: true, paidApprovals, accountClaim, distributionOwed, finalPaidApprovals: paidApprovals.filter((nonce) => this.finallyPaid.has(nonce)), finalDistributionOwed };
   }
 
   /** Whether the vault shows approval `nonce` paid at the chain's head; a wallet that cannot read a finalized block only costs the read being asked again. */
@@ -177,9 +193,25 @@ export class ProviderExit implements ExitWallet {
     if (this.finallyPaid.has(nonce)) return true;
     const data = encodeFunctionData({ abi: EXIT_VAULT, functionName: "usedNonces", args: [account, BigInt(nonce)] });
     if (!(await this.bool(this.chain.vault, data))) return false;
-    const final = await this.call(this.chain.vault, data, "finalized").catch(() => null);
-    if (final !== null && decodeAbiParameters([{ type: "bool" }], final)[0]) this.finallyPaid.add(nonce);
+    if (((await this.finalWord(data)) ?? 0n) !== 0n) this.finallyPaid.add(nonce);
     return true;
+  }
+
+  /** Deposit `id`'s payer and amount on the vault. Only an exit's reads ask, and it takes no deposit after it starts, so one read of each serves. */
+  private async depositRecord(id: number): Promise<{ payer: string; amount: bigint }> {
+    let record = this.depositRecords.get(id);
+    if (record === undefined) {
+      const [payer, amount] = decodeAbiParameters([{ type: "address" }, { type: "uint96" }], await this.call(this.chain.vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "depositRecords", args: [BigInt(id)] })));
+      record = { payer: payer.toLowerCase(), amount };
+      this.depositRecords.set(id, record);
+    }
+    return record;
+  }
+
+  /** Whether the vault's record of a pending deposit is what `refundPendingDeposit` compares it with: a reorganisation can put another payer or amount at its id. */
+  private async recordMatches(deposit: ExitPendingProof["deposit"]): Promise<boolean> {
+    const record = await this.depositRecord(deposit.deposit_id);
+    return record.payer === deposit.payer && record.amount * USDC_UNIT === fixedFromWire(deposit.amount);
   }
 
   /** The account's deposits the exit root does not hold, which `refundDeposit` takes by id alone: from the exit's cursor on, and the gaps below it that `proof` names. */
@@ -194,12 +226,7 @@ export class ProviderExit implements ExitWallet {
     const ids = [...(proof?.terms.terms.gaps ?? []).filter((id) => id < cursor), ...Array.from({ length: Math.max(end - cursor, 0) }, (_, index) => cursor + index)];
     const deposits: { id: number; amount: bigint }[] = [];
     for (const id of ids) {
-      let record = this.depositRecords.get(id);
-      if (record === undefined) {
-        const [payer, amount] = decodeAbiParameters([{ type: "address" }, { type: "uint96" }], await this.call(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "depositRecords", args: [BigInt(id)] })));
-        record = { payer: payer.toLowerCase(), amount };
-        this.depositRecords.set(id, record);
-      }
+      const record = await this.depositRecord(id);
       if (record.payer === this.address.toLowerCase()) deposits.push({ id, amount: record.amount });
     }
     return { deposits, complete };
@@ -217,11 +244,15 @@ export class ProviderExit implements ExitWallet {
     const approvalsUsed: number[] = [];
     for (const { approval } of proof?.approvals ?? []) if (await this.paid(account, approval.nonce)) approvalsUsed.push(approval.nonce);
     const refunded: number[] = [];
-    for (const { deposit } of proof?.pending_deposits ?? []) if (await this.bool(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "depositRefunded", args: [BigInt(deposit.deposit_id)] }))) refunded.push(deposit.deposit_id);
+    const mismatched: number[] = [];
+    for (const { deposit } of proof?.pending_deposits ?? []) {
+      if (await this.bool(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "depositRefunded", args: [BigInt(deposit.deposit_id)] }))) refunded.push(deposit.deposit_id);
+      else if (!(await this.recordMatches(deposit))) mismatched.push(deposit.deposit_id);
+    }
     return {
       accountRegistered: await this.bool(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "exitAccountRegistered", args: [account] })),
       distributionRegistered: await this.bool(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "exitDistributionRegistered", args: [account] })),
-      queuedRegistered, approvalsUsed, refunded,
+      queuedRegistered, approvalsUsed, refunded, mismatched,
       exitClaim: await this.uint(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "exitClaims", args: [account] })),
       exitDistributionClaim: await this.uint(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "exitDistributionClaims", args: [account] })),
       distributionPaid: await this.uint(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "distributionsClaimed", args: [account] })),

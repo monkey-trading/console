@@ -23,7 +23,7 @@ describe("MockVaultExit", () => {
     const { vault, exit } = funded();
     const proof = parseExitProof(vault.proof(ACCOUNT));
     expect(proof.root).toBe((await exit.facts()).latestRoot);
-    expect(await exit.check(proof, proof.root)).toEqual({ ok: true, paidApprovals: [], accountClaim: 5_000_000_000n, distributionOwed: 0n });
+    expect(await exit.check(proof, proof.root)).toEqual({ ok: true, paidApprovals: [], accountClaim: 5_000_000_000n, distributionOwed: 0n, finalPaidApprovals: [], finalDistributionOwed: 0n });
   });
 
   it("holds nothing for an account it never credited", () => {

@@ -59,7 +59,7 @@ export function exitWatchKit() {
     },
     /** A connected account the page has read as holding `balance`, on a trusted, live node. */
     connect(balance = 1000n): Promise<void> {
-      return kit.attach({ attestation: { kind: "mock" }, stream: "live", accountRead: true, account: balance === 0n ? null : { balance, unfinalised: 0n, equity: balance, margin: 0n, positions: [], orders: [] } });
+      return kit.attach({ attestation: { kind: "mock" }, stream: "live", accountRead: true, accountHistory: "read", account: balance === 0n ? null : { balance, unfinalised: 0n, equity: balance, margin: 0n, positions: [], orders: [] } });
     },
   };
   return kit;

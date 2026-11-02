@@ -90,7 +90,7 @@ export class MockVaultExit {
   }
 
   private held(key: string): ExitClaimFacts {
-    return this.claimsOf.get(key) ?? { accountRegistered: false, distributionRegistered: false, queuedRegistered: [], approvalsUsed: [], refunded: [], exitClaim: 0n, exitDistributionClaim: 0n, distributionPaid: this.state.monkey.distClaimed.get(key) ?? 0n, unheld: [], unheldComplete: true };
+    return this.claimsOf.get(key) ?? { accountRegistered: false, distributionRegistered: false, queuedRegistered: [], approvalsUsed: [], refunded: [], mismatched: [], exitClaim: 0n, exitDistributionClaim: 0n, distributionPaid: this.state.monkey.distClaimed.get(key) ?? 0n, unheld: [], unheldComplete: true };
   }
 
   private update(key: string, change: Partial<ExitClaimFacts>): void {
@@ -117,7 +117,8 @@ export class MockVaultExit {
         if (proof.root !== root) return { ok: false, reason: "its exit terms do not prove against the vault's root" };
         const paid = this.state.monkey.distClaimed.get(key) ?? 0n;
         const entitled = BigInt(proof.distribution?.entitled ?? "0");
-        return { ok: true, paidApprovals: [], accountClaim: proof.account === null ? 0n : this.accountWorth(key), distributionOwed: entitled > paid ? entitled - paid : 0n };
+        const distributionOwed = entitled > paid ? entitled - paid : 0n;
+        return { ok: true, paidApprovals: [], accountClaim: proof.account === null ? 0n : this.accountWorth(key), distributionOwed, finalPaidApprovals: [], finalDistributionOwed: distributionOwed };
       },
       claims: async () => this.held(key),
       stakeHeld: async () => (this.state.monkey.staked.get(key) ?? 0n) > 0n,

@@ -124,6 +124,8 @@ export interface ConsoleState {
   queue: QueuedWithdrawal[];
   /** Whether the connected account's eligibility, queue and state have been read since it connected; each is empty before it, and after a read that failed. */
   accountRead: boolean;
+  /** How the connected account's first read of its history went: `history` is known to hold what the node holds only once it is `read`, and it stays so while later reads fail. */
+  accountHistory: "waiting" | "read" | "failed";
   /** When this browser's session key expires by the node's clock, or 0 with no registered key; the key itself never enters the snapshot. */
   sessionExpiresAt: number;
   /** Why the last registration the node answered was refused, or null: orders and cancels then ask the wallet instead. */
@@ -223,6 +225,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     account: null,
     queue: [],
     accountRead: false,
+    accountHistory: "waiting",
     sessionExpiresAt: 0,
     sessionRefusal: null,
     setup: NO_SETUP,
