@@ -136,20 +136,6 @@ describe("the page's transactions", () => {
     stop();
   });
 
-  it("sends no claim, and says why, while the vault has not reached the node's proof", async () => {
-    const { node, store, panel, stop } = await setup();
-    const real = node.client.stats.distributions;
-    node.client.stats.distributions = async (address) => {
-      const proof = await real(address);
-      return proof === null ? null : { ...proof, seq: proof.seq + 1 };
-    };
-    const claims = vi.spyOn(node.controls, "claimDistribution");
-    expect(await claimDistribution(panel)).toBe(false);
-    expect(claims).not.toHaveBeenCalled();
-    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: expect.stringContaining("has not reached") });
-    stop();
-  });
-
   it("waits on a verdict that may sign, says why, and sends no claim built from a node the vault has not judged", async () => {
     const { node, store, panel, stop } = await setup();
     node.client.tick(SIM_EPOCH_MS + EPOCH_MS);

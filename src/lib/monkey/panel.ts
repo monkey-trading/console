@@ -18,7 +18,6 @@ import type { ConsoleStore } from "../store/store";
 import { ChartFeed } from "./feed";
 import { failed, LOADING, ready, type Read } from "./figures";
 import { Backoff, followLive } from "./live-reads";
-import { PairCheck } from "./recheck";
 
 /** The activity table's length, and how often the page's totals and activity are read, in milliseconds. */
 export const ACTIVITY_LIMIT = 25;
@@ -73,7 +72,6 @@ export class MonkeyPanel {
   private nodeRead: Promise<void> | null = null;
   private readonly nodeBackoff = new Backoff();
   private readonly walletBackoff = new Backoff();
-  private readonly pair = new PairCheck();
   /** Counts the page's openings; work that began in an earlier one never writes into a later one. */
   private cycle = 0;
   private open = false;
@@ -126,7 +124,6 @@ export class MonkeyPanel {
     });
     return () => {
       stopLive();
-      this.pair.stop();
       this.open = false;
       this.cycle = this.store.monkeySession.nextOpening();
       this.nodeRead = null;
@@ -223,7 +220,6 @@ export class MonkeyPanel {
     }).finally(() => clearTimeout(waiting));
     return Promise.all([proof, chain]).then(() => {
       this.walletBackoff.record(this.state.wallet.position.status === "failed" || this.state.wallet.proof.status === "failed");
-      this.pair.after(this.store, this.state, () => this.open && cycle === this.cycle, () => this.refreshWallet(true));
     });
   }
 

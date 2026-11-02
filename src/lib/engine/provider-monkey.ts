@@ -6,6 +6,7 @@
 
 import { decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "viem";
 
+import { claimFailure } from "./claim-refusal";
 import type { EntitlementProof } from "./emissions";
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
 import { WALLET_READ_MS, withinMs } from "./serialized-provider";
@@ -44,7 +45,7 @@ export async function suggestTokenAsset(ensureChain: () => Promise<void>, provid
  * account: the node signed it for the account's own route.
  * Error cases:
  * - the proof is for another account or nothing to claim
- * - the user declines, or the transaction reverts or is not confirmed after 180 receipt polls a second apart
+ * - the user declines, or the transaction reverts (said in plain words, see `claimFailure`) or is not confirmed after 180 receipt polls a second apart
  */
 export async function claimEmissionsTx(
   address: Address,
@@ -57,7 +58,9 @@ export async function claimEmissionsTx(
   const entitled = BigInt(proof.entitled);
   if (entitled <= 0n) throw new Error("The entitlement proof names nothing to claim.");
   const data = encodeFunctionData({ abi: VAULT, functionName: "claimEmissions", args: [hexOf(address), entitled, BigInt(proof.seq), proof.siblings.map(hexOf)] });
-  return sendVault(data, "claim your MONKEY emissions", progress);
+  return sendVault(data, "claim your MONKEY emissions", progress).catch((error: unknown) => {
+    throw claimFailure(error);
+  });
 }
 
 /**

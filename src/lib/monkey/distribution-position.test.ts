@@ -50,10 +50,19 @@ describe("distributionPosition against a node that says what is newest", () => {
     expect(distributionPosition(carryAccrued(first, answered(900n, 900n, 40)), { distributionsClaimed: 400n, latestSeq: 40 }).accrued).toBe(1_400n);
   });
 
-  it("still pairs the proof with the vault's latest seq when the node's claimable flag says the proof is not yet accepted", () => {
+  it("takes the node's claimable flag over the vault's latest seq, in both directions", () => {
     const unaccepted = { ...proof(1_400n, 44), accepted_seq: 40, newest_seq: 44, newest_entitled: "1400", claimable: false };
-    expect(distributionPosition(unaccepted, { distributionsClaimed: 400n, latestSeq: 40 }).checkpoint).toBe("waiting");
-    expect(distributionPosition(unaccepted, { distributionsClaimed: 400n, latestSeq: 44 })).toMatchObject({ checkpoint: "posted", claimable: 1_000n });
+    expect(distributionPosition(unaccepted, { distributionsClaimed: 400n, latestSeq: 44 })).toMatchObject({ checkpoint: "waiting", claimable: 0n });
+    const accepted = { ...unaccepted, claimable: true };
+    // A new checkpoint arrives while the wallet's read is behind: the claim stays offered, and unread vault records change nothing.
+    expect(distributionPosition(accepted, { distributionsClaimed: 400n, latestSeq: 39 })).toMatchObject({ checkpoint: "posted", claimable: 1_000n });
+    expect(distributionPosition(accepted, null)).toMatchObject({ checkpoint: "posted", claimed: null, claimable: 0n });
+  });
+
+  it("falls back to the vault's latest seq against a node that does not say, and calls the pair unknown until it is read", () => {
+    expect(distributionPosition(proof(900n, 41), { distributionsClaimed: 400n, latestSeq: 40 }).checkpoint).toBe("waiting");
+    expect(distributionPosition(proof(900n, 41), { distributionsClaimed: 400n, latestSeq: 41 })).toMatchObject({ checkpoint: "posted", claimable: 500n });
+    expect(distributionPosition(proof(900n, 41), null).checkpoint).toBe("unknown");
   });
 
   it("works as before against a node without the fields", () => {

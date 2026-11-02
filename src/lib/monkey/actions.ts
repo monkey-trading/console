@@ -9,13 +9,14 @@ import type { StakingWallet } from "../engine/staking";
 import type { Progress, Wallet } from "../engine/wallet";
 import { monkeyExact } from "./figures";
 import { abandoned, errorText, notBusy, prompting, usableWallet } from "../store/signing";
-import { claimEmissions, emissionsPosition } from "../store/emissions";
+import { checkpointOf } from "../engine/claim-standing";
+import { claimEmissions, emissionsPosition, WAITING_ON_VAULT } from "../store/emissions";
 import { NO_CANDIDATE } from "../engine/registry";
 import type { NoticeSurface } from "../store/state";
 import type { OperatorReads } from "./operators";
 import type { MonkeyPanel } from "./panel";
 
-/** How many rounds a claim re-reads the vault and the node's proof before it keeps the waiting state; as the MONKEY claim does. */
+/** How many rounds a claim re-reads the vault and the node's proof before it keeps the waiting state, for a node that does not say whether its proof is claimable; as the MONKEY claim does. */
 const CLAIM_ATTEMPTS = 3;
 
 /**
@@ -116,10 +117,11 @@ export async function delegateStake(panel: MonkeyPanel, operators: OperatorReads
 
 /**
  * Claims the account's USDC distribution. The vault checks a proof against the root it keeps for
- * the proof's seq, so the claim needs a proof at a checkpoint the vault has reached, not the page's
- * last-read pair: both are read again, bounded, and the claim is sent once the vault has reached
- * the proof's. Later checkpoints do not undo it. It is built from the node's proof, so unlike a
- * stake or a delegation it waits on a verdict that may sign.
+ * the proof's seq, and the node's answer says whether that checkpoint is one the vault accepted
+ * (`claimable`), so the claim is sent on the node's current word and what the vault has paid, both
+ * read again, never on the wallet's read of the vault's latest seq running behind. A node without
+ * the field is compared with that seq, bounded rounds. Later checkpoints do not undo a claim. It is
+ * built from the node's proof, so unlike a stake or a delegation it waits on a verdict that may sign.
  */
 export function claimDistribution(panel: MonkeyPanel): Promise<boolean> {
   const { store } = panel;
@@ -137,7 +139,7 @@ export function claimDistribution(panel: MonkeyPanel): Promise<boolean> {
         store.notify("distribution", "The node holds no distribution proof for this account right now.", "info");
         return false;
       }
-      if (proof.seq <= position.latestSeq) {
+      if (checkpointOf(proof, position.latestSeq) === "posted") {
         const due = BigInt(proof.entitled) - position.distributionsClaimed;
         if (due <= 0n) return false; // the panel already says all of it is claimed
         // Checked last: the verdict may have ended while the reads above waited on the wallet.
@@ -145,8 +147,8 @@ export function claimDistribution(panel: MonkeyPanel): Promise<boolean> {
         await staking.claimDistribution(proof, progress);
         return true;
       }
-      if (attempt >= CLAIM_ATTEMPTS) {
-        store.notify("distribution", "The vault has not reached the checkpoint of the node's latest proof yet; the claim unlocks once it does.", "info");
+      if (proof.claimable !== undefined || attempt >= CLAIM_ATTEMPTS) {
+        store.notify("distribution", WAITING_ON_VAULT, "info");
         return false;
       }
     }
