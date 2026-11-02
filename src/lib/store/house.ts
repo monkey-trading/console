@@ -1,17 +1,22 @@
 /** The House page's reads: the node's house state (the latest `set_params` and checkpoint) and the public withdrawal queue's size. */
 
 import { QueueTotalsRetrying } from "../engine/live-queue";
+import { HOUSE_STATE, ROUTE_ABSENT_MS } from "./quiet-reads";
 import type { ConsoleStore } from "./store";
 
 /**
  * Reads the house's parameters and checkpoint from the node into the store. Called on every
  * refresh, like the markets and house reads; a failure is reported once, deduplicated like the
- * queue's. A node that predates the route answers null: the panels say so, and nothing is reported.
+ * queue's. A node that predates the route answers null: the panels say so, nothing is reported, and
+ * the route is not asked again until the page reopens, the node restarts or `ROUTE_ABSENT_MS` passes.
  * Resolves true when the read succeeded.
  */
 export function readHouseState(store: ConsoleStore): Promise<boolean> {
+  if (store.quiet.resting(HOUSE_STATE)) return Promise.resolve(true);
+  const mark = store.quiet.mark();
   return store.deps.client.houseState().then(
     (read) => {
+      if (read === null) store.quiet.rest(HOUSE_STATE, ROUTE_ABSENT_MS, mark);
       store.patch(
         read === null
           ? { houseParams: null, checkpoint: null, houseStateStatus: "unavailable" }
@@ -44,6 +49,7 @@ export function readHouseQueue(store: ConsoleStore): Promise<boolean> {
 /** Marks the House page open, so refreshes run its reads, and returns what closes it. The reads are for that page alone. */
 export function openHousePanel(store: ConsoleStore): () => void {
   store.housePanelOpen = true;
+  store.quiet.reset(); // a page opened again asks a node that lacked the route afresh
   store.houseStats.setOpen(true);
   // Before the first refresh the node is not trusted yet; that refresh runs them.
   if (store.getSnapshot().houseReady) readHousePanelSoon(store);
