@@ -40,10 +40,11 @@ the geo-block check (`scripts/check-geo-block.sh`, after the build), and the doc
 ## Trade against a local engine node
 
 `scripts/dev-local-stack.sh` starts everything a wallet needs on one machine: an Anvil chain with the vault
-and a mock USDC, the house's capital in the vault, mock USDC in a dev wallet, an engine node on that chain's
-custody that prices BTC-USD and ETH-USD from live crypto venues (the other markets need market-data vendor
-keys and stay unpriced) and posts checkpoints so withdrawals can be claimed, and the console in development
-mode against it. It needs Anvil, Forge and Cast, Cargo, Node.js and npm, curl, `jq`, Python 3.11 or later, and the engine's
+and a mock USDC, the operator registry that deploys the MONKEY staking contract (rotation off), the house's
+capital in the vault, mock USDC in a dev wallet, an engine node on that chain's custody that prices BTC-USD and
+ETH-USD from live crypto venues (the other markets need market-data vendor keys and stay unpriced), runs MONKEY
+emissions and staking, and posts checkpoints so withdrawals and MONKEY claims can be made, and the console in
+development mode against it, with the MONKEY token and staking contract named for its MONKEY page. It needs Anvil, Forge and Cast, Cargo, Node.js and npm, curl, `jq`, Python 3.11 or later, and the engine's
 repository beside this one (or at `ENGINE_DIR`) with its contract dependencies installed (`forge soldeer
 install` in its `contracts/`):
 
@@ -55,7 +56,10 @@ npm ci
 It prints how to add the Anvil network and import the dev wallet's key (a public test key) into a browser
 wallet, the mock USDC's address, and the console's address, `http://localhost:3000`; Ctrl-C stops everything
 it started. In the console, connect the wallet, deposit from Funding, sign the eligibility declaration once
-the node sees the deposit pending, and trade. Its header lists the variables that move its ports, fund
+the node sees the deposit pending, and trade. A realised loss earns MONKEY once its ten-minute period closes:
+claim it on the MONKEY page and stake it, and the epoch that closes next, every five minutes, pays stakers the
+house's USDC above its floor. The staking epoch, unstake cooldown and floor are development values that the
+script prints. Its header lists the variables that move its ports, fund
 another address, or serve a production build.
 
 ## Read a local engine development node

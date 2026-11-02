@@ -89,6 +89,11 @@ describe("plotValue and latestText", () => {
     expect(compactNumber(2_070_000)).toBe("2.07M");
     expect(compactNumber(1_500)).toBe("1.5K");
     expect(compactNumber(5.056)).toBe("5.06");
+    expect(compactNumber(-1_500)).toBe("-1.5K");
+    expect(compactNumber(-0.04)).toBe("-0.04");
+    // A tick a hair below zero is zero, not `-0.00`.
+    expect(compactNumber(-0.0004)).toBe("0.00");
+    expect(compactNumber(-0)).toBe("0.00");
   });
 });
 

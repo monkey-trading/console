@@ -93,7 +93,7 @@ matches the current action.
 - **scripts/** — `check-docs.py`, run by CI's `docs` job: every relative Markdown link under
   `agents/` and in the root `*.md` files resolves to a file or directory in the repository, and the
   root `AGENTS.md` and `CLAUDE.md`, when present, are symlinks to `agents/AGENTS.md`; its test is
-  `check-docs.test.py`; and `check-wasm-pin.mjs`, run before every build, which fails when the verifier's `.wasm` or glue is not the pinned one; `dev-live-client.sh`, the live client's dev scenario against an engine dev node through a tampering proxy (`live/`, run by `vitest.live.config.ts`); `dev-trading.sh`, the trading dev scenario: a private dev node on mock custody with EIP-712 client auth, traded against through the console's store and actions, ending in a close-out the operator forces by raising the market's margin tier (run by `vitest.live.config.ts`); `dev-local-stack.sh`, the one-command local stack (Anvil with the vault and mock USDC, a funded dev wallet, an engine node on Anvil custody with live crypto venues and checkpoints, and the console in live-dev mode); and `check-geo-block.sh`, run by CI's `geo-block` job, which serves a
+  `check-docs.test.py`; and `check-wasm-pin.mjs`, run before every build, which fails when the verifier's `.wasm` or glue is not the pinned one; `dev-live-client.sh`, the live client's dev scenario against an engine dev node through a tampering proxy (`live/`, run by `vitest.live.config.ts`); `dev-trading.sh`, the trading dev scenario: a private dev node on mock custody with EIP-712 client auth, traded against through the console's store and actions, ending in a close-out the operator forces by raising the market's margin tier (run by `vitest.live.config.ts`); `dev-local-stack.sh`, the one-command local stack (Anvil with the vault, mock USDC and the operator registry that deploys MONKEY staking, a funded dev wallet, an engine node on Anvil custody with live crypto venues, emissions, staking and checkpoints, and the console in live-dev mode); and `check-geo-block.sh`, run by CI's `geo-block` job, which serves a
   production build and checks that a restricted, an allowed, and an unknown country each get the
   right page, that every page is `noindex`, and that `robots.txt` is never rewritten. The review-delta
   helper and its test sit with the review skill, in `agents/skills/agent-code-review/scripts/`
@@ -133,8 +133,11 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   `npm run dev:live` (see the README)
 - Local trading stack: `./scripts/dev-local-stack.sh` (Anvil, Forge, Cast, Cargo, Node and npm, `curl`, `jq`, Python 3.11+; the engine
   checkout from `ENGINE_DIR`, default the `engine` beside the main checkout, with `forge soldeer install` run in its
-  `contracts/`; prints the wallet setup and runs until Ctrl-C; ports, the funded wallet and `CONSOLE_BUILD=production`
-  are set by the variables its header lists)
+  `contracts/`; deploys the vault and, as the launch deployment does, the operator registry that deploys the MONKEY staking
+  contract, and sequences emissions and staking (five-minute epochs, an equal cooldown and a floor under the house's capital:
+  development values it prints) so the MONKEY page can claim, stake and unstake; its checkpoints land every 1000 commands, which
+  the vault can keep up with; prints the wallet setup and runs until Ctrl-C; ports, the funded wallet and
+  `CONSOLE_BUILD=production` are set by the variables its header lists)
 - Live client dev scenario: `ENGINE_DIR=<engine checkout> ENGINE_BIN=<built engine binary> scripts/dev-live-client.sh`
   (Node, `curl`; starts a dev node on private data and ends `PASS: signed reads verify; tamper, replay, gap
   and mock-in-production are refused`)

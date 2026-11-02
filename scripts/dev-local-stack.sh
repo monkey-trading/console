@@ -2,10 +2,12 @@
 # Runs a local trading stack for the console, from a fresh chain and a fresh node log each time:
 #   1. Anvil (chain 31337) with the mock USDC and the vault at the addresses config/anvil.toml
 #      names, the vault signed for by the node's published mock enclave key;
-#   2. the house's capital deposited into the vault, and mock USDC minted to a dev wallet;
+#   2. the operator registry, which deploys the MONKEY staking contract as the launch deployment
+#      does, with operator rotation off; the house's capital deposited into the vault; and mock USDC
+#      minted to a dev wallet;
 #   3. an engine node on EVM custody that prices BTC-USD and ETH-USD from live crypto venues,
-#      screens through the local synthetic access source, initialises MONKEY emissions, and posts
-#      checkpoints on-chain, so withdrawals are authorized and claimable on the vault;
+#      screens through the local synthetic access source, initialises MONKEY emissions and staking,
+#      and posts checkpoints on-chain, so withdrawals are authorized and claimable on the vault;
 #   4. the console in live-dev mode against that node.
 # It prints what to add to the wallet, then runs until Ctrl-C, which stops everything it started.
 #
@@ -41,6 +43,13 @@ metrics_url="http://127.0.0.1:$metrics_port/metrics"
 usdc_units=1000000
 house_usdc=5000000
 dev_usdc=100000
+# MONKEY staking, development values and not approved production parameters: a five-minute
+# distribution epoch, an unstake cooldown of the same length (the staking contract refuses one
+# shorter than its epoch), and a liquidity floor 100000 USDC under the house's capital, so the first
+# epoch that closes with a stake pays the stakers that excess.
+staking_epoch_secs=300
+staking_cooldown_secs=300
+staking_floor_usdc=4900000
 
 work=""
 step_log=""
@@ -195,25 +204,33 @@ fi
 # checks checkpoints and withdrawal authorizations against it.
 enclave="$(address 0x4343434343434343434343434343434343434343434343434343434343434343)"
 
+# The deployer's third transaction deploys the operator registry, and the registry's first creation
+# is the staking contract it owns, so the node's config can name both before they exist; the deploy
+# step checks them.
+registry="$(cast compute-address "$deployer" --nonce 2 | awk '{print $NF}')"
+staking="$(cast compute-address "$registry" --nonce 1 | awk '{print $NF}')"
+
 step "Write the node config"
 step_log="$work/config.log"
 # dev.toml with EVM custody, as config/anvil.toml has it, against Anvil itself: the three
 # providers must have distinct URLs, and Anvil ignores the query that sets them apart.
 python3 - "$engine_dir/config" "$work" "$rpc" "$api_port" "$metrics_port" "$console_port" "$access_port" \
-  "$relayer" "$deployer" >"$work/config-values" 2>"$step_log" <<'PY' || die "could not write the node config"
+  "$relayer" "$deployer" "$registry" "$staking" >"$work/config-values" 2>"$step_log" <<'PY' || die "could not write the node config"
 import json
 import re
 import sys
 import tomllib
 from pathlib import Path
 
-config, work, rpc, api, metrics, console, access, relayer, source = sys.argv[1:]
+config, work, rpc, api, metrics, console, access, relayer, source, registry, staking = sys.argv[1:]
 cfg = tomllib.loads(Path(config, "dev.toml").read_text())
 anvil = tomllib.loads(Path(config, "anvil.toml").read_text())
 
-# Live venues sequence about 30 price commands a second, so a checkpoint, and with it a
-# withdrawal authorization, comes every few seconds.
-cfg["node"].update(listen=f"127.0.0.1:{api}", log_dir=f"{work}/log", auth="eip712", checkpoint_every=100)
+# Live venues sequence between 30 and 100 price commands a second, and one checkpoint lands on the
+# chain about every second: a checkpoint every 100 commands outruns that, the vault falls minutes
+# behind the log, and neither a withdrawal's authorization nor a MONKEY claim's proof is ever
+# covered. Every 1000 commands keeps the vault within seconds of the log.
+cfg["node"].update(listen=f"127.0.0.1:{api}", log_dir=f"{work}/log", auth="eip712", checkpoint_every=1000)
 cfg["api"]["allowed_origins"] = [f"http://localhost:{console}"]
 # One operator's browser with the first-party console is the whole user base here:
 # raise the per-IP and per-account buckets far above the production defaults so a
@@ -228,6 +245,9 @@ cfg["custody"] = anvil["custody"]
 evm = cfg["custody"]["evm"]
 evm["providers"] = [{"name": f"local-{name}", "rpc_url": f"{rpc}/?provider={name}"} for name in "abc"]
 evm["cursor_path"] = f"{work}/custody-cursor.json"
+# The staking contract the operator registry deployed, which the node mirrors into the engine once
+# staking is initialised, with the registry that deployed it.
+evm["staking"] = {"contract": staking, "cursor_path": f"{work}/staking-cursor.json", "registry": {"contract": registry}}
 # Live crypto venues price BTC-USD and ETH-USD; markets with no venue stay unpriced.
 cfg["feeds"]["provider"] = "venues"
 # With EVM custody, house capital comes from vault deposits to the house.
@@ -312,6 +332,26 @@ usdc="$deployed_usdc"
 vault="$deployed_vault"
 signer="$(cast call "$vault" 'checkpointSigner()(address)' --rpc-url "$rpc")"
 [[ "$(lower "$signer")" == "$(lower "$enclave")" ]] || die "the vault's signer is $signer, not the mock enclave $enclave"
+monkey="$(cast call "$vault" 'monkey()(address)' --rpc-url "$rpc")"
+
+step "Deploy the operator registry, which deploys the MONKEY staking contract"
+# The deployer is the initial operator, and rotation is off at deployment: no election moves the
+# operator key, which stays the dev config's. The election parameters are development values, as
+# in the engine's election scenario, within the bounds given after them.
+hex_bytes() { printf '0x%s' "$(printf "%0$(($2 * 2))d" 0 | sed "s/00/$1/g")"; }
+initial_operator="($deployer,$(hex_bytes d0 48),$(hex_bytes c0 32))"
+mon=000000000000000000
+parameters="(3600,3600,600,1000,500,2000,10,1000$mon,604800)"
+minimums="(60,0,0,0,0,0,1,0,60)"
+maximums="(2592000,31536000,86400,10000,10000,10000,100,1000000$mon,2592000)"
+deployed_registry="$(create --private-key "$deployer_key" src/OperatorRegistry.sol:OperatorRegistry \
+  --constructor-args "$monkey" "$staking_cooldown_secs" "$staking_epoch_secs" "$governance" \
+  "$initial_operator" "$parameters" "$minimums" "$maximums")"
+[[ "$(lower "$deployed_registry")" == "$(lower "$registry")" ]] || die "the registry deployed at $deployed_registry, not at $registry"
+deployed_staking="$(cast call "$registry" 'staking()(address)' --rpc-url "$rpc")"
+[[ "$(lower "$deployed_staking")" == "$(lower "$staking")" ]] || die "the registry deployed staking at $deployed_staking, not at $staking"
+registry="$deployed_registry"
+staking="$deployed_staking"
 
 step "Fund the house with $house_usdc USDC in the vault, and the dev wallet with $dev_usdc USDC"
 send() { nice -n 10 cast send "$@" --rpc-url "$rpc" >>"$step_log" 2>&1; }
@@ -358,7 +398,7 @@ poll 120 node_up || die "the node did not report healthy on $api/v1/health"
 attested="$(curl -sk --max-time 5 "$api/v1/attestation" | jq -r '.enclave_address // empty')"
 [[ "$(lower "$attested")" == "$(lower "$enclave")" ]] || die "the node attests enclave ${attested:-none}, not the vault's signer $enclave"
 
-step "Initialise MONKEY emissions"
+step "Initialise MONKEY emissions and staking"
 step_log="$work/init-emissions.log"
 # The engine queues genesis until its first trusted time sample and refuses every command until
 # then, so wait for the sequenced markets before sending the operator's schedule.
@@ -387,6 +427,23 @@ for _attempt in 1 2 3; do
 done
 [[ -n "$emissions_applied" ]] || die "the node did not sequence init-emissions (see $step_log)"
 
+# Staking is initialised once, the same way: epoch 0 starts at the next whole minute, with the
+# cooldown the staking contract was deployed with. The node mirrors the contract's events only
+# from then on.
+step_log="$work/init-staking.log"
+staking_applied=""
+for _attempt in 1 2 3; do
+  staking_start="$(python3 -c 'import time; print(time.strftime("%Y-%m-%dT%H:%M:00Z", time.gmtime((int(time.time()) // 60 + 1) * 60)))')"
+  if "$engine" admin --config "$work/node.toml" --node "$api" --pin "$tls_pin" --key-file "$work/operator.key" \
+    init-staking --start "$staking_start" --liquidity-floor "$staking_floor_usdc" \
+    --epoch-ms $((staking_epoch_secs * 1000)) --cooldown-ms $((staking_cooldown_secs * 1000)) >>"$step_log" 2>&1; then
+    staking_applied=yes
+    break
+  fi
+  sleep 2
+done
+[[ -n "$staking_applied" ]] || die "the node did not sequence init-staking (see $step_log)"
+
 # Every market a configured venue quotes, BTC-USD among them.
 venues_priced() {
   alive "$node_pid" || die "the node exited"
@@ -411,6 +468,8 @@ export NEXT_PUBLIC_ENGINE_DEV_ORIGINS="$api"
 export NEXT_PUBLIC_ENGINE_CHAIN_ID=31337
 export NEXT_PUBLIC_ENGINE_VAULT="$vault"
 export NEXT_PUBLIC_ENGINE_USDC="$usdc"
+export NEXT_PUBLIC_ENGINE_STAKING="$staking"
+export NEXT_PUBLIC_ENGINE_MONKEY="$monkey"
 export NEXT_PUBLIC_ENGINE_HEARTBEAT_MS="$heartbeat_ms"
 export NEXT_PUBLIC_ENGINE_RPC_URL="$rpc"
 if [[ "$console_build" == production ]]; then
@@ -433,9 +492,11 @@ poll 300 console_up || die "the console did not answer on $console_url"
 
 if [[ -n "${STACK_INFO_FILE:-}" ]]; then
   jq -n --arg consoleUrl "$console_url" --arg apiOrigin "$api" --arg rpcUrl "$rpc" --arg vault "$vault" \
-    --arg usdc "$usdc" --arg devWallet "$dev_wallet" --arg devWalletKey "$dev_wallet_key" --arg houseKey "$house_key" \
+    --arg usdc "$usdc" --arg monkey "$monkey" --arg staking "$staking" --arg registry "$registry" \
+    --arg devWallet "$dev_wallet" --arg devWalletKey "$dev_wallet_key" --arg houseKey "$house_key" \
     --arg deployerKey "$deployer_key" --arg workDir "$work" --arg nodeLog "$work/node.log" --arg metricsUrl "$metrics_url" \
     '{consoleUrl: $consoleUrl, apiOrigin: $apiOrigin, rpcUrl: $rpcUrl, chainId: 31337, vault: $vault, usdc: $usdc,
+      monkey: $monkey, staking: $staking, registry: $registry,
       devWallet: $devWallet, devWalletKey: (if $devWalletKey == "" then null else $devWalletKey end),
       houseKey: $houseKey, deployerKey: $deployerKey, workDir: $workDir, nodeLog: $nodeLog, metricsUrl: $metricsUrl}' \
     >"$STACK_INFO_FILE.tmp"
@@ -470,6 +531,11 @@ Dev wallet         $wallet_line
 Mock USDC          $usdc
                    Add it to the wallet as a custom token (6 decimals); the dev wallet holds $dev_usdc.
 Vault              $vault (house capital $house_usdc USDC)
+MONKEY token       $monkey (the vault mints it against emissions claims)
+Staking contract   $staking (deployed by the operator registry $registry, rotation off)
+Staking values     Development values, not production parameters: epochs of $((staking_epoch_secs / 60)) minutes from
+                   $staking_start, an unstake cooldown of $((staking_cooldown_secs / 60)) minutes, and a liquidity floor of
+                   $staking_floor_usdc USDC.
 Enclave signer     $enclave (the node's published mock key)
 
 Priced markets     ${priced:-none yet}
@@ -479,10 +545,12 @@ Unpriced markets   ${unfed:-none} (no market-data vendor keys)
 Deposits           Approve the vault and deposit from the console. The node sees a deposit a few
                    blocks (seconds) after it is mined; it stays pending until the wallet signs its
                    eligibility declaration, then it is credited.
-Withdrawals        The engine approves a withdrawal; the next checkpoint (every 100 commands, a few
+Withdrawals        The engine approves a withdrawal; the next checkpoint (every 1000 commands, within
                    seconds) is posted to the vault, and the console then claims it on the vault.
 MONKEY             Emissions run from $emissions_start: ten-minute budgets accrue to each period's
-                   net realised losses and show in the console once a losing trade closes.
+                   net realised losses and show in the console once a losing trade closes; claim
+                   them on the MONKEY page, then stake. An epoch that closes with a stake while the
+                   house's NAV is above the floor pays the excess to the stakers in USDC.
 
 Node log           $work/node.log
 Metrics            $metrics_url

@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { formatCompactUsd } from "@/lib/chart-format";
 import { signBlock } from "@/lib/engine/attestation";
 import { compactNumber, halvingsBetween, monkeyText } from "@/lib/monkey/figures";
 import { MonkeyPanel } from "@/lib/monkey/panel";
@@ -33,9 +34,6 @@ const SUPPLY_LINES: readonly LineSpec[] = [
 ];
 const REWARD_LINES: readonly LineSpec[] = [{ metric: "cumulative_distributed", label: "USDC distributed", tone: "glow" }];
 
-const dollars = (value: number) => `$${compactNumber(value)}`;
-const perDollar = (value: number) => value.toFixed(2);
-
 /** The four charts, in the right-hand column. */
 function Charts({ panel }: { panel: MonkeyPanel }) {
   const { overview } = usePanelState();
@@ -51,9 +49,9 @@ function Charts({ panel }: { panel: MonkeyPanel }) {
   );
   return (
     <>
-      <ChartCard id="chart-epochs" title="USDC distributed per epoch" caption="What each epoch close shared between stakers." feed={panel.feeds.epochs} kind="bars" lines={EPOCH_LINES} format={dollars} />
+      <ChartCard id="chart-epochs" title="USDC distributed per epoch" caption="What each epoch close shared between stakers." feed={panel.feeds.epochs} kind="bars" lines={EPOCH_LINES} format={formatCompactUsd} />
       <ChartCard
-        id="chart-per-loss" title="MONKEY per $1 of realised loss" feed={panel.feeds.perLoss} kind="steps" lines={PER_LOSS_LINES} format={perDollar} marks={marks}
+        id="chart-per-loss" title="MONKEY per $1 of realised loss" feed={panel.feeds.perLoss} kind="steps" lines={PER_LOSS_LINES} format={compactNumber} marks={marks}
         caption="By emission period: each ten-minute budget is shared between that period's realised losses, less write-offs."
         footer={emissions === null ? null : (
           <p className="mt-1 text-caption leading-relaxed text-fg-3">
@@ -62,7 +60,7 @@ function Charts({ panel }: { panel: MonkeyPanel }) {
         )}
       />
       <ChartCard id="chart-supply" title="MONKEY allocated and staked" feed={panel.feeds.supply} kind="lines" lines={SUPPLY_LINES} format={compactNumber} />
-      <ChartCard id="chart-rewards" title="Total USDC distributed to stakers" caption="Cumulative, across every epoch close." feed={panel.feeds.rewards} kind="area" lines={REWARD_LINES} format={dollars} />
+      <ChartCard id="chart-rewards" title="Total USDC distributed to stakers" caption="Cumulative, across every epoch close." feed={panel.feeds.rewards} kind="area" lines={REWARD_LINES} format={formatCompactUsd} />
     </>
   );
 }
