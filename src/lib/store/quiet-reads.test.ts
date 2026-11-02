@@ -13,7 +13,7 @@ import { ConsoleStore } from "./store";
 const PARAMS = { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, totalCapFloor: 0n, seq: 7 };
 const message = (seq: number, events: EngineEvent[]): StreamMessage => ({ offset: `${seq}:0`, type: "command", seq, ts: seq, cmd: { type: "deposit" }, events });
 /** The credit a deposit's screening retry makes: its one event names the account only inside the receipt, as the node's does (the command's own type is not one the console reads). */
-const retryCredit = (seq: number, account: string): StreamMessage => message(seq, [{ type: "custody_deposit_changed", receipt: { beneficiary: { kind: "trader", account } } }]);
+const retryCredit = (seq: number, account: string): StreamMessage => message(seq, [{ type: "custody_deposit_changed", receipt: { deposit_id: 1, amount: "1000000000", beneficiary: { kind: "trader", account } } }]);
 const creditedEvent = (seq: number, account = ACCOUNT) => message(seq, [{ type: "deposited", account, amount: "5" }]);
 
 beforeEach(() => { vi.useFakeTimers(); });
@@ -135,7 +135,7 @@ describe("an account the node has not credited", () => {
     const { client } = await connected();
     client.credited = true;
     client.onMessage?.(retryCredit(21, "0x00000000000000000000000000000000000000bb"));
-    client.onMessage?.(message(22, [{ type: "custody_deposit_changed", receipt: { beneficiary: { kind: "house" } } }]));
+    client.onMessage?.(message(22, [{ type: "custody_deposit_changed", receipt: { deposit_id: 1, amount: "1000000000", beneficiary: { kind: "house" } } }]));
     await settle();
     expect(client.accountReads).toBe(1);
   });

@@ -9,6 +9,7 @@ import type { Wallet } from "../engine/wallet";
 import { MonkeySession } from "../monkey/wallet-queue";
 import { decodeAccount, decodeHouse, decodeMarket } from "../models";
 import { loadAccount } from "./account";
+import { creditDeposits } from "./deposits";
 import { tickBars } from "./bars-tick";
 import { BarsSeed } from "./bars-seed";
 import { ExitWatch } from "./exit";
@@ -35,6 +36,10 @@ export class ConsoleStore {
   walletCleanup: Promise<void> | null = null;
   /** Bookkeeping for the background vault reads: `paidCheck` and `emissionsCheck` name the wallet each runs for. */
   paidCheck: Wallet | null = null; emissionsCheck: Wallet | null = null;
+  /** The vault's deposit ids the stream has shown credited, so a read that predates the credit does not bring one back. Not part of the snapshot. */
+  readonly creditedDeposits = new Set<string>();
+  /** Counts the reads of the vault's deposit events, so one that a later read overtook is dropped. Not part of the snapshot. */
+  depositReads = 0;
   readonly monkeySession = new MonkeySession(); // the MONKEY page's wallet queue and, while it is on screen, its store
   private snapshot: ConsoleState;
   private readonly listeners = new Set<() => void>();
@@ -122,7 +127,9 @@ export class ConsoleStore {
     this.viewer = undefined; // once a wallet has been connected or left, the starting viewer no longer applies
     this.quiet.accountEvent(); // its account reads start fresh: no rest of the last wallet's reads holds
     const mine = wallet?.address.toLowerCase();
-    this.patch({ wallet, accountRead: false, accountHistory: "waiting", notices: Object.fromEntries(Object.entries(this.snapshot.notices).filter(([surface]) => KEPT_ON_WALLET_CHANGE.includes(surface as NoticeSurface))), feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
+    // A deposit on its way belongs to the account it was sent to: another wallet drops it, a reconnect of the same one keeps it.
+    const sameAccount = this.snapshot.wallet?.address.toLowerCase() === mine;
+    this.patch({ wallet, accountRead: false, accountHistory: "waiting", ...(sameAccount ? {} : { pendingDeposits: [] }), notices: Object.fromEntries(Object.entries(this.snapshot.notices).filter(([surface]) => KEPT_ON_WALLET_CHANGE.includes(surface as NoticeSurface))), feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
   }
 
   setPaused(paused: boolean): void {
@@ -241,6 +248,7 @@ export class ConsoleStore {
     const own = mine !== undefined && message.events.some((e) => eventAccount(e) === mine);
     if (own) {
       noteSessionRevoked(this, message.events);
+      if (mine !== undefined) creditDeposits(this, message.events, mine);
       this.quiet.accountEvent(); // the credit this event may carry is read at once, not at the next rest's end
       void this.refresh(true);
     } else if (message.cmd.type === "tick") {

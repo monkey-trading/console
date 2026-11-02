@@ -7,7 +7,7 @@ export type EngineEvent =
   | { type: "eligibility_attested"; account: Address; class: EligibilityClass }
   | { type: "deposited"; account: Address; amount: string }
   /** A vault deposit's custody step (adopted, finalised, or credited by a screening retry): the receipt names who it is for, and there is no `account` field. */
-  | { type: "custody_deposit_changed"; receipt: { beneficiary: { kind: "trader"; account: Address } | { kind: "house" } } }
+  | { type: "custody_deposit_changed"; receipt: { deposit_id: number; amount: string; beneficiary: { kind: "trader"; account: Address } | { kind: "house" } } }
   /** A screened vault deposit waiting on, or held by, the access source. A deposit for the house has no account, so `account` is null: it is nobody's. `reason` is the engine's snake-case `AccessReject`. */
   | { type: "deposit_pending" | "deposit_held"; chain_ref: string; account: Address | null; payer: Address | null; amount: string; reason: string }
   | { type: "order_accepted"; account: Address; client_id: number; order_id: OrderId }

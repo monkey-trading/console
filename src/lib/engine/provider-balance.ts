@@ -9,6 +9,8 @@ import { hexOf } from "./provider-wallet";
 import type { UsdcBalance } from "./wallet";
 import type { Address } from "./types";
 
+export { vaultDepositsRead } from "./provider-deposits";
+
 const BALANCE_OF = parseAbi(["function balanceOf(address owner) view returns (uint256)"]);
 
 /** How long the wallet may take over each of the two calls, in milliseconds. */
