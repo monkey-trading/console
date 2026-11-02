@@ -16,7 +16,7 @@ attested enclave signed for the request, and follows the node's signed stream, w
 (and disabling order entry) when it stops. With a browser wallet, or a wallet app over WalletConnect, it
 deposits USDC to the vault, signs the engine's typed requests (orders, cancels, cancel all and close all, withdrawals, the eligibility
 declaration) for a node whose attestation it accepts. Orders, cancels and the two batches sign with an in-browser
-session key the wallet authorizes with one signature in the setup that follows connecting, kept in the browser's storage until it expires; deposits, withdrawals and claims always use
+session key the wallet authorizes with one signature, straight after a connect for a wallet that has declared and in the setup popup for one that has not, kept in the browser's storage until it expires; deposits, withdrawals and claims always use
 the wallet. It trades at the executable quote the node streams for the account, and claims approved
 withdrawals on the vault. The checks run
 in the engine's own verifier, built for the browser (`public/engine-verify/`, pinned by SHA-256 in
@@ -56,7 +56,7 @@ npm ci
 It prints how to add the Anvil network and import the dev wallet's key (a public test key) into a browser
 wallet, the mock USDC's address, and the console's address, `http://localhost:3000`; Ctrl-C stops everything
 it started. In the console, connect the wallet and follow the setup popup (fund with Anvil, sign the eligibility
-declaration, authorize the browser), then deposit from Funding and trade. A realised loss earns MONKEY once its ten-minute period closes:
+declaration, authorize the browser, deposit), then trade; Funding is where later deposits go. A realised loss earns MONKEY once its ten-minute period closes:
 claim it on the MONKEY page and stake it, and the epoch that closes next, every five minutes, pays stakers the
 house's USDC above its floor. The staking epoch, unstake cooldown and floor are development values that the
 script prints. Its header lists the variables that move its ports, fund

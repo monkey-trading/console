@@ -20,7 +20,7 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
-/** Both forms stay mounted, so an amount typed in one survives a look at the other. Depositing comes last: until setup is done, the Deposit tab says so instead of showing its form. */
+/** Both forms stay mounted, so an amount typed in one survives a look at the other. Until the account has a declaration, the Deposit tab says so instead of showing its form. */
 export function MoveMoney() {
   const state = useConsole();
   const { store } = useSession();
@@ -54,7 +54,7 @@ export function MoveMoney() {
         {setup === "needed" && (
           <section aria-labelledby={`${id}-setup`} className="p-4">
             <h4 id={`${id}-setup`} className="text-label tracking-caps text-fg-3 uppercase">Deposit USDC</h4>
-            <p className="mt-3 text-caption leading-relaxed text-fg-2">You deposit last. First {state.eligibility === null ? "sign the declaration and authorize this browser" : "authorize this browser"}.</p>
+            <p className="mt-3 text-caption leading-relaxed text-fg-2">You deposit last. First sign the declaration and authorize this browser.</p>
             <button type="button" onClick={() => openSetup(store)} className="mt-4 min-h-11 rounded border border-glow bg-glow/10 px-4 py-2.5 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0">Continue setup</button>
           </section>
         )}

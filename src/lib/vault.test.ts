@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt, parseFixed } from "./fixed";
-import { formatUsdc, isWholeUsdc, withdrawableNow, withdrawLimitCause } from "./vault";
+import { formatUsdc, isWholeUsdc, plainUsdc, withdrawableNow, withdrawLimitCause } from "./vault";
 
 describe("withdrawableNow", () => {
   it("is the smaller of unlocked cash and equity above margin, and never negative", () => {
@@ -45,5 +45,19 @@ describe("withdrawLimitCause", () => {
 
   it("names neither when the whole balance can go", () => {
     expect(withdrawLimitCause(usd(1_000), usd(1_000), 0n, 0n)).toBeNull();
+  });
+});
+
+describe("plainUsdc", () => {
+  it("writes a balance as the amount field takes it: no commas, no trailing zeros, six places at most", () => {
+    expect(plainUsdc(fixedFromInt(10_000))).toBe("10000");
+    expect(plainUsdc(fixedFromInt(1_234_567) + 500_000_000n)).toBe("1234567.5");
+    expect(plainUsdc(1_000n)).toBe("0.000001");
+    expect(plainUsdc(0n)).toBe("0");
+  });
+
+  it("is read back whole by the field's own parser", () => {
+    const balance = fixedFromInt(12_345) + 678_000n;
+    expect(parseFixed(plainUsdc(balance))).toBe(balance);
   });
 });

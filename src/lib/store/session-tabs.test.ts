@@ -140,6 +140,7 @@ describe("a new key another tab registered", () => {
   it("is adopted with no signature, which finishes the popup's key step here", async () => {
     const storage = memoryStorage();
     const waiting = await tab(storage);
+    waiting.client.declared = null; // an undeclared wallet has the popup, not a prompt
     await connectWallet(waiting.store, "injected");
     expect(waiting.store.getSnapshot().setup.open).toBe(true);
     const key = SessionKeySigner.generate();

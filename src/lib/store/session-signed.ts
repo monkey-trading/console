@@ -1,6 +1,6 @@
 /**
  * The session-signed path orders, cancels and the two batches take: silent, no wallet prompt. Trading
- * never registers a key (monkey-trading/console#168). With none, setup reopens; a registration the
+ * never registers a key (monkey-trading/console#168, #199). With none, setup reopens for an undeclared wallet and a declared one is asked for the key; a registration the
  * node refused sends the request through the wallet instead, so a position can always close; and a
  * key the node no longer admits ends the connection on its first refusal, so the page is never stuck
  * retrying with it and reconnecting brings setup back.
@@ -11,7 +11,7 @@ import type { Terms, TypedRequest } from "../engine/eip712";
 import type { RequestAuth } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
 import { describeReject } from "../messages";
-import { liveSessionKey } from "./session";
+import { authorizeBrowser, liveSessionKey } from "./session";
 import { openSetup } from "./setup";
 import { DISCONNECTED, errorText, MAY_HAVE_RUN, mayHaveRun, notBusy, REQUEST_TTL_MS, signed, type OnNonceTaken, type Outcome, usableWallet, wentOut } from "./signing";
 import type { ConsoleStore } from "./store";
@@ -49,7 +49,9 @@ export async function sessionSigned(
       store.toast("info", `${describeReject(refusal)} This request will ask your wallet instead.`);
       return signed(store, summary, build, send, onNonceTaken);
     }
-    openSetup(store);
+    // An undeclared wallet starts with the popup. A declared one is asked for the signature itself, and presses again.
+    if (store.getSnapshot().eligibility === null) openSetup(store);
+    else if (await authorizeBrowser(store)) store.toast("ok", "This browser can trade now. Send the request again.");
     return { ok: false };
   }
   store.patch({ busy: true });

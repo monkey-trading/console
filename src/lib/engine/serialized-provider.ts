@@ -7,12 +7,20 @@
  * every wallet it returns for that provider shares it, so a reconnect cannot overlap an earlier request.
  */
 
+import { withTimeout } from "./provider-errors";
 import type { Eip1193Provider } from "./provider-wallet";
 
 class SerializedProvider implements Eip1193Provider {
   private tail: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly provider: Eip1193Provider) {}
+
+  /** As `request`, but a wallet that has not answered within `ms` of the request reaching it is given up on, so the next waits no longer. */
+  requestWithin(args: Parameters<Eip1193Provider["request"]>[0], ms: number): Promise<unknown> {
+    const answer = this.tail.then(() => withTimeout(this.provider.request(args), ms));
+    this.tail = answer.then(() => undefined, () => undefined);
+    return answer;
+  }
 
   request(args: Parameters<Eip1193Provider["request"]>[0]): Promise<unknown> {
     const answer = this.tail.then(() => this.provider.request(args));
@@ -25,3 +33,7 @@ class SerializedProvider implements Eip1193Provider {
 export function serialized(provider: Eip1193Provider): Eip1193Provider {
   return provider instanceof SerializedProvider ? provider : new SerializedProvider(provider);
 }
+
+/** A read of a wallet's provider that stops waiting after `ms` and frees the queue behind it; a provider not queued gets a plain timeout. */
+export const withinMs = (provider: Eip1193Provider, args: Parameters<Eip1193Provider["request"]>[0], ms: number): Promise<unknown> =>
+  provider instanceof SerializedProvider ? provider.requestWithin(args, ms) : withTimeout(provider.request(args), ms);

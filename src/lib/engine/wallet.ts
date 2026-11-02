@@ -22,6 +22,9 @@ export interface SignRequest {
   typed: TypedRequest;
 }
 
+/** The wallet's USDC on the deployment's chain, or the chain it sits on instead. */
+export type UsdcBalance = { kind: "held"; amount: Fixed } | { kind: "wrong_chain"; chainId: number };
+
 export interface Wallet {
   address: Address;
   label: string;
@@ -69,6 +72,8 @@ export interface Wallet {
    * true when the wallet added it. Absent from a wallet with no token to suggest, such as the mock's.
    */
   suggestUsdc?(): Promise<boolean>;
+  /** The wallet's USDC on the custody chain, read without asking it to switch chain; rejects when it cannot be read. Absent from a wallet that reads no chain, such as a watched account's. */
+  usdcBalance?(): Promise<UsdcBalance>;
   /** Puts the wallet on the deployment's chain, asking it if need be; absent from a wallet with no chain to move. */
   ensureChain?(): Promise<void>;
   /** Ends the wallet's connection, such as a WalletConnect session, when the user disconnects; absent when there is nothing to end. */

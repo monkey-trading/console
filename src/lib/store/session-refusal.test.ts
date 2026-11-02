@@ -27,17 +27,17 @@ const CAP: Reject = { kind: "too_many_session_keys", max: 10 };
 const gate = (kit: { store: { getSnapshot(): Parameters<typeof setupGate>[0] } }) => setupGate(kit.store.getSnapshot());
 
 describe("a refusal for the live-key cap", () => {
-  it("holds the key step closed until it is refused again", async () => {
+  it("keeps asking the wallet to sign each order until a key can be registered", async () => {
     const kit = await refused(CAP);
     expect(gate(kit)).toBeNull();
   });
 
-  it("is cleared by a revocation another client made for the account, so the key step reopens", async () => {
+  it("is cleared by a revocation another client made for the account, so the next request asks for a key again", async () => {
     const kit = await refused(CAP);
     kit.client.deliver(message([{ type: "session_key_revoked", account: ACCOUNT, session_key: OTHER_KEY }]));
     await settle();
     expect(kit.store.getSnapshot().sessionRefusal).toBeNull();
-    expect(gate(kit)).toBe("needed");
+    expect(gate(kit)).toBeNull(); // a declared wallet is asked by the wallet, not by a popup
   });
 
   it("is cleared by a revocation made from this page, whether or not the stream has reported it", async () => {
@@ -45,7 +45,7 @@ describe("a refusal for the live-key cap", () => {
     const list = new SessionList(kit.store, () => false);
     await list.revoke(OTHER_KEY);
     expect(kit.store.getSnapshot().sessionRefusal).toBeNull();
-    expect(gate(kit)).toBe("needed");
+    expect(gate(kit)).toBeNull(); // a declared wallet is asked by the wallet, not by a popup
   });
 
   it("stays set for a revocation of another account's key", async () => {

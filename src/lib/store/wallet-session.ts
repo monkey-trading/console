@@ -13,14 +13,14 @@ import { clearChoice, clearChoiceIf, type WalletChoice } from "../engine/wallet-
 import { errorText } from "./signing";
 import { installKey, keyScope, liveSessionKey, revokeSession } from "./session";
 import { revokeClears } from "../setup-steps";
-import { NO_SETUP } from "./state";
+import { NO_SETUP, NO_USDC } from "./state";
 import type { ConsoleStore } from "./store";
 
 /** The state a wallet change clears: everything read or streamed for the account before. */
 export const NO_ACCOUNT = { account: null, eligibility: null, queue: [], history: [], quotes: {}, quoteError: null, quoted: [], authorizations: [], approvals: [], approvalsNext: null, payoutsRead: null, payoutsProblem: null, paid: [], unpaid: [], entitlement: null, emissionsVault: null };
 
-/** The rest a change of connection clears: its key's expiry and refusal, its setup, and a wallet request the old wallet may never answer, so the next connection's buttons are not stuck behind it. */
-export const NO_SESSION = { sessionExpiresAt: 0, sessionRefusal: null, setup: NO_SETUP, busy: false, prompt: null };
+/** The rest a change of connection clears: its key's expiry and refusal, its setup, its wallet's USDC, and a wallet request the old wallet may never answer, so the next connection's buttons are not stuck behind it. */
+export const NO_SESSION = { sessionExpiresAt: 0, sessionRefusal: null, setup: NO_SETUP, walletUsdc: NO_USDC, busy: false, prompt: null };
 
 /** Why a connection ended, as the toast says it. */
 export const KEY_EXPIRED = "This browser's trading authorization expired, so your wallet was disconnected. Connect again to renew it.";

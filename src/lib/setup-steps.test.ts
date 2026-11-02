@@ -2,39 +2,68 @@
 
 import { describe, expect, it } from "vitest";
 
-import { revokeClears, setupGate, setupSteps, stepNumber, type SetupView } from "./setup-steps";
+import { fixedFromInt } from "./fixed";
+import { currentStep, revokeClears, setupGate, setupSteps, stepNumber, type SetupFacts, type SetupStep, type SetupView } from "./setup-steps";
 
-const FRESH = { faucet: true, credited: false, declared: false, keyed: false, fundSettled: false };
+const FRESH: SetupFacts = { faucet: true, fund: null, walletHolds: null, credited: false, declared: null, keyUntil: null, deposit: null };
+const names = (facts: SetupFacts) => setupSteps(facts).map((s) => s.step);
+const doneOf = (facts: SetupFacts) => setupSteps(facts).filter((s) => s.done).map((s) => s.step);
+const at = (facts: SetupFacts, step: SetupStep) => setupSteps(facts).find((s) => s.step === step);
 
 describe("setupSteps", () => {
-  it("lists the steps in order: fund, declare, authorize", () => {
-    expect(setupSteps(FRESH)).toEqual(["fund", "declare", "authorize"]);
+  it("lists every step in order from start to finish: fund, declare, authorize, deposit", () => {
+    expect(names(FRESH)).toEqual(["fund", "declare", "authorize", "deposit"]);
+    expect(doneOf(FRESH)).toEqual([]);
+    expect(currentStep(setupSteps(FRESH))).toBe("fund");
   });
 
-  it("offers the faucet only in a dev build, to a never-credited account, and until it is settled", () => {
-    expect(setupSteps({ ...FRESH, faucet: false })).toEqual(["declare", "authorize"]);
-    expect(setupSteps({ ...FRESH, credited: true })).toEqual(["declare", "authorize"]);
-    expect(setupSteps({ ...FRESH, fundSettled: true })).toEqual(["declare", "authorize"]);
+  it("has no faucet step outside a dev build, and keeps the rest", () => {
+    expect(names({ ...FRESH, faucet: false })).toEqual(["declare", "authorize", "deposit"]);
   });
 
-  it("shows only the steps that remain", () => {
-    expect(setupSteps({ ...FRESH, faucet: false, declared: true })).toEqual(["authorize"]);
-    expect(setupSteps({ ...FRESH, faucet: false, keyed: true })).toEqual(["declare"]);
-    expect(setupSteps({ faucet: false, credited: true, declared: true, keyed: true, fundSettled: false })).toEqual([]);
+  it("keeps a finished step listed, done, and moves the current one on", () => {
+    const facts = { ...FRESH, fund: "skipped" as const, declared: "professional" as const };
+    expect(names(facts)).toEqual(["fund", "declare", "authorize", "deposit"]);
+    expect(doneOf(facts)).toEqual(["fund", "declare"]);
+    expect(currentStep(setupSteps(facts))).toBe("authorize");
+  });
+
+  it("summarises what the connection did: minted or skipped, the class, the key's expiry, the deposit", () => {
+    const done: SetupFacts = { ...FRESH, fund: "minted", declared: "eligible_client", keyUntil: Date.UTC(2026, 10, 3, 16, 30), deposit: { amount: fixedFromInt(1000), credited: true } };
+    expect(setupSteps(done).map((s) => s.summary)).toEqual(["10,000 USDC minted", "Eligible client", "This browser can trade until 3 Nov 16:30:00 UTC", "1,000 USDC deposited"]);
+    expect(at({ ...done, fund: "skipped" }, "fund")?.summary).toBe("Skipped");
+    expect(at({ ...done, declared: "professional" }, "declare")?.summary).toBe("Professional client");
+    expect(currentStep(setupSteps(done))).toBeNull();
+  });
+
+  it("starts a wallet that already holds USDC with the fund step done, saying what it holds", () => {
+    expect(at({ ...FRESH, walletHolds: fixedFromInt(2500) }, "fund")).toEqual({ step: "fund", done: true, summary: "Wallet holds 2,500 USDC" });
+    expect(at({ ...FRESH, walletHolds: 0n }, "fund")?.done).toBe(false);
+  });
+
+  it("keeps a step done before this connection generic, since it has no detail to show", () => {
+    expect(at({ ...FRESH, credited: true }, "fund")).toEqual({ step: "fund", done: true, summary: "Account already funded" });
+    expect(at({ ...FRESH, faucet: false, credited: true }, "deposit")).toEqual({ step: "deposit", done: true, summary: "Account funded" });
+  });
+
+  it("leaves the deposit open while the one the wallet sent is not yet credited, and done when it is", () => {
+    const sent = { amount: fixedFromInt(500), credited: false };
+    expect(at({ ...FRESH, credited: true, deposit: sent }, "deposit")?.done).toBe(false);
+    expect(at({ ...FRESH, deposit: { ...sent, credited: true } }, "deposit")).toEqual({ step: "deposit", done: true, summary: "500 USDC deposited" });
   });
 });
 
 describe("stepNumber", () => {
-  it("numbers a step among the steps the build has, whichever remain", () => {
-    expect(["fund", "declare", "authorize"].map((s) => stepNumber(s as "fund", true))).toEqual([1, 2, 3]);
-    expect(["declare", "authorize"].map((s) => stepNumber(s as "declare", false))).toEqual([1, 2]);
+  it("numbers a step among the steps the build has, whichever are done", () => {
+    expect((["fund", "declare", "authorize", "deposit"] as const).map((s) => stepNumber(s, true))).toEqual([1, 2, 3, 4]);
+    expect((["declare", "authorize", "deposit"] as const).map((s) => stepNumber(s, false))).toEqual([1, 2, 3]);
   });
 });
 
 describe("setupGate", () => {
-  const READY: SetupView = { wallet: {}, accountRead: true, eligibility: "professional", now: 100, sessionExpiresAt: 200, sessionRefusal: null, setup: { decided: true } };
+  const READY: SetupView = { wallet: {}, accountRead: true, eligibility: "professional", setup: { decided: true } };
 
-  it("waits on nothing with a declaration and a live key", () => {
+  it("waits on nothing with a declaration", () => {
     expect(setupGate(READY)).toBeNull();
   });
 
@@ -44,24 +73,16 @@ describe("setupGate", () => {
   });
 
   it("says reading, and never needed, before the account has been read: a declared account never shows a step it has done", () => {
-    expect(setupGate({ ...READY, accountRead: false, eligibility: null, sessionExpiresAt: 0 })).toBe("reading");
+    expect(setupGate({ ...READY, accountRead: false, eligibility: null })).toBe("reading");
   });
 
-  it("needs setup with no declaration, with no key, and with a key the clock has passed, at the exact instant", () => {
+  it("needs setup with no declaration alone: a declared wallet never waits on its key, whatever it holds", () => {
     expect(setupGate({ ...READY, eligibility: null })).toBe("needed");
-    expect(setupGate({ ...READY, sessionExpiresAt: 0 })).toBe("needed");
-    expect(setupGate({ ...READY, sessionExpiresAt: 100 })).toBe("needed");
-    expect(setupGate({ ...READY, sessionExpiresAt: 101 })).toBeNull();
-  });
-
-  it("stops waiting on a key once the node has refused one, since the wallet then signs; a missing declaration still waits", () => {
-    const refused = { ...READY, sessionExpiresAt: 0, sessionRefusal: { kind: "too_many_session_keys", max: 10 } as const };
-    expect(setupGate(refused)).toBeNull();
-    expect(setupGate({ ...refused, eligibility: null })).toBe("needed");
+    expect(setupGate({ ...READY, eligibility: "eligible_client" })).toBeNull();
   });
 
   it("says nothing of a page's starting demo account, read but not yet connected", () => {
-    expect(setupGate({ ...READY, sessionExpiresAt: 0, setup: { decided: false } })).toBeNull();
+    expect(setupGate({ ...READY, eligibility: null, setup: { decided: false } })).toBeNull();
   });
 });
 

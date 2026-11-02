@@ -18,6 +18,11 @@ export function formatUsdc(amount: Fixed): string {
   return `${text.replace(/\.?0+$/, "")} USDC`;
 }
 
+/** `amount` as a field takes it back, for a Max button: no grouping commas, no trailing zeros (`10000.5`). */
+export function plainUsdc(amount: Fixed): string {
+  return formatFixedPlaces(amount, 6).replaceAll(",", "").replace(/\.?0+$/, "");
+}
+
 /** Whether `amount` is a whole number of USDC base units, the finest a transfer can carry. */
 export function isWholeUsdc(amount: Fixed): boolean {
   return amount % USDC_UNIT === 0n;

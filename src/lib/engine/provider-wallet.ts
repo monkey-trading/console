@@ -13,13 +13,14 @@ import type { EntitlementProof } from "./emissions";
 import type { TypedRequest } from "./eip712";
 import { claimEmissionsTx, emissionsClaimedRead, suggestMonkeyToken, suggestTokenAsset } from "./provider-monkey";
 import { unknownChain, walletError } from "./provider-errors";
+import { usdcBalanceRead } from "./provider-balance";
 import { ProviderDeployment } from "./provider-registry";
 import { ProviderStaking } from "./provider-staking";
 import { waitMined } from "./receipts";
 import { serialized } from "./serialized-provider";
 import type { StakingWallet } from "./staking";
 import type { Address, SignedWithdrawal } from "./types";
-import type { Progress, SignRequest, Wallet } from "./wallet";
+import type { Progress, SignRequest, UsdcBalance, Wallet } from "./wallet";
 
 /** The part of an EIP-1193 provider the wallet uses. Most methods take an array; `wallet_watchAsset` takes its `{ type, options }` object directly. */
 export interface Eip1193Provider {
@@ -157,8 +158,11 @@ export class ProviderWallet implements Wallet {
   }
 
   /** Offers to add the vault's MONKEY token to the wallet; best-effort, as `suggestUsdc`. */
-  async suggestMonkey(): Promise<boolean> {
-    return suggestMonkeyToken(() => this.ensureChain(), this.chain, this.provider);
+  async suggestMonkey(): Promise<boolean> { return suggestMonkeyToken(() => this.ensureChain(), this.chain, this.provider); }
+
+  /** The wallet's USDC on the custody chain, read without a chain switch; see `usdcBalanceRead`. */
+  usdcBalance(): Promise<UsdcBalance> {
+    return usdcBalanceRead(this.address, this.chain, this.provider);
   }
 
   /**
@@ -241,9 +245,7 @@ export class ProviderWallet implements Wallet {
   }
 
   /** Ends the wallet's connection where it has one to end. */
-  async disconnect(): Promise<void> {
-    await this.deps.disconnect?.();
-  }
+  async disconnect(): Promise<void> { await this.deps.disconnect?.(); }
 
   /**
    * Whether the vault has paid this account's payout `nonce`. A read in the background, so a wallet

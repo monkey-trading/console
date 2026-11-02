@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { fixedFromInt } from "../fixed";
 import { CHAIN } from "./provider-wallet-fixtures";
 import { InjectedConnector } from "./injected";
 import { ProviderWallet } from "./provider-wallet";
-import { serialized } from "./serialized-provider";
+import { serialized, withinMs } from "./serialized-provider";
 import { ACCOUNT, StubProvider } from "./wallet-kit";
 import type { Eip1193Provider } from "./provider-wallet";
 
@@ -163,5 +163,41 @@ describe("a reconnect over the same browser provider", () => {
   it("wraps a provider once: serializing a serialized provider returns it", () => {
     const once = serialized(new StubProvider());
     expect(serialized(once)).toBe(once);
+  });
+});
+
+describe("requestWithin", () => {
+  it("frees the queue for the next request once a read has gone unanswered for the bound, and refuses the read", async () => {
+    vi.useFakeTimers();
+    try {
+      const asked: string[] = [];
+      const wallet = serialized({ request: ({ method }) => { asked.push(method); return method === "eth_chainId" ? new Promise(() => {}) : Promise.resolve(method); } });
+      const read = withinMs(wallet, { method: "eth_chainId" }, 1000);
+      const sign = wallet.request({ method: "eth_signTypedData_v4" });
+      const refused = expect(read).rejects.toThrow("did not answer in time");
+      await vi.advanceTimersByTimeAsync(999);
+      expect(asked).toEqual(["eth_chainId"]);
+      await vi.advanceTimersByTimeAsync(1);
+      await refused;
+      expect(await sign).toBe("eth_signTypedData_v4");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("starts its bound when the read reaches the wallet, not while it waits behind a prompt", async () => {
+    vi.useFakeTimers();
+    try {
+      let answerPrompt!: (value: string) => void;
+      const wallet = serialized({ request: ({ method }) => (method === "prompt" ? new Promise<string>((resolve) => { answerPrompt = resolve; }) : Promise.resolve(method)) });
+      const prompt = wallet.request({ method: "prompt" });
+      const read = withinMs(wallet, { method: "eth_chainId" }, 1000);
+      await vi.advanceTimersByTimeAsync(60_000); // a user takes a minute over a prompt
+      answerPrompt("signed");
+      await prompt;
+      expect(await read).toBe("eth_chainId");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

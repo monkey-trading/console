@@ -1,24 +1,30 @@
 /**
- * The setup popup's state (monkey-trading/console#168): it opens once per connection, after the
- * account's first read, on any page, if the declaration or key is missing; a dismissal lasts for the
- * connection, and whatever a missing step blocks reopens it. The faucet step alone never opens it. The
- * popup's steps run the actions they name, and only a step the user finished can send them on to
- * Funding, so a reload never redirects.
+ * The setup popup's state (monkey-trading/console#168, #199): it opens once per connection, after the
+ * account's first read, on any page, for a wallet with no recorded declaration; a dismissal lasts for
+ * the connection. It lists every step from start to finish and stays open until the user closes it,
+ * the last step being the deposit itself. A declared wallet never sees it: its key is asked for by the
+ * wallet's own prompt (`connectWallet`, `sessionSigned`).
  */
 
-import { keyLive, setupGate, setupSteps, type SetupFacts } from "../setup-steps";
+import type { Fixed } from "../fixed";
+import { keyLive, setupGate, type SetupFacts } from "../setup-steps";
 import type { ConsoleState } from "./state";
 import type { ConsoleStore } from "./store";
 import { forgetSessionKey } from "./wallet-session";
 
 /** The facts the steps depend on, from the console's state; `faucet` is whether this build has the dev faucet. */
-export const setupFacts = (state: ConsoleState, faucet: boolean): SetupFacts => ({
-  faucet,
-  credited: state.account !== null,
-  declared: state.eligibility !== null,
-  keyed: keyLive(state),
-  fundSettled: state.setup.fundSettled,
-});
+export const setupFacts = (state: ConsoleState, faucet: boolean): SetupFacts => {
+  const sent = state.setup.deposit;
+  return {
+    faucet,
+    fund: state.setup.fund,
+    walletHolds: state.walletUsdc.read.status === "held" ? state.walletUsdc.read.amount : null,
+    credited: state.account !== null,
+    declared: state.eligibility,
+    keyUntil: keyLive(state) ? state.sessionExpiresAt : null,
+    deposit: sent === null ? null : { amount: sent.amount, credited: (state.account?.balance ?? 0n) > sent.balanceBefore },
+  };
+};
 
 /** Whether the popup shows now: never for a watched account, nor for a visitor the node refuses or has not yet answered. */
 export const setupVisible = (state: ConsoleState): boolean =>
@@ -55,19 +61,13 @@ export function dismissSetup(store: ConsoleStore): void {
 }
 
 /** The faucet step was used or skipped, and is not offered again on this connection. */
-export function settleFund(store: ConsoleStore): void {
+export function settleFund(store: ConsoleStore, how: "minted" | "skipped"): void {
   const { setup } = store.getSnapshot();
-  store.patch({ setup: { ...setup, fundSettled: true } });
+  store.patch({ setup: { ...setup, fund: how } });
 }
 
-/**
- * Called when a step the user pressed has finished: closes the popup once no step remains, and says
- * where they go. A never-credited account goes to Funding to deposit; a credited one stays where it
- * is. Null while steps remain, or when the popup was dismissed while the wallet asked.
- */
-export function setupStepDone(store: ConsoleStore, faucet: boolean): "funding" | "stay" | null {
-  const state = store.getSnapshot();
-  if (!state.setup.open || setupSteps(setupFacts(state, faucet)).length > 0) return null;
-  dismissSetup(store);
-  return state.account === null ? "funding" : "stay";
+/** The wallet sent a deposit of `amount`; the deposit step counts it credited once the account's balance rises past what it was now. */
+export function noteDeposit(store: ConsoleStore, amount: Fixed): void {
+  const { setup, account } = store.getSnapshot();
+  store.patch({ setup: { ...setup, deposit: { amount, balanceBefore: account?.balance ?? 0n } } });
 }

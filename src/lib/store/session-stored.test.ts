@@ -65,21 +65,22 @@ describe("a reload or a new tab", () => {
     expect(signatures(provider)).toEqual([]);
   });
 
-  it("never reuses another account's key: that wallet sees setup instead", async () => {
+  it("never reuses another account's key: that wallet has none, and a reload asks it nothing", async () => {
     const storage = memoryStorage();
     saveSessionKey(storage, { ...SCOPE, account: "0x70997970c51812dc3a010c7d01b50e0d17dc79c8" }, SessionKeySigner.generate(), EXPIRES);
-    const { store } = await loadedTab(storage);
+    const { client, store } = await loadedTab(storage);
     expect(liveSessionKey(store)).toBeNull();
-    expect(store.getSnapshot().setup.open).toBe(true);
+    expect(store.getSnapshot().setup.open).toBe(false);
+    expect(client.posted).toEqual([]);
   });
 
-  it("discards a malformed entry and shows setup", async () => {
+  it("discards a malformed entry, asking nothing at the reload", async () => {
     const storage = memoryStorage();
     storage.setItem(NAME, "{\"privateKey\":\"nope\"}");
     const { store } = await loadedTab(storage);
     expect(liveSessionKey(store)).toBeNull();
     expect(storage.held.has(NAME)).toBe(false);
-    expect(store.getSnapshot().setup.open).toBe(true);
+    expect(store.getSnapshot().setup.open).toBe(false);
   });
 
   it("adopts nothing for a read-only watch account, and leaves the stored key to its wallet's tabs", async () => {
@@ -103,7 +104,7 @@ describe("a reload or a new tab", () => {
     const reloaded = await tab(denied);
     await connectWallet(reloaded.store, "injected", true);
     expect(liveSessionKey(reloaded.store)).toBeNull();
-    expect(reloaded.store.getSnapshot().setup.open).toBe(true);
+    expect(reloaded.store.getSnapshot().setup.open).toBe(false);
   });
 });
 

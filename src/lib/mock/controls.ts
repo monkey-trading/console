@@ -12,8 +12,13 @@ import { delegate, mockChainReads } from "./operators";
 import { MAX_STRESS } from "../pricing";
 import type { Region } from "./state";
 
+/** What each mock wallet starts with on the simulated chain. */
+const MOCK_WALLET_USDC: Fixed = fixedFromInt(50_000);
+
 /** Lets the mock be pushed into each state the screens must handle. */
 export class MockControls {
+  private readonly held = new Map<string, Fixed>();
+
   constructor(private readonly client: MockEngineClient) {}
 
   setRegion(region: Region): void {
@@ -135,9 +140,22 @@ export class MockControls {
     claimDistribution(this.client.state, address, BigInt(proof.entitled));
   }
 
+  /** The USDC a mock wallet holds: a fixed starting sum, less what it has deposited. */
+  walletUsdc(address: string): Fixed {
+    return this.held.get(address.toLowerCase()) ?? MOCK_WALLET_USDC;
+  }
+
   /** Stands in for a transaction to the vault, as the real wallet sends; see `chainDeposit`. */
   deposit(address: string, amount: Fixed): void {
     chainDeposit(this.client.state, address, amount);
+  }
+
+  /** A deposit the mock wallet itself sends: the wallet pays it out of what it holds, as the real one does. */
+  walletDeposit(address: string, amount: Fixed): void {
+    const held = this.walletUsdc(address);
+    if (amount > held) throw new Error("Your wallet holds less USDC than that.");
+    this.deposit(address, amount);
+    this.held.set(address.toLowerCase(), held - amount);
   }
 }
 

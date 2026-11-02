@@ -12,6 +12,7 @@ import { formatMark } from "@/lib/price-format";
 import { ticketPrices } from "@/lib/quotes";
 import { setupGate } from "@/lib/setup-steps";
 import { placeOrder } from "@/lib/store/actions";
+import { SessionRefusalNote } from "./SessionRefusalNote";
 import { openSetup } from "@/lib/store/setup";
 import { belowMinimum, contractUnit, MARGIN_SHORT, NO_SIZE, parseSize, previewTicket, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
 
@@ -65,9 +66,9 @@ export function DealTicket() {
   const sizeMissing = parsedSize.kind === "empty" || (parsedSize.kind === "qty" && qty === 0n);
   const blockSentence = (why: string | null) => (why === null ? null : `Trading is paused: ${why}.`);
   const readOnlyWhy = signBlock(state.attestation, state.stream, state.wallet?.readOnly === true);
-  // Trading never registers a key: until setup is done, this button reopens it.
+  // Trading never registers a key: until the declaration is signed, this button reopens setup. A declared wallet is asked for its key when an order needs it.
   const setup = setupGate(state);
-  const setupNote = setup === null ? null : setup === "reading" ? "Reading your account…" : state.eligibility === null ? "Sign the declaration and authorize this browser to trade." : "Authorize this browser to trade.";
+  const setupNote = setup === null ? null : setup === "reading" ? "Reading your account…" : "Sign the declaration and authorize this browser to trade.";
   // Why the console cannot sign comes first: a node it does not trust may never answer the read that setup waits on.
   const gate = !state.wallet ? "Connect a wallet to trade." : blockSentence(readOnlyWhy) ?? setupNote;
   const canPlace = gate === null && problems.length === 0 && sizeProblems.length === 0 && !sizeMissing && !state.busy;
@@ -143,6 +144,7 @@ export function DealTicket() {
         {live && <div className="mt-3"><SigningFor /></div>}
         <div aria-live="polite" className="mt-3 space-y-1 text-label leading-relaxed text-ember">
           {gate && <p className="text-fg-2">{gate}</p>}
+          {!gate && <SessionRefusalNote />}
           {!gate && problems.map((p) => <p key={p}>{p}{p === "Fund your account to trade." && <> <FundingLink /></>}</p>)}
         </div>
       </form>

@@ -15,7 +15,7 @@ import { SessionKeySigner, sessionKeyExpiry } from "../engine/session-key";
 import type { Wallet } from "../engine/wallet";
 import { formatStamp } from "../time";
 import { describeReject } from "../messages";
-import { DISCONNECTED, domainOf, errorText, prompting, REQUEST_TTL_MS } from "./signing";
+import { DISCONNECTED, domainOf, errorText, notBusy, prompting, REQUEST_TTL_MS } from "./signing";
 import type { ConsoleStore } from "./store";
 
 /** What the login asks the wallet to sign, shown in the prompt and passed to the wallet. */
@@ -106,6 +106,18 @@ export function ensureLogin(store: ConsoleStore): Promise<boolean> {
     });
   }
   return store.sessionLogin;
+}
+
+/** The one wallet signature that authorizes this browser, busy while the wallet asks. True once this browser holds a live key. */
+export async function authorizeBrowser(store: ConsoleStore): Promise<boolean> {
+  const wallet = store.liveWallet;
+  if (wallet === null) return false;
+  store.patch({ busy: true });
+  try {
+    return await ensureLogin(store);
+  } finally {
+    notBusy(store, wallet);
+  }
 }
 
 /**
