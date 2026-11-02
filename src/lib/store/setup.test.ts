@@ -158,6 +158,20 @@ describe("what closes it", () => {
     expect(store.getSnapshot().notices.setup?.text).toBe("The signature was not accepted.");
   });
 
+  it("stays on the step and tells the trader to try again later when the node limits new wallets", async () => {
+    const { client, store } = await fresh();
+    await connectWallet(store, "injected");
+    client.answer = () => { throw new EngineError(429, "too many new wallets are being set up; try again later"); };
+    expect(await attestEligibility(store, "professional")).toBe(false);
+    expect(store.getSnapshot().blocked).toBeNull();
+    expect(setupVisible(store.getSnapshot())).toBe(true);
+    expect(store.getSnapshot().notices.setup).toMatchObject({ tone: "error", text: "The node is limiting requests right now. Try again later." });
+    // The same answer to the browser's authorization is told the same way.
+    client.answer = () => { throw new EngineError(429, "rate limited"); };
+    expect(await authorizeBrowser(store, "setup")).toBe(false);
+    expect(store.getSnapshot().notices.setup?.text).toBe("The node is limiting requests right now. Try again later.");
+  });
+
   it("stays on the step when a signature is declined, and says why", async () => {
     const kit = await tab(memoryStorage(), { fail: { eth_signTypedData_v4: { code: 4001, message: "User rejected" } } });
     kit.client.declared = null;
