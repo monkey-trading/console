@@ -7,7 +7,7 @@ import { accruedOf, carryAccrued } from "../engine/claim-standing";
 import type { EntitlementProof } from "../engine/emissions";
 import type { Wallet } from "../engine/wallet";
 import { formatMonkey } from "../format";
-import { abandoned, errorText, prompting } from "./signing";
+import { abandoned, errorText, prompting, usableWallet } from "./signing";
 import type { ConsoleStore } from "./store";
 
 /** Where the account's MONKEY stands: what it has earned, what the node's proof against the vault's checkpoint owes, and what the vault has minted. */
@@ -80,9 +80,9 @@ export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> 
 }
 
 /**
- * Claims the connected account's MONKEY emissions on the vault. A claim signs nothing for the
- * node, so it needs only the wallet, like a payout claim; each proof was verified when it was
- * read.
+ * Claims the connected account's MONKEY emissions on the vault. The wallet is asked to send what the
+ * node's proof says, so the claim waits on a verdict that may sign: the vault checks the proof, and a
+ * node it has not judged could cost the user a reverted transaction's gas.
  */
 export async function claimEmissions(store: ConsoleStore): Promise<void> {
   const wallet = store.liveWallet;
@@ -107,6 +107,8 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
       if (proof.seq === record.latestSeq) {
         const due = BigInt(proof.entitled) - record.claimed;
         if (due <= 0n) return store.toast("info", "All accrued MONKEY is claimed.");
+        // Checked last: the verdict may have ended while the reads above waited on the wallet.
+        if (usableWallet(store, "claim MONKEY") === null) return;
         const amount = formatMonkey(due);
         await prompting(store, wallet, `Confirm in your wallet: claim ${amount} from the vault.`, (progress) => claim(proof, progress));
         // The mint belongs to the account that claimed it, which may no longer be the one connected.

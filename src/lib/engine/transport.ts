@@ -85,7 +85,7 @@ export class SignedTransport {
    * `POST path` with `body` as JSON, resolving with the signed answer of a 2xx. Never sent again
    * after an answer that does not verify: the request may have been sequenced, and the account's
    * nonce makes a resend fail anyway.
-   * Error cases: as `get`.
+   * Error cases: as `get`, and the last gate refuses it before it leaves: `NotSentError`.
    */
   async post(path: string, body: unknown): Promise<SignedAnswer> {
     return this.attempt("POST", path, JSON.stringify(body), await this.deps.trust.sendingSigner());

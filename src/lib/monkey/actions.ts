@@ -8,7 +8,7 @@ import type { StakingWallet } from "../engine/staking";
 import type { Progress, Wallet } from "../engine/wallet";
 import { monkeyExact } from "./figures";
 import { formatUsdc } from "../vault";
-import { abandoned, errorText, notBusy, prompting } from "../store/signing";
+import { abandoned, errorText, notBusy, prompting, usableWallet } from "../store/signing";
 import { claimEmissions, emissionsPosition } from "../store/emissions";
 import { usdcFixed } from "./figures";
 import { NO_CANDIDATE } from "../engine/registry";
@@ -118,7 +118,8 @@ export async function delegateStake(panel: MonkeyPanel, operators: OperatorReads
 /**
  * Claims the account's USDC distribution. The vault checks a proof against its latest posted
  * root, so the claim needs the proof for that checkpoint, not the page's last-read pair: both are
- * read again, bounded, and the claim is sent with the pair whose seqs meet.
+ * read again, bounded, and the claim is sent with the pair whose seqs meet. It is built from the
+ * node's proof, so unlike a stake or a delegation it waits on a verdict that may sign.
  */
 export function claimDistribution(panel: MonkeyPanel): Promise<boolean> {
   const { store } = panel;
@@ -142,6 +143,8 @@ export function claimDistribution(panel: MonkeyPanel): Promise<boolean> {
           store.toast("info", "All distributed USDC is claimed.");
           return null;
         }
+        // Checked last: the verdict may have ended while the reads above waited on the wallet.
+        if (usableWallet(store, "claim the USDC distribution") === null) return null;
         await staking.claimDistribution(proof, progress);
         return `The vault paid ${formatUsdc(usdcFixed(due))} to your wallet.`;
       }

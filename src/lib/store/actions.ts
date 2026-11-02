@@ -41,7 +41,17 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
       await Promise.race([cleanup, new Promise((resolve) => setTimeout(resolve, REQUEST_TTL_MS))]);
       if (store.walletCleanup === cleanup) store.walletCleanup = null;
     }
+    // The session went to another node's store while the cleanup ran: no wallet is asked for a store no screen reads.
+    if (store.movedAway) {
+      release(store, connected ?? null);
+      return false;
+    }
     const wallet = connected ?? (await store.deps.wallets.connect(optionId));
+    // Or while the wallet answered: what arrived ends, and nothing is kept.
+    if (store.movedAway) {
+      release(store, wallet);
+      return false;
+    }
     if (quiet && store.liveWallet !== null && store.liveWallet !== wallet) {
       release(store, wallet); // a quiet connect never replaces a wallet that connected while it waited; the stale one ends
       return false;

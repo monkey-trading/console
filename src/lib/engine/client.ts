@@ -66,6 +66,7 @@ export type SignatureChecks = "checked" | "none";
  * Error cases (every method):
  * - the node refuses the request: rejects with an `EngineError` carrying the status and message
  * - a live client receives an answer that is unsigned or does not verify: rejects with an `UntrustedError`, and the answer is not shown
+ * - a live client's last gate stops a signed action before it leaves the page: rejects with a `NotSentError`
  */
 export interface EngineClient {
   readonly signatures: SignatureChecks;

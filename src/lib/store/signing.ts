@@ -5,7 +5,7 @@ import { EngineError, type ActionResult } from "../engine/client";
 import { requestDomain, type Terms, type TypedRequest } from "../engine/eip712";
 import { declinedByUser } from "../engine/provider-errors";
 import type { Reject, RequestAuth } from "../engine/types";
-import { UntrustedError } from "../engine/trust";
+import { NotSentError, UntrustedError } from "../engine/trust";
 import type { Progress, Wallet } from "../engine/wallet";
 import { describeReject } from "../messages";
 import type { BlockReason } from "./state";
@@ -84,7 +84,7 @@ export async function signed(
   const wallet = usableWallet(store, "sign");
   if (!wallet) return { ok: false };
   store.patch({ busy: true });
-  /** Whether the request left the page: from then on it may have run, whatever comes back. */
+  /** Whether the request was handed to `send`: from then on it may have run, unless the last gate stopped it (`wentOut`). */
   let sent = false;
   try {
     const { next_nonce, time_ms } = await store.deps.client.nonce(wallet.address);
@@ -107,12 +107,13 @@ export async function signed(
       return { ok: true, result: await attempt(error.reject.expected) };
     }
   } catch (error) {
+    const left = wentOut(sent, error);
     // A wallet that declines or fails after its connection ended has nothing to tell the connection that came next.
-    if (error === DISCONNECTED || (!sent && store.liveWallet !== wallet)) return { ok: false };
+    if (error === DISCONNECTED || (!left && store.liveWallet !== wallet)) return { ok: false };
     if (store.noteAccess(error)) return { ok: false };
     // A sent request the node refused, left unanswered, or answered unverifiably may still have run: read the account first.
-    if (sent) await store.refresh(true);
-    store.toast("error", `${errorText(error)}${sent && mayHaveRun(error) ? MAY_HAVE_RUN : ""}`);
+    if (left) await store.refresh(true);
+    store.toast("error", `${errorText(error)}${left && mayHaveRun(error) ? MAY_HAVE_RUN : ""}`);
     return { ok: false };
   } finally {
     notBusy(store, wallet);
@@ -121,6 +122,9 @@ export async function signed(
 
 /** What the console adds for a request that went out with no answer it can judge. */
 export const MAY_HAVE_RUN = " It may have run: check your positions, orders, withdrawals and history before trying again.";
+
+/** Whether a failed request left the page: it was handed to `send`, and the last gate inside that did not stop it. */
+export const wentOut = (handedToSend: boolean, error: unknown): boolean => handedToSend && !(error instanceof NotSentError);
 
 /** Whether a sent request may have run: only a refusal the node signed, or a stop before it left, says it did not; no answer, or one that does not verify, says nothing. */
 export function mayHaveRun(error: unknown): boolean {

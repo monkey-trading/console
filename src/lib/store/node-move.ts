@@ -1,10 +1,11 @@
 /**
- * Moving the session to another node: a fresh store over a fresh client, around the same wallet and
- * session key. Nothing read from the old node exists in the new store, and work the old store has in
- * flight lands in a store no screen reads and finds its wallet gone, so it sends nothing. A session
- * key survives the move because it is registered in the engine's state, which an elected successor
- * takes with the log; a node that no longer holds it refuses it, and the session-signed path then
- * disconnects the wallet, so reconnecting brings setup back at the key's step.
+ * Moving the session to another node: a fresh store over a fresh client, around the same wallet,
+ * session key and setup state, since the connection has not ended. Nothing read from the old node
+ * exists in the new store, and work the old store has in flight lands in a store no screen reads and
+ * finds its wallet gone, so it sends nothing. A session key survives the move because it is registered
+ * in the engine's state, which an elected successor takes with the log; a node that no longer holds it
+ * refuses it, and the session-signed path then disconnects the wallet, so reconnecting brings setup
+ * back at the key's step.
  */
 
 import type { OperatorFollower } from "../engine/operator-follow";
@@ -15,11 +16,11 @@ import type { ConsoleStore } from "./store";
 /** What the console tells the user once the screens have remounted on the new store, so the log that announces it exists first. */
 export const moveNotice = (host: string): string => `The console connected to ${host}, the node the chain names, and is verifying its attestation.`;
 
-/** Hands `old`'s wallet and key to `next`; the stored entries need no change, since they name the account, chain and vault and no node. */
+/** Hands `old`'s wallet, key and setup state to `next`; the stored entries need no change, since they name the account, chain and vault and no node. */
 export async function moveToNode(old: ConsoleStore, next: ConsoleStore): Promise<void> {
   const wallet = old.liveWallet;
   const key = old.sessionKey;
-  const { sessionExpiresAt } = old.getSnapshot();
+  const { sessionExpiresAt, setup } = old.getSnapshot();
   old.movedAway = true;
   old.liveWallet = null;
   old.sessionKey = null;
@@ -27,6 +28,8 @@ export async function moveToNode(old: ConsoleStore, next: ConsoleStore): Promise
   if (wallet === null) return;
   // Set first, so the connect below keeps the key rather than clearing another wallet's.
   next.liveWallet = wallet;
+  // Before the connect's first account read, which would otherwise decide the popup afresh over a dismissal.
+  next.patch({ setup });
   if (key !== null && sessionExpiresAt > 0) installKey(next, key, sessionExpiresAt);
   await connectWallet(next, wallet.topic !== undefined ? "walletconnect" : "injected", true, wallet);
 }
