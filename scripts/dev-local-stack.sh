@@ -551,7 +551,7 @@ Deposits           Approve the vault and deposit from the console. The node sees
 Withdrawals        The engine approves a withdrawal; the next checkpoint (every 1000 commands, within
                    seconds) is posted to the vault, and the console then claims it on the vault.
 MONKEY             Emissions run from $emissions_start: ten-minute budgets accrue to each period's
-                   net realised losses and show in the console once a losing trade closes; claim
+                   gross realised losses and show in the console once a losing trade closes; claim
                    them on the MONKEY page, then stake. An epoch that closes with a stake while the
                    house's NAV is above the floor pays the excess to the stakers in USDC.
 

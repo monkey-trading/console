@@ -34,6 +34,15 @@ describe("formatMonkey", () => {
     // The third place is truncated, never rounded, as the engine's fixed point truncates.
     expect(formatMonkey(1_009n * MONKEY_UNIT / 1_000n)).toBe("1 MONKEY");
   });
+
+  it("never shows an amount above zero as zero: under the last place it says so", () => {
+    expect(formatMonkey(1n)).toBe("<0.01 MONKEY");
+    expect(formatMonkey(MONKEY_UNIT / 100n - 1n)).toBe("<0.01 MONKEY");
+    expect(formatMonkey(MONKEY_UNIT / 100n)).toBe("0.01 MONKEY");
+    expect(formatMonkey(0n)).toBe("0 MONKEY");
+    // A whole amount's dust is the truncation above, not a small amount.
+    expect(formatMonkey(MONKEY_UNIT + 1n)).toBe("1 MONKEY");
+  });
 });
 
 describe("formatRate", () => {
