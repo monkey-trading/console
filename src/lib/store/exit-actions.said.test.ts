@@ -38,10 +38,21 @@ describe("what the panel says of an exit action", () => {
   });
 
   it("tells a screen reader of an import, and of a refusal", async () => {
-    await kit.connect();
+    await kit.connect(0n);
     await importExitFile(kit.store, "{nope");
     expect(notice()).toMatchObject({ tone: "error", text: expect.stringMatching(/^The file was not imported/) });
     await importExitFile(kit.store, JSON.stringify({ seq: 100, root: fullProof(100).root, account: fullProof(100), house_pending_deposits: [], calls: [] }));
+    expect(exit().announced).toBe("Imported the proof for checkpoint 100.");
+  });
+
+  it("says so when a file is for the checkpoint already saved, which moves nothing on the panel, and stays quiet when it moves the saved line", async () => {
+    await kit.connect(0n);
+    const file = JSON.stringify({ seq: 100, root: fullProof(100).root, account: fullProof(100), house_pending_deposits: [], calls: [] });
+    await importExitFile(kit.store, file);
+    expect(notice()).toBeUndefined();
+    expect(exit().announced).toBe("Imported the proof for checkpoint 100.");
+    await importExitFile(kit.store, file);
+    expect(notice()).toMatchObject({ tone: "info", text: "This file is for the checkpoint already saved, and the vault accepts it." });
     expect(exit().announced).toBe("Imported the proof for checkpoint 100.");
   });
 
@@ -61,10 +72,9 @@ describe("what the panel says of an exit action", () => {
     const refusal = notice()?.id;
     await importExitFile(kit.store, "{nope");
     expect(notice()?.id).not.toBe(refusal);
-    const file = JSON.stringify({ seq: 100, root: fullProof(100).root, account: fullProof(100), house_pending_deposits: [], calls: [] });
-    await importExitFile(kit.store, file);
+    kit.store.exit.announce("The vault's exit has started.");
     const first = exit().announced;
-    await importExitFile(kit.store, file);
+    kit.store.exit.announce("The vault's exit has started.");
     expect(exit().announced).not.toBe(first);
     expect(exit().announced.trim()).toBe(first);
   });

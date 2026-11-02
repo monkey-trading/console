@@ -78,7 +78,7 @@ describe("a claim this page has had paid", () => {
     expect(kit.store.getSnapshot().exit.claims?.exitClaim).toBe(7n);
     expect(kit.store.getSnapshot().exit.paid).toBe(paid);
     expect(view().canClaim).toBe(false);
-    expect(view().notice).toBeNull();
+    expect(view().notice?.text ?? "").not.toMatch(/can be paid/);
   });
   it("is offered still when the claim did not go through", async () => {
     kit.exit.sendError = new Error("You declined to claim your exit from the vault in your wallet.");

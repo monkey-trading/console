@@ -53,7 +53,7 @@ describe("importing a file, with no node", () => {
       await store.exit.keeper.adopter.adopt(store.liveWallet as Wallet, SCOPE, parseExitProof(fullProof(100)));
       expect(refused()?.tone).toBe("error");
       await importExitFile(store, FILE(100));
-      expect(refused()).toBeNull();
+      expect(refused()?.text).toBe("This file is for the checkpoint already saved, and the vault accepts it.");
     });
 
     it("clears a failed read of the vault once an import's own read answers", async () => {
