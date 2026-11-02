@@ -16,6 +16,17 @@ describe("signed reads", () => {
     expect(node.requests[0]?.challenge).toBeNull();
   });
 
+  it("sets no cache mode on a read or an action, so the browser keeps the node's preflight answer for its max-age", async () => {
+    // Chrome skips its preflight cache for `cache: "no-store"` and `"no-cache"` alike, so every signed read cost an OPTIONS as well (measured, console#160).
+    // A cached answer cannot pass for a fresh one: each read's challenge is new, and the signature covers it (the replay test below).
+    const { node, client } = setup();
+    await client.markets();
+    // The attestation's plain read carries no custom header, so it is no preflight and keeps its own mode.
+    const signed = node.inits.filter((init) => new Headers(init?.headers).has("X-Engine-Challenge"));
+    expect(signed).toHaveLength(1);
+    expect(signed[0]).not.toHaveProperty("cache");
+  });
+
   it("rejects a read whose body was altered in transit, and shows nothing", async () => {
     const { node, client } = setup();
     node.signed("/v1/markets", () => replyOf(markets, { body: vectorResponse("altered body").body }));

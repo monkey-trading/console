@@ -6,6 +6,16 @@ import type { FeedLine } from "./state";
 
 export const FEED_LIMIT = 150;
 
+/**
+ * The account an event is for, lower-cased: its own `account`, or the trader a custody deposit
+ * receipt names.
+ */
+export function eventAccount(event: EngineEvent): string | undefined {
+  if ("account" in event) return event.account.toLowerCase();
+  if (event.type === "custody_deposit_changed" && event.receipt.beneficiary.kind === "trader") return event.receipt.beneficiary.account.toLowerCase();
+  return undefined;
+}
+
 /** Whether an event belongs in this user's activity: market events, and events of their own account. */
 export function isMine(event: EngineEvent, mine: string | undefined): boolean {
   if (!("account" in event)) return true;

@@ -6,6 +6,8 @@ import type { Address, EligibilityClass, Fill, MarketId, OrderId, Reject } from 
 export type EngineEvent =
   | { type: "eligibility_attested"; account: Address; class: EligibilityClass }
   | { type: "deposited"; account: Address; amount: string }
+  /** A vault deposit's custody step (adopted, finalised, or credited by a screening retry): the receipt names who it is for, and there is no `account` field. */
+  | { type: "custody_deposit_changed"; receipt: { beneficiary: { kind: "trader"; account: Address } | { kind: "house" } } }
   | { type: "order_accepted"; account: Address; client_id: number; order_id: OrderId }
   | { type: "order_rejected"; account: Address; client_id: number; reason: Reject }
   | { type: "order_cancelled"; account: Address; order_id: OrderId; reason: "client" | "unfillable" }

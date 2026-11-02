@@ -90,6 +90,8 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
     case "prices_rejected": return null;
     // Operator housekeeping is not the viewer's activity.
     case "admin_applied": return null;
+    // The deposit's custody steps are not the viewer's activity; `deposited` is the credit's line.
+    case "custody_deposit_changed": return null;
     case "admin_rejected": return null;
     // The login step reports itself; the log shows no line for key bookkeeping.
     case "session_key_registered": return null;

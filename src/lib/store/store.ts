@@ -11,12 +11,13 @@ import { decodeAccount, decodeHouse, decodeMarket } from "../models";
 import { loadAccount } from "./account";
 import { tickBars } from "./bars-tick";
 import { BarsSeed } from "./bars-seed";
-import { FEED_LIMIT, feedFrom, isMine } from "./feed";
+import { eventAccount, FEED_LIMIT, feedFrom, isMine } from "./feed";
 import { LedgerReads } from "./ledger";
 import { initialState, seedAllBars, type ConsoleState, type ToastMessage } from "./state";
 import { readHousePanelSoon } from "./house";
 import { HouseStats } from "./house-stats";
 import { PacedReads } from "./paced-reads";
+import { QuietReads } from "./quiet-reads";
 import { loginOnCredit, loginWhenLive } from "./session";
 import { noteAccess } from "./signing";
 import type { StoreDeps } from "./store-deps";
@@ -26,8 +27,7 @@ export class ConsoleStore {
   /** The connected wallet, which holds a signer and so is not part of the snapshot. */
   liveWallet: Wallet | null = null;
   /** The ephemeral in-browser key trading signs with and its registration's expiry by the node's clock (console#68); the private key never enters the snapshot. */
-  sessionKey: SessionKeySigner | null = null;
-  sessionKeyExpiresAt = 0;
+  sessionKey: SessionKeySigner | null = null; sessionKeyExpiresAt = 0;
   /** Why the last login the node answered was refused, or null: a refused registration sends orders and cancels through the wallet instead. */
   sessionLoginRefusal: Reject | null = null;
   /** The login in flight, so concurrent callers share one attempt and one wallet prompt. */
@@ -35,8 +35,7 @@ export class ConsoleStore {
   /** The previous disconnect's revocation and release, awaited before the next connect adopts. */
   walletCleanup: Promise<void> | null = null;
   /** Bookkeeping for the background vault reads: `paidCheck`/`emissionsCheck` name the wallet each runs for, `lastEmissionsReadError` dedupes its repeated failures. */
-  paidCheck: Wallet | null = null;
-  emissionsCheck: Wallet | null = null;
+  paidCheck: Wallet | null = null; emissionsCheck: Wallet | null = null;
   lastEmissionsReadError: string | null = null;
   readonly monkeySession = new MonkeySession(); // the MONKEY page's wallet queue and, while it is on screen, its store
   private snapshot: ConsoleState;
@@ -55,18 +54,17 @@ export class ConsoleStore {
   readonly barsSeed = new BarsSeed(this);
   /** The P&L tab's reads, and the House page's dashboard feeds: each runs only while its page is open. */
   readonly ledger = new LedgerReads(this); readonly houseStats = new HouseStats(this);
+  /** The reads a 404 holds back (a node without the House state route, an account not yet credited); not part of the snapshot. */ readonly quiet = new QuietReads();
   /** When each market's bar bucket was last ticked from the node's mark; a merge tells a stale candle from a fresh one. Not part of the snapshot. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
   /** Stand-down flags for pending history work, bumped on each start; not part of the snapshot. */
-  stopped = false;
-  scanEpoch = 0;
+  stopped = false; scanEpoch = 0;
   /** Whether trust in the node was lost (a failed check or a wrong clock) and not yet regained. */
   private trustLost = false;
   /** The last read failure shown, so a failure that repeats on every tick is shown once. */
   private lastReadError: string | null = null;
   /** Whether the House page is on screen, the only time its reads run. */
-  housePanelOpen = false;
-  houseRead: Promise<void> | null = null;
+  housePanelOpen = false; houseRead: Promise<void> | null = null;
   /** The house panel's queue walk in flight, guarded apart from the log reads. Not part of the snapshot. */
   queueRead: Promise<void> | null = null;
   /** The last log read failure shown, deduplicated like the main read's. Not part of the snapshot. */
@@ -187,6 +185,7 @@ export class ConsoleStore {
         // A connect that found the feed still starting runs the login now, when signing is possible.
         loginWhenLive(this);
         this.ledger.invalidate(); // the stream resumes at the live end: events from the gap are read again
+        this.quiet.reset(); // a node that was away may have restarted with the route, or credited the account
         void this.refresh(true);
       }
     } else if (event.type === "problem") this.toast("error", event.reason);
@@ -244,10 +243,11 @@ export class ConsoleStore {
     this.patch({ now: message.ts, feed: [...lines, ...this.snapshot.feed].slice(0, FEED_LIMIT) });
     // An event for the connected account, from any command, may have changed its history too.
     const mine = this.snapshot.wallet?.address.toLowerCase();
-    const own = mine !== undefined && message.events.some((e) => "account" in e && e.account.toLowerCase() === mine);
+    const own = mine !== undefined && message.events.some((e) => eventAccount(e) === mine);
     if (own) {
       // A deposit or declaration that credits the account is the moment its one-signature login may run.
       loginOnCredit(this, message.events, mine);
+      this.quiet.accountEvent(); // the credit this event may carry is read at once, not at the next rest's end
       void this.refresh(true);
     } else if (message.cmd.type === "tick") {
       const accountChanged = message.events.some((e) => "account" in e);

@@ -103,8 +103,10 @@ export class SignedTransport {
     try {
       const headers: Record<string, string> = { [CHALLENGE_HEADER]: challenge };
       if (requestBody !== null) headers["Content-Type"] = "application/json";
+      // No `cache` mode: Chrome skips its preflight cache for `no-store` and `no-cache`, so the node's
+      // `Access-Control-Max-Age` would never apply. A cached answer still cannot pass: the challenge is new per request and signed.
       response = await this.deps.fetch(this.deps.origin + path, {
-        method, headers, ...(requestBody === null ? {} : { body: requestBody }), cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal: this.deps.signal(),
+        method, headers, ...(requestBody === null ? {} : { body: requestBody }), credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal: this.deps.signal(),
       });
       bytes = new Uint8Array(await response.arrayBuffer());
     } catch (cause) {

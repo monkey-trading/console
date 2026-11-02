@@ -31,6 +31,8 @@ export class FakeNode {
   readonly requests: { path: string; challenge: string | null }[] = [];
   /** Each request's method, content type and body, beside `requests`. */
   readonly posts: { path: string; method: string; contentType: string | null; body: string }[] = [];
+  /** The init each request was made with, beside `requests`. */
+  readonly inits: (RequestInit | undefined)[] = [];
   routes = new Map<string, (challenge: string | null) => Response>();
 
   readonly fetch: typeof fetch = async (input, init) => {
@@ -38,6 +40,7 @@ export class FakeNode {
     const path = url.pathname + url.search;
     const headers = new Headers(init?.headers);
     this.requests.push({ path, challenge: headers.get("X-Engine-Challenge") });
+    this.inits.push(init);
     if (init?.method === "POST") this.posts.push({ path, method: init.method, contentType: headers.get("Content-Type"), body: String(init.body) });
     const route = this.routes.get(path);
     return route ? route(headers.get("X-Engine-Challenge")) : new Response('{"error":"not found"}', { status: 404 });

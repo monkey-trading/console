@@ -6,7 +6,7 @@ import type { EntitlementProof } from "../engine/emissions";
 import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
 import type { ActivityPage, MonkeyView, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "../engine/stats-types";
-import type { HistoryPage, MarketId, PriceRules, StreamMessage, MarketView } from "../engine/types";
+import type { AccountView, HistoryPage, MarketId, PriceRules, StreamMessage, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
@@ -89,13 +89,22 @@ export class FakeClient implements EngineClient {
     return this.unavailable ? null : { seq: this.houseSeq, params: this.params, checkpoint: this.checkpoint };
   }
   async withdrawalTotals() { if (this.totalsError !== null) throw this.totalsError; return this.totals; }
-  async account(): Promise<never> { throw this.accountError ?? new EngineError(404, "not found"); }
+  /** Whether the account read answers as a credited account; false answers the node's 404. How many times the account and its entitlement were read. */
+  credited = false;
+  accountReads = 0;
+  emissionsReads = 0;
+  async account(): Promise<AccountView> {
+    this.accountReads++;
+    if (this.accountError !== null) throw this.accountError;
+    if (!this.credited) throw new EngineError(404, "not found");
+    return { balance: "1000", equity: "1000", margin: "0", positions: {}, orders: {}, toxicity_bps: 0 };
+  }
   async accessProbe() {}
   async nonce() { return { next_nonce: 0 }; }
   async eligibility() { return { class: null, statement: null }; }
   /** The account's entitlement proof; a test may set it. */
   entitlement: EntitlementProof | null = null;
-  async emissions() { return this.entitlement; }
+  async emissions() { this.emissionsReads++; return this.entitlement; }
   async attestEligibility(): Promise<never> { throw new EngineError(501, "no"); }
   async placeOrder(): Promise<never> { throw new EngineError(501, "no"); }
   async cancelOrder(): Promise<never> { throw new EngineError(501, "no"); }
