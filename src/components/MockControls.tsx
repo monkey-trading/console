@@ -48,6 +48,7 @@ function MockPanel({ node }: { node: MockNode }) {
   const resetDemoAccount = () => {
     if (!wallet) return;
     controls.resetAccount(wallet.address);
+    store.ledger.invalidate(); // the P&L tab's rows belong to the account just cleared
     void store.refresh(true);
   };
   const changeRegion = (value: Region) => {

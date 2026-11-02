@@ -114,12 +114,12 @@ export class MockState {
   readonly history = new Map<string, HistoryItem[]>();
   readonly listeners = new Set<Listener>();
   /**
-   * MONKEY emissions, as the engine and the vault hold them: the open period's per-account net
-   * realised results, each account's cumulative entitlement in base units, what the simulated
+   * MONKEY emissions, as the engine and the vault hold them: the open period's per-account gross
+   * realised losses, each account's cumulative entitlement in base units, what the simulated
    * vault has minted (`emissionsClaimed`), and the seq of the vault's latest posted checkpoint,
    * which the mock's entitlement proofs are taken against.
    */
-  emission: { period: number; results: Map<string, { address: string; realised: Fixed; writtenOff: Fixed }> };
+  emission: { period: number; results: Map<string, { address: string; losses: Fixed; writtenOff: Fixed }> };
   readonly entitledMonkey = new Map<string, bigint>();
   readonly claimedMonkey = new Map<string, bigint>();
   postedSeq = 0;
