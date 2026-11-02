@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { AccessGate } from "./AccessGate";
 import { AttestationBanner } from "./AttestationBanner";
+import { ExitNotice } from "./ExitNotice";
 import { PageNotices } from "./PageNotices";
 import { RiskStrip } from "./RiskStrip";
 import { SetupDialog } from "./SetupDialog";
@@ -20,6 +21,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <TopBar />
       <AttestationBanner />
       <PageNotices />
+      <ExitNotice />
       <main id="main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col outline-none">
         <AccessGate>{children}</AccessGate>
       </main>

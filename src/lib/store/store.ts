@@ -11,6 +11,7 @@ import { decodeAccount, decodeHouse, decodeMarket } from "../models";
 import { loadAccount } from "./account";
 import { tickBars } from "./bars-tick";
 import { BarsSeed } from "./bars-seed";
+import { ExitWatch } from "./exit";
 import { eventAccount, FEED_LIMIT, feedFrom, isMine } from "./feed";
 import { LedgerReads } from "./ledger";
 import { initialState, KEPT_ON_WALLET_CHANGE, seedAllBars, type ConsoleState, type Notice, type NoticeSurface } from "./state";
@@ -63,6 +64,7 @@ export class ConsoleStore {
   housePanelOpen = false; houseRead: Promise<void> | null = null;
   /** The house panel's queue walk in flight, guarded apart from the log reads. Not part of the snapshot. */
   queueRead: Promise<void> | null = null;
+  readonly exit = new ExitWatch(this); // keeps the account's exit proof at the vault's latest root
   constructor(deps: StoreDeps) {
     this.deps = deps;
     this.viewer = deps.initial.viewer;

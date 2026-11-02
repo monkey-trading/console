@@ -88,6 +88,15 @@ function MockPanel({ node }: { node: MockNode }) {
             </fieldset>
           )}
           <button type="button" className={BUTTON} onClick={() => controls.addLiquidity(fixedFromInt(100_000))}>Add $100,000 vault liquidity</button>
+          <fieldset className="space-y-2">
+            <legend className="text-fg-2">The vault&apos;s exit</legend>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={BUTTON} onClick={() => { controls.exit.postCheckpoint(false); void store.exit.refresh(); }}>Post a checkpoint</button>
+              <button type="button" className={BUTTON} onClick={() => { controls.exit.postCheckpoint(true); void store.exit.refresh(); }}>Post one with the node ahead</button>
+              <button type="button" className={BUTTON} onClick={() => { controls.exit.comeDue(); void store.exit.refresh(); }}>Stop checkpoints for the exit period</button>
+              <button type="button" className={BUTTON} onClick={() => { controls.exit.closeWindow(); void store.exit.refresh(); }}>Run out the claim window</button>
+            </div>
+          </fieldset>
           <div>
             <button type="button" className={BUTTON} onClick={() => resetDemoAccount()}>Reset to an empty account</button>
             <p className="mt-1 text-label leading-relaxed text-fg-3">Clears the demo account's balance, positions, orders and history so the empty states show. Reload the page to restore it.</p>

@@ -70,6 +70,7 @@ export class MockWalletConnector implements WalletConnector {
         return { kind: "held" as const, amount: controls.walletUsdc(address) };
       },
       chainReads: controls.chainReads(),
+      exit: controls.exit.wallet(address),
       async claimed() {
         return true;
       },

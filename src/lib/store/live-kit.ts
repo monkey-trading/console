@@ -81,6 +81,7 @@ export class ActionClient implements EngineClient {
   /** The account's entitlement proof; a test may set it. */
   entitlement: EntitlementProof | null = null;
   async emissions() { return this.entitlement; }
+  async exitProof() { return null; }
   private act(route: string, body: Posted["body"]) { const posted = { route, body }; this.posted.push(posted); return Promise.resolve().then(() => this.answer(posted)); }
   attestEligibility(body: EligibilityRequest) { return this.act("eligibility", body); }
   placeOrder(body: OrderRequest) { return this.act("order", body); }

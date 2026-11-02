@@ -12,6 +12,7 @@ import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
 import { fixedToWire } from "../fixed";
 import { equityOf, marginOf } from "./accounts";
+import { MockVaultExit } from "./exit";
 import { mockHex } from "./hex";
 import { cancelAll, closeAll } from "./batch";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";
@@ -52,9 +53,11 @@ export class MockEngineClient implements EngineClient {
 
   /** The dashboard routes: the mock answers every one, as the node does. */
   readonly stats: StatsReads;
+  readonly vaultExit: MockVaultExit; // the simulated vault's exit, and the route's answers
 
   constructor(readonly state: MockState) {
     this.stats = mockStats(state);
+    this.vaultExit = new MockVaultExit(state);
   }
 
   /** Advances the node's clock to `ms`. */
@@ -196,6 +199,8 @@ export class MockEngineClient implements EngineClient {
     if (entitled === undefined) return null;
     return { seq: this.state.postedSeq, root: `0x${mockHex("emission-root", 64)}`, account: address, entitled: entitled.toString(), siblings: [], ...postedStanding(this.state.postedSeq, entitled) };
   }
+
+  async exitProof(address: Address): Promise<unknown> { return this.vaultExit.proof(address); }
 
   async attestEligibility(request: EligibilityRequest): Promise<ActionResult> {
     return attestEligibility(this.state, request);

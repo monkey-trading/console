@@ -47,6 +47,8 @@ export type ClientEvent =
   | { type: "enclave" }
   /** Why the stream was dropped, written for the user. */
   | { type: "problem"; reason: string }
+  /** A signed checkpoint the stream carried: the vault is about to be posted its root. */
+  | { type: "checkpoint"; seq: number }
   /** An executable quote for the account the console asked about. */
   | { type: "quote"; quote: MarketQuote }
   /** The node refused the quote request, such as for an account it has never credited. */
@@ -118,6 +120,8 @@ export interface EngineClient {
   eligibility(address: Address): Promise<EligibilityView>;
   /** The account's cumulative MONKEY entitlement with its proof against the node's last posted root; null when the engine holds none for it. */
   emissions(address: Address): Promise<EntitlementProof | null>;
+  /** `GET /v1/accounts/{address}/exit`, as JSON still to be read as a proof: every proof the account exits the vault with, at the node's newest checkpoint; null before the first checkpoint that holds them (404). */
+  exitProof(address: Address): Promise<unknown>;
   attestEligibility(request: EligibilityRequest): Promise<ActionResult>;
   placeOrder(request: OrderRequest): Promise<ActionResult>;
   cancelOrder(request: CancelRequest): Promise<ActionResult>;

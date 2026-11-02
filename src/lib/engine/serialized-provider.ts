@@ -34,6 +34,9 @@ export function serialized(provider: Eip1193Provider): Eip1193Provider {
   return provider instanceof SerializedProvider ? provider : new SerializedProvider(provider);
 }
 
+/** How long a wallet may take over one read it would answer without asking anyone, in milliseconds, before the queue behind it goes on. */
+export const WALLET_READ_MS = 30_000;
+
 /** A read of a wallet's provider that stops waiting after `ms` and frees the queue behind it; a provider not queued gets a plain timeout. */
 export const withinMs = (provider: Eip1193Provider, args: Parameters<Eip1193Provider["request"]>[0], ms: number): Promise<unknown> =>
   provider instanceof SerializedProvider ? provider.requestWithin(args, ms) : withTimeout(provider.request(args), ms);

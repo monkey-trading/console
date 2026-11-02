@@ -103,7 +103,7 @@ describe("quotes and authorizations on the stream", () => {
   const quote = { type: "quote", account: ACCOUNT, market: 1, open: true, reduce_only: false, stress_level: 0, mark: "100", ask: [], bid: [], close: null };
   const frame = (n: number, msg: object) => JSON.stringify({ v: 1, n, time: 1_000, msg: JSON.stringify(msg), sig: "0x00" });
 
-  it("asks for the account's quotes once the socket opens, and reports each quote and authorization the node signs", async () => {
+  it("asks for the account's quotes once the socket opens, and reports each quote, authorization and checkpoint the node signs", async () => {
     const sockets: FakeSocket[] = [];
     const { client } = accepting(sockets);
     const seen: unknown[] = [];
@@ -121,7 +121,7 @@ describe("quotes and authorizations on the stream", () => {
     socket.receive(frame(1, { type: "quote_error", error: "account has never been credited" }));
     socket.receive(frame(2, withdrawal));
     socket.receive(frame(3, { type: "checkpoint", offset: "9:1", seq: 9 }));
-    expect(seen).toEqual([{ type: "quote", quote }, { type: "quote_error", error: "account has never been credited" }, { type: "withdrawal", withdrawal }]);
+    expect(seen).toEqual([{ type: "quote", quote }, { type: "quote_error", error: "account has never been credited" }, { type: "withdrawal", withdrawal }, { type: "checkpoint", seq: 9 }]);
     expect(socket.closed).toBe(false);
   });
 

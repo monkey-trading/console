@@ -62,10 +62,14 @@ export class FakeClient implements EngineClient {
     series: async (query: SeriesQuery) => this.canned(`series:${query.metric}:${query.fromMs}:${query.limit}`, this.seriesPage),
     monkey: async () => this.canned("monkey", this.monkeyView),
     activity: async () => this.canned("activity", this.activityPage),
-    distributions: async () => null,
+    distributions: async () => { this.distributionReads++; if (this.distributionError !== null) throw this.distributionError; return this.distributionAnswer; },
     operator: async () => this.canned("operator", this.operatorRoute),
   };
   operatorRoute: OperatorRoute | null = null;
+  /** What the distribution read answers, and how many times it was read. */
+  distributionAnswer: Awaited<ReturnType<StatsReads["distributions"]>> = null;
+  distributionError: Error | null = null;
+  distributionReads = 0;
   private canned<T>(read: string, answer: T | null): T {
     this.statsReads.push(read);
     if (this.statsError !== null) throw this.statsError;
@@ -115,6 +119,11 @@ export class FakeClient implements EngineClient {
   /** The account's entitlement proof; a test may set it. */
   entitlement: EntitlementProof | null = null;
   async emissions() { this.emissionsReads++; return this.entitlement; }
+  /** What the exit route answers; a test may set it, or set `exitError` to fail the read. */
+  exitAnswer: unknown = null;
+  exitError: Error | null = null;
+  exitReads = 0;
+  async exitProof() { this.exitReads++; if (this.exitError !== null) throw this.exitError; return this.exitAnswer; }
   async attestEligibility(): Promise<never> { throw new EngineError(501, "no"); }
   async placeOrder(): Promise<never> { throw new EngineError(501, "no"); }
   async cancelOrder(): Promise<never> { throw new EngineError(501, "no"); }

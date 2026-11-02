@@ -2,6 +2,7 @@
 
 import type { Fixed } from "../fixed";
 import type { EntitlementProof } from "./emissions";
+import type { ExitWallet } from "./exit-types";
 import type { TypedRequest } from "./eip712";
 import type { DeploymentReads } from "./registry";
 import type { StakingWallet } from "./staking";
@@ -65,6 +66,8 @@ export interface Wallet {
    * wallets with nothing to mint from, such as the mock's own.
    */
   fund?(amount: Fixed, progress?: Progress): Promise<string>;
+  /** The vault's exit, which needs no node; absent from a wallet that reads no chain, such as a watched account's. */
+  exit?: ExitWallet;
   /** Whether the vault has paid this account's payout `nonce`; absent from a wallet that reads no chain, such as a watched account's. */
   claimed?(nonce: number): Promise<boolean>;
   /**

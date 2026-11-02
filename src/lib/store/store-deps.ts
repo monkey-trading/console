@@ -1,6 +1,7 @@
 /** What a console store is built from: the node's client, the wallet connectors, and the page's starting state. */
 
 import type { EngineClient } from "../engine/client";
+import type { ExitStorage } from "../engine/exit-file";
 import type { KeyStorage } from "../engine/session-key-store";
 import type { AccountView, EligibilityClass, HistoryEvent, HouseView, MarketView, QueuedWithdrawal, StreamMessage } from "../engine/types";
 import type { CheckpointEntry } from "../engine/wire";
@@ -31,6 +32,8 @@ export interface StoreDeps {
    * Absent in the mock session, whose node starts afresh on every load, and in most tests: nothing persists.
    */
   persistence?: KeyStorage;
+  /** Where the account's exit proof is kept, or null when the browser denies it; absent in most tests, where nothing is kept. */
+  exitStorage?: () => ExitStorage | null;
   /**
    * Starts the archive-scan fallback that seeds the chart for a node without the marks endpoint
    * (a 404 there asks for it once). False when the node has not named a log head yet, so the next

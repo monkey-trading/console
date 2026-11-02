@@ -1,0 +1,172 @@
+{
+ "holder": {
+  "seq": 71999,
+  "root": "0x77b927544005419990329bb276e98ce56187cbbb6078656cadb8a74be7e5b729",
+  "terms": {
+   "seq": 71999,
+   "root": "0x77b927544005419990329bb276e98ce56187cbbb6078656cadb8a74be7e5b729",
+   "terms": {
+    "deposit_cursor": 3,
+    "deposit_base": 3,
+    "pending": "250",
+    "held": "0",
+    "unheld": "0",
+    "held_receipts": "0",
+    "gaps": []
+   },
+   "siblings": [
+    "0xaa348086a53fd59ff53ddd50dab103be8df766242686006bf6591e38233ff668",
+    "0x579487711be9ab918b2d78496b2865884247fb02952c08ae54cccc1b93fb81c1",
+    "0x3ec231870527c0a8a428fdbe13daed9c6529ff341e3a52016ce903982df11e8c",
+    "0xef0a2f525fee713c0ee05f60d26d1cd7b7fb03ad5281cbba4a17fc8c50a15857",
+    "0x63fd1cffc8a6cf2b675d5460170213ff5fbea21e6286d943f5d5a25f8be4964c"
+   ]
+  },
+  "account": {
+   "seq": 71999,
+   "root": "0x77b927544005419990329bb276e98ce56187cbbb6078656cadb8a74be7e5b729",
+   "account": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+   "leaf": {
+    "balance": "4900",
+    "withdrawal_nonce": 1,
+    "toxicity_bps": 0,
+    "open_positions": 1,
+    "toxicity_fraction": "0.052645754",
+    "toxicity_history": "10768.876264865"
+   },
+   "siblings": [
+    "0x2da0131bff5aa007d922b3e09de57802be33ad6e0c8ddc4a86e04c917cb7309e",
+    "0x92ce556f1ef15d5a75681cc0655b4789adbc43111bda9852ce1029517bcaabb1",
+    "0xbf7ac3700a8bdecec8897c142c188208cca2f1dd117f5548c3722c30a82427e9",
+    "0xf5d54fd2a26b8360e6601b3062afd23539603cee3c72993d6fad54660ec5c116",
+    "0xa95ae07e0dfd95b0bc9a9ab2873f40a569ed58d114a2f09bd3c51356cf7f4bd2"
+   ],
+   "positions": [
+    {
+     "market": 1,
+     "position": {
+      "qty": "0.010001",
+      "entry": "76879.938492651"
+     },
+     "siblings": [
+      "0xaa348086a53fd59ff53ddd50dab103be8df766242686006bf6591e38233ff668",
+      "0xfce5d5fa1905377dd95debb6dc00c66b64b3902c7405756758435448bf5b8d19",
+      "0x10a41b26f3960369e81c8c68408c325b229480325ff2b581676a9327657a8ea3",
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0x4e40d0c0c8072c05debe688a61461d116321fdcff46ff711032b92625da7154a",
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0x256402a1f010ddf01ef82d182466a07b0ca61f9731df9612ed22739e9e607d4d"
+     ]
+    }
+   ],
+   "markets": [
+    {
+     "market": 1,
+     "leaf": {
+      "mark": "76750.255",
+      "quote_currency": {
+       "currency": "usd"
+      },
+      "fx_mark": null,
+      "client_qty": "0.010001",
+      "client_cost": "768.876264865",
+      "state_hash": "0x1a4267e5d91d235a7440e37bf727bb9dc71bcea3bb06a2f3890a2f00f81bf4bd"
+     },
+     "siblings": [
+      "0x2da0131bff5aa007d922b3e09de57802be33ad6e0c8ddc4a86e04c917cb7309e",
+      "0x2f8395e2dffd1f0588b17dba67abaf6402ea1e494f276d8964c978a5c51c38f1",
+      "0x1120b2aa288fe28bc29ab5206c4ac857579cb3c6aac92e8d200c9f89ba59ca68",
+      "0x57019dd1fdd5f12a8bd68c20cb4002fd5ac2e427c02b48b04a5d3291bd4d2dd5",
+      "0x8c25cc722c0a231a5b1275fb2d3b68517db6d3645747a4745b21fcd3afcfeac5"
+     ]
+    }
+   ]
+  },
+  "approvals": [
+   {
+    "seq": 71999,
+    "root": "0x77b927544005419990329bb276e98ce56187cbbb6078656cadb8a74be7e5b729",
+    "approval": {
+     "account": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+     "amount": "100",
+     "nonce": 1,
+     "approved_seq": 28895
+    },
+    "siblings": [
+     "0x2da0131bff5aa007d922b3e09de57802be33ad6e0c8ddc4a86e04c917cb7309e",
+     "0x2f8395e2dffd1f0588b17dba67abaf6402ea1e494f276d8964c978a5c51c38f1",
+     "0x821ee37d33687d0471ec6680fac60f644dd7dc9512a19c045b7037cd8f1226e3",
+     "0x4a19ca35ee1f6e51eab1eb1054aa5ea46762af54a8be67c2557dc731342471db",
+     "0x6ffcad9f0ac50a8f334160f48fd0d3be0c9734f7fde73862a0e9bc036b6ff1ff"
+    ]
+   }
+  ],
+  "queued": [],
+  "distribution": {
+   "seq": 71999,
+   "root": "0x77b927544005419990329bb276e98ce56187cbbb6078656cadb8a74be7e5b729",
+   "account": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+   "entitled": "100000000000",
+   "siblings": [
+    "0x2da0131bff5aa007d922b3e09de57802be33ad6e0c8ddc4a86e04c917cb7309e",
+    "0x2f8395e2dffd1f0588b17dba67abaf6402ea1e494f276d8964c978a5c51c38f1",
+    "0x1120b2aa288fe28bc29ab5206c4ac857579cb3c6aac92e8d200c9f89ba59ca68",
+    "0x808ddb40bb089ac603f723e7a43af483cae04cae43f22b08cfbeded682b4f923"
+   ]
+  },
+  "pending_deposits": []
+ },
+ "pending": {
+  "seq": 71999,
+  "root": "0x77b927544005419990329bb276e98ce56187cbbb6078656cadb8a74be7e5b729",
+  "terms": {
+   "seq": 71999,
+   "root": "0x77b927544005419990329bb276e98ce56187cbbb6078656cadb8a74be7e5b729",
+   "terms": {
+    "deposit_cursor": 3,
+    "deposit_base": 3,
+    "pending": "250",
+    "held": "0",
+    "unheld": "0",
+    "held_receipts": "0",
+    "gaps": []
+   },
+   "siblings": [
+    "0xaa348086a53fd59ff53ddd50dab103be8df766242686006bf6591e38233ff668",
+    "0x579487711be9ab918b2d78496b2865884247fb02952c08ae54cccc1b93fb81c1",
+    "0x3ec231870527c0a8a428fdbe13daed9c6529ff341e3a52016ce903982df11e8c",
+    "0xef0a2f525fee713c0ee05f60d26d1cd7b7fb03ad5281cbba4a17fc8c50a15857",
+    "0x63fd1cffc8a6cf2b675d5460170213ff5fbea21e6286d943f5d5a25f8be4964c"
+   ]
+  },
+  "account": null,
+  "approvals": [],
+  "queued": [],
+  "distribution": null,
+  "pending_deposits": [
+   {
+    "seq": 71999,
+    "root": "0x77b927544005419990329bb276e98ce56187cbbb6078656cadb8a74be7e5b729",
+    "chain_ref": "00000000000000000354:0x94ff7924f976ebb134a51e0a4351aebf84407ca8d6b915faf8127531af008992:0x7e24613a80fbbc0226530bc914d4c64fe88c692e4d7a392861e37607e168eb12:1",
+    "deposit": {
+     "deposit_id": 2,
+     "account": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+     "payer": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+     "amount": "250"
+    },
+    "siblings": [
+     "0x2da0131bff5aa007d922b3e09de57802be33ad6e0c8ddc4a86e04c917cb7309e",
+     "0x92ce556f1ef15d5a75681cc0655b4789adbc43111bda9852ce1029517bcaabb1",
+     "0xbf7ac3700a8bdecec8897c142c188208cca2f1dd117f5548c3722c30a82427e9",
+     "0xf5d54fd2a26b8360e6601b3062afd23539603cee3c72993d6fad54660ec5c116",
+     "0x5303d9ca1d743b6aa0d260e2e617d2ff94ed21a8149bc9c2628a0b0e5eab0d46",
+     "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "0x5f1376b5ad37da2e6a1ac0d36f47ec17140eefb4927c0a64365363cde611a333"
+    ]
+   }
+  ]
+ }
+}
