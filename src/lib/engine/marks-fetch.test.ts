@@ -142,4 +142,28 @@ describe("fetchBarsHistory", () => {
     expect(got.provenance).toBeNull();
     expect(got.bars).toEqual([]);
   });
+
+  it("asks no further page once the caller stops wanting the window, and returns what it read, marked incomplete", async () => {
+    class EndlessClient extends FakeClient {
+      override async marks(market: number, resolution: "1s" | "1m" | "1h" | "1d", fromMs: number, toMs: number) {
+        this.marksReads.push({ market, resolution, fromMs, toMs });
+        return { entries: [entry(fromMs + 1)], next: fromMs + 1_000 };
+      }
+    }
+    const client = new EndlessClient();
+    let asked = 0;
+    const alive = () => (asked += 1) <= 2;
+    const got = await fetchBarsHistory(client, 1, "1m", 0, 100_000, alive);
+    expect(client.marksReads).toHaveLength(3);
+    expect(got.complete).toBe(false);
+    expect(got.bars.length).toBeGreaterThan(0);
+  });
+
+  it("reads its first page whatever the caller wants, and starts no narrower pass once it stops", async () => {
+    const client = new FakeClient();
+    client.marksPages = [{ entries: [entry(60_000)], next: null }];
+    const got = await fetchBarsHistory(client, 1, "1m", 0, 100_000, () => false);
+    expect(client.marksReads).toHaveLength(1);
+    expect(got.complete).toBe(true);
+  });
 });

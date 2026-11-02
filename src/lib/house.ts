@@ -23,6 +23,10 @@ export interface QueueTotals {
   count: number;
   /** The sum of what the queue still owes, in dollars. */
   remaining: Fixed;
+  /** The most any one request still owes; null while the queue is empty. */
+  largest: Fixed | null;
+  /** What the request at the head, the next to be paid, still owes; null while the queue is empty. */
+  head: Fixed | null;
   /** The log seq the pages answered at; null before the first read. */
   seq: number | null;
   /** True when the walk read the queue's end within the page cap; false marks a lower bound. */
@@ -80,6 +84,8 @@ export function utilBps(part: Fixed, whole: Fixed): number | null {
 export function queueTotals(pages: readonly { seq: number | null; queue: readonly { remaining: string }[] }[], complete: boolean, stable: boolean): QueueTotals {
   let count = 0;
   let remaining = 0n;
+  let largest: Fixed | null = null;
+  let head: Fixed | null = null;
   let seq: number | null = null;
   for (const page of pages) {
     seq = page.seq;
@@ -88,7 +94,34 @@ export function queueTotals(pages: readonly { seq: number | null; queue: readonl
       if (amount === null) throw new Error("engine sent a malformed queue remainder");
       count += 1;
       remaining += amount;
+      head ??= amount;
+      if (largest === null || amount > largest) largest = amount;
     }
   }
-  return { count, remaining, seq, complete, stable };
+  return { count, remaining, largest, head, seq, complete, stable };
+}
+
+/**
+ * What the Parameters panel says about where the values come from: the log entry that set them, the launch values for
+ * a build that simulates the node, and nothing for a live node that does not know (one restored from an older snapshot).
+ */
+export function paramsSource(params: Pick<HouseParams, "seq">, simulated: boolean): string | null {
+  if (params.seq !== null) return `The log records these values at seq ${params.seq}.`;
+  return simulated ? "These are the launch values." : null;
+}
+
+/**
+ * The segments of a `segments`-wide bar that the queue `positions` (1 is the head) fall in, out of
+ * `waiting` requests. The head is always the first segment; a queue no longer than the bar gives each
+ * position its own segment, and a longer one spreads its positions across the bar, the last on the
+ * last segment; no position goes past the last segment.
+ */
+export function queueMarks(positions: readonly number[], waiting: number, segments: number): Set<number> {
+  const scale = waiting <= segments ? 1 : segments / waiting;
+  return new Set(positions.map((position) => Math.min(segments, Math.max(1, Math.ceil(position * scale)))));
+}
+
+/** The queue's totals when they can be taken as its true size: a complete walk over a steady queue whose last read succeeded; null otherwise. */
+export function exactTotals(totals: QueueTotals | null, failed: boolean): QueueTotals | null {
+  return totals !== null && totals.complete && totals.stable && !failed ? totals : null;
 }

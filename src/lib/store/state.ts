@@ -79,6 +79,8 @@ export interface ConsoleState {
   eligibility: Eligibility;
   account: AccountModel | null;
   queue: QueuedWithdrawal[];
+  /** Whether the connected account's queue has been read since it connected; `queue` is empty before it, and after a read that failed. */
+  accountQueueRead: boolean;
   history: HistoryEntry[];
   /** The P&L tab's rows and the schedule that prices them; read only once that tab has opened. */
   ledger: LedgerState;
@@ -164,6 +166,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     eligibility: null,
     account: null,
     queue: [],
+    accountQueueRead: false,
     history: [],
     ledger: emptyLedgerState(),
     feed: [],

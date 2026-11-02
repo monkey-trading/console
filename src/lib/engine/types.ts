@@ -6,6 +6,7 @@
 
 import type { EngineEvent } from "./event-types";
 export type { EngineEvent } from "./event-types";
+import type { HouseScanView } from "./stats-types";
 
 export type Address = string;
 export type MarketId = number;
@@ -59,7 +60,7 @@ export interface MarketView {
 }
 
 /** `GET /v1/house`. */
-export interface HouseView {
+export interface HouseView extends HouseScanView {
   cash: string;
   nav: string;
   gross_exposure: string;

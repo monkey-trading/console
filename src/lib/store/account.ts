@@ -24,7 +24,7 @@ export async function loadAccount(store: ConsoleStore, withHistory: boolean): Pr
       if (!(error instanceof EngineError && error.status === 404)) throw error;
     }
     if (store.getSnapshot().wallet?.address !== wallet.address) return;
-    store.patch({ eligibility: eligibility.class, queue: queue.queue, account, entitlement });
+    store.patch({ eligibility: eligibility.class, queue: queue.queue, accountQueueRead: true, account, entitlement });
     if (withHistory || store.getSnapshot().history.length === 0) {
       const history = (await client.history(wallet.address, { limit: 100 })).events;
       if (store.getSnapshot().wallet?.address === wallet.address) store.patch({ history });

@@ -44,10 +44,12 @@ export function readHouseQueue(store: ConsoleStore): Promise<boolean> {
 /** Marks the House page open, so refreshes run its reads, and returns what closes it. The reads are for that page alone. */
 export function openHousePanel(store: ConsoleStore): () => void {
   store.housePanelOpen = true;
+  store.houseStats.setOpen(true);
   // Before the first refresh the node is not trusted yet; that refresh runs them.
   if (store.getSnapshot().houseReady) readHousePanelSoon(store);
   return () => {
     store.housePanelOpen = false;
+    store.houseStats.setOpen(false);
   };
 }
 

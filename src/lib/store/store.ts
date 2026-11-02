@@ -14,6 +14,7 @@ import { FEED_LIMIT, feedFrom, isMine } from "./feed";
 import { LedgerReads } from "./ledger";
 import { initialState, seedAllBars, type ConsoleState, type ToastMessage } from "./state";
 import { readHousePanelSoon } from "./house";
+import { HouseStats } from "./house-stats";
 import { PacedReads } from "./paced-reads";
 import { loginOnCredit, loginWhenLive } from "./session";
 import { noteAccess } from "./signing";
@@ -51,8 +52,9 @@ export class ConsoleStore {
   private readonly pacing: PacedReads | null;
   /** Seeds the chart's bars from the marks endpoint once per market and timeframe. */
   readonly barsSeed = new BarsSeed(this);
-  /** The P&L tab's reads, run only while that tab is open. */
+  /** The P&L tab's reads, and the House page's dashboard feeds: each runs only while its page is open. */
   readonly ledger = new LedgerReads(this);
+  readonly houseStats = new HouseStats(this);
   /** When each market's bar bucket was last ticked from the node's mark; a merge tells a stale candle from a fresh one. Not part of the snapshot. */
   readonly barTicks: Record<number, Partial<Record<TimeframeId, Map<number, number>>>> = {};
   /** Stand-down flags for pending history work, bumped on each start; not part of the snapshot. */
@@ -62,7 +64,6 @@ export class ConsoleStore {
   private trustLost = false;
   /** The last read failure shown, so a failure that repeats on every tick is shown once. */
   private lastReadError: string | null = null;
-  /** The house panel's log read in flight, so a slow read never queues behind another. Not part of the snapshot. */
   /** Whether the House page is on screen, the only time its reads run. */
   housePanelOpen = false;
   houseRead: Promise<void> | null = null;
@@ -84,7 +85,7 @@ export class ConsoleStore {
       ...state,
       feed: feedFrom(deps.initial.recent ?? [], state.markets, this.viewer, () => this.id()),
       ...(session
-        ? { wallet: session.wallet, account: session.account ? decodeAccount(session.account) : null, eligibility: session.eligibility, queue: session.queue, history: session.history }
+        ? { wallet: session.wallet, account: session.account ? decodeAccount(session.account) : null, eligibility: session.eligibility, queue: session.queue, accountQueueRead: true, history: session.history }
         : {}),
     };
   }
@@ -129,7 +130,7 @@ export class ConsoleStore {
     this.lastEmissionsReadAt = -1;
     this.lastAccountError = null; // its account reads start fresh too: the same failure under a new wallet is reported
     const mine = wallet?.address.toLowerCase();
-    this.patch({ wallet, feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
+    this.patch({ wallet, accountQueueRead: false, feed: this.snapshot.feed.filter((line) => line.account === undefined || line.account === mine) });
   }
 
   setPaused(paused: boolean): void {

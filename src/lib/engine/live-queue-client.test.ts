@@ -13,8 +13,8 @@ describe("the live client's queue totals", () => {
     const node = new FakeNode();
     node.attestation(() => VECTORS.signer);
     const page = (queue: object[], next: number | null, seq = 5) => ({ status: 200, body: JSON.stringify({ seq, queue, next }), signature: "0x", timeMs: 1, seq });
-    const queueA = [{ position: 1, account: "0x00a1", amount: "10", remaining: "6", requested_seq: 2 }];
-    const queueB = [{ position: 2, account: "0x00b2", amount: "3", remaining: "3", requested_seq: 4 }];
+    const queueA = [{ position: 1, account: "0x00a1", amount: "10", remaining: "3", requested_seq: 2 }];
+    const queueB = [{ position: 2, account: "0x00b2", amount: "3", remaining: "6", requested_seq: 4 }];
     node.signed("/v1/withdrawals?limit=200", () => page(queueA, 7));
     node.signed("/v1/withdrawals?limit=200&after=7", () => page(queueB, null));
     const live = new LiveEngineClient({
@@ -22,9 +22,9 @@ describe("the live client's queue totals", () => {
       loadVerifier: async () => acceptAll, manifests: [], acceptsMock: true, fetch: node.fetch,
       openSocket: (url) => new FakeSocket(url), scheduler: new FakeScheduler(), nowMs: () => 1, challenge: () => "ab".repeat(32),
     });
-    await expect(live.withdrawalTotals()).resolves.toEqual({ count: 2, remaining: 9_000_000_000n, seq: 5, complete: true, stable: true });
+    await expect(live.withdrawalTotals()).resolves.toEqual({ count: 2, remaining: 9_000_000_000n, largest: 6_000_000_000n, head: 3_000_000_000n, seq: 5, complete: true, stable: true });
     // A second read within the walk's TTL reuses the answer instead of re-walking the queue's pages.
-    await expect(live.withdrawalTotals()).resolves.toEqual({ count: 2, remaining: 9_000_000_000n, seq: 5, complete: true, stable: true });
+    await expect(live.withdrawalTotals()).resolves.toEqual({ count: 2, remaining: 9_000_000_000n, largest: 6_000_000_000n, head: 3_000_000_000n, seq: 5, complete: true, stable: true });
     expect(node.requests.filter((r) => r.path.startsWith("/v1/withdrawals?limit=200"))).toHaveLength(2);
   });
 
@@ -46,7 +46,7 @@ describe("the live client's queue totals", () => {
     node.signed("/v1/withdrawals?limit=200", () => page(1));
     for (let after = 1; after <= 24; after++) node.signed(`/v1/withdrawals?limit=200&after=${after}`, () => page(after + 1));
     const capped = await live.withdrawalTotals();
-    expect(capped).toEqual({ count: 25, remaining: 25_000_000_000n, seq: 29, complete: false, stable: false });
+    expect(capped).toEqual({ count: 25, remaining: 25_000_000_000n, largest: 1_000_000_000n, head: 1_000_000_000n, seq: 29, complete: false, stable: false });
     // Pages answered at different log seqs are not one snapshot, which the walk says so.
     expect(capped.stable).toBe(false);
     expect(walkRequests()).toHaveLength(25);
@@ -98,7 +98,7 @@ describe("the live client's queue totals", () => {
     // Past the backoff the next read walks again.
     now = 63_000;
     fail = false;
-    await expect(live.withdrawalTotals()).resolves.toEqual({ count: 0, remaining: 0n, seq: 1, complete: true, stable: true });
+    await expect(live.withdrawalTotals()).resolves.toEqual({ count: 0, remaining: 0n, largest: null, head: null, seq: 1, complete: true, stable: true });
     expect(walked()).toBe(4);
   });
 });

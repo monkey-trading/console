@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { EngineCommand, EngineEvent } from "./engine/types";
 import { fixedFromInt } from "./fixed";
-import { capFor, queueTotals, setParamsOf, utilBps } from "./house";
+import { capFor, exactTotals, paramsSource, queueMarks, queueTotals, setParamsOf, utilBps } from "./house";
 
 const SET_PARAMS = {
   action: "set_params",
@@ -97,16 +97,66 @@ describe("queueTotals", () => {
       { seq: 10, queue: [entry("100.5"), entry("2")] },
       { seq: 12, queue: [entry("0.000000001")] },
     ];
-    expect(queueTotals(pages, true, true)).toEqual({ count: 3, remaining: 102500000001n, seq: 12, complete: true, stable: true });
+    expect(queueTotals(pages, true, true)).toEqual({ count: 3, remaining: 102500000001n, largest: 100_500_000_000n, head: 100_500_000_000n, seq: 12, complete: true, stable: true });
   });
 
   it("marks a walk the page cap cut short, and pages that mix a changing queue's seqs", () => {
     const pages = [{ seq: 10, queue: [entry("1")] }];
-    expect(queueTotals(pages, false, true)).toEqual({ count: 1, remaining: 1_000_000_000n, seq: 10, complete: false, stable: true });
-    expect(queueTotals(pages, true, false)).toEqual({ count: 1, remaining: 1_000_000_000n, seq: 10, complete: true, stable: false });
+    expect(queueTotals(pages, false, true)).toEqual({ count: 1, remaining: 1_000_000_000n, largest: 1_000_000_000n, head: 1_000_000_000n, seq: 10, complete: false, stable: true });
+    expect(queueTotals(pages, true, false)).toEqual({ count: 1, remaining: 1_000_000_000n, largest: 1_000_000_000n, head: 1_000_000_000n, seq: 10, complete: true, stable: false });
   });
 
   it("throws on a malformed remainder, which the engine never sends", () => {
     expect(() => queueTotals([{ seq: 10, queue: [entry("x")] }], true, true)).toThrow("malformed queue remainder");
+  });
+});
+
+describe("queueMarks", () => {
+  it("lights the first segment for the head, whatever the queue's length", () => {
+    expect([...queueMarks([1], 1, 40)]).toEqual([1]);
+    expect([...queueMarks([1], 3, 40)]).toEqual([1]);
+    expect([...queueMarks([1], 100, 40)]).toEqual([1]);
+  });
+
+  it("gives each position of a short queue its own segment, in order", () => {
+    expect([...queueMarks([1, 2, 3], 3, 40)]).toEqual([1, 2, 3]);
+    expect([...queueMarks([40], 40, 40)]).toEqual([40]);
+  });
+
+  it("spreads a long queue across the bar and puts its tail on the last segment", () => {
+    expect([...queueMarks([100], 100, 40)]).toEqual([40]);
+    expect([...queueMarks([50], 100, 40)]).toEqual([20]);
+  });
+
+  it("keeps every position on the bar, and lights one segment for requests that share it", () => {
+    expect([...queueMarks([7], 3, 40)]).toEqual([7]);
+    expect([...queueMarks([50], 40, 40)]).toEqual([40]);
+    expect([...queueMarks([1, 2], 80, 40)]).toEqual([1]);
+  });
+});
+
+describe("paramsSource", () => {
+  it("names the log entry that set the values when the node knows it", () => {
+    expect(paramsSource({ seq: 12 }, false)).toBe("The log records these values at seq 12.");
+  });
+
+  it("calls the values the launch values only in the simulation, and says nothing for a live node that does not know their source", () => {
+    expect(paramsSource({ seq: null }, true)).toBe("These are the launch values.");
+    expect(paramsSource({ seq: null }, false)).toBeNull();
+  });
+});
+
+describe("exactTotals", () => {
+  const totals = { count: 2, remaining: 5n, largest: 3n, head: 3n, seq: 1, complete: true, stable: true };
+
+  it("is the totals of a complete, steady walk whose last read succeeded", () => {
+    expect(exactTotals(totals, false)).toBe(totals);
+  });
+
+  it("is null for no read, a lower bound, a queue that changed while read, or a failed last read", () => {
+    expect(exactTotals(null, false)).toBeNull();
+    expect(exactTotals({ ...totals, complete: false }, false)).toBeNull();
+    expect(exactTotals({ ...totals, stable: false }, false)).toBeNull();
+    expect(exactTotals(totals, true)).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 /** An account's equity and margin at the current marks, and the house's exposure. */
 
-import { absFixed, mulFixed, type Fixed } from "../fixed";
+import { mulFixed, type Fixed } from "../fixed";
 import { tieredMargin } from "../pricing";
 import type { AccountState, MockState } from "./state";
 
@@ -35,13 +35,6 @@ export function houseNetNotional(state: MockState, id: number): Fixed {
   let qty = 0n;
   for (const account of state.accounts.values()) qty -= account.positions.get(id)?.qty ?? 0n;
   return mulFixed(qty, market.mid);
-}
-
-/** The house's gross notional over every market. */
-export function houseGross(state: MockState): Fixed {
-  let total = 0n;
-  for (const id of state.markets.keys()) total += absFixed(houseNetNotional(state, id));
-  return total;
 }
 
 /** The house's net asset value: its cash less what accounts hold unrealised. */

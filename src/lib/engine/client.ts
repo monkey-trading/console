@@ -8,6 +8,7 @@ import type { HouseState } from "./house-state";
 import type { ScanBudget, ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import type { QuoteRequest } from "./live-stream";
+import type { StatsReads } from "./stats-types";
 import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 
@@ -78,6 +79,12 @@ export interface EngineClient {
   watch(listener: (event: ClientEvent) => void): Unsubscribe;
   markets(): Promise<MarketView[]>;
   house(): Promise<HouseView>;
+  /**
+   * The dashboard's reads: positions by close-out price, series, and the MONKEY totals. Each rejects
+   * with a 404 `EngineError` from a node that predates the route, and `positions` with a 503 until
+   * the node's first scan.
+   */
+  readonly stats: StatsReads;
   /**
    * The house's latest `set_params` and checkpoint from `GET /v1/house/state`, kept at least as new
    * as the stream's; null from a node that predates the route.
