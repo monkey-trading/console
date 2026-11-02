@@ -43,7 +43,7 @@ export function WalletButton() {
         Connect wallet
       </button>
       {open && (
-        <ul id={menu} className="fixed inset-x-4 bottom-4 z-50 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded border sm:absolute sm:inset-x-auto sm:right-0 sm:bottom-auto sm:mt-2 sm:max-h-none sm:w-64 sm:overflow-visible border-line-2 bg-ink-2 p-1 shadow-platform">
+        <ul id={menu} className="fixed inset-x-4 bottom-4 z-50 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded border sm:absolute sm:inset-x-auto sm:right-0 sm:bottom-auto sm:mt-2 sm:max-h-[calc(100dvh-4rem)] sm:w-64 border-line-2 bg-ink-2 p-1 shadow-platform">
           <li className="sm:hidden"><button type="button" onClick={() => { setOpen(false); primary.current?.focus(); }} className={`${BUTTON} w-full`}>Close wallet choices</button></li>
           {store.deps.wallets.options.map((option) => (
             <li key={option.id}>
