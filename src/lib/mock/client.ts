@@ -3,7 +3,7 @@
 import { checkAttestation, type AttestationStatus } from "../engine/attestation";
 import { EngineError, type ActionResult, type EngineClient, type SignatureChecks, type Unsubscribe } from "../engine/client";
 import type { EntitlementProof } from "../engine/emissions";
-import type { EligibilityClass, AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
+import type { EligibilityClass, AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
@@ -226,13 +226,14 @@ export class MockEngineClient implements EngineClient {
     return withdraw(this.state, request);
   }
 
-  /** The mock pays approved withdrawals itself, so it signs no authorization to reissue or find. */
+  /** The mock pays approved withdrawals itself, so it signs no authorization to reissue. */
   async reissue(): Promise<never> {
     throw new EngineError(404, "not found");
   }
 
-  async findWithdrawal(): Promise<{ withdrawal: null; complete: true; reached: null }> {
-    return { withdrawal: null, complete: true, reached: null };
+  /** The mock pays every approval at once, so it holds no unpaid one: a loaded, empty list at its head. */
+  async payouts(): Promise<PayoutsPage> {
+    return { seq: this.headSeq, loaded: true, payouts: [], next: null };
   }
 
   /** The mock seeds its own chart history; there is no log scan to run. */

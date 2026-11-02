@@ -244,7 +244,7 @@ export interface HistoryPage {
   next: string | null;
 }
 
-export type { QueuedWithdrawal, SignedWithdrawal, WithdrawalAuthorization, WithdrawalPage } from "./withdrawal-types";
+export type { PayoutEntry, PayoutsPage, QueuedWithdrawal, SignedWithdrawal, WithdrawalAuthorization, WithdrawalPage } from "./withdrawal-types";
 
 /** One step of an executable quote: the average price of an order of up to `qty`. */
 export interface QuoteStep {

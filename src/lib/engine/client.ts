@@ -5,9 +5,8 @@ import type { EntitlementProof } from "./emissions";
 import type { HouseParams, QueueTotals } from "../house";
 import type { ScanBudget, ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
-import type { ScanResult } from "./live-scan";
 import type { QuoteRequest } from "./live-stream";
-import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PriceRules, Reject, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
+import type { AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 import type { CheckpointEntry } from "./wire";
 
@@ -111,8 +110,11 @@ export interface EngineClient {
   withdraw(request: WithdrawalRequest): Promise<ActionResult>;
   /** Asks for a fresh authorization of payout `nonce`, whose last one expired at `replacesExpiresAt` (0 if none); it arrives on the stream. */
   reissue(account: Address, nonce: number, body: { replaces_expires_at: number; signature: string }): Promise<void>;
-  /** Payout `nonce`'s latest authorization in the log after seq `fromSeq`, and whether the read reached the head. */
-  findWithdrawal(account: Address, nonce: number, fromSeq: number): Promise<ScanResult>;
+  /**
+   * One page of the account's unpaid approvals with their latest authorizations, from nonce `after`
+   * on (exclusive); rejects with a 404 `EngineError` from a node that predates the route.
+   */
+  payouts(account: Address, page: { limit: number; after?: number }): Promise<PayoutsPage>;
   /**
    * Reads the log from seq `fromSeq` for the index marks the chart's archive scan backfills with,
    * stopping at the head or `budget`, and resolving with the marks kept even when the read stopped

@@ -74,7 +74,7 @@ export class FakeClient implements EngineClient {
   async cancelOrder(): Promise<never> { throw new EngineError(501, "no"); }
   async withdraw(): Promise<never> { throw new EngineError(501, "no"); }
   async reissue(): Promise<never> { throw new EngineError(501, "no"); }
-  async findWithdrawal() { return { withdrawal: null, complete: true, reached: null }; }
+  async payouts() { return { seq: null, loaded: true, payouts: [], next: null }; }
   async scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>) { this.scans.push({ fromSeq, budget, rules, sessions }); return this.scanned; }
   async marks(market: number, resolution: "1s" | "1m" | "1h" | "1d", fromMs: number, toMs: number) {
     this.marksReads.push({ market, resolution, fromMs, toMs });

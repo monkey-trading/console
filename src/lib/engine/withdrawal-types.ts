@@ -17,6 +17,24 @@ export interface WithdrawalPage {
   next: number | null;
 }
 
+/** One unpaid approval in `GET /v1/accounts/{address}/payouts`: its latest signed authorization, null until the enclave signs one. */
+export interface PayoutEntry {
+  nonce: number;
+  amount: string;
+  withdrawal: SignedWithdrawal | null;
+}
+
+/**
+ * One page of the account's unpaid approvals, oldest first. `loaded` is false while the node is still
+ * loading approvals after a restart; `next` is the nonce to pass as `after` when the page was full.
+ */
+export interface PayoutsPage {
+  seq: number | null;
+  loaded: boolean;
+  payouts: PayoutEntry[];
+  next: number | null;
+}
+
 /** The vault's EIP-712 authorization of an approved payout, with its proof against a checkpoint root. */
 export interface WithdrawalAuthorization {
   signer: Address;
