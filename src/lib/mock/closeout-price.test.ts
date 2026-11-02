@@ -9,15 +9,15 @@ import { createMockNode } from "./index";
 import type { MockState } from "./state";
 import { funded, ME, START } from "./test-helpers";
 
-/** A fresh mock state with `ME` holding `held` (market, signed quantity) at the marks on `balance`. */
-function build(balance: number, held: [number, number][]): MockState {
+/** A fresh mock state with `ME` holding `held` (market, signed quantity, and the percent the entry sits above the mark, none by default) on `balance`. */
+function build(balance: number, held: [number, number, number?][]): MockState {
   const { state } = createMockNode(START).client;
   const account = state.account(ME);
   account.balance = fixedFromInt(balance);
-  for (const [id, qty] of held) {
+  for (const [id, qty, above = 0] of held) {
     const mid = state.markets.get(id)?.mid;
     if (mid === undefined) throw new Error(`market ${id} is listed`);
-    account.positions.set(id, { qty: fixedFromInt(qty), entry: mid });
+    account.positions.set(id, { qty: fixedFromInt(qty), entry: (mid * BigInt(100 + above)) / 100n });
   }
   return state;
 }
@@ -67,6 +67,20 @@ describe("the mock's close-out prices", () => {
     const both = agrees(() => build(5_000, [[1, 1], [2, 20]]), 1);
     expect(both > alone).toBe(true);
     agrees(() => build(5_000, [[1, 1], [2, 20]]), 2);
+  });
+
+  it("count another position's unrealised profit or loss in the equity they are measured against", () => {
+    // BTC bought below its mark is in profit and ETH bought above its mark is in loss, so the account's equity is neither its balance nor the flat-entry figure.
+    const flat = agrees(() => build(12_000, [[1, 1], [2, 20]]), 1);
+    const profit = agrees(() => build(12_000, [[1, 1], [2, 20, -10]]), 1);
+    const loss = agrees(() => build(12_000, [[1, 1], [2, 20, 10]]), 1);
+    // More equity leaves BTC further from its close-out; less brings it closer.
+    expect(profit < flat).toBe(true);
+    expect(loss > flat).toBe(true);
+    // And the price holds for the position that is itself in profit or in loss.
+    agrees(() => build(12_000, [[1, 1, -10], [2, 20, 10]]), 1);
+    agrees(() => build(12_000, [[1, 1, -10], [2, 20, 10]]), 2);
+    agrees(() => build(12_000, [[1, 1, 10], [2, 20, -10]]), 1);
   });
 
   it("say Due for an account already below the level and None for one no price in the range reaches", () => {
