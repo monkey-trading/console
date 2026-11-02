@@ -5,6 +5,7 @@ import { EngineError, type ActionResult, type EngineClient, type SignatureChecks
 import type { EntitlementProof } from "../engine/emissions";
 import type { EligibilityClass, AccountView, Address, Attestation, CancelRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
+import type { HouseState } from "../engine/house-state";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
 import { fixedToWire } from "../fixed";
@@ -124,11 +125,9 @@ export class MockEngineClient implements EngineClient {
     return { cash: fixedToWire(this.state.houseCash), nav: fixedToWire(houseNav(this.state)), gross_exposure: fixedToWire(houseGross(this.state)) };
   }
 
-  /** The solvency parameters in force, as the mock's launch genesis set them. */
-  setHouseLogOpen(): void {}
-
-  async houseParams(): Promise<HouseParams> {
-    return this.state.params;
+  /** The solvency parameters in force, as the mock's launch genesis set them, and the checkpoint its log would hold. */
+  async houseState(): Promise<HouseState> {
+    return { seq: this.headSeq, params: this.state.params, checkpoint: mockCheckpoint(this.headSeq ?? 0) };
   }
 
   /**
@@ -141,20 +140,6 @@ export class MockEngineClient implements EngineClient {
       checkpoint: mockCheckpoint(this.headSeq ?? 0),
       totals: mockTotals(this.state),
     };
-  }
-
-  /**
-   * The latest checkpoint the mock's log would hold: its cadence is one checkpoint per
-   * `CHECKPOINT_EVERY` sequenced commands, as the node's `checkpoint_every` sets it. The root is a
-   * deterministic stand-in — the mock computes no Merkle roots.
-   */
-  async latestCheckpoint(): Promise<CheckpointEntry | null> {
-    return mockCheckpoint(this.headSeq ?? 0);
-  }
-
-  /** The mock answers from its state, so its log read is always current. */
-  async houseLogStatus(): Promise<"current" | "reading" | "failed"> {
-    return "current";
   }
 
   /** The public queue's size, summed from its entries. */

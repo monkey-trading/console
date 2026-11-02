@@ -1,4 +1,4 @@
-/** What the one-off signed reads of the log share: their dependencies and the order of log offsets. */
+/** What the chart's archive-scan reads of the log share: their dependencies and the order of log offsets. */
 
 import type { Scheduler, Socket } from "./live-stream";
 import type { Verifier } from "./verifier";

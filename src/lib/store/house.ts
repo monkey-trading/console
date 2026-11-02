@@ -1,38 +1,29 @@
-/** The House page's reads: the log's latest `set_params`, checkpoint, and read status, and the public withdrawal queue's size. */
+/** The House page's reads: the node's house state (the latest `set_params` and checkpoint) and the public withdrawal queue's size. */
 
 import { QueueTotalsRetrying } from "../engine/live-queue";
-import type { ConsoleState } from "./state";
 import type { ConsoleStore } from "./store";
 
 /**
- * Reads the log-fed house state into the store: the latest applied `set_params`, the latest
- * checkpoint, and the log read's status, each published as its read lands. Called on every
+ * Reads the house's parameters and checkpoint from the node into the store. Called on every
  * refresh, like the markets and house reads; a failure is reported once, deduplicated like the
- * main read's. Resolves true when every read succeeded.
+ * queue's. A node that predates the route answers null: the panels say so, and nothing is reported.
+ * Resolves true when the read succeeded.
  */
-export function readHouseLog(store: ConsoleStore): Promise<boolean> {
-  const { client } = store.deps;
-  const publish = <K extends "houseParams" | "checkpoint" | "houseStatus">(
-    key: K,
-    read: Promise<ConsoleState[K]>,
-  ): Promise<boolean> =>
-    read.then(
-      (value) => {
-        store.patch({ [key]: value });
-        return true;
-      },
-      (error: unknown) => {
-        report(store, error, "log");
-        return false;
-      },
-    );
-  // The shipped clients resolve these reads from folds that never reject; the handlers guard
-  // implementations that do, so the page's panels degrade the way the queue walk's can.
-  return Promise.all([
-    publish("houseParams", client.houseParams()),
-    publish("checkpoint", client.latestCheckpoint()),
-    publish("houseStatus", client.houseLogStatus()),
-  ]).then((ok) => ok.every(Boolean));
+export function readHouseState(store: ConsoleStore): Promise<boolean> {
+  return store.deps.client.houseState().then(
+    (read) => {
+      store.patch(
+        read === null
+          ? { houseParams: null, checkpoint: null, houseStateStatus: "unavailable" }
+          : { houseParams: read.params, checkpoint: read.checkpoint, houseStateStatus: "read" },
+      );
+      return true;
+    },
+    (error: unknown) => {
+      report(store, error, "state");
+      return false;
+    },
+  );
 }
 
 /** Reads the public withdrawal queue's size into the store; resolves true when the walk succeeded. */
@@ -50,24 +41,19 @@ export function readHouseQueue(store: ConsoleStore): Promise<boolean> {
   );
 }
 
-/**
- * Marks the House page open, so refreshes run its reads, and returns what closes it. The reads are for
- * that page alone: a live client's log read replays the whole signed log, which no other page should pay for.
- */
+/** Marks the House page open, so refreshes run its reads, and returns what closes it. The reads are for that page alone. */
 export function openHousePanel(store: ConsoleStore): () => void {
   store.housePanelOpen = true;
-  store.deps.client.setHouseLogOpen(true);
   // Before the first refresh the node is not trusted yet; that refresh runs them.
   if (store.getSnapshot().houseReady) readHousePanelSoon(store);
   return () => {
     store.housePanelOpen = false;
-    store.deps.client.setHouseLogOpen(false);
   };
 }
 
 /**
  * Starts the house panel's reads without awaiting them, so a slow queue walk never holds up the
- * next market or account read. The log reads and the queue walk guard themselves separately, so a
+ * next market or account read. The house state read and the queue walk guard themselves separately, so a
  * slow walk cannot delay newer parameters or checkpoints; at most one of each runs at a time. The
  * failure latch clears only when a round of reads recovers, so a failure that repeats on every
  * refresh is shown once.
@@ -75,7 +61,7 @@ export function openHousePanel(store: ConsoleStore): () => void {
 export function readHousePanelSoon(store: ConsoleStore): void {
   if (store.stopped || !store.housePanelOpen) return;
   if (store.houseRead === null) {
-    store.houseRead = readHouseLog(store).then((ok) => {
+    store.houseRead = readHouseState(store).then((ok) => {
       if (ok) store.lastHouseReadError = null;
       store.houseRead = null;
     });
@@ -90,14 +76,14 @@ export function readHousePanelSoon(store: ConsoleStore): void {
 
 /**
  * Reports one house panel read failure, deduplicated so a failure that repeats on every refresh is
- * shown once. The log reads and the queue walk keep their own latches, cleared only when that read
+ * shown once. The state read and the queue walk keep their own latches, cleared only when that read
  * recovers. A backoff wait is not a new failure: the walk's original rejection stays latched, so a
  * persistent outage toasts once and the wait's own message never alternates with it.
  */
-function report(store: ConsoleStore, error: unknown, which: "log" | "queue"): void {
+function report(store: ConsoleStore, error: unknown, which: "state" | "queue"): void {
   if (error instanceof QueueTotalsRetrying) return;
   const message = error instanceof Error ? error.message : "The node did not answer the house panel's reads.";
-  const latch = which === "log" ? "lastHouseReadError" : "lastQueueReadError";
+  const latch = which === "state" ? "lastHouseReadError" : "lastQueueReadError";
   if (!store.noteAccess(error) && message !== store[latch]) store.toast("error", message);
   store[latch] = message;
 }

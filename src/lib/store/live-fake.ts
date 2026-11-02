@@ -54,13 +54,18 @@ export class FakeClient implements EngineClient {
   totals: QueueTotals = { count: 0, remaining: 0n, seq: null, complete: true, stable: true };
   /** When set, the queue totals read rejects with it, as a failing node answers. */
   totalsError: Error | null = null;
-  async houseParams() { return this.params; }
-  /** What the store told the client about the log read, oldest first. */
-  houseLogOpen: boolean[] = [];
-  setHouseLogOpen(open: boolean) { this.houseLogOpen.push(open); }
-  async latestCheckpoint() { return this.checkpoint; }
-  logStatus: "current" | "reading" | "failed" = "reading";
-  async houseLogStatus() { return this.logStatus; }
+  /** The log head the house state read answers at. */
+  houseSeq: number | null = null;
+  /** How many times the house state was read. */
+  houseStateReads = 0;
+  /** When set, the house state read rejects with it; `unavailable` answers as a node that predates the route does. */
+  houseStateError: Error | null = null;
+  unavailable = false;
+  async houseState() {
+    this.houseStateReads++;
+    if (this.houseStateError !== null) throw this.houseStateError;
+    return this.unavailable ? null : { seq: this.houseSeq, params: this.params, checkpoint: this.checkpoint };
+  }
   async withdrawalTotals() { if (this.totalsError !== null) throw this.totalsError; return this.totals; }
   async account(): Promise<never> { throw this.accountError ?? new EngineError(404, "not found"); }
   async accessProbe() {}
