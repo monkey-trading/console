@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { describeLeftOut, planCloseAll, pressCloseAll, targetsKey, type CloseRow } from "./close-all";
+import { describeLeftOut, planCloseAll, pressBatch, pressCloseAll, targetsKey, type CloseRow } from "./close-all";
 
 const row = (market: number, symbol: string, over: Partial<CloseRow> = {}): CloseRow => ({ market, symbol, open: true, quoted: 1_000_000_000n * BigInt(market), ...over });
 
@@ -54,6 +54,21 @@ describe("pressing Close all", () => {
 
   it("does nothing when no position qualifies, whatever the window says", () => {
     for (const state of ["idle", "early", "ready"] as const) expect(pressCloseAll(state, 0)).toBe("none");
+  });
+});
+
+describe("pressing a batch whose confirmation is a preference", () => {
+  it("asks for the second press as Close all does while the preference is on", () => {
+    expect(pressBatch(true, "idle", 3)).toBe("arm");
+    expect(pressBatch(true, "early", 3)).toBe("none");
+    expect(pressBatch(true, "ready", 3)).toBe("send");
+  });
+
+  it("sends on the first press when it is off, and still sends nothing when there is nothing to send", () => {
+    for (const state of ["idle", "early", "ready"] as const) {
+      expect(pressBatch(false, state, 3)).toBe("send");
+      expect(pressBatch(false, state, 0)).toBe("none");
+    }
   });
 });
 

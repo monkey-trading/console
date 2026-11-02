@@ -2,8 +2,10 @@
 
 /** Resting orders with a Cancel button each and a Cancel all above them: a table from 1024 px, cards below. */
 
-import { useId } from "react";
+import { useEffect, useId } from "react";
 
+import { pressBatch } from "@/lib/close-all";
+import { CONFIRM_MIN_GAP_MS, CONFIRM_MS } from "@/lib/confirm-window";
 import { fixedFromWire, formatFixedPlaces } from "@/lib/fixed";
 import { cancelOrder } from "@/lib/store/actions";
 import { cancelAll } from "@/lib/store/batch-actions";
@@ -11,15 +13,24 @@ import { cancelAll } from "@/lib/store/batch-actions";
 import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
 import { useReadOnlyNote } from "./SignGate";
+import { useConfirmWindow } from "./use-confirm-window";
+import { usePrefs } from "./use-prefs";
 
 const TH = "px-4 py-3 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
 const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
+
+/** The button while it waits for its second press: the hover colours, held. */
+const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 
 export function OrdersView() {
   const { account, markets, busy } = useConsole();
   const { store } = useSession();
   const readOnly = useReadOnlyNote(useId(), "Cancel");
   const count = account?.orders.length ?? 0;
+  const { armed, state, arm, cancel } = useConfirmWindow(CONFIRM_MS, CONFIRM_MIN_GAP_MS);
+  const { confirmBatch } = usePrefs().prefs;
+  // The window confirms the count it was armed for: when an order rests or goes, it closes and the next press arms again.
+  useEffect(() => cancel(), [count, cancel]);
   if (count === 0) return <p className="px-4 py-6 text-caption text-fg-3">No resting orders.</p>;
   const rows = (account?.orders ?? []).map((o) => {
     const market = markets.find((m) => m.id === o.market);
@@ -33,12 +44,27 @@ export function OrdersView() {
       cancel: (event: { currentTarget: HTMLElement }) => { keepFocus(event.currentTarget); void cancelOrder(store, o.order_id); },
     };
   });
+  const confirming = armed && count > 0;
+  const cancelEverything = (event: { currentTarget: HTMLElement }) => {
+    const press = pressBatch(confirmBatch, state(), count);
+    if (press === "arm") arm();
+    if (press !== "send") return;
+    cancel();
+    keepFocus(event.currentTarget);
+    void cancelAll(store);
+  };
+  // A held Enter repeats its click: only a separate press may confirm.
+  const holdsDown = (event: { repeat: boolean; preventDefault: () => void }) => { if (event.repeat) event.preventDefault(); };
+  const noun = count === 1 ? "order" : "orders";
   return (
     <>
       {readOnly.note}
       <div className="border-b border-line px-4 py-3 lg:py-2">
-        {/* One signature and one request for every resting order in every market, so it asks nothing more. */}
-        <button type="button" disabled={busy || readOnly.readOnly} className={`${BUTTON} w-full lg:w-auto`} aria-describedby={readOnly.describedBy} onClick={(event) => { keepFocus(event.currentTarget); void cancelAll(store); }}>Cancel all ({count})</button>
+        {/* One signature and one request for every resting order in every market; the second press is the Settings preference. */}
+        <button type="button" disabled={busy || readOnly.readOnly} className={`${confirming ? ARMED : BUTTON} w-full lg:w-auto`} aria-describedby={readOnly.describedBy} onClick={cancelEverything} onKeyDown={holdsDown}>
+          {confirming ? `Confirm: cancel ${count} ${noun}` : `Cancel all (${count})`}
+        </button>
+        <p role="status" className="sr-only">{confirming ? `Press again within five seconds to cancel ${count} ${noun}.` : ""}</p>
       </div>
       <ul className="lg:hidden">
         {rows.map((r) => (

@@ -4,7 +4,8 @@
 
 import { useEffect, useId } from "react";
 
-import { describeLeftOut, planCloseAll, pressCloseAll, targetsKey } from "@/lib/close-all";
+import { CONFIRM_MIN_GAP_MS, CONFIRM_MS } from "@/lib/confirm-window";
+import { describeLeftOut, planCloseAll, pressBatch, targetsKey } from "@/lib/close-all";
 import { formatMark } from "@/lib/price-format";
 import { absFixed, formatFixedPlaces, formatUsd } from "@/lib/fixed";
 import { closingPrice } from "@/lib/quotes";
@@ -16,6 +17,7 @@ import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
 import { useReadOnlyNote } from "./SignGate";
 import { useConfirmWindow } from "./use-confirm-window";
+import { usePrefs } from "./use-prefs";
 
 const TH = "px-4 py-3 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
 const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
@@ -25,16 +27,13 @@ const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-g
 /** The slippage bound a Close sends, capped at the market's own. */
 const CLOSE_SLIPPAGE_BPS = 25;
 
-/** How long Close all waits for its second press, and how soon after the first a press is taken as the same click's double. */
-const CONFIRM_MS = 5_000;
-const CONFIRM_MIN_GAP_MS = 400;
-
 export function PositionsView() {
   const { account, markets, busy, signatures, quotes, house, quoted: asked } = useConsole();
   const { store } = useSession();
   const id = useId();
   const readOnly = useReadOnlyNote(id, "Close");
   const { armed, state, arm, cancel } = useConfirmWindow(CONFIRM_MS, CONFIRM_MIN_GAP_MS);
+  const { confirmBatch } = usePrefs().prefs;
   const positions = account?.positions ?? [];
   const rows = positions.map((p) => {
     const market = markets.find((m) => m.id === p.market);
@@ -83,7 +82,7 @@ export function PositionsView() {
   useEffect(() => cancel(), [listed, cancel]);
   if (positions.length === 0) return <p className="px-4 py-6 text-caption text-fg-3">No open positions.</p>;
   const closeEverything = (event: { currentTarget: HTMLElement }) => {
-    const press = pressCloseAll(state(), count);
+    const press = pressBatch(confirmBatch, state(), count);
     if (press === "arm") arm();
     if (press !== "send") return;
     cancel();

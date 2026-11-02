@@ -13,6 +13,7 @@ import { mockHex } from "./client";
 import { chainDeposit, withdraw, withdrawable } from "./funds";
 import { liveQuote } from "./execute";
 import { attestEligibility, placeOrder } from "./orders";
+import { registerSessionKey } from "./session-keys";
 import type { MockState } from "./state";
 
 /** The address the "Browser wallet" option connects, so the demo account is the one a user sees first. */
@@ -84,6 +85,17 @@ class Script {
     const runtime = this.state.markets.get(market);
     if (runtime) runtime.shockBps += bps;
     this.at(this.state.now + 5_000);
+  }
+
+  /** Registers a session key for another browser of the demo account, dating its start `ageMs` before now. */
+  otherSession(name: string, ageMs: number): void {
+    const key = `0x${mockHex(name, 20)}`;
+    registerSessionKey(this.state, { account: DEMO_ADDRESS, session_key: key, expires_at: this.state.now + 24 * HOUR - ageMs, auth: this.auth() });
+    // The mock tells a request's signer by its nonce, so these browsers' request counters stand far from this one's.
+    this.state.sessionKeyNonces.set(key, 1_000_000);
+    for (const item of this.state.history.get(DEMO_ADDRESS.toLowerCase()) ?? []) {
+      if (item.event.type === "session_key_registered" && item.event.session_key === key) item.ts = this.state.now - ageMs;
+    }
   }
 
   withdraw(dollars: Fixed): void {
@@ -159,5 +171,8 @@ export function seedDemoAccount(state: MockState, endMs: number): void {
     s.shock(EUR, -4);
   }
   s.at(endMs);
+  // Two other browsers signed in a few hours ago.
+  s.otherSession("session-phone", 6 * HOUR);
+  s.otherSession("session-laptop", 4 * HOUR);
   state.quietPrices = false;
 }

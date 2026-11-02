@@ -128,9 +128,18 @@ export function startingSize(market: MarketModel, triggerPrice: Fixed | null = n
   return fixedToWire(high * QTY_STEP);
 }
 
-/** What the size field shows: what the trader typed, even a cleared field (`""`), else the starting size while they have not touched it (`typed` null). */
-export function sizeShown(typed: string | null, market: MarketModel, triggerPrice: Fixed | null = null): string {
-  return typed ?? startingSize(market, triggerPrice) ?? "";
+/**
+ * What the size field shows: what the trader typed, even a cleared field (`""`), else the size a new ticket starts at while they have not
+ * touched it (`typed` null). That is `last`, the size last placed in the market, when it is one the field accepts and not under the
+ * starting size now (a minimum that has risen since clamps it up); otherwise the starting size.
+ */
+export function sizeShown(typed: string | null, market: MarketModel, triggerPrice: Fixed | null = null, last: string | null = null): string {
+  if (typed !== null) return typed;
+  const start = startingSize(market, triggerPrice);
+  if (last === null) return start ?? "";
+  const kept = parseSize(last);
+  const floor = start === null ? null : parseSize(start);
+  return kept.kind === "qty" && (floor === null || (floor.kind === "qty" && kept.qty >= floor.qty)) ? last : (start ?? "");
 }
 
 /** `qty` cut down to the size field's step, so the size it names can be typed. */

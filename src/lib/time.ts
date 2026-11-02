@@ -25,3 +25,13 @@ export function formatStamp(ms: number): string {
   const month = mp < 10 ? mp + 3 : mp - 9;
   return `${day} ${MONTHS[month - 1] ?? "?"} ${formatClock(ms)}`;
 }
+
+/** A span as "under a minute", "5 min", "3 h 12 min" or "2 d 4 h", whole units truncated; a negative span reads as none. */
+export function formatSpan(ms: number): string {
+  const minutes = Math.floor(Math.max(ms, 0) / 60_000);
+  if (minutes < 1) return "under a minute";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return minutes % 60 === 0 ? `${hours} h` : `${hours} h ${minutes % 60} min`;
+  return hours % 24 === 0 ? `${Math.floor(hours / 24)} d` : `${Math.floor(hours / 24)} d ${hours % 24} h`;
+}

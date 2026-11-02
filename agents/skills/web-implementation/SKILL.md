@@ -344,6 +344,9 @@ The bar is WCAG 2.2 AA; the [development checklist](../../rules/development-chec
   WalletConnect, the session topic — never keys, addresses, or session secrets) persists in
   `localStorage` across page loads, is forgotten when the connection ends, and is disclosed on
   /notices.
+  A second, approved by the owner in monkey-trading/console#169: the trading preferences and the last size
+  placed in each market persist in `localStorage` (`monkeytrading.preferences`, `monkeytrading.last-sizes`),
+  read tolerantly, and are disclosed on /notices.
 - Every request the page makes is same-origin, but for the engine node's origin once the owner has
   approved it, and WalletConnect's relay and its Verify frame while a user pairs or uses a wallet app over
   it (approved in monkey-trading/console#7 and #27): the site serves its own fonts, images, and scripts. Check the production build's

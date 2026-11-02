@@ -51,3 +51,9 @@ export function pressCloseAll(state: ConfirmState, count: number): "arm" | "send
   if (count === 0 || state === "early") return "none";
   return state === "ready" ? "send" : "arm";
 }
+
+/** `pressCloseAll` for a batch whose confirmation is a preference: with it off, a press with something to send sends at once. */
+export function pressBatch(confirm: boolean, state: ConfirmState, count: number): "arm" | "send" | "none" {
+  if (!confirm) return count === 0 ? "none" : "send";
+  return pressCloseAll(state, count);
+}

@@ -12,21 +12,23 @@ import type { ConsoleState } from "@/lib/store/state";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { PriceChart, type PriceMarker } from "./PriceChart";
+import { usePrefs } from "./use-prefs";
 
 /**
  * The lines drawn across the chart: the open position's entry and close-out price, and resting orders.
  * Each line's colour follows its direction: a buy order or a long's entry is green, a sell order or a
- * short's entry is red. The close-out is red too, and dashed.
+ * short's entry is red. The close-out is red too, and dashed. With `lines` off (a Settings preference) the entry and the orders are not
+ * drawn; the close-out estimate is a risk figure and stays.
  */
-export function markersFor(state: ConsoleState, market: MarketModel): PriceMarker[] {
+export function markersFor(state: ConsoleState, market: MarketModel, lines = true): PriceMarker[] {
   const out: PriceMarker[] = [];
   const position = state.account?.positions.find((p) => p.market === market.id);
   if (state.account && position) {
-    out.push({ price: fixedToNumber(position.entry), tone: position.qty > 0n ? "glow" : "ember", style: "dotted", title: `${position.qty > 0n ? "Long" : "Short"} entry` });
+    if (lines) out.push({ price: fixedToNumber(position.entry), tone: position.qty > 0n ? "glow" : "ember", style: "dotted", title: `${position.qty > 0n ? "Long" : "Short"} entry` });
     const liq = closeOutMarker(state.signatures, state.account, market, state.markets);
     if (liq !== null) out.push({ price: fixedToNumber(liq), tone: "ember", style: "dashed", title: "Close-out (est.)" });
   }
-  for (const order of state.account?.orders ?? []) {
+  for (const order of lines ? (state.account?.orders ?? []) : []) {
     if (order.market === market.id && order.kind.kind !== "market") out.push({ price: Number(order.kind.price), tone: order.side === "buy" ? "glow" : "ember", style: "dotted", title: `${order.kind.kind} ${order.side}` });
   }
   return out;
@@ -35,6 +37,7 @@ export function markersFor(state: ConsoleState, market: MarketModel): PriceMarke
 export function ChartPanel() {
   const state = useConsole();
   const { store } = useSession();
+  const { chartLines } = usePrefs().prefs;
   const market = state.markets.find((m) => m.id === state.selected);
   if (!market) return null;
   const bars = state.bars[market.id]?.[state.timeframe] ?? [];
@@ -61,7 +64,7 @@ export function ChartPanel() {
           ))}
         </div>
       </div>
-      <PriceChart symbol={market.symbol} places={market.places} bars={bars} seriesKey={`${market.id}-${state.timeframe}`} markers={markersFor(state, market)} />
+      <PriceChart symbol={market.symbol} places={market.places} bars={bars} seriesKey={`${market.id}-${state.timeframe}`} markers={markersFor(state, market, chartLines)} />
     </div>
   );
 }

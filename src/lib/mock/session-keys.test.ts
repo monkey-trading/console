@@ -2,7 +2,9 @@
 
 import { describe, expect, it } from "vitest";
 
+import { readLiveKeys } from "../live-keys";
 import { fixedFromInt, fixedToWire, parseFixed } from "../fixed";
+import { DEMO_ADDRESS } from "./demo";
 import { MAX_SESSION_KEY_EXPIRY_MS } from "./session-keys";
 import { createMockNode } from "./index";
 import { auth, funded, ME, order, START, types } from "./test-helpers";
@@ -128,5 +130,24 @@ describe("session keys", () => {
     const filled = await order(node, "0.01", "buy");
     expect(types(filled.events)).toContain("fill");
     expect((await node.client.nonce(ME)).next_nonce).toBe(3);
+  });
+
+  it("serves registrations and revocations through its history, so the live keys can be read from it", async () => {
+    const node = await funded(10_000);
+    const until = node.client.state.now + MAX_SESSION_KEY_EXPIRY_MS;
+    await register(node, KEY, until);
+    await register(node, OTHER_KEY, until);
+    const read = async () => (await readLiveKeys((params) => node.client.history(ME, params), node.client.state.now)).keys;
+    expect((await read()).map((k) => k.address).sort()).toEqual([KEY, OTHER_KEY]);
+    await node.client.revokeSessionKey({ account: ME, session_key: KEY, auth: auth(node) });
+    const live = await read();
+    expect(live).toEqual([{ address: OTHER_KEY, startedAt: node.client.state.now, expiresAt: until }]);
+  });
+
+  it("seeds two other browsers on the demo account, which the live-key read finds beside the history it serves", async () => {
+    const node = createMockNode(START, true);
+    const { keys } = await readLiveKeys((params) => node.client.history(DEMO_ADDRESS, params), node.client.state.now);
+    expect(keys).toHaveLength(2);
+    expect(keys.every((k) => k.startedAt < node.client.state.now && k.expiresAt > node.client.state.now)).toBe(true);
   });
 });
