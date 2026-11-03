@@ -5,6 +5,7 @@
 import { useId } from "react";
 
 import { formatMonkey } from "@/lib/format";
+import type { Pending, PendingEmission } from "@/lib/monkey/pending";
 import { emissionsPosition } from "@/lib/store/emissions";
 
 import { useConsole } from "./ConsoleProvider";
@@ -22,7 +23,7 @@ const BUTTON = "mt-3 min-h-11 w-full rounded border border-glow bg-glow/10 px-3 
  * `claim` sends the claim behind the page's other wallet work, so the provider is asked one thing at a time, and refreshes the page afterwards.
  * The claim is built from the node's proof, so its button waits on a verdict that may sign and says why.
  */
-export function EmissionsCard({ claim }: { claim: () => Promise<unknown> }) {
+export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: () => Promise<unknown>; pending?: Pending<PendingEmission> }) {
   const state = useConsole();
   const readOnly = useReadOnlyNote(useId(), "Claiming MONKEY");
   const gate = useSignGate(useId());
@@ -46,7 +47,13 @@ export function EmissionsCard({ claim }: { claim: () => Promise<unknown> }) {
       ) : !state.accountRead ? (
         <p className="mt-3 text-caption text-fg-3">Reading your MONKEY emissions…</p>
       ) : proof === null ? (
-        <p className="mt-3 text-caption text-fg-3">No MONKEY accrued yet. MONKEY accrues from the engine&apos;s fixed ten-minute emission budgets, shared between the accounts that realised a loss in each period.</p>
+        pending.kind === "awaiting" ? (
+          <p role="status" className="mt-3 text-caption text-fg-3">You realised a loss in emission period {pending.period}, which has closed. Any MONKEY it earned you becomes claimable once the vault has the checkpoint covering it, and is read again by itself.</p>
+        ) : pending.kind === "reading" ? (
+          <p className="mt-3 text-caption text-fg-3">Reading the emission periods that have closed…</p>
+        ) : (
+          <p className="mt-3 text-caption text-fg-3">No MONKEY accrued yet. MONKEY accrues from the engine&apos;s fixed ten-minute emission budgets, shared between the accounts that realised a loss in each period.</p>
+        )
       ) : (
         <div className="mt-3 text-caption">
           <p className="flex justify-between gap-2"><span className="text-fg">Accrued</span><span className="text-fg-2">{accrued}</span></p>

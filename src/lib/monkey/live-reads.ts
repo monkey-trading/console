@@ -104,6 +104,15 @@ export interface LiveDeps {
   walletDue(): boolean;
   /** One tick of the page's charts. */
   tickCharts(): void;
+  /**
+   * A claim proof is awaited: an epoch or period paid that the account may share in, and the node
+   * holds no proof for it yet, because the vault has not accepted a checkpoint covering it. While
+   * it is, `readProofs` runs on every tick and on every signed checkpoint the stream carries
+   * (`watchCheckpoints`: checkpoints are frames of their own, not commands, so `rereadsFor` never sees them).
+   */
+  awaitingProof?(): boolean;
+  readProofs?(): void;
+  watchCheckpoints?(onCheckpoint: () => void): () => void;
   /** The base tick, the node's slower read and the wallet's, in milliseconds. */
   tickMs: number;
   nodeEveryMs: number;
@@ -122,6 +131,7 @@ export function followLive(deps: LiveDeps): () => void {
     ticks += 1;
     if (ticks % (deps.nodeEveryMs / deps.tickMs) === 0 && deps.nodeDue()) deps.readNode();
     if (ticks % (WALLET_READ_EVERY_MS / deps.tickMs) === 0 && deps.account() !== null && deps.walletDue()) deps.readWallet();
+    if (deps.account() !== null && deps.awaitingProof?.() === true) deps.readProofs?.();
     deps.tickCharts();
   }, deps.tickMs);
   const node = new Limiter(deps.readNode, EVENT_READ_MS);
@@ -132,10 +142,17 @@ export function followLive(deps: LiveDeps): () => void {
     if (reads.node) node.call();
     if (reads.wallet) wallet.call();
   });
+  const proofs = new Limiter(() => deps.readProofs?.(), EVENT_READ_MS);
+  const unwatch = deps.watchCheckpoints?.(() => {
+    if (deps.isHidden() || !deps.open() || deps.account() === null || deps.awaitingProof?.() !== true) return;
+    proofs.call();
+  });
   return () => {
     clearInterval(timer);
     unsubscribe();
+    unwatch?.();
     node.cancel();
     wallet.cancel();
+    proofs.cancel();
   };
 }
