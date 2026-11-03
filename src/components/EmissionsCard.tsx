@@ -48,7 +48,7 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
         <p className="mt-3 text-caption text-fg-3">Reading your MONKEY emissions…</p>
       ) : proof === null ? (
         pending.kind === "awaiting" ? (
-          <p role="status" className="mt-3 text-caption text-fg-3">You realised a loss in emission period {pending.period}, which has closed. Your MONKEY becomes claimable once the vault has the checkpoint covering it, and is read again by itself.</p>
+          <p role="status" className="mt-3 text-caption text-fg-3">You realised a loss in emission period {pending.period}, which has closed. Any MONKEY it earned you becomes claimable once the vault has the checkpoint covering it, and is read again by itself.</p>
         ) : pending.kind === "reading" ? (
           <p className="mt-3 text-caption text-fg-3">Reading the emission periods that have closed…</p>
         ) : (

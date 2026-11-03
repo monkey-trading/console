@@ -24,7 +24,7 @@ function PendingLine({ pending }: { pending: ReturnType<typeof pendingDistributi
   if (pending.kind === "none") return <p className={NOTE}>No USDC has been distributed to you yet. Stakers share the house&apos;s excess above its floor at each epoch close.</p>;
   const paid = `Epoch ${pending.epoch} closed and paid ${formatUsdc(usdcFixed(pending.paid))} to stakers.`;
   if (pending.staker === null) return <p role="status" className={NOTE}>{paid} If you staked, your share shows here once the vault has the checkpoint covering it.</p>;
-  const share = pending.share === null ? "" : ` Your share is about ${formatUsdc(usdcFixed(pending.share))}, estimated from your stake.`;
+  const share = pending.share === null ? "" : ` If you were staking then, your share is about ${formatUsdc(usdcFixed(pending.share))}, estimated from your stake now.`;
   return <p role="status" className={NOTE}>{paid}{share} It becomes claimable once the vault has the checkpoint covering it, and is read again by itself.</p>;
 }
 

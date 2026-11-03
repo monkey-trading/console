@@ -8,8 +8,7 @@
 import { carryAccrued } from "../engine/claim-standing";
 import type { EntitlementProof } from "../engine/emissions";
 import type { StakingPosition } from "../engine/staking";
-import type { ActivityPage, MonkeyView } from "../engine/stats-types";
-import type { DistributionProof } from "../engine/stats-types";
+import type { ActivityPage, DistributionProof, MonkeyView } from "../engine/stats-types";
 import type { Read } from "./figures";
 import type { ConsoleStore } from "../store/store";
 
@@ -30,6 +29,14 @@ export interface PendingDistribution {
 const UNITS = /^\d+$/;
 
 /**
+ * How long after a close a missing proof still reads as "awaiting": a checkpoint covering it
+ * reaches the vault within minutes, even when it waits on the one before. Past it the card falls
+ * back to the plain line, so a stake that began after the close, or a period that allocated the
+ * account nothing, is not promised a claim and the page stops asking for a proof that may never come.
+ */
+export const AWAIT_WINDOW_MS = 60 * 60_000;
+
+/**
  * Where the USDC distribution stands for an account with no proof: awaiting once an epoch has paid
  * and the account stakes (or its stake cannot be told), `none` for an account that stakes nothing
  * or when no epoch has paid, and `reading` until the totals and the account's stake have landed.
@@ -39,6 +46,7 @@ export function pendingDistribution(overview: Read<MonkeyView>, position: Read<S
   if (view === null) return { kind: overview.status === "unavailable" ? "none" : "reading" };
   const last = view.distribution?.last_distribution ?? null;
   if (last === null || !UNITS.test(last.allocated_usdc_units) || BigInt(last.allocated_usdc_units) === 0n) return { kind: "none" };
+  if (view.time_ms - last.closed_ms > AWAIT_WINDOW_MS) return { kind: "none" };
   const paid = BigInt(last.allocated_usdc_units);
   const held = position.value;
   if (held === null) {
@@ -59,7 +67,7 @@ export interface PendingEmission {
 
 /**
  * Where the MONKEY emissions stand for an account with no proof: awaiting when the public feed
- * holds a loss the account closed in an emission period that has since closed.
+ * holds a loss the account closed in an emission period that has since closed, within `AWAIT_WINDOW_MS`.
  */
 export function pendingEmission(activity: Read<ActivityPage>, overview: Read<MonkeyView>, account: string): Pending<PendingEmission> {
   const entries = activity.value?.entries;
@@ -72,6 +80,7 @@ export function pendingEmission(activity: Read<ActivityPage>, overview: Read<Mon
   let latest: number | null = null;
   for (const entry of entries) {
     if (entry.type !== "loss_close" || entry.period === null || entry.period >= current || entry.account.toLowerCase() !== mine) continue;
+    if (overview.value.time_ms - entry.ts > AWAIT_WINDOW_MS) continue;
     if (latest === null || entry.period > latest) latest = entry.period;
   }
   return latest === null ? { kind: "none" } : { kind: "awaiting", period: latest };

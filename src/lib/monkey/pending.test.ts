@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { StakingPosition } from "../engine/staking";
 import type { ActivityEntry, MonkeyView } from "../engine/stats-types";
 import { LOADING, ready, type Read } from "./figures";
-import { pendingDistribution, pendingEmission, proofAwaited } from "./pending";
+import { AWAIT_WINDOW_MS, pendingDistribution, pendingEmission, proofAwaited } from "./pending";
 
 const ME = "0x00000000000000000000000000000000000000aa";
 const MONKEY_UNIT = 10n ** 18n;
@@ -42,6 +42,13 @@ describe("pendingDistribution", () => {
     expect(pendingDistribution(overviewWith(null), stakes(1n), null)).toEqual({ kind: "none" });
   });
 
+  it("stops awaiting once the close is older than the window, so a stake that began after it is not promised a share", () => {
+    const view = overviewWith({});
+    const aged = ready({ ...(view.value as MonkeyView), time_ms: 2 + AWAIT_WINDOW_MS });
+    expect(pendingDistribution(aged, stakes(1n), null).kind).toBe("none");
+    expect(pendingDistribution(ready({ ...(view.value as MonkeyView), time_ms: 1 + AWAIT_WINDOW_MS }), stakes(1n), null).kind).toBe("awaiting");
+  });
+
   it("draws no verdict until the totals and the account's stake have landed", () => {
     expect(pendingDistribution(LOADING, stakes(1n), null)).toEqual({ kind: "reading" });
     expect(pendingDistribution(overviewWith({}), LOADING, null)).toEqual({ kind: "reading" });
@@ -65,6 +72,11 @@ describe("pendingEmission", () => {
     expect(pendingEmission(feed(loss(7)), overviewWith({}, 7), ME)).toEqual({ kind: "none" });
     expect(pendingEmission(feed(loss(5, "0x00000000000000000000000000000000000000bb")), overviewWith({}, 7), ME)).toEqual({ kind: "none" });
     expect(pendingEmission(feed(loss(null, ME, "stake")), overviewWith({}, 7), ME)).toEqual({ kind: "none" });
+  });
+
+  it("stops awaiting a loss older than the window", () => {
+    const aged = ready({ ...(overviewWith({}, 7).value as MonkeyView), time_ms: 2 + AWAIT_WINDOW_MS });
+    expect(pendingEmission(feed(loss(5)), aged, ME)).toEqual({ kind: "none" });
   });
 
   it("draws no verdict before the feed and the totals have landed", () => {
