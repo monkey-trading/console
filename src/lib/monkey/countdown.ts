@@ -25,8 +25,31 @@ export function nextCloseMs(distribution: DistributionView | null, nowMs: number
   return distribution.next_close_ms > nowMs ? distribution.next_close_ms : nextOnGrid(distribution.next_close_ms, distribution.epoch_ms, nowMs);
 }
 
-/** Whole seconds left, rounded up so the last second reads 0:01 and the figure never shows 0:00 before the boundary. */
-const seconds = (targetMs: number, nowMs: number) => Math.max(Math.ceil((targetMs - nowMs) / 1000), 0);
+/**
+ * Whether the clock has passed the budget the answer still holds: the period the node's answer
+ * names is behind the period the clock says is open, so the answer carrying the close has not
+ * landed and the countdown's place says it is waiting, instead of counting to the next budget
+ * beside the old period's figures.
+ */
+export function budgetAwaitingCheckpoint(emissions: EmissionsView | null, nowMs: number): boolean {
+  if (emissions === null || emissions.period === null || nowMs <= 0 || !usable(emissions.period_ms) || !Number.isSafeInteger(emissions.start_ms)) {
+    return false;
+  }
+  return Math.floor((nowMs - emissions.start_ms) / emissions.period_ms) > emissions.period;
+}
+
+/** Whether the close the answer names has passed: the next answer, which the checkpoint carries, has not landed. */
+export function closeAwaitingCheckpoint(distribution: DistributionView | null, nowMs: number): boolean {
+  return (
+    distribution !== null &&
+    nowMs > 0 &&
+    usable(distribution.epoch_ms) &&
+    Number.isSafeInteger(distribution.next_close_ms) &&
+    distribution.next_close_ms <= nowMs
+  );
+}
+
+/** Whole seconds left, rounded up so the last second reads 0:01 and the figure never shows 0:00 before the boundary. */const seconds = (targetMs: number, nowMs: number) => Math.max(Math.ceil((targetMs - nowMs) / 1000), 0);
 
 const two = (n: number) => String(n).padStart(2, "0");
 
