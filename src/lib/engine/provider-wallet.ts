@@ -9,6 +9,7 @@ import { decodeFunctionResult, encodeFunctionData, getTypesForEIP712Domain, isHe
 
 import { fixedFromWire, type Fixed } from "../fixed";
 import { isWholeUsdc, USDC_UNIT } from "../vault";
+import { withdrawalFailure } from "./claim-refusal";
 import type { EntitlementProof } from "./emissions";
 import type { TypedRequest } from "./eip712";
 import { claimEmissionsTx, emissionsClaimedRead, suggestMonkeyToken, suggestTokenAsset } from "./provider-monkey";
@@ -230,9 +231,8 @@ export class ProviderWallet implements Wallet {
   async claim(withdrawal: SignedWithdrawal, progress: Progress = () => undefined): Promise<string> {
     const auth = withdrawal.authorization;
     if (auth === undefined || withdrawal.approved_seq === undefined) throw new Error("This withdrawal has no authorization to claim yet.");
-    if (withdrawal.account.toLowerCase() !== this.address || withdrawal.chain_id !== this.chain.chainId || withdrawal.vault.toLowerCase() !== this.chain.vault.toLowerCase()) {
-      throw new Error("The authorization is for another account or deployment.");
-    }
+    const mine = withdrawal.account.toLowerCase() === this.address && withdrawal.chain_id === this.chain.chainId && withdrawal.vault.toLowerCase() === this.chain.vault.toLowerCase();
+    if (!mine) throw new Error("The authorization is for another account or deployment.");
     await this.ensureChain();
     const data = encodeFunctionData({
       abi: VAULT, functionName: "withdraw",
@@ -241,7 +241,7 @@ export class ProviderWallet implements Wallet {
         BigInt(auth.checkpoint_seq), auth.siblings.map(hexOf), hexOf(withdrawal.signature),
       ],
     });
-    return this.send(this.chain.vault, data, "claim the withdrawal", progress);
+    return this.send(this.chain.vault, data, "claim the withdrawal", progress).catch((error: unknown) => { throw withdrawalFailure(error); });
   }
 
   /** Ends the wallet's connection where it has one to end. */

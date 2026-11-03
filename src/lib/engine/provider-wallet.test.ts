@@ -215,6 +215,13 @@ describe("claims", () => {
     expect(provider.sent).toEqual([]);
   });
 
+  it("says in plain words that the vault refused an expired authorization, with no request data", async () => {
+    const { wallet: w } = wallet({ fail: { eth_sendTransaction: { code: 3, message: "Execution reverted with reason: custom error 0x41b7af92. Request Arguments: from: 0xabc data: 0x52be0833" } } });
+    const error = await w.claim(signed).catch((e: unknown) => e);
+    expect((error as Error).message).toContain("24-hour authorization has passed");
+    expect((error as Error).message).not.toMatch(/0x|Request Arguments/);
+  });
+
   it("reads whether the vault has paid a payout nonce, only on the deployment's chain and without asking to switch", async () => {
     expect(await wallet({ paid: true }).wallet.claimed(3)).toBe(true);
     expect(await wallet({ paid: false }).wallet.claimed(3)).toBe(false);
