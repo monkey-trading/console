@@ -19,7 +19,7 @@ export type AdoptOutcome =
 
 /** Why the saved proof is not at the vault's latest root, when something was tried. */
 export type ExitAttempt =
-  /** The node answered at another root than the vault holds: it stays until the vault's next checkpoint. */
+  /** The node answered at a checkpoint the vault has yet to hold, as it does while a post is on its way: the answer is kept, and saved when the vault reaches it. */
   | { kind: "node-ahead"; nodeSeq: number }
   /** The node's newest checkpoint is older than the vault's latest, as on a restarted or elected node: it is read again at each read of the vault until it has caught up. */
   | { kind: "node-behind"; nodeSeq: number }
@@ -94,6 +94,29 @@ export function acceptedRecord(exit: Pick<ExitState, "vault" | "record" | "check
 /** Whether a proof is being read or checked, which a press may not come between: what it comes to is not for the press to replace. */
 export const readingProof = (exit: Pick<ExitState, "reading" | "importing">): boolean => exit.reading || exit.importing;
 
+/**
+ * How long the saved proof may be behind the vault's latest root, or the account without one, before
+ * anything says so, in chain seconds. Checkpoints keep arriving on a healthy node, and each is held back
+ * until the one before it is final, so a proof is a checkpoint or two behind for much of every cycle;
+ * this is several cycles, and being behind matters only if the operator stops, which the exit's own
+ * phases then say.
+ */
+export const BEHIND_NOTICE_SECONDS = 3_600;
+
+/**
+ * Whether being without a proof at the vault's latest root has lasted, as far as this page can tell:
+ * it has watched that long, or the keeper tried and it is not the ordinary gap. A node ahead of the
+ * vault is the ordinary gap until the vault has gone that long without taking a checkpoint.
+ */
+export function behindLasts(exit: Pick<ExitState, "vault" | "record" | "attempt" | "missingSince" | "reading" | "importing">): boolean {
+  const { vault, record, attempt, missingSince } = exit;
+  if (vault === null) return false;
+  if (missingSince !== null && vault.chainNow - missingSince >= BEHIND_NOTICE_SECONDS) return true;
+  if (attempt === null || readingProof(exit)) return false;
+  if (attempt.kind === "node-ahead") return vault.chainNow - vault.lastCheckpointAt >= BEHIND_NOTICE_SECONDS;
+  return record !== null && vault.chainNow - record.checkpointAt >= BEHIND_NOTICE_SECONDS;
+}
+
 /** Whether a read failed that reading again can mend: of the vault, of what it holds for the account, of the node, or the wallet's check of a proof. */
 export const readFailed = (exit: ExitState): boolean => exit.vaultProblem !== null || exit.claimsProblem !== null || exit.attempt?.kind === "node-failed" || exit.attempt?.kind === "wallet-failed";
 
@@ -128,12 +151,14 @@ export function mayHold(state: Pick<ConsoleState, "account" | "queue" | "authori
 /**
  * How far back the page's reads show a funded account going, in seconds, once a read has failed to
  * bring its proof: a trader with short sessions has been without one that long, whatever this page
- * saw. An answer that says the vault's root predates its funds is the next checkpoint's to mend.
+ * saw. An answer that says the vault's root predates its funds, or one the vault is about to reach, is
+ * the next checkpoint's to mend.
  */
-export function heldSince(state: Pick<ConsoleState, "account" | "queue" | "history"> & { exit: Pick<ExitState, "attempt"> }): number | null {
-  const { attempt } = state.exit;
+export function heldSince(state: Pick<ConsoleState, "account" | "queue" | "history"> & { exit: Pick<ExitState, "attempt" | "vault"> }): number | null {
+  const { attempt, vault } = state.exit;
   const oldest = state.history.at(-1)?.ts;
   if (attempt === null || attempt.kind === "not-covered" || !holdsNow(state) || oldest === undefined) return null;
+  if (attempt.kind === "node-ahead" && vault !== null && vault.chainNow - vault.lastCheckpointAt < BEHIND_NOTICE_SECONDS) return null; // its answer is kept for the vault's next post
   return Math.floor(oldest / 1000);
 }
 

@@ -137,6 +137,11 @@ export class ExitWatch {
     }, RETRY_MS[Math.min(this.retries, RETRY_MS.length - 1)] ?? SLOW_READ_MS);
   }
 
+  /** Reads the vault until it reaches the answer the keeper holds, unless a checkpoint from the stream is being chased already. */
+  chaseHeld(seq: number): void {
+    if (this.chasing === null) this.chase(seq, 0);
+  }
+
   /** Heard on every store change, so it costs little unless the wallet, the node's state or the stake moved. */
   private sync(): void {
     const wallet = this.store.liveWallet;
