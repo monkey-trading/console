@@ -20,7 +20,7 @@ import { queuePage } from "@/lib/mock/funds";
 import { mockHistory } from "@/lib/mock/history";
 import { createMockNode, SIM_EPOCH_MS, type MockNode } from "@/lib/mock";
 import { connectWallet, storedKeyChanged, walletSessionEnded } from "@/lib/store/actions";
-import { followNode, moveNotice, moveToNode } from "@/lib/store/node-move";
+import { followNode, MoveAnnouncer, moveToNode } from "@/lib/store/node-move";
 import { reconnectWallet } from "@/lib/store/reconnect";
 import { scanBarsHistory } from "@/lib/store/bars-scan";
 import { followAccountFeeds, quoteSyncKey, syncQuotes } from "@/lib/store/funds";
@@ -43,6 +43,8 @@ interface Session {
   follower: OperatorFollower | null;
   /** Counts the moves to another node, each of which remounts every screen on a fresh store. */
   moves: number;
+  /** Posts the move notice at most once per move and holds its dismissal for that move alone. */
+  announcer: MoveAnnouncer;
   /** Hears each move to another node, which brings a fresh store; absent for the mock, which has one node. */
   onMove?: (listener: (store: ConsoleStore) => void) => void;
 }
@@ -119,7 +121,7 @@ function createLiveSession(deploy: Deploy): Session {
       moved?.(store);
     },
   });
-  return { store, deploy, node: null, walletConnect, prefs: createPrefs(), follower, moves: 0, onMove: (listener) => { moved = listener; } };
+  return { store, deploy, node: null, walletConnect, prefs: createPrefs(), follower, moves: 0, announcer: new MoveAnnouncer(), onMove: (listener) => { moved = listener; } };
 }
 
 function createSession(): Session {
@@ -142,7 +144,7 @@ function createSession(): Session {
       },
     },
   });
-  return { store, deploy, node, walletConnect: null, prefs: createPrefs(), follower: null, moves: 0 };
+  return { store, deploy, node, walletConnect: null, prefs: createPrefs(), follower: null, moves: 0, announcer: new MoveAnnouncer() };
 }
 
 /** The most simulated time one tick may add, so a stalled timer does not jump the prices. */
@@ -174,9 +176,10 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
   // After a move every screen has remounted: the notice row announces this, and focus that fell with the old screens goes somewhere deliberate.
   useEffect(() => {
     if (session.moves === 0 || follower === null) return;
-    store.notify("node", moveNotice(new URL(follower.getSnapshot().origin).host), "info");
+    const notice = session.announcer.noticeFor(session.moves, new URL(follower.getSnapshot().origin).host);
+    if (notice !== null) store.notify("node", notice, "info");
     if (document.activeElement === null || document.activeElement === document.body) document.getElementById("main")?.focus();
-  }, [session.moves, store, follower]);
+  }, [session.moves, session.announcer, store, follower]);
   useEffect(() => (follower === null ? undefined : followNode(store, follower)), [follower, store]);
   useEffect(() => {
     const stop = store.exit.follow({ scheduler, hidden: () => document.visibilityState === "hidden", nowMs: () => Date.now() });

@@ -13,14 +13,18 @@ const TONE = { error: `${LINE} border-ember/50 bg-ember/10 text-ember`, info: `$
 /** The notices of `SURFACES` with this tone, each with the button that dismisses it. */
 function Rows({ tone }: { tone: Notice["tone"] }) {
   const { notices } = useConsole();
-  const { store } = useSession();
+  const { store, announcer } = useSession();
   return SURFACES.map((surface) => {
     const notice = notices[surface];
     if (notice === undefined || notice.tone !== tone) return null;
     return (
       <div key={`${surface}-${notice.id}`} className={TONE[tone]}>
         {notice.text}
-        <button type="button" onClick={() => { store.clearNotice(surface); document.getElementById("main")?.focus(); }} className="ml-2 min-h-6 rounded border border-current px-1.5 hover:bg-fg/10 focus-visible:outline-2 focus-visible:outline-glow">Dismiss<span className="sr-only"> this notice</span></button>
+        <button type="button" onClick={() => {
+          if (surface === "node") announcer.dismissShowing(); // a dismissed move notice stays dismissed for that move
+          store.clearNotice(surface);
+          document.getElementById("main")?.focus();
+        }} className="ml-2 min-h-6 rounded border border-current px-1.5 hover:bg-fg/10 focus-visible:outline-2 focus-visible:outline-glow">Dismiss<span className="sr-only"> this notice</span></button>
       </div>
     );
   });
