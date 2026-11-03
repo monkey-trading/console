@@ -13,8 +13,31 @@ import { connectWallet } from "./actions";
 import { installKey } from "./session";
 import type { ConsoleStore } from "./store";
 
-/** What the console tells the user once the screens have remounted on the new store, so the log that announces it exists first. */
-export const moveNotice = (host: string): string => `The console connected to ${host}, the node the chain names, and is verifying its attestation.`;
+/** What the console tells the user once the screens have remounted on the new store, so the log that announces it exists first. The move adopted only after the node's attestation verified, so the notice says so. */
+export const moveNotice = (host: string): string => `The console connected to ${host}, the node the chain names, and verified its attestation.`;
+
+/**
+ * Posts the move notice at most once per move, and holds a dismissal for the move it was made on:
+ * whatever re-runs the effect — a repeated follow check, a remount — the same move announces once,
+ * and only a move to another node announces again.
+ */
+export class MoveAnnouncer {
+  private posted: { move: number; host: string } | null = null;
+  private dismissed: { move: number; host: string } | null = null;
+
+  /** The notice `move` earns, or null when this move was announced or dismissed already. */
+  noticeFor(move: number, host: string): string | null {
+    const held = (key: { move: number; host: string } | null) => key !== null && key.move === move && key.host === host;
+    if (held(this.posted) || held(this.dismissed)) return null;
+    this.posted = { move, host };
+    return moveNotice(host);
+  }
+
+  /** The user dismissed the notice now showing: it stays dismissed for that move alone. */
+  dismissShowing(): void {
+    if (this.posted !== null) this.dismissed = this.posted;
+  }
+}
 
 /** Hands `old`'s wallet, key and setup state to `next`; the stored entries need no change, since they name the account, chain and vault and no node. */
 export async function moveToNode(old: ConsoleStore, next: ConsoleStore): Promise<void> {
