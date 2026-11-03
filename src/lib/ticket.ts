@@ -14,6 +14,8 @@ const QTY_STEP: Fixed = SCALE / 1_000_000n;
 export const NO_FX_PRICE = "No FX price yet, so this order's value in USD is unknown.";
 
 /** The note an order with no size gets, which a size the field itself refuses does not repeat: a prompt under the field, not an error. */
+export const MARKET_CLOSED = "This market is closed.";
+export const REDUCE_ONLY = "This market only accepts orders that reduce a position.";
 export const NO_SIZE = "Enter a size";
 
 /** The refusal of a size under the market's minimum order value, given the spec's `min_order_notional`. */
@@ -238,8 +240,8 @@ export function previewTicket(input: TicketInput): TicketPreview {
   const afterCost = equity - cost;
   const useBps = afterCost > 0n ? Number((marginAfter * 10_000n) / afterCost) : equity > 0n ? 10_001 : null;
   const worst = side === "buy" ? bpsOf(quote.price, input.slippageBps) : -bpsOf(quote.price, input.slippageBps);
-  if (!market.open && !input.resting) problems.push("This market is closed.");
-  if (market.reduceOnly && grows) problems.push("This market only accepts orders that reduce a position.");
+  if (!market.open && !input.resting) problems.push(MARKET_CLOSED);
+  if (market.reduceOnly && grows) problems.push(REDUCE_ONLY);
   if (input.resting && input.triggerPrice != null && input.triggerPrice <= 0n) problems.push(TRIGGER_NOT_POSITIVE);
   if (qty <= 0n) problems.push(NO_SIZE);
   else if (grows && notional < fixedFromWire(spec.min_order_notional)) problems.push(belowMinimum(spec.min_order_notional));

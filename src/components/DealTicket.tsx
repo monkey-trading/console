@@ -10,14 +10,16 @@ import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { ORDER_LABELS, ORDER_TYPES, type OrderType } from "@/lib/prefs";
 import { formatMark } from "@/lib/price-format";
 import { ticketPrices } from "@/lib/quotes";
+import { describeSchedule } from "@/lib/schedule";
 import { setupGate } from "@/lib/setup-steps";
 import { placeOrder } from "@/lib/store/actions";
 import { AMOUNT_INPUT } from "./amount-input";
 import { SessionRefusalNote } from "./SessionRefusalNote";
 import { openSetup } from "@/lib/store/setup";
-import { belowMinimum, contractUnit, MARGIN_SHORT, NO_SIZE, parseSize, previewTicket, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
+import { belowMinimum, contractUnit, MARGIN_SHORT, MARKET_CLOSED, NO_SIZE, parseSize, previewTicket, REDUCE_ONLY, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
+import { tradingPaused } from "@/lib/trading-paused";
 
-import { useConsole, useSession } from "./ConsoleProvider";
+import { useConsole, useNodeFollow, useSession } from "./ConsoleProvider";
 import { MarketInfo } from "./MarketInfo";
 import { Notice } from "./Notice";
 import { SigningFor } from "./SigningFor";
@@ -46,8 +48,18 @@ export function DealTicket() {
   const [typedSize, setTypedSize] = useState<string | null>(null);
   const [price, setPrice] = useState("");
   const [chosenSlippage, setSlippage] = useState<number | null>(null);
+  const follow = useNodeFollow();
   const market = state.markets.find((m) => m.id === state.selected);
   if (!market) return null;
+  // One plain-words state for a paused market: a handover in progress, a closed market, no usable
+  // price, or reduce-only. A node the console does not trust is the gate below, which comes first.
+  const paused = tradingPaused({
+    handover: follow?.kind === "waiting",
+    open: market.open,
+    scheduleWords: market.open ? null : describeSchedule(market.view.schedule),
+    priced: market.mark !== null,
+    reduceOnly: market.reduceOnly,
+  });
   const triggerPrice = parseFixed(price);
   const size = sizeShown(typedSize, market, kind === "market" ? null : triggerPrice, prefs.size === "last" ? (sizes[market.id] ?? null) : null);
   const slippage = slippageBound(chosenSlippage ?? prefs.slippageBps, market);
@@ -72,8 +84,11 @@ export function DealTicket() {
   const setup = setupGate(state);
   const setupNote = setup === null ? null : setup === "reading" ? "Reading your account…" : "Sign the declaration and authorize this browser to trade.";
   // Why the console cannot sign comes first: a node it does not trust may never answer the read that setup waits on.
-  const gate = !state.wallet ? "Connect a wallet to trade." : blockSentence(readOnlyWhy) ?? setupNote;
-  const canPlace = gate === null && problems.length === 0 && sizeProblems.length === 0 && !sizeMissing && !state.busy;
+  // The paused state then names the one market-level reason, folding the ticket's own line for it.
+  const gate = !state.wallet ? "Connect a wallet to trade." : blockSentence(readOnlyWhy) ?? setupNote ?? blockSentence(paused?.why ?? null);
+  const folded = paused?.cause === "closed" ? MARKET_CLOSED : paused?.cause === "reduce_only" ? REDUCE_ONLY : null;
+  const shownProblems = folded === null ? problems : problems.filter((p) => p !== folded);
+  const canPlace = gate === null && shownProblems.length === 0 && sizeProblems.length === 0 && !sizeMissing && !state.busy;
   const places = market.places;
   const show = (value: bigint | null) => (value === null ? "—" : formatMark(value, places));
   const submit = () => {
@@ -148,7 +163,7 @@ export function DealTicket() {
         <div aria-live="polite" className="mt-3 space-y-1 text-label leading-relaxed text-ember">
           {gate && <p className="text-fg-2">{gate}</p>}
           {!gate && <SessionRefusalNote />}
-          {!gate && problems.map((p) => <p key={p}>{p}{p === "Fund your account to trade." && <> <FundingLink /></>}</p>)}
+          {!gate && shownProblems.map((p) => <p key={p}>{p}{p === "Fund your account to trade." && <> <FundingLink /></>}</p>)}
         </div>
       </form>
       <MarketInfo market={market} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} />
