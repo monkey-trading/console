@@ -7,8 +7,9 @@ import { useMemo } from "react";
 
 import { formatCompactUsd, formatUsdc, parseUnits } from "@/lib/chart-format";
 import { fixedToNumber, formatUsd, type Fixed } from "@/lib/fixed";
-import { groupThousands, formatMonkey } from "@/lib/format";
+import { groupThousands } from "@/lib/format";
 import { queueCaveats } from "@/lib/house";
+import { monkeyFigureRows } from "@/lib/house/monkey-figures";
 import { PAGES } from "@/lib/nav";
 import type { HouseScan } from "@/lib/house-scan";
 import { feedProblem } from "@/lib/store/house-feed-text";
@@ -112,15 +113,12 @@ export function HouseFigures() {
   );
 }
 
-/** MONKEY's supply, stake and the reward stakers have been paid. */
+/** MONKEY's emitted amount, stake and the reward stakers have been paid. */
 export function MonkeyFigures() {
   const { store } = useSession();
   const feed = useFeed(useMemo(() => monkeyFeed(store), [store]));
   const monkey = feed.data;
-  const text = (value: string | undefined, format: (units: bigint) => string): string => {
-    const units = value === undefined ? null : parseUnits(value);
-    return units === null ? "—" : format(units);
-  };
+  const rows = useMemo(() => monkeyFigureRows(monkey), [monkey]);
   return (
     <Panel
       title="MONKEY"
@@ -134,9 +132,7 @@ export function MonkeyFigures() {
       ) : (
         <>
         <dl className="space-y-1">
-          <Row label="Supply" tip="MONKEY emitted so far: every client's cumulative entitlement. It is minted when claimed." value={text(monkey?.emissions?.allocated, formatMonkey)} />
-          <Row label="Staked" tip="MONKEY locked in the staking contract." value={text(monkey?.staking?.total_staked, formatMonkey)} />
-          <Row label="Staker rewards" tip="USDC paid to stakers in total, across every distribution." value={text(monkey?.distribution?.distributed_usdc_units, formatUsdc)} />
+          {rows.map((row) => <Row key={row.label} label={row.label} tip={row.tip} value={row.value} />)}
           <Row label="Reward token" tip="The token distributions are paid in." value={monkey?.distribution ? "USDC" : "—"} />
         </dl>
         {feedProblem(feed, "the MONKEY totals") !== null && <p className="text-label text-fg-3">{feedProblem(feed, "the MONKEY totals")}</p>}
