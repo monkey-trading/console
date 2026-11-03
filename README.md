@@ -62,6 +62,57 @@ house's USDC above its floor. The staking epoch, unstake cooldown and floor are 
 script prints. Its header lists the variables that move its ports, fund
 another address, or serve a production build.
 
+## Try delegation, an election and a handover
+
+The same stack can run two engines, so a staker's vote moves the operator and the console follows it:
+
+```sh
+SECOND_ENGINE=1 ./scripts/dev-local-stack.sh
+```
+
+The first engine runs under sealed keys with operator rotation on, as the operator in effect. A second engine
+is registered as a candidate with an approved release; the stack starts it once an election has made the
+vault name that release, and it then takes the first engine's keys and log. The registry's election epoch is a
+minute. Two wallets (Anvil accounts 1 and 3, whose public test keys the script prints) each hold 20,000 MONKEY
+and 100,000 mock USDC. In a second terminal, `scripts/dev-local-stack-ctl.sh` drives the rest:
+
+1. On the MONKEY page, connect the first wallet, stake its MONKEY and delegate to `127.0.0.1:8081`, the second
+   engine. Do the same from the second wallet. The Operator card lists both candidates with their delegated
+   stake and whether each is eligible, and a delegation can be changed or cleared.
+2. `./scripts/dev-local-stack-ctl.sh elect` closes the election epoch. The candidate with the most delegated
+   stake wins when it is eligible (5% of all stake), at least 20% of all stake is delegated, and its votes lead
+   the operator in effect by 10%. The Operator card then shows the pending election.
+3. Claim any withdrawal you want paid (see below), then run `./scripts/dev-local-stack-ctl.sh handover`. It
+   moves the chain's clock past the election's seven-day notice, so the vault names the second engine's
+   release; the stack starts that engine, which takes the keys and the log, and the first engine exits. The
+   console follows to the second engine by itself, with balances and positions intact, and trading works. A
+   browser keeps a self-signed certificate per origin: if the console does not move, open
+   `https://127.0.0.1:8081/v1/health` once and accept it. A page loaded after the handover moves as soon as a
+   wallet is connected.
+4. `./scripts/dev-local-stack-ctl.sh fund-house 50000` adds mock USDC to the house's capital. This stack's
+   staking floor is that capital, so the next epoch that closes with a stake (every five minutes; set
+   `STAKING_EPOCH_SECS` to shorten it) pays the added amount to stakers in proportion to their stake. Each
+   wallet sees its share on the MONKEY page and claims it there, and the House page shows the same total as
+   "Staker rewards" and "Paid to stakers".
+
+`./scripts/dev-local-stack-ctl.sh status` prints the election, the vault's release, both engines and the
+chain's clock. The stack writes its addresses to `monkey-local-stack.json` in the temporary directory (or
+`STACK_INFO_FILE`), which the control script reads, and its probe of Anvil stops it with a message if Anvil
+stops answering, since the chain is lost with it.
+
+The notice can only pass on the chain's clock: the engine's clock is signed time from the internet, which a
+local stack cannot move. After `handover` the chain is a week ahead of the engine, which leaves:
+
+- Working: trading, quotes, session keys, positions and balances, deposits, staking and delegation, epochs,
+  distributions and their claims, checkpoints and the exit proof.
+- Not working until real time has caught up a week later: withdrawals. The vault accepts an authorization for
+  24 hours of the chain's clock from when the engine signed it, on the engine's clock, so every authorization
+  is expired when it arrives and the vault refuses the claim. Claim what you want paid before `handover`.
+- Different from a real election: the engine still shows the previous admin key as the operator's, with the
+  elected key pending, because it applies a new key only after seven days of its own time, so admin commands
+  signed by the elected key are not accepted either.
+- One handover per stack. Stop the stack and start it again for a fresh chain.
+
 ## Read a local engine development node
 
 Needs the engine's repository, Cargo, and a development node (`config/dev.toml` lists
