@@ -41,9 +41,23 @@ describe("the countdowns", () => {
     expect(html).toContain('aria-label="Next epoch close in 8 minutes"');
   });
 
-  it("rolls a stale close on to the next one", () => {
+  it("holds a stale close at zero, waiting for the checkpoint, until a fresh answer lands", () => {
     const stale = { ...view, distribution: { epoch_ms: 300_000, next_close_ms: NOW - 1_000 } } as MonkeyView;
-    expect(render(stale, "distributions")).toContain("Next in 4m 59s");
+    const held = render(stale, "distributions");
+    expect(held).toContain("Waiting for the checkpoint");
+    expect(held).toContain('aria-label="Next epoch close: waiting for the checkpoint"');
+    expect(held).not.toContain("Next in");
+    const fresh = { ...view, distribution: { epoch_ms: 300_000, next_close_ms: NOW + 300_000 } } as MonkeyView;
+    expect(render(fresh, "distributions")).toContain("Next in 5m 00s");
+  });
+
+  it("holds a stale budget at zero the same way", () => {
+    const open = { start_ms: 1_793_662_020_000, period_ms: 600_000, period: 0 } as MonkeyView["emissions"];
+    const stale = { ...view, emissions: open } as MonkeyView;
+    expect(render(stale, "emissions")).toContain("Waiting for the checkpoint");
+    const landed = { ...open, period: 3 } as MonkeyView["emissions"];
+    const fresh = { ...view, emissions: landed } as MonkeyView;
+    expect(render(fresh, "emissions")).toContain("Next in");
   });
 
   it("is no live region", () => {

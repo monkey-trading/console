@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { DistributionView, EmissionsView } from "../engine/stats-types";
-import { formatCountdown, nextBudgetMs, nextCloseMs, spokenCountdown } from "./countdown";
+import { budgetAwaitingCheckpoint, closeAwaitingCheckpoint, formatCountdown, nextBudgetMs, nextCloseMs, spokenCountdown } from "./countdown";
 
 const START = 1_793_662_020_000;
 const emissions = { start_ms: START, period_ms: 600_000 } as EmissionsView;
@@ -95,5 +95,42 @@ describe("spokenCountdown", () => {
     expect(at(3_600_000)).toBe("1 hour");
     expect(at(3_900_000)).toBe("1 hour 5 minutes");
     expect(at(7_200_000)).toBe("2 hours");
+  });
+});
+
+describe("budgetAwaitingCheckpoint", () => {
+  const schedule = (period: number | null) => ({ start_ms: START, period_ms: 600_000, period }) as EmissionsView;
+
+  it("holds only while the answer's period is behind the clock's", () => {
+    // The answer holds period 0; the clock inside it counts down normally.
+    expect(budgetAwaitingCheckpoint(schedule(0), START + 599_999)).toBe(false);
+    // The boundary passed: the answer for the closed period has not landed.
+    expect(budgetAwaitingCheckpoint(schedule(0), START + 600_000)).toBe(true);
+    expect(budgetAwaitingCheckpoint(schedule(0), START + 1_199_999)).toBe(true);
+    // The fresh answer names period 1: the countdown resumes.
+    expect(budgetAwaitingCheckpoint(schedule(1), START + 600_000)).toBe(false);
+    expect(budgetAwaitingCheckpoint(schedule(1), START + 1_199_999)).toBe(false);
+    expect(budgetAwaitingCheckpoint(schedule(1), START + 1_200_000)).toBe(true);
+  });
+
+  it("never waits without a schedule or a started one", () => {
+    expect(budgetAwaitingCheckpoint(null, START + 600_000)).toBe(false);
+    expect(budgetAwaitingCheckpoint(schedule(null), START + 600_000)).toBe(false);
+  });
+});
+
+describe("closeAwaitingCheckpoint", () => {
+  it("holds from the named close until a fresh answer moves it", () => {
+    expect(closeAwaitingCheckpoint(distribution, NEXT - 1)).toBe(false);
+    expect(closeAwaitingCheckpoint(distribution, NEXT)).toBe(true);
+    expect(closeAwaitingCheckpoint(distribution, NEXT + 299_999)).toBe(true);
+    // The fresh answer names the following close.
+    const fresh = { epoch_ms: 300_000, next_close_ms: NEXT + 300_000 } as DistributionView;
+    expect(closeAwaitingCheckpoint(fresh, NEXT)).toBe(false);
+    expect(closeAwaitingCheckpoint(fresh, NEXT + 300_000)).toBe(true);
+  });
+
+  it("never waits without a distribution", () => {
+    expect(closeAwaitingCheckpoint(null, NEXT)).toBe(false);
   });
 });
