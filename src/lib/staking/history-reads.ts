@@ -1,7 +1,10 @@
 /**
  * The Staking page's reads of the connected account's distribution history (monkey-trading/console#271):
  * on open, one page of each kind for the wallet; then what the stream adds, and older pages only on
- * "Load more". A failed first read is made again by itself, further apart each time, with no button.
+ * "Load more". The node's history index trails its stream by the index writer's queue, so an epoch
+ * that closed as the page opened can be missing from the first pages and already past on the stream:
+ * the newest pages are read once more a tick after the first read lands. A failed first read is
+ * made again by itself, further apart each time, with no button.
  * The page opens these reads only while the node is trusted, which a gap in the feed ends, so a
  * reopening reads afresh and nothing the gap carried stays missing.
  */
@@ -10,7 +13,7 @@ import { EngineError } from "../engine/client";
 import type { HistoryPage } from "../engine/types";
 import { Backoff } from "../monkey/live-reads";
 import type { ConsoleStore } from "../store/store";
-import { addMessage, addPage, emptyHistory, HISTORY_KINDS, limitingKinds, moreRemain, type DistributionHistory, type HistoryKind } from "./distribution-history";
+import { addMessage, addNewest, addPage, emptyHistory, HISTORY_KINDS, limitingKinds, moreRemain, type DistributionHistory, type HistoryKind } from "./distribution-history";
 
 export interface HistoryState {
   /** The account the history is for; null with no wallet. */
@@ -42,6 +45,8 @@ export class DistributionHistoryReads {
   private open = false;
   /** Counts openings and account changes; a read begun before one never writes after it. */
   private cycle = 0;
+  /** The cycle whose first read has landed and whose newest pages are still to be read once more. */
+  private recheck: number | null = null;
 
   constructor(private readonly store: ConsoleStore) {}
 
@@ -72,7 +77,9 @@ export class DistributionHistoryReads {
       if (next !== data) this.set({ data: next });
     });
     const timer = setInterval(() => {
-      if (!isHidden() && this.state.status === "failed" && this.backoff.ready()) void this.first(this.cycle);
+      if (isHidden()) return;
+      if (this.state.status === "failed" && this.backoff.ready()) void this.first(this.cycle);
+      else if (this.recheck === this.cycle && this.state.status === "ready") void this.readNewest(this.cycle);
     }, RETRY_TICK_MS);
     return () => {
       this.open = false;
@@ -124,11 +131,25 @@ export class DistributionHistoryReads {
       const pages = await Promise.all(HISTORY_KINDS.map((kind) => this.page(account, kind, null)));
       if (cycle !== this.cycle) return;
       this.backoff.record(false);
+      this.recheck = cycle;
       this.set({ status: "ready", data: HISTORY_KINDS.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null }), this.state.data) });
     } catch (error) {
       if (cycle !== this.cycle) return;
       this.backoff.record(true);
       this.set({ status: "failed", error: describe(error) });
+    }
+  }
+
+  /** The newest page of each kind once more, folded in where the first read's covers stand: what the index had not taken then. */
+  private async readNewest(cycle: number): Promise<void> {
+    const { account } = this.state;
+    this.recheck = null;
+    if (account === null) return;
+    try {
+      const pages = await Promise.all(HISTORY_KINDS.map((kind) => this.page(account, kind, null)));
+      if (cycle === this.cycle) this.set({ data: pages.reduce((held, page) => addNewest(held, page), this.state.data) });
+    } catch {
+      // Not a verdict: what is held stands, and the next opening reads afresh.
     }
   }
 

@@ -166,6 +166,29 @@ describe("DistributionHistoryReads", () => {
     stop();
   });
 
+  it("reads the newest pages once more a tick after the first read lands, for an epoch the index had not taken yet", async () => {
+    const kit = await setup();
+    kit.stop();
+    const real = kit.node.client.history.bind(kit.node.client);
+    let lagging = true;
+    // The index has not taken the account's one allocation yet when the page first reads it.
+    const pages = vi.spyOn(kit.node.client, "history").mockImplementation(async (address, params) => (lagging && params.kind === "distribution_allocated" ? { events: [], next: null } : real(address, params)));
+    const history = new DistributionHistoryReads(kit.store);
+    const stop = history.start(() => false);
+    await flush();
+    expect(history.getSnapshot().status).toBe("ready");
+    expect(epochsOf(history)).toEqual([]);
+    lagging = false;
+    pages.mockClear();
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
+    expect(mine(pages).map(([, params]) => params)).toEqual([{ kind: "distribution_allocated", limit: HISTORY_PAGE }, { kind: "operator_share_allocated", limit: HISTORY_PAGE }]);
+    expect(epochsOf(history)).toHaveLength(1);
+    // Once only.
+    await vi.advanceTimersByTimeAsync(5 * RETRY_TICK_MS);
+    expect(mine(pages)).toHaveLength(2);
+    stop();
+  });
+
   it("registers on the session while it reads, and reads afresh when the mock's account reset invalidates it", async () => {
     const { history, node, store, pages, stop } = await started();
     expect(store.monkeySession.history).toBe(history);

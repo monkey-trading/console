@@ -12,6 +12,8 @@ export type HistoryKind = "distribution_allocated" | "operator_share_allocated";
 export const HISTORY_KINDS: readonly HistoryKind[] = ["distribution_allocated", "operator_share_allocated"];
 /** Most epochs shown: reading stops there, and arrivals push the oldest out. Older epochs one stream has read and the other not yet are held beside them, at most a page of them. */
 export const MAX_EPOCHS = 2_000;
+/** Most epochs held in all: as many again as are shown, for arrivals held while no read has landed to show them. */
+const MAX_HELD = 2 * MAX_EPOCHS;
 
 /** What one closed epoch added to the account's cumulative distribution, in USDC base units. */
 export interface EpochRow {
@@ -73,10 +75,9 @@ function fold(data: DistributionHistory, events: readonly HistoryEvent[]): Distr
   }
   const folded = { ...data, rows: [...byEpoch.values()].sort((a, b) => b.epoch - a.epoch) };
   const shown = shownRows(folded);
-  if (shown.length <= MAX_EPOCHS) return folded;
-  const kept = shown.slice(0, MAX_EPOCHS);
-  const oldest = kept[kept.length - 1];
-  return { ...folded, rows: kept, trimmedBelow: oldest === undefined ? data.trimmedBelow : oldest.seq };
+  const kept = shown.length > MAX_EPOCHS ? shown.slice(0, MAX_EPOCHS) : folded.rows.length > MAX_HELD ? folded.rows.slice(0, MAX_HELD) : null;
+  const oldest = kept?.[kept.length - 1];
+  return kept === null || oldest === undefined ? folded : { ...folded, rows: kept, trimmedBelow: oldest.seq };
 }
 
 /** Adds one page of `kind`, read from where its cover left off. */
@@ -85,6 +86,11 @@ export function addPage(data: DistributionHistory, kind: HistoryKind, page: Hist
   const was = data.cover[kind];
   const cover: Cover = { oldestSeq: last === undefined ? was.oldestSeq : seqOf(last.cursor), next: page.next, done: page.next === null };
   return fold({ ...data, cover: { ...data.cover, [kind]: cover } }, page.events);
+}
+
+/** Folds the newest page of a kind in again where its cover stands: what the history index had not taken when the cover was read. */
+export function addNewest(data: DistributionHistory, page: HistoryPage): DistributionHistory {
+  return fold(data, page.events);
 }
 
 /** Folds a stream message's allocations for `account` in; the same object when it carries none, so a price message changes nothing. */
@@ -114,6 +120,11 @@ function heldFrom(data: DistributionHistory): number {
 export function shownRows(data: DistributionHistory): readonly EpochRow[] {
   const from = heldFrom(data);
   return data.rows.filter((row) => row.seq >= from);
+}
+
+/** Whether older epochs are left out: the bound stopped the reads before both streams reached their start, or arrivals pushed shown ones out. */
+export function epochsLeftOut(data: DistributionHistory): boolean {
+  return data.trimmedBelow !== null || (atBound(data) && HISTORY_KINDS.some((kind) => !data.cover[kind].done));
 }
 
 /** Whether the shown epochs have reached the bound, or arrivals have pushed older ones out. */

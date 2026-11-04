@@ -62,10 +62,16 @@ describe("MonkeyPanel wallet reads behind an unanswered call", () => {
     await vi.advanceTimersByTimeAsync(10_000);
     await first;
     expect(store.getSnapshot().notices).toEqual({});
+    // The card, not a notice, says why the record is unread.
+    expect(panel.getSnapshot().wallet.record).toMatchObject({ status: "failed", message: "Your wallet did not answer in time." });
     // The next read's own record read times out in its turn, and is just as silent.
     await vi.advanceTimersByTimeAsync(60_000);
     await next;
     expect(store.getSnapshot().notices).toEqual({});
+    // A wallet that answers again makes the record read ready.
+    wallet.emissionsClaimed = record;
+    await panel.refreshWallet(true);
+    expect(panel.getSnapshot().wallet.record.status).toBe("ready");
     stop();
   });
 });

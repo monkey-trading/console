@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { HistoryEvent, HistoryPage, StreamMessage } from "../engine/types";
-import { addMessage, addPage, atBound, emptyHistory, hasOperatorShare, HISTORY_KINDS, limitingKinds, MAX_EPOCHS, moreRemain, shownRows, type HistoryKind } from "./distribution-history";
+import { addMessage, addNewest, addPage, atBound, emptyHistory, epochsLeftOut, hasOperatorShare, HISTORY_KINDS, limitingKinds, MAX_EPOCHS, moreRemain, shownRows, type HistoryKind } from "./distribution-history";
 
 const ME = "0x00000000000000000000000000000000000000aa";
 const OTHER = "0x00000000000000000000000000000000000000bb";
@@ -141,5 +141,36 @@ describe("paging toward the bound", () => {
     expect(limitingKinds(data)).toEqual([]);
     expect(shownRows(data)).toHaveLength(120);
     expect(atBound(data)).toBe(false);
+  });
+});
+
+describe("what is held and left out", () => {
+  const arrival = (epoch: number): StreamMessage => ({ offset: `${10 * epoch}:0`, type: "command", seq: 10 * epoch, ts: epoch, cmd: { type: "tick" }, events: [{ type: "distribution_allocated", account: ME, epoch, amount: "1" }] });
+
+  it("bounds the arrivals held while no read has landed to show them, and shows none below what it kept once one lands", () => {
+    let data = emptyHistory();
+    for (let epoch = 1; epoch <= 2 * MAX_EPOCHS + 5; epoch += 1) data = addMessage(data, arrival(epoch), ME);
+    expect(data.rows).toHaveLength(2 * MAX_EPOCHS);
+    expect(data.rows.at(-1)?.epoch).toBe(6);
+    data = addPage(addPage(data, "distribution_allocated", { events: [], next: null }), "operator_share_allocated", { events: [], next: null });
+    expect(shownRows(data)).toHaveLength(MAX_EPOCHS);
+    expect(epochsLeftOut(data)).toBe(true);
+  });
+
+  it("says epochs are left out once arrivals push one out of a history read to its start, and not before", () => {
+    const all = Array.from({ length: MAX_EPOCHS }, (_, i) => MAX_EPOCHS - i);
+    let data = addPage(addPage(emptyHistory(), "distribution_allocated", page("distribution_allocated", all, false)), "operator_share_allocated", page("operator_share_allocated", [], false));
+    expect(shownRows(data)).toHaveLength(MAX_EPOCHS);
+    expect(epochsLeftOut(data)).toBe(false);
+    data = addMessage(data, arrival(MAX_EPOCHS + 1), ME);
+    expect(shownRows(data)).toHaveLength(MAX_EPOCHS);
+    expect(epochsLeftOut(data)).toBe(true);
+  });
+
+  it("folds the newest page in again without moving where the streams were read to", () => {
+    const data = addPage(addPage(emptyHistory(), "distribution_allocated", page("distribution_allocated", [9, 8], true)), "operator_share_allocated", page("operator_share_allocated", [], false));
+    const again = addNewest(data, page("distribution_allocated", [10, 9], true));
+    expect(again.cover).toEqual(data.cover);
+    expect(epochs(shownRows(again))).toEqual([10, 9, 8]);
   });
 });

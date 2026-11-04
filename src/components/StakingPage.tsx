@@ -73,7 +73,7 @@ export function StakingPage() {
               <ChartCard id="chart-rewards" title="Total USDC distributed to stakers" caption="Cumulative, across every epoch close." feed={panel.feed("rewards")} kind="area" lines={REWARD_LINES} format={formatCompactUsd} />
             </div>
           </div>
-          <div className={`${trusted ? "mt-4" : "mt-4 max-w-[35rem]"}`}>
+          <div className="mt-4">
             <OperatorsPanel operators={operators} />
           </div>
         </div>

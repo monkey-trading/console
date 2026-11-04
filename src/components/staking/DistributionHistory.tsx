@@ -10,7 +10,7 @@ import { useSyncExternalStore } from "react";
 
 import { groupThousands } from "@/lib/format";
 import { usdcFixed } from "@/lib/monkey/figures";
-import { atBound, hasOperatorShare, HISTORY_KINDS, MAX_EPOCHS, moreRemain, shownRows } from "@/lib/staking/distribution-history";
+import { epochsLeftOut, hasOperatorShare, MAX_EPOCHS, moreRemain, shownRows } from "@/lib/staking/distribution-history";
 import type { DistributionHistoryReads } from "@/lib/staking/history-reads";
 import { formatStamp } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
@@ -38,7 +38,7 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
   const rows = mine ? shownRows(state.data) : [];
   const operator = hasOperatorShare(rows);
   const more = mine && state.status === "ready" && moreRemain(state.data);
-  const bounded = mine && atBound(state.data) && HISTORY_KINDS.some((kind) => !state.data.cover[kind].done);
+  const bounded = mine && epochsLeftOut(state.data);
   const error = (state.error ?? "the read failed").replace(/\.+$/, "");
   // The first read's failure, or Load more's: one status line that changes its words, so either is announced.
   const problem = !mine || state.error === null ? "" : state.status === "failed" ? `Could not read your distributions: ${error}. The read is made again by itself.` : `Could not read older epochs: ${error}.`;
