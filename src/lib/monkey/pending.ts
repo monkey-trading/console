@@ -18,8 +18,8 @@ export type Pending<T> = { kind: "none" } | { kind: "reading" } | ({ kind: "awai
 /** The last epoch that paid stakers, with the account's estimated share of it. */
 export interface PendingDistribution {
   epoch: number;
-  /** What the epoch paid to all stakers, in USDC base units. */
-  paid: bigint;
+  /** What the epoch paid to all stakers, without the operator's share, in USDC base units; null while the closed epochs that state it are not read. */
+  paid: bigint | null;
   /** The account's share, estimated from its stake now against the counted total; null where either is unknown. */
   share: bigint | null;
   /** Whether the account stakes: null where its stake cannot be read (a watched account). */
@@ -40,14 +40,16 @@ export const AWAIT_WINDOW_MS = 60 * 60_000;
  * Where the USDC distribution stands for an account with no proof: awaiting once an epoch has paid
  * and the account stakes (or its stake cannot be told), `none` for an account that stakes nothing
  * or when no epoch has paid, and `reading` until the totals and the account's stake have landed.
+ * `toStakers` is an epoch's stakers' part as the closed epochs state it, null while not read: the
+ * node's allocated total counts the operator's fifth too while operator rotation is on.
  */
-export function pendingDistribution(overview: Read<MonkeyView>, position: Read<StakingPosition>, unmirroredTotal: string | null): Pending<PendingDistribution> {
+export function pendingDistribution(overview: Read<MonkeyView>, position: Read<StakingPosition>, unmirroredTotal: string | null, toStakers: (epoch: number) => bigint | null = () => null): Pending<PendingDistribution> {
   const view = overview.value;
   if (view === null) return { kind: overview.status === "unavailable" ? "none" : "reading" };
   const last = view.distribution?.last_distribution ?? null;
   if (last === null || !UNITS.test(last.allocated_usdc_units) || BigInt(last.allocated_usdc_units) === 0n) return { kind: "none" };
   if (view.time_ms - last.closed_ms > AWAIT_WINDOW_MS) return { kind: "none" };
-  const paid = BigInt(last.allocated_usdc_units);
+  const paid = toStakers(last.epoch);
   const held = position.value;
   if (held === null) {
     if (position.status === "unavailable") return { kind: "awaiting", epoch: last.epoch, paid, share: null, staker: null };
@@ -56,7 +58,7 @@ export function pendingDistribution(overview: Read<MonkeyView>, position: Read<S
   if (!held.stakingEnabled || held.staked === 0n) return { kind: "none" };
   const total = view.staking !== null && UNITS.test(view.staking.total_staked) ? BigInt(view.staking.total_staked) : 0n;
   // The node mirrors a stake or an unstake a little after the chain, so until its total moves the two disagree and a share would be wrong.
-  const share = total === 0n || unmirroredTotal !== null ? null : (paid * (held.staked > total ? total : held.staked)) / total;
+  const share = paid === null || total === 0n || unmirroredTotal !== null ? null : (paid * (held.staked > total ? total : held.staked)) / total;
   return { kind: "awaiting", epoch: last.epoch, paid, share, staker: true };
 }
 

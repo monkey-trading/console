@@ -27,7 +27,7 @@ import { focusHeading } from "../monkey/Card";
 import { ReadNote } from "../monkey/ReadNote";
 import { Row } from "../monkey/Row";
 import { NOTE } from "../monkey/styles";
-import { useConsoleSelect, useMonkeyPanel, usePanelState } from "../monkey/use-monkey";
+import { useConsoleSelect, useMonkeyPanel } from "../monkey/use-monkey";
 import { CandidatePicker } from "./CandidatePicker";
 
 /** The Delegate form's box, whose amount field a table row's Delegate button focuses. */
@@ -58,7 +58,6 @@ interface Props {
  */
 export function Delegations({ operators, lists, delegations: reads, read, target, onTarget, typedTo, onTypedTo, labelOf, titleId }: Props) {
   const panel = useMonkeyPanel();
-  const { settling } = usePanelState();
   const wallet = useConsoleSelect((state) => state.wallet);
   const decided = useConsoleSelect((state) => state.walletDecided);
   const busy = useConsoleSelect((state) => state.busy);
@@ -76,8 +75,9 @@ export function Delegations({ operators, lists, delegations: reads, read, target
   const listed = view?.rows.filter((row) => row.listed) ?? [];
   const nameOf = (address: string) => withAddress(labelOf(address), address);
   const options = listed.map((row) => ({ value: row.address, label: nameOf(row.address) }));
-  // Shut while a transaction's own read again is on its way: the figures held are the ones before it.
-  const disabled = busy || settling || read.settling || chain === null;
+  // Shut until a read begun after the last landed transaction succeeds: the figures held are the ones before it.
+  // The chain's read alone decides, never the node's: no operator may hold a staker's vote in place.
+  const disabled = busy || read.settling || chain === null;
   /** Opens one delegation's form, or closes it; an amount or address typed under another delegation is not this one's. */
   const edit = (next: { candidate: string; mode: "move" | "undelegate" } | null) => {
     if (next?.candidate !== editing?.candidate) {

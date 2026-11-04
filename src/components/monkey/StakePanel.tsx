@@ -45,8 +45,8 @@ export function StakePanel({ delegations = null, labelOf = shortHex }: { delegat
   const share = position === null || total === null || unmirroredTotal !== null ? null : shareBps(position.staked + (pending?.amount ?? 0n), total);
   const left = pending === null ? 0 : pending.claimableAtMs - nowMs;
   const readOnly = wallet?.readOnly === true;
-  // The delegations an unstake would reduce, once read fresh: never a read from before the last transaction.
-  const held = delegations !== null && delegations.read.status === "ready" && !delegations.settling ? delegations.read.value : null;
+  // The delegations an unstake would reduce, as the chain last told them, never from before the last landed transaction.
+  const held = delegations === null || delegations.settling ? null : delegations.read.value;
   // Not read yet: no wallet the page load may still connect, or a connected one whose stake has not landed.
   const reading = wallet === null ? !decided : !readOnly && position === null && (!mine || figures.position.status === "loading");
   return (
@@ -65,7 +65,7 @@ export function StakePanel({ delegations = null, labelOf = shortHex }: { delegat
           <AmountForm field="stake" label="Stake" action="Stake" max={position?.balance ?? 0n} maxLabel="your wallet balance" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => stakeMonkey(panel, amount, onLanded)} />
           <AmountForm
             field="unstake" label="Unstake" action="Start unstake" max={position?.staked ?? 0n} maxLabel="your stake"
-            disabled={busy || settling || position === null || (delegations !== null && (delegations.settling || delegations.read.status !== "ready"))}
+            disabled={busy || settling || position === null || (delegations !== null && held === null)}
             onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)}
             preview={held === null ? undefined : (amount) => unstakeWords(held.staked, held.delegations, amount, (address) => withAddress(labelOf(address), address))}
           />

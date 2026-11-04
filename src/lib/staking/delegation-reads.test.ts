@@ -76,6 +76,28 @@ describe("DelegationReads", () => {
     expect(reads.getSnapshot()).toEqual({ account: null, read: { status: "loading", value: null, message: null }, settling: false });
   });
 
+  it("keeps the forms shut when a landed change's read again fails, until a later read succeeds, and not for another account", async () => {
+    const { reads, stop, staking, store } = await started();
+    const real = staking.delegations.bind(staking);
+    staking.delegations = () => Promise.reject(new Error("the wallet did not answer"));
+    await reads.settleAfter();
+    expect(reads.getSnapshot()).toMatchObject({ settling: true, read: { status: "failed" } });
+    staking.delegations = real;
+    await reads.refresh();
+    expect(reads.getSnapshot()).toMatchObject({ settling: false, read: { status: "ready" } });
+    // A read for one account still settling never holds another's forms shut.
+    staking.delegations = () => Promise.reject(new Error("the wallet did not answer"));
+    await reads.settleAfter();
+    expect(reads.getSnapshot().settling).toBe(true);
+    disconnectWallet(store);
+    await flush();
+    expect(reads.getSnapshot()).toMatchObject({ account: null, settling: false });
+    await connectWallet(store, "browser");
+    await flush();
+    expect(reads.getSnapshot()).toMatchObject({ account: DEMO_ADDRESS, settling: false, read: { status: "ready" } });
+    stop();
+  });
+
   it("says delegation is unavailable when the build names no staking contract", async () => {
     const { reads, stop, staking } = await started();
     staking.delegations = () => Promise.resolve(null);

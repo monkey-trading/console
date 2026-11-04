@@ -18,7 +18,7 @@ export interface DelegationsState {
   account: string | null;
   /** Unavailable for a wallet with no staking calls, or a build that names no staking contract. */
   read: Read<StakeDelegations>;
-  /** Whether a staking transaction has landed and its read again has not: the figures held are the ones before it. */
+  /** Whether a staking transaction has landed and no read begun since has succeeded: the figures held are the ones before it. */
   settling: boolean;
 }
 
@@ -36,8 +36,13 @@ export class DelegationReads {
   private reading: { wallet: Wallet; cycle: number; read: Promise<void>; started: boolean } | null = null;
   /** Spaces the timer's reads out after failures; a read asked for after a transaction is not held back. */
   private readonly backoff = new Backoff();
-  /** The reads again after landed transactions still on their way; closing the page forgets them. */
-  private readonly settles = new Set<object>();
+  /**
+   * Counts landed transactions, and the count the last successful read began after: while they
+   * differ, the figures held predate a landed change. Another account's figures, or a new opening,
+   * start level.
+   */
+  private landed = 0;
+  private caughtUp = 0;
 
   constructor(private readonly store: ConsoleStore) {}
 
@@ -78,7 +83,7 @@ export class DelegationReads {
       if (this.store.monkeySession.delegations === this) this.store.monkeySession.delegations = null;
       this.reading = null;
       this.backoff.reset();
-      this.settles.clear();
+      this.caughtUp = this.landed;
       this.set(IDLE);
     };
   }
@@ -96,7 +101,8 @@ export class DelegationReads {
     const account = wallet?.address ?? null;
     if (account !== this.state.account) {
       this.cycle += 1;
-      this.set({ account, read: LOADING });
+      this.caughtUp = this.landed;
+      this.set({ account, read: LOADING, settling: false });
     }
     const staking = wallet?.staking;
     if (wallet === null || staking === undefined || wallet.readOnly === true) {
@@ -111,10 +117,15 @@ export class DelegationReads {
     entry.read = this.store.monkeySession.walletWork.work(wallet, async () => {
       entry.started = true;
       if (!current()) return;
+      // Begun after every transaction landed so far, so a success reflects them all.
+      const after = this.landed;
       try {
         const answer = await staking.delegations();
         this.backoff.record(false);
-        if (current()) this.set({ read: answer === null ? NONE : ready(answer) });
+        if (current()) {
+          this.caughtUp = Math.max(this.caughtUp, after);
+          this.set({ read: answer === null ? NONE : ready(answer), settling: this.landed > this.caughtUp });
+        }
       } catch (error) {
         this.backoff.record(true);
         if (current()) this.set({ read: failed(error, this.state.read.value) });
@@ -127,19 +138,14 @@ export class DelegationReads {
   }
 
   /**
-   * After a staking transaction landed: the figures held are the ones before it until this read
-   * lands, so the forms that check against them stay shut till then, and till every other such read
-   * has landed too.
+   * After a staking transaction landed: the figures held are the ones before it until a read begun
+   * after it succeeds, so the forms that check against them stay shut till then; a failed read leaves
+   * them shut, and the timer's next read may open them. Resolves once this read has finished.
    */
   async settleAfter(): Promise<void> {
     if (!this.open) return;
-    const token = {};
-    this.settles.add(token);
+    this.landed += 1;
     this.set({ settling: true });
-    try {
-      await this.refresh();
-    } finally {
-      if (this.settles.delete(token)) this.set({ settling: this.settles.size > 0 });
-    }
+    await this.refresh();
   }
 }

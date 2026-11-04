@@ -7,11 +7,12 @@
  * claimable layout with dashes, so nothing below moves when they land.
  */
 
-import { useId } from "react";
+import { useId, useSyncExternalStore } from "react";
 
 import { claimDistribution, distributionPosition } from "@/lib/monkey/actions";
 import { usdcFixed } from "@/lib/monkey/figures";
 import { pendingDistribution } from "@/lib/monkey/pending";
+import type { EpochReads, EpochsState } from "@/lib/staking/epoch-reads";
 import { formatUsdc } from "@/lib/vault";
 
 import { Notice } from "../Notice";
@@ -26,15 +27,20 @@ import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
 /** What the card says while the node holds no proof: what is known of the last paying epoch, never that nothing was distributed because no proof exists yet. */
 function PendingLine({ pending }: { pending: ReturnType<typeof pendingDistribution> }) {
   if (pending.kind === "reading") return <p className={NOTE}>Reading the epochs that have paid stakers…</p>;
-  if (pending.kind === "none") return <p className={NOTE}>No USDC has been distributed to you yet. Stakers share the house&apos;s excess above its floor at each epoch close.</p>;
-  const paid = `Epoch ${pending.epoch} closed and paid ${formatUsdc(usdcFixed(pending.paid))} to stakers.`;
+  if (pending.kind === "none") return <p className={NOTE}>No USDC has been distributed to you yet. Stakers share the house&apos;s excess above its floor at each epoch close, less the operator&apos;s fifth while operator rotation is on.</p>;
+  const paid = pending.paid === null ? `Epoch ${pending.epoch} closed and paid stakers.` : `Epoch ${pending.epoch} closed and paid ${formatUsdc(usdcFixed(pending.paid))} to stakers.`;
   if (pending.staker === null) return <p role="status" className={NOTE}>{paid} If you staked, your share shows here once the vault has the checkpoint covering it.</p>;
   const share = pending.share === null ? "" : ` If you were staking then, your share is about ${formatUsdc(usdcFixed(pending.share))}, estimated from your stake now.`;
   return <p role="status" className={NOTE}>{paid}{share} It becomes claimable once the vault has the checkpoint covering it, and is read again by itself.</p>;
 }
 
-export function DistributionClaim() {
+/** No closed epochs, for a card shown without the page's reads of them. */
+const NO_EPOCHS = { subscribe: () => () => undefined, getSnapshot: (): EpochsState | null => null };
+
+/** The card; `epochs`, the page's reads of the closed epochs, gives what a pending close paid stakers. */
+export function DistributionClaim({ epochs = null }: { epochs?: EpochReads | null }) {
   const panel = useMonkeyPanel();
+  const closes = useSyncExternalStore(epochs?.subscribe ?? NO_EPOCHS.subscribe, epochs?.getSnapshot ?? NO_EPOCHS.getSnapshot, epochs?.getSnapshot ?? NO_EPOCHS.getSnapshot);
   const { wallet: figures, overview, unmirroredTotal } = usePanelState();
   const wallet = useConsoleSelect((state) => state.wallet);
   const decided = useConsoleSelect((state) => state.walletDecided);
@@ -46,7 +52,12 @@ export function DistributionClaim() {
   const proof = mine ? figures.proof.value : null;
   const held = mine ? figures.position.value : null;
   const position = distributionPosition(proof, held);
-  const pending = pendingDistribution(overview, figures.position, unmirroredTotal);
+  // The closed epochs are checked as they are read, so each stakers' part is whole base units.
+  const toStakers = (epoch: number) => {
+    const close = closes?.epochs.find((entry) => entry.epoch === epoch);
+    return close === undefined ? null : BigInt(close.stakers_usdc_units);
+  };
+  const pending = pendingDistribution(overview, figures.position, unmirroredTotal, toStakers);
   // Not read yet: no wallet the page load may still connect, the node's proof, or, beside a proof, the vault's record that decides the claim.
   const readingProof = wallet !== null && (!mine || figures.proof.status === "loading");
   const readingRecord = mine && !readOnly && proof !== null && held === null && figures.position.status === "loading";

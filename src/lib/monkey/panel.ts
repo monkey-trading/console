@@ -31,8 +31,10 @@ export class MonkeyPanel {
   /** This page's charts, by name. */
   private readonly feeds: Partial<Record<FeedName, ChartFeed>>;
   private state: PanelState = { overview: LOADING, activity: LOADING, wallet: NO_WALLET, unmirroredTotal: null, drafts: NO_DRAFTS, settling: false };
-  /** Landed transactions whose re-read is still running. */
+  /** Landed transactions whose re-read is still running, for the account connected now. */
   private settlers = 0;
+  /** Counts changes of account; a re-read begun for an earlier account never counts against a later one. */
+  private accountRound = 0;
   private proofReads = 0;
   private proofLanded = 0;
   private readonly listeners = new Set<() => void>();
@@ -141,10 +143,12 @@ export class MonkeyPanel {
   /** Marks a landed transaction's re-read as running; `reread` is that read, after which the forms open again. */
   async settle(reread: Promise<unknown>): Promise<void> {
     const cycle = this.cycle;
+    const account = this.accountRound;
     this.settlers += 1;
     this.set({ settling: true });
     await reread.finally(() => {
-      if (cycle !== this.cycle) return; // the page was reopened meanwhile, which reset the count
+      // The page was reopened, or another account connected, meanwhile, which reset the count.
+      if (cycle !== this.cycle || account !== this.accountRound) return;
       this.settlers -= 1;
       this.set({ settling: this.settlers > 0 });
     });
@@ -185,11 +189,18 @@ export class MonkeyPanel {
   refreshWallet(fresh = false): Promise<void> {
     const wallet = this.store.liveWallet;
     if (wallet === null) {
-      this.set({ wallet: NO_WALLET, drafts: NO_DRAFTS });
+      this.accountRound += 1;
+      this.settlers = 0;
+      this.set({ wallet: NO_WALLET, drafts: NO_DRAFTS, settling: false });
       return Promise.resolve();
     }
     const cycle = this.cycle;
-    if (this.state.wallet.address !== wallet.address) this.set({ wallet: { ...NO_WALLET, address: wallet.address }, unmirroredTotal: null });
+    if (this.state.wallet.address !== wallet.address) {
+      // Another account's landed transaction says nothing about this one's figures, so its re-reads no longer hold the forms.
+      this.accountRound += 1;
+      this.settlers = 0;
+      this.set({ wallet: { ...NO_WALLET, address: wallet.address }, unmirroredTotal: null, settling: false });
+    }
     // The node's proof needs nothing from the wallet, so it is not held up behind a call the wallet has not answered.
     const proof = this.page === "staking" ? this.readProof(wallet, cycle) : Promise.resolve();
     // The page's wallet read (the stake, or the vault's record) still waiting for the wallet to answer an earlier call says so once the time limit has passed, instead of reading "Reading…" with no reason.

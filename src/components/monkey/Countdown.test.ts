@@ -25,7 +25,7 @@ function Page({ overview, now = NOW, children }: { overview: MonkeyView | null; 
 }
 
 const render = (overview: MonkeyView | null, card: "emissions" | "distributions", now?: number) =>
-  renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Page, { overview, now }, createElement(card === "emissions" ? EmissionsCard : DistributionClaim, { claim: async () => undefined }))));
+  renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Page, { overview, now }, card === "emissions" ? createElement(EmissionsCard, { claim: async () => undefined }) : createElement(DistributionClaim))));
 
 describe("the countdowns", () => {
   it("shows the next budget in the emissions card, with no wallet connected", () => {

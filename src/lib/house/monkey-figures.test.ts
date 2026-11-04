@@ -23,7 +23,7 @@ const viewWith = (over: Partial<NonNullable<MonkeyView["emissions"]>> = {}, stak
 describe("monkeyFigureRows", () => {
   it("labels the emissions row Emitted and reads the cumulative entitlement, not the token's supply", () => {
     const rows = monkeyFigureRows(viewWith());
-    expect(rows.map((row) => row.label)).toEqual(["Emitted", "Staked", "Staker rewards"]);
+    expect(rows.map((row) => row.label)).toEqual(["Emitted", "Staked", "USDC distributed"]);
     expect(rows[0]?.value).toBe(formatMonkey(5n * UNIT));
     expect(rows[0]?.tip).toContain("minted only when claimed");
   });

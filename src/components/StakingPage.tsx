@@ -74,7 +74,7 @@ export function StakingPage() {
           <div className={`mt-4 ${trusted ? "grid" : "hidden"} items-start gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,35rem)_minmax(0,1fr)]`}>
             <div className="flex min-w-0 flex-col gap-4">
               <StakePanel delegations={wallet !== null && delegationsRead.account === wallet.address ? delegationsRead : null} labelOf={labelOf} />
-              <DistributionClaim />
+              <DistributionClaim epochs={epochs} />
               <DistributionHistory history={history} />
               <div className="grid min-w-0 gap-4 xl:grid-cols-2">
                 <RewardsPanel />
@@ -82,8 +82,8 @@ export function StakingPage() {
               </div>
             </div>
             <div className="flex min-w-0 flex-col gap-4">
-              <ChartCard id="chart-epochs" title="USDC distributed per epoch" caption="What each epoch close shared between stakers." feed={panel.feed("epochs")} kind="bars" lines={EPOCH_LINES} format={formatCompactUsd} />
-              <ChartCard id="chart-rewards" title="Total USDC distributed to stakers" caption="Cumulative, across every epoch close." feed={panel.feed("rewards")} kind="area" lines={REWARD_LINES} format={formatCompactUsd} />
+              <ChartCard id="chart-epochs" title="USDC distributed per epoch" caption="What each epoch close distributed: to stakers, and while operator rotation is on, a fifth to the operator in effect." feed={panel.feed("epochs")} kind="bars" lines={EPOCH_LINES} format={formatCompactUsd} />
+              <ChartCard id="chart-rewards" title="Total USDC distributed" caption="Cumulative, across every epoch close, the operator's fifth included." feed={panel.feed("rewards")} kind="area" lines={REWARD_LINES} format={formatCompactUsd} />
               <EpochHistory epochs={epochs} labelOf={labelOf} />
             </div>
           </div>

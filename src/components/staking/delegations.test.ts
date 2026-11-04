@@ -126,6 +126,15 @@ describe("the delegations block while the node is unverified", () => {
     expect(delegateButton(render({ list: LOADING, held: null }, chain([], true), UNVERIFIED, "", BRAVO))).toContain('aria-disabled="true"');
   });
 
+  it("opens on the chain's read alone, while the page's other re-reads, the node's proof among them, still run", async () => {
+    let done = () => {};
+    const pending = panel.settle(new Promise<void>((resolve) => { done = resolve; }));
+    expect(panel.getSnapshot().settling).toBe(true);
+    expect(delegateButton(render({ list: LOADING, held: null }, chain([]), UNVERIFIED, "", BRAVO))).toContain('aria-disabled="false"');
+    done();
+    await pending;
+  });
+
   it("says when this build names no staking contract", () => {
     const html = render({ list: LOADING, held: null }, { account: WALLET.address, read: { status: "unavailable", value: null, message: null }, settling: false });
     expect(html).toContain("This build names no staking contract, so delegation is not available here.");
