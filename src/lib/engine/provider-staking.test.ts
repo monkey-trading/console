@@ -8,11 +8,14 @@ const ME = "0x00000000000000000000000000000000000000aa";
 const TOKEN = "0x00000000000000000000000000000000000000bb";
 const STAKING = "0x00000000000000000000000000000000000000cc";
 const VAULT = "0x00000000000000000000000000000000000000dd";
-const NO_ONE = "0x0000000000000000000000000000000000000000";
+const OTHER = "0x00000000000000000000000000000000000000AB";
 const CANDIDATE = "0x00000000000000000000000000000000000000ee";
 const CHAIN: WalletChain = { chainId: 31337, vault: VAULT, usdc: null, add: null, staking: STAKING };
 const ABI = parseAbi([
+  "struct Delegation { address candidate; uint256 amount; }",
   "function stakes(address) view returns (uint256)",
+  "function delegationsOf(address) view returns (Delegation[])",
+  "function delegatedStake(address) view returns (uint256)",
   "function unstakes(address) view returns (uint256 amount, uint256 claimableAt)",
   "function balanceOf(address) view returns (uint256)",
   "function allowance(address, address) view returns (uint256)",
@@ -23,29 +26,39 @@ const ABI = parseAbi([
   "function stake(uint256)",
   "function startUnstake(uint256)",
   "function completeUnstake()",
-  "function delegate(address)",
+  "function delegate(address, uint256)",
+  "function undelegate(address, uint256)",
+  "function redelegate(address, address, uint256)",
   "function claimDistribution(address, uint256, uint64, bytes32[]) returns (uint256)",
 ]);
 
-interface World { balance: bigint; allowance: bigint; staked: bigint; pending: [bigint, bigint]; paid: bigint; seq: bigint; chainId: number }
+interface World { balance: bigint; allowance: bigint; staked: bigint; pending: [bigint, bigint]; paid: bigint; seq: bigint; chainId: number; delegated?: bigint; delegations?: { candidate: Hex; amount: bigint }[] }
 
-/** A provider that answers the contracts' reads from `world` and records the order of every call. */
-function rig(world: World, chain: WalletChain = CHAIN, token: string = TOKEN) {
+/**
+ * A provider that answers the contracts' reads from `world` and records the order of every call;
+ * `tap` sees each call first, so a test can change the world between reads. It answers no
+ * `eth_blockNumber`, which some wallets refuse.
+ */
+function rig(world: World, chain: WalletChain = CHAIN, token: string = TOKEN, tap: (call: string, world: World) => void = () => undefined) {
   const order: string[] = [];
   const sent: { to: string; name: string; args: readonly unknown[] }[] = [];
   const provider: Eip1193Provider = {
     async request({ method, params = [] }) {
       const list = Array.isArray(params) ? params : [];
+      tap(method, world);
       if (method === "eth_chainId") return `0x${world.chainId.toString(16)}`;
       if (method !== "eth_call") throw new Error(`unexpected ${method}`);
       const call = list[0] as { to: string; data: Hex };
       const { functionName } = decodeFunctionData({ abi: ABI, data: call.data });
-      order.push(`${functionName}@${call.to}`);
+      tap(functionName, world);
+      order.push(`${functionName}@${call.to}${list[1] === "latest" ? "" : `#${String(list[1])}`}`);
       const uint = (value: bigint) => encodeAbiParameters([{ type: "uint256" }], [value]);
       switch (functionName) {
         case "monkey": return encodeAbiParameters([{ type: "address" }], [token as Hex]);
         case "stakes": return uint(world.staked);
         case "unstakes": return encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], world.pending);
+        case "delegatedStake": return uint(world.delegated ?? 0n);
+        case "delegationsOf": return encodeAbiParameters([{ type: "tuple[]", components: [{ name: "candidate", type: "address" }, { name: "amount", type: "uint256" }] }], [world.delegations ?? []]);
         case "balanceOf": return uint(world.balance);
         case "allowance": return uint(world.allowance);
         case "distributionsClaimed": return uint(world.paid);
@@ -97,16 +110,69 @@ describe("ProviderStaking.position", () => {
   });
 });
 
-describe("ProviderStaking transactions", () => {
-  it("delegates to a candidate, and clears the choice with the zero address, on the staking contract", async () => {
-    const { staking, sent } = rig(WORLD);
-    await staking.delegate(CANDIDATE);
-    await staking.delegate(NO_ONE);
-    expect(sent).toEqual([{ to: STAKING, name: "delegate", args: [getAddress(CANDIDATE)] }, { to: STAKING, name: "delegate", args: [NO_ONE] }]);
+describe("ProviderStaking.delegations", () => {
+  const delegations = [{ candidate: getAddress(CANDIDATE), amount: 30n }, { candidate: getAddress(OTHER), amount: 10n }];
+
+  it("reads the stake, the delegated stake and each delegation from the staking contract alone, then the two totals again, lowercased", async () => {
+    const { staking, order } = rig({ ...WORLD, delegated: 40n, delegations });
+    expect(await staking.delegations()).toEqual({ staked: 40n, delegated: 40n, delegations: [{ candidate: CANDIDATE.toLowerCase(), amount: 30n }, { candidate: OTHER.toLowerCase(), amount: 10n }] });
+    expect(order).toEqual([`stakes@${STAKING}`, `delegatedStake@${STAKING}`, `delegationsOf@${STAKING}`, `stakes@${STAKING}`, `delegatedStake@${STAKING}`]);
   });
 
-  it("refuses to delegate when the build names no staking contract", async () => {
-    await expect(rig(WORLD, { ...CHAIN, staking: null }).staking.delegate(CANDIDATE)).rejects.toThrow("names no staking contract");
+  it("reads nothing when the build names no staking contract", async () => {
+    const { staking, order } = rig(WORLD, { ...CHAIN, staking: null });
+    expect(await staking.delegations()).toBeNull();
+    expect(order).toEqual([]);
+  });
+
+  it("reads again when the stake moves between its reads, and says so when it moves on every one", async () => {
+    let reads = 0;
+    // The first pass sees the stake move after its delegations were read; the second holds still.
+    const settles = rig({ ...WORLD, delegated: 40n, delegations }, CHAIN, TOKEN, (call, world) => {
+      if (call === "stakes" && ++reads === 2) world.staked = 50n;
+    });
+    expect((await settles.staking.delegations())?.staked).toBe(50n);
+    expect(settles.order.filter((call) => call.startsWith("delegationsOf"))).toHaveLength(2);
+    const moving = rig({ ...WORLD, delegated: 40n, delegations }, CHAIN, TOKEN, (call, world) => {
+      if (call === "stakes") world.staked += 1n;
+    });
+    await expect(moving.staking.delegations()).rejects.toThrow("Your stake changed on every read");
+  });
+
+  it("refuses an answer when the wallet changed chain during the read", async () => {
+    const { staking } = rig({ ...WORLD, delegated: 40n, delegations }, CHAIN, TOKEN, (call, world) => {
+      if (call === "delegationsOf") world.chainId = 1;
+    });
+    await expect(staking.delegations()).rejects.toThrow("on chain 1, not chain 31337");
+  });
+
+  it("refuses delegations that do not add up to the delegated stake, or pass the stake, which only a lying RPC answers, and a wallet on another chain", async () => {
+    await expect(rig({ ...WORLD, delegated: 39n, delegations }).staking.delegations()).rejects.toThrow("do not add up");
+    await expect(rig({ ...WORLD, staked: 39n, delegated: 40n, delegations }).staking.delegations()).rejects.toThrow("do not add up");
+    await expect(rig({ ...WORLD, chainId: 1, delegated: 40n, delegations }).staking.delegations()).rejects.toThrow("on chain 1, not chain 31337");
+  });
+});
+
+describe("ProviderStaking transactions", () => {
+  it("delegates, takes back and moves amounts on the staking contract", async () => {
+    const { staking, sent } = rig(WORLD);
+    await staking.delegate(CANDIDATE, 300n);
+    await staking.undelegate(CANDIDATE, 100n);
+    await staking.redelegate(CANDIDATE, OTHER, 50n);
+    expect(sent).toEqual([
+      { to: STAKING, name: "delegate", args: [getAddress(CANDIDATE), 300n] },
+      { to: STAKING, name: "undelegate", args: [getAddress(CANDIDATE), 100n] },
+      { to: STAKING, name: "redelegate", args: [getAddress(CANDIDATE), getAddress(OTHER), 50n] },
+    ]);
+  });
+
+  it("refuses a zero amount, a move to the same candidate, and any change when the build names no staking contract, sending nothing", async () => {
+    const { staking, sent } = rig(WORLD);
+    await expect(staking.delegate(CANDIDATE, 0n)).rejects.toThrow("more than zero");
+    await expect(staking.undelegate(CANDIDATE, 0n)).rejects.toThrow("more than zero");
+    await expect(staking.redelegate(CANDIDATE, CANDIDATE.toUpperCase().replace("0X", "0x"), 5n)).rejects.toThrow("another candidate");
+    expect(sent).toEqual([]);
+    await expect(rig(WORLD, { ...CHAIN, staking: null }).staking.delegate(CANDIDATE, 5n)).rejects.toThrow("names no staking contract");
   });
 
   it("approves the staking contract for the amount before staking when the allowance is short", async () => {

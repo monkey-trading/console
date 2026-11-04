@@ -23,15 +23,8 @@ const ABI = parseAbi([
   "function checkpointSigner() view returns (address)",
   "function rotationEnabled() view returns (bool)",
   "function namedOperator() view returns (Operator)",
-  "function operatorInEffect() view returns (Operator)",
   "function pendingElection() view returns (Election)",
   "function candidateOf(address candidate) view returns (Candidate)",
-  "function candidateCount() view returns (uint256)",
-  "function candidateList(uint256 index) view returns (address)",
-  "function isEligible(address candidate) view returns (bool)",
-  "function votes(address candidate) view returns (uint256)",
-  "function totalStaked() view returns (uint256)",
-  "function delegates(address account) view returns (address)",
 ]);
 
 interface World {
@@ -40,18 +33,9 @@ interface World {
   /** The next election's effective time, in seconds; 0 for none. */
   effectiveAt?: bigint;
   hostnames?: Record<string, string>;
-  list?: readonly Hex[];
-  count?: bigint;
-  delegate?: Hex;
-  /** Addresses, lowercase, that never registered: `candidateOf` answers the zero struct for them. */
-  unregistered?: readonly string[];
-  /** Each candidate's self-bond, registration count and handover endpoint, by lowercase address. */
-  registrations?: Record<string, { bond: bigint; registration: bigint; handoverEndpoint: string }>;
 }
 
-const candidateOf = (hostname: string, registered = true) => (registered
-  ? { adminKey: KEY as Hex, enclave: KEY as Hex, bond: 1n, release: RELEASE, registration: 0n, apiHostname: hostname, handoverEndpoint: "x" }
-  : { adminKey: ZERO as Hex, enclave: ZERO as Hex, bond: 0n, release: `0x${"00".repeat(32)}` as const, registration: 0n, apiHostname: "", handoverEndpoint: "" });
+const candidateOf = (hostname: string) => ({ adminKey: KEY as Hex, enclave: KEY as Hex, bond: 1n, release: RELEASE, registration: 0n, apiHostname: hostname, handoverEndpoint: "x" });
 
 /** A provider answering the contracts' reads from `world`, recording each call in order. */
 function rig(world: World = {}, chain = CHAIN) {
@@ -68,19 +52,11 @@ function rig(world: World = {}, chain = CHAIN) {
         case "checkpointSigner": return encodeFunctionResult({ abi: ABI, functionName: "checkpointSigner", result: A as Hex });
         case "rotationEnabled": return encodeFunctionResult({ abi: ABI, functionName: "rotationEnabled", result: world.rotation ?? true });
         case "namedOperator": return encodeFunctionResult({ abi: ABI, functionName: "namedOperator", result: { candidate: A as Hex, adminKey: KEY as Hex, release: RELEASE, since: 100n } });
-        case "operatorInEffect": return encodeFunctionResult({ abi: ABI, functionName: "operatorInEffect", result: { candidate: A as Hex, adminKey: KEY as Hex, release: RELEASE, since: 100n } });
-        case "delegates": return encodeFunctionResult({ abi: ABI, functionName: "delegates", result: world.delegate ?? (ZERO as Hex) });
         case "pendingElection": return encodeFunctionResult({ abi: ABI, functionName: "pendingElection", result: { epoch: 3n, candidate: (world.effectiveAt ? B : ZERO) as Hex, adminKey: KEY as Hex, release: RELEASE, effectiveAt: world.effectiveAt ?? 0n, promoted: false } });
         case "candidateOf": {
           const asked = String(decoded.args[0]).toLowerCase();
-          const registered = candidateOf(world.hostnames?.[asked] ?? "", !(world.unregistered ?? []).includes(asked));
-          return encodeFunctionResult({ abi: ABI, functionName: "candidateOf", result: { ...registered, ...world.registrations?.[asked] } });
+          return encodeFunctionResult({ abi: ABI, functionName: "candidateOf", result: candidateOf(world.hostnames?.[asked] ?? "") });
         }
-        case "candidateCount": return encodeFunctionResult({ abi: ABI, functionName: "candidateCount", result: world.count ?? BigInt((world.list ?? []).length) });
-        case "candidateList": return encodeFunctionResult({ abi: ABI, functionName: "candidateList", result: world.list?.[Number(decoded.args[0])] ?? (ZERO as Hex) });
-        case "isEligible": return encodeFunctionResult({ abi: ABI, functionName: "isEligible", result: String(decoded.args[0]).toLowerCase() === A.toLowerCase() });
-        case "votes": return encodeFunctionResult({ abi: ABI, functionName: "votes", result: 40n });
-        case "totalStaked": return encodeFunctionResult({ abi: ABI, functionName: "totalStaked", result: 100n });
         default: throw new Error("unexpected call");
       }
     },
@@ -93,11 +69,9 @@ describe("a wallet that moves chain during a read", () => {
     const reads: [string, (deployment: ProviderDeployment) => Promise<unknown>][] = [
       ["vault", (deployment) => deployment.vault()],
       ["operator", (deployment) => deployment.operator()],
-      ["candidates", (deployment) => deployment.candidates()],
-      ["delegateOf", (deployment) => deployment.delegateOf(KEY)],
     ];
     for (const [name, read] of reads) {
-      const { provider } = rig({ list: [B as Hex] });
+      const { provider } = rig();
       let asked = 0;
       const moving: Eip1193Provider = { request: async (args) => (args.method === "eth_chainId" && ++asked > 1 ? "0x1" : provider.request(args)) };
       await expect(read(new ProviderDeployment(CHAIN, moving)), name).rejects.toThrow("on chain 1, not chain 31337");
@@ -112,12 +86,10 @@ describe("a chain check the wallet never answers", () => {
       const reads: [string, (deployment: ProviderDeployment) => Promise<unknown>][] = [
         ["vault", (deployment) => deployment.vault()],
         ["operator", (deployment) => deployment.operator()],
-        ["candidates", (deployment) => deployment.candidates()],
-        ["delegateOf", (deployment) => deployment.delegateOf(KEY)],
       ];
       for (const [name, read] of reads) {
         for (const answered of [0, 1]) {
-          const { provider } = rig({ list: [B as Hex] });
+          const { provider } = rig();
           let asked = 0;
           const silent: Eip1193Provider = { request: (args) => (args.method === "eth_chainId" && asked++ >= answered ? new Promise(() => {}) : provider.request(args)) };
           let settled = false;
@@ -171,84 +143,5 @@ describe("ProviderDeployment.operator", () => {
 
   it("reads a pending election with its effective time in milliseconds", async () => {
     await expect(rig({ effectiveAt: 5_000n }).reads.operator()).resolves.toMatchObject({ pending: { epoch: 3, candidate: B, adminKey: KEY, effectiveAtMs: 5_000_000, promoted: false } });
-  });
-});
-
-describe("ProviderDeployment.delegateOf", () => {
-  it("names the candidate the account's stake votes for, lowercase, and none for the zero address", async () => {
-    await expect(rig({ delegate: "0x00000000000000000000000000000000000000ab" }).reads.delegateOf(KEY)).resolves.toBe("0x00000000000000000000000000000000000000ab");
-    await expect(rig().reads.delegateOf(KEY)).resolves.toBeNull();
-  });
-
-  it("answers null, reading nothing, from a build that names no staking contract", async () => {
-    const { reads, order } = rig({}, { ...CHAIN, staking: null });
-    await expect(reads.delegateOf(KEY)).resolves.toBeNull();
-    expect(order).toEqual([]);
-  });
-});
-
-describe("ProviderDeployment.candidates", () => {
-  it("reads each listed candidate's hostname, votes, eligibility and registration, and the total, with no call beyond the four per candidate", async () => {
-    const registrations = { [A.toLowerCase()]: { bond: 7n, registration: 2n, handoverEndpoint: "a.example:9443" }, [B]: { bond: 9n, registration: 5n, handoverEndpoint: "https://b.example/handover" } };
-    const { reads, order } = rig({ list: [A as Hex, B as Hex], hostnames: { [A.toLowerCase()]: "a.example", [B]: "b.example" }, registrations });
-    const release = RELEASE.toLowerCase();
-    await expect(reads.candidates()).resolves.toEqual({
-      totalStaked: 100n,
-      inEffect: { candidate: A.toLowerCase(), hostname: "a.example", release, registered: { bond: 7n, release, registration: 2, handoverEndpoint: "a.example:9443" } },
-      candidates: [
-        { address: A.toLowerCase(), hostname: "a.example", votes: 40n, eligible: true, bond: 7n, release, registration: 2, handoverEndpoint: "a.example:9443" },
-        { address: B, hostname: "b.example", votes: 40n, eligible: false, bond: 9n, release, registration: 5, handoverEndpoint: "https://b.example/handover" },
-      ],
-    });
-    expect(order).toEqual(["candidateCount", "totalStaked", "operatorInEffect", "candidateOf", "candidateList", "candidateOf", "votes", "isEligible", "candidateList", "candidateOf", "votes", "isEligible"]);
-  });
-
-  it("names an operator in effect that never registered, such as the deployment's, with its release and no candidacy", async () => {
-    const { reads } = rig({ list: [B as Hex], unregistered: [A.toLowerCase()] });
-    await expect(reads.candidates()).resolves.toMatchObject({ inEffect: { candidate: A.toLowerCase(), hostname: null, release: RELEASE.toLowerCase(), registered: null } });
-  });
-
-  it("answers null from a build that names no registry or no staking contract", async () => {
-    await expect(rig({}, { ...CHAIN, registry: null }).reads.candidates()).resolves.toBeNull();
-    await expect(rig({}, { ...CHAIN, staking: null }).reads.candidates()).resolves.toBeNull();
-  });
-
-  it("gives a slow wallet thirty seconds per call, not across the table, so many candidates can still be read", async () => {
-    vi.useFakeTimers();
-    try {
-      const { provider } = rig({ list: [A as Hex, B as Hex], hostnames: { [A.toLowerCase()]: "a.example", [B]: "b.example" } });
-      const slow: Eip1193Provider = { request: async (args) => { if (args.method === "eth_call") await new Promise((resolve) => setTimeout(resolve, 20_000)); return provider.request(args); } };
-      const reading = new ProviderDeployment(CHAIN, slow).candidates();
-      await vi.advanceTimersByTimeAsync(20_000 * 20);
-      await expect(reading).resolves.toMatchObject({ candidates: [{ hostname: "a.example" }, { hostname: "b.example" }] });
-      const stuck: Eip1193Provider = { request: async (args) => (args.method === "eth_chainId" ? "0x7a69" : new Promise(() => {})) };
-      const failing = new ProviderDeployment(CHAIN, stuck).candidates();
-      const refused = expect(failing).rejects.toThrow("did not answer in time");
-      await vi.advanceTimersByTimeAsync(30_000);
-      await refused;
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("stops at once at a count the registry cannot hold, rather than read without bound", async () => {
-    const { reads, order } = rig({ count: 101n });
-    await expect(reads.candidates()).rejects.toThrow("more candidates than the registry can hold");
-    expect(order).toEqual(["candidateCount"]);
-    await expect(rig({ count: 2n ** 200n }).reads.candidates()).rejects.toThrow("more candidates");
-  });
-
-  it("skips a zero address in the list", async () => {
-    const { reads } = rig({ count: 1n });
-    await expect(reads.candidates()).resolves.toEqual({
-      totalStaked: 100n, candidates: [],
-      inEffect: { candidate: A.toLowerCase(), hostname: null, release: RELEASE.toLowerCase(), registered: { bond: 1n, release: RELEASE.toLowerCase(), registration: 0, handoverEndpoint: "x" } },
-    });
-  });
-
-  it("keeps a hostile hostname as data; nothing here decides a connection", async () => {
-    const hostile = `https://evil.example/"><script>`;
-    const { reads } = rig({ list: [B as Hex], hostnames: { [B]: hostile } });
-    expect((await reads.candidates())?.candidates[0]?.hostname).toBe(hostile);
   });
 });

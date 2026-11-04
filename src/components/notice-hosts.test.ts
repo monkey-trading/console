@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { OperatorReads } from "@/lib/monkey/operators";
+import { DelegationReads } from "@/lib/staking/delegation-reads";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import type { NoticeSurface } from "@/lib/store/state";
 
@@ -46,7 +47,7 @@ function OnMonkeyPage({ children }: { children: ReactNode }) {
 /** The Staking page's operators, over reads that have not started. */
 function Operators() {
   const { store } = useSession();
-  return createElement(OperatorsPanel, { operators: new OperatorReads(store) });
+  return createElement(OperatorsPanel, { operators: new OperatorReads(store), delegations: new DelegationReads(store) });
 }
 
 function render(surface: NoticeSurface, screen: ReactNode, tone: "error" | "info" = "error", stale = false): string {

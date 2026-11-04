@@ -2,13 +2,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { NO_CANDIDATE } from "../engine/registry";
 import { MONKEY_UNIT } from "../format";
 import { EPOCH_MS } from "../mock/monkey-state";
 import { SIM_EPOCH_MS } from "../mock";
-import { OperatorReads } from "./operators";
 import { MonkeyPanel } from "./panel";
-import { claimDistribution, completeUnstake, delegateStake, stakeMonkey, startUnstake } from "./actions";
+import { claimDistribution, completeUnstake, stakeMonkey, startUnstake } from "./actions";
 import { DEMO_ADDRESS } from "../mock/demo";
 import { flush, holdReads, setup } from "./panel-kit";
 
@@ -165,12 +163,11 @@ describe("the page's transactions", () => {
     stop();
   });
 
-  it("keeps stake, unstake and delegate open under that verdict, as they use nothing from the node", async () => {
+  it("keeps stake and unstake open under that verdict, as they use nothing from the node", async () => {
     const { store, panel, stop } = await setup();
     store.patch({ attestation: { kind: "attested", release: "r", address: DEMO_ADDRESS, why: "Your wallet did not answer." } });
     expect(await stakeMonkey(panel, MONKEY_UNIT)).toBe(true);
     expect(await startUnstake(panel, MONKEY_UNIT)).toBe(true);
-    expect(await delegateStake(panel, new OperatorReads(store), NO_CANDIDATE, "")).toBe(true);
     stop();
   });
 

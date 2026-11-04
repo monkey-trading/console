@@ -9,8 +9,8 @@ import { absFixed, fixedFromWire, fixedToNumber, fixedToWire } from "../fixed";
 import { seedBars } from "../bars";
 import { SEED } from "../prng";
 import { houseNav } from "./accounts";
-import { activityPage, distributionProof, mockContracts, monkeySeries, overview } from "./monkey";
-import { operatorRoute } from "./operators";
+import { activityPage, distributionEpochsPage, distributionProof, mockContracts, monkeySeries, overview } from "./monkey";
+import { operatorList, operatorRoute } from "./operators";
 import { AVERAGE_POSITION_USD, bookAt, cashAt, MOCK_RECORD_BEGINS_MS, navAt, noise, numberOf, queueAt, volumeIn, wire, type Book } from "./stats-model";
 import type { MockState } from "./state";
 
@@ -213,6 +213,8 @@ export function mockStats(state: MockState): StatsReads {
       }
     },
     operator: async () => operatorRoute(state),
+    operators: async () => operatorList(state),
+    distributionEpochs: async (params) => distributionEpochsPage(state, params),
     contracts: mockContracts(),
   };
 }

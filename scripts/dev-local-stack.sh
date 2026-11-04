@@ -227,7 +227,7 @@ step_log="$work/forge-build.log"
 (cd "$engine_dir/contracts" && nice -n 10 forge build) >"$step_log" 2>&1 || die "the contracts did not build"
 
 # Anvil's default test mnemonic: account 0 deploys and signs the synthetic access source's
-# screenings, 1 is the dev wallet, 2 funds the house, and 9 relays checkpoints.
+# screenings, 1 is the dev wallet, 2 funds the house, 8 deploys the registry lens, and 9 relays checkpoints.
 mnemonic="test test test test test test test test test test test junk"
 key() { cast wallet private-key --mnemonic "$mnemonic" --mnemonic-index "$1"; }
 address() { cast wallet address --private-key "$1"; }
@@ -277,13 +277,16 @@ enclave="$(address 0x43434343434343434343434343434343434343434343434343434343434
 # step checks them.
 registry="$(cast compute-address "$deployer" --nonce 2 | awk '{print $NF}')"
 staking="$(cast compute-address "$registry" --nonce 1 | awk '{print $NF}')"
+# The registry lens the node reads GET /v1/operators through: account 8's first transaction.
+lens_key="$(key 8)"
+lens="$(cast compute-address "$(address "$lens_key")" --nonce 0 | awk '{print $NF}')"
 
 step "Write the node config"
 step_log="$work/config.log"
 # dev.toml with EVM custody, as config/anvil.toml has it, against Anvil itself: the three
 # providers must have distinct URLs, and Anvil ignores the query that sets them apart.
 STACK_SCRIPTS="$root/scripts" python3 - "$engine_dir/config" "$work" "$rpc" "$api_port" "$metrics_port" "$console_port" "$access_port" \
-  "$relayer" "$deployer" "$registry" "$staking" >"$work/config-values" 2>"$step_log" <<'PY' || die "could not write the node config"
+  "$relayer" "$deployer" "$registry" "$staking" "$lens" >"$work/config-values" 2>"$step_log" <<'PY' || die "could not write the node config"
 import json
 import os
 import re
@@ -294,7 +297,7 @@ from pathlib import Path
 sys.path.insert(0, os.environ["STACK_SCRIPTS"])
 from stack_toml import dumps  # noqa: E402
 
-config, work, rpc, api, metrics, console, access, relayer, source, registry, staking = sys.argv[1:]
+config, work, rpc, api, metrics, console, access, relayer, source, registry, staking, lens = sys.argv[1:]
 cfg = tomllib.loads(Path(config, "dev.toml").read_text())
 anvil = tomllib.loads(Path(config, "anvil.toml").read_text())
 
@@ -319,7 +322,9 @@ evm["providers"] = [{"name": f"local-{name}", "rpc_url": f"{rpc}/?provider={name
 evm["cursor_path"] = f"{work}/custody-cursor.json"
 # The staking contract the operator registry deployed, which the node mirrors into the engine once
 # staking is initialised, with the registry that deployed it.
-evm["staking"] = {"contract": staking, "cursor_path": f"{work}/staking-cursor.json", "registry": {"contract": registry}}
+evm["staking"] = {"contract": staking, "cursor_path": f"{work}/staking-cursor.json", "registry": {"contract": registry, "lens": lens}}
+# The Staking page's operator table follows the chain within seconds of a block becoming final.
+cfg["api"]["operators_interval"] = "5s"
 # Live crypto venues price BTC-USD and ETH-USD; markets with no venue stay unpriced.
 cfg["feeds"]["provider"] = "venues"
 # With EVM custody, house capital comes from vault deposits to the house.
@@ -390,7 +395,7 @@ signer="$(cast call "$vault" 'checkpointSigner()(address)' --rpc-url "$rpc")"
 [[ "$(lower "$signer")" == "$(lower "$enclave")" ]] || die "the vault's signer is $signer, not the mock enclave $enclave"
 monkey="$(cast call "$vault" 'monkey()(address)' --rpc-url "$rpc")"
 
-step "Deploy the operator registry, which deploys the MONKEY staking contract"
+step "Deploy the operator registry, which deploys the MONKEY staking contract, and its lens"
 # The deployer is the initial operator, and rotation is off at deployment: no election moves the
 # operator key, which stays the dev config's (with SECOND_ENGINE=1, rotation goes on below). The election parameters are development values, as
 # in the engine's election scenario, within the bounds given after them.
@@ -413,6 +418,8 @@ deployed_staking="$(cast call "$registry" 'staking()(address)' --rpc-url "$rpc")
 [[ "$(lower "$deployed_staking")" == "$(lower "$staking")" ]] || die "the registry deployed staking at $deployed_staking, not at $staking"
 registry="$deployed_registry"
 staking="$deployed_staking"
+deployed_lens="$(create --private-key "$lens_key" src/RegistryLens.sol:RegistryLens --constructor-args "$registry")"
+[[ "$(lower "$deployed_lens")" == "$(lower "$lens")" ]] || die "the registry lens deployed at $deployed_lens, not at $lens"
 
 step "Fund the house with $house_usdc USDC in the vault, and the dev wallet with $dev_usdc USDC"
 send() { nice -n 10 cast send "$@" --rpc-url "$rpc" >>"$step_log" 2>&1; }

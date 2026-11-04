@@ -5,14 +5,15 @@ import { describe, expect, it } from "vitest";
 import { EngineError } from "./client";
 import { LiveEngineClient } from "./live";
 import { acceptAll, FakeNode, FakeScheduler, FakeSocket } from "./test-kit";
+import type { Verifier } from "./verifier";
 import { VECTORS, vectorResponse } from "./test-vectors";
 
-function client() {
+function client(verifier: Verifier = acceptAll) {
   const node = new FakeNode();
   node.attestation(() => VECTORS.signer);
   const live = new LiveEngineClient({
     origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: vectorResponse("markets").vault, heartbeatMs: 5_000,
-    loadVerifier: async () => acceptAll, releases: [], acceptsMock: true, fetch: node.fetch,
+    loadVerifier: async () => verifier, releases: [], acceptsMock: true, fetch: node.fetch,
     openSocket: (url) => new FakeSocket(url), scheduler: new FakeScheduler(), nowMs: () => 1, challenge: () => "ab".repeat(32),
   });
   const reply = (path: string, status: number, body: object) => node.signed(path, () => ({ status, body: JSON.stringify(body), signature: "0x", timeMs: 1, seq: 1 }));
@@ -77,5 +78,36 @@ describe("the live client's dashboard reads", () => {
     reply("/v1/accounts/0x00b2/distributions", 503, { error: "busy" });
     await expect(live.stats.distributions("0x00a1")).resolves.toBeNull();
     await expect(live.stats.distributions("0x00b2")).rejects.toBeInstanceOf(EngineError);
+  });
+
+  it("asks for the operator list and the closed epochs, older pages by the epoch before which they end", async () => {
+    const { node, live, reply } = client();
+    reply("/v1/operators", 200, { block: { number: 7, hash: "0x", time_ms: 1 }, candidates: [] });
+    reply("/v1/monkey/distributions?limit=20", 200, { epochs: [], next: 5 });
+    reply("/v1/monkey/distributions?limit=20&before=5", 200, { epochs: [], next: null });
+    await expect(live.stats.operators()).resolves.toMatchObject({ block: { number: 7 } });
+    await expect(live.stats.distributionEpochs({ limit: 20 })).resolves.toMatchObject({ next: 5 });
+    await expect(live.stats.distributionEpochs({ limit: 20, before: 5 })).resolves.toMatchObject({ next: null });
+    expect(node.requests.map((r) => r.path).filter((path) => path.startsWith("/v1/operators") || path.startsWith("/v1/monkey/distributions"))).toEqual([
+      "/v1/operators", "/v1/monkey/distributions?limit=20", "/v1/monkey/distributions?limit=20&before=5",
+    ]);
+  });
+
+  it("surfaces a node without the lens, and one that has not read the list yet, as engine errors the page can tell apart", async () => {
+    const { live, reply } = client();
+    reply("/v1/operators", 404, { error: "not found" });
+    await expect(live.stats.operators()).rejects.toMatchObject({ status: 404 });
+    const second = client();
+    second.reply("/v1/operators", 503, { error: "the operator list has not been read yet" });
+    await expect(second.live.stats.operators()).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("refuses an operator list or an epoch page whose signature does not verify, as it refuses any signed answer", async () => {
+    const { live, reply } = client({ ...acceptAll, verifyResponse: () => ({ ok: false, reason: "the signature does not recover to the attested signer" }) });
+    reply("/v1/operators", 200, { candidates: [] });
+    reply("/v1/monkey/distributions?limit=20", 200, { epochs: [] });
+    const said = "The node's answer did not verify: the signature does not recover to the attested signer.";
+    await expect(live.stats.operators()).rejects.toThrow(said);
+    await expect(live.stats.distributionEpochs({ limit: 20 })).rejects.toThrow(said);
   });
 });

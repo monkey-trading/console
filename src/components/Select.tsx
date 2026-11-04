@@ -28,6 +28,11 @@ export function Select<T extends string>({ label, value, options, onChange }: Pr
     if (open) list.current?.focus();
   }, [open]);
 
+  // A list taller than its box keeps the option the keyboard is on in view, as a native select does.
+  useEffect(() => {
+    if (open) document.getElementById(`${id}-opt-${active}`)?.scrollIntoView({ block: "nearest" });
+  }, [open, active, id]);
+
   useEffect(() => {
     if (!open) return;
     const away = (event: MouseEvent) => event.target instanceof Node && !root.current?.contains(event.target) && setOpen(false);

@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { CANDIDATE_LIMIT, NO_CANDIDATE } from "../engine/registry";
+import { CANDIDATE_LIMIT } from "../engine/staking-reads";
 import { MONKEY_UNIT } from "../format";
 import { createMockNode, SIM_EPOCH_MS } from ".";
 import { stake } from "./monkey";
@@ -23,72 +23,74 @@ describe("the simulated registry", () => {
     const named = await reads.operator();
     expect(named).toMatchObject({ rotationEnabled: true, hostname: "alpha.operators.example" });
     expect(named?.pending?.effectiveAtMs).toBe(state.now + 6 * 86_400_000);
-    const table = await reads.candidates();
-    const alpha = table?.candidates[0];
-    expect(table?.inEffect).toEqual({ candidate: named?.candidate, hostname: "alpha.operators.example", release: alpha?.release, registered: { bond: 50_000n * MONKEY_UNIT, release: alpha?.release, registration: 0, handoverEndpoint: "https://alpha.operators.example:9443/handover" } });
-    expect(table?.candidates.find((c) => c.address === named?.pending?.candidate)?.hostname).toBe("bravo.operators.example");
+    const list = await node().client.stats.operators();
+    const alpha = list.candidates[0];
+    expect(list.operator_in_effect).toMatchObject({ candidate: named?.candidate, release: alpha?.release });
+    expect(list.pending_election).toMatchObject({ candidate: named?.pending?.candidate, effective_at_ms: named?.pending?.effectiveAtMs, promoted: false });
+    expect(list.candidates.find((c) => c.address === named?.pending?.candidate)?.api_hostname).toBe("bravo.operators.example");
   });
 
-  it("lists as many candidates as the registry holds, eligible and not against the total stake, with every vote inside it", async () => {
-    const table = await node().reads.candidates();
-    const candidates = table?.candidates ?? [];
+  it("lists as many candidates as the registry holds, eligible and not against the total stake, with every vote inside it, at a block", async () => {
+    const list = await node().client.stats.operators();
+    const { candidates } = list;
     expect(candidates).toHaveLength(CANDIDATE_LIMIT);
-    expect(candidates.slice(0, 4).map((c) => [c.hostname.split(".")[0], c.eligible])).toEqual([["alpha", true], ["bravo", true], ["charlie", true], ["delta", false]]);
-    expect(candidates.slice(4).every((c) => !c.eligible && /^node-\d{3}\.operators\.example$/.test(c.hostname))).toBe(true);
+    expect(candidates.slice(0, 4).map((c) => [c.api_hostname.split(".")[0], c.eligible, c.role])).toEqual([["alpha", true, "operator"], ["bravo", true, "elected"], ["charlie", true, "candidate"], ["delta", false, "candidate"]]);
+    expect(candidates.slice(4).every((c) => !c.eligible && /^node-\d{3}\.operators\.example$/.test(c.api_hostname))).toBe(true);
     expect(new Set(candidates.map((c) => c.address)).size).toBe(CANDIDATE_LIMIT);
     expect(candidates.map((c) => c.registration)).toEqual(candidates.map((_, i) => i));
-    expect(candidates.reduce((sum, c) => sum + c.votes, 0n)).toBeLessThanOrEqual(table?.totalStaked ?? 0n);
+    expect(candidates.reduce((sum, c) => sum + BigInt(c.votes), 0n)).toBeLessThanOrEqual(BigInt(list.total_staked));
+    expect(list.block.number).toBeGreaterThan(0);
   });
 
-  it("moves the account's whole stake between candidates' votes, and out of them when cleared", async () => {
-    const { reads, controls } = node();
-    const before = await reads.candidates();
-    const [alpha, bravo] = before?.candidates ?? [];
+  it("delegates amounts of the account's stake, moves and takes them back, as `Staking` keeps them and the votes follow", async () => {
+    const { client, controls } = node();
+    const votes = async (n: number) => BigInt((await client.stats.operators()).candidates[n]?.votes ?? "0");
+    const [alpha, bravo] = client.state.operators.candidates;
     if (alpha === undefined || bravo === undefined) throw new Error("the mock lists its candidates");
-    controls.delegate(ME, alpha.address);
-    expect((await reads.candidates())?.candidates[0]?.votes).toBe(alpha.votes + 500_000n * MONKEY_UNIT);
-    await expect(reads.delegateOf(ME)).resolves.toBe(alpha.address);
-    controls.delegate(ME, bravo.address);
-    const moved = (await reads.candidates())?.candidates;
-    expect([moved?.[0]?.votes, moved?.[1]?.votes]).toEqual([alpha.votes, bravo.votes + 500_000n * MONKEY_UNIT]);
-    controls.delegate(ME, NO_CANDIDATE);
-    expect((await reads.candidates())?.candidates[1]?.votes).toBe(bravo.votes);
-    await expect(reads.delegateOf(ME)).resolves.toBeNull();
+    const [a, b] = [await votes(0), await votes(1)];
+    controls.moveDelegation(ME, null, alpha.address, 300n * MONKEY_UNIT);
+    controls.moveDelegation(ME, null, bravo.address, 200n * MONKEY_UNIT);
+    controls.moveDelegation(ME, alpha.address, bravo.address, 100n * MONKEY_UNIT);
+    controls.moveDelegation(ME, bravo.address, null, 100n * MONKEY_UNIT);
+    expect([await votes(0), await votes(1)]).toEqual([a + 200n * MONKEY_UNIT, b + 200n * MONKEY_UNIT]);
+    expect(controls.stakeDelegations(ME).delegations).toEqual([{ candidate: alpha.address, amount: 200n * MONKEY_UNIT }, { candidate: bravo.address, amount: 200n * MONKEY_UNIT }]);
   });
 
-  it("takes stake out of the total and the votes when its unstake starts, as the contract does, though the engine counts it through the cooldown", async () => {
-    const { reads, controls, state } = node();
-    const alpha = (await reads.candidates())?.candidates[0];
-    const total = (await reads.candidates())?.totalStaked ?? 0n;
-    if (alpha === undefined) throw new Error("the mock lists its candidates");
-    controls.delegate(ME, alpha.address);
-    controls.startUnstake(ME, 100n * MONKEY_UNIT);
-    const after = await reads.candidates();
-    expect(after?.totalStaked).toBe(total - 100n * MONKEY_UNIT);
-    expect(after?.candidates[0]?.votes).toBe(alpha.votes + 499_900n * MONKEY_UNIT);
-    expect(state.monkey.totalStakedAt(state.now)).toBeGreaterThan(after?.totalStaked ?? 0n);
+  it("takes an unstake from the undelegated stake first, then from the delegations in proportion, and out of the total at once", async () => {
+    const { client, controls, state } = node();
+    const [alpha, bravo] = state.operators.candidates;
+    if (alpha === undefined || bravo === undefined) throw new Error("the mock lists its candidates");
+    controls.moveDelegation(ME, null, alpha.address, 300_000n * MONKEY_UNIT);
+    controls.moveDelegation(ME, null, bravo.address, 100_000n * MONKEY_UNIT);
+    const total = BigInt((await client.stats.operators()).total_staked);
+    // 100,000 undelegated, then 50,000 from 400,000 delegated: a quarter from bravo, the rest from alpha.
+    controls.startUnstake(ME, 150_000n * MONKEY_UNIT);
+    expect(controls.stakeDelegations(ME).delegations).toEqual([{ candidate: alpha.address, amount: 262_500n * MONKEY_UNIT }, { candidate: bravo.address, amount: 87_500n * MONKEY_UNIT }]);
+    expect(BigInt((await client.stats.operators()).total_staked)).toBe(total - 150_000n * MONKEY_UNIT);
+    expect(state.monkey.totalStakedAt(state.now)).toBeGreaterThan(total - 150_000n * MONKEY_UNIT);
   });
 
-  it("counts a delegator's votes as they follow its stake", async () => {
-    const { reads, controls, state } = node();
-    const alpha = (await reads.candidates())?.candidates[0];
-    if (alpha === undefined) throw new Error("the mock lists its candidates");
-    controls.delegate(ME, alpha.address);
-    stake(state, ME, 100n * MONKEY_UNIT);
-    expect((await reads.candidates())?.candidates[0]?.votes).toBe(alpha.votes + 500_100n * MONKEY_UNIT);
+  it("refuses an amount over the undelegated stake or a delegation, a zero amount, the zero address, and a move to the same one, and takes any other address as the contract does", () => {
+    const { controls, state } = node();
+    const alpha = state.operators.candidates[0]?.address ?? "";
+    expect(() => controls.moveDelegation(ME, null, alpha, 500_001n * MONKEY_UNIT)).toThrow("undelegated stake is less");
+    expect(() => controls.moveDelegation(ME, alpha, null, 1n)).toThrow("delegation there is less");
+    expect(() => controls.moveDelegation(ME, null, alpha, 0n)).toThrow("more than zero");
+    expect(() => controls.moveDelegation(ME, null, "0x0000000000000000000000000000000000000000", 1n)).toThrow("not the zero address");
+    controls.moveDelegation(ME, null, "0x00000000000000000000000000000000000000ff", 1n);
+    expect(controls.stakeDelegations(ME)).toMatchObject({ delegated: 1n, delegations: [{ candidate: "0x00000000000000000000000000000000000000ff", amount: 1n }] });
+    controls.moveDelegation(ME, "0x00000000000000000000000000000000000000ff", null, 1n);
+    controls.moveDelegation(ME, null, alpha, 5n);
+    expect(() => controls.moveDelegation(ME, alpha, alpha, 1n)).toThrow("another candidate");
   });
 
-  it("refuses a candidate it does not list", () => {
-    expect(() => node().controls.delegate(ME, "0x00000000000000000000000000000000000000ff")).toThrow("lists no such candidate");
-  });
-
-  it("forgets a reset account's choice", () => {
+  it("forgets a reset account's delegations", () => {
     const { controls, state } = node();
     const first = state.operators.candidates[0];
     if (first === undefined) throw new Error("the mock lists its candidates");
-    controls.delegate(ME, first.address);
+    controls.moveDelegation(ME, null, first.address, MONKEY_UNIT);
     controls.resetAccount(ME);
-    expect(state.operators.delegates.has(ME)).toBe(false);
+    expect(state.operators.delegations.has(ME)).toBe(false);
   });
 
   it("takes the election into effect when the clock reaches its time, and the node's route follows", async () => {

@@ -1,0 +1,179 @@
+/** Tests for the Staking page's chain-only read of the account's stake and delegations, against the mock node. */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { MONKEY_UNIT } from "../format";
+import { DEMO_ADDRESS } from "../mock/demo";
+import { stakeMonkey } from "../monkey/actions";
+import { WALLET_READ_EVERY_MS } from "../monkey/live-reads";
+import { flush, setup } from "../monkey/panel-kit";
+import { connectWallet, disconnectWallet } from "../store/actions";
+import { DelegationReads } from "./delegation-reads";
+
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
+
+async function started(hidden = () => false) {
+  const kit = await setup();
+  const staking = kit.store.liveWallet?.staking;
+  if (staking === undefined) throw new Error("the mock wallet stakes");
+  const counts = { reads: 0 };
+  const real = staking.delegations.bind(staking);
+  staking.delegations = () => { counts.reads += 1; return real(); };
+  const reads = new DelegationReads(kit.store);
+  const stop = reads.start(hidden);
+  await flush();
+  return { ...kit, reads, stop, counts, staking };
+}
+
+describe("DelegationReads", () => {
+  it("reads the account's stake and delegations from the chain on open, whatever the node's state", async () => {
+    const { reads, stop, store, node, counts } = await started();
+    expect(reads.getSnapshot()).toMatchObject({ account: DEMO_ADDRESS, read: { status: "ready" } });
+    store.patch({ attestation: { kind: "unverified", reason: "gone" }, stream: "stale" });
+    const alpha = node.client.state.operators.candidates[0]?.address ?? "";
+    node.controls.moveDelegation(DEMO_ADDRESS, null, alpha, MONKEY_UNIT);
+    await reads.refresh();
+    expect(reads.getSnapshot().read.value?.delegations).toContainEqual({ candidate: alpha, amount: MONKEY_UNIT });
+    expect(counts.reads).toBe(2);
+    stop();
+  });
+
+  it("reads again every 15 seconds while the tab is visible, and not in a hidden tab", async () => {
+    const visible = await started();
+    await vi.advanceTimersByTimeAsync(WALLET_READ_EVERY_MS * 2);
+    expect(visible.counts.reads).toBe(3);
+    visible.stop();
+    const hidden = await started(() => true);
+    await vi.advanceTimersByTimeAsync(WALLET_READ_EVERY_MS * 2);
+    expect(hidden.counts.reads).toBe(1);
+    hidden.stop();
+  });
+
+  it("keeps the last answer and says why when a read fails, and drops another account's figures at once", async () => {
+    const { reads, stop, staking, store } = await started();
+    const held = reads.getSnapshot().read.value;
+    staking.delegations = () => Promise.reject(new Error("your wallet is on chain 1, not chain 31337"));
+    await reads.refresh();
+    expect(reads.getSnapshot().read).toEqual({ status: "failed", value: held, message: "your wallet is on chain 1, not chain 31337" });
+    disconnectWallet(store);
+    await flush();
+    expect(reads.getSnapshot()).toEqual({ account: null, read: { status: "unavailable", value: null, message: null }, settling: false });
+    await connectWallet(store, "browser");
+    await flush();
+    expect(reads.getSnapshot()).toMatchObject({ account: DEMO_ADDRESS, read: { status: "ready" } });
+    stop();
+  });
+
+  it("reads nothing for a read-only account, and forgets what it read once closed", async () => {
+    const { reads, stop, store } = await started();
+    const wallet = store.liveWallet;
+    if (wallet === null) throw new Error("the mock wallet connected");
+    store.liveWallet = { ...wallet, readOnly: true };
+    await reads.refresh();
+    expect(reads.getSnapshot().read.status).toBe("unavailable");
+    stop();
+    expect(reads.getSnapshot()).toEqual({ account: null, read: { status: "loading", value: null, message: null }, settling: false });
+  });
+
+  it("says delegation is unavailable when the build names no staking contract", async () => {
+    const { reads, stop, staking } = await started();
+    staking.delegations = () => Promise.resolve(null);
+    await reads.refresh();
+    expect(reads.getSnapshot().read).toEqual({ status: "unavailable", value: null, message: null });
+    stop();
+  });
+
+  it("holds the forms shut from a landed change until its read again lands, and until every such read has", async () => {
+    const { reads, stop, staking } = await started();
+    const real = staking.delegations.bind(staking);
+    const answers: (() => void)[] = [];
+    staking.delegations = () => new Promise((resolve) => { answers.push(() => { void real().then(resolve); }); });
+    const first = reads.settleAfter();
+    await flush();
+    expect(reads.getSnapshot().settling).toBe(true);
+    const second = reads.settleAfter();
+    answers.shift()?.();
+    await first;
+    // The second read waits behind the first, so the figures may still predate the second change.
+    expect(reads.getSnapshot().settling).toBe(true);
+    await flush();
+    answers.shift()?.();
+    await second;
+    expect(reads.getSnapshot().settling).toBe(false);
+    // Closing the page while one is on its way leaves nothing settling for the next opening, and writes nothing after.
+    const closing = reads.settleAfter();
+    await flush();
+    stop();
+    let writes = 0;
+    reads.subscribe(() => { writes += 1; });
+    answers.shift()?.();
+    await closing;
+    expect(reads.getSnapshot().settling).toBe(false);
+    expect(writes).toBe(0);
+  });
+
+  it("reads again after a stake or an unstake lands, which moves the undelegated stake", async () => {
+    const { reads, stop, panel, counts } = await started();
+    const before = reads.getSnapshot().read.value?.staked ?? 0n;
+    expect(await stakeMonkey(panel, MONKEY_UNIT)).toBe(true);
+    await flush();
+    expect(counts.reads).toBe(2);
+    expect(reads.getSnapshot().read.value?.staked).toBe(before + MONKEY_UNIT);
+    stop();
+  });
+
+  it("joins a read still waiting behind the wallet's earlier work, but not one already asking, so reads never pile up", async () => {
+    const { reads, stop, store, counts } = await started();
+    const wallet = store.liveWallet;
+    if (wallet === null) throw new Error("the mock wallet connected");
+    let release = () => {};
+    const busy = store.monkeySession.walletWork.work(wallet, () => new Promise<void>((resolve) => { release = resolve; }));
+    await flush();
+    const first = reads.refresh();
+    const second = reads.refresh();
+    expect(second).toBe(first);
+    release();
+    await busy;
+    await first;
+    expect(counts.reads).toBe(2);
+    // Once a read is asking the wallet, a new ask queues its own, as it may follow a change the first predates.
+    let answer = () => {};
+    const real = store.liveWallet?.staking?.delegations;
+    if (store.liveWallet?.staking === undefined || real === undefined) throw new Error("the mock wallet stakes");
+    store.liveWallet.staking.delegations = () => new Promise((resolve) => { answer = () => { void real().then(resolve); }; });
+    const asking = reads.refresh();
+    await flush();
+    const after = reads.refresh();
+    expect(after).not.toBe(asking);
+    answer();
+    await asking;
+    answer();
+    await after;
+    stop();
+  });
+
+  it("reads nothing for queued work once the page has closed, and backs the timer off after a failure", async () => {
+    const closing = await started();
+    const wallet = closing.store.liveWallet;
+    if (wallet === null) throw new Error("the mock wallet connected");
+    let release = () => {};
+    const busy = closing.store.monkeySession.walletWork.work(wallet, () => new Promise<void>((resolve) => { release = resolve; }));
+    await flush();
+    const queued = closing.reads.refresh();
+    closing.stop();
+    release();
+    await busy;
+    await queued;
+    expect(closing.counts.reads).toBe(1);
+    const { reads, stop, staking } = await started();
+    let failures = 0;
+    staking.delegations = () => { failures += 1; return Promise.reject(new Error("the wallet did not answer")); };
+    // Failures in a row push the timer's next read out further each time, past the 15-second pace.
+    for (let i = 0; i < 4; i += 1) await reads.refresh();
+    const after = failures;
+    await vi.advanceTimersByTimeAsync(WALLET_READ_EVERY_MS * 2);
+    expect(failures).toBe(after);
+    stop();
+  });
+});

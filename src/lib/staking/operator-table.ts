@@ -1,14 +1,16 @@
 /**
- * The Staking page's operator table (monkey-trading/console#271): one row per operator the registry
- * lists, with the role the registry gives it, and the search, sort and paging the table offers, done
- * in memory over the whole list so they hold at hundreds of rows. Roles follow `OperatorRegistry.sol`:
- * the operator in effect (`operatorInEffect`), the candidate a pending election or promotion names
- * (`pendingElection`), and the standby the liveness rule promotes (`_standby`).
+ * The Staking page's operator table (monkey-trading/console#271, #279): one row per candidate the
+ * node's signed `GET /v1/operators` lists, with the role the registry gives it, and the search, sort
+ * and paging the table offers, done in memory over the whole list so they hold at hundreds of rows.
+ * Roles follow `OperatorRegistry.sol`: the operator in effect (`operatorInEffect`), the candidate a
+ * pending election or promotion names (`pendingElection`), and the standby the liveness rule
+ * promotes (`_standby`).
  */
 
-import type { CandidateTable, NamedOperator } from "../engine/registry";
+import { CANDIDATE_LIMIT, type OperatorList } from "../engine/staking-reads";
 import { shareBps } from "../monkey/figures";
-import { shownHostname } from "../monkey/operators";
+import { shownHostname } from "./hostnames";
+import { ADDRESS } from "./candidate-choice";
 
 /** `elected` and `promoted` wait on `pendingElection`; `standby` is the one `promote()` would pick now. */
 export type OperatorRole = "active" | "elected" | "promoted" | "standby" | "candidate";
@@ -17,6 +19,8 @@ export interface OperatorRow {
   address: string;
   /** The registered hostname as the page may show it; null for text the build could not connect to. */
   hostname: string | null;
+  /** The hostname as the chain holds it, which decides whether this build could connect there. */
+  registeredHostname: string;
   role: OperatorRole;
   /** Whether the registry lists it, so stake can be delegated to it; an operator in effect may never have registered. */
   listed: boolean;
@@ -29,6 +33,22 @@ export interface OperatorRow {
   bond: bigint | null;
   release: string;
   endpoint: string | null;
+  /** Registrations before this one, which breaks a tie in votes; null where it never registered. */
+  registration: number | null;
+}
+
+/** The operator list as the page uses it: amounts as bigints, addresses lowercase, every row's role worked out. */
+export interface OperatorsView {
+  /** The final block the list reflects. */
+  block: { number: number; hash: string; timeMs: number };
+  rotationEnabled: boolean;
+  /** MONKEY base units staked across every account. */
+  totalStaked: bigint;
+  /** The operator in effect. */
+  inEffect: string;
+  /** An election or promotion waiting to take effect. */
+  pending: { candidate: string; effectiveAtMs: number; promoted: boolean } | null;
+  rows: readonly OperatorRow[];
 }
 
 export type SortId = "role" | "votes-desc" | "votes-asc" | "bond-desc" | "bond-asc" | "name-asc" | "name-desc";
@@ -57,43 +77,76 @@ export const PAGE_SIZE = 25;
 export const MAX_SEARCH = 100;
 
 const ROLE_ORDER: Record<OperatorRole, number> = { active: 0, promoted: 1, elected: 2, standby: 3, candidate: 4 };
+const UNITS = /^\d+$/;
+
+/**
+ * A decimal amount of base units.
+ * Error cases:
+ * - it is not one
+ */
+function units(text: string, what: string): bigint {
+  if (!UNITS.test(text)) throw new Error(`The operator list named ${what} that is not a whole amount.`);
+  return BigInt(text);
+}
+
+/**
+ * A lowercase address.
+ * Error cases:
+ * - it is not one
+ */
+function address(text: string): string {
+  if (!ADDRESS.test(text)) throw new Error("The operator list named an address that is not one.");
+  return text.toLowerCase();
+}
 
 /**
  * The candidate `promote()` would pick now, as `OperatorRegistry._standby` does: the eligible
  * candidate with the most votes other than the operator in effect, the earlier registration on a
- * tie. Only while rotation is on and no election waits, the only time `promote()` may run.
+ * tie. Only while rotation is on and no election or promotion waits, the only time `promote()` may run.
  */
-function standbyOf(table: CandidateTable, named: NamedOperator | null): string | null {
-  if (named === null || !named.rotationEnabled || named.pending !== null) return null;
-  let best: CandidateTable["candidates"][number] | null = null;
-  for (const candidate of table.candidates) {
-    if (candidate.address === table.inEffect.candidate || !candidate.eligible) continue;
-    if (best === null || candidate.votes > best.votes || (candidate.votes === best.votes && candidate.registration < best.registration)) best = candidate;
+function standbyOf(rows: readonly OperatorRow[], inEffect: string, open: boolean): string | null {
+  if (!open) return null;
+  let best: OperatorRow | null = null;
+  for (const row of rows) {
+    if (row.address === inEffect || !row.eligible || row.votes === null) continue;
+    if (best === null || best.votes === null || row.votes > best.votes || (row.votes === best.votes && (row.registration ?? 0) < (best.registration ?? 0))) best = row;
   }
   return best?.address ?? null;
 }
 
-/** Every operator the table shows: the registry's candidates, and the operator in effect where the registry does not list it. */
-export function operatorRows(table: CandidateTable, named: NamedOperator | null): OperatorRow[] {
-  const pending = named?.pending ?? null;
-  const standby = standbyOf(table, named);
-  const roleOf = (address: string): OperatorRole => {
-    if (address === table.inEffect.candidate) return "active";
-    if (pending !== null && address === pending.candidate) return pending.promoted ? "promoted" : "elected";
-    return address === standby ? "standby" : "candidate";
+/**
+ * The page's view of `list`: every listed candidate with its role, and the operator in effect where
+ * the registry does not list it.
+ * Error cases:
+ * - an amount or address is malformed, or the list names more candidates than the registry holds
+ */
+export function operatorsView(list: OperatorList): OperatorsView {
+  if (list.candidates.length > CANDIDATE_LIMIT) throw new Error("The operator list named more candidates than the registry can hold.");
+  const totalStaked = units(list.total_staked, "a total stake");
+  const inEffect = address(list.operator_in_effect.candidate);
+  const election = list.pending_election;
+  const pending = election === null ? null : { candidate: address(election.candidate), effectiveAtMs: election.effective_at_ms, promoted: election.promoted };
+  const listed: OperatorRow[] = list.candidates.map((candidate) => {
+    const votes = units(candidate.votes, "votes");
+    return {
+      address: address(candidate.address), hostname: shownHostname(candidate.api_hostname), registeredHostname: candidate.api_hostname, role: "candidate", listed: true, eligible: candidate.eligible,
+      votes, shareBps: shareBps(votes, totalStaked), bond: units(candidate.self_bond, "a self-bond"), release: candidate.release.toLowerCase(), endpoint: candidate.handover_endpoint, registration: candidate.registration,
+    };
+  });
+  const standby = standbyOf(listed, inEffect, list.rotation_enabled && pending === null && !list.pending_promotion);
+  const roleOf = (row: string): OperatorRole => {
+    if (row === inEffect) return "active";
+    if (pending !== null && row === pending.candidate) return pending.promoted ? "promoted" : "elected";
+    return row === standby ? "standby" : "candidate";
   };
-  const rows: OperatorRow[] = table.candidates.map((candidate) => ({
-    address: candidate.address, hostname: shownHostname(candidate.hostname), role: roleOf(candidate.address), listed: true, eligible: candidate.eligible,
-    votes: candidate.votes, shareBps: shareBps(candidate.votes, table.totalStaked), bond: candidate.bond, release: candidate.release, endpoint: candidate.handoverEndpoint,
-  }));
-  const { inEffect } = table;
-  if (!rows.some((row) => row.address === inEffect.candidate)) {
+  const rows = listed.map((row) => ({ ...row, role: roleOf(row.address) }));
+  if (!rows.some((row) => row.address === inEffect)) {
     rows.push({
-      address: inEffect.candidate, hostname: shownHostname(inEffect.hostname), role: "active", listed: false, eligible: false, votes: null, shareBps: 0,
-      bond: inEffect.registered?.bond ?? null, release: inEffect.release, endpoint: inEffect.registered?.handoverEndpoint ?? null,
+      address: inEffect, hostname: null, registeredHostname: "", role: "active", listed: false, eligible: false, votes: null, shareBps: 0,
+      bond: null, release: list.operator_in_effect.release.toLowerCase(), endpoint: null, registration: null,
     });
   }
-  return rows;
+  return { block: { number: list.block.number, hash: list.block.hash, timeMs: list.block.time_ms }, rotationEnabled: list.rotation_enabled, totalStaked, inEffect, pending, rows };
 }
 
 /** Whether `row` holds `query` (lowercase, trimmed) in its hostname, address, release or endpoint. */

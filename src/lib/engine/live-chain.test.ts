@@ -27,7 +27,7 @@ function rig(devDigests: readonly string[], sockets: FakeSocket[] = []) {
   return { client, scheduler, clock, attestations };
 }
 
-const reading = (vault: () => Promise<VaultFacts>): DeploymentReads => ({ vault, operator: async () => null, candidates: async () => null, delegateOf: async () => null });
+const reading = (vault: () => Promise<VaultFacts>): DeploymentReads => ({ vault, operator: async () => null });
 
 describe("readChainThrough", () => {
   it("judges the node again when a wallet arrives, and not for the same wallet twice", async () => {

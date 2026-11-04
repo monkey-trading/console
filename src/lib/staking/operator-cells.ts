@@ -37,3 +37,9 @@ export function operatorCells(row: OperatorRow): OperatorCells {
     endpoint: row.endpoint === null || row.endpoint === "" ? "—" : row.endpoint,
   };
 }
+
+/** A candidate as a transaction or a payment names it: its label, with its short address beside a hostname, since two candidates may register one hostname. */
+export function withAddress(label: string, address: string): string {
+  const short = shortHex(address);
+  return label === short ? short : `${label} (${short})`;
+}

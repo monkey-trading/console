@@ -1,6 +1,6 @@
 /**
- * The MONKEY and Staking pages' transactions: staking, starting and completing an unstake, and claiming a USDC
- * distribution. Each goes through the connected wallet, shows the wallet prompt while it waits,
+ * The MONKEY and Staking pages' transactions: staking, starting and completing an unstake, delegating,
+ * moving and taking back amounts of stake, and claiming a USDC distribution. Each goes through the connected wallet, shows the wallet prompt while it waits,
  * says on its panel why nothing was sent or what failed, and reads the wallet and the node again so
  * the figures follow it.
  */
@@ -11,8 +11,8 @@ import { monkeyExact } from "./figures";
 import { abandoned, errorText, notBusy, prompting, usableWallet } from "../store/signing";
 import { checkpointOf } from "../engine/claim-standing";
 import { claimEmissions, emissionsPosition, WAITING_ON_VAULT } from "../store/emissions";
-import { NO_CANDIDATE } from "../engine/registry";
 import type { NoticeSurface } from "../store/state";
+import type { DelegationReads } from "../staking/delegation-reads";
 import type { OperatorReads } from "./operators";
 import type { MonkeyPanel } from "./panel";
 
@@ -68,15 +68,18 @@ async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, s
     return false;
   }
   // The chain moved, or the node's proof did: read both again on the page that is open now, which
-  // may not be the one the transaction started on.
+  // may not be the one the transaction started on. Every staking transaction moves the delegations' figures too.
+  const delegations = landed ? store.monkeySession.delegations?.settleAfter() : undefined;
   const open = store.monkeySession.panel;
   if (open !== null) {
     // The node's total follows the chain a little later than the wallet's read does.
     if (landed && movesStake) open.holdShare();
-    // The forms stay shut until the re-read has finished: the balance they check against is the old one until then.
-    const reread = open.refreshWallet(true);
+    // The forms stay shut until the re-reads have finished: the balance and the delegations they check against are the old ones until then.
+    const reread = Promise.all([open.refreshWallet(true), delegations]);
     await (landed ? open.settle(reread) : reread);
     void open.refreshNode();
+  } else {
+    await delegations;
   }
   return landed;
 }
@@ -104,14 +107,41 @@ export function completeUnstake(panel: MonkeyPanel): Promise<boolean> {
   }, true);
 }
 
-/** Delegates the account's whole stake to `candidate`, or clears the choice with `NO_CANDIDATE`, then reads the candidates' votes again. */
-export async function delegateStake(panel: MonkeyPanel, operators: OperatorReads, candidate: string, label: string): Promise<boolean> {
-  const clearing = candidate === NO_CANDIDATE;
-  const landed = await run(panel, "operator", clearing ? "clear your delegation" : `delegate your stake to ${label}`, async (_wallet, staking, progress) => {
-    await staking.delegate(candidate, progress);
+/** A change to the account's delegations (monkey-trading/engine#586); each `label` is how the page names that candidate. */
+export type DelegationChange =
+  | { kind: "delegate"; to: string; toLabel: string; amount: bigint }
+  | { kind: "undelegate"; from: string; fromLabel: string; amount: bigint }
+  | { kind: "redelegate"; from: string; fromLabel: string; to: string; toLabel: string; amount: bigint };
+
+/** What the wallet prompt says a change does. */
+export function changeText(change: DelegationChange): string {
+  const amount = monkeyExact(change.amount);
+  switch (change.kind) {
+    case "delegate": return `delegate ${amount} to ${change.toLabel}`;
+    case "undelegate": return `take back ${amount} from ${change.fromLabel}`;
+    case "redelegate": return `move ${amount} from ${change.fromLabel} to ${change.toLabel}`;
+    default: {
+      const never: never = change;
+      throw new Error(`Unknown delegation change ${String(never)}.`);
+    }
+  }
+}
+
+/**
+ * Sends `change` through the wallet, then reads the account's delegations and the operator list
+ * again. It needs nothing from the node, so it goes while the node is down or unverified, which
+ * keeps a staker able to vote away from it.
+ */
+export async function changeDelegation(panel: MonkeyPanel, operators: OperatorReads, delegations: DelegationReads, change: DelegationChange, onLanded?: () => void): Promise<boolean> {
+  const landed = await run(panel, "operator", changeText(change), async (_wallet, staking, progress) => {
+    if (change.kind === "delegate") await staking.delegate(change.to, change.amount, progress);
+    else if (change.kind === "undelegate") await staking.undelegate(change.from, change.amount, progress);
+    else await staking.redelegate(change.from, change.to, change.amount, progress);
     return true;
-  });
-  await operators.refreshChain();
+  }, false, onLanded);
+  // The list is the node's, which may be down: the change's outcome waits on the chain's read alone, which `run` makes for the page's own reader.
+  void operators.refresh();
+  if (panel.store.monkeySession.delegations !== delegations) await delegations.refresh();
   return landed;
 }
 

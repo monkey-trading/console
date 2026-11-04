@@ -5,10 +5,11 @@ import type { EngineEvent, MarketId } from "../engine/types";
 import type { AttestationMode, MockEngineClient } from "./client";
 import type { DistributionProof } from "../engine/stats-types";
 import type { DeploymentReads } from "../engine/registry";
-import type { StakingPosition } from "../engine/staking";
+import type { StakeDelegations, StakingPosition } from "../engine/staking";
+import { delegatedOf } from "../staking/delegations";
 import { chainDeposit, payQueue } from "./funds";
 import { claimDistribution, completeUnstake, distributionProof, stake, startUnstake, walletBalance } from "./monkey";
-import { delegate, mockChainReads } from "./operators";
+import { delegationsOf, mockChainReads, moveDelegation, reduceForUnstake } from "./operators";
 import { MAX_STRESS } from "../pricing";
 import type { Region } from "./state";
 
@@ -76,7 +77,7 @@ export class MockControls {
     state.entitledMonkey.delete(key);
     state.claimedMonkey.delete(key);
     state.monkey.forget(key);
-    state.operators.delegates.delete(key);
+    state.operators.delegations.delete(key);
     state.emission.results.delete(key);
     for (let i = state.queue.length - 1; i >= 0; i--) if (state.queue[i]?.account === key) state.queue.splice(i, 1);
   }
@@ -115,9 +116,16 @@ export class MockControls {
     };
   }
 
-  /** Stands in for the staking contract's `delegate`. */
-  delegate(address: string, candidate: string): void {
-    delegate(this.client.state, address, candidate);
+  /** What the simulated staking contract holds of `address`'s stake and delegations. */
+  stakeDelegations(address: string): StakeDelegations {
+    const { state } = this.client;
+    const delegations = delegationsOf(state, address);
+    return { staked: state.monkey.staked.get(address.toLowerCase()) ?? 0n, delegated: delegatedOf(delegations), delegations };
+  }
+
+  /** Stands in for the staking contract's `delegate`, `undelegate` and `redelegate`: null names the undelegated stake. */
+  moveDelegation(address: string, from: string | null, to: string | null, amount: bigint): void {
+    moveDelegation(this.client.state, address, from, to, amount);
   }
 
   /** The reads a wallet makes of the simulated vault and operator registry. */
@@ -130,7 +138,9 @@ export class MockControls {
     stake(this.client.state, address, amount);
   }
 
+  /** Takes the undelegated stake first, then the delegations in proportion, as `Staking.startUnstake` does. */
   startUnstake(address: string, amount: bigint): void {
+    reduceForUnstake(this.client.state, address, amount);
     startUnstake(this.client.state, address, amount);
   }
 

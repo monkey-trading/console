@@ -18,7 +18,7 @@ import type { ConsoleStore } from "../store/store";
 import { ChartFeed } from "./feed";
 import { failed, LOADING, ready, type Read } from "./figures";
 import { Backoff, followLive } from "./live-reads";
-import { FEEDS, NO_DRAFTS, NO_WALLET, PAGE_FEEDS, type FeedName, type PanelPage, type PanelState } from "./panel-state";
+import { FEEDS, NO_DRAFTS, NO_WALLET, PAGE_FEEDS, type DraftField, type FeedName, type PanelPage, type PanelState } from "./panel-state";
 import { proofAwaited, readEntitlement } from "./pending";
 
 /** The activity table's length, and how often the page's totals and activity are read, in milliseconds. */
@@ -128,13 +128,13 @@ export class MonkeyPanel {
   }
 
   /** Keeps what was typed in a field; the field's account is the connected one. */
-  setDraft(field: "stake" | "unstake", text: string): void {
+  setDraft(field: DraftField, text: string): void {
     const account = this.store.liveWallet?.address ?? null;
     this.set({ drafts: { ...(this.state.drafts.account === account ? this.state.drafts : NO_DRAFTS), account, [field]: text } });
   }
 
   /** Empties a field once what was sent from it has landed, unless the visitor has typed something else since. */
-  clearDraft(field: "stake" | "unstake", sent: string): void {
+  clearDraft(field: DraftField, sent: string): void {
     if (this.state.drafts[field] === sent) this.set({ drafts: { ...this.state.drafts, [field]: "" } });
   }
 

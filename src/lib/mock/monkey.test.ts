@@ -101,9 +101,9 @@ describe("distribution epochs in the mock", () => {
     closeDistributionEpochs(state);
     const close = state.monkey.epochs[state.monkey.epochs.length - 1];
     expect(close).toMatchObject({ closedMs: lastClosed + EPOCH_MS, allocated: 10_000n * 1_000_000n });
-    // Staked 500 of the total the engine counts at the close.
+    // Staked 500 of the total the engine counts at the close, which shares four fifths: the operator in effect takes the other.
     const total = state.monkey.totalStakedAt(lastClosed + EPOCH_MS);
-    const expectedShare = (10_000n * 1_000_000n * (500n * MONKEY_UNIT)) / total;
+    const expectedShare = (8_000n * 1_000_000n * (500n * MONKEY_UNIT)) / total;
     expect(expectedShare).toBeGreaterThan(0n);
     const proof = distributionProof(state, ME);
     expect(BigInt(proof.entitled)).toBe(expectedShare);
@@ -113,7 +113,7 @@ describe("distribution epochs in the mock", () => {
     state.houseCash = FLOOR_USD + fixedFromInt(4_000);
     state.now = lastClosed + 2 * EPOCH_MS;
     closeDistributionEpochs(state);
-    const second = (4_000n * 1_000_000n * (500n * MONKEY_UNIT)) / state.monkey.totalStakedAt(lastClosed + 2 * EPOCH_MS);
+    const second = (3_200n * 1_000_000n * (500n * MONKEY_UNIT)) / state.monkey.totalStakedAt(lastClosed + 2 * EPOCH_MS);
     expect(BigInt(distributionProof(state, ME).entitled)).toBe(expectedShare + second);
   });
 

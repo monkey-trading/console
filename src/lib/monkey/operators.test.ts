@@ -3,12 +3,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EngineError } from "../engine/client";
-import { ProviderDeployment } from "../engine/provider-registry";
-import { CANDIDATE_LIMIT, NO_CANDIDATE, type DeploymentReads } from "../engine/registry";
+import { CANDIDATE_LIMIT } from "../engine/staking-reads";
+import type { OperatorList } from "../engine/staking-reads";
 import type { OperatorRoute } from "../engine/stats-types";
-import { connectWallet, disconnectWallet } from "../store/actions";
-import { delegateStake } from "./actions";
-import { hostnameListed, mirroredElection, OperatorReads, shownHostname } from "./operators";
+import { DelegationReads } from "../staking/delegation-reads";
+import { changeDelegation } from "./actions";
+import { hostnameListed, shownHostname } from "../staking/hostnames";
+import { mirroredElection, OperatorReads, operatorsShown } from "./operators";
 import { NODE_READ_MS } from "./panel";
 import { flush, setup } from "./panel-kit";
 
@@ -53,6 +54,18 @@ describe("mirroredElection", () => {
   });
 });
 
+describe("operatorsShown", () => {
+  it("shows the card with the figures once the node is trusted, and alone once it has failed a check or gone stale, never before the first verdict", () => {
+    expect(operatorsShown({ kind: "checking" }, "connecting")).toBe(false);
+    expect(operatorsShown({ kind: "mock" }, "connecting")).toBe(false);
+    expect(operatorsShown({ kind: "reverifying" }, "live")).toBe(false);
+    expect(operatorsShown({ kind: "mock" }, "live")).toBe(true);
+    expect(operatorsShown({ kind: "unverified", reason: "the quote did not verify" }, "connecting")).toBe(true);
+    expect(operatorsShown({ kind: "clock", skewMs: 90_000 }, "live")).toBe(true);
+    expect(operatorsShown({ kind: "mock" }, "stale")).toBe(true);
+  });
+});
+
 describe("OperatorReads", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
@@ -60,139 +73,96 @@ describe("OperatorReads", () => {
   /** The page's store with the card's reads started and counted. */
   async function started(hidden = () => false) {
     const kit = await setup();
-    const wallet = kit.store.liveWallet;
-    const reads = wallet?.chainReads;
-    if (wallet === null || reads === undefined) throw new Error("the mock wallet reads a chain");
-    const counts = { operator: 0, candidates: 0, route: 0 };
-    wallet.chainReads = { ...reads, operator: () => { counts.operator += 1; return reads.operator(); }, candidates: () => { counts.candidates += 1; return reads.candidates(); } };
+    const counts = { route: 0, list: 0 };
     const routeRead = kit.node.client.stats.operator;
+    const listRead = kit.node.client.stats.operators;
     kit.node.client.stats.operator = () => { counts.route += 1; return routeRead(); };
+    kit.node.client.stats.operators = () => { counts.list += 1; return listRead(); };
     const operators = new OperatorReads(kit.store);
     const stop = operators.start(hidden);
     await flush();
-    return { ...kit, operators, stop, counts, wallet };
+    return { ...kit, operators, stop, counts, listRead };
   }
 
-  it("reads the node's route and the registry on open", async () => {
-    const { operators, counts, stop } = await started();
-    const { route, named, table } = operators.getSnapshot();
-    expect([route.status, named.status, table.status]).toEqual(["ready", "ready", "ready"]);
-    expect(named.value?.hostname).toBe("alpha.operators.example");
-    expect(table.value?.candidates).toHaveLength(CANDIDATE_LIMIT);
-    expect(counts).toEqual({ route: 1, operator: 1, candidates: 1 });
-    stop();
-  });
-
-  it("keeps the page's pace: the route every 30 seconds, the registry every 15, and neither in a hidden tab", async () => {
-    const { counts, stop } = await started();
-    await vi.advanceTimersByTimeAsync(NODE_READ_MS);
-    expect(counts).toEqual({ route: 2, operator: 3, candidates: 3 });
-    await vi.advanceTimersByTimeAsync(FIVE_MINUTES - NODE_READ_MS);
-    expect(counts).toEqual({ route: 11, operator: 21, candidates: 21 });
-    stop();
-  });
-
-  it("shows a failure, not a read that goes on for ever, when the wallet never answers the chain check", async () => {
-    const { store } = await setup();
-    const wallet = store.liveWallet;
-    if (wallet === null) throw new Error("the mock wallet connected");
-    const chain = { chainId: 31337, vault: "0x00000000000000000000000000000000000000dd", usdc: null, add: null, staking: "0x00000000000000000000000000000000000000cc", registry: "0x00000000000000000000000000000000000000ee" };
-    wallet.chainReads = new ProviderDeployment(chain, { request: () => new Promise(() => {}) });
-    const operators = new OperatorReads(store);
+  it("reads the node's route and its signed operator list on open, never the wallet", async () => {
+    const kit = await setup();
+    const reads = kit.store.liveWallet?.chainReads;
+    if (kit.store.liveWallet === null || reads === undefined) throw new Error("the mock wallet reads a chain");
+    const chain = { vault: 0, operator: 0 };
+    kit.store.liveWallet.chainReads = { vault: () => { chain.vault += 1; return reads.vault(); }, operator: () => { chain.operator += 1; return reads.operator(); } };
+    const operators = new OperatorReads(kit.store);
     const stop = operators.start(() => false);
     await flush();
-    expect(operators.getSnapshot().named.status).toBe("loading");
-    for (const read of ["named", "table", "chosen"] as const) {
-      await vi.advanceTimersByTimeAsync(30_000);
-      expect(operators.getSnapshot()[read], read).toMatchObject({ status: "failed", message: "Your wallet did not answer in time." });
-    }
+    const { route, list } = operators.getSnapshot();
+    expect([route.status, list.status]).toEqual(["ready", "ready"]);
+    expect(list.value?.rows).toHaveLength(CANDIDATE_LIMIT);
+    expect(list.value?.block.number).toBeGreaterThan(0);
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS * 2);
+    expect(chain).toEqual({ vault: 0, operator: 0 });
     stop();
   });
 
-  it("reads nothing on its timer in a hidden tab", async () => {
-    const { counts, stop } = await started(() => true);
-    await vi.advanceTimersByTimeAsync(FIVE_MINUTES * 2);
-    expect(counts).toEqual({ route: 1, operator: 1, candidates: 1 });
+  it("keeps the page's pace, both every 30 seconds, and reads nothing on its timer in a hidden tab", async () => {
+    const { counts, stop } = await started();
+    await vi.advanceTimersByTimeAsync(FIVE_MINUTES);
+    expect(counts).toEqual({ route: 11, list: 11 });
     stop();
+    const hidden = await started(() => true);
+    await vi.advanceTimersByTimeAsync(FIVE_MINUTES);
+    expect(hidden.counts).toEqual({ route: 1, list: 1 });
+    hidden.stop();
   });
 
-  it("does not ask again for a route the node answers 404 to, until it is reopened", async () => {
+  it("does not ask again for a route or a list the node answers 404 to, until it is reopened", async () => {
     const { operators, node, counts, stop } = await started();
     node.client.stats.operator = () => { counts.route += 1; return Promise.reject(new EngineError(404, "not found")); };
-    await operators.refreshNode();
-    expect(operators.getSnapshot().route.status).toBe("unavailable");
-    const before = counts.route;
+    node.client.stats.operators = () => { counts.list += 1; return Promise.reject(new EngineError(404, "not found")); };
+    await operators.refresh();
+    expect([operators.getSnapshot().route.status, operators.getSnapshot().list.status]).toEqual(["unavailable", "unavailable"]);
     await vi.advanceTimersByTimeAsync(NODE_READ_MS * 3);
-    expect(counts.route).toBe(before);
+    expect(counts).toEqual({ route: 2, list: 2 });
     stop();
   });
 
-  it("reads once for the wallet it opened with, once for a new wallet, and joins a read already running", async () => {
-    const { operators, counts, stop, store, wallet } = await started();
-    operators.walletChanged();
-    await flush();
-    expect(counts.operator).toBe(1);
-    const running = operators.refreshChain();
-    const joined = operators.refreshChain();
-    expect(joined).toBe(running);
-    await running;
-    expect(counts.operator).toBe(2);
-    store.liveWallet = { ...wallet };
-    operators.walletChanged();
-    await flush();
-    expect(counts.operator).toBe(3);
+  it("keeps the last list and says why when the node has no fresh one, or answers one that does not hold together", async () => {
+    const { operators, node, stop, listRead } = await started();
+    const held = operators.getSnapshot().list.value;
+    node.client.stats.operators = () => Promise.reject(new EngineError(503, "the operator list is stale: the last read is too old"));
+    await operators.refresh();
+    expect(operators.getSnapshot().list).toEqual({ status: "failed", value: held, message: "the operator list is stale: the last read is too old" });
+    node.client.stats.operators = async (): Promise<OperatorList> => ({ ...(await listRead()), total_staked: "lots" });
+    await operators.refresh();
+    expect(operators.getSnapshot().list).toMatchObject({ status: "failed", value: held, message: "The operator list named a total stake that is not a whole amount." });
     stop();
   });
 
-  it("reads afresh for a wallet that arrives during another's read, and drops the other's figures", async () => {
-    const { operators, store, wallet, counts, stop } = await started();
-    const reads = wallet.chainReads as DeploymentReads;
-    let release = () => {};
-    wallet.chainReads = { ...reads, operator: () => new Promise((resolve) => { release = () => { void reads.operator().then(resolve); }; }) };
-    const stuck = operators.refreshChain();
-    await flush();
-    const other = { ...wallet, address: "0x00000000000000000000000000000000000000bb", chainReads: reads };
-    store.liveWallet = other;
-    const fresh = operators.refreshChain();
-    expect(fresh).not.toBe(stuck);
-    expect(operators.getSnapshot().table.status).toBe("loading");
-    release();
-    await Promise.all([stuck, fresh]);
-    await flush();
-    expect(operators.getSnapshot().table.status).toBe("ready");
-    expect(counts.candidates).toBe(2);
-    stop();
-  });
-
-  it("while the node cannot be trusted, drops its figures and reads the registry alone, and reads the node at once when it can be again", async () => {
+  it("while the node cannot be trusted, drops its figures and reads nothing, and reads at once when it can be again", async () => {
     const { operators, store, counts, stop } = await started();
-    expect(operators.getSnapshot().route.status).toBe("ready");
+    const held = operators.getSnapshot().list.value;
     store.patch({ attestation: { kind: "unverified", reason: "gone" } });
-    expect(operators.getSnapshot().route).toEqual({ status: "loading", value: null, message: null });
-    await operators.refreshNode();
-    await operators.refreshChain();
-    expect(counts).toEqual({ route: 1, operator: 2, candidates: 2 });
-    expect(operators.getSnapshot().table.status).toBe("ready");
+    expect(operators.getSnapshot()).toMatchObject({ route: { status: "loading", value: null, message: null }, list: { status: "loading", value: null, message: null }, held: { view: held } });
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS * 2);
+    expect(counts).toEqual({ route: 1, list: 1 });
     store.patch({ attestation: { kind: "mock" } });
     await flush();
-    expect(counts.route).toBe(2);
-    expect(operators.getSnapshot().route.status).toBe("ready");
+    expect(counts).toEqual({ route: 2, list: 2 });
+    expect(operators.getSnapshot().list.status).toBe("ready");
     stop();
   });
 
-  it("drops the node's answer that lands after trust in it ended, and an older answer that lands after a newer one", async () => {
+  it("drops an answer that lands after trust in the node ended, and an older answer that lands after a newer one", async () => {
     const { operators, store, node, stop } = await started();
     const answers: ((route: OperatorRoute) => void)[] = [];
     const route = (operator: string): OperatorRoute => ({ operator, pending_rotation: null, rotation_enabled: true, last_election: null });
     node.client.stats.operator = () => new Promise((resolve) => { answers.push(resolve); });
-    const older = operators.refreshNode();
-    const newer = operators.refreshNode();
+    const older = operators.refresh();
+    const newer = operators.refresh();
     answers[1]?.(route("0xnewer"));
     await newer;
     answers[0]?.(route("0xolder"));
     await older;
     expect(operators.getSnapshot().route.value?.operator).toBe("0xnewer");
-    const pending = operators.refreshNode();
+    const pending = operators.refresh();
     store.patch({ attestation: { kind: "unverified", reason: "gone" } });
     answers[2]?.(route("0xretired"));
     await pending;
@@ -200,87 +170,41 @@ describe("OperatorReads", () => {
     stop();
   });
 
-  it("stops following the node's trust once closed", async () => {
-    const { operators, store, counts, stop } = await started();
-    stop();
-    store.patch({ attestation: { kind: "unverified", reason: "gone" } });
-    store.patch({ attestation: { kind: "mock" } });
-    await flush();
-    expect(counts.route).toBe(1);
-    expect(operators.getSnapshot().route.status).toBe("loading");
-  });
-
-  it("reads again at once on an election event in the stream, and not on other events", async () => {
-    const { node, counts, stop } = await started();
-    node.client.state.emit({ type: "tick" }, [{ type: "operator_elected", epoch: 1, candidate: "0xb", admin_key: "0xk", effective_at: 1 }]);
-    await flush();
-    expect(counts).toEqual({ route: 2, operator: 2, candidates: 2 });
-    node.client.state.emit({ type: "tick" }, [{ type: "market_opened", market: 1 }]);
-    await flush();
-    expect(counts).toEqual({ route: 2, operator: 2, candidates: 2 });
-    stop();
-  });
-
-  it("keeps the last answer and says why when a chain read fails", async () => {
-    const { operators, wallet, stop } = await started();
-    const reads = wallet.chainReads as DeploymentReads;
-    const held = operators.getSnapshot().table.value;
-    wallet.chainReads = { ...reads, operator: () => Promise.reject(new Error("no answer")), candidates: () => Promise.reject(new Error("still no answer")) };
-    await operators.refreshChain();
-    expect(operators.getSnapshot().named).toMatchObject({ status: "failed", message: "no answer" });
-    expect(operators.getSnapshot().table).toEqual({ status: "failed", value: held, message: "still no answer" });
-    stop();
-  });
-
-  it("has nothing to read with no wallet, and a new wallet's reads replace it", async () => {
-    const { operators, store, stop } = await started();
-    disconnectWallet(store);
-    await operators.refreshChain();
-    expect(operators.getSnapshot().named.status).toBe("unavailable");
-    await connectWallet(store, "browser");
-    await operators.refreshChain();
-    expect(operators.getSnapshot().named.status).toBe("ready");
-    stop();
-  });
-
-  it("drops an answer that lands after the card closed, and forgets what it read", async () => {
-    const { operators, wallet, stop } = await started();
-    const reads = wallet.chainReads as DeploymentReads;
+  it("stops following the node's trust once closed, and drops an answer that lands after it closed", async () => {
+    const { operators, store, node, counts, stop } = await started();
     let release = () => {};
-    wallet.chainReads = { ...reads, operator: () => new Promise((resolve) => { release = () => { void reads.operator().then(resolve); }; }) };
-    const read = operators.refreshChain();
-    await flush();
+    const real = node.client.stats.operators;
+    node.client.stats.operators = () => new Promise((resolve) => { release = () => { void real().then(resolve); }; });
+    const read = operators.refresh();
     stop();
     release();
     await read;
-    expect(operators.getSnapshot().named.status).toBe("loading");
+    store.patch({ attestation: { kind: "unverified", reason: "gone" } });
+    store.patch({ attestation: { kind: "mock" } });
+    await flush();
+    expect(counts.route).toBe(2);
+    expect(operators.getSnapshot()).toEqual({ route: { status: "loading", value: null, message: null }, list: { status: "loading", value: null, message: null }, held: null });
   });
 
-  it("delegates through the staking wallet, and reads the votes and the choice again", async () => {
-    const { operators, panel, store, stop } = await started();
-    const staked = panel.getSnapshot().wallet.position.value?.staked ?? 0n;
-    expect(staked).toBeGreaterThan(0n);
-    const before = operators.getSnapshot().table.value?.candidates[0];
-    if (before === undefined) throw new Error("the mock lists its candidates");
-    expect(await delegateStake(panel, operators, before.address, "alpha")).toBe(true);
+  it("reads again at once on an election or rotation event in the stream, and not on other events", async () => {
+    const { node, counts, stop } = await started();
+    node.client.state.emit({ type: "tick" }, [{ type: "operator_elected", epoch: 1, candidate: "0xb", admin_key: "0xk", effective_at: 1 }]);
     await flush();
-    expect(operators.getSnapshot().table.value?.candidates[0]?.votes).toBe(before.votes + staked);
-    expect(operators.getSnapshot().chosen).toEqual({ status: "ready", value: before.address, message: null });
-    expect(store.getSnapshot().notices.operator).toBeUndefined();
-    expect(await delegateStake(panel, operators, NO_CANDIDATE, "")).toBe(true);
+    expect(counts).toEqual({ route: 2, list: 2 });
+    node.client.state.emit({ type: "tick" }, [{ type: "market_opened", market: 1 }]);
     await flush();
-    expect(operators.getSnapshot().chosen.value).toBeNull();
-    expect(store.getSnapshot().notices.operator).toBeUndefined();
+    expect(counts).toEqual({ route: 2, list: 2 });
     stop();
   });
 
-  it("delegates nothing for a read-only account", async () => {
-    const { operators, panel, store, stop } = await started();
-    const wallet = store.liveWallet;
-    if (wallet === null) throw new Error("the kit connects a wallet");
-    wallet.readOnly = true;
-    expect(await delegateStake(panel, operators, NO_CANDIDATE, "")).toBe(false);
-    expect(store.getSnapshot().notices.operator).toMatchObject({ tone: "error", text: "This wallet cannot send transactions." });
+  it("reads the list again after a delegation change, which shows the new votes", async () => {
+    const { operators, node, panel, counts, stop, store } = await started();
+    const alpha = node.client.state.operators.candidates[0];
+    if (alpha === undefined) throw new Error("the mock lists its candidates");
+    const before = operators.getSnapshot().list.value?.rows.find((row) => row.address === alpha.address)?.votes ?? 0n;
+    expect(await changeDelegation(panel, operators, new DelegationReads(store), { kind: "delegate", to: alpha.address, toLabel: "alpha", amount: 1n })).toBe(true);
+    expect(counts.list).toBe(2);
+    expect(operators.getSnapshot().list.value?.rows.find((row) => row.address === alpha.address)?.votes).toBe(before + 1n);
     stop();
   });
 });

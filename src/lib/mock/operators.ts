@@ -1,16 +1,20 @@
 /**
  * The simulated operator registry and what the node mirrors of it: a full list of candidates, the
- * operator in effect, and an election waiting out its notice, as `OperatorRegistry.sol` and
- * `GET /v1/operator` hold them. A delegation moves the account's stake between the candidates'
- * votes, as `Staking` does, and the election takes effect when the mock's clock reaches its time.
+ * operator in effect, and an election waiting out its notice, as `OperatorRegistry.sol`,
+ * `GET /v1/operator` and `GET /v1/operators` hold them. Accounts delegate amounts of their stake to
+ * candidates, as `Staking` keeps them (monkey-trading/engine#586), and the election takes effect when
+ * the mock's clock reaches its time.
  */
 
 import { keccak256, stringToHex } from "viem";
 
-import { CANDIDATE_LIMIT, NO_CANDIDATE, type CandidateTable, type DeploymentReads, type NamedOperator, type PendingElection, type Registration } from "../engine/registry";
+import { NO_CANDIDATE, type DeploymentReads, type NamedOperator, type PendingElection } from "../engine/registry";
+import type { Delegation } from "../engine/staking";
+import { CANDIDATE_LIMIT, type OperatorList } from "../engine/staking-reads";
 import type { OperatorRoute } from "../engine/stats-types";
 import { MONKEY_UNIT } from "../format";
 import { mulberry32, SEED } from "../prng";
+import { applyChange, delegatedOf, delegationTo, unstakeTakes } from "../staking/delegations";
 import type { MockState } from "./state";
 
 const DAY_MS = 86_400_000;
@@ -33,8 +37,12 @@ const hashOf = (text: string): string => keccak256(stringToHex(text));
 const hostnameOf = (name: string): string => `${name}.operators.example`;
 
 /** A candidate the simulated registry lists. */
-interface MockCandidate extends Registration {
+interface MockCandidate {
   address: string;
+  bond: bigint;
+  release: string;
+  registration: number;
+  handoverEndpoint: string;
   adminKey: string;
   hostname: string;
   /** MONKEY base units other delegators give it. */
@@ -58,8 +66,8 @@ function mockCandidates(): MockCandidate[] {
 }
 
 export class MockOperators {
-  /** The candidate each account's whole stake votes for. */
-  readonly delegates = new Map<string, string>();
+  /** Each account's delegations, in the order `Staking.delegationsOf` would list them. */
+  readonly delegations = new Map<string, Delegation[]>();
   readonly candidates: readonly MockCandidate[] = mockCandidates();
   private sinceMs: number;
   private inEffect: MockCandidate;
@@ -98,8 +106,6 @@ export function mockChainReads(state: MockState): DeploymentReads {
   return {
     vault: async () => ({ release: `0x${"0".repeat(64)}`, signer: NO_CANDIDATE }),
     operator: async () => state.operators.named(state.now),
-    candidates: async () => candidateTable(state),
-    delegateOf: async (account) => state.operators.delegates.get(account.toLowerCase()) ?? null,
   };
 }
 
@@ -111,40 +117,86 @@ export function operatorRoute(state: MockState): OperatorRoute {
   return { operator, pending_rotation: elected === null ? null : { address: elected.admin_key, effective_at: elected.effective_at }, rotation_enabled: true, last_election: elected };
 }
 
-/** The votes the visitor's accounts add to `candidate`: their whole stake, unstaking amounts excluded, as `Staking` counts it. */
-function delegatedTo(state: MockState, candidate: string): bigint {
+/** What the visitor's accounts delegate to `candidate`, as `Staking.votes` adds them. */
+function delegatedToCandidate(state: MockState, candidate: string): bigint {
   let sum = 0n;
-  for (const [account, chosen] of state.operators.delegates) if (chosen === candidate) sum += state.monkey.staked.get(account) ?? 0n;
+  for (const delegations of state.operators.delegations.values()) sum += delegationTo(delegations, candidate);
   return sum;
 }
 
-/** The simulated registry's `candidates()` read. */
-function candidateTable(state: MockState): CandidateTable {
+/** The simulated chain's block for `ms`: one every twelve seconds, final at once. */
+function blockAt(ms: number): OperatorList["block"] {
+  const number = Math.floor(ms / 12_000);
+  return { number, hash: hashOf(`block-${number}`), time_ms: number * 12_000 };
+}
+
+/** `GET /v1/operators`: the simulated registry through its lens, at the mock's latest block. */
+export function operatorList(state: MockState): OperatorList {
   // `Staking.totalStaked`: what votes, so an unstake leaves it at once though it keeps earning through its cooldown.
   let totalStaked = state.monkey.otherStakedAt(state.now);
   for (const staked of state.monkey.staked.values()) totalStaked += staked;
-  const candidates = state.operators.candidates.map(({ address, hostname, votes, bond, release, registration, handoverEndpoint }) => {
-    const cast = votes + delegatedTo(state, address);
-    return { address, hostname, votes: cast, eligible: cast * 10_000n >= ELIGIBILITY_BPS * totalStaked, bond, release, registration, handoverEndpoint };
+  const named = state.operators.named(state.now);
+  const operator = (candidate: string, sinceMs: number) => {
+    const listed = state.operators.candidates.find((entry) => entry.address === candidate);
+    return { candidate, admin_key: listed?.adminKey ?? NO_CANDIDATE, release: listed?.release ?? `0x${"0".repeat(64)}`, since_ms: sinceMs };
+  };
+  const pending = named.pending;
+  const candidates = state.operators.candidates.map(({ address, adminKey, hostname, votes, bond, release, registration, handoverEndpoint }) => {
+    const cast = votes + delegatedToCandidate(state, address);
+    const role = address === named.candidate ? ("operator" as const) : address === pending?.candidate ? ("elected" as const) : ("candidate" as const);
+    return {
+      address, admin_key: adminKey, enclave: hashOf(`${address}.enclave`).slice(0, 42), self_bond: bond.toString(), release, registration,
+      api_hostname: hostname, handover_endpoint: handoverEndpoint, votes: cast.toString(), eligible: cast * 10_000n >= ELIGIBILITY_BPS * totalStaked, role,
+    };
   });
-  const { candidate } = state.operators.named(state.now);
-  const current = state.operators.candidates.find((listed) => listed.address === candidate);
-  if (current === undefined) throw new Error("The simulated operator in effect is not one of its candidates.");
-  const { hostname, bond, release, registration, handoverEndpoint } = current;
-  return { inEffect: { candidate, hostname, release, registered: { bond, release, registration, handoverEndpoint } }, candidates, totalStaked };
+  return {
+    block: blockAt(state.now), registry: addressOf("registry", "contract"), lens: addressOf("lens", "contract"), rotation_enabled: named.rotationEnabled,
+    parameters: { epoch_length_secs: 604_800, min_term_secs: 0, finality_margin_secs: 900, margin_bps: 1_000, eligibility_bps: Number(ELIGIBILITY_BPS), quorum_bps: 2_000, max_candidates: CANDIDATE_LIMIT, min_self_bond: (10_000n * MONKEY_UNIT).toString(), liveness_timeout_secs: 86_400 },
+    open_epoch: 42, open_epoch_start_ms: state.now - DAY_MS, total_staked: totalStaked.toString(),
+    operator_in_effect: operator(named.candidate, named.sinceMs), named_operator: operator(named.candidate, named.sinceMs),
+    pending_election: pending === null ? null : { epoch: pending.epoch, candidate: pending.candidate, admin_key: pending.adminKey, release: operator(pending.candidate, 0).release, effective_at_ms: pending.effectiveAtMs, promoted: pending.promoted },
+    pending_promotion: false, candidates,
+  };
+}
+
+/** The simulated account's delegations. */
+export function delegationsOf(state: MockState, address: string): Delegation[] {
+  return state.operators.delegations.get(address.toLowerCase()) ?? [];
+}
+
+/** Keeps `delegations` as the account's, and none for an empty list, as the contract's set drops an emptied one. */
+function setDelegations(state: MockState, key: string, delegations: Delegation[]): void {
+  if (delegations.length === 0) state.operators.delegations.delete(key);
+  else state.operators.delegations.set(key, delegations);
 }
 
 /**
- * Stands in for `Staking.delegate`: the zero address clears the choice, so the stake abstains.
+ * Stands in for `Staking.delegate`, `undelegate` and `redelegate`: `from` gives `amount` (the
+ * undelegated stake when null) and `to` takes it (the undelegated stake when null). Like the
+ * contract, it takes any address but the zero one: whether it is a candidate is the registry's matter.
  * Error cases:
- * - the candidate is not one the simulated registry lists
+ * - the amount is not positive, or more than `from` holds; `to` is the zero address, or is `from`
  */
-export function delegate(state: MockState, address: string, candidate: string): void {
+export function moveDelegation(state: MockState, address: string, from: string | null, to: string | null, amount: bigint): void {
   const key = address.toLowerCase();
-  if (candidate === NO_CANDIDATE) {
-    state.operators.delegates.delete(key);
-    return;
-  }
-  if (!state.operators.candidates.some((listed) => listed.address === candidate)) throw new Error("The simulated registry lists no such candidate.");
-  state.operators.delegates.set(key, candidate);
+  let delegations = delegationsOf(state, key);
+  if (amount <= 0n) throw new Error("The amount must be more than zero.");
+  if (to === NO_CANDIDATE) throw new Error("A delegation goes to a candidate's address, not the zero address.");
+  if (to !== null && to === from) throw new Error("A delegation moves to another candidate than its own.");
+  const held = from === null ? (state.monkey.staked.get(key) ?? 0n) - delegatedOf(delegations) : delegationTo(delegations, from);
+  if (amount > held) throw new Error(from === null ? "Your undelegated stake is less than that." : "Your delegation there is less than that.");
+  if (from !== null) delegations = applyChange(delegations, { candidate: from, amount: -amount });
+  if (to !== null) delegations = applyChange(delegations, { candidate: to, amount });
+  setDelegations(state, key, delegations);
+}
+
+/** What `Staking.startUnstake(amount)` takes from the account's delegations, applied as the contract does, from the last to the first. */
+export function reduceForUnstake(state: MockState, address: string, amount: bigint): void {
+  const key = address.toLowerCase();
+  const staked = state.monkey.staked.get(key) ?? 0n;
+  if (amount <= 0n || amount > staked) return; // the unstake itself refuses it, and says why
+  let delegations = delegationsOf(state, key);
+  const { reductions } = unstakeTakes(staked, delegations, amount);
+  for (const reduction of [...reductions].reverse()) delegations = applyChange(delegations, { candidate: reduction.candidate, amount: -reduction.amount });
+  setDelegations(state, key, delegations);
 }

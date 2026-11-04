@@ -7,6 +7,7 @@
 
 import { EngineError } from "../engine/client";
 import type { EngineEvent } from "../engine/types";
+import type { DistributionEpochsPage } from "../engine/staking-reads";
 import type { ActivityPage, DistributionProof, MonkeyView, MonkeySeriesMetric, SeriesPage, SeriesQuery, SeriesResolution } from "../engine/stats-types";
 import { fixedToWire, type Fixed } from "../fixed";
 import { MONKEY_UNIT } from "../format";
@@ -176,15 +177,25 @@ export function closeDistributionEpochs(state: MockState): EngineEvent[] {
     const allocated = excessOf(state, nav) / 1_000n;
     state.houseCash -= allocated * 1_000n;
     const total = monkey.totalStakedAt(closedMs);
+    // Rotation is on in the mock, so the operator in effect takes a fifth, as the engine's V47 close does, and stakers the rest.
+    const operator = state.operators.named(closedMs).candidate;
+    const operatorShare = allocated / 5n;
+    const toStakers = allocated - operatorShare;
+    if (operatorShare > 0n) {
+      monkey.distEntitled.set(operator, (monkey.distEntitled.get(operator) ?? 0n) + operatorShare);
+      events.push({ type: "operator_share_allocated", account: operator, epoch, amount: operatorShare.toString() });
+    }
+    let stakers = 0;
     for (const account of new Set([...monkey.staked.keys(), ...monkey.unstaking.keys()])) {
       // An unstake still in its cooldown keeps earning, as the engine counts it staked until it completes.
       const held = (monkey.staked.get(account) ?? 0n) + (monkey.unstaking.get(account)?.amount ?? 0n);
-      const share = total > 0n ? (allocated * held) / total : 0n;
+      const share = total > 0n ? (toStakers * held) / total : 0n;
       if (share === 0n) continue;
       monkey.distEntitled.set(account, (monkey.distEntitled.get(account) ?? 0n) + share);
       events.push({ type: "distribution_allocated", account, epoch, amount: share.toString() });
+      stakers += 1;
     }
-    monkey.epochs.push({ epoch, closedMs, nav, allocated });
+    monkey.epochs.push({ epoch, closedMs, nav, allocated, operatorShare, seq: state.seq, stakers, operator });
     closed = true;
   }
   if (closed) state.postedSeq = state.seq;
@@ -251,4 +262,33 @@ export function seedMonkeyDemo(state: MockState, address: string): void {
   state.monkey.distEntitled.set(key, seeded);
   const epoch = state.monkey.epochs.at(-1)?.epoch ?? 0;
   state.emit({ type: "tick" }, [{ type: "distribution_allocated", account: key, epoch, amount: seeded.toString() }]);
+}
+
+/**
+ * `GET /v1/monkey/distributions`: the mock's closed epochs, newest first, older than `before`, each as
+ * its close recorded it, the operator's fifth to the operator in effect then (the first candidate for
+ * the generated history before the mock's own operators).
+ * Error cases:
+ * - the limit is outside 1 to 200, as the node refuses it (400)
+ */
+export function distributionEpochsPage(state: MockState, params: { before?: number; limit?: number }): DistributionEpochsPage {
+  const limit = params.limit ?? 50;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new EngineError(400, "limit must be 1 to 200");
+  const { monkey } = state;
+  const older = monkey.epochs.filter((close) => params.before === undefined || close.epoch < params.before).reverse();
+  const page = older.slice(0, limit);
+  const oldest = page[page.length - 1];
+  return {
+    seq: state.seq, time_ms: state.now, begins_ms: monkey.begins, begins_seq: 0, from_genesis: true, truncated: false, retained_from_epoch: null,
+    next: older.length > limit && oldest !== undefined ? oldest.epoch : null,
+    epochs: page.map((close) => {
+      const operator = close.operator ?? state.operators.candidates[0]?.address ?? null;
+      const shares = close.operatorShare > 0n && operator !== null ? [{ account: operator, amount: close.operatorShare.toString() }] : [];
+      return {
+        epoch: close.epoch, close_seq: close.seq, close_ms: close.closedMs, ended_ms: close.closedMs, nav: fixedToWire(close.nav), floor: fixedToWire(FLOOR_USD),
+        excess_usdc_units: close.allocated.toString(), allocated_usdc_units: close.allocated.toString(), stakers_usdc_units: (close.allocated - close.operatorShare).toString(),
+        stakers: close.stakers, operator_shares: shares, skipped: null,
+      };
+    }),
+  };
 }

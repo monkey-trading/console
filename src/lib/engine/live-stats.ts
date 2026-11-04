@@ -1,6 +1,7 @@
 /** The dashboard routes over a signed read: the House, MONKEY and Staking pages' positions, series and totals. */
 
 import { EngineError } from "./client";
+import type { DistributionEpochsPage, OperatorList } from "./staking-reads";
 import type { ActivityPage, DistributionProof, MonkeyView, OperatorRoute, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "./stats-types";
 
 /** Reads the routes through `get`, which answers only what the attested enclave signed for that request. */
@@ -30,6 +31,13 @@ export function liveStats(get: (path: string) => Promise<unknown>): StatsReads {
       }
     },
     operator: async () => (await get("/v1/operator")) as OperatorRoute,
+    operators: async () => (await get("/v1/operators")) as OperatorList,
+    distributionEpochs: async (params) => {
+      const query = new URLSearchParams();
+      if (params.limit !== undefined) query.set("limit", String(params.limit));
+      if (params.before !== undefined) query.set("before", String(params.before));
+      return (await get(`/v1/monkey/distributions${query.size > 0 ? `?${query}` : ""}`)) as DistributionEpochsPage;
+    },
   };
 }
 
@@ -41,4 +49,6 @@ export const NO_STATS: StatsReads = {
   activity: () => Promise.reject(new EngineError(404, "not found")),
   distributions: () => Promise.resolve(null),
   operator: () => Promise.reject(new EngineError(404, "not found")),
+  operators: () => Promise.reject(new EngineError(404, "not found")),
+  distributionEpochs: () => Promise.reject(new EngineError(404, "not found")),
 };

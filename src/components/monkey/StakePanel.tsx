@@ -6,9 +6,13 @@
  * card holds that layout with dashes and its forms closed, so nothing below moves when it lands.
  */
 
-import { formatMonkey, formatRate } from "@/lib/format";
+import { formatMonkey, formatRate, shortHex } from "@/lib/format";
 import { completeUnstake, stakeMonkey, startUnstake } from "@/lib/monkey/actions";
 import { formatDuration, shareBps } from "@/lib/monkey/figures";
+import type { StakeDelegations } from "@/lib/engine/staking";
+import type { Read } from "@/lib/monkey/figures";
+import { unstakeWords } from "@/lib/staking/delegation-words";
+import { withAddress } from "@/lib/staking/operator-cells";
 
 import { Notice } from "../Notice";
 import { AmountForm } from "./AmountForm";
@@ -18,7 +22,12 @@ import { Row } from "./Row";
 import { BUTTON, NOTE } from "./styles";
 import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
 
-export function StakePanel() {
+/**
+ * `delegations` is the chain's read of the account's delegations, which an unstake reduces, and
+ * `labelOf` names their candidates; with it, the unstake waits for a fresh read, so its preview of
+ * the reductions is never one from before the last transaction. Without it no reduction is shown.
+ */
+export function StakePanel({ delegations = null, labelOf = shortHex }: { delegations?: { read: Read<StakeDelegations>; settling: boolean } | null; labelOf?: (address: string) => string }) {
   const panel = useMonkeyPanel();
   const { wallet: figures, overview, unmirroredTotal, settling } = usePanelState();
   const wallet = useConsoleSelect((state) => state.wallet);
@@ -36,6 +45,8 @@ export function StakePanel() {
   const share = position === null || total === null || unmirroredTotal !== null ? null : shareBps(position.staked + (pending?.amount ?? 0n), total);
   const left = pending === null ? 0 : pending.claimableAtMs - nowMs;
   const readOnly = wallet?.readOnly === true;
+  // The delegations an unstake would reduce, once read fresh: never a read from before the last transaction.
+  const held = delegations !== null && delegations.read.status === "ready" && !delegations.settling ? delegations.read.value : null;
   // Not read yet: no wallet the page load may still connect, or a connected one whose stake has not landed.
   const reading = wallet === null ? !decided : !readOnly && position === null && (!mine || figures.position.status === "loading");
   return (
@@ -52,10 +63,16 @@ export function StakePanel() {
           </dl>
           {reading ? <p className="sr-only">Reading your stake…</p> : <ReadNote read={figures.position} />}
           <AmountForm field="stake" label="Stake" action="Stake" max={position?.balance ?? 0n} maxLabel="your wallet balance" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => stakeMonkey(panel, amount, onLanded)} />
-          <AmountForm field="unstake" label="Unstake" action="Start unstake" max={position?.staked ?? 0n} maxLabel="your stake" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)} />
+          <AmountForm
+            field="unstake" label="Unstake" action="Start unstake" max={position?.staked ?? 0n} maxLabel="your stake"
+            disabled={busy || settling || position === null || (delegations !== null && (delegations.settling || delegations.read.status !== "ready"))}
+            onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)}
+            preview={held === null ? undefined : (amount) => unstakeWords(held.staked, held.delegations, amount, (address) => withAddress(labelOf(address), address))}
+          />
+          {delegations !== null && delegations.read.status === "failed" && <ReadNote read={delegations.read} />}
           <Notice surface="stake" />
           <p className={NOTE}>
-            {staking === null ? "An unstake waits out a cooldown before it can be completed." : `An unstake waits ${formatDuration(staking.cooldown_ms)} before it can be completed.`} Until then it still counts as staked, so it stays in your share.
+            An unstake takes your undelegated stake first, then the rest from each of your delegations in proportion to its size. {staking === null ? "It waits out a cooldown before it can be completed." : `It waits ${formatDuration(staking.cooldown_ms)} before it can be completed.`} Until then it still counts as staked, so it stays in your share.
           </p>
           {pending !== null && (
             <div className="space-y-2 rounded border border-line-2 p-3">

@@ -2,10 +2,11 @@
 
 /**
  * One page of the operator table: a card per operator below 1024 px and a table from there, each with
- * its role, delegated stake, self-bond, release and handover endpoint, and the button that moves the
- * account's whole stake to it. Every string from the chain renders as text.
+ * its role, delegated stake, self-bond, release and handover endpoint, what the account delegates to
+ * it, and the button that chooses it in the Delegate form. Every string from the list renders as text.
  */
 
+import { formatMonkey } from "@/lib/format";
 import { operatorCells } from "@/lib/staking/operator-cells";
 import { ariaSort, type OperatorRow, type SortId } from "@/lib/staking/operator-table";
 
@@ -14,8 +15,8 @@ import { BUTTON } from "../monkey/styles";
 interface Props {
   rows: readonly OperatorRow[];
   sort: SortId;
-  /** The candidate the account's stake votes for; null while it abstains. */
-  chosen: string | null;
+  /** What the account delegates to each candidate, zero for none. */
+  held: (address: string) => bigint;
   canVote: boolean;
   disabled: boolean;
   /** Whether this build could connect to the hostname a listed candidate registered. */
@@ -33,14 +34,18 @@ const ROLE_TONE: Record<OperatorRow["role"], string> = {
   candidate: "border-line-2 text-fg-2",
 };
 
-/** The Delegate button, or what stands in its place: the account's vote, or nothing it can send. */
-function Action({ row, label, chosen, canVote, disabled, onDelegate }: Pick<Props, "chosen" | "canVote" | "disabled" | "onDelegate"> & { row: OperatorRow; label: string }) {
+/** What the account delegates to the row, and the Delegate button that chooses it in the form above the table. */
+function Action({ row, label, held, canVote, disabled, onDelegate }: Pick<Props, "held" | "canVote" | "disabled" | "onDelegate"> & { row: OperatorRow; label: string }) {
   if (!canVote || !row.listed) return null;
-  if (chosen === row.address) return <p className="text-caption text-glow">Your stake votes for this operator.</p>;
+  const mine = held(row.address);
   return (
-    <button type="button" aria-disabled={disabled} onClick={() => onDelegate(row)} className={`${BUTTON} w-full whitespace-nowrap lg:w-auto`}>
-      Delegate<span className="sr-only"> your stake to {label}</span>
-    </button>
+    <span className="flex flex-col gap-1 lg:items-end">
+      {mine > 0n && <span className="text-caption whitespace-nowrap text-glow">You delegate {formatMonkey(mine)}</span>}
+      {/* The name starts with the visible word and says what the button does: it chooses, it sends nothing. One label, as a hidden span after a colon reads with a stray space. */}
+      <button type="button" aria-label={`Delegate: choose ${label} in the form above`} aria-disabled={disabled} onClick={() => { if (!disabled) onDelegate(row); }} className={`${BUTTON} w-full whitespace-nowrap lg:w-auto`}>
+        Delegate
+      </button>
+    </span>
   );
 }
 
@@ -68,14 +73,14 @@ function Name({ row, reachable }: { row: OperatorRow; reachable: boolean }) {
 }
 
 /** One page of rows, both layouts; the one the width does not use is hidden from everyone. */
-export function OperatorTable({ rows, sort, chosen, canVote, disabled, reachable, onDelegate }: Props) {
+export function OperatorTable({ rows, sort, held, canVote, disabled, reachable, onDelegate }: Props) {
   return (
     <>
       <ul className="space-y-2 lg:hidden" aria-label="Operators">
         {rows.map((row) => {
           const cells = operatorCells(row);
           return (
-            <li key={row.address} className={`rounded border p-3 text-caption ${chosen === row.address ? "border-glow" : "border-line-2"}`}>
+            <li key={row.address} className={`rounded border p-3 text-caption ${held(row.address) > 0n ? "border-glow" : "border-line-2"}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0"><Name row={row} reachable={reachable(row)} /></div>
                 <Role row={row} />
@@ -86,14 +91,14 @@ export function OperatorTable({ rows, sort, chosen, canVote, disabled, reachable
                 <div><dt className="text-label text-fg-3">Release</dt><dd title={row.release}>{cells.release}</dd></div>
                 <div className="col-span-2"><dt className="text-label text-fg-3">Handover endpoint</dt><dd className="[overflow-wrap:anywhere]">{cells.endpoint}</dd></div>
               </dl>
-              <div className="mt-2"><Action row={row} label={cells.label} chosen={chosen} canVote={canVote} disabled={disabled} onDelegate={onDelegate} /></div>
+              <div className="mt-2"><Action row={row} label={cells.label} held={held} canVote={canVote} disabled={disabled} onDelegate={onDelegate} /></div>
             </li>
           );
         })}
       </ul>
       <div role="region" aria-label="Operators table" tabIndex={0} className="hidden overflow-x-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow lg:block">
         <table className="w-full min-w-[56rem] text-caption">
-          <caption className="sr-only">Operators the registry lists, with each one&apos;s role, delegated stake and share of all stake, self-bond, release and handover endpoint. Amounts are in MONKEY.</caption>
+          <caption className="sr-only">Operators the registry lists, with each one&apos;s role, delegated stake and share of all stake, self-bond, release and handover endpoint, and what you delegate to it. Amounts are in MONKEY.</caption>
           <thead>
             <tr className="border-b border-line">
               <th scope="col" aria-sort={ariaSort("name", sort)} className={TH}>Operator</th>
@@ -109,14 +114,14 @@ export function OperatorTable({ rows, sort, chosen, canVote, disabled, reachable
             {rows.map((row) => {
               const cells = operatorCells(row);
               return (
-                <tr key={row.address} className={`border-b border-line last:border-b-0 ${chosen === row.address ? "bg-glow/5" : ""}`}>
+                <tr key={row.address} className={`border-b border-line last:border-b-0 ${held(row.address) > 0n ? "bg-glow/5" : ""}`}>
                   <td className={`${TD} max-w-[16rem]`}><Name row={row} reachable={reachable(row)} /></td>
                   <td className={TD}><Role row={row} /></td>
                   <td className={`${TD} whitespace-nowrap text-fg`}>{cells.delegated}</td>
                   <td className={`${TD} whitespace-nowrap text-fg-2`}>{cells.bond}</td>
                   <td className={`${TD} whitespace-nowrap text-fg-2`} title={row.release}>{cells.release}</td>
                   <td className={`${TD} text-fg-2 [overflow-wrap:anywhere]`}>{cells.endpoint}</td>
-                  <td className={`${TD} text-right`}><Action row={row} label={cells.label} chosen={chosen} canVote={canVote} disabled={disabled} onDelegate={onDelegate} /></td>
+                  <td className={`${TD} text-right`}><Action row={row} label={cells.label} held={held} canVote={canVote} disabled={disabled} onDelegate={onDelegate} /></td>
                 </tr>
               );
             })}

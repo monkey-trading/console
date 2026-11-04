@@ -35,3 +35,8 @@ export function formatSpan(ms: number): string {
   if (hours < 24) return minutes % 60 === 0 ? `${hours} h` : `${hours} h ${minutes % 60} min`;
   return hours % 24 === 0 ? `${Math.floor(hours / 24)} d` : `${Math.floor(hours / 24)} d ${hours % 24} h`;
 }
+
+/** `2026-10-28 15:04`, in UTC: with the year, for lists that reach back past one. */
+export function formatStampWithYear(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 16).replace("T", " ");
+}

@@ -5,6 +5,7 @@ import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
 import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
+import type { DistributionEpochsPage, OperatorList } from "../engine/staking-reads";
 import type { ActivityPage, MonkeyView, OperatorRoute, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "../engine/stats-types";
 import type { AccountView, EligibilityClass, HistoryPage, MarketId, PriceRules, StreamMessage, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
@@ -64,7 +65,12 @@ export class FakeClient implements EngineClient {
     activity: async () => this.canned("activity", this.activityPage),
     distributions: async () => { this.distributionReads++; if (this.distributionError !== null) throw this.distributionError; return this.distributionAnswer; },
     operator: async () => this.canned("operator", this.operatorRoute),
+    operators: async () => this.canned("operators", this.operatorList),
+    distributionEpochs: async (params) => this.canned(`epochs:${params.before ?? ""}`, this.epochsPages[String(params.before ?? "")] ?? null),
   };
+  operatorList: OperatorList | null = null;
+  /** Pages of closed epochs by `before`, "" for the newest. */
+  epochsPages: Record<string, DistributionEpochsPage> = {};
   operatorRoute: OperatorRoute | null = null;
   /** What the distribution read answers, and how many times it was read. */
   distributionAnswer: Awaited<ReturnType<StatsReads["distributions"]>> = null;
