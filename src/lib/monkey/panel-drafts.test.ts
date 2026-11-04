@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MONKEY_UNIT } from "../format";
+import { connectWallet, disconnectWallet } from "../store/actions";
 import { stakeMonkey } from "./actions";
 import { flush, holdReads, setup } from "./panel-kit";
 
@@ -76,6 +77,28 @@ describe("the amounts typed on the MONKEY page", () => {
     expect(panel.getSnapshot().settling).toBe(true);
     second();
     await two;
+    expect(panel.getSnapshot().settling).toBe(false);
+    stop();
+  });
+
+  it("let another account's forms open while the last account's re-read still runs (monkey-trading/console#298)", async () => {
+    const { panel, store, stop } = await setup();
+    let release: () => void = () => {};
+    const held = panel.settle(new Promise<void>((resolve) => { release = resolve; }));
+    expect(panel.getSnapshot().settling).toBe(true);
+    disconnectWallet(store);
+    await panel.refreshWallet();
+    expect(panel.getSnapshot().settling).toBe(false);
+    await connectWallet(store, "browser");
+    await panel.refreshWallet();
+    let releaseOwn: () => void = () => {};
+    const own = panel.settle(new Promise<void>((resolve) => { releaseOwn = resolve; }));
+    // The earlier account's re-read ending does not open this account's forms while its own still runs.
+    release();
+    await held;
+    expect(panel.getSnapshot().settling).toBe(true);
+    releaseOwn();
+    await own;
     expect(panel.getSnapshot().settling).toBe(false);
     stop();
   });

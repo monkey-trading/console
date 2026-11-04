@@ -104,7 +104,7 @@ export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf:
       <p role="status" className="text-caption leading-relaxed text-amber empty:hidden">{problem}</p>
       <ReadNote read={read} loading="Reading the closed epochs…" />
       {covered !== null && <p className={NOTE}>{covered}</p>}
-      <p className={NOTE}>Each close shares the excess the Distribution card describes: between stakers in proportion to their stake, and, while operator rotation is on, a fifth to the operator in effect, named in the last column.</p>
+      <p className={NOTE}>Each close distributes the excess as the Distribution card describes; the operator&apos;s fifth, while rotation is on, is named in the last column.</p>
     </Card>
   );
 }

@@ -25,7 +25,7 @@ export function RewardsPanel() {
       <dl className="space-y-2">
         <Row label="USDC claimed">{position === null ? "—" : formatUsdc(usdcFixed(position.distributionsClaimed))}</Row>
         <Row label="Your share of stake">{share === null ? "—" : formatRate(share)}</Row>
-        <Row label="Total distributed to stakers">{distribution === null ? "—" : formatUsdc(usdcFixed(BigInt(distribution.distributed_usdc_units)))}</Row>
+        <Row label="Total distributed">{distribution === null ? "—" : formatUsdc(usdcFixed(BigInt(distribution.distributed_usdc_units)))}</Row>
         <Row label="Reward token">USDC</Row>
       </dl>
       <ReadNote read={overview} quiet />

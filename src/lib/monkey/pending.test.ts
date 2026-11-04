@@ -21,13 +21,25 @@ const overviewWith = (over: Partial<NonNullable<MonkeyView["distribution"]>> | n
 });
 const stakes = (staked: bigint): Read<StakingPosition> => ready({ stakingEnabled: true, staked, unstaking: null, balance: 0n, distributionsClaimed: 0n, latestSeq: 0 });
 
+/** The closed epochs' word on epoch 2: the stakers' part of its allocation, the whole of it here. */
+const epochTwo = (paid: bigint) => (epoch: number) => (epoch === 2 ? paid : null);
+
 describe("pendingDistribution", () => {
   it("says an epoch paid and estimates a 100% staker's share when the node holds no proof yet", () => {
-    expect(pendingDistribution(overviewWith({}), stakes(12_000n * MONKEY_UNIT), null)).toEqual({ kind: "awaiting", epoch: 2, paid: 100_089_412_000n, share: 100_089_412_000n, staker: true });
+    expect(pendingDistribution(overviewWith({}), stakes(12_000n * MONKEY_UNIT), null, epochTwo(100_089_412_000n))).toEqual({ kind: "awaiting", epoch: 2, paid: 100_089_412_000n, share: 100_089_412_000n, staker: true });
   });
 
   it("estimates a partial stake's share in integer arithmetic", () => {
-    expect(pendingDistribution(overviewWith({}), stakes(3_000n * MONKEY_UNIT), null)).toMatchObject({ kind: "awaiting", share: 25_022_353_000n });
+    expect(pendingDistribution(overviewWith({}), stakes(3_000n * MONKEY_UNIT), null, epochTwo(100_089_412_000n))).toMatchObject({ kind: "awaiting", share: 25_022_353_000n });
+  });
+
+  it("estimates from the stakers' part, not the allocation that counts the operator's fifth (monkey-trading/console#295)", () => {
+    // Epoch 2 allocated 100,089.412 USDC: a fifth to the operator in effect and 80,071.5296 to stakers.
+    expect(pendingDistribution(overviewWith({}), stakes(3_000n * MONKEY_UNIT), null, epochTwo(80_071_529_600n))).toMatchObject({ kind: "awaiting", paid: 80_071_529_600n, share: 20_017_882_400n });
+  });
+
+  it("names no amount and no share until the closed epochs state the stakers' part", () => {
+    expect(pendingDistribution(overviewWith({}), stakes(3_000n * MONKEY_UNIT), null)).toEqual({ kind: "awaiting", epoch: 2, paid: null, share: null, staker: true });
   });
 
   it("gives no share while the node's total has not caught up with the account's own stake change, or counts none", () => {

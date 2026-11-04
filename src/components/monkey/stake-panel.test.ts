@@ -34,7 +34,7 @@ function Card({ panel, delegations }: { panel: MonkeyPanel; delegations: { read:
 const unstakeButton = (html: string) => /<button[^>]*>Start unstake<\/button>/.exec(html)?.[0] ?? "";
 
 describe("the Staking page's unstake", () => {
-  it("opens only on a fresh read of the delegations, previews what it takes from them, and says why a read failed", async () => {
+  it("opens only on delegations read since the last landed change, previews what it takes from them, and says why a read failed", async () => {
     const { panel, stop } = await setup();
     const staked = panel.getSnapshot().wallet.position.value?.staked ?? 0n;
     expect(staked).toBeGreaterThan(MONKEY_UNIT);
@@ -51,9 +51,11 @@ describe("the Staking page's unstake", () => {
     expect(unstakeButton(settling)).toContain('aria-disabled="true"');
     expect(settling).not.toContain("This takes");
     expect(unstakeButton(render(LOADING))).toContain('aria-disabled="true"');
+    // A later read that failed keeps the figures it had, which no landed change has outdated, and says why.
     const broken = render(failed(new Error("your wallet is on chain 1, not chain 31337"), chain));
-    expect(unstakeButton(broken)).toContain('aria-disabled="true"');
+    expect(unstakeButton(broken)).toContain('aria-disabled="false"');
     expect(broken).toContain("your wallet is on chain 1, not chain 31337");
+    expect(unstakeButton(render(failed<StakeDelegations>(new Error("your wallet is on chain 1, not chain 31337"), null)))).toContain('aria-disabled="true"');
     stop();
   });
 });

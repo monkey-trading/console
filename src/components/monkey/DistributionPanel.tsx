@@ -31,7 +31,7 @@ export function DistributionPanel() {
             <Row label="Last distribution">{distribution === null ? "—" : lastClosed === null ? "None yet" : `${formatAgo(lastClosed, nowMs)}${last === null ? "" : `, ${formatUsdc(usdcFixed(BigInt(last.allocated_usdc_units)))}`}`}</Row>
             <Row label="Next close">{distribution === null ? "—" : `${formatStamp(distribution.next_close_ms)} UTC, in ${formatDuration(distribution.next_close_ms - nowMs)}`}</Row>
           </dl>
-          <p className={NOTE}>At each close, the house&apos;s NAV and cash above the floor, less deposits that can still reverse and clients&apos; debts, are shared between stakers in proportion to their stake.</p>
+          <p className={NOTE}>At each close, the house&apos;s NAV and cash above the floor, less deposits that can still reverse and clients&apos; debts, are distributed: while operator rotation is on, a fifth to the operator in effect, and the rest between stakers in proportion to their stake.</p>
         </>
       )}
       {distribution === null && overview.status === "ready" && <p className={NOTE}>This node has not started distributions yet.</p>}

@@ -93,9 +93,10 @@ and 100,000 mock USDC. In a second terminal, `scripts/dev-local-stack-ctl.sh` dr
    wallet is connected.
 4. `./scripts/dev-local-stack-ctl.sh fund-house 50000` adds mock USDC to the house's capital. This stack's
    staking floor is that capital, so the next epoch that closes with a stake (every five minutes; set
-   `STAKING_EPOCH_SECS` to shorten it) pays the added amount to stakers in proportion to their stake. Each
-   wallet sees its share on the Staking page and claims it there, and the House page shows the same total as
-   "Staker rewards" and "Paid to stakers".
+   `STAKING_EPOCH_SECS` to shorten it) distributes the added amount: while operator rotation is on, a fifth to
+   the operator in effect, and the rest to stakers in proportion to their stake. Each wallet sees its share on
+   the Staking page and claims it there, and the House page shows the same total as "USDC distributed" and
+   "Distributed".
 
 `./scripts/dev-local-stack-ctl.sh status` prints the election, the vault's release, both engines and the
 chain's clock. The stack writes its addresses to `monkey-local-stack.json` in the temporary directory (or

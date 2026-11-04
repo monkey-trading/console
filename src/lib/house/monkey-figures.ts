@@ -28,8 +28,8 @@ export function monkeyFigureRows(monkey: MonkeyView | null): MonkeyFigureRow[] {
       value: text(monkey?.staking?.total_staked, formatMonkey),
     },
     {
-      label: "Staker rewards",
-      tip: "USDC paid to stakers in total, across every distribution.",
+      label: "USDC distributed",
+      tip: "USDC distributed in total across every epoch close: to stakers, and while operator rotation is on, a fifth of each close to the operator in effect.",
       value: text(monkey?.distribution?.distributed_usdc_units, formatUsdc),
     },
   ];
