@@ -66,7 +66,8 @@ export function StakingPage() {
     <MonkeyPanelProvider value={panel}>
       {/* Keyboard scrolling needs a tab stop on the scroll container, as on the House page. */}
       <div role="region" aria-label="Staking details" tabIndex={0} className="relative min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
-        <div className="mx-auto w-full max-w-[110rem] px-4 py-5 sm:px-6">
+        {/* On a phone the page scrolls and the risk strip follows it: a viewport's height holds the strip below the fold until the figures land, so it does not jump. */}
+        <div className="mx-auto w-full max-w-[110rem] px-4 py-5 max-lg:min-h-dvh sm:px-6">
           <h2 className="text-lead tracking-caps text-glow uppercase">Staking</h2>
           {!trusted && <p className="mt-3 text-data leading-relaxed text-fg-2">Figures appear once the node&apos;s attestation is verified and its feed is live.</p>}
           {/* The figures are hidden, not unmounted, while the node is not trusted: a typed amount survives a gap in the feed, and no figure from before it shows. */}
