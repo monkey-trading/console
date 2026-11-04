@@ -24,14 +24,16 @@ export interface HistoryState {
   more: boolean;
   /** Why the last read failed; null after one that landed. */
   error: string | null;
+  /** Why the second read of the newest pages failed; it stays due and is made again by itself, and what is held stands meanwhile. */
+  recheckError: string | null;
 }
 
 /** Events per read: the node's page limit is 200, and an epoch is one event of each kind. */
 export const HISTORY_PAGE = 50;
-/** How often a failed first read is considered again; the backoff decides whether it is due. */
+/** How often a failed first read, or a second read of the newest pages still due, is considered again; the backoff decides whether it is made. */
 export const RETRY_TICK_MS = 5_000;
 
-const IDLE: HistoryState = { account: null, data: emptyHistory(), status: "idle", more: false, error: null };
+const IDLE: HistoryState = { account: null, data: emptyHistory(), status: "idle", more: false, error: null, recheckError: null };
 
 /** The text of a failed read for the card. */
 function describe(error: unknown): string {
@@ -45,8 +47,10 @@ export class DistributionHistoryReads {
   private open = false;
   /** Counts openings and account changes; a read begun before one never writes after it. */
   private cycle = 0;
-  /** The cycle whose first read has landed and whose newest pages are still to be read once more. */
-  private recheck: number | null = null;
+  /** The cycle whose first read has landed, and the device time from which its newest pages are read once more, until a read of them lands. */
+  private recheck: { cycle: number; after: number } | null = null;
+  /** The cycle whose second read of the newest pages is in flight, so the timer does not start another beside it. */
+  private rechecking: number | null = null;
 
   constructor(private readonly store: ConsoleStore) {}
 
@@ -79,7 +83,7 @@ export class DistributionHistoryReads {
     const timer = setInterval(() => {
       if (isHidden()) return;
       if (this.state.status === "failed" && this.backoff.ready()) void this.first(this.cycle);
-      else if (this.recheck === this.cycle && this.state.status === "ready") void this.readNewest(this.cycle);
+      else if (this.recheck?.cycle === this.cycle && Date.now() >= this.recheck.after && this.rechecking !== this.cycle && this.state.status === "ready" && this.backoff.ready()) void this.readNewest(this.cycle);
     }, RETRY_TICK_MS);
     return () => {
       this.open = false;
@@ -131,7 +135,8 @@ export class DistributionHistoryReads {
       const pages = await Promise.all(HISTORY_KINDS.map((kind) => this.page(account, kind, null)));
       if (cycle !== this.cycle) return;
       this.backoff.record(false);
-      this.recheck = cycle;
+      // A full tick after this read landed, whatever the timer's phase.
+      this.recheck = { cycle, after: Date.now() + RETRY_TICK_MS };
       this.set({ status: "ready", data: HISTORY_KINDS.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null }), this.state.data) });
     } catch (error) {
       if (cycle !== this.cycle) return;
@@ -140,16 +145,26 @@ export class DistributionHistoryReads {
     }
   }
 
-  /** The newest page of each kind once more, folded in where the first read's covers stand: what the index had not taken then. */
+  /**
+   * The newest page of each kind once more, folded in where the first read's covers stand: what the
+   * index had not taken then. A failure keeps it due, says why on the card, and waits out the backoff.
+   */
   private async readNewest(cycle: number): Promise<void> {
     const { account } = this.state;
-    this.recheck = null;
     if (account === null) return;
+    this.rechecking = cycle;
     try {
       const pages = await Promise.all(HISTORY_KINDS.map((kind) => this.page(account, kind, null)));
-      if (cycle === this.cycle) this.set({ data: pages.reduce((held, page) => addNewest(held, page), this.state.data) });
-    } catch {
-      // Not a verdict: what is held stands, and the next opening reads afresh.
+      if (cycle !== this.cycle) return;
+      this.recheck = null;
+      this.backoff.record(false);
+      this.set({ recheckError: null, data: pages.reduce((held, page) => addNewest(held, page), this.state.data) });
+    } catch (error) {
+      if (cycle !== this.cycle) return;
+      this.backoff.record(true);
+      this.set({ recheckError: describe(error) });
+    } finally {
+      if (this.rechecking === cycle) this.rechecking = null;
     }
   }
 

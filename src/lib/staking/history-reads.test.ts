@@ -189,6 +189,58 @@ describe("DistributionHistoryReads", () => {
     stop();
   });
 
+  it("makes the second read of the newest pages a full tick after a slow first read lands, not on the timer's next beat", async () => {
+    const kit = await setup();
+    kit.stop();
+    const real = kit.node.client.history.bind(kit.node.client);
+    let first = true;
+    const pages = vi.spyOn(kit.node.client, "history").mockImplementation(async (address, params) => {
+      // The first read of each kind takes 4.9 s.
+      if (first && (params.kind === "distribution_allocated" || params.kind === "operator_share_allocated")) await new Promise((resolve) => setTimeout(resolve, 4_900));
+      return real(address, params);
+    });
+    const history = new DistributionHistoryReads(kit.store);
+    const stop = history.start(() => false);
+    await vi.advanceTimersByTimeAsync(4_900);
+    first = false;
+    expect(history.getSnapshot().status).toBe("ready");
+    pages.mockClear();
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
+    expect(mine(pages)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
+    expect(mine(pages)).toHaveLength(2);
+    stop();
+  });
+
+  it("keeps the second read of the newest pages due while it fails, says why, and makes it again once the backoff has passed", async () => {
+    const kit = await setup();
+    kit.stop();
+    const real = kit.node.client.history.bind(kit.node.client);
+    let phase: "lagging" | "failing" | "answering" = "lagging";
+    const pages = vi.spyOn(kit.node.client, "history").mockImplementation(async (address, params) => {
+      if (params.kind !== "distribution_allocated") return real(address, params);
+      if (phase === "lagging") return { events: [], next: null };
+      if (phase === "failing") throw new Error("the node did not answer");
+      return real(address, params);
+    });
+    const history = new DistributionHistoryReads(kit.store);
+    const stop = history.start(() => false);
+    await flush();
+    phase = "failing";
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
+    expect(history.getSnapshot()).toMatchObject({ status: "ready", recheckError: "the node did not answer" });
+    expect(epochsOf(history)).toEqual([]);
+    phase = "answering";
+    pages.mockClear();
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
+    expect(mine(pages)).toHaveLength(2);
+    expect(history.getSnapshot()).toMatchObject({ status: "ready", recheckError: null });
+    expect(epochsOf(history)).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(5 * RETRY_TICK_MS);
+    expect(mine(pages)).toHaveLength(2);
+    stop();
+  });
+
   it("registers on the session while it reads, and reads afresh when the mock's account reset invalidates it", async () => {
     const { history, node, store, pages, stop } = await started();
     expect(store.monkeySession.history).toBe(history);

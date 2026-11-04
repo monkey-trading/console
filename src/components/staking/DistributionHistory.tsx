@@ -21,7 +21,7 @@ import { useConsoleSelect } from "../monkey/use-monkey";
 
 const TITLE_ID = "history-title";
 const TH = "px-1 py-1 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
-const LOAD = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:text-fg-3 lg:min-h-0";
+const LOAD = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:text-fg-3 aria-disabled:hover:border-line-2 aria-disabled:hover:text-fg-3 lg:min-h-0";
 
 /** USDC base units as the card shows them; an epoch that paid the account nothing of a kind shows a dash. */
 const usdc = (units: bigint | null) => (units === null ? "—" : formatUsdc(usdcFixed(units)));
@@ -40,8 +40,11 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
   const more = mine && state.status === "ready" && moreRemain(state.data);
   const bounded = mine && epochsLeftOut(state.data);
   const error = (state.error ?? "the read failed").replace(/\.+$/, "");
-  // The first read's failure, or Load more's: one status line that changes its words, so either is announced.
-  const problem = !mine || state.error === null ? "" : state.status === "failed" ? `Could not read your distributions: ${error}. The read is made again by itself.` : `Could not read older epochs: ${error}.`;
+  // The first read's failure, the newest pages' second read's, or Load more's: one status line that changes its words, so each is announced.
+  const problem = !mine ? ""
+    : state.status === "failed" ? `Could not read your distributions: ${error}. The read is made again by itself.`
+      : state.recheckError !== null ? `Could not check for epochs the node had not listed yet: ${state.recheckError.replace(/\.+$/, "")}. The check is made again by itself.`
+        : state.error !== null ? `Could not read older epochs: ${error}.` : "";
   const loadMore = () => {
     if (state.more) return;
     void history.loadMore().then(() => {
