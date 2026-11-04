@@ -274,9 +274,10 @@ export class MonkeyPanel {
     if (this.page === "monkey" && current()) {
       let record: Read<true>;
       try {
-        record = (await bounded(checkEmissionsClaimed(this.store))) ? ready(true) : failed(new Error("The vault's record could not be read."), held.record.value);
+        await bounded(checkEmissionsClaimed(this.store));
+        record = ready(true);
       } catch (error) {
-        record = failed(error, held.record.value); // the wallet did not answer in time
+        record = failed(error, held.record.value); // the read's own reason, or the wallet not answering in time
       }
       if (current()) this.set({ wallet: { ...this.state.wallet, address: wallet.address, record } });
     }

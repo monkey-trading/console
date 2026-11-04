@@ -260,7 +260,8 @@ describe("MonkeyPanel wallet reads", () => {
     let asked = 0;
     wallet.emissionsClaimed = () => { asked += 1; return Promise.reject(new Error("refused")); };
     await panel.refreshWallet(true);
-    expect(panel.getSnapshot().wallet.record).toMatchObject({ status: "failed", message: "The vault's record could not be read." });
+    // The card names the read's own reason.
+    expect(panel.getSnapshot().wallet.record).toMatchObject({ status: "failed", message: "refused" });
     // Fifteen-second reads for two minutes would ask eight times; failing ones wait 5 s, then 10, 20, 40 and 80.
     asked = 0;
     await vi.advanceTimersByTimeAsync(120_000);

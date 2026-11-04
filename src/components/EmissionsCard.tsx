@@ -33,7 +33,8 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
   const { wallet: figures } = usePanelState();
   // The page's last read of the vault's record, for the account it names.
   const record = state.wallet !== null && figures.address === state.wallet.address ? figures.record : null;
-  const recordProblem = record?.status === "failed" ? (record.message ?? "the read failed").replace(/\.+$/, "") : null;
+  // The read's own reason; a generic one only for an error that carries none.
+  const recordProblem = record?.status === "failed" ? (record.message || "the read failed").replace(/\.+$/, "") : null;
   const act = () => {
     if (state.busy) return;
     void claim().then(() => focusHeading("monkey-title"));

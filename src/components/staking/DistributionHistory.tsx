@@ -10,14 +10,14 @@ import { useSyncExternalStore } from "react";
 
 import { groupThousands } from "@/lib/format";
 import { usdcFixed } from "@/lib/monkey/figures";
-import { epochsLeftOut, hasOperatorShare, MAX_EPOCHS, moreRemain, shownRows } from "@/lib/staking/distribution-history";
+import { emptyHistoryText, epochsLeftOut, hasOperatorShare, MAX_EPOCHS, moreRemain, shownRows } from "@/lib/staking/distribution-history";
 import type { DistributionHistoryReads } from "@/lib/staking/history-reads";
 import { formatStamp } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
 
 import { Card, focusHeading } from "../monkey/Card";
 import { NOTE } from "../monkey/styles";
-import { useConsoleSelect } from "../monkey/use-monkey";
+import { useConsoleSelect, usePanelState } from "../monkey/use-monkey";
 
 const TITLE_ID = "history-title";
 const TH = "px-1 py-1 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
@@ -36,6 +36,10 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
   // The epochs are for the account they name: while another account's are held, none show.
   const mine = account !== null && state.account === account;
   const rows = mine ? shownRows(state.data) : [];
+  // The account's distribution proof, which the USDC distributions card shows: an empty history must not contradict it.
+  const { wallet: figures } = usePanelState();
+  const proof = figures.address === account ? figures.proof.value : null;
+  const entitled = proof === null || !/^\d+$/.test(proof.entitled) ? null : BigInt(proof.entitled);
   const operator = hasOperatorShare(rows);
   const more = mine && state.status === "ready" && moreRemain(state.data);
   const bounded = mine && epochsLeftOut(state.data);
@@ -59,7 +63,7 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
       ) : rows.length === 0 ? (
         !mine || state.status === "idle" || state.status === "reading" ? <p className={NOTE}>Reading your distributions by epoch…</p>
           : state.status === "failed" ? null
-            : <p className={NOTE}>No epoch has distributed USDC to you yet. Each epoch close shares the house&apos;s excess above its floor between stakers.</p>
+            : <p className={NOTE}>{emptyHistoryText(entitled)}</p>
       ) : (
         <div role="region" aria-label="Your distributions by epoch" tabIndex={0} className="relative -mx-1 max-h-80 overflow-y-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
           <table className="w-full table-fixed text-label sm:text-caption">

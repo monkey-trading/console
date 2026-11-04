@@ -1,10 +1,12 @@
 /**
  * The Staking page's reads of the connected account's distribution history (monkey-trading/console#271):
  * on open, one page of each kind for the wallet; then what the stream adds, and older pages only on
- * "Load more". The node's history index trails its stream by the index writer's queue, so an epoch
- * that closed as the page opened can be missing from the first pages and already past on the stream:
- * the newest pages are read once more a tick after the first read lands. A failed first read is
- * made again by itself, further apart each time, with no button.
+ * "Load more". The node's history index trails its stream by the index writer's queue, and its
+ * answers name no position in the log the index has reached, so an epoch that closed as the page
+ * opened can be missing from the first pages and already past on the stream: the newest pages are
+ * read again a tick after the first read lands, and then on the node read's pace for as long as the
+ * page is open and its tab visible. A failed read is made again by itself, further apart each time,
+ * with no button.
  * The page opens these reads only while the node is trusted, which a gap in the feed ends, so a
  * reopening reads afresh and nothing the gap carried stays missing.
  */
@@ -12,6 +14,7 @@
 import { EngineError } from "../engine/client";
 import type { HistoryPage } from "../engine/types";
 import { Backoff } from "../monkey/live-reads";
+import { NODE_READ_MS } from "../monkey/panel";
 import type { ConsoleStore } from "../store/store";
 import { addMessage, addNewest, addPage, emptyHistory, HISTORY_KINDS, limitingKinds, moreRemain, type DistributionHistory, type HistoryKind } from "./distribution-history";
 
@@ -24,7 +27,7 @@ export interface HistoryState {
   more: boolean;
   /** Why the last read failed; null after one that landed. */
   error: string | null;
-  /** Why the second read of the newest pages failed; it stays due and is made again by itself, and what is held stands meanwhile. */
+  /** Why the last read of the newest pages again failed; it stays due and is made again by itself, and what is held stands meanwhile. */
   recheckError: string | null;
 }
 
@@ -47,9 +50,9 @@ export class DistributionHistoryReads {
   private open = false;
   /** Counts openings and account changes; a read begun before one never writes after it. */
   private cycle = 0;
-  /** The cycle whose first read has landed, and the device time from which its newest pages are read once more, until a read of them lands. */
+  /** The cycle whose first read has landed, and the device time from which its newest pages are next read again. */
   private recheck: { cycle: number; after: number } | null = null;
-  /** The cycle whose second read of the newest pages is in flight, so the timer does not start another beside it. */
+  /** The cycle whose read of the newest pages again is in flight, so the timer does not start another beside it. */
   private rechecking: number | null = null;
 
   constructor(private readonly store: ConsoleStore) {}
@@ -146,8 +149,9 @@ export class DistributionHistoryReads {
   }
 
   /**
-   * The newest page of each kind once more, folded in where the first read's covers stand: what the
-   * index had not taken then. A failure keeps it due, says why on the card, and waits out the backoff.
+   * The newest page of each kind again, folded in where the first read's covers stand: what the index
+   * had not taken then. The next is due on the node read's pace; a failure keeps this one due, says
+   * why on the card, and waits out the backoff.
    */
   private async readNewest(cycle: number): Promise<void> {
     const { account } = this.state;
@@ -156,7 +160,7 @@ export class DistributionHistoryReads {
     try {
       const pages = await Promise.all(HISTORY_KINDS.map((kind) => this.page(account, kind, null)));
       if (cycle !== this.cycle) return;
-      this.recheck = null;
+      this.recheck = { cycle, after: Date.now() + NODE_READ_MS };
       this.backoff.record(false);
       this.set({ recheckError: null, data: pages.reduce((held, page) => addNewest(held, page), this.state.data) });
     } catch (error) {
