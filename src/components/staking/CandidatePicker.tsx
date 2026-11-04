@@ -18,7 +18,7 @@ import { NOTE } from "../monkey/styles";
 const FIELD = "min-h-11 w-full rounded border border-edge bg-ink px-2 py-2 text-data text-fg placeholder:text-fg-3 hover:border-glow focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0";
 
 /** Why the list in hand is not the node's current one, as the held list's note ends. */
-const WHY: Record<NoList, string> = { unverified: "the node is not verified now", unread: "the node's operator list cannot be read now" };
+const WHY: Record<NoList, string> = { unverified: "the node is not verified now", clock: "your device clock differs from the node's signed time", unread: "the node's operator list cannot be read now" };
 
 interface Props {
   label: string;

@@ -33,10 +33,11 @@ const NOTHING_READ: OperatorsState = { route: LOADING, list: LOADING, held: null
  * Whether the Staking page shows its operators card: with the rest of the figures once the node is
  * trusted, and on its own once the node has failed a check or its feed has gone stale, so a staker
  * can still vote away from it. Until the first verdict it waits with the rest, so nothing it holds is
- * pushed down when the figures land.
+ * pushed down when the figures land; once `shownBefore`, it stays, a re-verification included, so a
+ * form being filled in is never taken away.
  */
-export function operatorsShown(attestation: AttestationStatus, stream: FeedStatus): boolean {
-  return readBlock(attestation, stream) === null || attestation.kind === "unverified" || attestation.kind === "clock" || stream === "stale";
+export function operatorsShown(attestation: AttestationStatus, stream: FeedStatus, shownBefore = false): boolean {
+  return shownBefore || readBlock(attestation, stream) === null || attestation.kind === "unverified" || attestation.kind === "clock" || stream === "stale";
 }
 
 /** An election the log mirrors and has not applied: what the page shows of a pending election the list does not show yet. */

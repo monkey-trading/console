@@ -7,14 +7,24 @@
 
 import { isAddress } from "viem";
 
+import { readBlock, type AttestationStatus } from "../engine/attestation";
 import type { Read } from "../monkey/figures";
 import type { OperatorsView } from "./operator-table";
 
 /** An address as the console takes one: `0x` and 40 hexadecimal digits. */
 export const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
-/** Why the node's list is not in hand. */
-export type NoList = "unverified" | "unread";
+/** Why the node's list is not in hand: its answers may not be read now, or they may and its list was not. */
+export type NoList = NodeBlocked | "unread";
+
+/** Why the node's answers may not be read now: it is not verified, or the device clock and its signed time disagree. */
+export type NodeBlocked = "unverified" | "clock";
+
+/** Why the node's answers may not be read under `attestation`, by the reads' own trust rule (the attestation alone); null while they may. */
+export function nodeBlocked(attestation: AttestationStatus): NodeBlocked | null {
+  if (readBlock(attestation, "live") === null) return null;
+  return attestation.kind === "clock" ? "clock" : "unverified";
+}
 
 export type CandidateSource =
   | { kind: "current" }
@@ -23,11 +33,11 @@ export type CandidateSource =
   | { kind: "held"; verifiedAtMs: number; block: number; why: NoList }
   | { kind: "none"; why: NoList };
 
-/** The source for the node's list `list`, the last one verified `held`, and whether the node's answers may be read now. */
-export function candidateSource(list: Read<OperatorsView>, held: { view: OperatorsView; verifiedAtMs: number } | null, nodeReadable: boolean): CandidateSource {
+/** The source for the node's list `list`, the last one verified `held`, and why the node's answers may not be read now (`blocked`, null while they may). */
+export function candidateSource(list: Read<OperatorsView>, held: { view: OperatorsView; verifiedAtMs: number } | null, blocked: NodeBlocked | null): CandidateSource {
   if (list.status === "ready" && list.value !== null) return { kind: "current" };
-  if (nodeReadable && list.status === "loading") return { kind: "loading" };
-  const why: NoList = nodeReadable ? "unread" : "unverified";
+  if (blocked === null && list.status === "loading") return { kind: "loading" };
+  const why: NoList = blocked ?? "unread";
   return held === null ? { kind: "none", why } : { kind: "held", verifiedAtMs: held.verifiedAtMs, block: held.view.block.number, why };
 }
 
