@@ -10,9 +10,11 @@
 
 import { useState } from "react";
 
+import { readBlock } from "@/lib/engine/attestation";
 import { formatMonkey } from "@/lib/format";
 import { changeDelegation, type DelegationChange } from "@/lib/monkey/actions";
 import type { OperatorReads } from "@/lib/monkey/operators";
+import { delegateWords, moveWords, takeBackWords } from "@/lib/staking/delegation-words";
 import { delegatedOf, delegationTo, undelegatedOf } from "@/lib/staking/delegations";
 import type { OperatorRow } from "@/lib/staking/operator-table";
 
@@ -24,10 +26,10 @@ import { Row } from "../monkey/Row";
 import { NOTE } from "../monkey/styles";
 import { useConsoleSelect, useMonkeyPanel, usePanelState } from "../monkey/use-monkey";
 
-const TOGGLE = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:text-fg-3 lg:min-h-0";
+/** The Delegate form's box, whose amount field a table row's Delegate button focuses. */
+export const DELEGATE_FORM_ID = "delegate-form";
 
-/** `before → after` in MONKEY. */
-const change = (before: bigint, after: bigint) => `${formatMonkey(before)} → ${formatMonkey(after)}`;
+const TOGGLE = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:text-fg-3 lg:min-h-0";
 
 interface Props {
   operators: OperatorReads;
@@ -41,19 +43,33 @@ interface Props {
   titleId: string;
 }
 
+/**
+ * The delegations block of the operators card. Until the page load's wallet is read it holds its
+ * loaded layout, with dashes and a closed Delegate form, so the table below does not move when the
+ * read lands; while the node is not verified it says that the wallet's reads wait on it.
+ */
 export function Delegations({ operators, rows, target, onTarget, labelOf, titleId }: Props) {
   const panel = useMonkeyPanel();
   const { wallet: figures, settling } = usePanelState();
   const wallet = useConsoleSelect((state) => state.wallet);
+  const decided = useConsoleSelect((state) => state.walletDecided);
   const busy = useConsoleSelect((state) => state.busy);
+  const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
   const [editing, setEditing] = useState<{ candidate: string; mode: "move" | "undelegate" } | null>(null);
   const [moveTo, setMoveTo] = useState<string | null>(null);
   const mine = wallet !== null && figures.address === wallet.address;
   const position = mine ? figures.position.value : null;
   const listed = rows.filter((row) => row.listed);
-  const votesOf = (candidate: string) => rows.find((row) => row.address === candidate)?.votes ?? null;
   const options = listed.map((row) => ({ value: row.address, label: labelOf(row.address) }));
   const disabled = busy || settling || position === null;
+  /** Opens one delegation's form, or closes it; an amount typed under another delegation is not this one's. */
+  const edit = (next: { candidate: string; mode: "move" | "undelegate" } | null) => {
+    if (next?.candidate !== editing?.candidate) {
+      panel.setDraft("move", "");
+      panel.setDraft("undelegate", "");
+    }
+    setEditing(next);
+  };
   const send = (next: DelegationChange, onLanded: () => void) =>
     changeDelegation(panel, operators, next, onLanded).then((landed) => {
       if (landed) {
@@ -61,35 +77,33 @@ export function Delegations({ operators, rows, target, onTarget, labelOf, titleI
         focusHeading(titleId);
       }
     });
-  if (wallet === null) return <p className={NOTE}>Connect a wallet to delegate your stake.</p>;
-  if (wallet.readOnly === true) return <p className={NOTE}>This account is read-only, so its delegations are not read and nothing can be delegated for it.</p>;
-  if (position === null) return <ReadNote read={figures.position} loading="Reading your delegations…" />;
-  const { staked, delegations } = position;
-  const undelegated = undelegatedOf(staked, delegations);
+  if (wallet === null && decided) return <p className={NOTE}>Connect a wallet to delegate your stake.</p>;
+  if (wallet?.readOnly === true) return <p className={NOTE}>This account is read-only, so its delegations are not read and nothing can be delegated for it.</p>;
+  if (wallet !== null && !trusted) return <p className={NOTE}>Your delegations are read with the rest of the page&apos;s figures, once the node is verified.</p>;
+  const staked = position?.staked ?? null;
+  const delegations = position?.delegations ?? [];
+  const undelegated = staked === null ? 0n : undelegatedOf(staked, delegations);
   const chosen = target !== null && listed.some((row) => row.address === target) ? target : (listed[0]?.address ?? null);
   return (
     <div className="space-y-3">
       <dl className="space-y-2">
-        <Row label="Staked">{formatMonkey(staked)}</Row>
-        <Row label="Delegated">{formatMonkey(delegatedOf(delegations))}</Row>
-        <Row label="Undelegated">{formatMonkey(undelegated)}</Row>
+        <Row label="Staked">{staked === null ? "—" : formatMonkey(staked)}</Row>
+        <Row label="Delegated">{staked === null ? "—" : formatMonkey(delegatedOf(delegations))}</Row>
+        <Row label="Undelegated">{staked === null ? "—" : formatMonkey(undelegated)}</Row>
       </dl>
-      <ReadNote read={figures.position} />
+      {/* The dashes already hold the block's shape, so the pending line is for screen readers alone. */}
+      <ReadNote read={figures.position} loading="Reading your delegations…" quiet />
       {chosen !== null && (
-        <div className="space-y-2 rounded border border-line-2 p-3">
+        <div id={DELEGATE_FORM_ID} className="space-y-2 rounded border border-line-2 p-3">
           <Select label="Delegate to" value={chosen} options={options} onChange={onTarget} />
           <AmountForm
             field="delegate" label="Amount to delegate" action="Delegate" max={undelegated} maxLabel="your undelegated stake" disabled={disabled}
             onSubmit={(amount, onLanded) => send({ kind: "delegate", to: chosen, toLabel: labelOf(chosen), amount }, onLanded)}
-            preview={(amount) => {
-              const held = delegationTo(delegations, chosen);
-              const votes = votesOf(chosen);
-              return `Undelegated ${change(undelegated, undelegated - amount)}. Your delegation to ${labelOf(chosen)} ${change(held, held + amount)}${votes === null ? "" : `, and its votes ${change(votes, votes + amount)}`}.`;
-            }}
+            preview={(amount) => delegateWords(undelegated, delegationTo(delegations, chosen), amount, labelOf(chosen))}
           />
         </div>
       )}
-      {delegations.length === 0 ? (
+      {position === null ? null : delegations.length === 0 ? (
         <p className={NOTE}>You delegate none of your stake, so all of it abstains.</p>
       ) : (
         <ul className="space-y-2" aria-label="Your delegations">
@@ -103,8 +117,8 @@ export function Delegations({ operators, rows, target, onTarget, labelOf, titleI
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="min-w-0 text-fg"><span title={candidate}>{label}</span>: {formatMonkey(amount)}</p>
                   <div className="flex gap-2">
-                    <button type="button" aria-expanded={open === "move"} aria-disabled={targets.length === 0} onClick={() => { if (targets.length > 0) setEditing(open === "move" ? null : { candidate, mode: "move" }); }} className={TOGGLE}>Move<span className="sr-only"> part of your delegation to {label}</span></button>
-                    <button type="button" aria-expanded={open === "undelegate"} onClick={() => setEditing(open === "undelegate" ? null : { candidate, mode: "undelegate" })} className={TOGGLE}>Take back<span className="sr-only"> part of your delegation to {label}</span></button>
+                    <button type="button" aria-expanded={open === "move"} aria-disabled={targets.length === 0} onClick={() => { if (targets.length > 0) edit(open === "move" ? null : { candidate, mode: "move" }); }} className={TOGGLE}>Move<span className="sr-only"> part of your delegation to {label}</span></button>
+                    <button type="button" aria-expanded={open === "undelegate"} onClick={() => edit(open === "undelegate" ? null : { candidate, mode: "undelegate" })} className={TOGGLE}>Take back<span className="sr-only"> part of your delegation to {label}</span></button>
                   </div>
                 </div>
                 {open === "move" && to !== null && (
@@ -113,10 +127,7 @@ export function Delegations({ operators, rows, target, onTarget, labelOf, titleI
                     <AmountForm
                       field="move" label="Amount to move" action="Move" max={amount} maxLabel={`your delegation to ${label}`} disabled={disabled}
                       onSubmit={(sent, onLanded) => send({ kind: "redelegate", from: candidate, fromLabel: label, to, toLabel: labelOf(to), amount: sent }, onLanded)}
-                      preview={(sent) => {
-                        const there = delegationTo(delegations, to);
-                        return `Your delegation to ${label} ${change(amount, amount - sent)}, and to ${labelOf(to)} ${change(there, there + sent)}. Your undelegated stake stays ${formatMonkey(undelegated)}.`;
-                      }}
+                      preview={(sent) => moveWords({ label, held: amount }, { label: labelOf(to), held: delegationTo(delegations, to) }, sent, undelegated)}
                     />
                   </>
                 )}
@@ -124,7 +135,7 @@ export function Delegations({ operators, rows, target, onTarget, labelOf, titleI
                   <AmountForm
                     field="undelegate" label="Amount to take back" action="Take back" max={amount} maxLabel={`your delegation to ${label}`} disabled={disabled}
                     onSubmit={(sent, onLanded) => send({ kind: "undelegate", from: candidate, fromLabel: label, amount: sent }, onLanded)}
-                    preview={(sent) => `Your delegation to ${label} ${change(amount, amount - sent)}. Undelegated ${change(undelegated, undelegated + sent)}.`}
+                    preview={(sent) => takeBackWords(amount, undelegated, sent, label)}
                   />
                 )}
               </li>

@@ -56,10 +56,15 @@ function coverText(cover: NonNullable<ReturnType<EpochReads["getSnapshot"]>["cov
   return null;
 }
 
+/** The card; `epochs` is the page's reads of it, which start and stop with the page, and `labelOf` names an operator's share's recipient. */
 export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf: (address: string) => string }) {
   const state = useSyncExternalStore(epochs.subscribe, epochs.getSnapshot, epochs.getSnapshot);
   const covered = state.cover === null ? null : coverText(state.cover);
   const read = { status: state.status === "reading" || state.status === "idle" ? ("loading" as const) : state.status === "ready" ? ("ready" as const) : state.status, value: state.epochs.length > 0 ? state.epochs : null, message: state.error };
+  // A read that failed while epochs are held, or a failed Load more: one status line that changes its words, so each is announced.
+  const problem = state.status !== "ready" ? ""
+    : state.error !== null ? `Could not check for newly closed epochs: ${state.error.replace(/\.+$/, "")}. The check is made again by itself.`
+      : state.moreError !== null ? `Could not read older epochs: ${state.moreError.replace(/\.+$/, "")}.` : "";
   const loadMore = () => {
     if (state.more) return;
     void epochs.loadMore().then(() => {
@@ -97,9 +102,10 @@ export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf:
         </div>
       )}
       {state.status === "ready" && state.next !== null && <button type="button" aria-disabled={state.more} onClick={loadMore} className={LOAD}>{state.more ? "Loading" : "Load more"}<span className="sr-only"> epochs</span></button>}
+      <p role="status" className="text-caption leading-relaxed text-amber empty:hidden">{problem}</p>
       <ReadNote read={read} loading="Reading the closed epochs…" />
       {covered !== null && <p className={NOTE}>{covered}</p>}
-      <p className={NOTE}>An epoch distributes what the house NAV holds above the floor: to stakers in proportion to their stake, and, while operator rotation is on, a fifth to the operators named here.</p>
+      <p className={NOTE}>Each close shares the excess the Distribution card describes: between stakers in proportion to their stake, and, while operator rotation is on, a fifth to the operator in effect, named in the last column.</p>
     </Card>
   );
 }

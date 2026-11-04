@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EngineError } from "../engine/client";
-import { CANDIDATE_LIMIT } from "../engine/registry";
+import { CANDIDATE_LIMIT } from "../engine/staking-reads";
 import type { OperatorList } from "../engine/staking-reads";
 import type { OperatorRoute } from "../engine/stats-types";
 import { changeDelegation } from "./actions";
@@ -71,13 +71,20 @@ describe("OperatorReads", () => {
   }
 
   it("reads the node's route and its signed operator list on open, never the wallet", async () => {
-    const { operators, counts, stop, store } = await started();
+    const kit = await setup();
+    const reads = kit.store.liveWallet?.chainReads;
+    if (kit.store.liveWallet === null || reads === undefined) throw new Error("the mock wallet reads a chain");
+    const chain = { vault: 0, operator: 0 };
+    kit.store.liveWallet.chainReads = { vault: () => { chain.vault += 1; return reads.vault(); }, operator: () => { chain.operator += 1; return reads.operator(); } };
+    const operators = new OperatorReads(kit.store);
+    const stop = operators.start(() => false);
+    await flush();
     const { route, list } = operators.getSnapshot();
     expect([route.status, list.status]).toEqual(["ready", "ready"]);
     expect(list.value?.rows).toHaveLength(CANDIDATE_LIMIT);
     expect(list.value?.block.number).toBeGreaterThan(0);
-    expect(counts).toEqual({ route: 1, list: 1 });
-    expect(store.liveWallet?.chainReads).toBeDefined();
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS * 2);
+    expect(chain).toEqual({ vault: 0, operator: 0 });
     stop();
   });
 

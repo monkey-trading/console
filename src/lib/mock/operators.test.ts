@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { CANDIDATE_LIMIT } from "../engine/registry";
+import { CANDIDATE_LIMIT } from "../engine/staking-reads";
 import { MONKEY_UNIT } from "../format";
 import { createMockNode, SIM_EPOCH_MS } from ".";
 import { stake } from "./monkey";

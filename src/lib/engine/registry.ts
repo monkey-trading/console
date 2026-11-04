@@ -50,8 +50,5 @@ export interface DeploymentReads {
   operator(): Promise<NamedOperator | null>;
 }
 
-/** The registry's bound on its candidate list (`OperatorRegistry.CANDIDATE_LIMIT`): an RPC that claims more is not read further. */
-export const CANDIDATE_LIMIT = 100;
-
 /** The zero address, which the registry answers for no candidate. */
 export const NO_CANDIDATE = "0x0000000000000000000000000000000000000000";

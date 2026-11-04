@@ -8,9 +8,9 @@
 
 import { keccak256, stringToHex } from "viem";
 
-import { CANDIDATE_LIMIT, NO_CANDIDATE, type DeploymentReads, type NamedOperator, type PendingElection } from "../engine/registry";
+import { NO_CANDIDATE, type DeploymentReads, type NamedOperator, type PendingElection } from "../engine/registry";
 import type { Delegation } from "../engine/staking";
-import type { OperatorList } from "../engine/staking-reads";
+import { CANDIDATE_LIMIT, type OperatorList } from "../engine/staking-reads";
 import type { OperatorRoute } from "../engine/stats-types";
 import { MONKEY_UNIT } from "../format";
 import { mulberry32, SEED } from "../prng";
@@ -164,6 +164,7 @@ export function delegationsOf(state: MockState, address: string): Delegation[] {
   return state.operators.delegations.get(address.toLowerCase()) ?? [];
 }
 
+/** Keeps `delegations` as the account's, and none for an empty list, as the contract's set drops an emptied one. */
 function setDelegations(state: MockState, key: string, delegations: Delegation[]): void {
   if (delegations.length === 0) state.operators.delegations.delete(key);
   else state.operators.delegations.set(key, delegations);

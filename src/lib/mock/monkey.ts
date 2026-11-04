@@ -177,6 +177,7 @@ export function closeDistributionEpochs(state: MockState): EngineEvent[] {
     const allocated = excessOf(state, nav) / 1_000n;
     state.houseCash -= allocated * 1_000n;
     const total = monkey.totalStakedAt(closedMs);
+    let stakers = 0;
     for (const account of new Set([...monkey.staked.keys(), ...monkey.unstaking.keys()])) {
       // An unstake still in its cooldown keeps earning, as the engine counts it staked until it completes.
       const held = (monkey.staked.get(account) ?? 0n) + (monkey.unstaking.get(account)?.amount ?? 0n);
@@ -184,8 +185,9 @@ export function closeDistributionEpochs(state: MockState): EngineEvent[] {
       if (share === 0n) continue;
       monkey.distEntitled.set(account, (monkey.distEntitled.get(account) ?? 0n) + share);
       events.push({ type: "distribution_allocated", account, epoch, amount: share.toString() });
+      stakers += 1;
     }
-    monkey.epochs.push({ epoch, closedMs, nav, allocated });
+    monkey.epochs.push({ epoch, closedMs, nav, allocated, seq: state.seq, stakers, operator: state.operators.named(closedMs).candidate });
     closed = true;
   }
   if (closed) state.postedSeq = state.seq;
@@ -255,8 +257,10 @@ export function seedMonkeyDemo(state: MockState, address: string): void {
 }
 
 /**
- * `GET /v1/monkey/distributions`: the mock's closed epochs, newest first, older than `before`. The
- * mock runs no operator, so no close has an operator's share.
+ * `GET /v1/monkey/distributions`: the mock's closed epochs, newest first, older than `before`, each as
+ * its close recorded it. Rotation is on in the mock, so each close that paid stakers names the
+ * operator's fifth beside their four fifths, to the operator in effect then (the first candidate for
+ * the generated history before the mock's own operators).
  * Error cases:
  * - the limit is outside 1 to 200, as the node refuses it (400)
  */
@@ -270,10 +274,15 @@ export function distributionEpochsPage(state: MockState, params: { before?: numb
   return {
     seq: state.seq, time_ms: state.now, begins_ms: monkey.begins, begins_seq: 0, from_genesis: true, truncated: false, retained_from_epoch: null,
     next: older.length > limit && oldest !== undefined ? oldest.epoch : null,
-    epochs: page.map((close) => ({
-      epoch: close.epoch, close_seq: state.seq, close_ms: close.closedMs, ended_ms: close.closedMs, nav: fixedToWire(close.nav), floor: fixedToWire(FLOOR_USD),
-      excess_usdc_units: close.allocated.toString(), allocated_usdc_units: close.allocated.toString(), stakers_usdc_units: close.allocated.toString(),
-      stakers: close.allocated > 0n ? monkey.stakerCount() : 0, operator_shares: [], skipped: null,
-    })),
+    epochs: page.map((close) => {
+      const share = close.allocated / 4n;
+      const operator = close.operator ?? state.operators.candidates[0]?.address ?? null;
+      const shares = share > 0n && operator !== null ? [{ account: operator, amount: share.toString() }] : [];
+      const allocated = close.allocated + (shares.length > 0 ? share : 0n);
+      return {
+        epoch: close.epoch, close_seq: close.seq, close_ms: close.closedMs, ended_ms: close.closedMs, nav: fixedToWire(close.nav), floor: fixedToWire(FLOOR_USD),
+        excess_usdc_units: allocated.toString(), allocated_usdc_units: allocated.toString(), stakers_usdc_units: close.allocated.toString(), stakers: close.stakers, operator_shares: shares, skipped: null,
+      };
+    }),
   };
 }

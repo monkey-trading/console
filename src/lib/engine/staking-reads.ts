@@ -55,6 +55,9 @@ export interface ListedCandidate {
   role: ListedRole;
 }
 
+/** The registry's bound on its candidate list (`OperatorRegistry.CANDIDATE_LIMIT`): a list that names more is refused. */
+export const CANDIDATE_LIMIT = 100;
+
 /** `GET /v1/operators`. */
 export interface OperatorList {
   block: ListBlock;

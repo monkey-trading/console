@@ -8,6 +8,7 @@ import { shortHex } from "@/lib/format";
 import type { OperatorReads } from "@/lib/monkey/operators";
 import { operatorCells } from "@/lib/staking/operator-cells";
 
+/** The label for each address, following the operator list as it is read again. */
 export function useOperatorLabel(operators: OperatorReads): (address: string) => string {
   const { list } = useSyncExternalStore(operators.subscribe, operators.getSnapshot, operators.getSnapshot);
   const rows = list.value?.rows;

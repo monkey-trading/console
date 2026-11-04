@@ -24,7 +24,7 @@ describe("delegation changes", () => {
     stop();
   });
 
-  it("says at the control why a delegation change was refused, and sends it again only when asked", async () => {
+  it("says at the control why a delegation change was refused, and settles busy", async () => {
     const { node, store, panel, stop } = await setup();
     const [first] = node.client.state.operators.candidates;
     if (first === undefined) throw new Error("the mock lists no candidate");

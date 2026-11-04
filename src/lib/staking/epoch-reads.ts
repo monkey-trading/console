@@ -28,12 +28,14 @@ export interface EpochsState {
   /** The `before` for the next older page; null once none is held. */
   next: number | null;
   cover: EpochCover | null;
-  /** Whether an older page is being read, and why the last read failed. */
+  /** Whether an older page is being read. */
   more: boolean;
+  /** Why the last read of the newest page failed, and the last Load more; null after one that landed. */
   error: string | null;
+  moreError: string | null;
 }
 
-const IDLE: EpochsState = { status: "idle", epochs: [], next: null, cover: null, more: false, error: null };
+const IDLE: EpochsState = { status: "idle", epochs: [], next: null, cover: null, more: false, error: null, moreError: null };
 
 /**
  * `held` with `page` folded in. A newest page adds the epochs that closed since and replaces the ones
@@ -124,18 +126,23 @@ export class EpochReads {
     }
   }
 
-  /** "Load more": the next older page; a failure says so under the button, which tries again. */
+  /**
+   * "Load more": the next older page; a failure says so under the button, which tries again. A page
+   * that lands after a read of the newest page started the list again, past a gap, belongs to the
+   * list that was replaced, so it is dropped: the cursor it was asked from is no longer the held one.
+   */
   async loadMore(): Promise<void> {
     const { status, more, next } = this.state;
     if (status !== "ready" || more || next === null) return;
     const cycle = this.cycle;
-    this.set({ more: true, error: null });
+    this.set({ more: true, moreError: null });
     try {
       const page = await this.store.deps.client.stats.distributionEpochs({ before: next, limit: EPOCH_PAGE });
       if (cycle !== this.cycle) return;
-      this.set({ more: false, cover: page, ...foldEpochs(this.state, page, true) });
+      if (this.state.next !== next) this.set({ more: false });
+      else this.set({ more: false, cover: page, ...foldEpochs(this.state, page, true) });
     } catch (error) {
-      if (cycle === this.cycle) this.set({ more: false, error: describe(error) });
+      if (cycle === this.cycle) this.set({ more: false, moreError: describe(error) });
     }
   }
 }

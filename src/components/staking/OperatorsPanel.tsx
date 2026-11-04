@@ -26,15 +26,13 @@ import { ReadNote } from "../monkey/ReadNote";
 import { Row } from "../monkey/Row";
 import { NOTE } from "../monkey/styles";
 import { useConsoleSelect, usePanelState } from "../monkey/use-monkey";
-import { Delegations } from "./Delegations";
+import { DELEGATE_FORM_ID, Delegations } from "./Delegations";
 import { OperatorTable } from "./OperatorTable";
 import { useOperatorLabel } from "./use-operator-label";
 
 const TITLE_ID = "operators-title";
 const FIELD = "min-h-11 w-full rounded border border-edge bg-ink px-2 py-2 text-data text-fg placeholder:text-fg-3 hover:border-glow focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0";
 const PAGER = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:text-fg-3 aria-disabled:hover:border-line-2 lg:min-h-0";
-/** The Delegate form's section, which a row's Delegate button brings into view. */
-const DELEGATE_ID = "delegate-form";
 
 /** The host of an `https://` origin. */
 const hostOf = (origin: string) => new URL(origin).host;
@@ -86,7 +84,7 @@ export function OperatorsPanel({ operators }: { operators: OperatorReads }) {
         </p>
       )}
       <ReadNote read={route} loading={nodeReadable ? "Reading the node's figures…" : "The node's figures wait until it is verified."} />
-      <h4 id={DELEGATE_ID} className="pt-1 text-label tracking-caps text-fg-3 uppercase">Your delegations</h4>
+      <h4 className="pt-1 text-label tracking-caps text-fg-3 uppercase">Your delegations</h4>
       <Delegations operators={operators} rows={rows} target={target} onTarget={setTarget} labelOf={labelOf} titleId={TITLE_ID} />
       {/* Beside the forms, and there with no wallet too: a change's outcome outlives the connection that sent it. */}
       <Notice surface="operator" />
@@ -94,7 +92,7 @@ export function OperatorsPanel({ operators }: { operators: OperatorReads }) {
       {list !== null && (
         <>
           <h4 className="pt-2 text-label tracking-caps text-fg-3 uppercase">All operators</h4>
-          <p className={NOTE}>As the registry stood at final block {list.block.number.toLocaleString("en-US")}, at {formatStamp(list.block.timeMs)} UTC, read by the node from the chain. It is read again by itself.</p>
+          <p className={NOTE}>As the registry stood at final block {list.block.number.toLocaleString("en-US")}, at {formatStamp(list.block.timeMs)} UTC, read by the node from the chain. It is read again by itself, and counts a delegation once its block is final.</p>
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,16rem)] sm:items-end">
             <div className="space-y-1">
               <label htmlFor={searchId} className="block text-caption text-fg-2">Search operators</label>
@@ -109,7 +107,8 @@ export function OperatorsPanel({ operators }: { operators: OperatorReads }) {
               rows={view.rows} sort={sort} held={held} canVote={canVote} disabled={busy || settling} reachable={reachable}
               onDelegate={(row) => {
                 setTarget(row.address);
-                document.getElementById(DELEGATE_ID)?.scrollIntoView({ block: "start" });
+                // The form above now names this candidate: its amount field is where the visitor goes next.
+                document.getElementById(DELEGATE_FORM_ID)?.querySelector("input")?.focus();
               }}
             />
           )}

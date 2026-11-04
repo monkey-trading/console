@@ -141,4 +141,39 @@ describe("EpochReads", () => {
     await flush();
     expect(epochs.getSnapshot()).toMatchObject({ status: "idle", epochs: [] });
   });
+
+  it("keeps the epochs it holds and says why when a later read of the newest page fails, then clears the line once one lands", async () => {
+    const { epochs, node, stop, served } = await started(3);
+    node.client.stats.distributionEpochs = () => Promise.reject(new Error("The node did not answer."));
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS);
+    expect(epochs.getSnapshot()).toMatchObject({ status: "ready", error: "The node did not answer." });
+    expect(epochs.getSnapshot().epochs).toHaveLength(3);
+    node.client.stats.distributionEpochs = (params) => served.answer(params);
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS * 2);
+    expect(epochs.getSnapshot().error).toBeNull();
+    stop();
+  });
+
+  it("says a failed Load more under the button and keeps what it holds", async () => {
+    const { epochs, node, stop } = await started(EPOCH_PAGE + 5);
+    node.client.stats.distributionEpochs = () => Promise.reject(new Error("The node did not answer."));
+    await epochs.loadMore();
+    expect(epochs.getSnapshot()).toMatchObject({ status: "ready", more: false, moreError: "The node did not answer.", next: 6 });
+    expect(epochs.getSnapshot().epochs).toHaveLength(EPOCH_PAGE);
+    stop();
+  });
+
+  it("drops an older page that lands after a newest read started the list again past a gap", async () => {
+    const { epochs, node, stop } = await started(EPOCH_PAGE + 5);
+    let release: (value: DistributionEpochsPage) => void = () => {};
+    node.client.stats.distributionEpochs = (params) => (params.before !== undefined ? new Promise((resolve) => { release = resolve; }) : Promise.resolve(page(Array.from({ length: EPOCH_PAGE }, (_, i) => 60 - i), 41)));
+    const older = epochs.loadMore();
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS);
+    expect(epochs.getSnapshot()).toMatchObject({ next: 41 });
+    release(page([5, 4, 3, 2, 1], null));
+    await older;
+    expect(epochs.getSnapshot().next).toBe(41);
+    expect(epochs.getSnapshot().epochs.map((c) => c.epoch)).toEqual(Array.from({ length: EPOCH_PAGE }, (_, i) => 60 - i));
+    stop();
+  });
 });

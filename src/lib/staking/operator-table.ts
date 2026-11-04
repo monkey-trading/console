@@ -7,7 +7,7 @@
  * promotes (`_standby`).
  */
 
-import type { OperatorList } from "../engine/staking-reads";
+import { CANDIDATE_LIMIT, type OperatorList } from "../engine/staking-reads";
 import { shareBps } from "../monkey/figures";
 import { shownHostname } from "../monkey/operators";
 
@@ -74,8 +74,6 @@ export function ariaSort(column: SortColumn, sort: SortId): "ascending" | "desce
 export const PAGE_SIZE = 25;
 /** The longest search the table takes: longer than any address, hostname or endpoint a visitor would type. */
 export const MAX_SEARCH = 100;
-/** The registry's bound on its candidate list (`OperatorRegistry.CANDIDATE_LIMIT`): a list that names more is refused. */
-export const CANDIDATE_LIMIT = 100;
 
 const ROLE_ORDER: Record<OperatorRole, number> = { active: 0, promoted: 1, elected: 2, standby: 3, candidate: 4 };
 const UNITS = /^\d+$/;

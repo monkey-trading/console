@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ListedCandidate, OperatorList } from "../engine/staking-reads";
+import answer from "./operator-list-answer.json";
 import { ariaSort, countText, MAX_SEARCH, operatorsView, PAGE_SIZE, SORTS, tableView, type OperatorRow, type SortId } from "./operator-table";
 
 const RELEASE = `0x${"ab".repeat(32)}`;
@@ -62,6 +63,13 @@ describe("operatorsView", () => {
   it("shows no hostname the build could not connect to, so a lookalike never reads as a host, and keeps the registered one for the build's check", () => {
     const { rows } = operatorsView(list([candidate(1, { api_hostname: "раураl.example" }), candidate(2, { api_hostname: "OP-2.Example" })]));
     expect(rows.map((row) => [row.hostname, row.registeredHostname])).toEqual([[null, "раураl.example"], ["op-2.example", "OP-2.Example"]]);
+  });
+
+  it("reads an answer a node served on the local two-engine stack, as the engine serializes it", () => {
+    // Saved from GET /v1/operators on the console's local stack (SECOND_ENGINE=1), engine #590's lens at block 269.
+    const view = operatorsView(answer as OperatorList);
+    expect(view).toMatchObject({ block: { number: 269 }, rotationEnabled: true, totalStaked: 2n * 10n ** 18n, inEffect: "0x17c5185167401ed00cf5f5b2fc97d9bbfdb7d025", pending: null });
+    expect(view.rows.map((row) => [row.hostname, row.role, row.votes, row.bond])).toEqual([["127.0.0.1:28080", "active", 0n, 10n ** 18n], ["127.0.0.1:28081", "candidate", 0n, 10n ** 18n]]);
   });
 
   it("names the final block the list reflects, the total stake, and the rotation switch", () => {

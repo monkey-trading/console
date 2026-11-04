@@ -57,6 +57,11 @@ export interface EpochClose {
   nav: Fixed;
   /** USDC base units the close allocated to stakers; zero when NAV was at or below the floor. */
   allocated: bigint;
+  /** The seq of the close and the stakers it paid, as the close recorded them. */
+  seq: number;
+  stakers: number;
+  /** The operator in effect at the close, which the operator's share went to; null for the generated history, before the mock's own operators. */
+  operator: string | null;
 }
 
 /** A change in a running total, for the series built from them. */
@@ -171,7 +176,7 @@ export class MockMonkey {
     const lastEpoch = Math.floor((this.seededAt - this.startMs) / EPOCH_MS);
     for (let epoch = firstEpoch; epoch < lastEpoch; epoch += 1) {
       const allocated = this.excessOf(epoch);
-      this.epochs.push({ epoch, closedMs: this.startMs + (epoch + 1) * EPOCH_MS, nav: FLOOR_USD + allocated * 1_000n, allocated });
+      this.epochs.push({ epoch, closedMs: this.startMs + (epoch + 1) * EPOCH_MS, nav: FLOOR_USD + allocated * 1_000n, allocated, seq: 0, stakers: allocated > 0n ? 3 : 0, operator: null });
     }
     // A feed of the last two days: losses closing each period, and stakers coming and going.
     const feedFrom = this.seededAt - 2 * DAY_MS;

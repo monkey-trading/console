@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { MONKEY_UNIT } from "../format";
 import { applyChange, delegatedOf, delegationTo, undelegatedOf, unstakeTakes } from "./delegations";
-import { unstakeWords } from "./delegation-words";
+import { delegateWords, moveWords, takeBackWords, unstakeWords } from "./delegation-words";
 
 const A = "0x00000000000000000000000000000000000000a1";
 const B = "0x00000000000000000000000000000000000000b2";
@@ -89,5 +89,13 @@ describe("unstakeWords", () => {
   it("says nothing for an amount the stake does not cover", () => {
     expect(unstakeWords(10n, [], 11n, label)).toBeNull();
     expect(unstakeWords(10n, [], 0n, label)).toBeNull();
+  });
+});
+
+describe("the delegation forms' words", () => {
+  it("say what delegating, moving and taking back an amount would change, before the wallet is asked", () => {
+    expect(delegateWords(1_000n * M, 0n, 300n * M, "alpha.example")).toBe("Undelegated 1,000 MONKEY → 700 MONKEY. Your delegation to alpha.example 0 MONKEY → 300 MONKEY.");
+    expect(moveWords({ label: "alpha.example", held: 300n * M }, { label: "bravo.example", held: 200n * M }, 100n * M, 500n * M)).toBe("Your delegation to alpha.example 300 MONKEY → 200 MONKEY, and to bravo.example 200 MONKEY → 300 MONKEY. Your undelegated stake stays 500 MONKEY.");
+    expect(takeBackWords(300n * M, 500n * M, 100n * M, "bravo.example")).toBe("Your delegation to bravo.example 300 MONKEY → 200 MONKEY. Undelegated 500 MONKEY → 600 MONKEY.");
   });
 });
