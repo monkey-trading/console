@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { MONKEY_UNIT } from "../format";
-import { operatorCells, ROLE_LABELS } from "./operator-cells";
+import { operatorCells, ROLE_LABELS, withAddress } from "./operator-cells";
 import type { OperatorRow } from "./operator-table";
 
 const ROW: OperatorRow = {
@@ -36,5 +36,12 @@ describe("operatorCells", () => {
 
   it("labels every role", () => {
     expect(ROLE_LABELS).toEqual({ active: "Active", elected: "Elected", promoted: "Promoted", standby: "Standby", candidate: "Candidate" });
+  });
+});
+
+describe("withAddress", () => {
+  it("names a candidate by hostname and short address, and by the short address alone when that is its label", () => {
+    expect(withAddress("alpha.example", ROW.address)).toBe("alpha.example (0x000000…00a1)");
+    expect(withAddress("0x000000…00a1", ROW.address)).toBe("0x000000…00a1");
   });
 });

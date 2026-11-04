@@ -13,12 +13,14 @@
 import { useState } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
-import { formatMonkey, shortHex } from "@/lib/format";
+import { formatMonkey } from "@/lib/format";
 import { changeDelegation, type DelegationChange } from "@/lib/monkey/actions";
 import type { OperatorReads, OperatorsState } from "@/lib/monkey/operators";
+import { candidateSource, pickedCandidate } from "@/lib/staking/candidate-choice";
 import type { DelegationReads, DelegationsState } from "@/lib/staking/delegation-reads";
 import { delegateWords, moveWords, takeBackWords } from "@/lib/staking/delegation-words";
 import { delegationTo, undelegatedOf } from "@/lib/staking/delegations";
+import { withAddress } from "@/lib/staking/operator-cells";
 
 import { AmountForm } from "../monkey/AmountForm";
 import { focusHeading } from "../monkey/Card";
@@ -26,7 +28,7 @@ import { ReadNote } from "../monkey/ReadNote";
 import { Row } from "../monkey/Row";
 import { NOTE } from "../monkey/styles";
 import { useConsoleSelect, useMonkeyPanel, usePanelState } from "../monkey/use-monkey";
-import { CandidatePicker, pickedCandidate, type CandidateSource } from "./CandidatePicker";
+import { CandidatePicker } from "./CandidatePicker";
 
 /** The Delegate form's box, whose amount field a table row's Delegate button focuses. */
 export const DELEGATE_FORM_ID = "delegate-form";
@@ -58,23 +60,19 @@ export function Delegations({ operators, lists, delegations: reads, read, target
   const wallet = useConsoleSelect((state) => state.wallet);
   const decided = useConsoleSelect((state) => state.walletDecided);
   const busy = useConsoleSelect((state) => state.busy);
-  const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
+  // The operator reads' own rule for whether the node's answers may be read, so the forms and the list agree.
+  const nodeReadable = useConsoleSelect((state) => readBlock(state.attestation, "live") === null);
   const [editing, setEditing] = useState<{ candidate: string; mode: "move" | "undelegate" } | null>(null);
   const [moveTo, setMoveTo] = useState<string | null>(null);
   const [typedTo, setTypedTo] = useState("");
   const [typedMove, setTypedMove] = useState("");
   const mine = wallet !== null && read.account === wallet.address;
   const held = mine ? read.read.value : null;
-  // The node's current list while it is trusted; else the last one verified; else none, and a typed address.
-  const current = trusted && lists.list.value !== null ? lists.list.value : null;
-  const source: CandidateSource = current !== null ? { kind: "current" } : lists.held !== null ? { kind: "held", verifiedAtMs: lists.held.verifiedAtMs, block: lists.held.view.block.number } : { kind: "none" };
-  const listed = (current ?? lists.held?.view ?? null)?.rows.filter((row) => row.listed) ?? [];
-  // What a transaction names a candidate by: its hostname with its short address, since two candidates may register one hostname.
-  const nameOf = (address: string) => {
-    const label = labelOf(address);
-    const short = shortHex(address);
-    return label === short ? short : `${label} (${short})`;
-  };
+  // The node's current list while it is read; else the last one verified; else none, and a typed address.
+  const source = candidateSource(lists.list, lists.held, nodeReadable);
+  const view = source.kind === "current" ? lists.list.value : source.kind === "held" ? (lists.held?.view ?? null) : null;
+  const listed = view?.rows.filter((row) => row.listed) ?? [];
+  const nameOf = (address: string) => withAddress(labelOf(address), address);
   const options = listed.map((row) => ({ value: row.address, label: nameOf(row.address) }));
   const disabled = busy || settling || held === null;
   /** Opens one delegation's form, or closes it; an amount or address typed under another delegation is not this one's. */
@@ -99,7 +97,7 @@ export function Delegations({ operators, lists, delegations: reads, read, target
   const delegated = held?.delegations ?? [];
   const undelegated = held === null ? 0n : undelegatedOf(held.staked, delegated);
   const chosen = target !== null && listed.some((row) => row.address === target) ? target : (listed[0]?.address ?? null);
-  const to = pickedCandidate(source, typedTo, chosen);
+  const to = pickedCandidate(typedTo, chosen);
   return (
     <div className="space-y-3">
       <dl className="space-y-2">
@@ -127,8 +125,8 @@ export function Delegations({ operators, lists, delegations: reads, read, target
             const open = editing?.candidate === candidate ? editing.mode : null;
             const targets = options.filter((option) => option.value !== candidate);
             const listedTo = moveTo !== null && targets.some((option) => option.value === moveTo) ? moveTo : (targets[0]?.value ?? null);
-            const movesTo = pickedCandidate(source, typedMove, listedTo);
-            const canMove = targets.length > 0 || source.kind !== "current";
+            const movesTo = pickedCandidate(typedMove, listedTo);
+            const canMove = targets.length > 0 || source.kind === "held" || source.kind === "none";
             return (
               <li key={candidate} className="space-y-2 rounded border border-line-2 p-3 text-caption">
                 <div className="flex flex-wrap items-center justify-between gap-2">

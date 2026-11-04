@@ -19,7 +19,7 @@ const overviewWith = (over: Partial<NonNullable<MonkeyView["distribution"]>> | n
     last_distribution: { epoch: 2, closed_ms: 1, nav: "0", floor: "0", excess_usdc_units: "100089412000", allocated_usdc_units: "100089412000" }, ...over,
   },
 });
-const stakes = (staked: bigint): Read<StakingPosition> => ready({ stakingEnabled: true, staked, delegations: [], unstaking: null, balance: 0n, distributionsClaimed: 0n, latestSeq: 0 });
+const stakes = (staked: bigint): Read<StakingPosition> => ready({ stakingEnabled: true, staked, unstaking: null, balance: 0n, distributionsClaimed: 0n, latestSeq: 0 });
 
 describe("pendingDistribution", () => {
   it("says an epoch paid and estimates a 100% staker's share when the node holds no proof yet", () => {

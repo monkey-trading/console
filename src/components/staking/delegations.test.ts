@@ -19,7 +19,6 @@ import { formatStamp } from "@/lib/time";
 
 import { ConsoleProvider, useSession } from "../ConsoleProvider";
 import { MonkeyPanelProvider } from "../monkey/use-monkey";
-import { pickedCandidate } from "./CandidatePicker";
 import { Delegations } from "./Delegations";
 
 const WALLET = { address: "0x00000000000000000000000000000000000000aa", label: "Browser wallet" };
@@ -82,25 +81,16 @@ describe("the delegations block while the node is unverified", () => {
     expect(html.match(/aria-expanded="false" aria-disabled="false"[^>]*>Move/g)).toHaveLength(2);
   });
 
+  it("says when the node is verified but its list cannot be read, and offers the last list and a typed address", () => {
+    const html = render({ list: { status: "failed", value: view, message: "the operator list is stale: the last read is too old" }, held: { view, verifiedAtMs: VERIFIED_AT } }, chain([]), { ...UNVERIFIED, attestation: { kind: "mock" }, stream: "live" });
+    expect(html).toContain("final block 4,321: the node&#x27;s operator list cannot be read now.");
+    expect(html).toContain("Or a candidate&#x27;s address");
+  });
+
   it("while the node is verified, chooses from its current list with no typed address", () => {
     const html = render({ list: ready(view), held: { view, verifiedAtMs: VERIFIED_AT } }, chain([]), { ...UNVERIFIED, attestation: { kind: "mock" }, stream: "live" });
     expect(html).toContain("Delegate to");
     expect(html).not.toContain("candidate&#x27;s address");
     expect(html).not.toContain("last verified");
-  });
-});
-
-describe("pickedCandidate", () => {
-  const held = { kind: "held", verifiedAtMs: VERIFIED_AT, block: 4_321 } as const;
-
-  it("takes a well-formed typed address, lowercased, over the list's choice off the node's current list", () => {
-    expect(pickedCandidate(held, ` ${BRAVO.toUpperCase().replace("0X", "0x")} `, ALPHA)).toBe(BRAVO);
-    expect(pickedCandidate({ kind: "none" }, BRAVO, null)).toBe(BRAVO);
-    expect(pickedCandidate(held, "", ALPHA)).toBe(ALPHA);
-  });
-
-  it("names nothing for typed text that is not an address, and ignores what was typed once the node's current list is back", () => {
-    expect(pickedCandidate(held, "0x12", ALPHA)).toBeNull();
-    expect(pickedCandidate({ kind: "current" }, BRAVO, ALPHA)).toBe(ALPHA);
   });
 });

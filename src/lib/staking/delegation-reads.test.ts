@@ -85,4 +85,58 @@ describe("DelegationReads", () => {
     expect(reads.getSnapshot().read.value?.staked).toBe(before + MONKEY_UNIT);
     stop();
   });
+
+  it("joins a read still waiting behind the wallet's earlier work, but not one already asking, so reads never pile up", async () => {
+    const { reads, stop, store, counts } = await started();
+    const wallet = store.liveWallet;
+    if (wallet === null) throw new Error("the mock wallet connected");
+    let release = () => {};
+    const busy = store.monkeySession.walletWork.work(wallet, () => new Promise<void>((resolve) => { release = resolve; }));
+    await flush();
+    const first = reads.refresh();
+    const second = reads.refresh();
+    expect(second).toBe(first);
+    release();
+    await busy;
+    await first;
+    expect(counts.reads).toBe(2);
+    // Once a read is asking the wallet, a new ask queues its own, as it may follow a change the first predates.
+    let answer = () => {};
+    const real = store.liveWallet?.staking?.delegations;
+    if (store.liveWallet?.staking === undefined || real === undefined) throw new Error("the mock wallet stakes");
+    store.liveWallet.staking.delegations = () => new Promise((resolve) => { answer = () => { void real().then(resolve); }; });
+    const asking = reads.refresh();
+    await flush();
+    const after = reads.refresh();
+    expect(after).not.toBe(asking);
+    answer();
+    await asking;
+    answer();
+    await after;
+    stop();
+  });
+
+  it("reads nothing for queued work once the page has closed, and backs the timer off after a failure", async () => {
+    const closing = await started();
+    const wallet = closing.store.liveWallet;
+    if (wallet === null) throw new Error("the mock wallet connected");
+    let release = () => {};
+    const busy = closing.store.monkeySession.walletWork.work(wallet, () => new Promise<void>((resolve) => { release = resolve; }));
+    await flush();
+    const queued = closing.reads.refresh();
+    closing.stop();
+    release();
+    await busy;
+    await queued;
+    expect(closing.counts.reads).toBe(1);
+    const { reads, stop, staking } = await started();
+    let failures = 0;
+    staking.delegations = () => { failures += 1; return Promise.reject(new Error("the wallet did not answer")); };
+    // Failures in a row push the timer's next read out further each time, past the 15-second pace.
+    for (let i = 0; i < 4; i += 1) await reads.refresh();
+    const after = failures;
+    await vi.advanceTimersByTimeAsync(WALLET_READ_EVERY_MS * 2);
+    expect(failures).toBe(after);
+    stop();
+  });
 });

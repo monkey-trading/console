@@ -23,15 +23,8 @@ const ABI = parseAbi([
   "function checkpointSigner() view returns (address)",
   "function rotationEnabled() view returns (bool)",
   "function namedOperator() view returns (Operator)",
-  "function operatorInEffect() view returns (Operator)",
   "function pendingElection() view returns (Election)",
   "function candidateOf(address candidate) view returns (Candidate)",
-  "function candidateCount() view returns (uint256)",
-  "function candidateList(uint256 index) view returns (address)",
-  "function isEligible(address candidate) view returns (bool)",
-  "function votes(address candidate) view returns (uint256)",
-  "function totalStaked() view returns (uint256)",
-  "function delegates(address account) view returns (address)",
 ]);
 
 interface World {
@@ -40,18 +33,9 @@ interface World {
   /** The next election's effective time, in seconds; 0 for none. */
   effectiveAt?: bigint;
   hostnames?: Record<string, string>;
-  list?: readonly Hex[];
-  count?: bigint;
-  delegate?: Hex;
-  /** Addresses, lowercase, that never registered: `candidateOf` answers the zero struct for them. */
-  unregistered?: readonly string[];
-  /** Each candidate's self-bond, registration count and handover endpoint, by lowercase address. */
-  registrations?: Record<string, { bond: bigint; registration: bigint; handoverEndpoint: string }>;
 }
 
-const candidateOf = (hostname: string, registered = true) => (registered
-  ? { adminKey: KEY as Hex, enclave: KEY as Hex, bond: 1n, release: RELEASE, registration: 0n, apiHostname: hostname, handoverEndpoint: "x" }
-  : { adminKey: ZERO as Hex, enclave: ZERO as Hex, bond: 0n, release: `0x${"00".repeat(32)}` as const, registration: 0n, apiHostname: "", handoverEndpoint: "" });
+const candidateOf = (hostname: string) => ({ adminKey: KEY as Hex, enclave: KEY as Hex, bond: 1n, release: RELEASE, registration: 0n, apiHostname: hostname, handoverEndpoint: "x" });
 
 /** A provider answering the contracts' reads from `world`, recording each call in order. */
 function rig(world: World = {}, chain = CHAIN) {
@@ -68,19 +52,11 @@ function rig(world: World = {}, chain = CHAIN) {
         case "checkpointSigner": return encodeFunctionResult({ abi: ABI, functionName: "checkpointSigner", result: A as Hex });
         case "rotationEnabled": return encodeFunctionResult({ abi: ABI, functionName: "rotationEnabled", result: world.rotation ?? true });
         case "namedOperator": return encodeFunctionResult({ abi: ABI, functionName: "namedOperator", result: { candidate: A as Hex, adminKey: KEY as Hex, release: RELEASE, since: 100n } });
-        case "operatorInEffect": return encodeFunctionResult({ abi: ABI, functionName: "operatorInEffect", result: { candidate: A as Hex, adminKey: KEY as Hex, release: RELEASE, since: 100n } });
-        case "delegates": return encodeFunctionResult({ abi: ABI, functionName: "delegates", result: world.delegate ?? (ZERO as Hex) });
         case "pendingElection": return encodeFunctionResult({ abi: ABI, functionName: "pendingElection", result: { epoch: 3n, candidate: (world.effectiveAt ? B : ZERO) as Hex, adminKey: KEY as Hex, release: RELEASE, effectiveAt: world.effectiveAt ?? 0n, promoted: false } });
         case "candidateOf": {
           const asked = String(decoded.args[0]).toLowerCase();
-          const registered = candidateOf(world.hostnames?.[asked] ?? "", !(world.unregistered ?? []).includes(asked));
-          return encodeFunctionResult({ abi: ABI, functionName: "candidateOf", result: { ...registered, ...world.registrations?.[asked] } });
+          return encodeFunctionResult({ abi: ABI, functionName: "candidateOf", result: candidateOf(world.hostnames?.[asked] ?? "") });
         }
-        case "candidateCount": return encodeFunctionResult({ abi: ABI, functionName: "candidateCount", result: world.count ?? BigInt((world.list ?? []).length) });
-        case "candidateList": return encodeFunctionResult({ abi: ABI, functionName: "candidateList", result: world.list?.[Number(decoded.args[0])] ?? (ZERO as Hex) });
-        case "isEligible": return encodeFunctionResult({ abi: ABI, functionName: "isEligible", result: String(decoded.args[0]).toLowerCase() === A.toLowerCase() });
-        case "votes": return encodeFunctionResult({ abi: ABI, functionName: "votes", result: 40n });
-        case "totalStaked": return encodeFunctionResult({ abi: ABI, functionName: "totalStaked", result: 100n });
         default: throw new Error("unexpected call");
       }
     },
@@ -95,7 +71,7 @@ describe("a wallet that moves chain during a read", () => {
       ["operator", (deployment) => deployment.operator()],
     ];
     for (const [name, read] of reads) {
-      const { provider } = rig({ list: [B as Hex] });
+      const { provider } = rig();
       let asked = 0;
       const moving: Eip1193Provider = { request: async (args) => (args.method === "eth_chainId" && ++asked > 1 ? "0x1" : provider.request(args)) };
       await expect(read(new ProviderDeployment(CHAIN, moving)), name).rejects.toThrow("on chain 1, not chain 31337");
@@ -113,7 +89,7 @@ describe("a chain check the wallet never answers", () => {
       ];
       for (const [name, read] of reads) {
         for (const answered of [0, 1]) {
-          const { provider } = rig({ list: [B as Hex] });
+          const { provider } = rig();
           let asked = 0;
           const silent: Eip1193Provider = { request: (args) => (args.method === "eth_chainId" && asked++ >= answered ? new Promise(() => {}) : provider.request(args)) };
           let settled = false;

@@ -11,6 +11,7 @@ import { completeUnstake, stakeMonkey, startUnstake } from "@/lib/monkey/actions
 import { formatDuration, shareBps } from "@/lib/monkey/figures";
 import type { StakeDelegations } from "@/lib/engine/staking";
 import { unstakeWords } from "@/lib/staking/delegation-words";
+import { withAddress } from "@/lib/staking/operator-cells";
 
 import { Notice } from "../Notice";
 import { AmountForm } from "./AmountForm";
@@ -57,7 +58,7 @@ export function StakePanel({ delegations = null, labelOf = shortHex }: { delegat
           <AmountForm field="stake" label="Stake" action="Stake" max={position?.balance ?? 0n} maxLabel="your wallet balance" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => stakeMonkey(panel, amount, onLanded)} />
           <AmountForm
             field="unstake" label="Unstake" action="Start unstake" max={position?.staked ?? 0n} maxLabel="your stake" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)}
-            preview={delegations === null ? undefined : (amount) => unstakeWords(delegations.staked, delegations.delegations, amount, labelOf)}
+            preview={delegations === null ? undefined : (amount) => unstakeWords(delegations.staked, delegations.delegations, amount, (address) => withAddress(labelOf(address), address))}
           />
           <Notice surface="stake" />
           <p className={NOTE}>

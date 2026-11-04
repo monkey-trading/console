@@ -13,6 +13,7 @@ import { formatUsd, parseFixed } from "@/lib/fixed";
 import { usdcFixed } from "@/lib/monkey/figures";
 import type { EpochClose } from "@/lib/engine/staking-reads";
 import type { EpochReads } from "@/lib/staking/epoch-reads";
+import { withAddress } from "@/lib/staking/operator-cells";
 import { formatStamp } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
 
@@ -43,7 +44,7 @@ function Shares({ close, labelOf }: { close: EpochClose; labelOf: (address: stri
   return (
     <ul className="space-y-0.5">
       {close.operator_shares.map((share) => (
-        <li key={share.account}><span title={share.account}>{labelOf(share.account)}</span>: {usdc(share.amount)}</li>
+        <li key={share.account}><span title={share.account}>{withAddress(labelOf(share.account), share.account)}</span>: {usdc(share.amount)}</li>
       ))}
     </ul>
   );

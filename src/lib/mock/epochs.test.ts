@@ -46,7 +46,6 @@ describe("the mock's closed epochs", () => {
     expect(read()).toEqual(before);
   });
 
-
   it("pays a live close's fifth to the operator in effect, with its event and entitlement, and the stakers the rest", () => {
     const state = node();
     const me = "0x00000000000000000000000000000000000000ab";

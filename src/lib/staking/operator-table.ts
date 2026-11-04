@@ -10,6 +10,7 @@
 import { CANDIDATE_LIMIT, type OperatorList } from "../engine/staking-reads";
 import { shareBps } from "../monkey/figures";
 import { shownHostname } from "../monkey/operators";
+import { ADDRESS } from "./candidate-choice";
 
 /** `elected` and `promoted` wait on `pendingElection`; `standby` is the one `promote()` would pick now. */
 export type OperatorRole = "active" | "elected" | "promoted" | "standby" | "candidate";
@@ -77,7 +78,6 @@ export const MAX_SEARCH = 100;
 
 const ROLE_ORDER: Record<OperatorRole, number> = { active: 0, promoted: 1, elected: 2, standby: 3, candidate: 4 };
 const UNITS = /^\d+$/;
-const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
 /**
  * A decimal amount of base units.

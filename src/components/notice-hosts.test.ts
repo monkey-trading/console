@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { OperatorReads } from "@/lib/monkey/operators";
+import { DelegationReads } from "@/lib/staking/delegation-reads";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import type { NoticeSurface } from "@/lib/store/state";
 
@@ -25,7 +26,6 @@ import { SessionsCard } from "./SessionsCard";
 import { SetupSteps } from "./SetupSteps";
 import { Shell } from "./Shell";
 import { OperatorsPanel } from "./staking/OperatorsPanel";
-import { DelegationReads } from "@/lib/staking/delegation-reads";
 import { WithdrawForm } from "./WithdrawForm";
 
 const TEXT = "a message the trader must read";
