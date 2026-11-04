@@ -6,9 +6,10 @@
  * card holds that layout with dashes and its forms closed, so nothing below moves when it lands.
  */
 
-import { formatMonkey, formatRate } from "@/lib/format";
+import { formatMonkey, formatRate, shortHex } from "@/lib/format";
 import { completeUnstake, stakeMonkey, startUnstake } from "@/lib/monkey/actions";
 import { formatDuration, shareBps } from "@/lib/monkey/figures";
+import { unstakeWords } from "@/lib/staking/delegation-words";
 
 import { Notice } from "../Notice";
 import { AmountForm } from "./AmountForm";
@@ -18,7 +19,8 @@ import { Row } from "./Row";
 import { BUTTON, NOTE } from "./styles";
 import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
 
-export function StakePanel() {
+/** `labelOf` names a candidate an unstake would reduce the delegation to; a short address without it. */
+export function StakePanel({ labelOf = shortHex }: { labelOf?: (address: string) => string }) {
   const panel = useMonkeyPanel();
   const { wallet: figures, overview, unmirroredTotal, settling } = usePanelState();
   const wallet = useConsoleSelect((state) => state.wallet);
@@ -52,10 +54,13 @@ export function StakePanel() {
           </dl>
           {reading ? <p className="sr-only">Reading your stake…</p> : <ReadNote read={figures.position} />}
           <AmountForm field="stake" label="Stake" action="Stake" max={position?.balance ?? 0n} maxLabel="your wallet balance" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => stakeMonkey(panel, amount, onLanded)} />
-          <AmountForm field="unstake" label="Unstake" action="Start unstake" max={position?.staked ?? 0n} maxLabel="your stake" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)} />
+          <AmountForm
+            field="unstake" label="Unstake" action="Start unstake" max={position?.staked ?? 0n} maxLabel="your stake" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)}
+            preview={position === null ? undefined : (amount) => unstakeWords(position.staked, position.delegations, amount, labelOf)}
+          />
           <Notice surface="stake" />
           <p className={NOTE}>
-            {staking === null ? "An unstake waits out a cooldown before it can be completed." : `An unstake waits ${formatDuration(staking.cooldown_ms)} before it can be completed.`} Until then it still counts as staked, so it stays in your share.
+            An unstake takes your undelegated stake first, then the rest from each of your delegations in proportion to its size. {staking === null ? "It waits out a cooldown before it can be completed." : `It waits ${formatDuration(staking.cooldown_ms)} before it can be completed.`} Until then it still counts as staked, so it stays in your share.
           </p>
           {pending !== null && (
             <div className="space-y-2 rounded border border-line-2 p-3">

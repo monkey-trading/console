@@ -7,7 +7,7 @@ import { operatorCells, ROLE_LABELS } from "./operator-cells";
 import type { OperatorRow } from "./operator-table";
 
 const ROW: OperatorRow = {
-  address: "0x00000000000000000000000000000000000000a1", hostname: "alpha.example", role: "standby", listed: true, eligible: true,
+  address: "0x00000000000000000000000000000000000000a1", hostname: "alpha.example", registeredHostname: "alpha.example", role: "standby", listed: true, eligible: true, registration: 0,
   votes: 620_000n * MONKEY_UNIT, shareBps: 3_712, bond: 50_000n * MONKEY_UNIT, release: `0x${"ab".repeat(32)}`, endpoint: "https://alpha.example:9443/handover",
 };
 

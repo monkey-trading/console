@@ -61,9 +61,17 @@ export class MockWalletConnector implements WalletConnector {
           controls.claimDistribution(address, proof);
           return `0x${mockHex(`distribution-${proof.entitled}-${address}`, 32)}`;
         },
-        async delegate(candidate: string) {
-          controls.delegate(address, candidate);
-          return `0x${mockHex(`delegate-${candidate}-${address}`, 32)}`;
+        async delegate(candidate: string, amount: bigint) {
+          controls.moveDelegation(address, null, candidate, amount);
+          return `0x${mockHex(`delegate-${candidate}-${amount}-${address}`, 32)}`;
+        },
+        async undelegate(candidate: string, amount: bigint) {
+          controls.moveDelegation(address, candidate, null, amount);
+          return `0x${mockHex(`undelegate-${candidate}-${amount}-${address}`, 32)}`;
+        },
+        async redelegate(from: string, to: string, amount: bigint) {
+          controls.moveDelegation(address, from, to, amount);
+          return `0x${mockHex(`redelegate-${from}-${to}-${amount}-${address}`, 32)}`;
         },
       },
       async usdcBalance() {

@@ -36,9 +36,11 @@ export interface WalletFigures {
 }
 
 /** The text typed in the stake and unstake fields, for the account it was typed for. */
-export interface Drafts { account: string | null; stake: string; unstake: string }
+export interface Drafts { account: string | null; stake: string; unstake: string; delegate: string; move: string; undelegate: string }
+/** The amount fields the page keeps what was typed in. */
+export type DraftField = Exclude<keyof Drafts, "account">;
 
-export const NO_DRAFTS: Drafts = { account: null, stake: "", unstake: "" };
+export const NO_DRAFTS: Drafts = { account: null, stake: "", unstake: "", delegate: "", move: "", undelegate: "" };
 
 export interface PanelState {
   overview: Read<MonkeyView>;

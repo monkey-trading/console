@@ -1,74 +1,100 @@
-/** Tests for the operator table: the roles the registry gives each row, and search, sort and paging at hundreds of rows. */
+/** Tests for the operator table: the roles the registry gives each row of the node's signed list, and search, sort and paging at hundreds of rows. */
 
 import { describe, expect, it } from "vitest";
 
-import type { Candidate, CandidateTable, NamedOperator } from "../engine/registry";
-import { ariaSort, countText, MAX_SEARCH, operatorRows, PAGE_SIZE, SORTS, tableView, type OperatorRow, type SortId } from "./operator-table";
+import type { ListedCandidate, OperatorList } from "../engine/staking-reads";
+import { ariaSort, countText, MAX_SEARCH, operatorsView, PAGE_SIZE, SORTS, tableView, type OperatorRow, type SortId } from "./operator-table";
 
 const RELEASE = `0x${"ab".repeat(32)}`;
+const DEPLOYER = "0x00000000000000000000000000000000000000aa";
 
-/** A candidate numbered `n`: its address and hostname carry the number, so a test can tell rows apart. */
-function candidate(n: number, over: Partial<Candidate> = {}): Candidate {
-  const hex = n.toString(16).padStart(40, "0");
-  return { address: `0x${hex}`, hostname: `op-${n}.example`, votes: BigInt(n) * 10n, eligible: true, bond: BigInt(n) * 3n, release: RELEASE, registration: n, handoverEndpoint: `https://op-${n}.example/handover`, ...over };
-}
-
-function table(candidates: Candidate[], inEffect = candidates[0]?.address ?? "0x00000000000000000000000000000000000000aa"): CandidateTable {
-  const listed = candidates.find((c) => c.address === inEffect);
+/** A candidate numbered `n`, as `GET /v1/operators` lists it: its address and hostname carry the number, so a test can tell rows apart. */
+function candidate(n: number, over: Partial<ListedCandidate> = {}): ListedCandidate {
+  const address = `0x${n.toString(16).padStart(40, "0")}`;
   return {
-    inEffect: { candidate: inEffect, hostname: listed?.hostname ?? null, release: RELEASE, registered: listed === undefined ? null : { bond: listed.bond, release: RELEASE, registration: listed.registration, handoverEndpoint: listed.handoverEndpoint } },
-    candidates,
-    totalStaked: 1_000n,
+    address, admin_key: address, enclave: address, self_bond: String(n * 3), release: RELEASE, registration: n, api_hostname: `op-${n}.example`,
+    handover_endpoint: `https://op-${n}.example/handover`, votes: String(n * 10), eligible: true, role: "candidate", ...over,
   };
 }
 
-function named(over: Partial<NamedOperator> = {}): NamedOperator {
-  return { rotationEnabled: true, candidate: candidate(1).address, adminKey: candidate(1).address, sinceMs: 0, hostname: null, pending: null, ...over };
+/** The list the node answers, with `inEffect` the operator in effect: the first candidate's by default. */
+function list(candidates: ListedCandidate[], inEffect = candidates[0]?.address ?? DEPLOYER, over: Partial<OperatorList> = {}): OperatorList {
+  const operator = { candidate: inEffect, admin_key: inEffect, release: RELEASE, since_ms: 0 };
+  return {
+    block: { number: 1_234_567, hash: `0x${"cd".repeat(32)}`, time_ms: 1_793_000_000_000 }, registry: DEPLOYER, lens: DEPLOYER, rotation_enabled: true,
+    parameters: { epoch_length_secs: 60, min_term_secs: 0, finality_margin_secs: 60, margin_bps: 1_000, eligibility_bps: 500, quorum_bps: 2_000, max_candidates: 100, min_self_bond: "1", liveness_timeout_secs: 604_800 },
+    open_epoch: 3, open_epoch_start_ms: 0, total_staked: "1000", operator_in_effect: operator, named_operator: operator, pending_election: null, pending_promotion: false, candidates, ...over,
+  };
 }
 
-const roles = (rows: OperatorRow[]) => Object.fromEntries(rows.map((row) => [row.hostname, row.role]));
+const roles = (rows: readonly OperatorRow[]) => Object.fromEntries(rows.map((row) => [row.hostname, row.role]));
+const election = (n: number, promoted = false) => ({ epoch: 3, candidate: candidate(n).address, admin_key: candidate(n).address, release: RELEASE, effective_at_ms: 5, promoted });
 
-describe("operatorRows", () => {
+describe("operatorsView", () => {
   it("names the operator in effect active, the top eligible other candidate standby, and the rest candidates", () => {
-    const rows = operatorRows(table([candidate(1), candidate(2), candidate(3), candidate(4, { eligible: false })]), named());
+    const { rows } = operatorsView(list([candidate(1), candidate(2), candidate(3), candidate(4, { eligible: false })]));
     // Candidate 4 has the most votes but is not eligible; 3 has the most of the eligible others.
     expect(roles(rows)).toEqual({ "op-1.example": "active", "op-2.example": "candidate", "op-3.example": "standby", "op-4.example": "candidate" });
   });
 
   it("breaks a tie in votes for the standby by the earlier registration, as the registry does", () => {
-    const rows = operatorRows(table([candidate(1), candidate(2, { votes: 50n, registration: 9 }), candidate(3, { votes: 50n, registration: 4 })]), named());
+    const { rows } = operatorsView(list([candidate(1), candidate(2, { votes: "50", registration: 9 }), candidate(3, { votes: "50", registration: 4 })]));
     expect(roles(rows)).toMatchObject({ "op-2.example": "candidate", "op-3.example": "standby" });
   });
 
-  it("names no standby while rotation is off, while an election waits, or with no registry read", () => {
+  it("names no standby while rotation is off or while an election or a promotion waits, and names the one waiting", () => {
     const candidates = [candidate(1), candidate(2), candidate(3)];
-    expect(operatorRows(table(candidates), named({ rotationEnabled: false })).map((r) => r.role)).toEqual(["active", "candidate", "candidate"]);
-    expect(operatorRows(table(candidates), null).map((r) => r.role)).toEqual(["active", "candidate", "candidate"]);
-    const pending = { epoch: 3, candidate: candidate(2).address, adminKey: candidate(2).address, effectiveAtMs: 5, promoted: false };
-    expect(operatorRows(table(candidates), named({ pending })).map((r) => r.role)).toEqual(["active", "elected", "candidate"]);
-    expect(operatorRows(table(candidates), named({ pending: { ...pending, promoted: true } })).map((r) => r.role)).toEqual(["active", "promoted", "candidate"]);
+    const rolesOf = (over: Partial<OperatorList>) => operatorsView(list(candidates, undefined, over)).rows.map((row) => row.role);
+    expect(rolesOf({ rotation_enabled: false })).toEqual(["active", "candidate", "candidate"]);
+    expect(rolesOf({ pending_promotion: true })).toEqual(["active", "candidate", "candidate"]);
+    expect(rolesOf({ pending_election: election(2) })).toEqual(["active", "elected", "candidate"]);
+    expect(rolesOf({ pending_election: election(2, true) })).toEqual(["active", "promoted", "candidate"]);
+    expect(operatorsView(list(candidates, undefined, { pending_election: election(2, true) })).pending).toEqual({ candidate: candidate(2).address, effectiveAtMs: 5, promoted: true });
   });
 
-  it("adds an operator in effect the registry does not list, with no votes and no Delegate, and its registration where it has one", () => {
-    const deployer = "0x00000000000000000000000000000000000000aa";
-    const rows = operatorRows(table([candidate(2)], deployer), named());
-    expect(rows.at(-1)).toEqual({ address: deployer, hostname: null, role: "active", listed: false, eligible: false, votes: null, shareBps: 0, bond: null, release: RELEASE, endpoint: null });
-    expect(rows[0]).toMatchObject({ role: "standby", listed: true, votes: 20n, shareBps: 200, bond: 6n, endpoint: "https://op-2.example/handover" });
-    // An operator in effect whose release approval the timelock withdrew: delisted, still registered.
-    const delisted = table([candidate(2)], deployer);
-    const registered = { ...delisted, inEffect: { candidate: deployer, hostname: "kept.example", release: RELEASE, registered: { bond: 77n, release: RELEASE, registration: 0, handoverEndpoint: "https://kept.example/handover" } } };
-    expect(operatorRows(registered, named()).at(-1)).toEqual({ address: deployer, hostname: "kept.example", role: "active", listed: false, eligible: false, votes: null, shareBps: 0, bond: 77n, release: RELEASE, endpoint: "https://kept.example/handover" });
+  it("adds an operator in effect the registry does not list, with no votes, no registration and no Delegate", () => {
+    const { rows, inEffect } = operatorsView(list([candidate(2)], DEPLOYER.toUpperCase().replace("0X", "0x")));
+    expect(inEffect).toBe(DEPLOYER);
+    expect(rows.at(-1)).toEqual({ address: DEPLOYER, hostname: null, registeredHostname: "", role: "active", listed: false, eligible: false, votes: null, shareBps: 0, bond: null, release: RELEASE, endpoint: null, registration: null });
+    expect(rows[0]).toMatchObject({ role: "standby", listed: true, votes: 20n, shareBps: 200, bond: 6n, endpoint: "https://op-2.example/handover", registration: 2 });
   });
 
-  it("shows no hostname the build could not connect to, so a lookalike never reads as a host", () => {
-    const rows = operatorRows(table([candidate(1, { hostname: "раураl.example" }), candidate(2, { hostname: "OP-2.Example" })]), named());
-    expect(rows.map((row) => row.hostname)).toEqual([null, "op-2.example"]);
+  it("shows no hostname the build could not connect to, so a lookalike never reads as a host, and keeps the registered one for the build's check", () => {
+    const { rows } = operatorsView(list([candidate(1, { api_hostname: "раураl.example" }), candidate(2, { api_hostname: "OP-2.Example" })]));
+    expect(rows.map((row) => [row.hostname, row.registeredHostname])).toEqual([[null, "раураl.example"], ["op-2.example", "OP-2.Example"]]);
+  });
+
+  it("names the final block the list reflects, the total stake, and the rotation switch", () => {
+    expect(operatorsView(list([candidate(1)], undefined, { rotation_enabled: false }))).toMatchObject({ block: { number: 1_234_567, hash: `0x${"cd".repeat(32)}`, timeMs: 1_793_000_000_000 }, totalStaked: 1_000n, rotationEnabled: false });
+  });
+
+  it("refuses a malformed amount or address, or more candidates than the registry holds", () => {
+    expect(() => operatorsView(list([candidate(1, { votes: "1e3" })]))).toThrow("not a whole amount");
+    expect(() => operatorsView(list([candidate(1, { self_bond: "-1" })]))).toThrow("not a whole amount");
+    expect(() => operatorsView(list([candidate(1)], undefined, { total_staked: "" }))).toThrow("not a whole amount");
+    expect(() => operatorsView(list([candidate(1, { address: "0x12" })]))).toThrow("address that is not one");
+    expect(() => operatorsView(list(Array.from({ length: 101 }, (_, i) => candidate(i + 1))))).toThrow("more candidates than the registry can hold");
+  });
+
+  it("sorts, searches and pages a full list of 100 candidates in four pages", () => {
+    const { rows } = operatorsView(list(Array.from({ length: 100 }, (_, i) => candidate(i + 1)), undefined, { rotation_enabled: false, total_staked: "100000" }));
+    expect(rows).toHaveLength(100);
+    const pages = [0, 1, 2, 3].map((page) => tableView(rows, "", "votes-desc", page));
+    expect(pages.map((view) => view.rows.length)).toEqual([25, 25, 25, 25]);
+    expect(pages[0]?.rows[0]).toMatchObject({ hostname: "op-100.example", votes: 1_000n, shareBps: 100 });
+    expect(pages[3]?.rows.at(-1)?.hostname).toBe("op-1.example");
+    expect(countText(pages[1] ?? tableView([], "", "role", 0), "")).toBe("Showing 26–50 of 100 operators.");
+    expect(tableView(rows, "op-7", "name-asc", 0).rows.map((row) => row.hostname)).toEqual(["op-7.example", "op-70.example", "op-71.example", "op-72.example", "op-73.example", "op-74.example", "op-75.example", "op-76.example", "op-77.example", "op-78.example", "op-79.example"]);
+    expect(tableView(rows, "", "role", 0).rows[0]).toMatchObject({ hostname: "op-1.example", role: "active" });
   });
 });
 
-/** `count` rows, numbered from 1, the first active. */
+/** `count` rows numbered from 1, the first active, as the table sees them: more than a list holds, to show the table holds at hundreds. */
 function many(count: number): OperatorRow[] {
-  return operatorRows(table(Array.from({ length: count }, (_, i) => candidate(i + 1))), named({ rotationEnabled: false }));
+  return Array.from({ length: count }, (_, i) => {
+    const n = i + 1;
+    return { address: candidate(n).address, hostname: `op-${n}.example`, registeredHostname: `op-${n}.example`, role: n === 1 ? "active" : "candidate", listed: true, eligible: true, votes: BigInt(n) * 10n, shareBps: 0, bond: BigInt(n) * 3n, release: RELEASE, endpoint: `https://op-${n}.example/handover`, registration: n };
+  });
 }
 
 describe("tableView paging", () => {
@@ -112,9 +138,7 @@ describe("tableView search", () => {
 });
 
 describe("tableView sorting", () => {
-  const deployer = "0x00000000000000000000000000000000000000aa";
-  const pending = { epoch: 1, candidate: candidate(2).address, adminKey: candidate(2).address, effectiveAtMs: 1, promoted: false };
-  const rows = operatorRows(table([candidate(2), candidate(3, { hostname: "" }), candidate(4), candidate(5, { votes: 40n })], deployer), named({ pending }));
+  const { rows } = operatorsView(list([candidate(2), candidate(3, { api_hostname: "" }), candidate(4), candidate(5, { votes: "40" })], DEPLOYER, { pending_election: election(2) }));
   const order = (sort: SortId) => tableView(rows, "", sort, 0).rows.map((row) => row.address.slice(-2));
 
   it("orders by role, then by delegated stake, ties by address", () => {

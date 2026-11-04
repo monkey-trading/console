@@ -13,6 +13,7 @@ import type { HouseParams, QueueTotals } from "../house";
 import { WatchConnector } from "../engine/watch-wallet";
 import type { StoreDeps } from "./store-deps";
 import { ConsoleStore } from "./store";
+import type { DistributionEpochsPage, OperatorList } from "../engine/staking-reads";
 
 export const BTC: MarketView = {
   id: 1, symbol: "BTC-USD", open: true, reduce_only: false, mark: "100000", fx_mark: null, stress_level: 0,
@@ -64,7 +65,12 @@ export class FakeClient implements EngineClient {
     activity: async () => this.canned("activity", this.activityPage),
     distributions: async () => { this.distributionReads++; if (this.distributionError !== null) throw this.distributionError; return this.distributionAnswer; },
     operator: async () => this.canned("operator", this.operatorRoute),
+    operators: async () => this.canned("operators", this.operatorList),
+    distributionEpochs: async (params) => this.canned(`epochs:${params.before ?? ""}`, this.epochsPages[String(params.before ?? "")] ?? null),
   };
+  operatorList: OperatorList | null = null;
+  /** Pages of closed epochs by `before`, "" for the newest. */
+  epochsPages: Record<string, DistributionEpochsPage> = {};
   operatorRoute: OperatorRoute | null = null;
   /** What the distribution read answers, and how many times it was read. */
   distributionAnswer: Awaited<ReturnType<StatsReads["distributions"]>> = null;

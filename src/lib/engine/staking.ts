@@ -1,7 +1,15 @@
 /** What the console needs from a wallet to stake MONKEY and claim USDC distributions. */
 
 import type { DistributionProof } from "./stats-types";
+import type { Address } from "./types";
 import type { Progress } from "./wallet";
+
+/** `amount` MONKEY base units of the account's stake voting for `candidate` (`Staking.Delegation`). */
+export interface Delegation {
+  /** Lowercase `0x` hex. */
+  candidate: Address;
+  amount: bigint;
+}
 
 /** The account's standing on the staking contract and the vault, as the wallet's chain reads see it. */
 export interface StakingPosition {
@@ -9,6 +17,11 @@ export interface StakingPosition {
   stakingEnabled: boolean;
   /** MONKEY base units staked. */
   staked: bigint;
+  /**
+   * Its delegations, each nonzero, in `Staking.delegationsOf` order, the order an unstake reduces
+   * them from the end; what they do not hold of `staked` is undelegated and abstains (monkey-trading/engine#586).
+   */
+  delegations: readonly Delegation[];
   /** An unstake waiting out its cooldown, with the time it completes in milliseconds. */
   unstaking: { amount: bigint; claimableAtMs: number } | null;
   /** The MONKEY the wallet holds, in base units; zero while the vault has no token. */
@@ -33,8 +46,12 @@ export interface StakingWallet {
   /** Starts unstaking `amount`; it stops earning once the cooldown completes and the engine mirrors it. */
   startUnstake(amount: bigint, progress?: Progress): Promise<string>;
   completeUnstake(progress?: Progress): Promise<string>;
-  /** Moves the account's whole stake, now and as it changes, to `candidate`'s votes; the zero address clears the choice, so the stake abstains. */
-  delegate(candidate: string, progress?: Progress): Promise<string>;
+  /** Delegates `amount` of the account's undelegated stake to `candidate`, adding to any delegation it holds there. */
+  delegate(candidate: Address, amount: bigint, progress?: Progress): Promise<string>;
+  /** Returns `amount` of the delegation to `candidate` to the undelegated stake. */
+  undelegate(candidate: Address, amount: bigint, progress?: Progress): Promise<string>;
+  /** Moves `amount` of the delegation to `from` to `to` in one transaction. */
+  redelegate(from: Address, to: Address, amount: bigint, progress?: Progress): Promise<string>;
   /** Claims the USDC `proof`'s cumulative distribution adds to what the vault has paid. */
   claimDistribution(proof: DistributionProof, progress?: Progress): Promise<string>;
 }

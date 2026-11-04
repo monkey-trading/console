@@ -1,0 +1,144 @@
+/** Tests for the Staking page's reads of the closed distribution epochs from the node's signed route, against the mock node. */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { EngineError } from "../engine/client";
+import type { DistributionEpochsPage, EpochClose } from "../engine/staking-reads";
+import { NODE_READ_MS } from "../monkey/panel";
+import { flush, setup } from "../monkey/panel-kit";
+import { EPOCH_PAGE, EpochReads, foldEpochs, MAX_HELD_EPOCHS } from "./epoch-reads";
+import { RETRY_TICK_MS } from "./history-reads";
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const close = (epoch: number, over: Partial<EpochClose> = {}): EpochClose => ({
+  epoch, close_seq: epoch * 10, close_ms: epoch * 1_000, ended_ms: epoch * 1_000, nav: "5000000", floor: "4900000", excess_usdc_units: "100", allocated_usdc_units: "100",
+  stakers_usdc_units: "80", stakers: 2, operator_shares: [{ account: "0x00000000000000000000000000000000000000a1", amount: "20" }], skipped: null, ...over,
+});
+
+/** A page of `epochs`, newest first, with `next` the cursor to read on from. */
+const page = (epochs: number[], next: number | null): DistributionEpochsPage => ({
+  seq: 1, time_ms: 1, epochs: epochs.map((epoch) => close(epoch)), next, begins_ms: 0, begins_seq: 0, from_genesis: true, truncated: false, retained_from_epoch: null,
+});
+
+/** The node's closes numbered 1 to `count`, served newest first and paged as the node pages them. */
+function serve(count: number) {
+  const reads: { before?: number; limit?: number }[] = [];
+  const answer = async (params: { before?: number; limit?: number }) => {
+    reads.push(params);
+    const older = Array.from({ length: count }, (_, i) => count - i).filter((epoch) => params.before === undefined || epoch < params.before);
+    const shown = older.slice(0, params.limit ?? 50);
+    return page(shown, older.length > shown.length ? (shown[shown.length - 1] ?? null) : null);
+  };
+  return { reads, answer, more: () => { count += 1; } };
+}
+
+async function started(count: number, hidden = () => false) {
+  const kit = await setup();
+  const served = serve(count);
+  kit.node.client.stats.distributionEpochs = (params) => served.answer(params);
+  const epochs = new EpochReads(kit.store);
+  const stop = epochs.start(hidden);
+  await flush();
+  return { ...kit, epochs, stop, served };
+}
+
+describe("foldEpochs", () => {
+  it("adds the epochs that closed since above, replaces those held again, and keeps the older pages' cursor", () => {
+    const held = { epochs: [close(5), close(4), close(3)], next: 3 };
+    const folded = foldEpochs(held, { ...page([7, 6, 5], 4), epochs: [close(7), close(6), close(5, { stakers: 9 })] }, false);
+    expect(folded.epochs.map((c) => c.epoch)).toEqual([7, 6, 5, 4, 3]);
+    expect(folded.epochs[2]?.stakers).toBe(9);
+    expect(folded.next).toBe(3);
+  });
+
+  it("adds an older page below and moves the cursor on", () => {
+    expect(foldEpochs({ epochs: [close(5), close(4)], next: 4 }, page([3, 2], 2), true)).toEqual({ epochs: [close(5), close(4), close(3), close(2)], next: 2 });
+  });
+
+  it("starts again from a newest page that does not reach what is held, past a gap of more than a page", () => {
+    expect(foldEpochs({ epochs: [close(5), close(4)], next: null }, page([30, 29], 29), false)).toEqual({ epochs: [close(30), close(29)], next: 29 });
+  });
+
+  it("keeps at most the bound, and reads no further past it", () => {
+    const held = { epochs: Array.from({ length: MAX_HELD_EPOCHS }, (_, i) => close(MAX_HELD_EPOCHS + 1 - i)), next: 2 };
+    const folded = foldEpochs(held, page([1], null), true);
+    expect(folded.epochs).toHaveLength(MAX_HELD_EPOCHS);
+    expect(folded.next).toBeNull();
+  });
+});
+
+describe("EpochReads", () => {
+  it("reads the newest page on open, and older pages on Load more until none is left", async () => {
+    const { epochs, stop, served } = await started(EPOCH_PAGE + 5);
+    expect(epochs.getSnapshot()).toMatchObject({ status: "ready", next: 6 });
+    expect(epochs.getSnapshot().epochs.map((c) => c.epoch).slice(0, 2)).toEqual([25, 24]);
+    await epochs.loadMore();
+    expect(epochs.getSnapshot().epochs).toHaveLength(EPOCH_PAGE + 5);
+    expect(epochs.getSnapshot().next).toBeNull();
+    expect(served.reads).toEqual([{ limit: EPOCH_PAGE }, { before: 6, limit: EPOCH_PAGE }]);
+    stop();
+  });
+
+  it("reads the newest page again on the node read's pace, and at once after the stream carries an allocation, so a new close shows by itself", async () => {
+    const { epochs, node, stop, served } = await started(3);
+    served.more();
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
+    expect(served.reads).toHaveLength(1);
+    node.client.state.emit({ type: "tick" }, [{ type: "distribution_allocated", account: "0x00000000000000000000000000000000000000a1", epoch: 4, amount: "1" }]);
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
+    expect(served.reads).toHaveLength(2);
+    expect(epochs.getSnapshot().epochs.map((c) => c.epoch)).toEqual([4, 3, 2, 1]);
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS);
+    expect(served.reads).toHaveLength(3);
+    stop();
+  });
+
+  it("reads nothing again in a hidden tab", async () => {
+    const { stop, served } = await started(3, () => true);
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS * 4);
+    expect(served.reads).toHaveLength(1);
+    stop();
+  });
+
+  it("says a node without the route is unavailable and asks it no more, and makes a failed read again by itself", async () => {
+    const kit = await setup();
+    const calls = { count: 0 };
+    kit.node.client.stats.distributionEpochs = () => { calls.count += 1; return Promise.reject(new EngineError(404, "not found")); };
+    const missing = new EpochReads(kit.store);
+    const stopMissing = missing.start(() => false);
+    await flush();
+    expect(missing.getSnapshot().status).toBe("unavailable");
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS * 2);
+    expect(calls.count).toBe(1);
+    stopMissing();
+    let fail = true;
+    const served = serve(2);
+    kit.node.client.stats.distributionEpochs = (params) => (fail ? Promise.reject(new Error("The node did not answer.")) : served.answer(params));
+    const failing = new EpochReads(kit.store);
+    const stop = failing.start(() => false);
+    await flush();
+    expect(failing.getSnapshot()).toMatchObject({ status: "failed", error: "The node did not answer." });
+    fail = false;
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS);
+    expect(failing.getSnapshot()).toMatchObject({ status: "ready", error: null });
+    stop();
+  });
+
+  it("drops an answer that lands after the card closed, and forgets what it read", async () => {
+    const kit = await setup();
+    let release: (value: DistributionEpochsPage) => void = () => {};
+    kit.node.client.stats.distributionEpochs = () => new Promise((resolve) => { release = resolve; });
+    const epochs = new EpochReads(kit.store);
+    const stop = epochs.start(() => false);
+    stop();
+    release(page([1], null));
+    await flush();
+    expect(epochs.getSnapshot()).toMatchObject({ status: "idle", epochs: [] });
+  });
+});

@@ -6,6 +6,7 @@
 
 import type { ClaimStanding } from "./emissions";
 import type { Address, MarketId } from "./types";
+import type { DistributionEpochsPage, OperatorList } from "./staking-reads";
 
 /** `/v1/house`'s added figures. A scan figure is null until the node's first scan; a node that predates the routes omits them. */
 export interface HouseScanView {
@@ -245,6 +246,10 @@ export interface StatsReads {
   distributions(address: Address): Promise<DistributionProof | null>;
   /** `GET /v1/operator`; rejects with a 404 `EngineError` from a node that predates it. */
   operator(): Promise<OperatorRoute>;
+  /** `GET /v1/operators`; rejects with a 404 `EngineError` from a node with no registry lens, and a 503 before its first read or once that read is stale. */
+  operators(): Promise<OperatorList>;
+  /** `GET /v1/monkey/distributions`: closed epochs older than `before`, newest first; a 404 from a node that predates it. */
+  distributionEpochs(params: { before?: number; limit?: number }): Promise<DistributionEpochsPage>;
   /** Contract addresses a client knows without a deployment config; only the mock names any. */
   readonly contracts?: { token: string; staking: string };
 }

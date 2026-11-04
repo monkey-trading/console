@@ -8,11 +8,13 @@ const ME = "0x00000000000000000000000000000000000000aa";
 const TOKEN = "0x00000000000000000000000000000000000000bb";
 const STAKING = "0x00000000000000000000000000000000000000cc";
 const VAULT = "0x00000000000000000000000000000000000000dd";
-const NO_ONE = "0x0000000000000000000000000000000000000000";
+const OTHER = "0x00000000000000000000000000000000000000AB";
 const CANDIDATE = "0x00000000000000000000000000000000000000ee";
 const CHAIN: WalletChain = { chainId: 31337, vault: VAULT, usdc: null, add: null, staking: STAKING };
 const ABI = parseAbi([
+  "struct Delegation { address candidate; uint256 amount; }",
   "function stakes(address) view returns (uint256)",
+  "function delegationsOf(address) view returns (Delegation[])",
   "function unstakes(address) view returns (uint256 amount, uint256 claimableAt)",
   "function balanceOf(address) view returns (uint256)",
   "function allowance(address, address) view returns (uint256)",
@@ -23,11 +25,13 @@ const ABI = parseAbi([
   "function stake(uint256)",
   "function startUnstake(uint256)",
   "function completeUnstake()",
-  "function delegate(address)",
+  "function delegate(address, uint256)",
+  "function undelegate(address, uint256)",
+  "function redelegate(address, address, uint256)",
   "function claimDistribution(address, uint256, uint64, bytes32[]) returns (uint256)",
 ]);
 
-interface World { balance: bigint; allowance: bigint; staked: bigint; pending: [bigint, bigint]; paid: bigint; seq: bigint; chainId: number }
+interface World { balance: bigint; allowance: bigint; staked: bigint; pending: [bigint, bigint]; paid: bigint; seq: bigint; chainId: number; delegations?: { candidate: Hex; amount: bigint }[] }
 
 /** A provider that answers the contracts' reads from `world` and records the order of every call. */
 function rig(world: World, chain: WalletChain = CHAIN, token: string = TOKEN) {
@@ -46,6 +50,7 @@ function rig(world: World, chain: WalletChain = CHAIN, token: string = TOKEN) {
         case "monkey": return encodeAbiParameters([{ type: "address" }], [token as Hex]);
         case "stakes": return uint(world.staked);
         case "unstakes": return encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], world.pending);
+        case "delegationsOf": return encodeAbiParameters([{ type: "tuple[]", components: [{ name: "candidate", type: "address" }, { name: "amount", type: "uint256" }] }], [world.delegations ?? []]);
         case "balanceOf": return uint(world.balance);
         case "allowance": return uint(world.allowance);
         case "distributionsClaimed": return uint(world.paid);
@@ -68,10 +73,18 @@ function rig(world: World, chain: WalletChain = CHAIN, token: string = TOKEN) {
 const WORLD: World = { balance: 500n, allowance: 0n, staked: 40n, pending: [0n, 0n], paid: 7n, seq: 9n, chainId: 31337 };
 
 describe("ProviderStaking.position", () => {
-  it("reads the stake, the unstake, the balance, the vault's payments and checkpoint, one call after another", async () => {
-    const { staking, order } = rig({ ...WORLD, pending: [25n, 1_700_000_000n] });
-    expect(await staking.position()).toEqual({ stakingEnabled: true, staked: 40n, unstaking: { amount: 25n, claimableAtMs: 1_700_000_000_000 }, balance: 500n, distributionsClaimed: 7n, latestSeq: 9 });
-    expect(order).toEqual([`distributionsClaimed@${VAULT}`, `latestSeq@${VAULT}`, `stakes@${STAKING}`, `unstakes@${STAKING}`, `monkey@${VAULT}`, `balanceOf@${TOKEN}`]);
+  it("reads the stake, the unstake, the delegations, the balance, the vault's payments and checkpoint, one call after another", async () => {
+    const delegations = [{ candidate: getAddress(CANDIDATE), amount: 30n }, { candidate: getAddress(OTHER), amount: 10n }];
+    const { staking, order } = rig({ ...WORLD, pending: [25n, 1_700_000_000n], delegations });
+    expect(await staking.position()).toEqual({
+      stakingEnabled: true, staked: 40n, unstaking: { amount: 25n, claimableAtMs: 1_700_000_000_000 }, balance: 500n, distributionsClaimed: 7n, latestSeq: 9,
+      delegations: [{ candidate: CANDIDATE.toLowerCase(), amount: 30n }, { candidate: OTHER.toLowerCase(), amount: 10n }],
+    });
+    expect(order).toEqual([`distributionsClaimed@${VAULT}`, `latestSeq@${VAULT}`, `stakes@${STAKING}`, `unstakes@${STAKING}`, `delegationsOf@${STAKING}`, `monkey@${VAULT}`, `balanceOf@${TOKEN}`]);
+  });
+
+  it("refuses delegations that add up to more than the stake, which only a lying RPC answers", async () => {
+    await expect(rig({ ...WORLD, delegations: [{ candidate: getAddress(CANDIDATE), amount: 41n }] }).staking.position()).rejects.toThrow("more delegated stake than is staked");
   });
 
   it("reports no unstake when the contract holds none", async () => {
@@ -84,7 +97,7 @@ describe("ProviderStaking.position", () => {
 
   it("still reads the vault's payments and checkpoint and the wallet's balance when the build names no staking contract", async () => {
     const { staking, order } = rig(WORLD, { ...CHAIN, staking: null });
-    expect(await staking.position()).toEqual({ stakingEnabled: false, staked: 0n, unstaking: null, balance: 500n, distributionsClaimed: 7n, latestSeq: 9 });
+    expect(await staking.position()).toEqual({ stakingEnabled: false, staked: 0n, delegations: [], unstaking: null, balance: 500n, distributionsClaimed: 7n, latestSeq: 9 });
     expect(order.some((call) => call.includes(STAKING))).toBe(false);
   });
 
@@ -98,15 +111,25 @@ describe("ProviderStaking.position", () => {
 });
 
 describe("ProviderStaking transactions", () => {
-  it("delegates to a candidate, and clears the choice with the zero address, on the staking contract", async () => {
+  it("delegates, takes back and moves amounts on the staking contract", async () => {
     const { staking, sent } = rig(WORLD);
-    await staking.delegate(CANDIDATE);
-    await staking.delegate(NO_ONE);
-    expect(sent).toEqual([{ to: STAKING, name: "delegate", args: [getAddress(CANDIDATE)] }, { to: STAKING, name: "delegate", args: [NO_ONE] }]);
+    await staking.delegate(CANDIDATE, 300n);
+    await staking.undelegate(CANDIDATE, 100n);
+    await staking.redelegate(CANDIDATE, OTHER, 50n);
+    expect(sent).toEqual([
+      { to: STAKING, name: "delegate", args: [getAddress(CANDIDATE), 300n] },
+      { to: STAKING, name: "undelegate", args: [getAddress(CANDIDATE), 100n] },
+      { to: STAKING, name: "redelegate", args: [getAddress(CANDIDATE), getAddress(OTHER), 50n] },
+    ]);
   });
 
-  it("refuses to delegate when the build names no staking contract", async () => {
-    await expect(rig(WORLD, { ...CHAIN, staking: null }).staking.delegate(CANDIDATE)).rejects.toThrow("names no staking contract");
+  it("refuses a zero amount, a move to the same candidate, and any change when the build names no staking contract, sending nothing", async () => {
+    const { staking, sent } = rig(WORLD);
+    await expect(staking.delegate(CANDIDATE, 0n)).rejects.toThrow("more than zero");
+    await expect(staking.undelegate(CANDIDATE, 0n)).rejects.toThrow("more than zero");
+    await expect(staking.redelegate(CANDIDATE, CANDIDATE.toUpperCase().replace("0X", "0x"), 5n)).rejects.toThrow("another candidate");
+    expect(sent).toEqual([]);
+    await expect(rig(WORLD, { ...CHAIN, staking: null }).staking.delegate(CANDIDATE, 5n)).rejects.toThrow("names no staking contract");
   });
 
   it("approves the staking contract for the amount before staking when the allowance is short", async () => {

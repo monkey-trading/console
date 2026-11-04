@@ -1,6 +1,6 @@
 /**
- * The MONKEY and Staking pages' transactions: staking, starting and completing an unstake, and claiming a USDC
- * distribution. Each goes through the connected wallet, shows the wallet prompt while it waits,
+ * The MONKEY and Staking pages' transactions: staking, starting and completing an unstake, delegating,
+ * moving and taking back amounts of stake, and claiming a USDC distribution. Each goes through the connected wallet, shows the wallet prompt while it waits,
  * says on its panel why nothing was sent or what failed, and reads the wallet and the node again so
  * the figures follow it.
  */
@@ -11,7 +11,6 @@ import { monkeyExact } from "./figures";
 import { abandoned, errorText, notBusy, prompting, usableWallet } from "../store/signing";
 import { checkpointOf } from "../engine/claim-standing";
 import { claimEmissions, emissionsPosition, WAITING_ON_VAULT } from "../store/emissions";
-import { NO_CANDIDATE } from "../engine/registry";
 import type { NoticeSurface } from "../store/state";
 import type { OperatorReads } from "./operators";
 import type { MonkeyPanel } from "./panel";
@@ -104,14 +103,35 @@ export function completeUnstake(panel: MonkeyPanel): Promise<boolean> {
   }, true);
 }
 
-/** Delegates the account's whole stake to `candidate`, or clears the choice with `NO_CANDIDATE`, then reads the candidates' votes again. */
-export async function delegateStake(panel: MonkeyPanel, operators: OperatorReads, candidate: string, label: string): Promise<boolean> {
-  const clearing = candidate === NO_CANDIDATE;
-  const landed = await run(panel, "operator", clearing ? "clear your delegation" : `delegate your stake to ${label}`, async (_wallet, staking, progress) => {
-    await staking.delegate(candidate, progress);
+/** A change to the account's delegations (monkey-trading/engine#586); each `label` is how the page names that candidate. */
+export type DelegationChange =
+  | { kind: "delegate"; to: string; toLabel: string; amount: bigint }
+  | { kind: "undelegate"; from: string; fromLabel: string; amount: bigint }
+  | { kind: "redelegate"; from: string; fromLabel: string; to: string; toLabel: string; amount: bigint };
+
+/** What the wallet prompt says a change does. */
+export function changeText(change: DelegationChange): string {
+  const amount = monkeyExact(change.amount);
+  switch (change.kind) {
+    case "delegate": return `delegate ${amount} to ${change.toLabel}`;
+    case "undelegate": return `take back ${amount} from ${change.fromLabel}`;
+    case "redelegate": return `move ${amount} from ${change.fromLabel} to ${change.toLabel}`;
+    default: {
+      const never: never = change;
+      throw new Error(`Unknown delegation change ${String(never)}.`);
+    }
+  }
+}
+
+/** Sends `change` through the wallet, then reads the operator list again; the wallet's own delegations are read again by `run`. */
+export async function changeDelegation(panel: MonkeyPanel, operators: OperatorReads, change: DelegationChange, onLanded?: () => void): Promise<boolean> {
+  const landed = await run(panel, "operator", changeText(change), async (_wallet, staking, progress) => {
+    if (change.kind === "delegate") await staking.delegate(change.to, change.amount, progress);
+    else if (change.kind === "undelegate") await staking.undelegate(change.from, change.amount, progress);
+    else await staking.redelegate(change.from, change.to, change.amount, progress);
     return true;
-  });
-  await operators.refreshChain();
+  }, false, onLanded);
+  await operators.refresh();
   return landed;
 }
 

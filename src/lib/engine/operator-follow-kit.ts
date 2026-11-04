@@ -35,7 +35,7 @@ export function rig(options: { reads?: DeploymentReads | null; operator?: () => 
   let now = 1_000_000;
   let answer = options.operator ?? (async () => named());
   const operatorReads = { count: 0 };
-  const reads: DeploymentReads = { vault: async () => ({ release: "0x", signer: "0x" }), operator: () => { operatorReads.count += 1; return answer(); }, candidates: async () => null, delegateOf: async () => null };
+  const reads: DeploymentReads = { vault: async () => ({ release: "0x", signer: "0x" }), operator: () => { operatorReads.count += 1; return answer(); } };
   const held = { chain: options.reads === undefined ? (reads as DeploymentReads | null) : options.reads, busy: false };
   const opened: { origin: string; client: TrialClient }[] = [];
   const adopted: string[] = [];

@@ -1,36 +1,28 @@
 /**
- * The Staking page's operator reads. The node's signed `GET /v1/operator` is read at the page's 30-second
- * pace; the registry's reads go through the connected wallet, one call at a time behind the wallet's
- * other work, on open, when the wallet changes, on an election event in the stream, after a
- * delegation, and otherwise every 15 seconds while the tab is visible (monkey-trading/console#202),
- * bounded in time and never asking the wallet to do anything.
+ * The Staking page's operator reads, all from the node and all signed: `GET /v1/operator`, the key in
+ * effect as the log mirrors it, and `GET /v1/operators`, the registry's candidates as the custody
+ * quorum read them at a final block (monkey-trading/engine#590), never one chain call per candidate
+ * (monkey-trading/console#279). Both are read on open, at the page's 30-second pace while the tab is
+ * visible, on an election or rotation event in the stream, and after a delegation, and only while the
+ * node's answers may be read. The account's own delegations come from the wallet's staking reads.
  */
 
 import { readBlock } from "../engine/attestation";
 import { hostnameOrigin, listedOrigins, type Deploy } from "../engine/deploy";
-import type { CandidateTable, NamedOperator } from "../engine/registry";
 import type { OperatorRoute } from "../engine/stats-types";
-import type { Wallet } from "../engine/wallet";
+import { operatorsView, type OperatorsView } from "../staking/operator-table";
 import type { ConsoleStore } from "../store/store";
 import { failed, LOADING, ready, type Read } from "./figures";
-import { WALLET_READ_EVERY_MS } from "./live-reads";
 import { NODE_READ_MS } from "./panel";
-
-
-/** A read that has no chain to go through. */
-const NO_CHAIN = { status: "unavailable", value: null, message: null } as const;
 
 export interface OperatorsState {
   /** What the node's log mirrors. */
   route: Read<OperatorRoute>;
-  /** The operator the vault names, from the registry; null from a build that names no registry. */
-  named: Read<NamedOperator | null>;
-  table: Read<CandidateTable | null>;
-  /** The candidate the connected account's whole stake votes for; null while it abstains. */
-  chosen: Read<string | null>;
+  /** The registry's candidates at the final block the node last read; unavailable from a node with no registry lens. */
+  list: Read<OperatorsView>;
 }
 
-const NOTHING_READ: OperatorsState = { route: LOADING, named: LOADING, table: LOADING, chosen: LOADING };
+const NOTHING_READ: OperatorsState = { route: LOADING, list: LOADING };
 
 /** A hostname as the page shows it: plain ASCII as the build could connect to it, or null for text it could not, so a lookalike in another script never reads as a host. */
 export function shownHostname(hostname: string | null): string | null {
@@ -43,7 +35,7 @@ export function hostnameListed(deploy: Pick<Deploy, "origin" | "candidateOrigins
   return origin !== null && listedOrigins(deploy).includes(origin);
 }
 
-/** An election the log mirrors and has not applied: what the page shows of a pending election with no chain to read. */
+/** An election the log mirrors and has not applied: what the page shows of a pending election the list does not show yet. */
 export function mirroredElection(route: OperatorRoute | null, nowMs: number): { candidate: string; effectiveAtMs: number } | null {
   const election = route?.last_election ?? null;
   // A clock of zero is one no frame has set yet, against which any election would look ahead.
@@ -57,12 +49,9 @@ export class OperatorReads {
   /** Counts the card's openings; work begun in an earlier one never writes into a later one. */
   private cycle = 0;
   private open = false;
-  /** Numbers the route's reads: only the latest may land. */
+  /** Numbers each read: only the latest of a kind may land. */
   private routeRead = 0;
-  /** The wallet the registry was last read through, so a page opening does not read twice for one wallet. */
-  private readFor: Wallet | null = null;
-  /** The registry read waiting or running for a wallet, which a second ask for that wallet joins: each costs dozens of calls. */
-  private chainRead: { wallet: Wallet; read: Promise<void> } | null = null;
+  private listRead = 0;
 
   constructor(private readonly store: ConsoleStore) {}
 
@@ -89,109 +78,66 @@ export class OperatorReads {
   start(isHidden: () => boolean): () => void {
     this.open = true;
     this.cycle += 1;
-    void this.refreshNode();
-    void this.refreshChain();
+    void this.refresh();
     // No figure from a node the console has stopped trusting stays on the card, and a node trusted again is read at once.
     let readable = this.nodeReadable();
     const stopFollowing = this.store.subscribe(() => {
       const now = this.nodeReadable();
       if (now === readable) return;
       readable = now;
-      if (now) void this.refreshNode();
+      if (now) void this.refresh();
       else {
-        this.routeRead += 1; // an answer on its way came from the node trust just left
-        this.set({ route: LOADING });
+        // An answer on its way came from the node trust just left.
+        this.routeRead += 1;
+        this.listRead += 1;
+        this.set(NOTHING_READ);
       }
     });
     const timer = setInterval(() => {
-      if (!isHidden() && this.state.route.status !== "unavailable") void this.refreshNode();
+      if (!isHidden()) void this.refresh();
     }, NODE_READ_MS);
-    const chainTimer = setInterval(() => {
-      if (!isHidden()) void this.refreshChain();
-    }, WALLET_READ_EVERY_MS);
     const unsubscribe = this.store.deps.client.subscribe((message) => {
-      if (!message.events.some((event) => event.type === "operator_elected" || event.type === "rotation_switched")) return;
-      void this.refreshNode();
-      void this.refreshChain();
+      if (message.events.some((event) => event.type === "operator_elected" || event.type === "rotation_switched")) void this.refresh();
     });
     return () => {
       this.open = false;
       this.cycle += 1;
       clearInterval(timer);
-      clearInterval(chainTimer);
       unsubscribe();
       stopFollowing();
-      this.readFor = null;
-      this.chainRead = null;
       this.set(NOTHING_READ);
     };
   }
 
-  /** Reads the node's route, while its answers may be read: the registry's reads need nothing from it. */
-  async refreshNode(): Promise<void> {
-    if (!this.nodeReadable()) return;
+  /** Reads both routes, while the node's answers may be read; a route the node does not serve is not asked again. */
+  async refresh(): Promise<void> {
+    if (!this.nodeReadable() || !this.open) return;
+    await Promise.all([
+      this.state.route.status === "unavailable" ? undefined : this.readRoute(),
+      this.state.list.status === "unavailable" ? undefined : this.readList(),
+    ]);
+  }
+
+  private async readRoute(): Promise<void> {
     const ticket = ++this.routeRead;
     const cycle = this.cycle;
-    const current = () => ticket === this.routeRead && cycle === this.cycle && this.open;
     try {
       const route = await this.store.deps.client.stats.operator();
-      if (current()) this.set({ route: ready(route) });
+      if (ticket === this.routeRead && cycle === this.cycle) this.set({ route: ready(route) });
     } catch (error) {
-      if (current()) this.set({ route: failed(error, this.state.route.value) });
+      if (ticket === this.routeRead && cycle === this.cycle) this.set({ route: failed(error, this.state.route.value) });
     }
   }
 
-  /** Reads the registry if the connected wallet is not the one it was last read through. */
-  walletChanged(): void {
-    if (this.store.liveWallet !== this.readFor) void this.refreshChain();
-  }
-
-  /**
-   * Reads the registry through the connected wallet, behind the wallet's earlier work; with no wallet
-   * that reads a chain there is nothing to read. A read waiting or running for this wallet serves this
-   * one too: it ran or will run after anything already done, a transaction included, since those
-   * share its queue. Another wallet's figures go at once, and its read stands aside.
-   */
-  refreshChain(): Promise<void> {
-    const wallet = this.store.liveWallet;
-    if (wallet !== this.readFor) this.set({ named: LOADING, table: LOADING, chosen: LOADING });
-    this.readFor = wallet;
-    if (wallet === null || wallet.chainReads === undefined) {
-      this.set({ named: NO_CHAIN, table: NO_CHAIN, chosen: NO_CHAIN });
-      return Promise.resolve();
-    }
-    if (this.chainRead?.wallet === wallet) return this.chainRead.read;
-    const read = this.store.monkeySession.walletWork.work(wallet, () => this.readChain(wallet)).finally(() => {
-      if (this.chainRead?.read === read) this.chainRead = null;
-    });
-    this.chainRead = { wallet, read };
-    return read;
-  }
-
-  private async readChain(wallet: Wallet): Promise<void> {
+  /** The list, checked as it is turned into the page's view: a malformed answer is a failed read, and the last good one stays. */
+  private async readList(): Promise<void> {
+    const ticket = ++this.listRead;
     const cycle = this.cycle;
-    const reads = wallet.chainReads;
-    const current = () => this.open && cycle === this.cycle && this.store.liveWallet === wallet;
-    if (reads === undefined || !current()) return;
     try {
-      const named = await reads.operator();
-      if (current()) this.set({ named: ready(named) });
+      const list = operatorsView(await this.store.deps.client.stats.operators());
+      if (ticket === this.listRead && cycle === this.cycle) this.set({ list: ready(list) });
     } catch (error) {
-      if (current()) this.set({ named: failed(error, this.state.named.value) });
-    }
-    if (!current()) return;
-    try {
-      const table = await reads.candidates();
-      if (current()) this.set({ table: ready(table) });
-    } catch (error) {
-      if (current()) this.set({ table: failed(error, this.state.table.value) });
-    }
-    if (!current()) return;
-    try {
-      const chosen = await reads.delegateOf(wallet.address);
-      if (current()) this.set({ chosen: ready(chosen) });
-    } catch (error) {
-      if (current()) this.set({ chosen: failed(error, this.state.chosen.value) });
+      if (ticket === this.listRead && cycle === this.cycle) this.set({ list: failed(error, this.state.list.value) });
     }
   }
 }

@@ -39,62 +39,19 @@ export interface NamedOperator {
   pending: PendingElection | null;
 }
 
-/** What a candidacy registered (`OperatorRegistry.candidateOf`), every string as the chain answered it. */
-export interface Registration {
-  /** Its self-bond, in MONKEY base units. */
-  bond: bigint;
-  /** `keccak256(launchDigest ‖ configHash)`, lowercase `0x` hex: the release it runs, as the vault names one. */
-  release: string;
-  /** Registrations made before this one, which breaks a tie in votes. */
-  registration: number;
-  /** Where its enclave takes the keys and the log over from the operator it succeeds. */
-  handoverEndpoint: string;
-}
-
-/** One candidate the timelock approved. */
-export interface Candidate extends Registration {
-  address: Address;
-  /** Its registered API hostname, as the chain answered. */
-  hostname: string;
-  /** MONKEY base units delegated to it. */
-  votes: bigint;
-  /** Whether it would count in a close now: its bond and share of stake meet the minimums. */
-  eligible: boolean;
-}
-
-/** The operator in effect (`OperatorRegistry.operatorInEffect`): for a liveness promotion's notice, not the operator the vault names. */
-export interface InEffect {
-  candidate: Address;
-  /** Its registered API hostname, as the chain answered; null for none. */
-  hostname: string | null;
-  /** The release it runs, lowercase `0x` hex. */
-  release: string;
-  /** Its candidacy; null for an operator that never registered, such as the deployment's. */
-  registered: Registration | null;
-}
-
-/** The registry's candidates and the stake their votes are a share of. */
-export interface CandidateTable {
-  inEffect: InEffect;
-  candidates: readonly Candidate[];
-  /** MONKEY base units staked across every account, unstaking amounts excluded. */
-  totalStaked: bigint;
-}
-
 /**
- * A wallet's reads of the deployment's contracts. Each asks one thing at a time, and is refused when
- * the wallet sits on another chain. `operator` and `candidates` answer null when the build names no registry.
+ * A wallet's reads of the deployment's contracts, which decide the node the console talks to. Each
+ * asks one thing at a time, and is refused when the wallet sits on another chain. `operator` answers
+ * null when the build names no registry. The Staking page's candidate list is the node's signed
+ * `GET /v1/operators` instead (monkey-trading/console#279).
  */
 export interface DeploymentReads {
   vault(): Promise<VaultFacts>;
   operator(): Promise<NamedOperator | null>;
-  candidates(): Promise<CandidateTable | null>;
-  /** The candidate `account`'s whole stake votes for, lowercase; null while it abstains or the build names no staking contract. */
-  delegateOf(account: Address): Promise<Address | null>;
 }
 
 /** The registry's bound on its candidate list (`OperatorRegistry.CANDIDATE_LIMIT`): an RPC that claims more is not read further. */
 export const CANDIDATE_LIMIT = 100;
 
-/** What delegating to no one sends: the stake abstains. */
+/** The zero address, which the registry answers for no candidate. */
 export const NO_CANDIDATE = "0x0000000000000000000000000000000000000000";

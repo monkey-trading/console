@@ -93,8 +93,6 @@ describe("a wallet that moves chain during a read", () => {
     const reads: [string, (deployment: ProviderDeployment) => Promise<unknown>][] = [
       ["vault", (deployment) => deployment.vault()],
       ["operator", (deployment) => deployment.operator()],
-      ["candidates", (deployment) => deployment.candidates()],
-      ["delegateOf", (deployment) => deployment.delegateOf(KEY)],
     ];
     for (const [name, read] of reads) {
       const { provider } = rig({ list: [B as Hex] });
@@ -112,8 +110,6 @@ describe("a chain check the wallet never answers", () => {
       const reads: [string, (deployment: ProviderDeployment) => Promise<unknown>][] = [
         ["vault", (deployment) => deployment.vault()],
         ["operator", (deployment) => deployment.operator()],
-        ["candidates", (deployment) => deployment.candidates()],
-        ["delegateOf", (deployment) => deployment.delegateOf(KEY)],
       ];
       for (const [name, read] of reads) {
         for (const answered of [0, 1]) {
@@ -171,84 +167,5 @@ describe("ProviderDeployment.operator", () => {
 
   it("reads a pending election with its effective time in milliseconds", async () => {
     await expect(rig({ effectiveAt: 5_000n }).reads.operator()).resolves.toMatchObject({ pending: { epoch: 3, candidate: B, adminKey: KEY, effectiveAtMs: 5_000_000, promoted: false } });
-  });
-});
-
-describe("ProviderDeployment.delegateOf", () => {
-  it("names the candidate the account's stake votes for, lowercase, and none for the zero address", async () => {
-    await expect(rig({ delegate: "0x00000000000000000000000000000000000000ab" }).reads.delegateOf(KEY)).resolves.toBe("0x00000000000000000000000000000000000000ab");
-    await expect(rig().reads.delegateOf(KEY)).resolves.toBeNull();
-  });
-
-  it("answers null, reading nothing, from a build that names no staking contract", async () => {
-    const { reads, order } = rig({}, { ...CHAIN, staking: null });
-    await expect(reads.delegateOf(KEY)).resolves.toBeNull();
-    expect(order).toEqual([]);
-  });
-});
-
-describe("ProviderDeployment.candidates", () => {
-  it("reads each listed candidate's hostname, votes, eligibility and registration, and the total, with no call beyond the four per candidate", async () => {
-    const registrations = { [A.toLowerCase()]: { bond: 7n, registration: 2n, handoverEndpoint: "a.example:9443" }, [B]: { bond: 9n, registration: 5n, handoverEndpoint: "https://b.example/handover" } };
-    const { reads, order } = rig({ list: [A as Hex, B as Hex], hostnames: { [A.toLowerCase()]: "a.example", [B]: "b.example" }, registrations });
-    const release = RELEASE.toLowerCase();
-    await expect(reads.candidates()).resolves.toEqual({
-      totalStaked: 100n,
-      inEffect: { candidate: A.toLowerCase(), hostname: "a.example", release, registered: { bond: 7n, release, registration: 2, handoverEndpoint: "a.example:9443" } },
-      candidates: [
-        { address: A.toLowerCase(), hostname: "a.example", votes: 40n, eligible: true, bond: 7n, release, registration: 2, handoverEndpoint: "a.example:9443" },
-        { address: B, hostname: "b.example", votes: 40n, eligible: false, bond: 9n, release, registration: 5, handoverEndpoint: "https://b.example/handover" },
-      ],
-    });
-    expect(order).toEqual(["candidateCount", "totalStaked", "operatorInEffect", "candidateOf", "candidateList", "candidateOf", "votes", "isEligible", "candidateList", "candidateOf", "votes", "isEligible"]);
-  });
-
-  it("names an operator in effect that never registered, such as the deployment's, with its release and no candidacy", async () => {
-    const { reads } = rig({ list: [B as Hex], unregistered: [A.toLowerCase()] });
-    await expect(reads.candidates()).resolves.toMatchObject({ inEffect: { candidate: A.toLowerCase(), hostname: null, release: RELEASE.toLowerCase(), registered: null } });
-  });
-
-  it("answers null from a build that names no registry or no staking contract", async () => {
-    await expect(rig({}, { ...CHAIN, registry: null }).reads.candidates()).resolves.toBeNull();
-    await expect(rig({}, { ...CHAIN, staking: null }).reads.candidates()).resolves.toBeNull();
-  });
-
-  it("gives a slow wallet thirty seconds per call, not across the table, so many candidates can still be read", async () => {
-    vi.useFakeTimers();
-    try {
-      const { provider } = rig({ list: [A as Hex, B as Hex], hostnames: { [A.toLowerCase()]: "a.example", [B]: "b.example" } });
-      const slow: Eip1193Provider = { request: async (args) => { if (args.method === "eth_call") await new Promise((resolve) => setTimeout(resolve, 20_000)); return provider.request(args); } };
-      const reading = new ProviderDeployment(CHAIN, slow).candidates();
-      await vi.advanceTimersByTimeAsync(20_000 * 20);
-      await expect(reading).resolves.toMatchObject({ candidates: [{ hostname: "a.example" }, { hostname: "b.example" }] });
-      const stuck: Eip1193Provider = { request: async (args) => (args.method === "eth_chainId" ? "0x7a69" : new Promise(() => {})) };
-      const failing = new ProviderDeployment(CHAIN, stuck).candidates();
-      const refused = expect(failing).rejects.toThrow("did not answer in time");
-      await vi.advanceTimersByTimeAsync(30_000);
-      await refused;
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("stops at once at a count the registry cannot hold, rather than read without bound", async () => {
-    const { reads, order } = rig({ count: 101n });
-    await expect(reads.candidates()).rejects.toThrow("more candidates than the registry can hold");
-    expect(order).toEqual(["candidateCount"]);
-    await expect(rig({ count: 2n ** 200n }).reads.candidates()).rejects.toThrow("more candidates");
-  });
-
-  it("skips a zero address in the list", async () => {
-    const { reads } = rig({ count: 1n });
-    await expect(reads.candidates()).resolves.toEqual({
-      totalStaked: 100n, candidates: [],
-      inEffect: { candidate: A.toLowerCase(), hostname: null, release: RELEASE.toLowerCase(), registered: { bond: 1n, release: RELEASE.toLowerCase(), registration: 0, handoverEndpoint: "x" } },
-    });
-  });
-
-  it("keeps a hostile hostname as data; nothing here decides a connection", async () => {
-    const hostile = `https://evil.example/"><script>`;
-    const { reads } = rig({ list: [B as Hex], hostnames: { [B]: hostile } });
-    expect((await reads.candidates())?.candidates[0]?.hostname).toBe(hostile);
   });
 });

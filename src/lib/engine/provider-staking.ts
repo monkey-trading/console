@@ -8,9 +8,8 @@ import { decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "vi
 import { claimFailure } from "./claim-refusal";
 import type { DistributionProof } from "./stats-types";
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
-import { NO_CANDIDATE } from "./registry";
 import { WALLET_READ_MS, withinMs } from "./serialized-provider";
-import type { StakingPosition, StakingWallet } from "./staking";
+import type { Delegation, StakingPosition, StakingWallet } from "./staking";
 import type { Progress } from "./wallet";
 
 /** The vault that has not deployed its token yet names the zero address. */
@@ -21,14 +20,19 @@ const ERC20 = parseAbi([
   "function allowance(address owner, address spender) view returns (uint256)",
   "function approve(address spender, uint256 amount) returns (bool)",
 ]);
-// `Staking.sol`; `unstakes` is the public getter of its `Unstake { amount, claimableAt }` struct.
+// `Staking.sol`; `unstakes` is the public getter of its `Unstake { amount, claimableAt }` struct, and
+// the delegation calls are monkey-trading/engine#586's.
 const STAKING = parseAbi([
+  "struct Delegation { address candidate; uint256 amount; }",
   "function stake(uint256 amount)",
   "function startUnstake(uint256 amount)",
   "function completeUnstake()",
-  "function delegate(address candidate)",
+  "function delegate(address candidate, uint256 amount)",
+  "function undelegate(address candidate, uint256 amount)",
+  "function redelegate(address from, address to, uint256 amount)",
   "function stakes(address account) view returns (uint256)",
   "function unstakes(address account) view returns (uint256 amount, uint256 claimableAt)",
+  "function delegationsOf(address account) view returns (Delegation[])",
 ]);
 const VAULT = parseAbi([
   "function claimDistribution(address account, uint256 entitled, uint64 checkpointSeq, bytes32[] siblings) returns (uint256)",
@@ -92,14 +96,19 @@ export class ProviderStaking implements StakingWallet {
     const staking = this.stakingAddress();
     let staked = 0n;
     let unstaking: StakingPosition["unstaking"] = null;
+    let delegations: Delegation[] = [];
     if (staking !== null) {
       staked = decodeFunctionResult({ abi: STAKING, functionName: "stakes", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "stakes", args: [owner] })) });
       const [amount, claimableAt] = decodeFunctionResult({ abi: STAKING, functionName: "unstakes", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "unstakes", args: [owner] })) });
       unstaking = amount > 0n ? { amount, claimableAtMs: Number(claimableAt) * 1000 } : null;
+      const held = decodeFunctionResult({ abi: STAKING, functionName: "delegationsOf", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegationsOf", args: [owner] })) });
+      delegations = held.map((delegation) => ({ candidate: delegation.candidate.toLowerCase(), amount: delegation.amount }));
+      // The contract keeps them within the stake; a wallet's RPC that says otherwise is not believed.
+      if (delegations.reduce((sum, delegation) => sum + delegation.amount, 0n) > staked) throw new Error("The chain read named more delegated stake than is staked.");
     }
     const token = await this.tokenAddress();
     const balance = token === null ? 0n : decodeFunctionResult({ abi: ERC20, functionName: "balanceOf", data: await this.call(token, encodeFunctionData({ abi: ERC20, functionName: "balanceOf", args: [owner] })) });
-    return { stakingEnabled: staking !== null, staked, unstaking, balance, distributionsClaimed: paid, latestSeq: Number(latestSeq) };
+    return { stakingEnabled: staking !== null, staked, delegations, unstaking, balance, distributionsClaimed: paid, latestSeq: Number(latestSeq) };
   }
 
   async stake(amount: bigint, progress: Progress = () => undefined): Promise<string> {
@@ -126,9 +135,20 @@ export class ProviderStaking implements StakingWallet {
     return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "completeUnstake" }), "complete the unstake", progress);
   }
 
-  async delegate(candidate: string, progress: Progress = () => undefined): Promise<string> {
-    const action = candidate === NO_CANDIDATE ? "clear your delegation" : "delegate your stake";
-    return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "delegate", args: [hexOf(candidate)] }), action, progress);
+  async delegate(candidate: string, amount: bigint, progress: Progress = () => undefined): Promise<string> {
+    if (amount <= 0n) throw new Error("The amount must be more than zero.");
+    return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "delegate", args: [hexOf(candidate), amount] }), "delegate your stake", progress);
+  }
+
+  async undelegate(candidate: string, amount: bigint, progress: Progress = () => undefined): Promise<string> {
+    if (amount <= 0n) throw new Error("The amount must be more than zero.");
+    return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "undelegate", args: [hexOf(candidate), amount] }), "take back your delegation", progress);
+  }
+
+  async redelegate(from: string, to: string, amount: bigint, progress: Progress = () => undefined): Promise<string> {
+    if (amount <= 0n) throw new Error("The amount must be more than zero.");
+    if (from.toLowerCase() === to.toLowerCase()) throw new Error("A delegation moves to another candidate than its own.");
+    return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "redelegate", args: [hexOf(from), hexOf(to), amount] }), "move your delegation", progress);
   }
 
   /** Claims at the checkpoint the proof's `seq` names. The proof names this account: the node signed it for the account's own route. */

@@ -7,6 +7,7 @@
 
 import { EngineError } from "../engine/client";
 import type { EngineEvent } from "../engine/types";
+import type { DistributionEpochsPage } from "../engine/staking-reads";
 import type { ActivityPage, DistributionProof, MonkeyView, MonkeySeriesMetric, SeriesPage, SeriesQuery, SeriesResolution } from "../engine/stats-types";
 import { fixedToWire, type Fixed } from "../fixed";
 import { MONKEY_UNIT } from "../format";
@@ -251,4 +252,28 @@ export function seedMonkeyDemo(state: MockState, address: string): void {
   state.monkey.distEntitled.set(key, seeded);
   const epoch = state.monkey.epochs.at(-1)?.epoch ?? 0;
   state.emit({ type: "tick" }, [{ type: "distribution_allocated", account: key, epoch, amount: seeded.toString() }]);
+}
+
+/**
+ * `GET /v1/monkey/distributions`: the mock's closed epochs, newest first, older than `before`. The
+ * mock runs no operator, so no close has an operator's share.
+ * Error cases:
+ * - the limit is outside 1 to 200, as the node refuses it (400)
+ */
+export function distributionEpochsPage(state: MockState, params: { before?: number; limit?: number }): DistributionEpochsPage {
+  const limit = params.limit ?? 50;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new EngineError(400, "limit must be 1 to 200");
+  const { monkey } = state;
+  const older = monkey.epochs.filter((close) => params.before === undefined || close.epoch < params.before).reverse();
+  const page = older.slice(0, limit);
+  const oldest = page[page.length - 1];
+  return {
+    seq: state.seq, time_ms: state.now, begins_ms: monkey.begins, begins_seq: 0, from_genesis: true, truncated: false, retained_from_epoch: null,
+    next: older.length > limit && oldest !== undefined ? oldest.epoch : null,
+    epochs: page.map((close) => ({
+      epoch: close.epoch, close_seq: state.seq, close_ms: close.closedMs, ended_ms: close.closedMs, nav: fixedToWire(close.nav), floor: fixedToWire(FLOOR_USD),
+      excess_usdc_units: close.allocated.toString(), allocated_usdc_units: close.allocated.toString(), stakers_usdc_units: close.allocated.toString(),
+      stakers: close.allocated > 0n ? monkey.stakerCount() : 0, operator_shares: [], skipped: null,
+    })),
+  };
 }

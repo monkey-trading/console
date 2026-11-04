@@ -7,7 +7,7 @@ import { MONKEY_UNIT } from "../format";
 import { houseNav } from "./accounts";
 import { recordEmissionResult } from "./emissions";
 import { advance } from "./step";
-import { activityPage, closeDistributionEpochs, completeUnstake, distributionProof, monkeySeries, overview, stake, startUnstake, walletBalance } from "./monkey";
+import { activityPage, closeDistributionEpochs, completeUnstake, distributionEpochsPage, distributionProof, monkeySeries, overview, stake, startUnstake, walletBalance } from "./monkey";
 import { COOLDOWN_MS, EPOCH_MS, FLOOR_USD, HALVING_PERIODS, HISTORY_MS, PERIOD_MS } from "./monkey-state";
 import { START } from "./test-helpers";
 import { createMockNode } from "./index";
@@ -83,6 +83,22 @@ describe("staking in the mock", () => {
 });
 
 describe("distribution epochs in the mock", () => {
+  it("serves its closed epochs newest first, paged by the epoch before which a page ends, as GET /v1/monkey/distributions does", () => {
+    const state = node();
+    const count = state.monkey.epochs.length;
+    const newest = state.monkey.epochs[count - 1];
+    const first = distributionEpochsPage(state, { limit: 2 });
+    expect(first.epochs.map((close) => close.epoch)).toEqual([newest?.epoch, (newest?.epoch ?? 0) - 1]);
+    expect(first.epochs[0]).toMatchObject({ close_ms: newest?.closedMs, stakers_usdc_units: newest?.allocated.toString(), operator_shares: [], skipped: null });
+    expect(first.next).toBe((newest?.epoch ?? 0) - 1);
+    const rest = distributionEpochsPage(state, { before: first.next ?? 0, limit: 200 });
+    expect(rest.epochs[0]?.epoch).toBe((first.next ?? 0) - 1);
+    const oldest = state.monkey.epochs[0]?.epoch ?? 0;
+    expect(distributionEpochsPage(state, { before: oldest + 1, limit: 200 })).toMatchObject({ epochs: [{ epoch: oldest }], next: null });
+    expect(count).toBeGreaterThan(200);
+    expect(() => distributionEpochsPage(state, { limit: 201 })).toThrow(EngineError);
+  });
+
   it("pays a staker its exact share of what the close allocates, and posts a checkpoint with it", () => {
     const state = node();
     stake(state, ME, 500n * MONKEY_UNIT);
