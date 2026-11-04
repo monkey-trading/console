@@ -6,7 +6,10 @@ import type { OperatorRole, OperatorRow } from "./operator-table";
 export const ROLE_LABELS: Record<OperatorRole, string> = { active: "Active", elected: "Elected", promoted: "Promoted", standby: "Standby", candidate: "Candidate" };
 
 export interface OperatorCells {
+  /** What the name cell shows, which may say why there is no hostname to show. */
   name: string;
+  /** What a message or a control calls it: the hostname the build can show, else the short address, never the name cell's placeholder. */
+  label: string;
   /** The candidate's address, shortened; the cell's title carries it whole. */
   address: string;
   role: string;
@@ -24,6 +27,7 @@ export interface OperatorCells {
 export function operatorCells(row: OperatorRow): OperatorCells {
   return {
     name: row.hostname ?? (row.bond === null ? "The deployment's initial operator" : "Not a plain hostname"),
+    label: row.hostname ?? shortHex(row.address),
     address: shortHex(row.address),
     role: ROLE_LABELS[row.role],
     eligibility: !row.listed ? "Not listed" : row.eligible ? "Eligible" : "Not eligible",

@@ -49,8 +49,9 @@ function MockPanel({ node }: { node: MockNode }) {
     if (!wallet) return;
     controls.resetAccount(wallet.address);
     store.ledger.invalidate(); // the P&L tab's rows belong to the account just cleared
+    store.monkeySession.history?.invalidate(); // and so do the Staking page's epochs
     void store.refresh(true);
-    void store.monkeySession.panel?.refreshWallet(true); // the Staking page's stake and balance went with it
+    void store.monkeySession.panel?.refreshWallet(true); // the open page's wallet figures went with it
   };
   const changeRegion = (value: Region) => {
     setRegion(value);

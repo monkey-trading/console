@@ -28,6 +28,23 @@ describe("MonkeyPanel wallet reads behind an unanswered call", () => {
     stop();
   });
 
+  it("says on the MONKEY page why a vault-record read still queued behind work the wallet has not finished shows nothing", async () => {
+    const { panel, stop } = await setup("monkey");
+    let finish: () => void = () => {};
+    void panel.exclusive(() => new Promise<void>((resolve) => { finish = resolve; }));
+    await flush();
+    const queued = panel.refreshWallet(true);
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(panel.getSnapshot().wallet.record.status).not.toBe("failed");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(panel.getSnapshot().wallet.record).toMatchObject({ status: "failed", message: "Your wallet has not answered an earlier request." });
+    expect(panel.getSnapshot().wallet.position.status).toBe("loading");
+    finish();
+    await queued;
+    expect(panel.getSnapshot().wallet.record.status).toBe("ready");
+    stop();
+  });
+
   it("stays silent when the vault's record does not answer in time, and still holds the queue until the provider answers", async () => {
     const { store, panel, stop } = await setup("monkey");
     const wallet = store.liveWallet;

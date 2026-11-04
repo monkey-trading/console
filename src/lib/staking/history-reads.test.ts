@@ -166,6 +166,22 @@ describe("DistributionHistoryReads", () => {
     stop();
   });
 
+  it("registers on the session while it reads, and reads afresh when the mock's account reset invalidates it", async () => {
+    const { history, node, store, pages, stop } = await started();
+    expect(store.monkeySession.history).toBe(history);
+    expect(epochsOf(history)).toHaveLength(1);
+    node.controls.resetAccount(DEMO_ADDRESS);
+    pages.mockClear();
+    store.monkeySession.history?.invalidate();
+    expect(shownRows(history.getSnapshot().data)).toEqual([]);
+    await flush();
+    expect(mine(pages)).toHaveLength(2);
+    expect(history.getSnapshot()).toMatchObject({ account: DEMO_ADDRESS, status: "ready" });
+    expect(epochsOf(history)).toEqual([]);
+    stop();
+    expect(store.monkeySession.history).toBeNull();
+  });
+
   it("forgets what it read when it stops, and an answer that lands afterwards writes nothing", async () => {
     const kit = await setup();
     kit.stop();

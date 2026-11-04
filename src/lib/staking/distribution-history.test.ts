@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { HistoryEvent, HistoryPage, StreamMessage } from "../engine/types";
-import { addMessage, addPage, emptyHistory, hasOperatorShare, MAX_EPOCHS, moreRemain, shownRows, type HistoryKind } from "./distribution-history";
+import { addMessage, addPage, atBound, emptyHistory, hasOperatorShare, HISTORY_KINDS, limitingKinds, MAX_EPOCHS, moreRemain, shownRows, type HistoryKind } from "./distribution-history";
 
 const ME = "0x00000000000000000000000000000000000000aa";
 const OTHER = "0x00000000000000000000000000000000000000bb";
@@ -100,5 +100,46 @@ describe("the distribution history's bound", () => {
     expect(epochs(shownRows(pushed)).slice(0, 2)).toEqual([MAX_EPOCHS + 1, MAX_EPOCHS]);
     expect(shownRows(pushed).at(-1)?.epoch).toBe(2);
     expect(moreRemain(pushed)).toBe(false);
+  });
+});
+
+describe("paging toward the bound", () => {
+  /** Serves `kind`'s events for `epochs`, newest first, 50 a page, as the history route pages them. */
+  function served(kind: HistoryKind, epochs: number[]) {
+    const events = [...epochs].sort((a, b) => b - a).map((epoch) => event(kind, epoch, "1", kind === "distribution_allocated" ? 0 : 1));
+    return (before: string | null): HistoryPage => {
+      const older = events.filter((entry) => before === null || seqOfCursor(entry.cursor) < seqOfCursor(before));
+      const page = older.slice(0, 50);
+      return { events: page, next: older.length > page.length ? (page[page.length - 1]?.cursor ?? null) : null };
+    };
+  }
+  const seqOfCursor = (cursor: string) => Number(cursor.split(":")[0]);
+  const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
+  it("reads only the stream that limits what shows, so a staker's newer epochs reach the bound past an operator's older ones", () => {
+    // Staker shares in epochs 1 to 4,000; operator shares only in the oldest 2,000.
+    const pages = { distribution_allocated: served("distribution_allocated", range(1, 4_000)), operator_share_allocated: served("operator_share_allocated", range(1, 2_000)) };
+    let data = HISTORY_KINDS.reduce((held, kind) => addPage(held, kind, pages[kind](null)), emptyHistory());
+    let presses = 0;
+    while (moreRemain(data)) {
+      const kinds = limitingKinds(data);
+      data = kinds.reduce((held, kind) => addPage(held, kind, pages[kind](held.cover[kind].next)), data);
+      presses += 1;
+      // Only one page of the stream that does not limit is ever held below what shows.
+      expect(data.rows.length - shownRows(data).length).toBeLessThanOrEqual(50);
+    }
+    expect(epochs(shownRows(data))).toEqual(range(2_001, 4_000).reverse());
+    expect(atBound(data)).toBe(true);
+    expect(presses).toBe(MAX_EPOCHS / 50 - 1);
+  });
+
+  it("reads both streams while both limit, and neither once both are read to their start", () => {
+    const pages = { distribution_allocated: served("distribution_allocated", range(1, 120)), operator_share_allocated: served("operator_share_allocated", range(1, 120)) };
+    let data = HISTORY_KINDS.reduce((held, kind) => addPage(held, kind, pages[kind](null)), emptyHistory());
+    expect(limitingKinds(data)).toEqual(["distribution_allocated", "operator_share_allocated"]);
+    while (moreRemain(data)) data = limitingKinds(data).reduce((held, kind) => addPage(held, kind, pages[kind](held.cover[kind].next)), data);
+    expect(limitingKinds(data)).toEqual([]);
+    expect(shownRows(data)).toHaveLength(120);
+    expect(atBound(data)).toBe(false);
   });
 });

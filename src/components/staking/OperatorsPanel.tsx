@@ -65,7 +65,7 @@ export function OperatorsPanel({ operators }: { operators: OperatorReads }) {
   const view = useMemo(() => tableView(rows, search, sort, page), [rows, search, sort, page]);
   const labelOf = (address: string) => {
     const row = rows.find((candidate) => candidate.address === address);
-    return row === undefined ? shortHex(address) : operatorCells(row).name;
+    return row === undefined ? shortHex(address) : operatorCells(row).label;
   };
   const canVote = wallet !== null && wallet.readOnly !== true && chosenRead.status === "ready";
   const send = (candidate: string, label: string) => {
@@ -111,7 +111,8 @@ export function OperatorsPanel({ operators }: { operators: OperatorReads }) {
           {table.status === "ready" && table.value === null && <p className={NOTE}>This build names no operator registry, so operators are not available here.</p>}
           {table.value !== null && (
             <>
-              <div className="grid gap-2 pt-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,16rem)] sm:items-end">
+              <h4 className="pt-2 text-label tracking-caps text-fg-3 uppercase">All operators</h4>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,16rem)] sm:items-end">
                 <div className="space-y-1">
                   <label htmlFor={searchId} className="block text-caption text-fg-2">Search operators</label>
                   <input id={searchId} type="search" value={search} maxLength={MAX_SEARCH} spellCheck={false} autoComplete="off" placeholder="Hostname or address" onChange={(event) => { setSearch(event.target.value); setPage(0); }} className={FIELD} />
@@ -120,7 +121,7 @@ export function OperatorsPanel({ operators }: { operators: OperatorReads }) {
               </div>
               {table.value.candidates.length === 0 && table.status === "ready" && <p className={NOTE}>No candidate&apos;s release has been approved yet.</p>}
               <p role="status" className="text-caption text-fg-2">{countText(view, search)}</p>
-              {view.rows.length > 0 && <OperatorTable rows={view.rows} sort={sort} chosen={chosen} canVote={canVote} disabled={busy || settling} reachable={reachable} onDelegate={(row) => send(row.address, operatorCells(row).name)} />}
+              {view.rows.length > 0 && <OperatorTable rows={view.rows} sort={sort} chosen={chosen} canVote={canVote} disabled={busy || settling} reachable={reachable} onDelegate={(row) => send(row.address, operatorCells(row).label)} />}
               {view.pages > 1 && (
                 <nav aria-label="Operator pages" className="flex flex-wrap items-center gap-2">
                   <button type="button" aria-disabled={view.page === 0} onClick={() => { if (view.page > 0) setPage(view.page - 1); }} className={PAGER}>Previous<span className="sr-only"> page of operators</span></button>

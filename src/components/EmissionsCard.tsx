@@ -11,6 +11,7 @@ import { emissionsPosition } from "@/lib/store/emissions";
 import { useConsole } from "./ConsoleProvider";
 import { focusHeading } from "./monkey/Card";
 import { BudgetCountdown } from "./monkey/Countdown";
+import { usePanelState } from "./monkey/use-monkey";
 import { Notice } from "./Notice";
 import { useReadOnlyNote, useSignGate } from "./SignGate";
 
@@ -19,7 +20,7 @@ const BUTTON = "mt-3 min-h-11 w-full rounded border border-glow bg-glow/10 px-3 
 /**
  * The MONKEY emissions card on the MONKEY page, in every mode: the mock mirrors the accrual and the
  * claim. The vault's record of what it has minted is read by the page's wallet reads, on load, on
- * `refresh` and after a claim, never on the node's clock;
+ * `refresh` and after a claim, never on the node's clock, and a read that failed or waits on the wallet says so;
  * `claim` sends the claim behind the page's other wallet work, so the provider is asked one thing at a time, and refreshes the page afterwards.
  * The claim is built from the node's proof, so its button waits on a verdict that may sign and says why.
  */
@@ -29,6 +30,10 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
   const gate = useSignGate(useId());
   const proof = state.entitlement;
   const position = emissionsPosition(proof, state.emissionsVault);
+  const { wallet: figures } = usePanelState();
+  // The page's last read of the vault's record, for the account it names.
+  const record = state.wallet !== null && figures.address === state.wallet.address ? figures.record : null;
+  const recordProblem = record?.status === "failed" ? (record.message ?? "the read failed").replace(/\.+$/, "") : null;
   const act = () => {
     if (state.busy) return;
     void claim().then(() => focusHeading("monkey-title"));
@@ -60,7 +65,10 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
           {position.claimed !== null ? (
             <p className="mt-2 text-fg-3">Claimed {formatMonkey(position.claimed)} of {accrued} accrued.</p>
           ) : (
-            <p className="mt-2 text-fg-3">Reading the vault&apos;s record of what it has minted…</p>
+            // One status line that changes its words, so a failure is announced.
+            <p role="status" className={`mt-2 ${recordProblem === null ? "text-fg-3" : "text-amber"}`}>
+              {recordProblem === null ? "Reading the vault's record of what it has minted…" : `Could not read the vault's record of what it has minted: ${recordProblem}. It is read again by itself.`}
+            </p>
           )}
           {position.claimable > 0n && (
             <>

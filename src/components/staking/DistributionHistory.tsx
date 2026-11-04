@@ -10,7 +10,7 @@ import { useSyncExternalStore } from "react";
 
 import { groupThousands } from "@/lib/format";
 import { usdcFixed } from "@/lib/monkey/figures";
-import { hasOperatorShare, HISTORY_KINDS, MAX_EPOCHS, moreRemain, shownRows } from "@/lib/staking/distribution-history";
+import { atBound, hasOperatorShare, HISTORY_KINDS, MAX_EPOCHS, moreRemain, shownRows } from "@/lib/staking/distribution-history";
 import type { DistributionHistoryReads } from "@/lib/staking/history-reads";
 import { formatStamp } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
@@ -29,6 +29,7 @@ const usdc = (units: bigint | null) => (units === null ? "—" : formatUsdc(usdc
 /** `28 Oct 15:04`, in UTC, without the seconds the table has no room for. */
 const when = (ms: number) => formatStamp(ms).slice(0, -3);
 
+/** The card; `history` is the page's reads of it, which start and stop with the page. */
 export function DistributionHistory({ history }: { history: DistributionHistoryReads }) {
   const state = useSyncExternalStore(history.subscribe, history.getSnapshot, history.getSnapshot);
   const account = useConsoleSelect((s) => s.wallet?.address ?? null);
@@ -37,7 +38,10 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
   const rows = mine ? shownRows(state.data) : [];
   const operator = hasOperatorShare(rows);
   const more = mine && state.status === "ready" && moreRemain(state.data);
-  const bounded = mine && !moreRemain(state.data) && HISTORY_KINDS.some((kind) => !state.data.cover[kind].done);
+  const bounded = mine && atBound(state.data) && HISTORY_KINDS.some((kind) => !state.data.cover[kind].done);
+  const error = (state.error ?? "the read failed").replace(/\.+$/, "");
+  // The first read's failure, or Load more's: one status line that changes its words, so either is announced.
+  const problem = !mine || state.error === null ? "" : state.status === "failed" ? `Could not read your distributions: ${error}. The read is made again by itself.` : `Could not read older epochs: ${error}.`;
   const loadMore = () => {
     if (state.more) return;
     void history.loadMore().then(() => {
@@ -78,13 +82,8 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
           </table>
         </div>
       )}
-      {mine && state.status === "failed" && <p role="status" className="text-caption leading-relaxed text-amber">Could not read your distributions: {(state.error ?? "the read failed").replace(/\.+$/, "")}. The read is made again by itself.</p>}
-      {more && (
-        <div>
-          <button type="button" aria-disabled={state.more} onClick={loadMore} className={LOAD}>{state.more ? "Loading" : "Load more"}<span className="sr-only"> epochs</span></button>
-          {state.error !== null && <p role="status" className="mt-1 text-caption text-amber">Could not read older epochs: {state.error.replace(/\.+$/, "")}.</p>}
-        </div>
-      )}
+      {more && <button type="button" aria-disabled={state.more} onClick={loadMore} className={LOAD}>{state.more ? "Loading" : "Load more"}<span className="sr-only"> epochs</span></button>}
+      <p role="status" className="text-caption leading-relaxed text-amber empty:hidden">{problem}</p>
       {bounded && <p className={NOTE}>Only the newest {groupThousands(MAX_EPOCHS)} epochs are kept here.</p>}
     </Card>
   );

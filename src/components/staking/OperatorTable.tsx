@@ -44,6 +44,7 @@ function Action({ row, label, chosen, canVote, disabled, onDelegate }: Pick<Prop
   );
 }
 
+/** The row's role and whether it would count in an election close now. */
 function Role({ row }: { row: OperatorRow }) {
   const cells = operatorCells(row);
   return (
@@ -54,6 +55,7 @@ function Role({ row }: { row: OperatorRow }) {
   );
 }
 
+/** The row's hostname and address, and a mark where this build could not connect to it. */
 function Name({ row, reachable }: { row: OperatorRow; reachable: boolean }) {
   const cells = operatorCells(row);
   return (
@@ -65,6 +67,7 @@ function Name({ row, reachable }: { row: OperatorRow; reachable: boolean }) {
   );
 }
 
+/** One page of rows, both layouts; the one the width does not use is hidden from everyone. */
 export function OperatorTable({ rows, sort, chosen, canVote, disabled, reachable, onDelegate }: Props) {
   return (
     <>
@@ -83,7 +86,7 @@ export function OperatorTable({ rows, sort, chosen, canVote, disabled, reachable
                 <div><dt className="text-label text-fg-3">Release</dt><dd title={row.release}>{cells.release}</dd></div>
                 <div className="col-span-2"><dt className="text-label text-fg-3">Handover endpoint</dt><dd className="[overflow-wrap:anywhere]">{cells.endpoint}</dd></div>
               </dl>
-              <div className="mt-2"><Action row={row} label={cells.name} chosen={chosen} canVote={canVote} disabled={disabled} onDelegate={onDelegate} /></div>
+              <div className="mt-2"><Action row={row} label={cells.label} chosen={chosen} canVote={canVote} disabled={disabled} onDelegate={onDelegate} /></div>
             </li>
           );
         })}
@@ -113,7 +116,7 @@ export function OperatorTable({ rows, sort, chosen, canVote, disabled, reachable
                   <td className={`${TD} whitespace-nowrap text-fg-2`}>{cells.bond}</td>
                   <td className={`${TD} whitespace-nowrap text-fg-2`} title={row.release}>{cells.release}</td>
                   <td className={`${TD} text-fg-2 [overflow-wrap:anywhere]`}>{cells.endpoint}</td>
-                  <td className={`${TD} text-right`}><Action row={row} label={cells.name} chosen={chosen} canVote={canVote} disabled={disabled} onDelegate={onDelegate} /></td>
+                  <td className={`${TD} text-right`}><Action row={row} label={cells.label} chosen={chosen} canVote={canVote} disabled={disabled} onDelegate={onDelegate} /></td>
                 </tr>
               );
             })}

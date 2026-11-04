@@ -11,7 +11,6 @@
 
 import { carryAccrued } from "../engine/claim-standing";
 import { withTimeout } from "../engine/provider-errors";
-import type { MonkeySeriesMetric } from "../engine/stats-types";
 import type { StakingPosition } from "../engine/staking";
 import type { Wallet } from "../engine/wallet";
 import { checkEmissionsClaimed } from "../store/emissions";
@@ -19,27 +18,14 @@ import type { ConsoleStore } from "../store/store";
 import { ChartFeed } from "./feed";
 import { failed, LOADING, ready, type Read } from "./figures";
 import { Backoff, followLive } from "./live-reads";
-import { NO_DRAFTS, NO_WALLET, type PanelPage, type PanelState } from "./panel-state";
+import { FEEDS, NO_DRAFTS, NO_WALLET, PAGE_FEEDS, type FeedName, type PanelPage, type PanelState } from "./panel-state";
 import { proofAwaited, readEntitlement } from "./pending";
-import type { TimeframeId } from "./timeframes";
 
 /** The activity table's length, and how often the page's totals and activity are read, in milliseconds. */
 export const ACTIVITY_LIMIT = 25;
 export const NODE_READ_MS = 30_000;
 /** The page's one timer: the charts' cadence, and the unit the slower reads count in. */
 export const LIVE_READ_MS = 5_000;
-
-export type FeedName = "epochs" | "perLoss" | "supply" | "rewards";
-
-/** Each chart's metrics and the window it opens on. */
-const FEEDS: Record<FeedName, { metrics: MonkeySeriesMetric[]; initial: TimeframeId }> = {
-  epochs: { metrics: ["distributed_per_epoch"], initial: "7d" },
-  perLoss: { metrics: ["monkey_per_loss"], initial: "all" },
-  supply: { metrics: ["total_allocated", "total_staked"], initial: "all" },
-  rewards: { metrics: ["cumulative_distributed"], initial: "all" },
-};
-/** The charts each page draws: the MONKEY page its emissions and supply, the Staking page what stakers were paid. */
-const PAGE_FEEDS: Record<PanelPage, readonly FeedName[]> = { monkey: ["perLoss", "supply"], staking: ["epochs", "rewards"] };
 
 export class MonkeyPanel {
   /** This page's charts, by name. */
@@ -206,12 +192,13 @@ export class MonkeyPanel {
     if (this.state.wallet.address !== wallet.address) this.set({ wallet: { ...NO_WALLET, address: wallet.address }, unmirroredTotal: null });
     // The node's proof needs nothing from the wallet, so it is not held up behind a call the wallet has not answered.
     const proof = this.page === "staking" ? this.readProof(wallet, cycle) : Promise.resolve();
-    // A stake read still waiting for the wallet to answer an earlier call says so once the time limit has passed, instead of reading "Reading…" with no reason.
+    // The page's wallet read (the stake, or the vault's record) still waiting for the wallet to answer an earlier call says so once the time limit has passed, instead of reading "Reading…" with no reason.
     let started = false;
     const waiting = setTimeout(() => {
-      if (this.page === "staking" && !started && this.open && cycle === this.cycle && this.store.liveWallet === wallet && this.state.wallet.position.status !== "failed") {
-        this.set({ wallet: { ...this.state.wallet, address: wallet.address, position: failed(new Error("Your wallet has not answered an earlier request."), this.state.wallet.position.value) } });
-      }
+      const { position, record } = this.state.wallet;
+      if (started || !this.open || cycle !== this.cycle || this.store.liveWallet !== wallet || (this.page === "staking" ? position : record).status === "failed") return;
+      const stalled = new Error("Your wallet has not answered an earlier request.");
+      this.set({ wallet: { ...this.state.wallet, address: wallet.address, ...(this.page === "staking" ? { position: failed(stalled, position.value) } : { record: failed(stalled, record.value) }) } });
     }, WALLET_READ_MS);
     const chain = this.store.monkeySession.walletWork.read(wallet, fresh, cycle, () => {
       started = true;
@@ -219,7 +206,8 @@ export class MonkeyPanel {
       return this.readWallet(wallet, cycle);
     }).finally(() => clearTimeout(waiting));
     return Promise.all([proof, chain]).then(() => {
-      this.walletBackoff.record(this.state.wallet.position.status === "failed" || this.state.wallet.proof.status === "failed");
+      const { position, proof: held, record } = this.state.wallet;
+      this.walletBackoff.record([position, held, record].some((read) => read.status === "failed"));
     });
   }
 
@@ -284,11 +272,13 @@ export class MonkeyPanel {
     // Any call the wallet has not answered is settled before the next is asked.
     await Promise.all(outstanding);
     if (this.page === "monkey" && current()) {
+      let record: Read<true>;
       try {
-        await bounded(checkEmissionsClaimed(this.store));
-      } catch {
-        // The wallet did not answer in time. The emissions card says the vault's record is unread, and the next wallet read asks again.
+        record = (await bounded(checkEmissionsClaimed(this.store))) ? ready(true) : failed(new Error("The vault's record could not be read."), held.record.value);
+      } catch (error) {
+        record = failed(error, held.record.value); // the wallet did not answer in time
       }
+      if (current()) this.set({ wallet: { ...this.state.wallet, address: wallet.address, record } });
     }
     await Promise.all(outstanding);
   }

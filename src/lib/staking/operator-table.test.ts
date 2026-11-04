@@ -54,6 +54,10 @@ describe("operatorRows", () => {
     const rows = operatorRows(table([candidate(2)], deployer), named());
     expect(rows.at(-1)).toEqual({ address: deployer, hostname: null, role: "active", listed: false, eligible: false, votes: null, shareBps: 0, bond: null, release: RELEASE, endpoint: null });
     expect(rows[0]).toMatchObject({ role: "standby", listed: true, votes: 20n, shareBps: 200, bond: 6n, endpoint: "https://op-2.example/handover" });
+    // An operator in effect whose release approval the timelock withdrew: delisted, still registered.
+    const delisted = table([candidate(2)], deployer);
+    const registered = { ...delisted, inEffect: { candidate: deployer, hostname: "kept.example", release: RELEASE, registered: { bond: 77n, release: RELEASE, registration: 0, handoverEndpoint: "https://kept.example/handover" } } };
+    expect(operatorRows(registered, named()).at(-1)).toEqual({ address: deployer, hostname: "kept.example", role: "active", listed: false, eligible: false, votes: null, shareBps: 0, bond: 77n, release: RELEASE, endpoint: "https://kept.example/handover" });
   });
 
   it("shows no hostname the build could not connect to, so a lookalike never reads as a host", () => {

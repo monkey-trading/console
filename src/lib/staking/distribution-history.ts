@@ -10,7 +10,7 @@ import type { HistoryEvent, HistoryPage, StreamMessage } from "../engine/types";
 
 export type HistoryKind = "distribution_allocated" | "operator_share_allocated";
 export const HISTORY_KINDS: readonly HistoryKind[] = ["distribution_allocated", "operator_share_allocated"];
-/** Most epochs held: reading stops there, and arrivals push the oldest out. */
+/** Most epochs shown: reading stops there, and arrivals push the oldest out. Older epochs one stream has read and the other not yet are held beside them, at most a page of them. */
 export const MAX_EPOCHS = 2_000;
 
 /** What one closed epoch added to the account's cumulative distribution, in USDC base units. */
@@ -42,6 +42,7 @@ export interface DistributionHistory {
 const UNREAD: Cover = { oldestSeq: null, next: null, done: false };
 const UNITS = /^\d+$/;
 
+/** A history with nothing read. */
 export function emptyHistory(): DistributionHistory {
   return { rows: [], cover: { distribution_allocated: UNREAD, operator_share_allocated: UNREAD }, trimmedBelow: null };
 }
@@ -57,7 +58,11 @@ function allocationOf(event: HistoryEvent): { kind: HistoryKind; epoch: number; 
   return UNITS.test(event.amount) ? { kind: event.type, epoch: event.epoch, amount: BigInt(event.amount) } : null;
 }
 
-/** Folds events in: each epoch holds at most one event of each kind, so an event read twice (a page and the stream) replaces itself. */
+/**
+ * Folds events in: each epoch holds at most one event of each kind, so an event read twice (a page
+ * and the stream) replaces itself. Past the bound the newest shown epochs are kept and every older
+ * one dropped, and nothing below them shows again.
+ */
 function fold(data: DistributionHistory, events: readonly HistoryEvent[]): DistributionHistory {
   const byEpoch = new Map(data.rows.map((row) => [row.epoch, row]));
   for (const event of events) {
@@ -66,11 +71,12 @@ function fold(data: DistributionHistory, events: readonly HistoryEvent[]): Distr
     const held = byEpoch.get(allocation.epoch) ?? { epoch: allocation.epoch, seq: seqOf(event.cursor), ts: event.ts, staker: null, operator: null };
     byEpoch.set(allocation.epoch, { ...held, [allocation.kind === "distribution_allocated" ? "staker" : "operator"]: allocation.amount });
   }
-  const rows = [...byEpoch.values()].sort((a, b) => b.epoch - a.epoch);
-  if (rows.length <= MAX_EPOCHS) return { ...data, rows };
-  const kept = rows.slice(0, MAX_EPOCHS);
+  const folded = { ...data, rows: [...byEpoch.values()].sort((a, b) => b.epoch - a.epoch) };
+  const shown = shownRows(folded);
+  if (shown.length <= MAX_EPOCHS) return folded;
+  const kept = shown.slice(0, MAX_EPOCHS);
   const oldest = kept[kept.length - 1];
-  return { ...data, rows: kept, trimmedBelow: oldest === undefined ? data.trimmedBelow : oldest.seq };
+  return { ...folded, rows: kept, trimmedBelow: oldest === undefined ? data.trimmedBelow : oldest.seq };
 }
 
 /** Adds one page of `kind`, read from where its cover left off. */
@@ -110,9 +116,24 @@ export function shownRows(data: DistributionHistory): readonly EpochRow[] {
   return data.rows.filter((row) => row.seq >= from);
 }
 
-/** Whether an older page can add epochs: a stream has more below it and the bound has room. */
+/** Whether the shown epochs have reached the bound, or arrivals have pushed older ones out. */
+export function atBound(data: DistributionHistory): boolean {
+  return data.trimmedBelow !== null || shownRows(data).length >= MAX_EPOCHS;
+}
+
+/**
+ * The streams whose next page can show more: those with more below them that stop no lower than
+ * the other, since what shows starts where the higher of the two stops. Reading the lower one would
+ * only hold more epochs that cannot show yet.
+ */
+export function limitingKinds(data: DistributionHistory): HistoryKind[] {
+  const from = heldFrom(data);
+  return HISTORY_KINDS.filter((kind) => !data.cover[kind].done && (data.cover[kind].oldestSeq ?? Number.POSITIVE_INFINITY) >= from);
+}
+
+/** Whether an older page can add epochs: a stream that limits what shows has more below it, and the bound has room. */
 export function moreRemain(data: DistributionHistory): boolean {
-  return data.trimmedBelow === null && data.rows.length < MAX_EPOCHS && HISTORY_KINDS.some((kind) => !data.cover[kind].done);
+  return !atBound(data) && limitingKinds(data).length > 0;
 }
 
 /** Whether any epoch shown paid the account an operator's share, so the table needs that column. */

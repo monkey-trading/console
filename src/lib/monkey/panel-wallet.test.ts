@@ -252,6 +252,25 @@ describe("MonkeyPanel wallet reads", () => {
     stop();
   });
 
+  it("marks the MONKEY page's vault-record read failed when the wallet refuses it, ready once it answers, and backs a failing read off", async () => {
+    const { store, panel, stop } = await setup("monkey");
+    const wallet = store.liveWallet;
+    const record = wallet?.emissionsClaimed;
+    if (wallet === null || record === undefined) throw new Error("the mock wallet reads the vault");
+    let asked = 0;
+    wallet.emissionsClaimed = () => { asked += 1; return Promise.reject(new Error("refused")); };
+    await panel.refreshWallet(true);
+    expect(panel.getSnapshot().wallet.record).toMatchObject({ status: "failed", message: "The vault's record could not be read." });
+    // Fifteen-second reads for two minutes would ask eight times; failing ones wait 5 s, then 10, 20, 40 and 80.
+    asked = 0;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(asked).toBeLessThan(6);
+    wallet.emissionsClaimed = record;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(panel.getSnapshot().wallet.record.status).toBe("ready");
+    stop();
+  });
+
   it("reads the vault's record of the MONKEY claims with the wallet's other reads, so the emissions card needs no timer of its own", async () => {
     const { store, panel, stop } = await setup("monkey");
     store.patch({ emissionsVault: null });

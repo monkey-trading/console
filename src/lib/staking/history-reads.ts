@@ -10,7 +10,7 @@ import { EngineError } from "../engine/client";
 import type { HistoryPage } from "../engine/types";
 import { Backoff } from "../monkey/live-reads";
 import type { ConsoleStore } from "../store/store";
-import { addMessage, addPage, emptyHistory, HISTORY_KINDS, moreRemain, type DistributionHistory, type HistoryKind } from "./distribution-history";
+import { addMessage, addPage, emptyHistory, HISTORY_KINDS, limitingKinds, moreRemain, type DistributionHistory, type HistoryKind } from "./distribution-history";
 
 export interface HistoryState {
   /** The account the history is for; null with no wallet. */
@@ -63,6 +63,7 @@ export class DistributionHistoryReads {
   start(isHidden: () => boolean): () => void {
     this.open = true;
     this.cycle += 1;
+    this.store.monkeySession.history = this;
     this.walletChanged();
     const unsubscribe = this.store.deps.client.subscribe((message) => {
       const { account, data } = this.state;
@@ -78,6 +79,7 @@ export class DistributionHistoryReads {
       this.cycle += 1;
       clearInterval(timer);
       unsubscribe();
+      if (this.store.monkeySession.history === this) this.store.monkeySession.history = null;
       this.backoff.reset();
       this.set(IDLE);
     };
@@ -86,7 +88,15 @@ export class DistributionHistoryReads {
   /** Reads the history again for the connected wallet when it is not the one held: another account's epochs are not this one's. */
   walletChanged(): void {
     const account = this.store.liveWallet?.address ?? null;
-    if (account === this.state.account && this.state.status !== "idle") return;
+    if (account !== this.state.account || this.state.status === "idle") this.readAfresh(account);
+  }
+
+  /** Drops what is held and reads it again: the account's history changed under it, as the mock's reset changes it. */
+  invalidate(): void {
+    this.readAfresh(this.store.liveWallet?.address ?? null);
+  }
+
+  private readAfresh(account: string | null): void {
     this.cycle += 1;
     this.backoff.reset();
     this.set({ ...IDLE, account });
@@ -122,14 +132,14 @@ export class DistributionHistoryReads {
     }
   }
 
-  /** "Load more": one older page of each kind with more below it; a failure says so under the button, which tries again. */
+  /** "Load more": one older page of each kind that limits what shows; a failure says so under the button, which tries again. */
   async loadMore(): Promise<void> {
     const { account, status, more, data } = this.state;
     if (account === null || status !== "ready" || more || !moreRemain(data)) return;
     const cycle = this.cycle;
     this.set({ more: true, error: null });
     try {
-      const kinds = HISTORY_KINDS.filter((kind) => !data.cover[kind].done);
+      const kinds = limitingKinds(data);
       const pages = await Promise.all(kinds.map((kind) => this.page(account, kind, data.cover[kind].next)));
       if (cycle !== this.cycle) return;
       this.set({ more: false, data: kinds.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null }), this.state.data) });
