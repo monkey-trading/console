@@ -27,6 +27,7 @@ export const KEY_EXPIRED = "This browser's trading authorization expired, so you
 export const KEY_REVOKED = "This browser's trading authorization was revoked, so your wallet was disconnected. Connect again to renew it.";
 export const KEY_REFUSED = "The node no longer accepts this browser's trading authorization, so your wallet was disconnected. Connect again to renew it.";
 const KEY_ENDED_ELSEWHERE = "This browser's trading authorization ended in another tab, so your wallet was disconnected here too. Connect again to renew it.";
+export const WALLET_LEFT = "Your wallet no longer shares an account with this site (it may be locked), so the console disconnected it. Connect again to continue.";
 
 /** Ends a wallet's connection in the background, telling the user if that fails. */
 export function release(store: ConsoleStore, wallet: Wallet | null): void {
@@ -79,6 +80,20 @@ export function sessionEnded(store: ConsoleStore, why: string | null): void {
   }
   dropWallet(store, false);
   if (why !== null) store.notify("wallet", why, "info");
+}
+
+/**
+ * The wallet shares no account with the page any more, locked or with the site disconnected in it
+ * (monkey-trading/console#289): disconnects with no prompt, forgets the stored choice that names this
+ * connection, so a reload does not ask the wallet again, and says why. The account's key stays
+ * stored, so connecting it again needs no signature; nothing can sign its revocation now.
+ */
+export function walletLeft(store: ConsoleStore): void {
+  const wallet = store.liveWallet;
+  if (wallet === null) return;
+  if (store.deps.persistence !== undefined) clearChoiceIf(store.deps.persistence, ownChoice(wallet));
+  dropWallet(store, false);
+  store.notify("wallet", WALLET_LEFT, "info");
 }
 
 /** The stored choice that names this connection. */
@@ -191,7 +206,7 @@ function dropWallet(store: ConsoleStore, revoke = true): void {
   store.sessionKey = null;
   store.sessionLogin = null; // a login in flight installs nothing: its wallet no longer matches
   store.setWallet(null);
-  store.patch({ ...NO_ACCOUNT, ...NO_SESSION });
+  store.patch({ ...NO_ACCOUNT, ...NO_SESSION, walletChain: null });
   void store.deps.client.readChainThrough(null);
   store.walletCleanup = revoke && wallet && !wallet.readOnly && key !== null ? revokeThenRelease(store, wallet, key) : Promise.resolve(release(store, wallet));
 }

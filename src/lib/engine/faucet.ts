@@ -39,7 +39,7 @@ const RECEIPT_READS = 30;
 const RECEIPT_WAIT_MS = 500;
 
 /** A JSON-RPC 2.0 request body; Anvil's server answers a body without the version field with an empty 204, not a result. */
-function rpcBody(method: string, params: readonly unknown[]): unknown {
+export function rpcBody(method: string, params: readonly unknown[]): unknown {
   return { jsonrpc: "2.0", id: 1, method, params };
 }
 
@@ -121,7 +121,7 @@ function rpcError(body: unknown): { code: number; message: string } | null {
 }
 
 /** The answer's `result`; the error shape, when there is one, becomes an exception. Error cases: the answer is not a JSON-RPC response. */
-async function rpc(post: JsonRpcPost, url: string, body: unknown): Promise<unknown> {
+export async function rpc(post: JsonRpcPost, url: string, body: unknown): Promise<unknown> {
   const out = await rpcAllow(post, url, body);
   if (out.error !== null) throw new Error(`The chain's RPC answered with ${out.error.code}: ${out.error.message}.`);
   return out.result;
@@ -137,3 +137,10 @@ async function rpcAllow(post: JsonRpcPost, url: string, body: unknown): Promise<
   if ("error" in response && error === null) throw new Error(`The chain's RPC answered with a malformed error: ${String(response)}.`);
   return { result: "result" in response ? response.result : null, error };
 }
+
+/** POSTs one JSON-RPC request to the pinned RPC and resolves with the decoded body. Error cases: the RPC answers not-OK. */
+export const postJsonRpc: JsonRpcPost = async (url, body) => {
+  const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!response.ok) throw new Error(`the chain's RPC answered HTTP ${response.status}`);
+  return response.json() as Promise<unknown>;
+};

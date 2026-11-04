@@ -1,7 +1,7 @@
 /** What the user can do: connect a wallet, deposit, declare eligibility, trade, and withdraw. */
 
 import type { Deploy } from "../engine/deploy";
-import { FAUCET_USDC, faucetAvailable, mintFromAnvil, topUpGas } from "../engine/faucet";
+import { FAUCET_USDC, faucetAvailable, mintFromAnvil, postJsonRpc, topUpGas } from "../engine/faucet";
 import { cancelTypedData, eligibilityTypedData, orderTypedData, STATEMENTS, withdrawalTypedData } from "../engine/eip712";
 import type { EligibilityClass, OrderKind, Side } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
@@ -19,6 +19,7 @@ import type { ConsoleStore } from "./store";
 import { noteSentDeposit, readPendingDeposits } from "./deposits";
 import { noteDeposit } from "./setup";
 import { readWalletUsdc } from "./wallet-usdc";
+import { followWallet } from "./wallet-follow";
 import { adoptStoredKey, KEY_EXPIRED, NO_ACCOUNT, NO_SESSION, release, sessionEnded } from "./wallet-session";
 
 export { REQUEST_TTL_MS, STATEMENTS };
@@ -62,13 +63,17 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     if (store.liveWallet !== wallet) {
       release(store, store.liveWallet); // the wallet this one replaces keeps no session open
       // The old connection's key, expiry, in-flight login, refusal and setup do not carry to the new wallet.
+      // A wallet the connector just put on the deployment's chain is there; one handed over, such as the
+      // account a wallet switched to, stays where the wallet said it was.
       store.sessionKey = null;
       store.sessionLogin = null;
-      store.patch(NO_SESSION);
+      store.patch({ ...NO_SESSION, ...(connected === undefined ? { walletChain: null } : {}) });
     }
     store.liveWallet = wallet;
     store.patch(NO_ACCOUNT);
     store.setWallet({ address: wallet.address, label: wallet.label, ...(wallet.readOnly ? { readOnly: true } : {}) });
+    // The wallet's own account and chain changes are followed from now on; an account it moves to connects as this one did.
+    followWallet(store, wallet, (next) => connectWallet(store, next.topic !== undefined ? "walletconnect" : "injected", true, next));
     // Before the key and the account, as nothing is signed for the node until the vault's release has
     // been read, and before the offer below: its prompt would hold the wallet from answering the read.
     await store.deps.client.readChainThrough(wallet.chainReads ?? null);
@@ -186,13 +191,6 @@ export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy, surface
     notBusy(store, wallet);
   }
 }
-
-/** POSTs one JSON-RPC request to the chain's RPC and resolves with the decoded body. Error cases: the RPC answers not-OK. */
-const postJsonRpc = async (url: string, body: unknown): Promise<unknown> => {
-  const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  if (!response.ok) throw new Error(`the chain's RPC answered HTTP ${response.status}`);
-  return response.json() as Promise<unknown>;
-};
 
 export interface OrderParams {
   market: number;

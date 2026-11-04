@@ -10,6 +10,7 @@ import type { Progress, Wallet } from "../engine/wallet";
 import { describeReject } from "../messages";
 import type { BlockReason, NoticeSurface } from "./state";
 import type { ConsoleStore } from "./store";
+import { offChain } from "./wallet-chain";
 
 /** A signed request stays valid this long past the node's signed time, within the engine's five-minute cap (`MAX_EXPIRY_AHEAD_MS`). */
 export const REQUEST_TTL_MS = 120_000;
@@ -41,10 +42,13 @@ export function usableWallet(store: ConsoleStore, action: string, surface: Notic
  * for the user; the step reports what each part of it waits for through the `Progress` it is given. A
  * change of connection already cleared the prompt and the next wallet's may be showing, so a step of an
  * old connection neither writes nor clears it. Null is a revocation, which runs once its connection has
- * been dropped and until another adopts.
+ * been dropped and until another adopts. While the connected wallet says it is on another chain, its
+ * step is refused with the sentence that asks to switch back (monkey-trading/console#289).
  */
 export async function prompting<T>(store: ConsoleStore, owner: Wallet | null, surface: NoticeSurface, prompt: string, step: (progress: Progress) => Promise<T>): Promise<T> {
   const current = () => store.liveWallet === owner;
+  const away = owner === null || !current() ? null : offChain(store);
+  if (away !== null) throw new Error(away);
   if (current()) store.patch({ prompt, promptAt: surface });
   try {
     return await step((waitingFor) => {

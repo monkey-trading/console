@@ -73,6 +73,9 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
           <p className="flex justify-between gap-2"><span className="text-fg">Accrued</span><span className="text-fg-2">{accrued}</span></p>
           {position.claimed !== null ? (
             <p className="mt-2 text-fg-3">Claimed {formatMonkey(position.claimed)} of {accrued} accrued.</p>
+          ) : state.wallet.readOnly === true ? (
+            // The console reads the chain only through a connected wallet, and a watched account has none (#288).
+            <p className="mt-2 text-fg-3">What the vault has minted to this account is read through a connected wallet, so it does not show for a watched account.</p>
           ) : (
             // One status line that changes its words, so a failure is announced.
             <p role="status" className={`mt-2 ${recordProblem === null ? "text-fg-3" : "text-amber"}`}>

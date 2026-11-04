@@ -48,6 +48,8 @@ export interface ProviderWalletDeps {
   wait(ms: number): Promise<void>;
   /** Ends the wallet's connection, such as a WalletConnect session; absent when there is nothing to end. */
   disconnect?: () => Promise<void>;
+  /** A dev build's check that sent transaction `hash` from `account` waits behind a nonce the chain has not reached (monkey-trading/console#291); absent elsewhere. */
+  stuck?: (hash: string, account: string) => Promise<boolean>;
 }
 
 const ERC20 = parseAbi([
@@ -273,7 +275,8 @@ export class ProviderWallet implements Wallet {
       throw walletError(error, action);
     }
     progress(`Waiting for the transaction to ${action} to be mined.`);
-    await waitMined((txHash) => withinMs(this.provider, { method: "eth_getTransactionReceipt", params: [txHash] }, WALLET_READ_MS), hash, action, this.deps.wait);
+    const { stuck } = this.deps;
+    await waitMined((txHash) => withinMs(this.provider, { method: "eth_getTransactionReceipt", params: [txHash] }, WALLET_READ_MS), hash, action, this.deps.wait, stuck && (() => stuck(hash, this.address)));
     return hash;
   }
 }
