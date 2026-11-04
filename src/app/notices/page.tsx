@@ -76,8 +76,8 @@ export default function Page() {
         </p>
         <p className={P}>
           A development build of the console (one built for a local node) may show a dev faucet that tops your
-          wallet&apos;s gas up: that one request goes from the page straight to the build&apos;s pinned local chain
-          endpoint, and nothing else does.
+          wallet&apos;s gas up and mints it mock USDC: those requests go from the page straight to the build&apos;s
+          pinned local chain endpoint, and nothing else does.
         </p>
         <p className={P}>
           If you connect a wallet app with WalletConnect, the pairing and every request between this page and your

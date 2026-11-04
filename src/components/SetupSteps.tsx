@@ -39,20 +39,18 @@ export function SetupSteps({ step }: { step: SetupStep }) {
   }
 }
 
-/** The dev faucet: mints to the wallet, or is skipped. Nothing else depends on it. */
+/** The dev faucet: mints to the wallet through the local chain, with nothing for the wallet to sign, or is skipped. Nothing else depends on it. */
 function FundStep() {
   const { store, deploy } = useSession();
   const { busy } = useConsole();
-  const gate = useSignGate(`${useId()}-gate`);
-  const able = !busy && !gate.blocked;
+  const able = !busy;
   return (
     <>
-      <p className={NOTE}>Mint {formatUsdc(FAUCET_USDC)} to this wallet (mock tokens) and top its gas up to 1 ETH. Dev builds only.</p>
+      <p className={NOTE}>Mint {formatUsdc(FAUCET_USDC)} to this wallet (mock tokens) and top its gas up to 1 ETH, straight from the local Anvil chain. Your wallet signs nothing. Dev builds only.</p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" aria-disabled={!able} aria-describedby={gate.describedBy} onClick={() => { if (able) void fundWithAnvil(store, deploy, "setup").then((funded) => { if (funded) settleFund(store, "minted"); }); }} className={PRIMARY}>{busy ? "Waiting for your wallet…" : "Fund with Anvil"}</button>
+        <button type="button" aria-disabled={!able} onClick={() => { if (able) void fundWithAnvil(store, deploy, "setup").then((funded) => { if (funded) settleFund(store, "minted"); }); }} className={PRIMARY}>{busy ? "Minting…" : "Fund with Anvil"}</button>
         <button type="button" onClick={() => settleFund(store, "skipped")} className={SECONDARY}>Skip</button>
       </div>
-      {gate.note}
       <Notice surface="setup" />
     </>
   );

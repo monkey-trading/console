@@ -1,7 +1,7 @@
 /** What the user can do: connect a wallet, deposit, declare eligibility, trade, and withdraw. */
 
 import type { Deploy } from "../engine/deploy";
-import { FAUCET_USDC, faucetAvailable, topUpGas } from "../engine/faucet";
+import { FAUCET_USDC, faucetAvailable, mintFromAnvil, topUpGas } from "../engine/faucet";
 import { cancelTypedData, eligibilityTypedData, orderTypedData, STATEMENTS, withdrawalTypedData } from "../engine/eip712";
 import type { EligibilityClass, OrderKind, Side } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
@@ -140,38 +140,47 @@ export async function deposit(store: ConsoleStore, amount: Fixed, surface: Notic
 }
 
 /**
- * The dev-only faucet (monkey-trading/console#44): tops the wallet's gas up to 1 ETH through
- * `anvil_setBalance` on the build's pinned RPC, then mints 10,000 mock USDC to it through the
- * wallet. A pinned RPC that is not Anvil is named, not guessed at, and nothing is minted then. True
- * when the mint went through and this wallet is still the one connected.
+ * The dev-only faucet (monkey-trading/console#44, #290): tops the wallet's gas up to 1 ETH through
+ * `anvil_setBalance` on the build's pinned RPC, then mints 10,000 mock USDC to it from one of Anvil's
+ * unlocked accounts through the same RPC, so the wallet is never asked. A pinned RPC that is not
+ * Anvil is named, not guessed at, and nothing is minted then. True when the mint went through and
+ * this wallet is still the one connected.
  */
 export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy, surface: NoticeSurface = "faucet"): Promise<boolean> {
   if (!faucetAvailable(deploy)) return false;
   store.clearNotice(surface);
-  // usableWallet says its own reason when it refuses; only an able wallet that cannot mint reaches the notice below.
-  const wallet = usableWallet(store, "fund the wallet", surface);
-  if (!wallet) return false;
-  const rpcUrl = deploy.rpcUrl;
-  if (wallet.fund === undefined || rpcUrl === null) {
-    store.notify(surface, "This build's faucet is not available for the connected wallet.");
+  const wallet = store.liveWallet;
+  if (wallet === null) {
+    store.notify(surface, "Connect a wallet first.");
     return false;
   }
-  // Bound to the wallet: calling the method without a receiver unbinds `this` in the provider wallet.
-  const fund = wallet.fund.bind(wallet);
+  if (wallet.readOnly === true) {
+    store.notify(surface, "The watched account is read-only, so the faucet cannot fund it.");
+    return false;
+  }
+  const { rpcUrl, usdc } = deploy;
+  // faucetAvailable has checked both: a build without them shows no faucet.
+  if (rpcUrl === null || usdc === null) return false;
   store.patch({ busy: true });
   try {
     const gas = await topUpGas(rpcUrl, wallet.address, postJsonRpc);
     if (!gas.ok) {
-      store.notify(surface, gas.notAnvil
+      if (store.liveWallet === wallet) store.notify(surface, gas.notAnvil
         ? `The build's RPC is not an Anvil node (${gas.detail}), so the faucet cannot fund this wallet.`
         : `The faucet could not top up gas: ${gas.detail}.`);
       return false;
     }
-    await prompting(store, wallet, surface, `Confirm in your wallet: mint ${formatUsdc(FAUCET_USDC)} from the Anvil faucet.`, (progress) => fund(FAUCET_USDC, progress));
+    const minted = await mintFromAnvil(rpcUrl, usdc, wallet.address, FAUCET_USDC, postJsonRpc);
+    if (!minted.ok) {
+      if (store.liveWallet === wallet) store.notify(surface, minted.notAnvil
+        ? `The build's RPC is not an Anvil node (${minted.detail}), so the faucet cannot fund this wallet.`
+        : `The faucet could not mint USDC: ${minted.detail}.`);
+      return false;
+    }
     void readWalletUsdc(store, true);
-    return store.liveWallet === wallet; // a mint the old wallet finished settles nothing for the connection that came next
+    return store.liveWallet === wallet; // a mint for the old wallet settles nothing for the connection that came next
   } catch (error) {
-    if (!abandoned(store, wallet, error) && !store.noteAccess(error)) store.notify(surface, errorText(error));
+    if (store.liveWallet === wallet) store.notify(surface, errorText(error));
     return false;
   } finally {
     notBusy(store, wallet);

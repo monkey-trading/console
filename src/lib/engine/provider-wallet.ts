@@ -54,8 +54,6 @@ const ERC20 = parseAbi([
   "function allowance(address owner, address spender) view returns (uint256)",
   "function balanceOf(address owner) view returns (uint256)",
   "function approve(address spender, uint256 amount) returns (bool)",
-  // The local stack's MockUSDC (engine contracts/test/mocks/MockUSDC.sol) mints to anyone; the faucet is the one caller (monkey-trading/console#44).
-  "function mint(address to, uint256 amount)",
 ]);
 const VAULT = parseAbi([
   "function deposit(uint256 amount) returns (uint256)",
@@ -208,19 +206,6 @@ export class ProviderWallet implements Wallet {
     const allowance = await this.read(usdc, encodeFunctionData({ abi: ERC20, functionName: "allowance", args: [owner, vault] }), "allowance");
     if (allowance < units) await this.send(usdc, encodeFunctionData({ abi: ERC20, functionName: "approve", args: [vault, units] }), "approve the vault", progress);
     return this.send(this.chain.vault, encodeFunctionData({ abi: VAULT, functionName: "deposit", args: [units] }), "deposit", progress);
-  }
-
-  /**
-   * Error cases:
-   * - the build names no USDC token, or the amount is not a positive whole number of USDC base units
-   * - the user declines the transaction, or it reverts or is not confirmed after 180 receipt polls a second apart
-   */
-  async fund(amount: Fixed, progress: Progress = () => undefined): Promise<string> {
-    const units = usdcUnits(amount);
-    const usdc = this.chain.usdc;
-    if (usdc === null) throw new Error("This build names no USDC token, so it cannot mint one.");
-    await this.ensureChain();
-    return this.send(usdc, encodeFunctionData({ abi: ERC20, functionName: "mint", args: [hexOf(this.address), units] }), "mint USDC", progress);
   }
 
   /**

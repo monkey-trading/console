@@ -34,7 +34,8 @@ export const viewport: Viewport = {
 /** The document shell around every page. */
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={mono.variable}>
+    // Browser extensions (a password manager's, for one) set attributes on <html> before hydration.
+    <html lang="en" className={mono.variable} suppressHydrationWarning>
       <body className="min-h-dvh antialiased">{children}</body>
     </html>
   );

@@ -61,12 +61,6 @@ export interface Wallet {
   staking?: StakingWallet;
   /** The vault's and the operator registry's reads; absent from a wallet that reads no chain, such as a watched account's. */
   chainReads?: DeploymentReads;
-  /**
-   * Dev-only, live-dev builds: mints `amount` of the deployment's mock USDC to this account through
-   * the wallet and resolves with the transaction hash; `progress` as for `deposit`. Absent on
-   * wallets with nothing to mint from, such as the mock's own.
-   */
-  fund?(amount: Fixed, progress?: Progress): Promise<string>;
   /** The vault's exit, which needs no node; absent from a wallet that reads no chain, such as a watched account's. */
   exit?: ExitWallet;
   /** Whether the vault has paid this account's payout `nonce`; absent from a wallet that reads no chain, such as a watched account's. */

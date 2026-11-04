@@ -97,20 +97,28 @@ describe("a refused or failed action lands on its own surface", () => {
     expectOnly(inSetup.store, "setup", /declined/i);
   });
 
-  it("faucet: a declined or reverted mint, or on setup when setup minted", async () => {
-    const rpc = { eth_getBalance: { result: "0xde0b6b3a7640000" } };
-    vi.stubGlobal("fetch", async (_input: unknown, init?: { body?: string }) => ({ ok: true, json: async () => rpc[(JSON.parse(init?.body ?? "{}") as { method: "eth_getBalance" }).method] }) as Response);
+  it("faucet: a mint the RPC refuses or that reverts, or on setup when setup minted", async () => {
+    const answers = (receipt: string) => ({
+      eth_getBalance: { result: "0xde0b6b3a7640000" },
+      eth_accounts: { result: ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"] },
+      eth_sendTransaction: receipt === "refused" ? { error: { code: -32000, message: "insufficient funds" } } : { result: `0x${"ab".repeat(32)}` },
+      eth_getTransactionReceipt: { result: { status: receipt } },
+    });
+    const stub = (rpc: Record<string, unknown>) => vi.stubGlobal("fetch", async (_input: unknown, init?: { body?: string }) => ({ ok: true, json: async () => rpc[(JSON.parse(init?.body ?? "{}") as { method: string }).method] }) as Response);
     try {
       const deploy = parseDeploy({ mode: "live-dev", origin: "https://127.0.0.1:8080", chainId: String(vectors.chain_id), vault: VAULT, usdc: "0x00000000000000000000000000000000000000cc", devOrigins: "https://127.0.0.1:8080", rpcUrl: "http://127.0.0.1:8545" });
-      const declined = await connected({ ...FUNDED, fail: { eth_sendTransaction: { code: 4001, message: "User rejected" } } });
-      expect(await fundWithAnvil(declined.store, deploy)).toBe(false);
-      expectOnly(declined.store, "faucet", /declined/i);
-      const reverted = await connected({ ...FUNDED, receiptStatus: "0x0" });
+      stub(answers("refused"));
+      const refused = await connected(FUNDED);
+      expect(await fundWithAnvil(refused.store, deploy)).toBe(false);
+      expectOnly(refused.store, "faucet", "The faucet could not mint USDC: insufficient funds.");
+      stub(answers("0x0"));
+      const reverted = await connected(FUNDED);
       expect(await fundWithAnvil(reverted.store, deploy)).toBe(false);
-      expect(Object.keys(reverted.store.getSnapshot().notices)).toEqual(["faucet"]);
-      const inSetup = await connected({ ...FUNDED, fail: { eth_sendTransaction: { code: 4001, message: "User rejected" } } });
+      expectOnly(reverted.store, "faucet", "The faucet's mint reverted.");
+      stub(answers("refused"));
+      const inSetup = await connected(FUNDED);
       expect(await fundWithAnvil(inSetup.store, deploy, "setup")).toBe(false);
-      expectOnly(inSetup.store, "setup", /declined/i);
+      expectOnly(inSetup.store, "setup", "The faucet could not mint USDC: insufficient funds.");
     } finally {
       vi.unstubAllGlobals();
     }
