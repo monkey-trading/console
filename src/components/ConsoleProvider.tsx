@@ -7,7 +7,7 @@ import { createContext, Fragment, useContext, useEffect, useRef, useState, useSy
 import { MultiConnector } from "@/lib/engine/connectors";
 import { parseDeploy, rawDeploy, type Deploy } from "@/lib/engine/deploy";
 import { InjectedConnector } from "@/lib/engine/injected";
-import { createLiveClient, GLUE_PATH } from "@/lib/engine/live-session";
+import { createLiveClient, GLUE_PATH, walletDeps } from "@/lib/engine/live-session";
 import { OperatorFollower, type FollowStatus } from "@/lib/engine/operator-follow";
 import type { EngineClient } from "@/lib/engine/client";
 import type { Eip1193Provider } from "@/lib/engine/provider-wallet";
@@ -87,7 +87,7 @@ function createLiveSession(deploy: Deploy): Session {
   const client = createLiveClient(deploy, browser);
   if (deploy.origin === null || deploy.chainId === null || deploy.vault === null) throw new Error("A live session needs the deployment's node, chain id and vault.");
   const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, staking: deploy.staking, registry: deploy.registry, add: deploy.rpcUrl === null ? null : { name: deploy.chainId === 31337 ? "Anvil (local)" : `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
-  const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+  const deps = walletDeps(deploy, (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   // The choice and the session key persist in localStorage, reached lazily: this function also runs on
   // the server, where `window` does not exist, so the storage is touched only from effects and handlers.
   const persistence: KeyStorage = {
@@ -101,9 +101,9 @@ function createLiveSession(deploy: Deploy): Session {
   // session cannot sign a revocation: walletSessionEnded leaves the key's registration to expire.)
   const ended = (topic: string) => walletSessionEnded(store, topic);
   const walletConnect = deploy.walletConnectProjectId === null ? null : new WalletConnectConnector(
-    { projectId: deploy.walletConnectProjectId, url: () => window.location.origin }, chain, { wait }, () => import("@walletconnect/universal-provider"), ended,
+    { projectId: deploy.walletConnectProjectId, url: () => window.location.origin }, chain, deps, () => import("@walletconnect/universal-provider"), ended,
   );
-  const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, { wait }), ...(walletConnect === null ? [] : [walletConnect]), new WatchConnector(() => window.location.search)]);
+  const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, deps), ...(walletConnect === null ? [] : [walletConnect]), new WatchConnector(() => window.location.search)]);
   // A node without the marks endpoint 404s it; the chart's archive scan then seeds its history.
   const storeFor = (forClient: EngineClient) => new ConsoleStore({ client: forClient, wallets, persistence, exitStorage, history: () => [], historyScan: (store, markets) => scanBarsHistory(store, markets, store.deps.scanClock), initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
   // The store in use, which a move to another node replaces; `ended` above and the follower below read it when they run.

@@ -1,11 +1,14 @@
-/** Builds the live client for a build's deployment from the browser's own `fetch`, WebSocket and clock. */
+/** Builds the live client for a build's deployment from the browser's own `fetch`, WebSocket and clock, and what the build gives its wallets. */
 
 import { acceptsMockAttestation, listedOrigins, streamOrigin, type Deploy } from "./deploy";
+import { postJsonRpc } from "./faucet";
 import { LiveEngineClient } from "./live";
 import type { Scheduler, Socket } from "./live-stream";
 import { loadVerifier } from "./load-verifier";
 import type { VerifierModule } from "./wasm-verifier";
 import { PINNED_RELEASES } from "./manifests";
+import type { ProviderWalletDeps } from "./provider-wallet";
+import { staleNonce } from "./stale-nonce";
 
 /** Where the build serves the verifier's pinned WebAssembly from. */
 export const WASM_PATH = "/engine-verify/engine_verify_bg.wasm";
@@ -37,4 +40,14 @@ export function createLiveClient(deploy: Deploy, browser: Browser, load: typeof 
     loadVerifier: () => load({ allowMock, loadGlue: browser.loadGlue, fetchWasm: async () => new Uint8Array(await (await browser.fetch(WASM_PATH)).arrayBuffer()) }),
     releases: PINNED_RELEASES, devDigests: deploy.devLaunchDigests, acceptsMock: allowMock, ...browser,
   });
+}
+
+/**
+ * What every wallet the build connects is given: `wait` for its receipt polls and, in a `live-dev`
+ * build with a pinned RPC, the check for a transaction stuck behind a nonce from an earlier chain.
+ */
+export function walletDeps(deploy: Deploy, wait: (ms: number) => Promise<void>): ProviderWalletDeps {
+  const { rpcUrl } = deploy;
+  if (deploy.mode !== "live-dev" || rpcUrl === null) return { wait };
+  return { wait, stuck: (hash, account) => staleNonce(rpcUrl, postJsonRpc, hash, account) };
 }

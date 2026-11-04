@@ -1,7 +1,7 @@
 /** What the user can do: connect a wallet, deposit, declare eligibility, trade, and withdraw. */
 
 import type { Deploy } from "../engine/deploy";
-import { FAUCET_USDC, faucetAvailable, mintFromAnvil, topUpGas } from "../engine/faucet";
+import { FAUCET_USDC, faucetAvailable, mintFromAnvil, postJsonRpc, topUpGas } from "../engine/faucet";
 import { cancelTypedData, eligibilityTypedData, orderTypedData, STATEMENTS, withdrawalTypedData } from "../engine/eip712";
 import type { EligibilityClass, OrderKind, Side } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
@@ -191,13 +191,6 @@ export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy, surface
     notBusy(store, wallet);
   }
 }
-
-/** POSTs one JSON-RPC request to the chain's RPC and resolves with the decoded body. Error cases: the RPC answers not-OK. */
-const postJsonRpc = async (url: string, body: unknown): Promise<unknown> => {
-  const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  if (!response.ok) throw new Error(`the chain's RPC answered HTTP ${response.status}`);
-  return response.json() as Promise<unknown>;
-};
 
 export interface OrderParams {
   market: number;
