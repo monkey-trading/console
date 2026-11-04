@@ -180,7 +180,7 @@ export class WalletConnectConnector implements WalletConnector {
 
   /** The wallet for `address` over session `topic`, following the session's account and chain events. */
   private walletFor(provider: WcProvider, topic: string, address: string): Wallet {
-    const wallet = new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, topic) });
+    const wallet: ProviderWallet & Pick<Wallet, "follow"> = new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, topic) });
     wallet.topic = topic; // the console persists it as the connection choice only if it adopts this wallet
     wallet.follow = (changes) => followSession(provider, topic, this.chain.chainId, address, (next) => this.walletFor(provider, topic, next), changes);
     return wallet;

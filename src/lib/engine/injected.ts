@@ -52,7 +52,7 @@ export class InjectedConnector implements WalletConnector {
 
   /** The wallet for `address` over the page's provider, following its `accountsChanged` and `chainChanged` when it sends them. */
   private walletFor(queued: { raw: Eip1193Provider; asked: Eip1193Provider }, address: string): ProviderWallet {
-    const wallet = new ProviderWallet(address, "Browser wallet", queued.asked, this.chain, this.deps);
+    const wallet: ProviderWallet & Pick<Wallet, "follow"> = new ProviderWallet(address, "Browser wallet", queued.asked, this.chain, this.deps);
     const { raw } = queued;
     if (hasEvents(raw)) wallet.follow = (changes) => follow(raw, address, (next) => this.walletFor(queued, next), changes);
     return wallet;
