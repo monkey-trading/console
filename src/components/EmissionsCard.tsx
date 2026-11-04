@@ -43,7 +43,8 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
   const accrued = formatMonkey(position.accrued);
   // Not read yet: no wallet the page load may still connect, a connected one whose account, or whose closed periods, have not been read. The card then holds its claimable layout with a dash, as it does while the vault's record that decides the claim is read.
   const reading = state.wallet === null ? !state.walletDecided : !state.accountRead || (proof === null && pending.kind === "reading");
-  const recordPending = proof !== null && position.claimed === null && recordProblem === null;
+  // A watched account reads no vault and can claim nothing, so it holds no place for the button.
+  const recordPending = proof !== null && position.claimed === null && recordProblem === null && state.wallet?.readOnly !== true;
   /** The claim button's place, held while the reads that decide it run. */
   const buttonSlot = <div aria-hidden="true" className={`${BUTTON} invisible`}>Claim</div>;
   return (

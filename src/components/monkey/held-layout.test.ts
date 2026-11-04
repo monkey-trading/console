@@ -78,6 +78,15 @@ describe("the cards while a connected wallet's first reads run", () => {
     expect(html).toContain("Reading your stake…");
   });
 
+  it("holds no button's place on the emissions card for a watched account, which can claim nothing", () => {
+    const entitlement = { seq: 1, root: `0x${"ab".repeat(32)}`, account: WALLET.address, entitled: "5", siblings: [] };
+    const watched = render(Emissions, { wallet: { ...WALLET, readOnly: true }, walletDecided: true, accountRead: true, entitlement, emissionsVault: null }, "monkey");
+    expect(watched).toContain("Accrued");
+    expect(held(watched)).toBe(0);
+    const connected = render(Emissions, { wallet: WALLET, walletDecided: true, accountRead: true, entitlement, emissionsVault: null }, "monkey");
+    expect(held(connected)).toBe(1);
+  });
+
   it("holds the emissions card's layout while the account or its closed periods are read", () => {
     expect(render(Emissions, { wallet: WALLET, walletDecided: true, accountRead: false }, "monkey")).toContain("Reading your MONKEY emissions…");
     const periods = render(Emissions, { wallet: WALLET, walletDecided: true, accountRead: true, entitlement: null }, "monkey");
