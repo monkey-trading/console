@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MONKEY_UNIT } from "../format";
 import { DEMO_ADDRESS } from "../mock/demo";
+import { stakeMonkey } from "../monkey/actions";
 import { WALLET_READ_EVERY_MS } from "../monkey/live-reads";
 import { flush, setup } from "../monkey/panel-kit";
 import { connectWallet, disconnectWallet } from "../store/actions";
@@ -73,5 +74,15 @@ describe("DelegationReads", () => {
     expect(reads.getSnapshot().read.status).toBe("unavailable");
     stop();
     expect(reads.getSnapshot()).toEqual({ account: null, read: { status: "loading", value: null, message: null } });
+  });
+
+  it("reads again after a stake or an unstake lands, which moves the undelegated stake", async () => {
+    const { reads, stop, panel, counts } = await started();
+    const before = reads.getSnapshot().read.value?.staked ?? 0n;
+    expect(await stakeMonkey(panel, MONKEY_UNIT)).toBe(true);
+    await flush();
+    expect(counts.reads).toBe(2);
+    expect(reads.getSnapshot().read.value?.staked).toBe(before + MONKEY_UNIT);
+    stop();
   });
 });

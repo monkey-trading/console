@@ -7,6 +7,7 @@
 
 import type { Wallet } from "../engine/wallet";
 import type { DistributionHistoryReads } from "../staking/history-reads";
+import type { DelegationReads } from "../staking/delegation-reads";
 import type { MonkeyPanel } from "./panel";
 
 interface Entry {
@@ -90,4 +91,6 @@ export class MonkeySession {
   panel: MonkeyPanel | null = null;
   /** The Staking page's distribution history while it reads. */
   history: DistributionHistoryReads | null = null;
+  /** The Staking page's chain read of the account's delegations while it reads, which every staking transaction changes. */
+  delegations: DelegationReads | null = null;
 }

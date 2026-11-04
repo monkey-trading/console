@@ -2,8 +2,9 @@
  * The Staking page's read of the connected account's stake and delegations, straight from the chain
  * through its wallet (`StakingWallet.delegations`), whatever the node's state (monkey-trading/console#279):
  * no single operator may stop a staker voting away from it, so a node that is down or unverified
- * never holds this read up. Read on open, when the wallet changes, after a delegation change, and
- * every 15 seconds while the tab is visible, one call at a time behind the wallet's other work.
+ * never holds this read up. Read on open, when the wallet changes, after any staking transaction
+ * (through `monkeySession.delegations`), and every 15 seconds while the tab is visible, one call at a
+ * time behind the wallet's other work.
  */
 
 import type { StakeDelegations } from "../engine/staking";
@@ -48,6 +49,7 @@ export class DelegationReads {
   start(isHidden: () => boolean): () => void {
     this.open = true;
     this.cycle += 1;
+    this.store.monkeySession.delegations = this;
     let wallet = this.store.liveWallet;
     void this.refresh();
     const stopFollowing = this.store.subscribe(() => {
@@ -63,6 +65,7 @@ export class DelegationReads {
       this.cycle += 1;
       clearInterval(timer);
       stopFollowing();
+      if (this.store.monkeySession.delegations === this) this.store.monkeySession.delegations = null;
       this.set(IDLE);
     };
   }

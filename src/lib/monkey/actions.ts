@@ -68,7 +68,8 @@ async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, s
     return false;
   }
   // The chain moved, or the node's proof did: read both again on the page that is open now, which
-  // may not be the one the transaction started on.
+  // may not be the one the transaction started on. A stake or an unstake moves the delegations' figures too.
+  if (landed) void store.monkeySession.delegations?.refresh();
   const open = store.monkeySession.panel;
   if (open !== null) {
     // The node's total follows the chain a little later than the wallet's read does.
