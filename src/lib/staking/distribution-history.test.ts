@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { HistoryEvent, HistoryPage, StreamMessage } from "../engine/types";
-import { addMessage, addNewest, addPage, atBound, emptyHistory, epochsLeftOut, hasOperatorShare, HISTORY_KINDS, limitingKinds, MAX_EPOCHS, moreRemain, shownRows, type HistoryKind } from "./distribution-history";
+import { addMessage, addNewest, addPage, atBound, emptyHistory, emptyHistoryText, epochsLeftOut, hasOperatorShare, HISTORY_KINDS, limitingKinds, MAX_EPOCHS, moreRemain, shownRows, type HistoryKind } from "./distribution-history";
 
 const ME = "0x00000000000000000000000000000000000000aa";
 const OTHER = "0x00000000000000000000000000000000000000bb";
@@ -172,5 +172,13 @@ describe("what is held and left out", () => {
     const again = addNewest(data, page("distribution_allocated", [10, 9], true));
     expect(again.cover).toEqual(data.cover);
     expect(epochs(shownRows(again))).toEqual([10, 9, 8]);
+  });
+});
+
+describe("emptyHistoryText", () => {
+  it("claims only what the node's history holds, and never contradicts a proof that USDC was distributed", () => {
+    expect(emptyHistoryText(null)).toBe("No epoch in the node's history has distributed USDC to you. Each epoch close shares the house's excess above its floor between stakers.");
+    expect(emptyHistoryText(0n)).toBe(emptyHistoryText(null));
+    expect(emptyHistoryText(1n)).toBe("The node's history no longer holds the epochs that distributed USDC to you: it keeps account events for a limited time. The USDC distributions card has what was distributed in all.");
   });
 });

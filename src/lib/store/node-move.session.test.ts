@@ -163,3 +163,17 @@ describe("the setup popup across a move", () => {
     expect(next.store.getSnapshot().setup).toEqual({ open: false, decided: false, fund: null, deposit: null });
   });
 });
+
+describe("the page load's settled wallet across a move", () => {
+  it("starts a fresh store unsettled, and carries a settled one to the next store, with a wallet or without", async () => {
+    expect(nextStore().store.getSnapshot().walletDecided).toBe(false);
+    for (const connected of [true, false]) {
+      const old = await tab(memoryStorage());
+      if (!connected) disconnectWallet(old.store);
+      old.store.patch({ walletDecided: true });
+      const next = nextStore();
+      await moveToNode(old.store, next.store);
+      expect(next.store.getSnapshot().walletDecided, connected ? "with a wallet" : "without").toBe(true);
+    }
+  });
+});

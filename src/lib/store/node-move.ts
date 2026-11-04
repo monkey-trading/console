@@ -49,6 +49,8 @@ export async function moveToNode(old: ConsoleStore, next: ConsoleStore): Promise
   old.liveWallet = null;
   old.sessionKey = null;
   old.sessionLogin = null;
+  // The page load's wallet was settled on the old store; the next one starts from that.
+  next.patch({ walletDecided: old.getSnapshot().walletDecided });
   if (wallet === null) return;
   // Set first, so the connect below keeps the key rather than clearing another wallet's.
   next.liveWallet = wallet;

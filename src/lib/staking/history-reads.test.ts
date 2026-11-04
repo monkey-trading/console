@@ -6,6 +6,7 @@ import { EngineError } from "../engine/client";
 import type { HistoryPage } from "../engine/types";
 import { DEMO_ADDRESS } from "../mock/demo";
 import { EPOCH_MS } from "../mock/monkey-state";
+import { NODE_READ_MS } from "../monkey/panel";
 import { flush, setup } from "../monkey/panel-kit";
 import { connectWallet, disconnectWallet } from "../store/actions";
 import { shownRows } from "./distribution-history";
@@ -166,26 +167,43 @@ describe("DistributionHistoryReads", () => {
     stop();
   });
 
-  it("reads the newest pages once more a tick after the first read lands, for an epoch the index had not taken yet", async () => {
+  it("reads the newest pages again a tick after the first read lands and then on the node read's pace, until an epoch the index lagged on shows", async () => {
     const kit = await setup();
     kit.stop();
     const real = kit.node.client.history.bind(kit.node.client);
     let lagging = true;
-    // The index has not taken the account's one allocation yet when the page first reads it.
+    // The index has not taken the account's one allocation when the page first reads it, nor at the first read again.
     const pages = vi.spyOn(kit.node.client, "history").mockImplementation(async (address, params) => (lagging && params.kind === "distribution_allocated" ? { events: [], next: null } : real(address, params)));
     const history = new DistributionHistoryReads(kit.store);
     const stop = history.start(() => false);
     await flush();
     expect(history.getSnapshot().status).toBe("ready");
     expect(epochsOf(history)).toEqual([]);
-    lagging = false;
     pages.mockClear();
     await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
     expect(mine(pages).map(([, params]) => params)).toEqual([{ kind: "distribution_allocated", limit: HISTORY_PAGE }, { kind: "operator_share_allocated", limit: HISTORY_PAGE }]);
-    expect(epochsOf(history)).toHaveLength(1);
-    // Once only.
-    await vi.advanceTimersByTimeAsync(5 * RETRY_TICK_MS);
+    expect(epochsOf(history)).toEqual([]);
+    lagging = false;
+    // Nothing more before the node read's pace has passed, then the epoch the index has now taken.
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS - RETRY_TICK_MS);
     expect(mine(pages)).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
+    expect(mine(pages)).toHaveLength(4);
+    expect(epochsOf(history)).toHaveLength(1);
+    // And on, while the page is open.
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS);
+    expect(mine(pages)).toHaveLength(6);
+    stop();
+  });
+
+  it("reads none of the newest pages while the tab is hidden", async () => {
+    let hidden = false;
+    const { history, pages, stop } = await started({ hidden: () => hidden });
+    expect(history.getSnapshot().status).toBe("ready");
+    hidden = true;
+    pages.mockClear();
+    await vi.advanceTimersByTimeAsync(3 * NODE_READ_MS);
+    expect(mine(pages)).toHaveLength(0);
     stop();
   });
 

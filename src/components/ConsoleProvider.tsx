@@ -194,10 +194,10 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       const stopFeeds = followAccountFeeds(store);
       // An address in the URL names the account to watch; it wins over a stored connection
       // choice, which would otherwise replace the read-only view when its wallet answers.
-      if (new URLSearchParams(window.location.search).has("account")) void connectWallet(store, "watch", true);
+      if (new URLSearchParams(window.location.search).has("account")) void connectWallet(store, "watch", true).finally(() => store.patch({ walletDecided: true }));
       else if (!reconnected.current) {
         reconnected.current = true;
-        void reconnectWallet(store, session.walletConnect, () => injectedProvider() !== undefined);
+        void reconnectWallet(store, session.walletConnect, () => injectedProvider() !== undefined).finally(() => store.patch({ walletDecided: true }));
       }
       return () => {
         stopFeeds();
@@ -206,7 +206,7 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
     }
     const stop = store.start(SIM_EPOCH_MS);
     // The demo account is connected on load, so no screen starts empty.
-    void connectWallet(store, "browser", true);
+    void connectWallet(store, "browser", true).finally(() => store.patch({ walletDecided: true }));
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) store.setPaused(true);
     let simulated = SIM_EPOCH_MS;
     let last = Date.now();

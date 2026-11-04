@@ -1,6 +1,11 @@
 "use client";
 
-/** The USDC the stakers' distributions have added to the account, what the vault has paid, and the claim, which waits on a verdict that may sign since it is built from the node's proof. */
+/**
+ * The USDC the stakers' distributions have added to the account, what the vault has paid, and the
+ * claim, which waits on a verdict that may sign since it is built from the node's proof. Until the
+ * page load's wallet is settled and both reads that decide the claim have landed, the card holds the
+ * claimable layout with dashes, so nothing below moves when they land.
+ */
 
 import { useId } from "react";
 
@@ -32,6 +37,7 @@ export function DistributionClaim() {
   const panel = useMonkeyPanel();
   const { wallet: figures, overview, unmirroredTotal } = usePanelState();
   const wallet = useConsoleSelect((state) => state.wallet);
+  const decided = useConsoleSelect((state) => state.walletDecided);
   const busy = useConsoleSelect((state) => state.busy);
   const gate = useSignGate(useId());
   const readOnly = wallet?.readOnly === true;
@@ -41,16 +47,29 @@ export function DistributionClaim() {
   const held = mine ? figures.position.value : null;
   const position = distributionPosition(proof, held);
   const pending = pendingDistribution(overview, figures.position, unmirroredTotal);
+  // Not read yet: no wallet the page load may still connect, the node's proof, or, beside a proof, the vault's record that decides the claim.
+  const readingProof = wallet !== null && (!mine || figures.proof.status === "loading");
+  const readingRecord = mine && !readOnly && proof !== null && held === null && figures.position.status === "loading";
+  const reading = (wallet === null && !decided) || readingProof || readingRecord;
   return (
     <Card
       id="distributions-title"
       title="USDC distributions"
       aside={<CloseCountdown />}
     >
-      {wallet === null ? (
+      {reading ? (
+        <>
+          <dl className="space-y-2">
+            <Row label="Distributed to you">{proof === null ? "—" : formatUsdc(usdcFixed(position.accrued))}</Row>
+            <Row label="Paid by the vault">—</Row>
+            <Row label="Claimable">—</Row>
+          </dl>
+          <p className="sr-only">{proof === null ? "Reading your distributions…" : "Reading the vault's record of what it has paid…"}</p>
+          {/* The claim button's place, held while the reads that decide it run. */}
+          <div aria-hidden="true" className={`${BUTTON} invisible w-full`}>Claim</div>
+        </>
+      ) : wallet === null ? (
         <p className={NOTE}>Connect a wallet to see your USDC distributions.</p>
-      ) : !mine || figures.proof.status === "loading" ? (
-        <p className={NOTE}>Reading your distributions…</p>
       ) : proof === null && figures.proof.status === "ready" ? (
         <PendingLine pending={pending} />
       ) : proof === null ? null : (
@@ -60,11 +79,11 @@ export function DistributionClaim() {
           {position.claimable > 0n && <Row label="Claimable">{formatUsdc(usdcFixed(position.claimable))}</Row>}
         </dl>
       )}
-      {proof !== null && position.awaiting > 0n && <p className={NOTE}>{formatUsdc(usdcFixed(position.awaiting))} of this is not claimable yet; the rest follows once the vault reaches the newest checkpoint.</p>}
-      {mine && <ReadNote read={figures.proof} />}
+      {!reading && proof !== null && position.awaiting > 0n && <p className={NOTE}>{formatUsdc(usdcFixed(position.awaiting))} of this is not claimable yet; the rest follows once the vault reaches the newest checkpoint.</p>}
+      {mine && !reading && <ReadNote read={figures.proof} />}
       {mine && figures.position.status === "failed" && <ReadNote read={figures.position} />}
       {mine && readOnly && proof !== null && <p role="status" className="text-caption leading-relaxed text-amber">Claiming is off: this account is read-only, so nothing can be signed for it. What the vault has paid is read from a wallet&apos;s own chain connection, which a watched account does not have.</p>}
-      {mine && !readOnly && position.claimable > 0n && (
+      {mine && !readOnly && !reading && position.claimable > 0n && (
         <div>
           <button type="button" aria-disabled={busy || gate.blocked} aria-describedby={gate.describedBy} onClick={() => { if (!busy && !gate.blocked) void claimDistribution(panel).then(() => focusHeading("distributions-title")); }} className={`${BUTTON} w-full`}>
             Claim {formatUsdc(usdcFixed(position.claimable))} on the vault
@@ -73,7 +92,6 @@ export function DistributionClaim() {
         </div>
       )}
       <Notice surface="distribution" />
-      {mine && !readOnly && proof !== null && held === null && figures.position.status === "loading" && <p className={NOTE}>Reading the vault&apos;s record of what it has paid…</p>}
       {mine && !readOnly && proof !== null && held === null && figures.position.status === "failed" && <p className={NOTE}>The vault&apos;s record of what it has paid could not be read; it is read again by itself.</p>}
       {mine && !readOnly && position.claimed !== null && position.checkpoint === "waiting" && position.accrued > position.claimed && <p className={NOTE}>The vault has not accepted a checkpoint covering this yet; the claim unlocks once it does. It is checked again by itself.</p>}
       {mine && !readOnly && position.claimed !== null && position.checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && <p className={NOTE}>All distributed USDC is claimed.</p>}

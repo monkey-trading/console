@@ -687,7 +687,7 @@ Two engines        The first engine ($api) is the operator in effect, under seal
                    the stack starts it once an election has made the vault name its release;
                    then open $second_api/v1/health once and accept its certificate.
 Second wallet      $wallet2_line
-MONKEY to stake    Both wallets hold $wallet_monkey MONKEY to stake and delegate on the MONKEY page; the stack also gave the
+MONKEY to stake    Both wallets hold $wallet_monkey MONKEY to stake and delegate on the Staking page; the stack also gave the
                    second wallet $dev_usdc mock USDC.
 Drive it           ./scripts/dev-local-stack-ctl.sh status | elect | handover | fund-house <USDC>
                    (reads $STACK_INFO_FILE)

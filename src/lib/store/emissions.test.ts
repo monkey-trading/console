@@ -79,10 +79,10 @@ describe("checkEmissionsClaimed", () => {
     expect(store.getSnapshot().emissionsVault).toEqual({ claimed: 7n * MONKEY_UNIT, latestSeq: 40 });
   });
 
-  it("stays silent when the read is refused on another chain, and reads again once the wallet is back", async () => {
+  it("raises no notice when the read is refused on another chain, rejects with the refusal's reason for the card, and reads again once the wallet is back", async () => {
     const { provider, store } = await connected({ chainId: 1, emissionsClaimed: 7n * MONKEY_UNIT, latestSeq: 40 });
     store.patch({ entitlement: proof(9n * MONKEY_UNIT) });
-    await checkEmissionsClaimed(store);
+    await expect(checkEmissionsClaimed(store)).rejects.toThrow("not chain 31337");
     expect(store.getSnapshot().emissionsVault).toBeNull();
     expect(store.getSnapshot().notices).toEqual({});
     provider.chainId = 31337;
@@ -105,8 +105,9 @@ describe("checkEmissionsClaimed", () => {
     const reading = checkEmissionsClaimed(store);
     store.liveWallet = wallet; // replaced before the read settles
     fail(new Error("your wallet is on chain 1, not chain 31337"));
-    await reading;
+    await expect(reading).rejects.toThrow("not chain 31337");
     expect(store.getSnapshot().notices).toEqual({});
+    expect(store.getSnapshot().emissionsVault).toBeNull();
   });
 });
 

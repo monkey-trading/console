@@ -151,3 +151,14 @@ export function moreRemain(data: DistributionHistory): boolean {
 export function hasOperatorShare(rows: readonly EpochRow[]): boolean {
   return rows.some((row) => row.operator !== null);
 }
+
+/**
+ * What the card says when the node's history holds no epoch for the account. The node keeps account
+ * events only for its `history.retention`, so an empty history proves nothing about older epochs:
+ * where the account's distribution proof (`entitled`, USDC base units, null without one) shows USDC
+ * distributed, the line says the history no longer holds it, never that none was distributed.
+ */
+export function emptyHistoryText(entitled: bigint | null): string {
+  if (entitled !== null && entitled > 0n) return "The node's history no longer holds the epochs that distributed USDC to you: it keeps account events for a limited time. The USDC distributions card has what was distributed in all.";
+  return "No epoch in the node's history has distributed USDC to you. Each epoch close shares the house's excess above its floor between stakers.";
+}

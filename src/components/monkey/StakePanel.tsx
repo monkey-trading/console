@@ -1,6 +1,10 @@
 "use client";
 
-/** The connected account's stake: what it holds, the forms to stake and to start an unstake, and an unstake waiting out its cooldown. */
+/**
+ * The connected account's stake: what it holds, the forms to stake and to start an unstake, and an
+ * unstake waiting out its cooldown. Until the page load's wallet is settled and its stake read, the
+ * card holds that layout with dashes and its forms closed, so nothing below moves when it lands.
+ */
 
 import { formatMonkey, formatRate } from "@/lib/format";
 import { completeUnstake, stakeMonkey, startUnstake } from "@/lib/monkey/actions";
@@ -18,6 +22,7 @@ export function StakePanel() {
   const panel = useMonkeyPanel();
   const { wallet: figures, overview, unmirroredTotal, settling } = usePanelState();
   const wallet = useConsoleSelect((state) => state.wallet);
+  const decided = useConsoleSelect((state) => state.walletDecided);
   const busy = useConsoleSelect((state) => state.busy);
   // The node's clock to five seconds, so the Complete button opens within moments of the cooldown ending; the time left is shown to the minute.
   const nowMs = useConsoleSelect((state) => Math.floor(state.now / 5_000) * 5_000);
@@ -31,33 +36,23 @@ export function StakePanel() {
   const share = position === null || total === null || unmirroredTotal !== null ? null : shareBps(position.staked + (pending?.amount ?? 0n), total);
   const left = pending === null ? 0 : pending.claimableAtMs - nowMs;
   const readOnly = wallet?.readOnly === true;
+  // Not read yet: no wallet the page load may still connect, or a connected one whose stake has not landed.
+  const reading = wallet === null ? !decided : !readOnly && position === null && (!mine || figures.position.status === "loading");
   return (
     <Card
       id="stake-title"
       title="Your stake"
     >
-      {wallet === null ? (
-        <p className={NOTE}>Connect a wallet to stake or unstake MONKEY.</p>
-      ) : readOnly ? (
-        <p role="status" className="text-caption leading-relaxed text-amber">This account is read-only. Its stake and wallet balance are read through a wallet&apos;s own chain connection, and nothing can be signed for it.</p>
-      ) : position === null ? (
-        <ReadNote read={mine ? figures.position : { status: "loading", value: null, message: null }} loading="Reading your stake…" />
-      ) : !position.stakingEnabled ? (
-        <>
-          <dl className="space-y-2"><Row label="Wallet balance">{formatMonkey(position.balance)}</Row></dl>
-          <ReadNote read={figures.position} />
-          <p className={NOTE}>This build names no staking contract, so staking and unstaking are not available here.</p>
-        </>
-      ) : (
+      {reading || position?.stakingEnabled === true ? (
         <>
           <dl className="space-y-2">
-            <Row label="Staked">{formatMonkey(position.staked)}</Row>
-            <Row label="Wallet balance">{formatMonkey(position.balance)}</Row>
+            <Row label="Staked">{position === null ? "—" : formatMonkey(position.staked)}</Row>
+            <Row label="Wallet balance">{position === null ? "—" : formatMonkey(position.balance)}</Row>
             <Row label="Share of all stake">{share === null ? "—" : formatRate(share)}</Row>
           </dl>
-          <ReadNote read={figures.position} />
-          <AmountForm field="stake" label="Stake" action="Stake" max={position.balance} maxLabel="your wallet balance" disabled={busy || settling} onSubmit={(amount, onLanded) => stakeMonkey(panel, amount, onLanded)} />
-          <AmountForm field="unstake" label="Unstake" action="Start unstake" max={position.staked} maxLabel="your stake" disabled={busy || settling} onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)} />
+          {reading ? <p className="sr-only">Reading your stake…</p> : <ReadNote read={figures.position} />}
+          <AmountForm field="stake" label="Stake" action="Stake" max={position?.balance ?? 0n} maxLabel="your wallet balance" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => stakeMonkey(panel, amount, onLanded)} />
+          <AmountForm field="unstake" label="Unstake" action="Start unstake" max={position?.staked ?? 0n} maxLabel="your stake" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)} />
           <Notice surface="stake" />
           <p className={NOTE}>
             {staking === null ? "An unstake waits out a cooldown before it can be completed." : `An unstake waits ${formatDuration(staking.cooldown_ms)} before it can be completed.`} Until then it still counts as staked, so it stays in your share.
@@ -69,6 +64,18 @@ export function StakePanel() {
               <button type="button" aria-disabled={busy || left > 0} onClick={() => { if (!busy && left <= 0) void completeUnstake(panel).then(() => focusHeading("stake-title")); }} className={`${BUTTON} w-full`}>Complete unstake</button>
             </div>
           )}
+        </>
+      ) : wallet === null ? (
+        <p className={NOTE}>Connect a wallet to stake or unstake MONKEY.</p>
+      ) : readOnly ? (
+        <p role="status" className="text-caption leading-relaxed text-amber">This account is read-only. Its stake and wallet balance are read through a wallet&apos;s own chain connection, and nothing can be signed for it.</p>
+      ) : position === null ? (
+        <ReadNote read={figures.position} loading="Reading your stake…" />
+      ) : (
+        <>
+          <dl className="space-y-2"><Row label="Wallet balance">{formatMonkey(position.balance)}</Row></dl>
+          <ReadNote read={figures.position} />
+          <p className={NOTE}>This build names no staking contract, so staking and unstaking are not available here.</p>
         </>
       )}
     </Card>

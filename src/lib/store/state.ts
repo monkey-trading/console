@@ -125,6 +125,12 @@ export interface ConsoleState {
   /** Whether the queue read failed; true between a failed walk and its recovery. */
   queueFailed: boolean;
   wallet: { address: string; label: string; readOnly?: boolean } | null;
+  /**
+   * Whether the page load has settled its wallet: the mock's demo account, the URL's watched account,
+   * or a stored connection choice has connected or failed. Until then no wallet means "not yet", not
+   * "none", so a card holds the shape it will take rather than the line it shows with no wallet.
+   */
+  walletDecided: boolean;
   eligibility: Eligibility;
   account: AccountModel | null;
   queue: QueuedWithdrawal[];
@@ -229,6 +235,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     withdrawalTotals: housePanel?.totals ?? null,
     queueFailed: false,
     wallet: null,
+    walletDecided: false,
     eligibility: null,
     account: null,
     queue: [],

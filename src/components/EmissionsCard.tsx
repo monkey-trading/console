@@ -33,13 +33,20 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
   const { wallet: figures } = usePanelState();
   // The page's last read of the vault's record, for the account it names.
   const record = state.wallet !== null && figures.address === state.wallet.address ? figures.record : null;
-  const recordProblem = record?.status === "failed" ? (record.message ?? "the read failed").replace(/\.+$/, "") : null;
+  // The read's own reason; a generic one only for an error that carries none.
+  const recordProblem = record?.status === "failed" ? (record.message || "the read failed").replace(/\.+$/, "") : null;
   const act = () => {
     if (state.busy) return;
     void claim().then(() => focusHeading("monkey-title"));
   };
   const idle = !state.busy;
   const accrued = formatMonkey(position.accrued);
+  // Not read yet: no wallet the page load may still connect, a connected one whose account, or whose closed periods, have not been read. The card then holds its claimable layout with a dash, as it does while the vault's record that decides the claim is read.
+  const reading = state.wallet === null ? !state.walletDecided : !state.accountRead || (proof === null && pending.kind === "reading");
+  // A watched account reads no vault and can claim nothing, so it holds no place for the button.
+  const recordPending = proof !== null && position.claimed === null && recordProblem === null && state.wallet?.readOnly !== true;
+  /** The claim button's place, held while the reads that decide it run. */
+  const buttonSlot = <div aria-hidden="true" className={`${BUTTON} invisible`}>Claim</div>;
   return (
     <section aria-labelledby="monkey-title" className="rounded-xl border border-line-2 bg-ink-1 p-4">
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
@@ -47,15 +54,17 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
         <BudgetCountdown />
       </div>
       {readOnly.note}
-      {!state.wallet ? (
+      {reading ? (
+        <div className="mt-3 text-caption">
+          <p className="flex justify-between gap-2"><span className="text-fg">Accrued</span><span className="text-fg-2">—</span></p>
+          <p className="mt-2 text-fg-3">Reading your MONKEY emissions…</p>
+          {buttonSlot}
+        </div>
+      ) : !state.wallet ? (
         <p className="mt-3 text-caption text-fg-3">Connect a wallet to see your MONKEY emissions.</p>
-      ) : !state.accountRead ? (
-        <p className="mt-3 text-caption text-fg-3">Reading your MONKEY emissions…</p>
       ) : proof === null ? (
         pending.kind === "awaiting" ? (
           <p role="status" className="mt-3 text-caption text-fg-3">You realised a loss in emission period {pending.period}, which has closed. Any MONKEY it earned you becomes claimable once the vault has the checkpoint covering it, and is read again by itself.</p>
-        ) : pending.kind === "reading" ? (
-          <p className="mt-3 text-caption text-fg-3">Reading the emission periods that have closed…</p>
         ) : (
           <p className="mt-3 text-caption text-fg-3">No MONKEY accrued yet. MONKEY accrues from the engine&apos;s fixed ten-minute emission budgets, shared between the accounts that realised a loss in each period.</p>
         )
@@ -70,6 +79,7 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
               {recordProblem === null ? "Reading the vault's record of what it has minted…" : `Could not read the vault's record of what it has minted: ${recordProblem}. It is read again by itself.`}
             </p>
           )}
+          {recordPending && buttonSlot}
           {position.claimable > 0n && (
             <>
               <button type="button" aria-disabled={!idle || gate.blocked} aria-describedby={readOnly.describedBy ?? gate.describedBy} onClick={() => !gate.blocked && act()} className={BUTTON}>Claim {formatMonkey(position.claimable)} on the vault</button>

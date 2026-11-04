@@ -72,6 +72,13 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
           <ChartCanvas kind={kind} lines={lines} data={data} format={format} marks={marks} label={`${title} chart`} />
         )}
       </div>
+      {data === null && read.status === "loading" && (
+        // The lines under a read chart, held while it is read so the card keeps its loaded height.
+        <div aria-hidden="true" className="invisible">
+          <p className="mt-2 text-label">Latest</p>
+          <p className={`${NOTE} mt-1`}>Data begins</p>
+        </div>
+      )}
       {data !== null && (
         <>
           <p className="sr-only">{title}: {lines.map((line) => `${line.label} ${latestText(data.units[line.metric] ?? "", data.latest[line.metric])}`).join("; ")}.</p>
