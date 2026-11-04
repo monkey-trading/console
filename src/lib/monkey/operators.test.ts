@@ -8,7 +8,8 @@ import type { OperatorList } from "../engine/staking-reads";
 import type { OperatorRoute } from "../engine/stats-types";
 import { DelegationReads } from "../staking/delegation-reads";
 import { changeDelegation } from "./actions";
-import { hostnameListed, mirroredElection, OperatorReads, operatorsShown, shownHostname } from "./operators";
+import { hostnameListed, shownHostname } from "../staking/hostnames";
+import { mirroredElection, OperatorReads, operatorsShown } from "./operators";
 import { NODE_READ_MS } from "./panel";
 import { flush, setup } from "./panel-kit";
 

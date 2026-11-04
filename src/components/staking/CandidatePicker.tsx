@@ -9,7 +9,7 @@
 import { useId } from "react";
 
 import { groupThousands } from "@/lib/format";
-import { ADDRESS, offersTyped, type CandidateSource, type NoList } from "@/lib/staking/candidate-choice";
+import { offersTyped, typedAddressOk, type CandidateSource, type NoList } from "@/lib/staking/candidate-choice";
 import { formatStamp } from "@/lib/time";
 
 import { Select } from "../Select";
@@ -36,11 +36,11 @@ interface Props {
 export function CandidatePicker({ label, options, value, onChange, source, typed, onTyped }: Props) {
   const id = useId();
   const text = typed.trim();
-  const wrong = text !== "" && !ADDRESS.test(text);
+  const wrong = text !== "" && !typedAddressOk(text);
   return (
     <div className="space-y-2">
       {source.kind === "loading" && <p className={NOTE}>Reading the operator list…</p>}
-      {value !== null && options.length > 0 && <Select label={label} value={value} options={options} onChange={onChange} />}
+      {options.length > 0 && <Select label={label} value={value ?? ""} options={[{ value: "", label: "Choose a candidate" }, ...options]} onChange={onChange} />}
       {source.kind === "held" && <p className={NOTE}>From the operator list last verified at {formatStamp(source.verifiedAtMs)} UTC, as the registry stood at final block {groupThousands(BigInt(source.block))}: {WHY[source.why]}.</p>}
       {offersTyped(source, typed) && (
         <>
@@ -48,7 +48,7 @@ export function CandidatePicker({ label, options, value, onChange, source, typed
           {/* Cleared, the list's choice applies again; typed, it holds even once the node's list is back. */}
           <input id={id} value={typed} maxLength={44} spellCheck={false} autoComplete="off" placeholder="0x…" aria-invalid={wrong} aria-describedby={`${id}-note`} onChange={(event) => onTyped(event.target.value)} className={FIELD} />
           <p id={`${id}-note`} className={wrong ? "text-caption text-amber" : NOTE}>
-            {wrong ? "Enter a 0x address of 40 hexadecimal digits. " : ""}An address typed here is checked only by the chain, and the staking contract takes any address: make sure it is a candidate&apos;s.
+            {wrong ? "Enter a candidate's 0x address of 40 hexadecimal digits, as its checksum has it. " : ""}An address typed here is checked only by the chain, and the staking contract takes any address: make sure it is a candidate&apos;s.
           </p>
         </>
       )}

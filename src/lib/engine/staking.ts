@@ -48,8 +48,8 @@ export interface StakeDelegations {
  */
 export interface StakingWallet {
   position(): Promise<StakingPosition>;
-  /** The stake and its delegations from the chain alone, so a staker sees and changes them whatever the node's state; refused on another chain. */
-  delegations(): Promise<StakeDelegations>;
+  /** The stake and its delegations from the chain alone, so a staker sees and changes them whatever the node's state; refused on another chain; null for a build that names no staking contract. */
+  delegations(): Promise<StakeDelegations | null>;
   /** Approves the staking contract for `amount` MONKEY if needed, then stakes it. */
   stake(amount: bigint, progress?: Progress): Promise<string>;
   /** Starts unstaking `amount`; it stops earning once the cooldown completes and the engine mirrors it. */

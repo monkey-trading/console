@@ -5,6 +5,8 @@
  * from the last list verified, or take a typed address that only the chain checks.
  */
 
+import { isAddress } from "viem";
+
 import type { Read } from "../monkey/figures";
 import type { OperatorsView } from "./operator-table";
 
@@ -34,13 +36,27 @@ export function offersTyped(source: CandidateSource, typed: string): boolean {
   return source.kind === "held" || source.kind === "none" || typed.trim() !== "";
 }
 
+/** The zero address, which no candidate has: the staking contract refuses it. */
+const ZERO = "0x0000000000000000000000000000000000000000";
+
 /**
- * The candidate a picker names: what is typed, lowercased, once it is an address, else the chosen
- * option; null for typed text that is not an address, or with nothing to choose. What is typed holds
- * when the node's list comes back, until the visitor clears it.
+ * Whether typed text is an address a delegation may go to: well formed, its EIP-55 checksum right
+ * where it is mixed case (all lower or all upper case carries none), and not the zero address.
+ */
+export function typedAddressOk(text: string): boolean {
+  if (!ADDRESS.test(text) || text.toLowerCase() === ZERO) return false;
+  const hex = text.slice(2);
+  return hex === hex.toLowerCase() || hex === hex.toUpperCase() || isAddress(text, { strict: true });
+}
+
+/**
+ * The candidate a picker names: what is typed, lowercased, once it is an address a delegation may go
+ * to, else the chosen option (none for ""); null for typed text that is not such an address, or with
+ * nothing chosen. What is typed holds when the node's list comes back, until the visitor clears it or
+ * chooses a candidate.
  */
 export function pickedCandidate(typed: string, value: string | null): string | null {
   const text = typed.trim();
-  if (text === "") return value;
-  return ADDRESS.test(text) ? text.toLowerCase() : null;
+  if (text === "") return value === "" ? null : value;
+  return typedAddressOk(text) ? text.toLowerCase() : null;
 }

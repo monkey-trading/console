@@ -73,7 +73,7 @@ export function StakingPage() {
           {/* The figures are hidden, not unmounted, while the node is not trusted: a typed amount survives a gap in the feed, and no figure from before it shows. */}
           <div className={`mt-4 ${trusted ? "grid" : "hidden"} items-start gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,35rem)_minmax(0,1fr)]`}>
             <div className="flex min-w-0 flex-col gap-4">
-              <StakePanel delegations={wallet !== null && delegationsRead.account === wallet.address ? delegationsRead.read.value : null} labelOf={labelOf} />
+              <StakePanel delegations={wallet !== null && delegationsRead.account === wallet.address ? delegationsRead : null} labelOf={labelOf} />
               <DistributionClaim />
               <DistributionHistory history={history} />
               <div className="grid min-w-0 gap-4 xl:grid-cols-2">

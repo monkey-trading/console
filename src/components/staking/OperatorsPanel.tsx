@@ -13,9 +13,11 @@ import { useId, useMemo, useState, useSyncExternalStore } from "react";
 import { readBlock } from "@/lib/engine/attestation";
 import { groupThousands, shortHex } from "@/lib/format";
 import { formatDuration } from "@/lib/monkey/figures";
-import { hostnameListed, mirroredElection, type OperatorReads } from "@/lib/monkey/operators";
+import { mirroredElection, type OperatorReads } from "@/lib/monkey/operators";
 import type { DelegationReads } from "@/lib/staking/delegation-reads";
 import { delegationTo } from "@/lib/staking/delegations";
+import { hostnameListed } from "@/lib/staking/hostnames";
+import { withAddress } from "@/lib/staking/operator-cells";
 import { countText, MAX_SEARCH, SORTS, tableView, type OperatorRow, type SortId } from "@/lib/staking/operator-table";
 import { formatStamp } from "@/lib/time";
 
@@ -53,7 +55,8 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortId>("role");
   const [page, setPage] = useState(0);
-  const [target, setTarget] = useState<string | null>(null);
+  const [target, setTarget] = useState("");
+  const [typedTo, setTypedTo] = useState("");
   const list = listRead.value;
   const rows = useMemo(() => list?.rows ?? [], [list]);
   const view = useMemo(() => tableView(rows, search, sort, page), [rows, search, sort, page]);
@@ -61,7 +64,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
   const pending = list?.pending ?? null;
   const mirrored = pending === null ? mirroredElection(route.value, nowMs) : null;
   const mine = wallet !== null && delegationsRead.account === wallet.address ? delegationsRead.read.value : null;
-  const held = (address: string) => (mine === null ? 0n : delegationTo(mine.delegations, address));
+  const delegatedTo = (address: string) => (mine === null ? 0n : delegationTo(mine.delegations, address));
   const canVote = wallet !== null && wallet.readOnly !== true && mine !== null;
   // The candidates whose registered hostname this build could not connect to, were one elected.
   const unreachable = useMemo(() => new Set(node !== null ? [] : rows.filter((row) => row.listed && !hostnameListed(deploy, row.registeredHostname)).map((row) => row.address)), [node, deploy, rows]);
@@ -77,17 +80,17 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
       </dl>
       {pending !== null && (
         <p className="rounded border border-amber/40 bg-amber/10 p-3 text-caption leading-relaxed text-amber">
-          {pending.promoted ? `A liveness promotion names ${labelOf(pending.candidate)}: its release applies now, and its admin key` : `An election named ${labelOf(pending.candidate)}, which`} takes effect at {formatStamp(pending.effectiveAtMs)} UTC{nowMs > 0 && pending.effectiveAtMs > nowMs ? `, in ${formatDuration(pending.effectiveAtMs - nowMs)}` : ""}.
+          {pending.promoted ? `A liveness promotion names ${withAddress(labelOf(pending.candidate), pending.candidate)}: its release applies now, and its admin key` : `An election named ${withAddress(labelOf(pending.candidate), pending.candidate)}, which`} takes effect at {formatStamp(pending.effectiveAtMs)} UTC{nowMs > 0 && pending.effectiveAtMs > nowMs ? `, in ${formatDuration(pending.effectiveAtMs - nowMs)}` : ""}.
         </p>
       )}
       {mirrored !== null && (
         <p className="rounded border border-amber/40 bg-amber/10 p-3 text-caption leading-relaxed text-amber">
-          The node has logged an election naming {labelOf(mirrored.candidate)}, which applies its admin key at {formatStamp(mirrored.effectiveAtMs)} UTC, in {formatDuration(mirrored.effectiveAtMs - nowMs)}.
+          The node has logged an election naming {withAddress(labelOf(mirrored.candidate), mirrored.candidate)}, which applies its admin key at {formatStamp(mirrored.effectiveAtMs)} UTC, in {formatDuration(mirrored.effectiveAtMs - nowMs)}.
         </p>
       )}
       <ReadNote read={route} loading={nodeReadable ? "Reading the node's figures…" : "The node's figures wait until it is verified."} />
       <h4 className="pt-1 text-label tracking-caps text-fg-3 uppercase">Your delegations</h4>
-      <Delegations operators={operators} lists={{ list: listRead, held: heldList }} delegations={delegations} read={delegationsRead} target={target} onTarget={setTarget} labelOf={labelOf} titleId={TITLE_ID} />
+      <Delegations operators={operators} lists={{ list: listRead, held: heldList }} delegations={delegations} read={delegationsRead} target={target} onTarget={setTarget} typedTo={typedTo} onTypedTo={setTypedTo} labelOf={labelOf} titleId={TITLE_ID} />
       {/* Beside the forms, and there with no wallet too: a change's outcome outlives the connection that sent it. */}
       <Notice surface="operator" />
       <p className={NOTE}>You delegate amounts of your stake to any candidates the registry lists, and may move or take them back at any time; the next election close counts them. Stake you have not delegated abstains, and stake you have started to unstake does not vote. Delegation changes nothing about distributions, and delegators share no rewards.</p>
@@ -106,11 +109,12 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
           <p role="status" className="text-caption text-fg-2">{countText(view, search)}</p>
           {view.rows.length > 0 && (
             <OperatorTable
-              rows={view.rows} sort={sort} held={held} canVote={canVote} disabled={busy || settling} reachable={reachable}
+              rows={view.rows} sort={sort} held={delegatedTo} canVote={canVote} disabled={busy || settling} reachable={reachable}
               onDelegate={(row) => {
+                // A deliberate choice: it replaces any address typed in the form, which then names this candidate.
                 setTarget(row.address);
-                // The form above now names this candidate: its amount field is where the visitor goes next.
-                document.getElementById(DELEGATE_FORM_ID)?.querySelector("input")?.focus();
+                setTypedTo("");
+                document.getElementById(DELEGATE_FORM_ID)?.querySelector<HTMLInputElement>('input[inputmode="decimal"]')?.focus();
               }}
             />
           )}

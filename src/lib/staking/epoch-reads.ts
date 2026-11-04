@@ -11,6 +11,7 @@ import type { DistributionEpochsPage, EpochClose } from "../engine/staking-reads
 import { Backoff } from "../monkey/live-reads";
 import { NODE_READ_MS } from "../monkey/panel";
 import type { ConsoleStore } from "../store/store";
+import { ADDRESS } from "./candidate-choice";
 import { RETRY_TICK_MS } from "./history-reads";
 
 /** Epochs per read: the node allows 1 to 200. */
@@ -54,6 +55,29 @@ export function foldEpochs(held: Pick<EpochsState, "epochs" | "next">, page: Dis
   const epochs = [...byEpoch.values()].sort((a, b) => b.epoch - a.epoch).slice(0, MAX_HELD_EPOCHS);
   const next = older || newestHeld === undefined ? page.next : held.next;
   return { epochs, next: epochs.length >= MAX_HELD_EPOCHS ? null : next };
+}
+
+const UNITS = /^\d+$/;
+const FIXED = /^-?\d+(\.\d+)?$/;
+
+/**
+ * `page` checked as it is read, as the operator list is: every amount whole base units, NAV and floor
+ * decimals, each recipient an address, each epoch, skipped epoch and time a whole number.
+ * Error cases:
+ * - any of those is malformed
+ */
+export function checkedPage(page: DistributionEpochsPage): DistributionEpochsPage {
+  const whole = (n: unknown) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0;
+  for (const close of page.epochs) {
+    const amounts = [close.excess_usdc_units, close.allocated_usdc_units, close.stakers_usdc_units, ...close.operator_shares.map((share) => share.amount)];
+    const ok = amounts.every((amount) => UNITS.test(amount)) && FIXED.test(close.nav) && FIXED.test(close.floor)
+      && [close.epoch, close.close_seq, close.close_ms, close.ended_ms, close.stakers].every(whole)
+      && close.operator_shares.every((share) => ADDRESS.test(share.account))
+      && (close.skipped === null || (whole(close.skipped.first) && whole(close.skipped.last)));
+    if (!ok) throw new Error(`The closed epochs named a malformed figure for epoch ${String(close.epoch)}.`);
+  }
+  if (page.next !== null && !whole(page.next)) throw new Error("The closed epochs named a cursor that is not an epoch.");
+  return page;
 }
 
 /** The text of a failed read for the card. */
@@ -110,7 +134,7 @@ export class EpochReads {
   private async readNewest(cycle: number): Promise<void> {
     this.reading = true;
     try {
-      const page = await this.store.deps.client.stats.distributionEpochs({ limit: EPOCH_PAGE });
+      const page = checkedPage(await this.store.deps.client.stats.distributionEpochs({ limit: EPOCH_PAGE }));
       if (cycle !== this.cycle) return;
       this.backoff.record(false);
       this.dueAt = Date.now() + NODE_READ_MS;
@@ -137,7 +161,7 @@ export class EpochReads {
     const cycle = this.cycle;
     this.set({ more: true, moreError: null });
     try {
-      const page = await this.store.deps.client.stats.distributionEpochs({ before: next, limit: EPOCH_PAGE });
+      const page = checkedPage(await this.store.deps.client.stats.distributionEpochs({ before: next, limit: EPOCH_PAGE }));
       if (cycle !== this.cycle) return;
       if (this.state.next !== next) this.set({ more: false });
       else this.set({ more: false, cover: page, ...foldEpochs(this.state, page, true) });

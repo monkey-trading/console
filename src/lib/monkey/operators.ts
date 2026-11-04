@@ -8,7 +8,6 @@
  */
 
 import { readBlock, type AttestationStatus, type FeedStatus } from "../engine/attestation";
-import { hostnameOrigin, listedOrigins, type Deploy } from "../engine/deploy";
 import type { OperatorRoute } from "../engine/stats-types";
 import { operatorsView, type OperatorsView } from "../staking/operator-table";
 import type { ConsoleStore } from "../store/store";
@@ -29,17 +28,6 @@ export interface OperatorsState {
 }
 
 const NOTHING_READ: OperatorsState = { route: LOADING, list: LOADING, held: null };
-
-/** A hostname as the page shows it: plain ASCII as the build could connect to it, or null for text it could not, so a lookalike in another script never reads as a host. */
-export function shownHostname(hostname: string | null): string | null {
-  return hostname !== null && hostnameOrigin(hostname) !== null ? hostname.toLowerCase() : null;
-}
-
-/** Whether this build could connect to `hostname`: its CSP names the origin. */
-export function hostnameListed(deploy: Pick<Deploy, "origin" | "candidateOrigins">, hostname: string): boolean {
-  const origin = hostnameOrigin(hostname);
-  return origin !== null && listedOrigins(deploy).includes(origin);
-}
 
 /**
  * Whether the Staking page shows its operators card: with the rest of the figures once the node is

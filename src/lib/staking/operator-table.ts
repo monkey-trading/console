@@ -9,7 +9,7 @@
 
 import { CANDIDATE_LIMIT, type OperatorList } from "../engine/staking-reads";
 import { shareBps } from "../monkey/figures";
-import { shownHostname } from "../monkey/operators";
+import { shownHostname } from "./hostnames";
 import { ADDRESS } from "./candidate-choice";
 
 /** `elected` and `promoted` wait on `pendingElection`; `standby` is the one `promote()` would pick now. */

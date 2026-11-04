@@ -69,7 +69,7 @@ async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, s
   }
   // The chain moved, or the node's proof did: read both again on the page that is open now, which
   // may not be the one the transaction started on. Every staking transaction moves the delegations' figures too.
-  const delegations = landed ? store.monkeySession.delegations?.refresh() : undefined;
+  const delegations = landed ? store.monkeySession.delegations?.settleAfter() : undefined;
   const open = store.monkeySession.panel;
   if (open !== null) {
     // The node's total follows the chain a little later than the wallet's read does.
@@ -139,9 +139,9 @@ export async function changeDelegation(panel: MonkeyPanel, operators: OperatorRe
     else await staking.redelegate(change.from, change.to, change.amount, progress);
     return true;
   }, false, onLanded);
-  // The list is the node's, which may be down: the change's outcome waits on the chain's read alone.
+  // The list is the node's, which may be down: the change's outcome waits on the chain's read alone, which `run` makes for the page's own reader.
   void operators.refresh();
-  await delegations.refresh();
+  if (panel.store.monkeySession.delegations !== delegations) await delegations.refresh();
   return landed;
 }
 

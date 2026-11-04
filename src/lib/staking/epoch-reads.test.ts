@@ -6,7 +6,7 @@ import { EngineError } from "../engine/client";
 import type { DistributionEpochsPage, EpochClose } from "../engine/staking-reads";
 import { NODE_READ_MS } from "../monkey/panel";
 import { flush, setup } from "../monkey/panel-kit";
-import { EPOCH_PAGE, EpochReads, foldEpochs, MAX_HELD_EPOCHS } from "./epoch-reads";
+import { checkedPage, EPOCH_PAGE, EpochReads, foldEpochs, MAX_HELD_EPOCHS } from "./epoch-reads";
 import { RETRY_TICK_MS } from "./history-reads";
 
 beforeEach(() => {
@@ -47,6 +47,20 @@ async function started(count: number, hidden = () => false) {
   await flush();
   return { ...kit, epochs, stop, served };
 }
+
+describe("checkedPage", () => {
+  it("passes a well-formed page and refuses a malformed amount, recipient, epoch, skipped run or cursor", () => {
+    const good = page([3, 2], 2);
+    expect(checkedPage(good)).toBe(good);
+    const bad: Partial<EpochClose>[] = [
+      { stakers_usdc_units: "1.5" }, { allocated_usdc_units: "-1" }, { nav: "five" },
+      { operator_shares: [{ account: "0x12", amount: "20" }] }, { operator_shares: [{ account: "0x00000000000000000000000000000000000000a1", amount: "2e3" }] },
+      { epoch: 1.5 }, { close_ms: -1 }, { skipped: { first: 1, last: Number.NaN } },
+    ];
+    for (const over of bad) expect(() => checkedPage({ ...good, epochs: [close(3, over)] })).toThrow("malformed figure for epoch");
+    expect(() => checkedPage({ ...good, next: -2 })).toThrow("cursor that is not an epoch");
+  });
+});
 
 describe("foldEpochs", () => {
   it("adds the epochs that closed since above, replaces those held again, and keeps the older pages' cursor", () => {
@@ -151,6 +165,21 @@ describe("EpochReads", () => {
     node.client.stats.distributionEpochs = (params) => served.answer(params);
     await vi.advanceTimersByTimeAsync(NODE_READ_MS * 2);
     expect(epochs.getSnapshot().error).toBeNull();
+    stop();
+  });
+
+  it("shows no page with a malformed figure, newest or older, and says why", async () => {
+    const { epochs, node, stop, served } = await started(EPOCH_PAGE + 5);
+    node.client.stats.distributionEpochs = async (params) => {
+      const answer = await served.answer(params);
+      return { ...answer, epochs: answer.epochs.map((c) => ({ ...c, stakers_usdc_units: "0x10" })) };
+    };
+    await epochs.loadMore();
+    expect(epochs.getSnapshot().moreError).toContain("malformed figure");
+    expect(epochs.getSnapshot().epochs).toHaveLength(EPOCH_PAGE);
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS);
+    expect(epochs.getSnapshot().error).toContain("malformed figure");
+    expect(epochs.getSnapshot().epochs.every((c) => c.stakers_usdc_units !== "0x10")).toBe(true);
     stop();
   });
 

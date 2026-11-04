@@ -16,14 +16,15 @@ import type { ConsoleStore } from "../store/store";
 export interface DelegationsState {
   /** The account the read is for; null with no wallet. */
   account: string | null;
+  /** Unavailable for a wallet with no staking calls, or a build that names no staking contract. */
   read: Read<StakeDelegations>;
+  /** Whether a staking transaction has landed and its read again has not: the figures held are the ones before it. */
+  settling: boolean;
 }
 
 /** A wallet with no staking calls, such as a watched account's, reads nothing. */
 const NONE = { status: "unavailable", value: null, message: null } as const;
-const IDLE: DelegationsState = { account: null, read: LOADING };
-/** The reads that have begun asking the wallet, which a later ask no longer joins. */
-const started = new WeakSet<Promise<void>>();
+const IDLE: DelegationsState = { account: null, read: LOADING, settling: false };
 
 export class DelegationReads {
   private state: DelegationsState = IDLE;
@@ -31,10 +32,12 @@ export class DelegationReads {
   /** Counts openings and wallet changes; a read begun before one never writes after it. */
   private cycle = 0;
   private open = false;
-  /** The read waiting or running for a wallet, which another ask for that wallet joins, so reads never pile up behind a wallet that is slow to answer. */
-  private reading: { wallet: Wallet; cycle: number; read: Promise<void> } | null = null;
+  /** The read waiting for a wallet, which another ask for that wallet joins until it has begun asking, so reads never pile up behind a wallet that is slow to answer. */
+  private reading: { wallet: Wallet; cycle: number; read: Promise<void>; started: boolean } | null = null;
   /** Spaces the timer's reads out after failures; a read asked for after a transaction is not held back. */
   private readonly backoff = new Backoff();
+  /** The reads again after landed transactions still on their way; closing the page forgets them. */
+  private readonly settles = new Set<object>();
 
   constructor(private readonly store: ConsoleStore) {}
 
@@ -75,6 +78,7 @@ export class DelegationReads {
       if (this.store.monkeySession.delegations === this) this.store.monkeySession.delegations = null;
       this.reading = null;
       this.backoff.reset();
+      this.settles.clear();
       this.set(IDLE);
     };
   }
@@ -101,23 +105,41 @@ export class DelegationReads {
     }
     const cycle = this.cycle;
     const waiting = this.reading;
-    if (waiting !== null && waiting.wallet === wallet && waiting.cycle === cycle && !started.has(waiting.read)) return waiting.read;
+    if (waiting !== null && waiting.wallet === wallet && waiting.cycle === cycle && !waiting.started) return waiting.read;
     const current = () => cycle === this.cycle && this.open && this.store.liveWallet === wallet;
-    const read: Promise<void> = this.store.monkeySession.walletWork.work(wallet, async () => {
-      started.add(read);
+    const entry = { wallet, cycle, read: Promise.resolve(), started: false };
+    entry.read = this.store.monkeySession.walletWork.work(wallet, async () => {
+      entry.started = true;
       if (!current()) return;
       try {
         const answer = await staking.delegations();
         this.backoff.record(false);
-        if (current()) this.set({ read: ready(answer) });
+        if (current()) this.set({ read: answer === null ? NONE : ready(answer) });
       } catch (error) {
         this.backoff.record(true);
         if (current()) this.set({ read: failed(error, this.state.read.value) });
       }
     }).finally(() => {
-      if (this.reading?.read === read) this.reading = null;
+      if (this.reading === entry) this.reading = null;
     });
-    this.reading = { wallet, cycle, read };
-    return read;
+    this.reading = entry;
+    return entry.read;
+  }
+
+  /**
+   * After a staking transaction landed: the figures held are the ones before it until this read
+   * lands, so the forms that check against them stay shut till then, and till every other such read
+   * has landed too.
+   */
+  async settleAfter(): Promise<void> {
+    if (!this.open) return;
+    const token = {};
+    this.settles.add(token);
+    this.set({ settling: true });
+    try {
+      await this.refresh();
+    } finally {
+      if (this.settles.delete(token)) this.set({ settling: this.settles.size > 0 });
+    }
   }
 }

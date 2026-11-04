@@ -44,4 +44,17 @@ describe("offersTyped and pickedCandidate", () => {
   it("names nothing for typed text that is not an address", () => {
     expect(pickedCandidate("0x12", A)).toBeNull();
   });
+
+  it("names nothing for the zero address or a mixed-case address whose checksum is wrong", () => {
+    const mixed = "0x52908400098527886E0F7030069857D2E4169EE7";
+    expect(pickedCandidate("0x0000000000000000000000000000000000000000", A)).toBeNull();
+    expect(pickedCandidate(mixed.replace("EE7", "Ee7"), A)).toBeNull();
+    expect(pickedCandidate(mixed, A)).toBe(mixed.toLowerCase());
+    expect(pickedCandidate(mixed.toLowerCase(), A)).toBe(mixed.toLowerCase());
+  });
+
+  it("names nothing while nothing is chosen or typed", () => {
+    expect(pickedCandidate("", "")).toBeNull();
+    expect(pickedCandidate("  ", "")).toBeNull();
+  });
 });

@@ -58,7 +58,7 @@ describe("DelegationReads", () => {
     expect(reads.getSnapshot().read).toEqual({ status: "failed", value: held, message: "your wallet is on chain 1, not chain 31337" });
     disconnectWallet(store);
     await flush();
-    expect(reads.getSnapshot()).toEqual({ account: null, read: { status: "unavailable", value: null, message: null } });
+    expect(reads.getSnapshot()).toEqual({ account: null, read: { status: "unavailable", value: null, message: null }, settling: false });
     await connectWallet(store, "browser");
     await flush();
     expect(reads.getSnapshot()).toMatchObject({ account: DEMO_ADDRESS, read: { status: "ready" } });
@@ -73,7 +73,44 @@ describe("DelegationReads", () => {
     await reads.refresh();
     expect(reads.getSnapshot().read.status).toBe("unavailable");
     stop();
-    expect(reads.getSnapshot()).toEqual({ account: null, read: { status: "loading", value: null, message: null } });
+    expect(reads.getSnapshot()).toEqual({ account: null, read: { status: "loading", value: null, message: null }, settling: false });
+  });
+
+  it("says delegation is unavailable when the build names no staking contract", async () => {
+    const { reads, stop, staking } = await started();
+    staking.delegations = () => Promise.resolve(null);
+    await reads.refresh();
+    expect(reads.getSnapshot().read).toEqual({ status: "unavailable", value: null, message: null });
+    stop();
+  });
+
+  it("holds the forms shut from a landed change until its read again lands, and until every such read has", async () => {
+    const { reads, stop, staking } = await started();
+    const real = staking.delegations.bind(staking);
+    const answers: (() => void)[] = [];
+    staking.delegations = () => new Promise((resolve) => { answers.push(() => { void real().then(resolve); }); });
+    const first = reads.settleAfter();
+    await flush();
+    expect(reads.getSnapshot().settling).toBe(true);
+    const second = reads.settleAfter();
+    answers.shift()?.();
+    await first;
+    // The second read waits behind the first, so the figures may still predate the second change.
+    expect(reads.getSnapshot().settling).toBe(true);
+    await flush();
+    answers.shift()?.();
+    await second;
+    expect(reads.getSnapshot().settling).toBe(false);
+    // Closing the page while one is on its way leaves nothing settling for the next opening, and writes nothing after.
+    const closing = reads.settleAfter();
+    await flush();
+    stop();
+    let writes = 0;
+    reads.subscribe(() => { writes += 1; });
+    answers.shift()?.();
+    await closing;
+    expect(reads.getSnapshot().settling).toBe(false);
+    expect(writes).toBe(0);
   });
 
   it("reads again after a stake or an unstake lands, which moves the undelegated stake", async () => {
