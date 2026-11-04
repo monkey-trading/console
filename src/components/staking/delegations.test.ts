@@ -84,6 +84,11 @@ describe("the delegations block while the node is unverified", () => {
     expect(html).toContain("Undelegated");
   });
 
+  it("blames the device clock, not the node, when the two disagree (monkey-trading/console#302)", () => {
+    const html = render({ list: LOADING, held: { view, verifiedAtMs: VERIFIED_AT } }, chain([]), { ...UNVERIFIED, attestation: { kind: "clock", skewMs: 90_000 } });
+    expect(html).toContain("final block 4,321: your device clock differs from the node&#x27;s signed time.");
+  });
+
   it("with no list held, takes a typed address alone", () => {
     const html = render({ list: LOADING, held: null }, chain([]));
     expect(html).toContain("A candidate&#x27;s address");
@@ -138,6 +143,9 @@ describe("the delegations block while the node is unverified", () => {
   it("says when this build names no staking contract", () => {
     const html = render({ list: LOADING, held: null }, { account: WALLET.address, read: { status: "unavailable", value: null, message: null }, settling: false });
     expect(html).toContain("This build names no staking contract, so delegation is not available here.");
+    // Said once, by the build, with no form to fill and no line blaming the node (monkey-trading/console#302).
+    expect(html).not.toContain("does not serve");
+    expect(html).not.toContain("Amount to delegate");
   });
 
   it("while the node is verified, chooses from its current list with no typed address", () => {

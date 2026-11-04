@@ -64,6 +64,11 @@ describe("operatorsShown", () => {
     expect(operatorsShown({ kind: "clock", skewMs: 90_000 }, "live")).toBe(true);
     expect(operatorsShown({ kind: "mock" }, "stale")).toBe(true);
   });
+
+  it("keeps the card once shown, through a re-verification or a feed reconnecting (monkey-trading/console#302)", () => {
+    expect(operatorsShown({ kind: "reverifying" }, "live", true)).toBe(true);
+    expect(operatorsShown({ kind: "mock" }, "connecting", true)).toBe(true);
+  });
 });
 
 describe("OperatorReads", () => {

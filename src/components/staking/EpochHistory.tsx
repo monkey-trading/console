@@ -13,8 +13,9 @@ import { formatUsd, parseFixed } from "@/lib/fixed";
 import { usdcFixed } from "@/lib/monkey/figures";
 import type { EpochClose } from "@/lib/engine/staking-reads";
 import type { EpochReads } from "@/lib/staking/epoch-reads";
+import { coverText, problemText } from "@/lib/staking/epoch-words";
 import { withAddress } from "@/lib/staking/operator-cells";
-import { formatStamp, formatStampWithYear } from "@/lib/time";
+import { formatStampWithYear } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
 
 import { Card, focusHeading } from "../monkey/Card";
@@ -48,22 +49,12 @@ function Shares({ close, labelOf }: { close: EpochClose; labelOf: (address: stri
   );
 }
 
-/** Where the node's record begins, which bounds what the list can show. */
-function coverText(cover: NonNullable<ReturnType<EpochReads["getSnapshot"]>["cover"]>): string | null {
-  if (cover.truncated) return `The node keeps the newest epochs only, from epoch ${cover.retained_from_epoch ?? "—"} on.`;
-  if (!cover.from_genesis && cover.begins_ms !== null) return `The node's record of closes begins at ${formatStamp(cover.begins_ms)} UTC; earlier epochs are not listed.`;
-  return null;
-}
-
 /** The card; `epochs` is the page's reads of it, which start and stop with the page, and `labelOf` names an operator's share's recipient. */
 export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf: (address: string) => string }) {
   const state = useSyncExternalStore(epochs.subscribe, epochs.getSnapshot, epochs.getSnapshot);
   const covered = state.cover === null ? null : coverText(state.cover);
   const read = { status: state.status === "reading" || state.status === "idle" ? ("loading" as const) : state.status === "ready" ? ("ready" as const) : state.status, value: state.epochs.length > 0 ? state.epochs : null, message: state.error };
-  // A read that failed while epochs are held, or a failed Load more: one status line that changes its words, so each is announced.
-  const problem = state.status !== "ready" ? ""
-    : state.error !== null ? `Could not check for newly closed epochs: ${state.error.replace(/\.+$/, "")}. The check is made again by itself.`
-      : state.moreError !== null ? `Could not read older epochs: ${state.moreError.replace(/\.+$/, "")}.` : "";
+  const problem = problemText(state);
   const loadMore = () => {
     if (state.more) return;
     void epochs.loadMore().then(() => {

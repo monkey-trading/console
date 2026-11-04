@@ -45,7 +45,10 @@ export function StakingPage() {
   const [epochs] = useState(() => new EpochReads(store));
   const [delegations] = useState(() => new DelegationReads(store));
   const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
-  const settled = useConsoleSelect((state) => operatorsShown(state.attestation, state.stream));
+  // Once shown, the operators card stays through a re-verification, so a Take back being typed is not hidden mid-way.
+  const [shownOnce, setShownOnce] = useState(false);
+  const settled = useConsoleSelect((state) => operatorsShown(state.attestation, state.stream, shownOnce));
+  if (settled && !shownOnce) setShownOnce(true);
   // The wallet object changes whenever a wallet connects, even to the same address, and the chain reads follow it.
   const wallet = useConsoleSelect((state) => state.wallet);
   // Reads start once the node's answers can be trusted and stop when the page is left; a gap in the feed restarts them, so what it carried is read again.
