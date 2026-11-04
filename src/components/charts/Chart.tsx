@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The console's own chart for the House and MONKEY pages: lines, steps, areas and bars over time
+ * The console's own chart for the House, MONKEY and Staking pages: lines, steps, areas and bars over time
  * in SVG, with a value axis on the right, a tag for each series' last value, an optional dashed
  * floor, markers, and a crosshair whose readout works from the pointer and from the keyboard
  * (arrow keys, Home, End, Escape). Points are thinned to the chart's pixel width and the drawing

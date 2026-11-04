@@ -21,9 +21,10 @@ import { useSession } from "../ConsoleProvider";
 import { Panel, Quiet, Row, Term, type Emphasis } from "./Panel";
 import { useFeed, useSelected } from "./use-feed";
 
-/** The MONKEY page's path; the panel links to it once the top bar lists it, so the link never leads to a missing page. */
-const MONKEY_PAGE = "/monkey";
+/** The pages the MONKEY panel links to: the token's and emissions', and staking's; each once the top bar lists it, so no link leads to a missing page. */
+const MONKEY_LINKS = [{ href: "/monkey", label: "MONKEY page" }, { href: "/staking", label: "Staking page" }] as const;
 const LISTED: readonly string[] = PAGES.map((page) => page.href);
+const LINK = "text-caption text-glow hover:text-glow-hover focus-visible:outline-2 focus-visible:outline-glow";
 const HEAD = "py-1 text-right text-label font-normal tracking-caps text-fg-3 uppercase";
 const CELL = "py-1 text-right text-caption tabular-nums";
 
@@ -113,7 +114,7 @@ export function HouseFigures() {
   );
 }
 
-/** MONKEY's emitted amount, stake and the reward stakers have been paid. */
+/** MONKEY's emitted amount, stake and the reward stakers have been paid, with links to the MONKEY and Staking pages. */
 export function MonkeyFigures() {
   const { store } = useSession();
   const feed = useFeed(useMemo(() => monkeyFeed(store), [store]));
@@ -123,7 +124,7 @@ export function MonkeyFigures() {
     <Panel
       title="MONKEY"
       tip="The protocol token: emitted to clients for their realised losses, and staked to receive the USDC distributions the engine pays from the house's NAV above its liquidity floor."
-      controls={LISTED.includes(MONKEY_PAGE) ? <Link href={MONKEY_PAGE} className="text-caption text-glow hover:text-glow-hover focus-visible:outline-2 focus-visible:outline-glow">Open the MONKEY page</Link> : undefined}
+      controls={<>{MONKEY_LINKS.filter((link) => LISTED.includes(link.href)).map((link) => <Link key={link.href} href={link.href} className={LINK}>{link.label}</Link>)}</>}
     >
       {feed.status === "failed" ? (
         <Quiet>{feedProblem(feed, "the MONKEY totals")}</Quiet>

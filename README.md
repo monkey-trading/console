@@ -3,7 +3,7 @@
 The Monkey Trading web app, to be served at console.monkey.trading: the client for the open-source CFD
 engine in [monkey-trading/engine](https://github.com/monkey-trading/engine). One full-view trading
 terminal with a watchlist, a candlestick chart, a deal ticket that sends the quote you saw with your
-slippage bound, positions, orders, history, a P&L ledger of realised results with the MONKEY each loss earned, a Funding page, a Settings page for trading preferences and the browsers signed in to trade, a MONKEY page for claims, staking and the token's state, and a House page that shows the
+slippage bound, positions, orders, history, a P&L ledger of realised results with the MONKEY each loss earned, a Funding page, a Settings page for trading preferences and the browsers signed in to trade, a MONKEY page for the token and claiming its emissions, a Staking page for staking, delegation, the USDC distributions and the operators, and a House page that shows the
 house's solvency from the node's signed answers: its net asset value, cash and exposure against its
 caps, the withdrawal queue's size, and the signed checkpoint roots the figures stand on.
 
@@ -44,7 +44,7 @@ and a mock USDC, the operator registry that deploys the MONKEY staking contract 
 capital in the vault, mock USDC in a dev wallet, an engine node on that chain's custody that prices BTC-USD and
 ETH-USD from live crypto venues (the other markets need market-data vendor keys and stay unpriced), runs MONKEY
 emissions and staking, and posts checkpoints so withdrawals and MONKEY claims can be made, and the console in
-development mode against it, with the MONKEY token and staking contract named for its MONKEY page. It needs Anvil, Forge and Cast, Cargo, Node.js and npm, curl, `jq`, Python 3.11 or later, and the engine's
+development mode against it, with the MONKEY token and staking contract named for its MONKEY and Staking pages. It needs Anvil, Forge and Cast, Cargo, Node.js and npm, curl, `jq`, Python 3.11 or later, and the engine's
 repository beside this one (or at `ENGINE_DIR`) with its contract dependencies installed (`forge soldeer
 install` in its `contracts/`):
 
@@ -57,7 +57,7 @@ It prints how to add the Anvil network and import the dev wallet's key (a public
 wallet, the mock USDC's address, and the console's address, `http://localhost:3000`; Ctrl-C stops everything
 it started. In the console, connect the wallet and follow the setup popup (fund with Anvil, sign the eligibility
 declaration, authorize the browser, deposit), then trade; Funding is where later deposits go. A realised loss earns MONKEY once its ten-minute period closes:
-claim it on the MONKEY page and stake it, and the epoch that closes next, every five minutes, pays stakers the
+claim it on the MONKEY page and stake it on the Staking page, and the epoch that closes next, every five minutes, pays stakers the
 house's USDC above its floor. The staking epoch, unstake cooldown and floor are development values that the
 script prints. Its header lists the variables that move its ports, fund
 another address, or serve a production build.
@@ -76,12 +76,12 @@ vault name that release, and it then takes the first engine's keys and log. The 
 minute. Two wallets (Anvil accounts 1 and 3, whose public test keys the script prints) each hold 20,000 MONKEY
 and 100,000 mock USDC. In a second terminal, `scripts/dev-local-stack-ctl.sh` drives the rest:
 
-1. On the MONKEY page, connect the first wallet, stake its MONKEY and delegate to `127.0.0.1:8081`, the second
-   engine. Do the same from the second wallet. The Operator card lists both candidates with their delegated
+1. On the Staking page, connect the first wallet, stake its MONKEY and delegate to `127.0.0.1:8081`, the second
+   engine. Do the same from the second wallet. The operators table lists both candidates with their delegated
    stake and whether each is eligible, and a delegation can be changed or cleared.
 2. `./scripts/dev-local-stack-ctl.sh elect` closes the election epoch. The candidate with the most delegated
    stake wins when it is eligible (5% of all stake), at least 20% of all stake is delegated, and its votes lead
-   the operator in effect by 10%. The Operator card then shows the pending election.
+   the operator in effect by 10%. The Staking page's operators then show the pending election.
 3. Claim any withdrawal you want paid (see below), then run `./scripts/dev-local-stack-ctl.sh handover`. It
    moves the chain's clock past the election's seven-day notice, so the vault names the second engine's
    release; the stack starts that engine, which takes the keys and the log, and the first engine exits. The
@@ -92,7 +92,7 @@ and 100,000 mock USDC. In a second terminal, `scripts/dev-local-stack-ctl.sh` dr
 4. `./scripts/dev-local-stack-ctl.sh fund-house 50000` adds mock USDC to the house's capital. This stack's
    staking floor is that capital, so the next epoch that closes with a stake (every five minutes; set
    `STAKING_EPOCH_SECS` to shorten it) pays the added amount to stakers in proportion to their stake. Each
-   wallet sees its share on the MONKEY page and claims it there, and the House page shows the same total as
+   wallet sees its share on the Staking page and claims it there, and the House page shows the same total as
    "Staker rewards" and "Paid to stakers".
 
 `./scripts/dev-local-stack-ctl.sh status` prints the election, the vault's release, both engines and the
@@ -143,13 +143,13 @@ A live build is configured by environment variables at build time, all pinned in
 | `NEXT_PUBLIC_ENGINE_ORIGIN` | The node's bare `https://` origin; the stream is the same host over `wss` |
 | `NEXT_PUBLIC_ENGINE_CHAIN_ID`, `NEXT_PUBLIC_ENGINE_VAULT` | The deployment every signature must name |
 | `NEXT_PUBLIC_ENGINE_USDC` | The USDC the vault takes; without it the build cannot deposit |
-| `NEXT_PUBLIC_ENGINE_STAKING` | Optional staking contract the MONKEY page stakes into; without it staking is refused |
+| `NEXT_PUBLIC_ENGINE_STAKING` | Optional staking contract the Staking page stakes into; without it staking is refused |
 | `NEXT_PUBLIC_ENGINE_MONKEY` | Optional MONKEY token address the MONKEY page shows with a copy button |
 | `NEXT_PUBLIC_ENGINE_RPC_URL` | Optional RPC URL a wallet that does not know the chain is offered, such as a local Anvil chain's; in a `live-dev` build the Funding page's faucet also tops gas up through it |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional WalletConnect project id (32 lowercase hex characters); without it the build offers no WalletConnect |
 | `NEXT_PUBLIC_ENGINE_HEARTBEAT_MS` | The node's `[api] heartbeat_interval`, in milliseconds (default 5000) |
 | `NEXT_PUBLIC_ENGINE_DEV_ORIGINS` | Comma-separated node origins a `live-dev` build may accept a mock attestation from |
-| `NEXT_PUBLIC_ENGINE_REGISTRY` | Optional operator registry; without it the build does not follow the operator, and the MONKEY page lists no candidates |
+| `NEXT_PUBLIC_ENGINE_REGISTRY` | Optional operator registry; without it the build does not follow the operator, and the Staking page lists no operators |
 | `NEXT_PUBLIC_ENGINE_CANDIDATE_ORIGINS` | Comma-separated bare `https://` origins of every timelock-approved candidate's registered hostname: the nodes the build can follow beside its own, named one by one |
 | `NEXT_PUBLIC_ENGINE_DEV_LAUNCH_DIGESTS` | Comma-separated 48-byte stand-ins, in a `live-dev` build only, for the launch digest a mock quote cannot measure, so a local stack runs the vault's release check |
 

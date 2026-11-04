@@ -1,4 +1,4 @@
-/** The MONKEY page's figures: shares and ratios in integer arithmetic, durations, the stake amount a visitor types, and the halvings a schedule implies. */
+/** The MONKEY and Staking pages' figures: shares and ratios in integer arithmetic, durations, the stake amount a visitor types, and the halvings a schedule implies. */
 
 import { EngineError } from "../engine/client";
 import type { EmissionsView } from "../engine/stats-types";

@@ -40,7 +40,7 @@ export class ConsoleStore {
   readonly creditedDeposits = new Set<string>();
   /** Counts the reads of the vault's deposit events, so one that a later read overtook is dropped. Not part of the snapshot. */
   depositReads = 0;
-  readonly monkeySession = new MonkeySession(); // the MONKEY page's wallet queue and, while it is on screen, its store
+  readonly monkeySession = new MonkeySession(); // the MONKEY and Staking pages' wallet queue and, while one is on screen, its store
   private snapshot: ConsoleState;
   private readonly listeners = new Set<() => void>();
   private nextId = 1;

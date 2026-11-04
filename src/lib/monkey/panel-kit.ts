@@ -1,4 +1,4 @@
-/** Shared setup for the MONKEY page store's tests: the mock node, its wallet, and a started panel. */
+/** Shared setup for the MONKEY and Staking pages' store's tests: the mock node, its wallet, and a started panel. */
 
 import { vi } from "vitest";
 
@@ -9,8 +9,10 @@ import { seedMonkeyDemo } from "../mock/monkey";
 import { connectWallet } from "../store/actions";
 import { ConsoleStore } from "../store/store";
 import { MonkeyPanel } from "./panel";
+import type { PanelPage } from "./panel-state";
 
-export async function setup() {
+/** The mock node and a store with the demo wallet connected, and a started panel for `page`: the Staking page's, unless a test reads the MONKEY page's. */
+export async function setup(page: PanelPage = "staking") {
   const node = createMockNode(SIM_EPOCH_MS);
   seedMonkeyDemo(node.client.state, DEMO_ADDRESS);
   const store = new ConsoleStore({
@@ -19,7 +21,7 @@ export async function setup() {
   });
   store.start(SIM_EPOCH_MS);
   await connectWallet(store, "browser");
-  const panel = new MonkeyPanel(store);
+  const panel = new MonkeyPanel(store, page);
   const stop = panel.start(() => false);
   await panel.refreshWallet();
   return { node, store, panel, stop };
@@ -31,22 +33,30 @@ export async function flush() {
 }
 
 /**
- * Holds the connected wallet's next chain read until `release` is called, and counts the stakes it
- * sends. The wallet's other calls run as they would.
+ * Holds the connected wallet's next page read until `release` is called (the stake on the Staking
+ * page, the vault's MONKEY record on the MONKEY page), and counts the stakes it sends. The wallet's
+ * other calls run as they would.
  */
 export function holdReads(store: ConsoleStore) {
   const wallet = store.liveWallet;
   const staking = wallet?.staking;
-  if (wallet === null || staking === undefined) throw new Error("the mock wallet stakes");
+  const record = wallet?.emissionsClaimed;
+  if (wallet === null || staking === undefined || record === undefined) throw new Error("the mock wallet stakes and reads the vault");
   const held = { release: () => {}, stakes: 0 };
   let first = true;
+  const hold = async () => {
+    if (!first) return;
+    first = false;
+    await new Promise<void>((resolve) => { held.release = resolve; });
+  };
+  wallet.emissionsClaimed = async () => {
+    await hold();
+    return record();
+  };
   wallet.staking = {
     ...staking,
     position: async () => {
-      if (first) {
-        first = false;
-        await new Promise<void>((resolve) => { held.release = resolve; });
-      }
+      await hold();
       return staking.position();
     },
     stake: async (amount, progress) => {

@@ -20,13 +20,15 @@ afterEach(() => {
 });
 
 describe("the page's transactions", () => {
-  it("stakes, and the wallet's figures and the feed follow", async () => {
+  it("stakes, and the wallet's figures and the node's total follow", async () => {
     const { store, panel, stop } = await setup();
+    await panel.refreshNode();
+    const total = BigInt(panel.getSnapshot().overview.value?.staking?.total_staked ?? "0");
     expect(panel.getSnapshot().wallet.position.value).toMatchObject({ staked: 12_000n * MONKEY_UNIT, balance: 28_000n * MONKEY_UNIT });
     expect(await stakeMonkey(panel, 1_000n * MONKEY_UNIT)).toBe(true);
     expect(panel.getSnapshot().wallet.position.value).toMatchObject({ staked: 13_000n * MONKEY_UNIT, balance: 27_000n * MONKEY_UNIT });
     await panel.refreshNode();
-    expect(panel.getSnapshot().activity.value?.entries[0]).toMatchObject({ type: "stake", amount: (1_000n * MONKEY_UNIT).toString() });
+    expect(BigInt(panel.getSnapshot().overview.value?.staking?.total_staked ?? "0")).toBe(total + 1_000n * MONKEY_UNIT);
     expect(store.getSnapshot().notices.stake).toBeUndefined();
     expect(store.getSnapshot().busy).toBe(false);
     stop();
@@ -273,7 +275,7 @@ describe("the page's transactions", () => {
     const staked = stakeMonkey(panel, 1_000n * MONKEY_UNIT);
     await flush();
     stop();
-    const later = new MonkeyPanel(store);
+    const later = new MonkeyPanel(store, "staking");
     const restart = later.start(() => false);
     held.release();
     await staked;

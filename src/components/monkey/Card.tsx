@@ -1,6 +1,6 @@
 "use client";
 
-/** A titled card on the MONKEY page, labelled by its heading. */
+/** A titled card on the MONKEY and Staking pages, labelled by its heading. */
 
 import type { ReactNode } from "react";
 

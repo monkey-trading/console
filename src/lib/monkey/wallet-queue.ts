@@ -77,7 +77,7 @@ export class WalletQueue {
   }
 }
 
-/** What the MONKEY page keeps for the whole session: the wallet queue, and the page's store while the page is on screen, which a transaction that lands later refreshes. */
+/** What the MONKEY and Staking pages keep for the whole session: the wallet queue, and the store of the one on screen, which a transaction that lands later refreshes. */
 export class MonkeySession {
   readonly walletWork = new WalletQueue();
   private openings = 0;

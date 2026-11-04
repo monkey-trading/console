@@ -1,5 +1,5 @@
 /**
- * What the mock node holds for the MONKEY page: the schedule, the stakers, the public activity, the
+ * What the mock node holds for the MONKEY and Staking pages: the schedule, the stakers, the public activity, the
  * closed distribution epochs and the closed emission periods. The history before the mock's start is
  * generated from a seed, so every visitor sees the same page; what the visitor does and what the
  * mock's clock closes after it is recorded on top. `monkey.ts` serves these as the node's routes.

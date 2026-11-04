@@ -1,5 +1,5 @@
 /**
- * The MONKEY page's transactions: staking, starting and completing an unstake, and claiming a USDC
+ * The MONKEY and Staking pages' transactions: staking, starting and completing an unstake, and claiming a USDC
  * distribution. Each goes through the connected wallet, shows the wallet prompt while it waits,
  * says on its panel why nothing was sent or what failed, and reads the wallet and the node again so
  * the figures follow it.

@@ -103,7 +103,7 @@ describe("a MONKEY stake whose wallet is replaced while it prompts", () => {
     const { staking } = kit.wallet;
     if (staking === undefined) throw new Error("the wallet stakes");
     kit.wallet.staking = { ...staking, stake: async () => { await kit.hold; return decline(); } };
-    const staked = stakeMonkey(new MonkeyPanel(kit.store), MONKEY_UNIT);
+    const staked = stakeMonkey(new MonkeyPanel(kit.store, "staking"), MONKEY_UNIT);
     await settle();
     const before = await nextWalletWaiting(kit);
     await expectUntouched(kit, before);

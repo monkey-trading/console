@@ -4,7 +4,7 @@ import { decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "vi
 
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
 import { withinMs } from "./serialized-provider";
-import { CANDIDATE_LIMIT, NO_CANDIDATE, type CandidateTable, type DeploymentReads, type NamedOperator, type PendingElection, type VaultFacts } from "./registry";
+import { CANDIDATE_LIMIT, NO_CANDIDATE, type CandidateTable, type DeploymentReads, type NamedOperator, type PendingElection, type Registration, type VaultFacts } from "./registry";
 import type { Address } from "./types";
 
 const VAULT = parseAbi([
@@ -35,6 +35,11 @@ const CALL_MS = 30_000;
 
 /** Chain seconds as the milliseconds the console shows; beyond any time a chain could hold, so the conversion is exact. */
 const secondsToMs = (seconds: bigint): number => Number(seconds) * 1000;
+
+/** What the table shows of a decoded `candidateOf`: the registration count is a `uint64` of registrations made, far below 2^53. */
+const registrationOf = (registered: { bond: bigint; release: Hex; registration: bigint; handoverEndpoint: string }): Registration => ({
+  bond: registered.bond, release: registered.release.toLowerCase(), registration: Number(registered.registration), handoverEndpoint: registered.handoverEndpoint,
+});
 
 export class ProviderDeployment implements DeploymentReads {
   constructor(private readonly chain: WalletChain, private readonly provider: Eip1193Provider) {}
@@ -100,18 +105,26 @@ export class ProviderDeployment implements DeploymentReads {
     const count = decodeFunctionResult({ abi: REGISTRY, functionName: "candidateCount", data: await this.call(registry, encodeFunctionData({ abi: REGISTRY, functionName: "candidateCount" })) });
     if (count > BigInt(CANDIDATE_LIMIT)) throw new Error("The chain read named more candidates than the registry can hold.");
     const totalStaked = decodeFunctionResult({ abi: STAKING, functionName: "totalStaked", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "totalStaked" })) });
-    const { candidate: inEffect } = decodeFunctionResult({ abi: REGISTRY, functionName: "operatorInEffect", data: await this.call(registry, encodeFunctionData({ abi: REGISTRY, functionName: "operatorInEffect" })) });
-    const { apiHostname: inEffectHostname } = await this.candidateOf(registry, inEffect);
+    const inEffect = decodeFunctionResult({ abi: REGISTRY, functionName: "operatorInEffect", data: await this.call(registry, encodeFunctionData({ abi: REGISTRY, functionName: "operatorInEffect" })) });
+    const current = await this.candidateOf(registry, inEffect.candidate);
     const candidates = [];
     for (let index = 0n; index < count; index += 1n) {
       const address = decodeFunctionResult({ abi: REGISTRY, functionName: "candidateList", data: await this.call(registry, encodeFunctionData({ abi: REGISTRY, functionName: "candidateList", args: [index] })) });
       if (address === NO_CANDIDATE) continue;
-      const { apiHostname } = await this.candidateOf(registry, address);
+      const registered = await this.candidateOf(registry, address);
       const votes = decodeFunctionResult({ abi: STAKING, functionName: "votes", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "votes", args: [address] })) });
       const eligible = decodeFunctionResult({ abi: REGISTRY, functionName: "isEligible", data: await this.call(registry, encodeFunctionData({ abi: REGISTRY, functionName: "isEligible", args: [address] })) });
-      candidates.push({ address: address.toLowerCase(), hostname: apiHostname, votes, eligible });
+      candidates.push({ address: address.toLowerCase(), hostname: registered.apiHostname, votes, eligible, ...registrationOf(registered) });
     }
-    return { inEffect: { candidate: inEffect.toLowerCase(), hostname: inEffectHostname === "" ? null : inEffectHostname }, candidates, totalStaked };
+    return {
+      inEffect: {
+        candidate: inEffect.candidate.toLowerCase(), hostname: current.apiHostname === "" ? null : current.apiHostname, release: inEffect.release.toLowerCase(),
+        // An unregistered address answers the zero struct, whose admin key is zero: a registration always names one.
+        registered: current.adminKey === NO_CANDIDATE ? null : registrationOf(current),
+      },
+      candidates,
+      totalStaked,
+    };
   }
 
   async delegateOf(account: Address): Promise<Address | null> {

@@ -1,4 +1,4 @@
-/** Tests for the MONKEY page's wallet reads that wait behind a call the wallet has not answered. */
+/** Tests for the MONKEY and Staking pages' wallet reads that wait behind a call the wallet has not answered. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -29,7 +29,7 @@ describe("MonkeyPanel wallet reads behind an unanswered call", () => {
   });
 
   it("stays silent when the vault's record does not answer in time, and still holds the queue until the provider answers", async () => {
-    const { store, panel, stop } = await setup();
+    const { store, panel, stop } = await setup("monkey");
     const wallet = store.liveWallet;
     const record = wallet?.emissionsClaimed;
     if (wallet === null || record === undefined) throw new Error("the mock wallet reads the vault");

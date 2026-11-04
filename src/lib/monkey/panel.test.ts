@@ -1,4 +1,4 @@
-/** Tests for the MONKEY page store's reads of the node: cadence, unavailable routes, trust and lifecycle. */
+/** Tests for the MONKEY and Staking pages' store's reads of the node: what each page reads, cadence, unavailable routes, trust and lifecycle. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,9 +17,10 @@ afterEach(() => {
 });
 
 describe("MonkeyPanel", () => {
-  it("reads the totals, the activity and every chart as it starts", async () => {
-    const { node, store } = await setup();
-    const fresh = new MonkeyPanel(store);
+  it("reads the totals, the activity and the token's two charts as the MONKEY page starts", async () => {
+    const { node, store, stop: stopFirst } = await setup("monkey");
+    stopFirst();
+    const fresh = new MonkeyPanel(store, "monkey");
     const overview = vi.spyOn(node.client.stats, "monkey");
     const activity = vi.spyOn(node.client.stats, "activity");
     const series = vi.spyOn(node.client.stats, "series");
@@ -27,13 +28,37 @@ describe("MonkeyPanel", () => {
     await flush();
     expect(overview).toHaveBeenCalledTimes(1);
     expect(activity).toHaveBeenCalledWith({ limit: 25 });
-    // Four charts, five metrics between them.
-    expect(series.mock.calls.map(([query]) => query.metric).sort()).toEqual(["cumulative_distributed", "distributed_per_epoch", "monkey_per_loss", "total_allocated", "total_staked"]);
+    // Two charts, three metrics between them.
+    expect(series.mock.calls.map(([query]) => query.metric).sort()).toEqual(["monkey_per_loss", "total_allocated", "total_staked"]);
     stop();
   });
 
+  it("reads the totals and the distributions' two charts, and no activity, as the Staking page starts", async () => {
+    const { node, store, stop: stopFirst } = await setup();
+    stopFirst();
+    const fresh = new MonkeyPanel(store, "staking");
+    const overview = vi.spyOn(node.client.stats, "monkey");
+    const activity = vi.spyOn(node.client.stats, "activity");
+    const series = vi.spyOn(node.client.stats, "series");
+    const stop = fresh.start(() => false);
+    await flush();
+    expect(overview).toHaveBeenCalledTimes(1);
+    expect(activity).not.toHaveBeenCalled();
+    expect(fresh.getSnapshot().activity.status).toBe("loading");
+    expect(series.mock.calls.map(([query]) => query.metric).sort()).toEqual(["cumulative_distributed", "distributed_per_epoch"]);
+    stop();
+  });
+
+  it("hands out its own page's charts, and refuses another page's, which only a component on the wrong page asks for", async () => {
+    const { store } = await setup();
+    expect(new MonkeyPanel(store, "monkey").feed("perLoss").metrics).toEqual(["monkey_per_loss"]);
+    expect(new MonkeyPanel(store, "staking").feed("rewards").metrics).toEqual(["cumulative_distributed"]);
+    expect(() => new MonkeyPanel(store, "staking").feed("supply")).toThrow("The staking page draws no supply chart.");
+    expect(() => new MonkeyPanel(store, "monkey").feed("epochs")).toThrow("The monkey page draws no epochs chart.");
+  });
+
   it("reads the totals and activity again every thirty seconds and not before", async () => {
-    const { node, panel, stop } = await setup();
+    const { node, panel, stop } = await setup("monkey");
     const overview = vi.spyOn(node.client.stats, "monkey");
     const activity = vi.spyOn(node.client.stats, "activity");
     await vi.advanceTimersByTimeAsync(25_000);
@@ -52,7 +77,9 @@ describe("MonkeyPanel", () => {
     await vi.advanceTimersByTimeAsync(0);
     const series = vi.spyOn(node.client.stats, "series");
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(series.mock.calls.length).toBeGreaterThanOrEqual(2 * Object.keys(panel.feeds).length);
+    // Each page draws two charts.
+    expect(series.mock.calls.length).toBeGreaterThanOrEqual(2 * 2);
+    expect(panel.feed("epochs").getSnapshot().read.status).toBe("ready");
     stop();
   });
 
@@ -60,17 +87,24 @@ describe("MonkeyPanel", () => {
     const { node } = await setup();
     const quiet = Object.assign(Object.create(Object.getPrototypeOf(node.client)), node.client, { stats: NO_STATS });
     const bare = new ConsoleStore({ client: quiet, wallets: node.wallets, history: mockHistory, initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS } });
-    const panel = new MonkeyPanel(bare);
     const overview = vi.spyOn(quiet.stats, "monkey");
+    const panel = new MonkeyPanel(bare, "monkey");
     const stop = panel.start(() => false);
     await vi.advanceTimersByTimeAsync(0);
     expect(panel.getSnapshot().overview.status).toBe("unavailable");
     expect(panel.getSnapshot().activity.status).toBe("unavailable");
-    expect(panel.feeds.supply.getSnapshot().read.status).toBe("unavailable");
+    expect(panel.feed("supply").getSnapshot().read.status).toBe("unavailable");
     expect(bare.getSnapshot().notices).toEqual({});
     await vi.advanceTimersByTimeAsync(120_000);
     expect(overview).toHaveBeenCalledTimes(1);
     stop();
+    // The Staking page reads no activity, so the totals alone decide.
+    const staking = new MonkeyPanel(bare, "staking");
+    const stopStaking = staking.start(() => false);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(staking.getSnapshot().overview.status).toBe("unavailable");
+    expect(overview).toHaveBeenCalledTimes(2);
+    stopStaking();
   });
 
   it("does not let a totals read from before the page stopped overwrite the one after it reopened", async () => {
@@ -123,7 +157,7 @@ describe("MonkeyPanel", () => {
     expect(panel.getSnapshot().wallet.address).not.toBeNull();
     stop();
     expect(panel.getSnapshot()).toMatchObject({ overview: { status: "loading" }, activity: { status: "loading" }, wallet: { address: null } });
-    expect(panel.feeds.supply.getSnapshot().read.status).toBe("loading");
+    expect(panel.feed("epochs").getSnapshot().read.status).toBe("loading");
   });
 
 
@@ -149,7 +183,7 @@ describe("MonkeyPanel", () => {
   it("stops reading on the timer, and on events, while the tab is hidden", async () => {
     const { node, store, stop: stopFirst } = await setup();
     stopFirst();
-    const fresh = new MonkeyPanel(store);
+    const fresh = new MonkeyPanel(store, "staking");
     let hidden = true;
     const stop = fresh.start(() => hidden);
     await flush();

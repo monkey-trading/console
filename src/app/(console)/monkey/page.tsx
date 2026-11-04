@@ -1,4 +1,4 @@
-/** The MONKEY screen: claims, stake, the token's state, activity and charts. */
+/** The MONKEY screen: the account's emissions and their claim, the token's state, activity and charts. */
 
 import type { Metadata } from "next";
 

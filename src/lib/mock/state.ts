@@ -136,7 +136,7 @@ export class MockState {
   readonly entitledMonkey = new Map<string, bigint>();
   readonly claimedMonkey = new Map<string, bigint>();
   postedSeq = 0;
-  /** What the MONKEY page reads: stakers, the feed, closed epochs and periods. */
+  /** What the MONKEY and Staking pages read: stakers, the feed, closed epochs and periods. */
   readonly monkey: MockMonkey;
   readonly operators: MockOperators;
 

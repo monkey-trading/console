@@ -1,4 +1,4 @@
-/** The dashboard routes over a signed read: the House and MONKEY pages' positions, series and totals. */
+/** The dashboard routes over a signed read: the House, MONKEY and Staking pages' positions, series and totals. */
 
 import { EngineError } from "./client";
 import type { ActivityPage, DistributionProof, MonkeyView, OperatorRoute, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "./stats-types";
