@@ -19,7 +19,7 @@ export function FaucetCard() {
     <section aria-labelledby="faucet-title" className="p-4">
       <h4 id="faucet-title" className="text-label tracking-caps text-fg-3 uppercase">Dev faucet</h4>
       <p className="mt-3 text-caption text-fg-2">
-        Mint 10,000 mock USDC to the connected wallet and top its gas up to 1 ETH, straight from the local Anvil chain. Dev builds only; the mint asks the wallet first.
+        Mint 10,000 mock USDC to the connected wallet and top its gas up to 1 ETH, straight from the local Anvil chain. Dev builds only; your wallet signs nothing.
       </p>
       <button
         type="button"
