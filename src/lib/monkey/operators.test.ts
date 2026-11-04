@@ -8,7 +8,7 @@ import type { OperatorList } from "../engine/staking-reads";
 import type { OperatorRoute } from "../engine/stats-types";
 import { DelegationReads } from "../staking/delegation-reads";
 import { changeDelegation } from "./actions";
-import { hostnameListed, mirroredElection, OperatorReads, shownHostname } from "./operators";
+import { hostnameListed, mirroredElection, OperatorReads, operatorsShown, shownHostname } from "./operators";
 import { NODE_READ_MS } from "./panel";
 import { flush, setup } from "./panel-kit";
 
@@ -50,6 +50,18 @@ describe("mirroredElection", () => {
     expect(mirroredElection(route({ cancelled: true }), 99)).toBeNull();
     expect(mirroredElection(route(null), 0)).toBeNull();
     expect(mirroredElection(null, 0)).toBeNull();
+  });
+});
+
+describe("operatorsShown", () => {
+  it("shows the card with the figures once the node is trusted, and alone once it has failed a check or gone stale, never before the first verdict", () => {
+    expect(operatorsShown({ kind: "checking" }, "connecting")).toBe(false);
+    expect(operatorsShown({ kind: "mock" }, "connecting")).toBe(false);
+    expect(operatorsShown({ kind: "reverifying" }, "live")).toBe(false);
+    expect(operatorsShown({ kind: "mock" }, "live")).toBe(true);
+    expect(operatorsShown({ kind: "unverified", reason: "the quote did not verify" }, "connecting")).toBe(true);
+    expect(operatorsShown({ kind: "clock", skewMs: 90_000 }, "live")).toBe(true);
+    expect(operatorsShown({ kind: "mock" }, "stale")).toBe(true);
   });
 });
 

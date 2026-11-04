@@ -139,7 +139,9 @@ export async function changeDelegation(panel: MonkeyPanel, operators: OperatorRe
     else await staking.redelegate(change.from, change.to, change.amount, progress);
     return true;
   }, false, onLanded);
-  await Promise.all([delegations.refresh(), operators.refresh()]);
+  // The list is the node's, which may be down: the change's outcome waits on the chain's read alone.
+  void operators.refresh();
+  await delegations.refresh();
   return landed;
 }
 

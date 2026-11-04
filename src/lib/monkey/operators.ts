@@ -7,7 +7,7 @@
  * node's answers may be read. The account's own delegations come from the wallet's staking reads.
  */
 
-import { readBlock } from "../engine/attestation";
+import { readBlock, type AttestationStatus, type FeedStatus } from "../engine/attestation";
 import { hostnameOrigin, listedOrigins, type Deploy } from "../engine/deploy";
 import type { OperatorRoute } from "../engine/stats-types";
 import { operatorsView, type OperatorsView } from "../staking/operator-table";
@@ -39,6 +39,16 @@ export function shownHostname(hostname: string | null): string | null {
 export function hostnameListed(deploy: Pick<Deploy, "origin" | "candidateOrigins">, hostname: string): boolean {
   const origin = hostnameOrigin(hostname);
   return origin !== null && listedOrigins(deploy).includes(origin);
+}
+
+/**
+ * Whether the Staking page shows its operators card: with the rest of the figures once the node is
+ * trusted, and on its own once the node has failed a check or its feed has gone stale, so a staker
+ * can still vote away from it. Until the first verdict it waits with the rest, so nothing it holds is
+ * pushed down when the figures land.
+ */
+export function operatorsShown(attestation: AttestationStatus, stream: FeedStatus): boolean {
+  return readBlock(attestation, stream) === null || attestation.kind === "unverified" || attestation.kind === "clock" || stream === "stale";
 }
 
 /** An election the log mirrors and has not applied: what the page shows of a pending election the list does not show yet. */

@@ -12,7 +12,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { formatCompactUsd } from "@/lib/chart-format";
 import { readBlock } from "@/lib/engine/attestation";
-import { OperatorReads } from "@/lib/monkey/operators";
+import { OperatorReads, operatorsShown } from "@/lib/monkey/operators";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import { DelegationReads } from "@/lib/staking/delegation-reads";
 import { EpochReads } from "@/lib/staking/epoch-reads";
@@ -45,6 +45,7 @@ export function StakingPage() {
   const [epochs] = useState(() => new EpochReads(store));
   const [delegations] = useState(() => new DelegationReads(store));
   const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
+  const settled = useConsoleSelect((state) => operatorsShown(state.attestation, state.stream));
   // The wallet object changes whenever a wallet connects, even to the same address, and the chain reads follow it.
   const wallet = useConsoleSelect((state) => state.wallet);
   // Reads start once the node's answers can be trusted and stop when the page is left; a gap in the feed restarts them, so what it carried is read again.
@@ -85,8 +86,7 @@ export function StakingPage() {
               <EpochHistory epochs={epochs} labelOf={labelOf} />
             </div>
           </div>
-          {/* The operators card stays, saying what waits on the node, so the page holds its height while the node is verified. */}
-          <div className="mt-4">
+          <div className={settled ? "mt-4" : "hidden"}>
             <OperatorsPanel operators={operators} delegations={delegations} />
           </div>
         </div>
