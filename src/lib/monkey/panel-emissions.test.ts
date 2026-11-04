@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 async function accrued() {
-  const made = await setup();
+  const made = await setup("monkey");
   made.node.client.state.entitledMonkey.set(DEMO_ADDRESS, 5n * MONKEY_UNIT);
   return made;
 }
@@ -104,7 +104,7 @@ describe("claimMonkeyEmissions", () => {
     const claimed = claimMonkeyEmissions(panel);
     await flush();
     stop();
-    const later = new MonkeyPanel(store);
+    const later = new MonkeyPanel(store, "monkey");
     const restart = later.start(() => false);
     held.release();
     await claimed;

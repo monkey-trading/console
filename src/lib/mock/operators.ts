@@ -1,33 +1,39 @@
 /**
- * The simulated operator registry and what the node mirrors of it: four candidates, the operator in
- * effect, and an election waiting out its notice, as `OperatorRegistry.sol` and `GET /v1/operator`
- * hold them. A delegation moves the account's stake between the candidates' votes, as `Staking`
- * does, and the election takes effect when the mock's clock reaches its time.
+ * The simulated operator registry and what the node mirrors of it: a full list of candidates, the
+ * operator in effect, and an election waiting out its notice, as `OperatorRegistry.sol` and
+ * `GET /v1/operator` hold them. A delegation moves the account's stake between the candidates'
+ * votes, as `Staking` does, and the election takes effect when the mock's clock reaches its time.
  */
 
-import type { CandidateTable, DeploymentReads, NamedOperator, PendingElection } from "../engine/registry";
-import { NO_CANDIDATE } from "../engine/registry";
+import { keccak256, stringToHex } from "viem";
+
+import { CANDIDATE_LIMIT, NO_CANDIDATE, type CandidateTable, type DeploymentReads, type NamedOperator, type PendingElection, type Registration } from "../engine/registry";
 import type { OperatorRoute } from "../engine/stats-types";
 import { MONKEY_UNIT } from "../format";
+import { mulberry32, SEED } from "../prng";
 import type { MockState } from "./state";
 
 const DAY_MS = 86_400_000;
 /** The share of total stake a candidate needs to be eligible, in basis points; a development value, as the registry's parameters are decided apart. */
 const ELIGIBILITY_BPS = 500n;
-/** The stake other delegators give each candidate, in whole MONKEY, so the visitor's own moves the figures without deciding them. */
-const CANDIDATES = [
-  { name: "alpha", votes: 620_000n },
-  { name: "bravo", votes: 780_000n },
-  { name: "charlie", votes: 240_000n },
-  { name: "delta", votes: 30_000n },
+/** The stake other delegators give the four candidates that lead, in whole MONKEY, so the visitor's own moves the figures without deciding them. */
+const LEADERS = [
+  { name: "alpha", votes: 620_000n, bond: 50_000n },
+  { name: "bravo", votes: 780_000n, bond: 40_000n },
+  { name: "charlie", votes: 240_000n, bond: 25_000n },
+  { name: "delta", votes: 30_000n, bond: 10_000n },
 ] as const;
+/** The most whole MONKEY each of the other candidates is delegated, so every vote stays within the stake the mock counts. */
+const TAIL_VOTES = 5_000;
 
 /** A stand-in address from a stand-in name; these sit where a chain would answer. */
 const addressOf = (name: string, role: string): string => `0x${Array.from(`${name}.${role}`, (c) => c.charCodeAt(0).toString(16)).join("").padEnd(40, "0").slice(0, 40)}`;
+/** A stand-in hash of `text`, lowercase `0x` hex: the generated candidates' addresses and every release, distinct even shortened. */
+const hashOf = (text: string): string => keccak256(stringToHex(text));
 const hostnameOf = (name: string): string => `${name}.operators.example`;
 
 /** A candidate the simulated registry lists. */
-interface MockCandidate {
+interface MockCandidate extends Registration {
   address: string;
   adminKey: string;
   hostname: string;
@@ -35,10 +41,26 @@ interface MockCandidate {
   votes: bigint;
 }
 
+/** The registry's full list: the four leaders, then candidates with a little stake each, in the order they registered. */
+function mockCandidates(): MockCandidate[] {
+  const rand = mulberry32(SEED + 271);
+  const tail = Array.from({ length: CANDIDATE_LIMIT - LEADERS.length }, (_, i) => ({
+    name: `node-${String(i + LEADERS.length + 1).padStart(3, "0")}`,
+    votes: rand() < 0.2 ? 0n : BigInt(Math.floor(rand() * TAIL_VOTES)),
+    bond: 10_000n + BigInt(Math.floor(rand() * 30)) * 1_000n,
+  }));
+  return [...LEADERS, ...tail].map(({ name, votes, bond }, registration) => ({
+    address: registration < LEADERS.length ? addressOf(name, "candidate") : hashOf(`${name}.candidate`).slice(0, 42),
+    adminKey: registration < LEADERS.length ? addressOf(name, "admin") : hashOf(`${name}.admin`).slice(0, 42),
+    hostname: hostnameOf(name), votes: votes * MONKEY_UNIT,
+    bond: bond * MONKEY_UNIT, release: hashOf(`${name}.release`), registration, handoverEndpoint: `https://${hostnameOf(name)}:9443/handover`,
+  }));
+}
+
 export class MockOperators {
   /** The candidate each account's whole stake votes for. */
   readonly delegates = new Map<string, string>();
-  readonly candidates: readonly MockCandidate[] = CANDIDATES.map(({ name, votes }) => ({ address: addressOf(name, "candidate"), adminKey: addressOf(name, "admin"), hostname: hostnameOf(name), votes: votes * MONKEY_UNIT }));
+  readonly candidates: readonly MockCandidate[] = mockCandidates();
   private sinceMs: number;
   private inEffect: MockCandidate;
   private next: { candidate: MockCandidate; epoch: number; effectiveAtMs: number } | null;
@@ -101,12 +123,15 @@ function candidateTable(state: MockState): CandidateTable {
   // `Staking.totalStaked`: what votes, so an unstake leaves it at once though it keeps earning through its cooldown.
   let totalStaked = state.monkey.otherStakedAt(state.now);
   for (const staked of state.monkey.staked.values()) totalStaked += staked;
-  const candidates = state.operators.candidates.map(({ address, hostname, votes }) => {
+  const candidates = state.operators.candidates.map(({ address, hostname, votes, bond, release, registration, handoverEndpoint }) => {
     const cast = votes + delegatedTo(state, address);
-    return { address, hostname, votes: cast, eligible: cast * 10_000n >= ELIGIBILITY_BPS * totalStaked };
+    return { address, hostname, votes: cast, eligible: cast * 10_000n >= ELIGIBILITY_BPS * totalStaked, bond, release, registration, handoverEndpoint };
   });
-  const { candidate, hostname } = state.operators.named(state.now);
-  return { inEffect: { candidate, hostname }, candidates, totalStaked };
+  const { candidate } = state.operators.named(state.now);
+  const current = state.operators.candidates.find((listed) => listed.address === candidate);
+  if (current === undefined) throw new Error("The simulated operator in effect is not one of its candidates.");
+  const { hostname, bond, release, registration, handoverEndpoint } = current;
+  return { inEffect: { candidate, hostname, release, registered: { bond, release, registration, handoverEndpoint } }, candidates, totalStaked };
 }
 
 /**

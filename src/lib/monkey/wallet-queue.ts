@@ -6,6 +6,7 @@
  */
 
 import type { Wallet } from "../engine/wallet";
+import type { DistributionHistoryReads } from "../staking/history-reads";
 import type { MonkeyPanel } from "./panel";
 
 interface Entry {
@@ -77,7 +78,7 @@ export class WalletQueue {
   }
 }
 
-/** What the MONKEY page keeps for the whole session: the wallet queue, and the page's store while the page is on screen, which a transaction that lands later refreshes. */
+/** What the MONKEY and Staking pages keep for the whole session: the wallet queue, and the stores of the one on screen, which a transaction that lands later, or the mock's account reset, refreshes. */
 export class MonkeySession {
   readonly walletWork = new WalletQueue();
   private openings = 0;
@@ -87,4 +88,6 @@ export class MonkeySession {
     return this.openings;
   }
   panel: MonkeyPanel | null = null;
+  /** The Staking page's distribution history while it reads. */
+  history: DistributionHistoryReads | null = null;
 }

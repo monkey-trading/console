@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EngineError } from "../engine/client";
 import { ProviderDeployment } from "../engine/provider-registry";
-import { NO_CANDIDATE, type DeploymentReads } from "../engine/registry";
+import { CANDIDATE_LIMIT, NO_CANDIDATE, type DeploymentReads } from "../engine/registry";
 import type { OperatorRoute } from "../engine/stats-types";
 import { connectWallet, disconnectWallet } from "../store/actions";
 import { delegateStake } from "./actions";
@@ -78,7 +78,7 @@ describe("OperatorReads", () => {
     const { route, named, table } = operators.getSnapshot();
     expect([route.status, named.status, table.status]).toEqual(["ready", "ready", "ready"]);
     expect(named.value?.hostname).toBe("alpha.operators.example");
-    expect(table.value?.candidates).toHaveLength(4);
+    expect(table.value?.candidates).toHaveLength(CANDIDATE_LIMIT);
     expect(counts).toEqual({ route: 1, operator: 1, candidates: 1 });
     stop();
   });

@@ -6,6 +6,7 @@
  */
 
 import { EngineError } from "../engine/client";
+import type { EngineEvent } from "../engine/types";
 import type { ActivityPage, DistributionProof, MonkeyView, MonkeySeriesMetric, SeriesPage, SeriesQuery, SeriesResolution } from "../engine/stats-types";
 import { fixedToWire, type Fixed } from "../fixed";
 import { MONKEY_UNIT } from "../format";
@@ -161,9 +162,10 @@ export function distributionProof(state: MockState, address: string): Distributi
   return { seq: state.postedSeq, root: `0x${mockHex("distribution-root", 32)}`, account: address, entitled: entitled.toString(), siblings: [], ...postedStanding(state.postedSeq, entitled) };
 }
 
-/** Closes every distribution epoch the clock has passed, paying each staker its share of the amount, and posts a checkpoint with the close. */
-export function closeDistributionEpochs(state: MockState): void {
+/** Closes every distribution epoch the clock has passed, paying each staker its share of the amount, and posts a checkpoint with the close; returns each share's event. */
+export function closeDistributionEpochs(state: MockState): EngineEvent[] {
   const { monkey } = state;
+  const events: EngineEvent[] = [];
   let closed = false;
   for (;;) {
     const epoch = (monkey.epochs[monkey.epochs.length - 1]?.epoch ?? Math.floor((monkey.seededAt - monkey.startMs) / EPOCH_MS) - 1) + 1;
@@ -178,12 +180,15 @@ export function closeDistributionEpochs(state: MockState): void {
       // An unstake still in its cooldown keeps earning, as the engine counts it staked until it completes.
       const held = (monkey.staked.get(account) ?? 0n) + (monkey.unstaking.get(account)?.amount ?? 0n);
       const share = total > 0n ? (allocated * held) / total : 0n;
-      if (share > 0n) monkey.distEntitled.set(account, (monkey.distEntitled.get(account) ?? 0n) + share);
+      if (share === 0n) continue;
+      monkey.distEntitled.set(account, (monkey.distEntitled.get(account) ?? 0n) + share);
+      events.push({ type: "distribution_allocated", account, epoch, amount: share.toString() });
     }
     monkey.epochs.push({ epoch, closedMs, nav, allocated });
     closed = true;
   }
   if (closed) state.postedSeq = state.seq;
+  return events;
 }
 
 /** Records an emission period's loss allocation in the feed. */
@@ -236,11 +241,14 @@ export function claimDistribution(state: MockState, address: string, entitled: b
   state.monkey.distClaimed.set(key, entitled);
 }
 
-/** Gives the demo account something to see: MONKEY in its wallet, a stake, and a distribution waiting at the posted checkpoint. */
+/** Gives the demo account something to see: MONKEY in its wallet, a stake, and a distribution from the last epoch closed before the mock started, waiting at the posted checkpoint. */
 export function seedMonkeyDemo(state: MockState, address: string): void {
   const key = address.toLowerCase();
+  const seeded = 37_250_000n;
   state.monkey.seededBalance.set(key, 40_000n * MONKEY_UNIT);
   state.monkey.staked.set(key, 12_000n * MONKEY_UNIT);
   state.monkey.stakeSteps.push({ ts: state.monkey.begins, delta: 12_000n * MONKEY_UNIT, account: key });
-  state.monkey.distEntitled.set(key, 37_250_000n);
+  state.monkey.distEntitled.set(key, seeded);
+  const epoch = state.monkey.epochs.at(-1)?.epoch ?? 0;
+  state.emit({ type: "tick" }, [{ type: "distribution_allocated", account: key, epoch, amount: seeded.toString() }]);
 }

@@ -1,5 +1,5 @@
 /**
- * The operator card's reads. The node's signed `GET /v1/operator` is read at the page's 30-second
+ * The Staking page's operator reads. The node's signed `GET /v1/operator` is read at the page's 30-second
  * pace; the registry's reads go through the connected wallet, one call at a time behind the wallet's
  * other work, on open, when the wallet changes, on an election event in the stream, after a
  * delegation, and otherwise every 15 seconds while the tab is visible (monkey-trading/console#202),

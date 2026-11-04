@@ -1,4 +1,4 @@
-/** Tests for the MONKEY page store's wallet reads: one at a time, queued behind transactions, bounded and never stale. */
+/** Tests for the MONKEY and Staking pages' store's wallet reads: what each page reads, one at a time, queued behind transactions, bounded and never stale. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -193,7 +193,7 @@ describe("MonkeyPanel wallet reads", () => {
     void panel.refreshWallet(true);
     await flush();
     stop();
-    const later = new MonkeyPanel(store);
+    const later = new MonkeyPanel(store, "staking");
     const restart = later.start(() => false);
     const reading = later.refreshWallet();
     held.release();
@@ -203,24 +203,23 @@ describe("MonkeyPanel wallet reads", () => {
     restart();
   });
 
-  it("does not ask for the vault's record while a call the wallet has not answered is still outstanding", async () => {
-    const { store, panel, stop } = await setup();
-    const wallet = store.liveWallet;
-    const staking = wallet?.staking;
-    const record = wallet?.emissionsClaimed;
-    if (wallet === null || staking === undefined || record === undefined) throw new Error("the mock wallet reads the vault");
-    let recordAsked = false;
-    wallet.emissionsClaimed = () => { recordAsked = true; return record(); };
-    wallet.staking = { ...staking, position: () => new Promise((resolve) => setTimeout(() => resolve(staking.position()), 40_000)) };
-    store.patch({ emissionsVault: null });
-    const reading = panel.refreshWallet(true);
-    await vi.advanceTimersByTimeAsync(35_000);
-    expect(panel.getSnapshot().wallet.position.status).toBe("failed");
-    expect(recordAsked).toBe(false);
-    await vi.advanceTimersByTimeAsync(10_000);
-    await reading;
-    expect(recordAsked).toBe(true);
-    stop();
+  it("reads only what its page shows of the wallet: the stake and the proof on the Staking page, the vault's MONKEY record on the MONKEY page", async () => {
+    for (const page of ["staking", "monkey"] as const) {
+      const { node, store, panel, stop } = await setup(page);
+      const wallet = store.liveWallet;
+      const staking = wallet?.staking;
+      const record = wallet?.emissionsClaimed;
+      if (wallet === null || staking === undefined || record === undefined) throw new Error("the mock wallet reads the vault");
+      const asked = { position: 0, record: 0 };
+      wallet.staking = { ...staking, position: () => { asked.position += 1; return staking.position(); } };
+      wallet.emissionsClaimed = () => { asked.record += 1; return record(); };
+      const proof = vi.spyOn(node.client.stats, "distributions");
+      store.patch({ emissionsVault: null });
+      await panel.refreshWallet(true);
+      expect({ ...asked, proof: proof.mock.calls.length }, page).toEqual(page === "staking" ? { position: 1, record: 0, proof: 1 } : { position: 0, record: 1, proof: 0 });
+      expect(panel.getSnapshot().wallet.position.status, page).toBe(page === "staking" ? "ready" : "loading");
+      stop();
+    }
   });
 
   it("keeps the figures it held when the node's proof read fails, and says so on the proof", async () => {
@@ -253,8 +252,27 @@ describe("MonkeyPanel wallet reads", () => {
     stop();
   });
 
+  it("marks the MONKEY page's vault-record read failed when the wallet refuses it, ready once it answers, and backs a failing read off", async () => {
+    const { store, panel, stop } = await setup("monkey");
+    const wallet = store.liveWallet;
+    const record = wallet?.emissionsClaimed;
+    if (wallet === null || record === undefined) throw new Error("the mock wallet reads the vault");
+    let asked = 0;
+    wallet.emissionsClaimed = () => { asked += 1; return Promise.reject(new Error("refused")); };
+    await panel.refreshWallet(true);
+    expect(panel.getSnapshot().wallet.record).toMatchObject({ status: "failed", message: "The vault's record could not be read." });
+    // Fifteen-second reads for two minutes would ask eight times; failing ones wait 5 s, then 10, 20, 40 and 80.
+    asked = 0;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(asked).toBeLessThan(6);
+    wallet.emissionsClaimed = record;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(panel.getSnapshot().wallet.record.status).toBe("ready");
+    stop();
+  });
+
   it("reads the vault's record of the MONKEY claims with the wallet's other reads, so the emissions card needs no timer of its own", async () => {
-    const { store, panel, stop } = await setup();
+    const { store, panel, stop } = await setup("monkey");
     store.patch({ emissionsVault: null });
     await panel.refreshWallet(true);
     expect(store.getSnapshot().emissionsVault).not.toBeNull();

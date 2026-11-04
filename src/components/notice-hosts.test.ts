@@ -4,6 +4,7 @@ import { createElement, type ComponentType, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { OperatorReads } from "@/lib/monkey/operators";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import type { NoticeSurface } from "@/lib/store/state";
 
@@ -23,6 +24,7 @@ import { PositionsView } from "./PositionsView";
 import { SessionsCard } from "./SessionsCard";
 import { SetupSteps } from "./SetupSteps";
 import { Shell } from "./Shell";
+import { OperatorsPanel } from "./staking/OperatorsPanel";
 import { WithdrawForm } from "./WithdrawForm";
 
 const TEXT = "a message the trader must read";
@@ -35,10 +37,16 @@ function Seed({ surface, tone, stale }: { surface: NoticeSurface; tone: "error" 
   return null;
 }
 
-/** Panels of the MONKEY page, which read the page's own store. */
+/** Panels of the MONKEY and Staking pages, which read the pages' own store. */
 function OnMonkeyPage({ children }: { children: ReactNode }) {
   const { store } = useSession();
-  return createElement(MonkeyPanelProvider, { value: new MonkeyPanel(store) }, children);
+  return createElement(MonkeyPanelProvider, { value: new MonkeyPanel(store, "staking") }, children);
+}
+
+/** The Staking page's operators, over reads that have not started. */
+function Operators() {
+  const { store } = useSession();
+  return createElement(OperatorsPanel, { operators: new OperatorReads(store) });
 }
 
 function render(surface: NoticeSurface, screen: ReactNode, tone: "error" | "info" = "error", stale = false): string {
@@ -66,6 +74,7 @@ const HOSTS: readonly [NoticeSurface, string, ReactNode][] = [
   ["payoutVault", "the claims on the vault", el(Payouts)],
   ["emissions", "the MONKEY emissions card", createElement(OnMonkeyPage, null, createElement(EmissionsCard, { claim: () => Promise.resolve() }))],
   ["distribution", "the distribution claim", createElement(OnMonkeyPage, null, el(DistributionClaim))],
+  ["operator", "the Staking page's operators", createElement(OnMonkeyPage, null, el(Operators))],
   ["settings", "Settings' sessions", el(SessionsCard)],
   ["chart", "the chart", el(ChartPanel)],
   ["wallet", "the top bar", el(Shell)],

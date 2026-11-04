@@ -1,18 +1,16 @@
 "use client";
 
 /**
- * The MONKEY page: what the account can claim and has staked, the token's supply and contracts, the
- * distribution's state, the latest activity, and four charts of how the token and its distributions
- * have moved. Panels on the left and charts on the right where there is room, stacked on a phone.
- * Every figure is read only while the page is on screen.
+ * The MONKEY page: the account's MONKEY emissions and their claim, the token's supply and contracts,
+ * the latest activity, and two charts of how emissions and the supply have moved. Staking, delegation
+ * and USDC distributions are the Staking page's. Panels on the left and charts on the right where
+ * there is room, stacked on a phone. Every figure is read only while the page is on screen.
  */
 
 import { useEffect, useMemo, useState } from "react";
 
-import { formatCompactUsd } from "@/lib/chart-format";
 import { readBlock } from "@/lib/engine/attestation";
 import { compactNumber, halvingsBetween, monkeyText, perUsdFigure } from "@/lib/monkey/figures";
-import { OperatorReads } from "@/lib/monkey/operators";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import { formatStamp } from "@/lib/time";
 
@@ -21,22 +19,16 @@ import { ActivityTable } from "./monkey/ActivityTable";
 import { ChartCard } from "./monkey/ChartCard";
 import type { LineSpec } from "./monkey/ChartCanvas";
 import { ClaimPanel } from "./monkey/ClaimPanel";
-import { OperatorPanel } from "./monkey/OperatorPanel";
-import { DistributionPanel } from "./monkey/DistributionPanel";
-import { RewardsPanel } from "./monkey/RewardsPanel";
 import { TokenPanel } from "./monkey/TokenPanel";
-import { StakePanel } from "./monkey/StakePanel";
 import { MonkeyPanelProvider, useConsoleSelect, usePanelState } from "./monkey/use-monkey";
 
-const EPOCH_LINES: readonly LineSpec[] = [{ metric: "distributed_per_epoch", label: "USDC distributed", tone: "glow" }];
 const PER_LOSS_LINES: readonly LineSpec[] = [{ metric: "monkey_per_loss", label: "MONKEY per $1 of loss", tone: "glow" }];
 const SUPPLY_LINES: readonly LineSpec[] = [
   { metric: "total_allocated", label: "Allocated", tone: "amber" },
   { metric: "total_staked", label: "Staked", tone: "glow" },
 ];
-const REWARD_LINES: readonly LineSpec[] = [{ metric: "cumulative_distributed", label: "USDC distributed", tone: "glow" }];
 
-/** The four charts, in the right-hand column. */
+/** The two charts, in the right-hand column. */
 function Charts({ panel }: { panel: MonkeyPanel }) {
   const { overview } = usePanelState();
   const emissions = overview.value?.emissions ?? null;
@@ -51,9 +43,8 @@ function Charts({ panel }: { panel: MonkeyPanel }) {
   );
   return (
     <>
-      <ChartCard id="chart-epochs" title="USDC distributed per epoch" caption="What each epoch close shared between stakers." feed={panel.feeds.epochs} kind="bars" lines={EPOCH_LINES} format={formatCompactUsd} />
       <ChartCard
-        id="chart-per-loss" title="MONKEY per $1 of realised loss" feed={panel.feeds.perLoss} kind="steps" lines={PER_LOSS_LINES} format={perUsdFigure} marks={marks}
+        id="chart-per-loss" title="MONKEY per $1 of realised loss" feed={panel.feed("perLoss")} kind="steps" lines={PER_LOSS_LINES} format={perUsdFigure} marks={marks}
         caption="By emission period: each ten-minute budget is shared between that period's realised losses, less write-offs, so the rate is set by how much was lost in the period and a small loss in a quiet period reads high."
         footer={emissions === null ? null : (
           <p className="mt-1 text-caption leading-relaxed text-fg-3">
@@ -61,8 +52,7 @@ function Charts({ panel }: { panel: MonkeyPanel }) {
           </p>
         )}
       />
-      <ChartCard id="chart-supply" title="MONKEY allocated and staked" feed={panel.feeds.supply} kind="lines" lines={SUPPLY_LINES} format={compactNumber} />
-      <ChartCard id="chart-rewards" title="Total USDC distributed to stakers" caption="Cumulative, across every epoch close." feed={panel.feeds.rewards} kind="area" lines={REWARD_LINES} format={formatCompactUsd} />
+      <ChartCard id="chart-supply" title="MONKEY allocated and staked" feed={panel.feed("supply")} kind="lines" lines={SUPPLY_LINES} format={compactNumber} />
     </>
   );
 }
@@ -70,15 +60,12 @@ function Charts({ panel }: { panel: MonkeyPanel }) {
 /** The MONKEY screen; the console's layout supplies the provider, the access gate and the shell. */
 export function MonkeyPage() {
   const { store } = useSession();
-  const [panel] = useState(() => new MonkeyPanel(store));
-  const [operators] = useState(() => new OperatorReads(store));
+  const [panel] = useState(() => new MonkeyPanel(store, "monkey"));
   const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
   // The wallet object changes whenever a wallet connects, even to the same address, and the chain reads follow it.
   const wallet = useConsoleSelect((state) => state.wallet);
   // Reads start once the node's answers can be trusted and stop when the page is left.
   useEffect(() => (trusted ? panel.start(() => document.visibilityState === "hidden") : undefined), [panel, trusted]);
-  // The operator card's reads go through the wallet and need nothing from a node the vote may be removing.
-  useEffect(() => operators.start(() => document.visibilityState === "hidden"), [operators]);
   useEffect(() => {
     if (trusted) void panel.refreshWallet();
   }, [panel, trusted, wallet]);
@@ -89,24 +76,14 @@ export function MonkeyPage() {
         <div className="mx-auto w-full max-w-[110rem] px-4 py-5 sm:px-6">
           <h2 className="text-lead tracking-caps text-glow uppercase">MONKEY</h2>
           {!trusted && <p className="mt-3 text-data leading-relaxed text-fg-2">Figures appear once the node&apos;s attestation is verified and its feed is live.</p>}
-          {/* The figures are hidden, not unmounted, while the node is not trusted: a typed amount survives a gap in the feed, and no figure from before it shows. The operator card alone stays, in one place: its reads go through the wallet, and the vote never depends on the host it may remove. */}
-          <div className={`mt-4 grid items-start gap-4 ${trusted ? "lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,35rem)_minmax(0,1fr)]" : "max-w-[35rem]"}`}>
+          {/* The figures are hidden, not unmounted, while the node is not trusted, so no figure from before a gap in the feed shows. */}
+          <div className={`mt-4 ${trusted ? "grid" : "hidden"} items-start gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,35rem)_minmax(0,1fr)]`}>
             <div className="flex min-w-0 flex-col gap-4">
-              <div className={trusted ? "contents" : "hidden"}>
-                <ClaimPanel />
-                <StakePanel />
-              </div>
-              <OperatorPanel operators={operators} />
-              <div className={trusted ? "contents" : "hidden"}>
-                <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-                  <RewardsPanel />
-                  <TokenPanel />
-                </div>
-                <DistributionPanel />
-                <ActivityTable />
-              </div>
+              <ClaimPanel />
+              <TokenPanel />
+              <ActivityTable />
             </div>
-            <div className={`${trusted ? "flex" : "hidden"} min-w-0 flex-col gap-4`}>
+            <div className="flex min-w-0 flex-col gap-4">
               <Charts panel={panel} />
             </div>
           </div>

@@ -43,9 +43,15 @@ interface World {
   list?: readonly Hex[];
   count?: bigint;
   delegate?: Hex;
+  /** Addresses, lowercase, that never registered: `candidateOf` answers the zero struct for them. */
+  unregistered?: readonly string[];
+  /** Each candidate's self-bond, registration count and handover endpoint, by lowercase address. */
+  registrations?: Record<string, { bond: bigint; registration: bigint; handoverEndpoint: string }>;
 }
 
-const candidateOf = (hostname: string) => ({ adminKey: KEY as Hex, enclave: KEY as Hex, bond: 1n, release: RELEASE, registration: 0n, apiHostname: hostname, handoverEndpoint: "x" });
+const candidateOf = (hostname: string, registered = true) => (registered
+  ? { adminKey: KEY as Hex, enclave: KEY as Hex, bond: 1n, release: RELEASE, registration: 0n, apiHostname: hostname, handoverEndpoint: "x" }
+  : { adminKey: ZERO as Hex, enclave: ZERO as Hex, bond: 0n, release: `0x${"00".repeat(32)}` as const, registration: 0n, apiHostname: "", handoverEndpoint: "" });
 
 /** A provider answering the contracts' reads from `world`, recording each call in order. */
 function rig(world: World = {}, chain = CHAIN) {
@@ -65,7 +71,11 @@ function rig(world: World = {}, chain = CHAIN) {
         case "operatorInEffect": return encodeFunctionResult({ abi: ABI, functionName: "operatorInEffect", result: { candidate: A as Hex, adminKey: KEY as Hex, release: RELEASE, since: 100n } });
         case "delegates": return encodeFunctionResult({ abi: ABI, functionName: "delegates", result: world.delegate ?? (ZERO as Hex) });
         case "pendingElection": return encodeFunctionResult({ abi: ABI, functionName: "pendingElection", result: { epoch: 3n, candidate: (world.effectiveAt ? B : ZERO) as Hex, adminKey: KEY as Hex, release: RELEASE, effectiveAt: world.effectiveAt ?? 0n, promoted: false } });
-        case "candidateOf": return encodeFunctionResult({ abi: ABI, functionName: "candidateOf", result: candidateOf(world.hostnames?.[String(decoded.args[0]).toLowerCase()] ?? "") });
+        case "candidateOf": {
+          const asked = String(decoded.args[0]).toLowerCase();
+          const registered = candidateOf(world.hostnames?.[asked] ?? "", !(world.unregistered ?? []).includes(asked));
+          return encodeFunctionResult({ abi: ABI, functionName: "candidateOf", result: { ...registered, ...world.registrations?.[asked] } });
+        }
         case "candidateCount": return encodeFunctionResult({ abi: ABI, functionName: "candidateCount", result: world.count ?? BigInt((world.list ?? []).length) });
         case "candidateList": return encodeFunctionResult({ abi: ABI, functionName: "candidateList", result: world.list?.[Number(decoded.args[0])] ?? (ZERO as Hex) });
         case "isEligible": return encodeFunctionResult({ abi: ABI, functionName: "isEligible", result: String(decoded.args[0]).toLowerCase() === A.toLowerCase() });
@@ -178,14 +188,24 @@ describe("ProviderDeployment.delegateOf", () => {
 });
 
 describe("ProviderDeployment.candidates", () => {
-  it("reads each listed candidate's hostname, votes and eligibility, and the total", async () => {
-    const { reads, order } = rig({ list: [A as Hex, B as Hex], hostnames: { [A.toLowerCase()]: "a.example", [B]: "b.example" } });
+  it("reads each listed candidate's hostname, votes, eligibility and registration, and the total, with no call beyond the four per candidate", async () => {
+    const registrations = { [A.toLowerCase()]: { bond: 7n, registration: 2n, handoverEndpoint: "a.example:9443" }, [B]: { bond: 9n, registration: 5n, handoverEndpoint: "https://b.example/handover" } };
+    const { reads, order } = rig({ list: [A as Hex, B as Hex], hostnames: { [A.toLowerCase()]: "a.example", [B]: "b.example" }, registrations });
+    const release = RELEASE.toLowerCase();
     await expect(reads.candidates()).resolves.toEqual({
       totalStaked: 100n,
-      inEffect: { candidate: A.toLowerCase(), hostname: "a.example" },
-      candidates: [{ address: A.toLowerCase(), hostname: "a.example", votes: 40n, eligible: true }, { address: B, hostname: "b.example", votes: 40n, eligible: false }],
+      inEffect: { candidate: A.toLowerCase(), hostname: "a.example", release, registered: { bond: 7n, release, registration: 2, handoverEndpoint: "a.example:9443" } },
+      candidates: [
+        { address: A.toLowerCase(), hostname: "a.example", votes: 40n, eligible: true, bond: 7n, release, registration: 2, handoverEndpoint: "a.example:9443" },
+        { address: B, hostname: "b.example", votes: 40n, eligible: false, bond: 9n, release, registration: 5, handoverEndpoint: "https://b.example/handover" },
+      ],
     });
     expect(order).toEqual(["candidateCount", "totalStaked", "operatorInEffect", "candidateOf", "candidateList", "candidateOf", "votes", "isEligible", "candidateList", "candidateOf", "votes", "isEligible"]);
+  });
+
+  it("names an operator in effect that never registered, such as the deployment's, with its release and no candidacy", async () => {
+    const { reads } = rig({ list: [B as Hex], unregistered: [A.toLowerCase()] });
+    await expect(reads.candidates()).resolves.toMatchObject({ inEffect: { candidate: A.toLowerCase(), hostname: null, release: RELEASE.toLowerCase(), registered: null } });
   });
 
   it("answers null from a build that names no registry or no staking contract", async () => {
@@ -220,7 +240,10 @@ describe("ProviderDeployment.candidates", () => {
 
   it("skips a zero address in the list", async () => {
     const { reads } = rig({ count: 1n });
-    await expect(reads.candidates()).resolves.toEqual({ totalStaked: 100n, inEffect: { candidate: A.toLowerCase(), hostname: null }, candidates: [] });
+    await expect(reads.candidates()).resolves.toEqual({
+      totalStaked: 100n, candidates: [],
+      inEffect: { candidate: A.toLowerCase(), hostname: null, release: RELEASE.toLowerCase(), registered: { bond: 1n, release: RELEASE.toLowerCase(), registration: 0, handoverEndpoint: "x" } },
+    });
   });
 
   it("keeps a hostile hostname as data; nothing here decides a connection", async () => {

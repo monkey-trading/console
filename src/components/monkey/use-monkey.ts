@@ -1,10 +1,11 @@
 "use client";
 
-/** Hooks the MONKEY page's panels read through: narrow slices of the console's state, so a stream patch re-renders nothing here, and the page's own store. */
+/** Hooks the MONKEY and Staking pages' panels read through: narrow slices of the console's state, so a stream patch re-renders nothing here, and the page's own store. */
 
 import { createContext, useContext, useSyncExternalStore } from "react";
 
-import type { MonkeyPanel, PanelState } from "@/lib/monkey/panel";
+import type { MonkeyPanel } from "@/lib/monkey/panel";
+import type { PanelState } from "@/lib/monkey/panel-state";
 import type { ConsoleState } from "@/lib/store/state";
 
 import { useSession } from "../ConsoleProvider";
@@ -22,10 +23,10 @@ export function useConsoleSelect<T>(select: (state: ConsoleState) => T): T {
 const PanelContext = createContext<MonkeyPanel | null>(null);
 export const MonkeyPanelProvider = PanelContext.Provider;
 
-/** The page's store. Throws outside the page. */
+/** The page's store. Throws outside the pages. */
 export function useMonkeyPanel(): MonkeyPanel {
   const panel = useContext(PanelContext);
-  if (panel === null) throw new Error("useMonkeyPanel is used outside the MONKEY page");
+  if (panel === null) throw new Error("useMonkeyPanel is used outside the MONKEY and Staking pages");
   return panel;
 }
 

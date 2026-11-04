@@ -16,7 +16,7 @@ export interface Deploy {
   /** The vault address, lowercase `0x` hex. */
   vault: string | null;
   usdc: string | null;
-  /** The staking contract the MONKEY page stakes into, lowercase `0x` hex; null leaves staking out. */
+  /** The staking contract the Staking page stakes into, lowercase `0x` hex; null leaves staking out. */
   staking: string | null;
   /** The MONKEY token the MONKEY page shows with a copy button; null when the build does not name it. */
   monkey: string | null;

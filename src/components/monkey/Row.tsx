@@ -1,4 +1,4 @@
-/** One labelled figure on the MONKEY page, the label left and the value right. */
+/** One labelled figure on the MONKEY and Staking pages, the label left and the value right. */
 
 import type { ReactNode } from "react";
 

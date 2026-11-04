@@ -1,8 +1,8 @@
-/** Tests for the simulated registry: what the mock build's MONKEY page shows of candidates and an election. */
+/** Tests for the simulated registry: what the mock build's Staking page shows of candidates and an election. */
 
 import { describe, expect, it } from "vitest";
 
-import { NO_CANDIDATE } from "../engine/registry";
+import { CANDIDATE_LIMIT, NO_CANDIDATE } from "../engine/registry";
 import { MONKEY_UNIT } from "../format";
 import { createMockNode, SIM_EPOCH_MS } from ".";
 import { stake } from "./monkey";
@@ -24,13 +24,20 @@ describe("the simulated registry", () => {
     expect(named).toMatchObject({ rotationEnabled: true, hostname: "alpha.operators.example" });
     expect(named?.pending?.effectiveAtMs).toBe(state.now + 6 * 86_400_000);
     const table = await reads.candidates();
-    expect(table?.inEffect).toEqual({ candidate: named?.candidate, hostname: "alpha.operators.example" });
+    const alpha = table?.candidates[0];
+    expect(table?.inEffect).toEqual({ candidate: named?.candidate, hostname: "alpha.operators.example", release: alpha?.release, registered: { bond: 50_000n * MONKEY_UNIT, release: alpha?.release, registration: 0, handoverEndpoint: "https://alpha.operators.example:9443/handover" } });
     expect(table?.candidates.find((c) => c.address === named?.pending?.candidate)?.hostname).toBe("bravo.operators.example");
   });
 
-  it("lists eligible and ineligible candidates against the total stake", async () => {
+  it("lists as many candidates as the registry holds, eligible and not against the total stake, with every vote inside it", async () => {
     const table = await node().reads.candidates();
-    expect(table?.candidates.map((c) => [c.hostname.split(".")[0], c.eligible])).toEqual([["alpha", true], ["bravo", true], ["charlie", true], ["delta", false]]);
+    const candidates = table?.candidates ?? [];
+    expect(candidates).toHaveLength(CANDIDATE_LIMIT);
+    expect(candidates.slice(0, 4).map((c) => [c.hostname.split(".")[0], c.eligible])).toEqual([["alpha", true], ["bravo", true], ["charlie", true], ["delta", false]]);
+    expect(candidates.slice(4).every((c) => !c.eligible && /^node-\d{3}\.operators\.example$/.test(c.hostname))).toBe(true);
+    expect(new Set(candidates.map((c) => c.address)).size).toBe(CANDIDATE_LIMIT);
+    expect(candidates.map((c) => c.registration)).toEqual(candidates.map((_, i) => i));
+    expect(candidates.reduce((sum, c) => sum + c.votes, 0n)).toBeLessThanOrEqual(table?.totalStaked ?? 0n);
   });
 
   it("moves the account's whole stake between candidates' votes, and out of them when cleared", async () => {

@@ -3,6 +3,7 @@ export const PAGES = [
   { href: "/", label: "Trade" },
   { href: "/house", label: "House" },
   { href: "/monkey", label: "MONKEY" },
+  { href: "/staking", label: "Staking" },
   { href: "/funding", label: "Funding" },
   { href: "/settings", label: "Settings" },
 ] as const;

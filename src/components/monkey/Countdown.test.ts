@@ -18,7 +18,8 @@ const view = { emissions: { start_ms: 1_793_662_020_000, period_ms: 600_000 }, d
 function Page({ overview, now = NOW, children }: { overview: MonkeyView | null; now?: number; children?: ReactNode }) {
   const { store } = useSession();
   store.patch({ now });
-  const panel = new MonkeyPanel(store);
+  // Both pages read the totals the countdowns follow; the distribution card is the Staking page's.
+  const panel = new MonkeyPanel(store, "staking");
   if (overview !== null) (panel as unknown as { state: unknown }).state = { ...panel.getSnapshot(), overview: { status: "ready", value: overview, message: null } };
   return createElement(MonkeyPanelProvider, { value: panel }, children);
 }

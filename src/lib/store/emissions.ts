@@ -52,19 +52,22 @@ export const WAITING_ON_VAULT = "The vault has not accepted the checkpoint of th
 /**
  * Reads the vault's record of the connected account's MONKEY through the wallet's chain provider:
  * what it has minted and its latest posted checkpoint seq. One read per wallet at a time; a failed
- * read leaves the record unread, which the card says, and the MONKEY page's next wallet read tries it again.
+ * read leaves the record unread and answers false, which the MONKEY page's panel shows on the card,
+ * and its next wallet read tries it again. True for a read that landed or was not this call's to make.
  */
-export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> {
+export async function checkEmissionsClaimed(store: ConsoleStore): Promise<boolean> {
   const wallet = store.liveWallet;
-  if (!wallet?.emissionsClaimed || store.emissionsCheck === wallet) return;
+  if (!wallet?.emissionsClaimed || store.emissionsCheck === wallet) return true;
   store.emissionsCheck = wallet;
   const current = () => store.liveWallet === wallet;
   try {
     const record = await wallet.emissionsClaimed();
     // The wallet may have changed while the read ran; another account's record is not shown.
     if (current()) store.patch({ emissionsVault: record });
+    return true;
   } catch {
-    // The card says the vault's record has not been read, and the next refresh asks again.
+    // Not a verdict: the card says the vault's record has not been read, and the next read asks again.
+    return false;
   } finally {
     if (store.emissionsCheck === wallet) store.emissionsCheck = null;
   }

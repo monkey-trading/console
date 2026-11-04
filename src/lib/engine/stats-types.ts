@@ -82,7 +82,7 @@ export interface PositionsView {
 }
 
 export type HouseSeriesMetric = "nav" | "cash" | "withdrawal_queue" | "long" | "short" | "volume";
-/** The MONKEY page's series: MONKEY base units staked and allocated, USDC base units distributed (cumulative and per epoch), and MONKEY base units per dollar of realised loss by period. */
+/** The MONKEY and Staking pages' series: MONKEY base units staked and allocated, USDC base units distributed (cumulative and per epoch), and MONKEY base units per dollar of realised loss by period. */
 export type MonkeySeriesMetric = "total_staked" | "total_allocated" | "cumulative_distributed" | "monkey_per_loss" | "distributed_per_epoch";
 export type SeriesMetric = HouseSeriesMetric | MonkeySeriesMetric;
 export type SeriesResolution = "1m" | "1h" | "1d";

@@ -21,6 +21,10 @@ export type EngineEvent =
   | { type: "withdrawal_rejected"; account: Address; amount: string; reason: Reject }
   | { type: "emission_allocated"; account: Address; period: number; weight: string; amount: string }
   | { type: "emission_period_closed"; period: number; budget: string; allocated: string; cancelled: string }
+  /** An account's share of a closed distribution epoch, in USDC base units, added to the cumulative distribution the vault pays. */
+  | { type: "distribution_allocated"; account: Address; epoch: number; amount: string }
+  /** From the engine's V47, the operator's share of a closed distribution epoch, in USDC base units, to the candidate seated under the key in effect. */
+  | { type: "operator_share_allocated"; account: Address; epoch: number; amount: string }
   | { type: "financing"; account: Address; market: MarketId; amount: string }
   | { type: "bad_debt"; account: Address; amount: string }
   /** Signed USD realised by closing the fraction a split rounded off a position; counts toward emission weight like a fill's result. */
