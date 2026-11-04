@@ -19,9 +19,26 @@ const TONES: Record<ActivityKind, string> = {
   unstake: "border-line-2 text-fg-2",
 };
 
+/** The rows a read table holds below its reading row, kept invisible so the card keeps its loaded height while the activity is read. */
+const HELD_ROWS = Array.from({ length: ACTIVITY_LIMIT - 1 }, (_, index) => index);
+
 /** `28 Oct 15:04`, in UTC, without the seconds the table has no room for. */
 function when(ms: number): string {
   return formatStamp(ms).slice(0, -3);
+}
+
+/** The table's head, the same while it is read and once it is. */
+function Head() {
+  return (
+    <thead>
+      <tr className="text-left text-label tracking-caps text-fg-3 uppercase">
+        <th scope="col" className="w-[26%] px-1 py-1 font-normal">Time</th>
+        <th scope="col" className="w-[24%] px-1 py-1 font-normal">Type</th>
+        <th scope="col" className="w-[26%] px-1 py-1 font-normal">Account</th>
+        <th scope="col" className="px-1 py-1 text-right font-normal">Amount</th>
+      </tr>
+    </thead>
+  );
 }
 
 export function ActivityTable() {
@@ -29,7 +46,26 @@ export function ActivityTable() {
   const page = activity.value;
   return (
     <Card id="activity-title" title="MONKEY activity" aside={<span className="text-label tracking-caps text-fg-3 uppercase">Last {ACTIVITY_LIMIT}</span>}>
-      {page === null ? (
+      {page === null && activity.status === "loading" ? (
+        // The table's place while the first read runs: its head, a reading row, and the rows it will hold, unseen.
+        <div className="-mx-1">
+          <table className="w-full table-fixed text-label sm:text-caption">
+            <caption className="sr-only">The latest MONKEY events, being read.</caption>
+            <Head />
+            <tbody>
+              <tr className="border-t border-line align-top"><td colSpan={4} className="px-1 py-1.5 text-fg-3">Reading the latest activity…</td></tr>
+              {HELD_ROWS.map((index) => (
+                <tr key={index} aria-hidden="true" className="invisible border-t border-line align-top">
+                  <td className="px-1 py-1.5">—</td>
+                  <td className="px-1 py-1.5"><span className={`inline-block rounded border px-1 text-label uppercase ${TONES.stake}`}>—</span></td>
+                  <td className="px-1 py-1.5">—</td>
+                  <td className="px-1 py-1.5 text-right">—</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : page === null ? (
         <ReadNote read={activity} loading="Reading the latest activity…" />
       ) : page.entries.length === 0 ? (
         <p className={NOTE}>No MONKEY activity has been recorded yet.</p>
@@ -37,14 +73,7 @@ export function ActivityTable() {
         <div className="-mx-1">
           <table className="w-full table-fixed text-label sm:text-caption">
             <caption className="sr-only">The latest {page.entries.length} MONKEY events, newest first. Times are UTC and amounts are in MONKEY.</caption>
-            <thead>
-              <tr className="text-left text-label tracking-caps text-fg-3 uppercase">
-                <th scope="col" className="w-[26%] px-1 py-1 font-normal">Time</th>
-                <th scope="col" className="w-[24%] px-1 py-1 font-normal">Type</th>
-                <th scope="col" className="w-[26%] px-1 py-1 font-normal">Account</th>
-                <th scope="col" className="px-1 py-1 text-right font-normal">Amount</th>
-              </tr>
-            </thead>
+            <Head />
             <tbody>
               {page.entries.map((entry) => (
                 <tr key={entry.id} className="border-t border-line align-top">

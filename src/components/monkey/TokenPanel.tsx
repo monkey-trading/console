@@ -30,7 +30,7 @@ export function TokenPanel() {
         <AddressRow label="Token" address={deploy.monkey ?? contracts?.token ?? null} />
         <AddressRow label="Staking contract" address={deploy.staking ?? contracts?.staking ?? null} />
       </dl>
-      <ReadNote read={overview} />
+      <ReadNote read={overview} quiet />
       <p className={NOTE}>The stake ratio is the staked supply as a share of everything allocated so far.</p>
     </Card>
   );

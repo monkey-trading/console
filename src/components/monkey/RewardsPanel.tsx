@@ -28,7 +28,7 @@ export function RewardsPanel() {
         <Row label="Total distributed to stakers">{distribution === null ? "—" : formatUsdc(usdcFixed(BigInt(distribution.distributed_usdc_units)))}</Row>
         <Row label="Reward token">USDC</Row>
       </dl>
-      <ReadNote read={overview} />
+      <ReadNote read={overview} quiet />
       {mine && figures.position.status === "failed" && <ReadNote read={figures.position} />}
     </Card>
   );
