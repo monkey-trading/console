@@ -49,8 +49,8 @@ export function StakingPage() {
   useEffect(() => (trusted ? panel.start(hidden) : undefined), [panel, trusted]);
   useEffect(() => (trusted ? history.start(hidden) : undefined), [history, trusted]);
   useEffect(() => (trusted ? epochs.start(hidden) : undefined), [epochs, trusted]);
-  // The operator list is the node's signed answer, read like the rest once the node may be read.
-  useEffect(() => (trusted ? operators.start(hidden) : undefined), [operators, trusted]);
+  // The operator list is the node's signed answer: its reads follow the node's trust themselves, read the moment it may be read.
+  useEffect(() => operators.start(hidden), [operators]);
   useEffect(() => {
     if (trusted) void panel.refreshWallet();
   }, [panel, trusted, wallet]);
@@ -80,7 +80,8 @@ export function StakingPage() {
               <EpochHistory epochs={epochs} labelOf={labelOf} />
             </div>
           </div>
-          <div className={trusted ? "mt-4" : "hidden"}>
+          {/* The operators card stays, saying what waits on the node, so the page holds its height while the node is verified. */}
+          <div className="mt-4">
             <OperatorsPanel operators={operators} />
           </div>
         </div>
