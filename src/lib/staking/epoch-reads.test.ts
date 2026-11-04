@@ -176,4 +176,16 @@ describe("EpochReads", () => {
     expect(epochs.getSnapshot().epochs.map((c) => c.epoch)).toEqual(Array.from({ length: EPOCH_PAGE }, (_, i) => 60 - i));
     stop();
   });
+
+  it("drops the failure of an older page for a list a newest read has since replaced", async () => {
+    const { epochs, node, stop } = await started(EPOCH_PAGE + 5);
+    let refuse: (error: Error) => void = () => {};
+    node.client.stats.distributionEpochs = (params) => (params.before !== undefined ? new Promise((_, reject) => { refuse = reject; }) : Promise.resolve(page(Array.from({ length: EPOCH_PAGE }, (_, i) => 60 - i), 41)));
+    const older = epochs.loadMore();
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS);
+    refuse(new Error("The node did not answer."));
+    await older;
+    expect(epochs.getSnapshot()).toMatchObject({ more: false, moreError: null, next: 41 });
+    stop();
+  });
 });

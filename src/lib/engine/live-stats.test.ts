@@ -99,14 +99,15 @@ describe("the live client's dashboard reads", () => {
     await expect(live.stats.operators()).rejects.toMatchObject({ status: 404 });
     const second = client();
     second.reply("/v1/operators", 503, { error: "the operator list has not been read yet" });
-    await expect(second.live.stats.operators()).rejects.toBeInstanceOf(EngineError);
+    await expect(second.live.stats.operators()).rejects.toMatchObject({ status: 503 });
   });
 
   it("refuses an operator list or an epoch page whose signature does not verify, as it refuses any signed answer", async () => {
     const { live, reply } = client({ ...acceptAll, verifyResponse: () => ({ ok: false, reason: "the signature does not recover to the attested signer" }) });
     reply("/v1/operators", 200, { candidates: [] });
     reply("/v1/monkey/distributions?limit=20", 200, { epochs: [] });
-    await expect(live.stats.operators()).rejects.toThrow();
-    await expect(live.stats.distributionEpochs({ limit: 20 })).rejects.toThrow();
+    const said = "The node's answer did not verify: the signature does not recover to the attested signer.";
+    await expect(live.stats.operators()).rejects.toThrow(said);
+    await expect(live.stats.distributionEpochs({ limit: 20 })).rejects.toThrow(said);
   });
 });

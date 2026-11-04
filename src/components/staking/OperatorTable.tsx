@@ -42,7 +42,7 @@ function Action({ row, label, held, canVote, disabled, onDelegate }: Pick<Props,
     <span className="flex flex-col gap-1 lg:items-end">
       {mine > 0n && <span className="text-caption whitespace-nowrap text-glow">You delegate {formatMonkey(mine)}</span>}
       <button type="button" aria-disabled={disabled} onClick={() => { if (!disabled) onDelegate(row); }} className={`${BUTTON} w-full whitespace-nowrap lg:w-auto`}>
-        Delegate<span className="sr-only"> stake to {label}</span>
+        Delegate<span className="sr-only">: choose {label} in the form above</span>
       </button>
     </span>
   );

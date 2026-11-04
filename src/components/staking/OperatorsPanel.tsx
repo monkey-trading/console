@@ -11,7 +11,7 @@
 import { useId, useMemo, useState, useSyncExternalStore } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
-import { shortHex } from "@/lib/format";
+import { groupThousands, shortHex } from "@/lib/format";
 import { formatDuration } from "@/lib/monkey/figures";
 import { hostnameListed, mirroredElection, type OperatorReads } from "@/lib/monkey/operators";
 import type { DelegationReads } from "@/lib/staking/delegation-reads";
@@ -94,7 +94,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
       {list !== null && (
         <>
           <h4 className="pt-2 text-label tracking-caps text-fg-3 uppercase">All operators</h4>
-          <p className={NOTE}>As the registry stood at final block {list.block.number.toLocaleString("en-US")}, at {formatStamp(list.block.timeMs)} UTC, read by the node from the chain. It is read again by itself, and counts a delegation once its block is final.</p>
+          <p className={NOTE}>As the registry stood at final block {groupThousands(BigInt(list.block.number))}, at {formatStamp(list.block.timeMs)} UTC, read by the node from the chain. It is read again by itself, and counts a delegation once its block is final.</p>
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,16rem)] sm:items-end">
             <div className="space-y-1">
               <label htmlFor={searchId} className="block text-caption text-fg-2">Search operators</label>

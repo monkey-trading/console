@@ -68,8 +68,9 @@ export class ProviderStaking implements StakingWallet {
     return this.chain.staking ?? null;
   }
 
-  private async call(to: string, data: Hex): Promise<Hex> {
-    return hexOf(await withinMs(this.provider, { method: "eth_call", params: [{ to, data }, "latest"] }, WALLET_READ_MS));
+  /** `data` called on `to` at `block`, the latest by default. */
+  private async call(to: string, data: Hex, block = "latest"): Promise<Hex> {
+    return hexOf(await withinMs(this.provider, { method: "eth_call", params: [{ to, data }, block] }, WALLET_READ_MS));
   }
 
   /** The vault's MONKEY token, or null while it names the zero address (no token deployed yet), which is read again next time. */
@@ -108,17 +109,19 @@ export class ProviderStaking implements StakingWallet {
   }
 
   /**
-   * One call after another, refused on another chain. The contract keeps the delegations' sum equal
-   * to `delegatedStake` and within the stake; an answer that breaks either is not believed.
+   * One call after another, all at the one block the wallet names latest first, so the stake and the
+   * delegations are the same moment's; refused on another chain. The contract keeps the delegations'
+   * sum equal to `delegatedStake` and within the stake; an answer that breaks either is not believed.
    */
   async delegations(): Promise<StakeDelegations> {
     const current = Number(await withinMs(this.provider, { method: "eth_chainId" }, WALLET_READ_MS));
     if (current !== this.chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chain.chainId}`);
     const staking = this.staking();
     const owner = hexOf(this.address);
-    const staked = decodeFunctionResult({ abi: STAKING, functionName: "stakes", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "stakes", args: [owner] })) });
-    const delegated = decodeFunctionResult({ abi: STAKING, functionName: "delegatedStake", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegatedStake", args: [owner] })) });
-    const held = decodeFunctionResult({ abi: STAKING, functionName: "delegationsOf", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegationsOf", args: [owner] })) });
+    const block = hexOf(await withinMs(this.provider, { method: "eth_blockNumber" }, WALLET_READ_MS));
+    const staked = decodeFunctionResult({ abi: STAKING, functionName: "stakes", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "stakes", args: [owner] }), block) });
+    const delegated = decodeFunctionResult({ abi: STAKING, functionName: "delegatedStake", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegatedStake", args: [owner] }), block) });
+    const held = decodeFunctionResult({ abi: STAKING, functionName: "delegationsOf", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegationsOf", args: [owner] }), block) });
     const delegations = held.map((delegation) => ({ candidate: delegation.candidate.toLowerCase(), amount: delegation.amount }));
     if (delegations.reduce((sum, delegation) => sum + delegation.amount, 0n) !== delegated || delegated > staked) throw new Error("The chain read named delegations that do not add up to the delegated stake within the stake.");
     return { staked, delegated, delegations };

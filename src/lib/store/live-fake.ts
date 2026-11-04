@@ -5,6 +5,7 @@ import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
 import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
+import type { DistributionEpochsPage, OperatorList } from "../engine/staking-reads";
 import type { ActivityPage, MonkeyView, OperatorRoute, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "../engine/stats-types";
 import type { AccountView, EligibilityClass, HistoryPage, MarketId, PriceRules, StreamMessage, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
@@ -13,7 +14,6 @@ import type { HouseParams, QueueTotals } from "../house";
 import { WatchConnector } from "../engine/watch-wallet";
 import type { StoreDeps } from "./store-deps";
 import { ConsoleStore } from "./store";
-import type { DistributionEpochsPage, OperatorList } from "../engine/staking-reads";
 
 export const BTC: MarketView = {
   id: 1, symbol: "BTC-USD", open: true, reduce_only: false, mark: "100000", fx_mark: null, stress_level: 0,

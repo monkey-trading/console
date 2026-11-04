@@ -42,10 +42,11 @@ function rig(world: World, chain: WalletChain = CHAIN, token: string = TOKEN) {
     async request({ method, params = [] }) {
       const list = Array.isArray(params) ? params : [];
       if (method === "eth_chainId") return `0x${world.chainId.toString(16)}`;
+      if (method === "eth_blockNumber") return "0x2a";
       if (method !== "eth_call") throw new Error(`unexpected ${method}`);
       const call = list[0] as { to: string; data: Hex };
       const { functionName } = decodeFunctionData({ abi: ABI, data: call.data });
-      order.push(`${functionName}@${call.to}`);
+      order.push(`${functionName}@${call.to}${list[1] === "latest" ? "" : `#${String(list[1])}`}`);
       const uint = (value: bigint) => encodeAbiParameters([{ type: "uint256" }], [value]);
       switch (functionName) {
         case "monkey": return encodeAbiParameters([{ type: "address" }], [token as Hex]);
@@ -107,10 +108,10 @@ describe("ProviderStaking.position", () => {
 describe("ProviderStaking.delegations", () => {
   const delegations = [{ candidate: getAddress(CANDIDATE), amount: 30n }, { candidate: getAddress(OTHER), amount: 10n }];
 
-  it("reads the stake, the delegated stake and each delegation from the staking contract alone, lowercased", async () => {
+  it("reads the stake, the delegated stake and each delegation from the staking contract alone, all at one block, lowercased", async () => {
     const { staking, order } = rig({ ...WORLD, delegated: 40n, delegations });
     expect(await staking.delegations()).toEqual({ staked: 40n, delegated: 40n, delegations: [{ candidate: CANDIDATE.toLowerCase(), amount: 30n }, { candidate: OTHER.toLowerCase(), amount: 10n }] });
-    expect(order).toEqual([`stakes@${STAKING}`, `delegatedStake@${STAKING}`, `delegationsOf@${STAKING}`]);
+    expect(order).toEqual([`stakes@${STAKING}#0x2a`, `delegatedStake@${STAKING}#0x2a`, `delegationsOf@${STAKING}#0x2a`]);
   });
 
   it("refuses delegations that do not add up to the delegated stake, or pass the stake, which only a lying RPC answers, and a wallet on another chain", async () => {

@@ -13,7 +13,7 @@
 import { useState } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
-import { formatMonkey } from "@/lib/format";
+import { formatMonkey, shortHex } from "@/lib/format";
 import { changeDelegation, type DelegationChange } from "@/lib/monkey/actions";
 import type { OperatorReads, OperatorsState } from "@/lib/monkey/operators";
 import type { DelegationReads, DelegationsState } from "@/lib/staking/delegation-reads";
@@ -69,7 +69,13 @@ export function Delegations({ operators, lists, delegations: reads, read, target
   const current = trusted && lists.list.value !== null ? lists.list.value : null;
   const source: CandidateSource = current !== null ? { kind: "current" } : lists.held !== null ? { kind: "held", verifiedAtMs: lists.held.verifiedAtMs, block: lists.held.view.block.number } : { kind: "none" };
   const listed = (current ?? lists.held?.view ?? null)?.rows.filter((row) => row.listed) ?? [];
-  const options = listed.map((row) => ({ value: row.address, label: labelOf(row.address) }));
+  // What a transaction names a candidate by: its hostname with its short address, since two candidates may register one hostname.
+  const nameOf = (address: string) => {
+    const label = labelOf(address);
+    const short = shortHex(address);
+    return label === short ? short : `${label} (${short})`;
+  };
+  const options = listed.map((row) => ({ value: row.address, label: nameOf(row.address) }));
   const disabled = busy || settling || held === null;
   /** Opens one delegation's form, or closes it; an amount or address typed under another delegation is not this one's. */
   const edit = (next: { candidate: string; mode: "move" | "undelegate" } | null) => {
@@ -107,16 +113,17 @@ export function Delegations({ operators, lists, delegations: reads, read, target
         <CandidatePicker label="Delegate to" options={options} value={chosen} onChange={onTarget} source={source} typed={typedTo} onTyped={setTypedTo} />
         <AmountForm
           field="delegate" label="Amount to delegate" action="Delegate" max={undelegated} maxLabel="your undelegated stake" disabled={disabled || to === null}
-          onSubmit={(amount, onLanded) => (to === null ? Promise.resolve() : send({ kind: "delegate", to, toLabel: labelOf(to), amount }, onLanded))}
-          preview={(amount) => (to === null ? null : delegateWords(undelegated, delegationTo(delegated, to), amount, labelOf(to)))}
+          onSubmit={(amount, onLanded) => (to === null ? Promise.resolve() : send({ kind: "delegate", to, toLabel: nameOf(to), amount }, onLanded))}
+          preview={(amount) => (to === null ? null : delegateWords(undelegated, delegationTo(delegated, to), amount, nameOf(to)))}
         />
       </div>
-      {held === null ? null : delegated.length === 0 ? (
+      {/* Until the read lands, the line it will most often show holds its place, unseen. */}
+      {held === null ? <p aria-hidden="true" className={`${NOTE} invisible`}>You delegate none of your stake, so all of it abstains.</p> : delegated.length === 0 ? (
         <p className={NOTE}>You delegate none of your stake, so all of it abstains.</p>
       ) : (
         <ul className="space-y-2" aria-label="Your delegations">
           {delegated.map(({ candidate, amount }) => {
-            const label = labelOf(candidate);
+            const label = nameOf(candidate);
             const open = editing?.candidate === candidate ? editing.mode : null;
             const targets = options.filter((option) => option.value !== candidate);
             const listedTo = moveTo !== null && targets.some((option) => option.value === moveTo) ? moveTo : (targets[0]?.value ?? null);
@@ -136,8 +143,8 @@ export function Delegations({ operators, lists, delegations: reads, read, target
                     <CandidatePicker label="Move to" options={targets} value={listedTo} onChange={setMoveTo} source={source} typed={typedMove} onTyped={setTypedMove} />
                     <AmountForm
                       field="move" label="Amount to move" action="Move" max={amount} maxLabel={`your delegation to ${label}`} disabled={disabled || movesTo === null || movesTo === candidate}
-                      onSubmit={(sent, onLanded) => (movesTo === null ? Promise.resolve() : send({ kind: "redelegate", from: candidate, fromLabel: label, to: movesTo, toLabel: labelOf(movesTo), amount: sent }, onLanded))}
-                      preview={(sent) => (movesTo === null || movesTo === candidate ? null : moveWords({ label, held: amount }, { label: labelOf(movesTo), held: delegationTo(delegated, movesTo) }, sent, undelegated))}
+                      onSubmit={(sent, onLanded) => (movesTo === null ? Promise.resolve() : send({ kind: "redelegate", from: candidate, fromLabel: label, to: movesTo, toLabel: nameOf(movesTo), amount: sent }, onLanded))}
+                      preview={(sent) => (movesTo === null || movesTo === candidate ? null : moveWords({ label, held: amount }, { label: nameOf(movesTo), held: delegationTo(delegated, movesTo) }, sent, undelegated))}
                     />
                   </>
                 )}

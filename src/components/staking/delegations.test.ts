@@ -75,8 +75,9 @@ describe("the delegations block while the node is unverified", () => {
 
   it("keeps each delegation's Take back and Move, read from the chain", () => {
     const html = render({ list: LOADING, held: null }, chain([[ALPHA, 300n * MONKEY_UNIT], [BRAVO, 200n * MONKEY_UNIT]]));
-    expect(html).toContain("alpha.example</span>: 300 MONKEY");
-    expect(html).toContain("bravo.example</span>: 200 MONKEY");
+    // Each named by hostname and short address, since two candidates may register one hostname.
+    expect(html).toContain("alpha.example (0x000000…00a1)</span>: 300 MONKEY");
+    expect(html).toContain("bravo.example (0x000000…00b2)</span>: 200 MONKEY");
     expect(html.match(/Take back<span class="sr-only"> part of your delegation to/g)).toHaveLength(2);
     expect(html.match(/aria-expanded="false" aria-disabled="false"[^>]*>Move/g)).toHaveLength(2);
   });

@@ -25,11 +25,11 @@ import { DistributionClaim } from "./monkey/DistributionClaim";
 import { DistributionPanel } from "./monkey/DistributionPanel";
 import { RewardsPanel } from "./monkey/RewardsPanel";
 import { StakePanel } from "./monkey/StakePanel";
-import { useOperatorLabel } from "./staking/use-operator-label";
 import { MonkeyPanelProvider, useConsoleSelect } from "./monkey/use-monkey";
 import { DistributionHistory } from "./staking/DistributionHistory";
 import { EpochHistory } from "./staking/EpochHistory";
 import { OperatorsPanel } from "./staking/OperatorsPanel";
+import { useOperatorLabel } from "./staking/use-operator-label";
 
 const EPOCH_LINES: readonly LineSpec[] = [{ metric: "distributed_per_epoch", label: "USDC distributed", tone: "glow" }];
 const REWARD_LINES: readonly LineSpec[] = [{ metric: "cumulative_distributed", label: "USDC distributed", tone: "glow" }];

@@ -142,7 +142,8 @@ export class EpochReads {
       if (this.state.next !== next) this.set({ more: false });
       else this.set({ more: false, cover: page, ...foldEpochs(this.state, page, true) });
     } catch (error) {
-      if (cycle === this.cycle) this.set({ more: false, moreError: describe(error) });
+      // A failure for a list that has since been replaced says nothing of the one held now.
+      if (cycle === this.cycle) this.set(this.state.next === next ? { more: false, moreError: describe(error) } : { more: false });
     }
   }
 }

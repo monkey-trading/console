@@ -34,8 +34,8 @@ const usd = (fixed: string) => {
   return value === null ? "—" : formatUsd(value);
 };
 
-/** `28 Oct 15:04`, in UTC. */
-const when = (ms: number) => formatStamp(ms).slice(0, -3);
+/** `2026-10-28 15:04`, in UTC: with the year, as the list reaches back to genesis. */
+const when = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace("T", " ");
 
 /** Every recipient of the epoch's operator share, named as the page names a candidate. */
 function Shares({ close, labelOf }: { close: EpochClose; labelOf: (address: string) => string }) {
@@ -90,7 +90,7 @@ export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf:
             <tbody>
               {state.epochs.map((close) => (
                 <tr key={close.epoch} className="border-t border-line">
-                  <td className={`${TD} text-fg-2 tabular-nums`}>{close.epoch}{close.skipped !== null && <span className="block text-fg-3">after {close.skipped.first === close.skipped.last ? `epoch ${close.skipped.first}` : `epochs ${close.skipped.first}–${close.skipped.last}`}, unwitnessed</span>}</td>
+                  <td className={`${TD} text-fg-2 tabular-nums`}>{close.epoch}{close.skipped !== null && <span className="block text-fg-3">{close.skipped.first === close.skipped.last ? `epoch ${close.skipped.first} closed` : `epochs ${close.skipped.first}–${close.skipped.last} closed`} with no distribution</span>}</td>
                   <td className={`${TD} text-fg-2`}>{when(close.close_ms)}</td>
                   <td className={`${TD} text-right text-fg-2`}>{usd(close.nav)}<span className="block text-fg-3">{usd(close.floor)}</span></td>
                   <td className={`${TD} text-right text-fg`}>{usdc(close.stakers_usdc_units)}<span className="block text-fg-3">{close.stakers === 1 ? "1 staker" : `${close.stakers} stakers`}</span></td>

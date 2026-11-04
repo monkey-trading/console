@@ -79,13 +79,21 @@ const ROLE_ORDER: Record<OperatorRole, number> = { active: 0, promoted: 1, elect
 const UNITS = /^\d+$/;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
-/** A decimal amount of base units. Error cases: it is not one. */
+/**
+ * A decimal amount of base units.
+ * Error cases:
+ * - it is not one
+ */
 function units(text: string, what: string): bigint {
   if (!UNITS.test(text)) throw new Error(`The operator list named ${what} that is not a whole amount.`);
   return BigInt(text);
 }
 
-/** A lowercase address. Error cases: it is not one. */
+/**
+ * A lowercase address.
+ * Error cases:
+ * - it is not one
+ */
 function address(text: string): string {
   if (!ADDRESS.test(text)) throw new Error("The operator list named an address that is not one.");
   return text.toLowerCase();

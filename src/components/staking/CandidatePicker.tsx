@@ -8,6 +8,7 @@
 
 import { useId } from "react";
 
+import { groupThousands } from "@/lib/format";
 import { formatStamp } from "@/lib/time";
 
 import { Select } from "../Select";
@@ -46,7 +47,7 @@ export function CandidatePicker({ label, options, value, onChange, source, typed
   return (
     <div className="space-y-2">
       {value !== null && options.length > 0 && <Select label={label} value={value} options={options} onChange={onChange} />}
-      {source.kind === "held" && <p className={NOTE}>From the operator list last verified at {formatStamp(source.verifiedAtMs)} UTC, as the registry stood at final block {source.block.toLocaleString("en-US")}: the node is not verified now.</p>}
+      {source.kind === "held" && <p className={NOTE}>From the operator list last verified at {formatStamp(source.verifiedAtMs)} UTC, as the registry stood at final block {groupThousands(BigInt(source.block))}: the node is not verified now.</p>}
       {source.kind !== "current" && (
         <>
           <label htmlFor={id} className="block text-caption text-fg-2">{options.length > 0 ? "Or a candidate's address" : "A candidate's address"}</label>
