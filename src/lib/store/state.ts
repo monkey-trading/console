@@ -131,6 +131,8 @@ export interface ConsoleState {
    * "none", so a card holds the shape it will take rather than the line it shows with no wallet.
    */
   walletDecided: boolean;
+  /** The chain the connected wallet says it moved to, when that is not the deployment's; null on the deployment's chain. Its requests wait until it is back (monkey-trading/console#289). */
+  walletChain: number | null;
   eligibility: Eligibility;
   account: AccountModel | null;
   queue: QueuedWithdrawal[];
@@ -236,6 +238,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     queueFailed: false,
     wallet: null,
     walletDecided: false,
+    walletChain: null,
     eligibility: null,
     account: null,
     queue: [],

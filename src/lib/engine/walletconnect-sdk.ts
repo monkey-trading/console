@@ -12,7 +12,7 @@ export interface WcSession {
   namespaces: Readonly<Record<string, WcNamespace>>;
 }
 
-type WcEvent = "display_uri" | "session_delete";
+type WcEvent = "display_uri" | "session_delete" | "session_event" | "session_update";
 
 /** The part of the SDK's `UniversalProvider` the connector uses. */
 export interface WcProvider {

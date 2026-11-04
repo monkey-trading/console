@@ -90,6 +90,8 @@ export function normaliseSignature(signature: string): Hex {
 export class ProviderWallet implements Wallet {
   /** The WalletConnect session topic, set by that connector's wallet so the console can persist the connection choice on adoption. */
   topic?: string;
+  /** The wallet's account and chain events, set by the connector that knows where they come from. */
+  follow?: Wallet["follow"];
   /** The staking and distribution calls. */
   readonly staking: StakingWallet;
   readonly chainReads: ProviderDeployment; // the vault's and the operator registry's reads

@@ -80,6 +80,18 @@ export interface Wallet {
   disconnect?(): Promise<void>;
   /** The WalletConnect session topic, when the wallet connects over one: persisted as the connection choice only once the wallet is adopted, never for a connect the console refused. */
   topic?: string;
+  /** Tells `changes` of the wallet's own account and chain changes until the returned stop is called; absent from a wallet that reports none, such as a watched account's or the mock's. */
+  follow?(changes: WalletChanges): () => void;
+}
+
+/** What a wallet tells the console of itself once connected (monkey-trading/console#289). */
+export interface WalletChanges {
+  /** It moved to another account it shares with the page, which `next` signs for. */
+  account(next: Wallet): void;
+  /** It shares no account with the page any more: it was locked, or the site was disconnected in it. */
+  gone(): void;
+  /** It moved to chain `chainId`, the deployment's or another. */
+  chain(chainId: number): void;
 }
 
 /** Told, as a sentence for the user, what a wallet's transaction waits for: the user's confirmation, then the chain. */

@@ -83,8 +83,12 @@ describe("the cards while a connected wallet's first reads run", () => {
     const watched = render(Emissions, { wallet: { ...WALLET, readOnly: true }, walletDecided: true, accountRead: true, entitlement, emissionsVault: null }, "monkey");
     expect(watched).toContain("Accrued");
     expect(held(watched)).toBe(0);
+    // It says plainly that the vault's record needs a wallet, never reading it for ever (#288).
+    expect(watched).toContain("What the vault has minted to this account is read through a connected wallet, so it does not show for a watched account.");
+    expect(watched).not.toContain("Reading the vault&#x27;s record");
     const connected = render(Emissions, { wallet: WALLET, walletDecided: true, accountRead: true, entitlement, emissionsVault: null }, "monkey");
     expect(held(connected)).toBe(1);
+    expect(connected).toContain("Reading the vault&#x27;s record of what it has minted…");
   });
 
   it("holds the emissions card's layout while the account or its closed periods are read", () => {

@@ -54,8 +54,8 @@ export async function moveToNode(old: ConsoleStore, next: ConsoleStore): Promise
   if (wallet === null) return;
   // Set first, so the connect below keeps the key rather than clearing another wallet's.
   next.liveWallet = wallet;
-  // Before the connect's first account read, which would otherwise decide the popup afresh over a dismissal.
-  next.patch({ setup });
+  // Before the connect's first account read, which would otherwise decide the popup afresh over a dismissal; the wallet stays on the chain it was on.
+  next.patch({ setup, walletChain: old.getSnapshot().walletChain });
   if (key !== null && sessionExpiresAt > 0) installKey(next, key, sessionExpiresAt);
   await connectWallet(next, wallet.topic !== undefined ? "walletconnect" : "injected", true, wallet);
 }

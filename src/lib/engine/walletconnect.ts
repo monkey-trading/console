@@ -7,6 +7,8 @@
 import { WALLETCONNECT_RELAY } from "./deploy";
 import { ProviderWallet, type Eip1193Provider, type ProviderWalletDeps, type WalletChain } from "./provider-wallet";
 import type { Wallet, WalletConnector } from "./wallet";
+import { Attempt } from "./walletconnect-attempt";
+import { followSession } from "./walletconnect-follow";
 import { detail, MemoryStorage, sessionScope, type WcModule, type WcProvider, type WcSession } from "./walletconnect-sdk";
 
 export type PairingState =
@@ -25,30 +27,6 @@ const WALLET_METHODS: readonly string[] = [SIGN, "eth_sendTransaction", "eth_cal
 const EVENTS = ["accountsChanged", "chainChanged"];
 const CLOSED = "You closed the WalletConnect pairing, so no wallet was connected.";
 const ENDED = "Your wallet ended the WalletConnect session. Connect it again to continue.";
-
-/** One connect in progress, which `cancel` stops. */
-class Attempt {
-  /** Rejects once the attempt is cancelled; the connect races it. */
-  readonly stopped: Promise<never>;
-  private error: Error | null = null;
-  private reject: (error: Error) => void = () => undefined;
-
-  constructor() {
-    this.stopped = new Promise<never>((_, reject) => {
-      this.reject = reject;
-    });
-  }
-
-  cancel(error: Error): void {
-    this.error = error;
-    this.reject(error);
-  }
-
-  /** Throws once the attempt is cancelled, so a step after an `await` goes no further. */
-  check(): void {
-    if (this.error !== null) throw this.error;
-  }
-}
 
 /** A wallet app paired over WalletConnect, as the "WalletConnect" option, with its pairing state for the dialog. */
 export class WalletConnectConnector implements WalletConnector {
@@ -180,10 +158,7 @@ export class WalletConnectConnector implements WalletConnector {
       throw new Error(refused);
     }
     this.live = session.topic;
-    const topic = session.topic;
-    const wallet = new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, topic) });
-    wallet.topic = topic; // the console persists it as the connection choice only if it adopts this wallet
-    return wallet;
+    return this.walletFor(provider, session.topic, address);
   }
 
   /**
@@ -200,8 +175,14 @@ export class WalletConnectConnector implements WalletConnector {
     const { address, methods } = sessionScope(session, this.chain.chainId);
     if (address === null || !methods.has(SIGN)) return null;
     this.live = session.topic;
-    const wallet = new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, session.topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, session.topic) });
-    wallet.topic = session.topic;
+    return this.walletFor(provider, session.topic, address);
+  }
+
+  /** The wallet for `address` over session `topic`, following the session's account and chain events. */
+  private walletFor(provider: WcProvider, topic: string, address: string): Wallet {
+    const wallet = new ProviderWallet(address, "WalletConnect", this.sessionProvider(provider, topic), this.chain, { ...this.deps, disconnect: () => this.end(provider, topic) });
+    wallet.topic = topic; // the console persists it as the connection choice only if it adopts this wallet
+    wallet.follow = (changes) => followSession(provider, topic, this.chain.chainId, address, (next) => this.walletFor(provider, topic, next), changes);
     return wallet;
   }
 

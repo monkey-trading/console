@@ -138,3 +138,27 @@ export class StubProvider implements Eip1193Provider {
     return encodeAbiParameters([{ type: "uint256" }], [functionName === "balanceOf" ? (this.options.balance ?? 0n) : (this.options.allowance ?? 0n)]);
   }
 }
+
+/** A stub provider that also sends EIP-1193's events, as a browser wallet does when its user switches account or chain. */
+export class EventfulProvider extends StubProvider {
+  private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
+
+  on(event: string, listener: (payload: unknown) => void): void {
+    this.listeners.set(event, (this.listeners.get(event) ?? new Set()).add(listener));
+  }
+
+  removeListener(event: string, listener: (payload: unknown) => void): void {
+    this.listeners.get(event)?.delete(listener);
+  }
+
+  /** How many listeners `event` has, so a test can see a follow stop. */
+  heard(event: string): number {
+    return this.listeners.get(event)?.size ?? 0;
+  }
+
+  /** Sends `event` to its listeners as the wallet would; a switch also changes what the wallet answers for its chain. */
+  emit(event: string, payload: unknown): void {
+    if (event === "chainChanged") this.chainId = Number(payload);
+    [...(this.listeners.get(event) ?? [])].forEach((listener) => listener(payload));
+  }
+}
