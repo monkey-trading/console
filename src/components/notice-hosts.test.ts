@@ -25,6 +25,7 @@ import { SessionsCard } from "./SessionsCard";
 import { SetupSteps } from "./SetupSteps";
 import { Shell } from "./Shell";
 import { OperatorsPanel } from "./staking/OperatorsPanel";
+import { DelegationReads } from "@/lib/staking/delegation-reads";
 import { WithdrawForm } from "./WithdrawForm";
 
 const TEXT = "a message the trader must read";
@@ -46,7 +47,7 @@ function OnMonkeyPage({ children }: { children: ReactNode }) {
 /** The Staking page's operators, over reads that have not started. */
 function Operators() {
   const { store } = useSession();
-  return createElement(OperatorsPanel, { operators: new OperatorReads(store) });
+  return createElement(OperatorsPanel, { operators: new OperatorReads(store), delegations: new DelegationReads(store) });
 }
 
 function render(surface: NoticeSurface, screen: ReactNode, tone: "error" | "info" = "error", stale = false): string {

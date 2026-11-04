@@ -8,12 +8,13 @@
  * across the page below; stacked on a phone. Every figure is read only while the page is on screen.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { formatCompactUsd } from "@/lib/chart-format";
 import { readBlock } from "@/lib/engine/attestation";
 import { OperatorReads } from "@/lib/monkey/operators";
 import { MonkeyPanel } from "@/lib/monkey/panel";
+import { DelegationReads } from "@/lib/staking/delegation-reads";
 import { EpochReads } from "@/lib/staking/epoch-reads";
 import { DistributionHistoryReads } from "@/lib/staking/history-reads";
 
@@ -42,6 +43,7 @@ export function StakingPage() {
   const [operators] = useState(() => new OperatorReads(store));
   const [history] = useState(() => new DistributionHistoryReads(store));
   const [epochs] = useState(() => new EpochReads(store));
+  const [delegations] = useState(() => new DelegationReads(store));
   const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
   // The wallet object changes whenever a wallet connects, even to the same address, and the chain reads follow it.
   const wallet = useConsoleSelect((state) => state.wallet);
@@ -51,6 +53,9 @@ export function StakingPage() {
   useEffect(() => (trusted ? epochs.start(hidden) : undefined), [epochs, trusted]);
   // The operator list is the node's signed answer: its reads follow the node's trust themselves, read the moment it may be read.
   useEffect(() => operators.start(hidden), [operators]);
+  // The account's delegations are the chain's, read whatever the node's state, so a staker can always vote away from it.
+  useEffect(() => delegations.start(hidden), [delegations]);
+  const delegationsRead = useSyncExternalStore(delegations.subscribe, delegations.getSnapshot, delegations.getSnapshot);
   useEffect(() => {
     if (trusted) void panel.refreshWallet();
   }, [panel, trusted, wallet]);
@@ -66,7 +71,7 @@ export function StakingPage() {
           {/* The figures are hidden, not unmounted, while the node is not trusted: a typed amount survives a gap in the feed, and no figure from before it shows. */}
           <div className={`mt-4 ${trusted ? "grid" : "hidden"} items-start gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,35rem)_minmax(0,1fr)]`}>
             <div className="flex min-w-0 flex-col gap-4">
-              <StakePanel labelOf={labelOf} />
+              <StakePanel delegations={wallet !== null && delegationsRead.account === wallet.address ? delegationsRead.read.value : null} labelOf={labelOf} />
               <DistributionClaim />
               <DistributionHistory history={history} />
               <div className="grid min-w-0 gap-4 xl:grid-cols-2">
@@ -82,7 +87,7 @@ export function StakingPage() {
           </div>
           {/* The operators card stays, saying what waits on the node, so the page holds its height while the node is verified. */}
           <div className="mt-4">
-            <OperatorsPanel operators={operators} />
+            <OperatorsPanel operators={operators} delegations={delegations} />
           </div>
         </div>
       </div>

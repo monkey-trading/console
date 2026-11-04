@@ -53,7 +53,7 @@ describe("the simulated registry", () => {
     controls.moveDelegation(ME, alpha.address, bravo.address, 100n * MONKEY_UNIT);
     controls.moveDelegation(ME, bravo.address, null, 100n * MONKEY_UNIT);
     expect([await votes(0), await votes(1)]).toEqual([a + 200n * MONKEY_UNIT, b + 200n * MONKEY_UNIT]);
-    expect(controls.stakingPosition(ME).delegations).toEqual([{ candidate: alpha.address, amount: 200n * MONKEY_UNIT }, { candidate: bravo.address, amount: 200n * MONKEY_UNIT }]);
+    expect(controls.stakeDelegations(ME).delegations).toEqual([{ candidate: alpha.address, amount: 200n * MONKEY_UNIT }, { candidate: bravo.address, amount: 200n * MONKEY_UNIT }]);
   });
 
   it("takes an unstake from the undelegated stake first, then from the delegations in proportion, and out of the total at once", async () => {
@@ -65,18 +65,21 @@ describe("the simulated registry", () => {
     const total = BigInt((await client.stats.operators()).total_staked);
     // 100,000 undelegated, then 50,000 from 400,000 delegated: a quarter from bravo, the rest from alpha.
     controls.startUnstake(ME, 150_000n * MONKEY_UNIT);
-    expect(controls.stakingPosition(ME).delegations).toEqual([{ candidate: alpha.address, amount: 262_500n * MONKEY_UNIT }, { candidate: bravo.address, amount: 87_500n * MONKEY_UNIT }]);
+    expect(controls.stakeDelegations(ME).delegations).toEqual([{ candidate: alpha.address, amount: 262_500n * MONKEY_UNIT }, { candidate: bravo.address, amount: 87_500n * MONKEY_UNIT }]);
     expect(BigInt((await client.stats.operators()).total_staked)).toBe(total - 150_000n * MONKEY_UNIT);
     expect(state.monkey.totalStakedAt(state.now)).toBeGreaterThan(total - 150_000n * MONKEY_UNIT);
   });
 
-  it("refuses an amount over the undelegated stake or a delegation, a zero amount, a candidate it does not list, and a move to the same one", () => {
+  it("refuses an amount over the undelegated stake or a delegation, a zero amount, the zero address, and a move to the same one, and takes any other address as the contract does", () => {
     const { controls, state } = node();
     const alpha = state.operators.candidates[0]?.address ?? "";
     expect(() => controls.moveDelegation(ME, null, alpha, 500_001n * MONKEY_UNIT)).toThrow("undelegated stake is less");
     expect(() => controls.moveDelegation(ME, alpha, null, 1n)).toThrow("delegation there is less");
     expect(() => controls.moveDelegation(ME, null, alpha, 0n)).toThrow("more than zero");
-    expect(() => controls.moveDelegation(ME, null, "0x00000000000000000000000000000000000000ff", 1n)).toThrow("lists no such candidate");
+    expect(() => controls.moveDelegation(ME, null, "0x0000000000000000000000000000000000000000", 1n)).toThrow("not the zero address");
+    controls.moveDelegation(ME, null, "0x00000000000000000000000000000000000000ff", 1n);
+    expect(controls.stakeDelegations(ME)).toMatchObject({ delegated: 1n, delegations: [{ candidate: "0x00000000000000000000000000000000000000ff", amount: 1n }] });
+    controls.moveDelegation(ME, "0x00000000000000000000000000000000000000ff", null, 1n);
     controls.moveDelegation(ME, null, alpha, 5n);
     expect(() => controls.moveDelegation(ME, alpha, alpha, 1n)).toThrow("another candidate");
   });

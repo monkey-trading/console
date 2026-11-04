@@ -172,15 +172,16 @@ function setDelegations(state: MockState, key: string, delegations: Delegation[]
 
 /**
  * Stands in for `Staking.delegate`, `undelegate` and `redelegate`: `from` gives `amount` (the
- * undelegated stake when null) and `to` takes it (the undelegated stake when null).
+ * undelegated stake when null) and `to` takes it (the undelegated stake when null). Like the
+ * contract, it takes any address but the zero one: whether it is a candidate is the registry's matter.
  * Error cases:
- * - the amount is not positive, or more than `from` holds; `to` is not a listed candidate, or is `from`
+ * - the amount is not positive, or more than `from` holds; `to` is the zero address, or is `from`
  */
 export function moveDelegation(state: MockState, address: string, from: string | null, to: string | null, amount: bigint): void {
   const key = address.toLowerCase();
   let delegations = delegationsOf(state, key);
   if (amount <= 0n) throw new Error("The amount must be more than zero.");
-  if (to !== null && !state.operators.candidates.some((listed) => listed.address === to)) throw new Error("The simulated registry lists no such candidate.");
+  if (to === NO_CANDIDATE) throw new Error("A delegation goes to a candidate's address, not the zero address.");
   if (to !== null && to === from) throw new Error("A delegation moves to another candidate than its own.");
   const held = from === null ? (state.monkey.staked.get(key) ?? 0n) - delegatedOf(delegations) : delegationTo(delegations, from);
   if (amount > held) throw new Error(from === null ? "Your undelegated stake is less than that." : "Your delegation there is less than that.");

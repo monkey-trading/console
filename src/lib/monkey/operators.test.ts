@@ -6,6 +6,7 @@ import { EngineError } from "../engine/client";
 import { CANDIDATE_LIMIT } from "../engine/staking-reads";
 import type { OperatorList } from "../engine/staking-reads";
 import type { OperatorRoute } from "../engine/stats-types";
+import { DelegationReads } from "../staking/delegation-reads";
 import { changeDelegation } from "./actions";
 import { hostnameListed, mirroredElection, OperatorReads, shownHostname } from "./operators";
 import { NODE_READ_MS } from "./panel";
@@ -124,8 +125,9 @@ describe("OperatorReads", () => {
 
   it("while the node cannot be trusted, drops its figures and reads nothing, and reads at once when it can be again", async () => {
     const { operators, store, counts, stop } = await started();
+    const held = operators.getSnapshot().list.value;
     store.patch({ attestation: { kind: "unverified", reason: "gone" } });
-    expect(operators.getSnapshot()).toEqual({ route: { status: "loading", value: null, message: null }, list: { status: "loading", value: null, message: null } });
+    expect(operators.getSnapshot()).toMatchObject({ route: { status: "loading", value: null, message: null }, list: { status: "loading", value: null, message: null }, held: { view: held } });
     await vi.advanceTimersByTimeAsync(NODE_READ_MS * 2);
     expect(counts).toEqual({ route: 1, list: 1 });
     store.patch({ attestation: { kind: "mock" } });
@@ -168,7 +170,7 @@ describe("OperatorReads", () => {
     store.patch({ attestation: { kind: "mock" } });
     await flush();
     expect(counts.route).toBe(2);
-    expect(operators.getSnapshot()).toEqual({ route: { status: "loading", value: null, message: null }, list: { status: "loading", value: null, message: null } });
+    expect(operators.getSnapshot()).toEqual({ route: { status: "loading", value: null, message: null }, list: { status: "loading", value: null, message: null }, held: null });
   });
 
   it("reads again at once on an election or rotation event in the stream, and not on other events", async () => {
@@ -183,11 +185,11 @@ describe("OperatorReads", () => {
   });
 
   it("reads the list again after a delegation change, which shows the new votes", async () => {
-    const { operators, node, panel, counts, stop } = await started();
+    const { operators, node, panel, counts, stop, store } = await started();
     const alpha = node.client.state.operators.candidates[0];
     if (alpha === undefined) throw new Error("the mock lists its candidates");
     const before = operators.getSnapshot().list.value?.rows.find((row) => row.address === alpha.address)?.votes ?? 0n;
-    expect(await changeDelegation(panel, operators, { kind: "delegate", to: alpha.address, toLabel: "alpha", amount: 1n })).toBe(true);
+    expect(await changeDelegation(panel, operators, new DelegationReads(store), { kind: "delegate", to: alpha.address, toLabel: "alpha", amount: 1n })).toBe(true);
     expect(counts.list).toBe(2);
     expect(operators.getSnapshot().list.value?.rows.find((row) => row.address === alpha.address)?.votes).toBe(before + 1n);
     stop();

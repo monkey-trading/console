@@ -17,11 +17,6 @@ export interface StakingPosition {
   stakingEnabled: boolean;
   /** MONKEY base units staked. */
   staked: bigint;
-  /**
-   * Its delegations, each nonzero, in `Staking.delegationsOf` order, the order an unstake reduces
-   * them from the end; what they do not hold of `staked` is undelegated and abstains (monkey-trading/engine#586).
-   */
-  delegations: readonly Delegation[];
   /** An unstake waiting out its cooldown, with the time it completes in milliseconds. */
   unstaking: { amount: bigint; claimableAtMs: number } | null;
   /** The MONKEY the wallet holds, in base units; zero while the vault has no token. */
@@ -33,6 +28,18 @@ export interface StakingPosition {
 }
 
 /**
+ * The account's stake and its delegations, straight from the staking contract (monkey-trading/engine#586):
+ * what each candidate holds, in `Staking.delegationsOf` order, the order an unstake reduces them from
+ * the end; what they do not hold of `staked` is undelegated and abstains.
+ */
+export interface StakeDelegations {
+  staked: bigint;
+  /** `Staking.delegatedStake`: what the delegations hold in all. */
+  delegated: bigint;
+  delegations: readonly Delegation[];
+}
+
+/**
  * A wallet's staking calls. Every transaction goes through the wallet's provider; `position` makes
  * its chain reads one at a time and is called on load and after a transaction, never on a timer.
  * Error cases (every method):
@@ -41,6 +48,8 @@ export interface StakingPosition {
  */
 export interface StakingWallet {
   position(): Promise<StakingPosition>;
+  /** The stake and its delegations from the chain alone, so a staker sees and changes them whatever the node's state; refused on another chain. */
+  delegations(): Promise<StakeDelegations>;
   /** Approves the staking contract for `amount` MONKEY if needed, then stakes it. */
   stake(amount: bigint, progress?: Progress): Promise<string>;
   /** Starts unstaking `amount`; it stops earning once the cooldown completes and the engine mirrors it. */

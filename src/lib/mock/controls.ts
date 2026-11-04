@@ -5,7 +5,8 @@ import type { EngineEvent, MarketId } from "../engine/types";
 import type { AttestationMode, MockEngineClient } from "./client";
 import type { DistributionProof } from "../engine/stats-types";
 import type { DeploymentReads } from "../engine/registry";
-import type { StakingPosition } from "../engine/staking";
+import type { StakeDelegations, StakingPosition } from "../engine/staking";
+import { delegatedOf } from "../staking/delegations";
 import { chainDeposit, payQueue } from "./funds";
 import { claimDistribution, completeUnstake, distributionProof, stake, startUnstake, walletBalance } from "./monkey";
 import { delegationsOf, mockChainReads, moveDelegation, reduceForUnstake } from "./operators";
@@ -108,12 +109,18 @@ export class MockControls {
     return {
       stakingEnabled: true,
       staked: state.monkey.staked.get(key) ?? 0n,
-      delegations: delegationsOf(state, key),
       unstaking: pending === undefined ? null : { amount: pending.amount, claimableAtMs: pending.claimableAt },
       balance: walletBalance(state, key),
       distributionsClaimed: state.monkey.distClaimed.get(key) ?? 0n,
       latestSeq: state.postedSeq,
     };
+  }
+
+  /** What the simulated staking contract holds of `address`'s stake and delegations. */
+  stakeDelegations(address: string): StakeDelegations {
+    const { state } = this.client;
+    const delegations = delegationsOf(state, address);
+    return { staked: state.monkey.staked.get(address.toLowerCase()) ?? 0n, delegated: delegatedOf(delegations), delegations };
   }
 
   /** Stands in for the staking contract's `delegate`, `undelegate` and `redelegate`: null names the undelegated stake. */

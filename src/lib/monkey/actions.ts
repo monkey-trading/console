@@ -12,6 +12,7 @@ import { abandoned, errorText, notBusy, prompting, usableWallet } from "../store
 import { checkpointOf } from "../engine/claim-standing";
 import { claimEmissions, emissionsPosition, WAITING_ON_VAULT } from "../store/emissions";
 import type { NoticeSurface } from "../store/state";
+import type { DelegationReads } from "../staking/delegation-reads";
 import type { OperatorReads } from "./operators";
 import type { MonkeyPanel } from "./panel";
 
@@ -123,15 +124,19 @@ export function changeText(change: DelegationChange): string {
   }
 }
 
-/** Sends `change` through the wallet, then reads the operator list again; the wallet's own delegations are read again by `run`. */
-export async function changeDelegation(panel: MonkeyPanel, operators: OperatorReads, change: DelegationChange, onLanded?: () => void): Promise<boolean> {
+/**
+ * Sends `change` through the wallet, then reads the account's delegations and the operator list
+ * again. It needs nothing from the node, so it goes while the node is down or unverified, which
+ * keeps a staker able to vote away from it.
+ */
+export async function changeDelegation(panel: MonkeyPanel, operators: OperatorReads, delegations: DelegationReads, change: DelegationChange, onLanded?: () => void): Promise<boolean> {
   const landed = await run(panel, "operator", changeText(change), async (_wallet, staking, progress) => {
     if (change.kind === "delegate") await staking.delegate(change.to, change.amount, progress);
     else if (change.kind === "undelegate") await staking.undelegate(change.from, change.amount, progress);
     else await staking.redelegate(change.from, change.to, change.amount, progress);
     return true;
   }, false, onLanded);
-  await operators.refresh();
+  await Promise.all([delegations.refresh(), operators.refresh()]);
   return landed;
 }
 

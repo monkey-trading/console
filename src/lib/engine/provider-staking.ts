@@ -9,7 +9,7 @@ import { claimFailure } from "./claim-refusal";
 import type { DistributionProof } from "./stats-types";
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
 import { WALLET_READ_MS, withinMs } from "./serialized-provider";
-import type { Delegation, StakingPosition, StakingWallet } from "./staking";
+import type { StakeDelegations, StakingPosition, StakingWallet } from "./staking";
 import type { Progress } from "./wallet";
 
 /** The vault that has not deployed its token yet names the zero address. */
@@ -33,6 +33,7 @@ const STAKING = parseAbi([
   "function stakes(address account) view returns (uint256)",
   "function unstakes(address account) view returns (uint256 amount, uint256 claimableAt)",
   "function delegationsOf(address account) view returns (Delegation[])",
+  "function delegatedStake(address account) view returns (uint256)",
 ]);
 const VAULT = parseAbi([
   "function claimDistribution(address account, uint256 entitled, uint64 checkpointSeq, bytes32[] siblings) returns (uint256)",
@@ -96,19 +97,31 @@ export class ProviderStaking implements StakingWallet {
     const staking = this.stakingAddress();
     let staked = 0n;
     let unstaking: StakingPosition["unstaking"] = null;
-    let delegations: Delegation[] = [];
     if (staking !== null) {
       staked = decodeFunctionResult({ abi: STAKING, functionName: "stakes", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "stakes", args: [owner] })) });
       const [amount, claimableAt] = decodeFunctionResult({ abi: STAKING, functionName: "unstakes", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "unstakes", args: [owner] })) });
       unstaking = amount > 0n ? { amount, claimableAtMs: Number(claimableAt) * 1000 } : null;
-      const held = decodeFunctionResult({ abi: STAKING, functionName: "delegationsOf", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegationsOf", args: [owner] })) });
-      delegations = held.map((delegation) => ({ candidate: delegation.candidate.toLowerCase(), amount: delegation.amount }));
-      // The contract keeps them within the stake; a wallet's RPC that says otherwise is not believed.
-      if (delegations.reduce((sum, delegation) => sum + delegation.amount, 0n) > staked) throw new Error("The chain read named more delegated stake than is staked.");
     }
     const token = await this.tokenAddress();
     const balance = token === null ? 0n : decodeFunctionResult({ abi: ERC20, functionName: "balanceOf", data: await this.call(token, encodeFunctionData({ abi: ERC20, functionName: "balanceOf", args: [owner] })) });
-    return { stakingEnabled: staking !== null, staked, delegations, unstaking, balance, distributionsClaimed: paid, latestSeq: Number(latestSeq) };
+    return { stakingEnabled: staking !== null, staked, unstaking, balance, distributionsClaimed: paid, latestSeq: Number(latestSeq) };
+  }
+
+  /**
+   * One call after another, refused on another chain. The contract keeps the delegations' sum equal
+   * to `delegatedStake` and within the stake; an answer that breaks either is not believed.
+   */
+  async delegations(): Promise<StakeDelegations> {
+    const current = Number(await withinMs(this.provider, { method: "eth_chainId" }, WALLET_READ_MS));
+    if (current !== this.chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chain.chainId}`);
+    const staking = this.staking();
+    const owner = hexOf(this.address);
+    const staked = decodeFunctionResult({ abi: STAKING, functionName: "stakes", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "stakes", args: [owner] })) });
+    const delegated = decodeFunctionResult({ abi: STAKING, functionName: "delegatedStake", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegatedStake", args: [owner] })) });
+    const held = decodeFunctionResult({ abi: STAKING, functionName: "delegationsOf", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegationsOf", args: [owner] })) });
+    const delegations = held.map((delegation) => ({ candidate: delegation.candidate.toLowerCase(), amount: delegation.amount }));
+    if (delegations.reduce((sum, delegation) => sum + delegation.amount, 0n) !== delegated || delegated > staked) throw new Error("The chain read named delegations that do not add up to the delegated stake within the stake.");
+    return { staked, delegated, delegations };
   }
 
   async stake(amount: bigint, progress: Progress = () => undefined): Promise<string> {

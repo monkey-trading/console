@@ -45,6 +45,7 @@ export class MockWalletConnector implements WalletConnector {
       },
       staking: {
         position: async () => controls.stakingPosition(address),
+        delegations: async () => controls.stakeDelegations(address),
         async stake(amount: bigint) {
           controls.stake(address, amount);
           return `0x${mockHex(`stake-${amount}-${address}`, 32)}`;

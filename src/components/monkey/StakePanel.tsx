@@ -9,6 +9,7 @@
 import { formatMonkey, formatRate, shortHex } from "@/lib/format";
 import { completeUnstake, stakeMonkey, startUnstake } from "@/lib/monkey/actions";
 import { formatDuration, shareBps } from "@/lib/monkey/figures";
+import type { StakeDelegations } from "@/lib/engine/staking";
 import { unstakeWords } from "@/lib/staking/delegation-words";
 
 import { Notice } from "../Notice";
@@ -19,8 +20,8 @@ import { Row } from "./Row";
 import { BUTTON, NOTE } from "./styles";
 import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
 
-/** `labelOf` names a candidate an unstake would reduce the delegation to; a short address without it. */
-export function StakePanel({ labelOf = shortHex }: { labelOf?: (address: string) => string }) {
+/** `delegations` are the chain's, which an unstake reduces, and `labelOf` names their candidates; without them no reduction is shown. */
+export function StakePanel({ delegations = null, labelOf = shortHex }: { delegations?: StakeDelegations | null; labelOf?: (address: string) => string }) {
   const panel = useMonkeyPanel();
   const { wallet: figures, overview, unmirroredTotal, settling } = usePanelState();
   const wallet = useConsoleSelect((state) => state.wallet);
@@ -56,7 +57,7 @@ export function StakePanel({ labelOf = shortHex }: { labelOf?: (address: string)
           <AmountForm field="stake" label="Stake" action="Stake" max={position?.balance ?? 0n} maxLabel="your wallet balance" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => stakeMonkey(panel, amount, onLanded)} />
           <AmountForm
             field="unstake" label="Unstake" action="Start unstake" max={position?.staked ?? 0n} maxLabel="your stake" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)}
-            preview={position === null ? undefined : (amount) => unstakeWords(position.staked, position.delegations, amount, labelOf)}
+            preview={delegations === null ? undefined : (amount) => unstakeWords(delegations.staked, delegations.delegations, amount, labelOf)}
           />
           <Notice surface="stake" />
           <p className={NOTE}>

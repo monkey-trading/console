@@ -14,6 +14,7 @@ import { readBlock } from "@/lib/engine/attestation";
 import { shortHex } from "@/lib/format";
 import { formatDuration } from "@/lib/monkey/figures";
 import { hostnameListed, mirroredElection, type OperatorReads } from "@/lib/monkey/operators";
+import type { DelegationReads } from "@/lib/staking/delegation-reads";
 import { delegationTo } from "@/lib/staking/delegations";
 import { countText, MAX_SEARCH, SORTS, tableView, type OperatorRow, type SortId } from "@/lib/staking/operator-table";
 import { formatStamp } from "@/lib/time";
@@ -37,13 +38,14 @@ const PAGER = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text
 /** The host of an `https://` origin. */
 const hostOf = (origin: string) => new URL(origin).host;
 
-/** The operators section. Its figures are the node's, so they show once the node's answers may be read. */
-export function OperatorsPanel({ operators }: { operators: OperatorReads }) {
+/** The operators section. The list is the node's, shown once its answers may be read; the account's delegations are the chain's, shown whatever the node's state. */
+export function OperatorsPanel({ operators, delegations }: { operators: OperatorReads; delegations: DelegationReads }) {
   const { deploy, node } = useSession();
   const follow = useNodeFollow();
   const searchId = useId();
-  const { list: listRead, route } = useSyncExternalStore(operators.subscribe, operators.getSnapshot, operators.getSnapshot);
-  const { wallet: figures, settling } = usePanelState();
+  const { list: listRead, route, held: heldList } = useSyncExternalStore(operators.subscribe, operators.getSnapshot, operators.getSnapshot);
+  const delegationsRead = useSyncExternalStore(delegations.subscribe, delegations.getSnapshot, delegations.getSnapshot);
+  const { settling } = usePanelState();
   const nodeReadable = useConsoleSelect((state) => readBlock(state.attestation, "live") === null);
   const wallet = useConsoleSelect((state) => state.wallet);
   const busy = useConsoleSelect((state) => state.busy);
@@ -58,9 +60,9 @@ export function OperatorsPanel({ operators }: { operators: OperatorReads }) {
   const labelOf = useOperatorLabel(operators);
   const pending = list?.pending ?? null;
   const mirrored = pending === null ? mirroredElection(route.value, nowMs) : null;
-  const position = wallet !== null && figures.address === wallet.address ? figures.position.value : null;
-  const held = (address: string) => (position === null ? 0n : delegationTo(position.delegations, address));
-  const canVote = wallet !== null && wallet.readOnly !== true && position !== null;
+  const mine = wallet !== null && delegationsRead.account === wallet.address ? delegationsRead.read.value : null;
+  const held = (address: string) => (mine === null ? 0n : delegationTo(mine.delegations, address));
+  const canVote = wallet !== null && wallet.readOnly !== true && mine !== null;
   // The candidates whose registered hostname this build could not connect to, were one elected.
   const unreachable = useMemo(() => new Set(node !== null ? [] : rows.filter((row) => row.listed && !hostnameListed(deploy, row.registeredHostname)).map((row) => row.address)), [node, deploy, rows]);
   const reachable = (row: OperatorRow) => !unreachable.has(row.address);
@@ -85,7 +87,7 @@ export function OperatorsPanel({ operators }: { operators: OperatorReads }) {
       )}
       <ReadNote read={route} loading={nodeReadable ? "Reading the node's figures…" : "The node's figures wait until it is verified."} />
       <h4 className="pt-1 text-label tracking-caps text-fg-3 uppercase">Your delegations</h4>
-      <Delegations operators={operators} rows={rows} target={target} onTarget={setTarget} labelOf={labelOf} titleId={TITLE_ID} />
+      <Delegations operators={operators} lists={{ list: listRead, held: heldList }} delegations={delegations} read={delegationsRead} target={target} onTarget={setTarget} labelOf={labelOf} titleId={TITLE_ID} />
       {/* Beside the forms, and there with no wallet too: a change's outcome outlives the connection that sent it. */}
       <Notice surface="operator" />
       <p className={NOTE}>You delegate amounts of your stake to any candidates the registry lists, and may move or take them back at any time; the next election close counts them. Stake you have not delegated abstains, and stake you have started to unstake does not vote. Delegation changes nothing about distributions, and delegators share no rewards.</p>

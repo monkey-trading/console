@@ -20,9 +20,15 @@ export interface OperatorsState {
   route: Read<OperatorRoute>;
   /** The registry's candidates at the final block the node last read; unavailable from a node with no registry lens. */
   list: Read<OperatorsView>;
+  /**
+   * The last list read while the node was trusted, and when, by this device's clock: kept while trust
+   * is lost, so a staker can still choose a candidate to delegate to away from a node that failed.
+   * Nothing on the page shows it as current; it is gone when the page closes.
+   */
+  held: { view: OperatorsView; verifiedAtMs: number } | null;
 }
 
-const NOTHING_READ: OperatorsState = { route: LOADING, list: LOADING };
+const NOTHING_READ: OperatorsState = { route: LOADING, list: LOADING, held: null };
 
 /** A hostname as the page shows it: plain ASCII as the build could connect to it, or null for text it could not, so a lookalike in another script never reads as a host. */
 export function shownHostname(hostname: string | null): string | null {
@@ -90,7 +96,7 @@ export class OperatorReads {
         // An answer on its way came from the node trust just left.
         this.routeRead += 1;
         this.listRead += 1;
-        this.set(NOTHING_READ);
+        this.set({ route: LOADING, list: LOADING });
       }
     });
     const timer = setInterval(() => {
@@ -135,7 +141,7 @@ export class OperatorReads {
     const cycle = this.cycle;
     try {
       const list = operatorsView(await this.store.deps.client.stats.operators());
-      if (ticket === this.listRead && cycle === this.cycle) this.set({ list: ready(list) });
+      if (ticket === this.listRead && cycle === this.cycle) this.set({ list: ready(list), held: { view: list, verifiedAtMs: Date.now() } });
     } catch (error) {
       if (ticket === this.listRead && cycle === this.cycle) this.set({ list: failed(error, this.state.list.value) });
     }
