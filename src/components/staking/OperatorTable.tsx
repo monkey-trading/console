@@ -41,8 +41,9 @@ function Action({ row, label, held, canVote, disabled, onDelegate }: Pick<Props,
   return (
     <span className="flex flex-col gap-1 lg:items-end">
       {mine > 0n && <span className="text-caption whitespace-nowrap text-glow">You delegate {formatMonkey(mine)}</span>}
-      <button type="button" aria-disabled={disabled} onClick={() => { if (!disabled) onDelegate(row); }} className={`${BUTTON} w-full whitespace-nowrap lg:w-auto`}>
-        Delegate<span className="sr-only">: choose {label} in the form above</span>
+      {/* The name starts with the visible word and says what the button does: it chooses, it sends nothing. One label, as a hidden span after a colon reads with a stray space. */}
+      <button type="button" aria-label={`Delegate: choose ${label} in the form above`} aria-disabled={disabled} onClick={() => { if (!disabled) onDelegate(row); }} className={`${BUTTON} w-full whitespace-nowrap lg:w-auto`}>
+        Delegate
       </button>
     </span>
   );
