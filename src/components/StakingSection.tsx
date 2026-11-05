@@ -68,9 +68,11 @@ export function StakingSection({ children }: { children: ReactNode }) {
   const onRewards = href === "/staking/rewards";
   const onEpochs = href === "/staking/epochs";
   const scrollRef = useRef<HTMLDivElement>(null);
-  // A tab switch shows the new tab from its top.
+  // A tab switch shows the new tab from its top. Below lg the document scrolls, at lg and up the region
+  // does; resetting both is a no-op on whichever does not scroll at the breakpoint.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
+    window.scrollTo({ top: 0 });
   }, [pathname]);
   // Each tab starts only the reads its cards show, and they stop when the tab is left; the panel's
   // overview and wallet reads serve every tab. Reads start once the node's answers can be trusted,
@@ -90,8 +92,8 @@ export function StakingSection({ children }: { children: ReactNode }) {
   return (
     <StakingContext.Provider value={reads}>
       <MonkeyPanelProvider value={panel}>
-        {/* Keyboard scrolling needs a tab stop on the scroll container, as on the House and MONKEY pages; scroll-padding keeps a focused card clear of the sticky tab bar. */}
-        <div ref={scrollRef} role="region" aria-label="Staking details" tabIndex={0} className="relative min-h-0 flex-1 overflow-y-auto scroll-pt-28 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow lg:scroll-pt-12">
+        {/* Keyboard scrolling needs a tab stop on the scroll container, as on the House and MONKEY pages. Below lg the document scrolls and this region grows with its content (the tab bar sticks to the viewport; scroll-padding on html in globals.css keeps a focused card clear of it); at lg and up the region scrolls and its scroll-padding does the same. */}
+        <div ref={scrollRef} role="region" aria-label="Staking details" tabIndex={0} className="relative min-h-0 flex-1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow lg:overflow-y-auto lg:scroll-pt-12">
           <div className="mx-auto w-full max-w-[110rem] px-4 py-5 max-lg:min-h-dvh sm:px-6">
             <h2 className="text-lead tracking-caps text-glow uppercase">Staking</h2>
             {!trusted && <p className="mt-3 text-data leading-relaxed text-fg-2">Figures appear once the node&apos;s attestation is verified and its feed is live.</p>}

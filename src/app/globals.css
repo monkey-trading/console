@@ -44,9 +44,10 @@ html {
   scroll-behavior: smooth;
 }
 
-/* A focused control scrolls clear of the phone's bar. */
+/* Below lg the document scrolls: a focused control clears the phone's bar and the Staking section's tab bar, which sticks to the viewport top there. */
 html {
   @variant max-lg {
+    scroll-padding-top: calc(var(--spacing) * 28);
     scroll-padding-bottom: calc(var(--bar-height, var(--spacing-bar)) + 0.5rem);
   }
 }
