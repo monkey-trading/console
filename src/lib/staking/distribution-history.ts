@@ -160,5 +160,5 @@ export function hasOperatorShare(rows: readonly EpochRow[]): boolean {
  */
 export function emptyHistoryText(entitled: bigint | null): string {
   if (entitled !== null && entitled > 0n) return "The node's history no longer holds the epochs that distributed USDC to you: it keeps account events for a limited time. The USDC distributions card has what was distributed in all.";
-  return "No epoch in the node's history has distributed USDC to you. Each epoch close shares the house's excess above its floor between stakers.";
+  return "No epoch in the node's history has distributed USDC to you. At each epoch close, the house's excess above its floor is distributed: while operator rotation is on, a fifth to the operator in effect, and the rest between stakers in proportion to their stake.";
 }
