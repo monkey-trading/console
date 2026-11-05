@@ -224,19 +224,22 @@ describe("DistributionHistoryReads", () => {
     stop();
   });
 
-  it("registers on the session while it reads, and reads afresh when the mock's account reset invalidates it", async () => {
+  it("drops what it holds when the mock's account reset invalidates it while its reads are stopped, and reads afresh when they restart", async () => {
     const { history, node, store, pages, stop } = await started();
-    expect(store.monkeySession.history).toBe(history);
+    // The section holds this registration for its whole mount, so the reset reaches the retained rows from any tab.
+    store.monkeySession.history = history;
     expect(epochsOf(history)).toHaveLength(1);
+    stop();
     node.controls.resetAccount(DEMO_ADDRESS);
     pages.mockClear();
     store.monkeySession.history?.invalidate();
     expect(shownRows(history.getSnapshot().data)).toEqual([]);
+    expect(mine(pages)).toHaveLength(0);
+    const restart = history.start(() => false);
     await flush();
     expect(mine(pages)).toHaveLength(2);
     expect(history.getSnapshot()).toMatchObject({ account: DEMO_ADDRESS, status: "ready" });
     expect(epochsOf(history)).toEqual([]);
-    stop();
-    expect(store.monkeySession.history).toBeNull();
+    restart();
   });
 });

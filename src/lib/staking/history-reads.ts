@@ -76,7 +76,6 @@ export class DistributionHistoryReads {
   start(isHidden: () => boolean): () => void {
     this.open = true;
     this.cycle += 1;
-    this.store.monkeySession.history = this;
     this.walletChanged();
     // Resuming after a tab switch: the newest pages are read again a tick later, for what the stream carried meanwhile.
     if (this.state.status === "ready") this.recheck = { cycle: this.cycle, after: Date.now() + RETRY_TICK_MS };
@@ -96,9 +95,8 @@ export class DistributionHistoryReads {
       this.cycle += 1;
       clearInterval(timer);
       unsubscribe();
-      if (this.store.monkeySession.history === this) this.store.monkeySession.history = null;
       this.backoff.reset();
-      // What was read stays, so the loaded pages survive a tab switch; a first read cut off mid-flight, or an older page read cut off, starts over when the reads resume.
+      // What was read stays, so the loaded pages survive a tab switch; a first read cut off mid-flight, or an older page read cut off, starts over when the reads resume. The session registration is the section's: it survives a stop, so the mock's account reset reaches these rows from any tab.
       this.set({ more: false, ...(this.state.status === "reading" ? { status: "idle" as const } : {}) });
     };
   }

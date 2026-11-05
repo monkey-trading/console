@@ -84,6 +84,14 @@ export function StakingSection({ children }: { children: ReactNode }) {
   useEffect(() => (onDelegate ? delegations.start(hidden) : undefined), [delegations, onDelegate]);
   useEffect(() => (trusted && (onRewards || onEpochs) ? epochs.start(hidden) : undefined), [epochs, trusted, onRewards, onEpochs]);
   useEffect(() => (trusted && onRewards ? history.start(hidden) : undefined), [history, trusted, onRewards]);
+  // The history's registration on the session lives for the section's whole mount, not for its
+  // reads' run, so the mock's account reset reaches the retained rows from any tab.
+  useEffect(() => {
+    store.monkeySession.history = history;
+    return () => {
+      if (store.monkeySession.history === history) store.monkeySession.history = null;
+    };
+  }, [history, store]);
   useEffect(() => {
     if (trusted) void panel.refreshWallet();
   }, [panel, trusted, wallet]);
