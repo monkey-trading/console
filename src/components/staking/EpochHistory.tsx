@@ -68,7 +68,7 @@ function Shares({ close, labelOf }: { close: EpochClose; labelOf: (address: stri
   );
 }
 
-/** The card; `epochs` is the page's reads of it, which start and stop with the page, and `labelOf` names an operator's share's recipient. */
+/** The card; `epochs` is the section's reads of it, which start and stop with its tabs and keep what they read across a tab switch; `labelOf` names an operator's share's recipient. */
 export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf: (address: string) => string }) {
   const state = useSyncExternalStore(epochs.subscribe, epochs.getSnapshot, epochs.getSnapshot);
   const covered = state.cover === null ? null : coverText(state.cover);
@@ -82,11 +82,14 @@ export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf:
   };
   // The first read holds the table's shape, so the charts below stay in place when the page lands.
   const firstRead = state.epochs.length === 0 && (state.status === "reading" || state.status === "idle");
+  const more = state.status === "ready" && state.next !== null;
   return (
     <Card id={TITLE_ID} title="Closed epochs">
-      {state.status === "ready" && state.epochs.length === 0 && <p className={NOTE}>No distribution epoch has closed yet.</p>}
-      {state.epochs.length > 0 ? (
-        <div role="region" aria-label="Closed distribution epochs" tabIndex={0} className="relative -mx-1 max-h-96 overflow-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
+      {/* One viewport at the same height in every state — reading, empty, failed, or holding any
+          number of epochs — so the charts below the card never move; the empty and failure lines
+          sit inside it. */}
+      <div role="region" aria-label="Closed distribution epochs" tabIndex={0} className="relative -mx-1 h-96 overflow-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
+        {state.epochs.length > 0 ? (
           <table className="w-full min-w-[36rem] text-label sm:text-caption">
             <caption className="sr-only">Each closed distribution epoch, newest first: when it closed, the house NAV against the floor, what went to stakers, and each recipient of the operator&apos;s share. Times are UTC.</caption>
             <Head />
@@ -102,9 +105,7 @@ export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf:
               ))}
             </tbody>
           </table>
-        </div>
-      ) : firstRead ? (
-        <div className="relative -mx-1 max-h-96 overflow-hidden">
+        ) : firstRead ? (
           <table className="w-full min-w-[36rem] text-label sm:text-caption">
             <caption className="sr-only">Each closed distribution epoch, being read.</caption>
             <Head />
@@ -121,12 +122,21 @@ export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf:
               ))}
             </tbody>
           </table>
-        </div>
-      ) : null}
-      {state.status === "ready" && state.next !== null && <button type="button" aria-disabled={state.more} onClick={loadMore} className={LOAD}>{state.more ? "Loading" : "Load more"}<span className="sr-only"> epochs</span></button>}
+        ) : state.status === "ready" ? (
+          <p className={`${NOTE} px-1`}>No distribution epoch has closed yet.</p>
+        ) : (
+          <ReadNote read={read} loading="Reading the closed epochs…" />
+        )}
+      </div>
+      {/* The Load more row and the cover line hold their places in every state, so nothing below
+          the card moves when a read lands. */}
+      {more ? (
+        <button type="button" aria-disabled={state.more} onClick={loadMore} className={LOAD}>{state.more ? "Loading" : "Load more"}<span className="sr-only"> epochs</span></button>
+      ) : (
+        <span aria-hidden="true" className={`${LOAD} block invisible`}>Load more</span>
+      )}
       <p role="status" className="text-caption leading-relaxed text-amber empty:hidden">{problem}</p>
-      {!firstRead && <ReadNote read={read} loading="Reading the closed epochs…" />}
-      {covered !== null && <p className={NOTE}>{covered}</p>}
+      {covered !== null ? <p className={NOTE}>{covered}</p> : <p aria-hidden="true" className={`${NOTE} invisible`}>{"\u00a0"}</p>}
       <p className={NOTE}>Each close distributes the excess as the Distribution card describes; the operator&apos;s fifth, while rotation is on, is named in the last column.</p>
     </Card>
   );
