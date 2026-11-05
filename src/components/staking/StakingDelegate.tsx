@@ -25,8 +25,8 @@ export function StakingDelegate() {
       <div className={trusted ? "min-w-0" : "hidden"}>
         <StakePanel delegations={wallet !== null && delegationsRead.account === wallet.address ? delegationsRead : null} labelOf={labelOf} />
       </div>
-      {/* The operators card shows from the node's first verdict and stays through a re-verification, so what it holds is never taken away mid-way. */}
-      <div className={operatorsSettled ? "min-w-0" : "hidden"}>
+      {/* The operators card shows from the node's first verdict and stays through a re-verification, so what it holds is never taken away mid-way; its grid place is pinned so hiding Your stake never moves it. */}
+      <div className={operatorsSettled ? "min-w-0 lg:col-start-2" : "hidden"}>
         <OperatorsPanel operators={operators} delegations={delegations} />
       </div>
     </div>
