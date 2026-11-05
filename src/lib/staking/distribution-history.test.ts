@@ -177,7 +177,8 @@ describe("what is held and left out", () => {
 
 describe("emptyHistoryText", () => {
   it("claims only what the node's history holds, and never contradicts a proof that USDC was distributed", () => {
-    expect(emptyHistoryText(null)).toBe("No epoch in the node's history has distributed USDC to you. Each epoch close shares the house's excess above its floor between stakers.");
+    // The split as the Distribution card states it, the operator's fifth included (monkey-trading/console#306).
+    expect(emptyHistoryText(null)).toBe("No epoch in the node's history has distributed USDC to you. At each epoch close, the house's excess above its floor is distributed: while operator rotation is on, a fifth to the operator in effect, and the rest between stakers in proportion to their stake.");
     expect(emptyHistoryText(0n)).toBe(emptyHistoryText(null));
     expect(emptyHistoryText(1n)).toBe("The node's history no longer holds the epochs that distributed USDC to you: it keeps account events for a limited time. The USDC distributions card has what was distributed in all.");
   });
