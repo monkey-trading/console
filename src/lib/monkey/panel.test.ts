@@ -25,6 +25,8 @@ describe("MonkeyPanel", () => {
     const activity = vi.spyOn(node.client.stats, "activity");
     const series = vi.spyOn(node.client.stats, "series");
     const stop = fresh.start(() => false);
+    void fresh.feed("perLoss").show();
+    void fresh.feed("supply").show();
     await flush();
     expect(overview).toHaveBeenCalledTimes(1);
     expect(activity).toHaveBeenCalledWith({ limit: 25 });
@@ -41,6 +43,8 @@ describe("MonkeyPanel", () => {
     const activity = vi.spyOn(node.client.stats, "activity");
     const series = vi.spyOn(node.client.stats, "series");
     const stop = fresh.start(() => false);
+    void fresh.feed("epochs").show();
+    void fresh.feed("rewards").show();
     await flush();
     expect(overview).toHaveBeenCalledTimes(1);
     expect(activity).not.toHaveBeenCalled();
@@ -90,6 +94,8 @@ describe("MonkeyPanel", () => {
     const overview = vi.spyOn(quiet.stats, "monkey");
     const panel = new MonkeyPanel(bare, "monkey");
     const stop = panel.start(() => false);
+    void panel.feed("perLoss").show();
+    void panel.feed("supply").show();
     await vi.advanceTimersByTimeAsync(0);
     expect(panel.getSnapshot().overview.status).toBe("unavailable");
     expect(panel.getSnapshot().activity.status).toBe("unavailable");

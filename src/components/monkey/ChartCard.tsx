@@ -1,8 +1,8 @@
 "use client";
 
-/** A MONKEY chart's card: its title and timeframe, the chart, the latest values, and where its data begins. */
+/** A MONKEY chart's card: its title and timeframe, the chart, the latest values, and where its data begins. The chart reads only while this card is on screen. */
 
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
 import type { ChartFeed } from "@/lib/monkey/feed";
 import { latestText } from "@/lib/monkey/figures";
@@ -45,6 +45,11 @@ function beginsText(begins: number | null, fromGenesis: boolean, retained: numbe
 export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MARKS, caption, footer }: Props) {
   const { timeframe, read } = useSyncExternalStore(feed.subscribe, feed.getSnapshot, feed.getSnapshot);
   const data = read.value;
+  // The chart's reads follow its card: they run while it is on screen and stop when it leaves.
+  useEffect(() => {
+    void feed.show();
+    return () => feed.hide();
+  }, [feed]);
   return (
     <section aria-labelledby={id} className="min-w-0 rounded-xl border border-line-2 bg-ink-1 p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">

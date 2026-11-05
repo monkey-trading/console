@@ -7,8 +7,9 @@
  * read again a tick after the first read lands, and then on the node read's pace for as long as the
  * page is open and its tab visible. A failed read is made again by itself, further apart each time,
  * with no button.
- * The page opens these reads only while the node is trusted, which a gap in the feed ends, so a
- * reopening reads afresh and nothing the gap carried stays missing.
+ * The page opens these reads only while the node is trusted, which a gap in the feed ends. What was
+ * read stays across a stop, so the loaded pages survive a tab switch; the newest pages are read
+ * again a tick after the reads resume, so nothing the gap carried stays missing.
  */
 
 import { EngineError } from "../engine/client";
@@ -71,12 +72,14 @@ export class DistributionHistoryReads {
     for (const listener of this.listeners) listener();
   }
 
-  /** Starts the reads for the connected wallet, and returns what stops them and forgets what they read. While `isHidden` says the tab is hidden, no failed read is made again. */
+  /** Starts the reads for the connected wallet, and returns what stops them. While `isHidden` says the tab is hidden, no failed read is made again. What was read stays across a stop, so the loaded pages survive a tab switch; the newest pages are read again a tick after the reads resume. */
   start(isHidden: () => boolean): () => void {
     this.open = true;
     this.cycle += 1;
     this.store.monkeySession.history = this;
     this.walletChanged();
+    // Resuming after a tab switch: the newest pages are read again a tick later, for what the stream carried meanwhile.
+    if (this.state.status === "ready") this.recheck = { cycle: this.cycle, after: Date.now() + RETRY_TICK_MS };
     const unsubscribe = this.store.deps.client.subscribe((message) => {
       const { account, data } = this.state;
       if (account === null) return;
@@ -95,7 +98,8 @@ export class DistributionHistoryReads {
       unsubscribe();
       if (this.store.monkeySession.history === this) this.store.monkeySession.history = null;
       this.backoff.reset();
-      this.set(IDLE);
+      // What was read stays, so the loaded pages survive a tab switch; a first read cut off mid-flight, or an older page read cut off, starts over when the reads resume.
+      this.set({ more: false, ...(this.state.status === "reading" ? { status: "idle" as const } : {}) });
     };
   }
 

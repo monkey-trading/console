@@ -22,12 +22,12 @@ export interface OperatorsState {
   /**
    * The last list read while the node was trusted, and when, by this device's clock: kept while trust
    * is lost, so a staker can still choose a candidate to delegate to away from a node that failed.
-   * Nothing on the page shows it as current; it is gone when the page closes.
+   * Nothing on the page shows it as current; it is gone when the section's reads are discarded.
    */
   held: { view: OperatorsView; verifiedAtMs: number } | null;
 }
 
-const NOTHING_READ: OperatorsState = { route: LOADING, list: LOADING, held: null };
+const IDLE_READS: OperatorsState = { route: LOADING, list: LOADING, held: null };
 
 /**
  * Whether the Staking page shows its operators card: with the rest of the figures once the node is
@@ -49,7 +49,7 @@ export function mirroredElection(route: OperatorRoute | null, nowMs: number): { 
 }
 
 export class OperatorReads {
-  private state: OperatorsState = NOTHING_READ;
+  private state: OperatorsState = IDLE_READS;
   private readonly listeners = new Set<() => void>();
   /** Counts the card's openings; work begun in an earlier one never writes into a later one. */
   private cycle = 0;
@@ -79,7 +79,7 @@ export class OperatorReads {
     return readBlock(this.store.getSnapshot().attestation, "live") === null;
   }
 
-  /** Starts the reads, and returns what stops them and forgets what they read. While `isHidden` says the tab is hidden the timer reads nothing. */
+  /** Starts the reads, and returns what stops them. While `isHidden` says the tab is hidden the timer reads nothing. What was read stays across a stop, so a tab switch back shows the last list while a read begun at the restart refreshes it. */
   start(isHidden: () => boolean): () => void {
     this.open = true;
     this.cycle += 1;
@@ -110,7 +110,7 @@ export class OperatorReads {
       clearInterval(timer);
       unsubscribe();
       stopFollowing();
-      this.set(NOTHING_READ);
+      // What was read stays, so the operator list survives a tab switch.
     };
   }
 

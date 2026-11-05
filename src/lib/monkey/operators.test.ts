@@ -175,7 +175,7 @@ describe("OperatorReads", () => {
     stop();
   });
 
-  it("stops following the node's trust once closed, and drops an answer that lands after it closed", async () => {
+  it("stops following the node's trust once closed, drops an answer that lands after it closed, and keeps the last list for a tab switch back", async () => {
     const { operators, store, node, counts, stop } = await started();
     let release = () => {};
     const real = node.client.stats.operators;
@@ -188,7 +188,14 @@ describe("OperatorReads", () => {
     store.patch({ attestation: { kind: "mock" } });
     await flush();
     expect(counts.route).toBe(2);
-    expect(operators.getSnapshot()).toEqual({ route: { status: "loading", value: null, message: null }, list: { status: "loading", value: null, message: null }, held: null });
+    // What was read stays, so a tab switch back shows the last list while a read begun at the restart refreshes it.
+    const held = operators.getSnapshot().list.value;
+    expect(held?.rows).toHaveLength(CANDIDATE_LIMIT);
+    const restart = operators.start(() => false);
+    await flush();
+    expect(counts.route).toBe(3);
+    expect(operators.getSnapshot().list.value).not.toBeNull();
+    restart();
   });
 
   it("reads again at once on an election or rotation event in the stream, and not on other events", async () => {
