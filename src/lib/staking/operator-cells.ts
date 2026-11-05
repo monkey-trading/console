@@ -26,14 +26,16 @@ export interface OperatorCells {
  */
 export function operatorCells(row: OperatorRow): OperatorCells {
   return {
-    name: row.hostname ?? (row.bond === null ? "The deployment's initial operator" : "Not a plain hostname"),
+    // A row the list does not name carries no release (`yoursRows`' unlisted one): it is named by
+    // its address, like its label, not by the deployment words an unlisted operator in effect gets.
+    name: row.hostname ?? (row.release === "" ? shortHex(row.address) : row.bond === null ? "The deployment's initial operator" : "Not a plain hostname"),
     label: row.hostname ?? shortHex(row.address),
     address: shortHex(row.address),
     role: ROLE_LABELS[row.role],
     eligibility: !row.listed ? "Not listed" : row.eligible ? "Eligible" : "Not eligible",
     delegated: row.votes === null ? "—" : `${formatMonkey(row.votes)} (${formatRate(row.shareBps)})`,
     bond: row.bond === null ? "—" : formatMonkey(row.bond),
-    release: shortHex(row.release),
+    release: row.release === "" ? "—" : shortHex(row.release),
     endpoint: row.endpoint === null || row.endpoint === "" ? "—" : row.endpoint,
   };
 }

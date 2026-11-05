@@ -8,6 +8,7 @@
  */
 
 import { CANDIDATE_LIMIT, type OperatorList } from "../engine/staking-reads";
+import type { Delegation } from "../engine/staking";
 import { shareBps } from "../monkey/figures";
 import { shownHostname } from "./hostnames";
 import { ADDRESS } from "./candidate-choice";
@@ -220,4 +221,21 @@ export function countText(view: TableView, search: string): string {
   if (search.slice(0, MAX_SEARCH).trim() === "") return view.total === 0 ? "No operators." : `Showing ${range} of ${view.total} ${noun}.`;
   if (view.matched === 0) return "No operator matches.";
   return `${view.matched} of ${view.total} ${noun} ${view.matched === 1 ? "matches" : "match"}; showing ${range}.`;
+}
+
+/** A row for an address the list does not name, which a delegation may still go to: it carries its address alone. */
+function unlistedRow(address: string): OperatorRow {
+  return { address, hostname: null, registeredHostname: "", role: "candidate", listed: false, eligible: false, votes: null, shareBps: 0, bond: null, release: "", endpoint: null, registration: null };
+}
+
+/**
+ * A row for each delegation the chain reports, in its order: the list's own row where it names the
+ * candidate, else an unlisted one, so a staker finds every delegation they hold — one to an address
+ * neither list names included — each with Move and Take back.
+ */
+export function yoursRows(rows: readonly OperatorRow[], delegations: readonly Delegation[]): readonly OperatorRow[] {
+  return delegations.map(({ candidate }) => {
+    const address = candidate.toLowerCase();
+    return rows.find((row) => row.address === address) ?? unlistedRow(address);
+  });
 }

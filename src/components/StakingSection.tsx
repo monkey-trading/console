@@ -4,8 +4,10 @@
  * The Staking screen (monkey-trading/console#271) as a section: its heading, the Delegate, Rewards
  * and Epochs tab bar, and one provider for the reads its tabs share (monkey-trading/console#308).
  * The reads are created once per visit to the section, so what they hold — a typed amount, a loaded
- * page of history, the operator list — survives a tab switch. Each tab starts only the reads its
- * cards show, and they stop when the tab is left.
+ * page of history, the operator list — survives a tab switch, and the Delegate tab's editing
+ * context (its open editor, the Move form's destination, the addresses typed) is kept here too
+ * (monkey-trading/console#309). Each tab starts only the reads its cards show, and they stop when
+ * the tab is left.
  */
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
@@ -16,6 +18,7 @@ import { OperatorReads, operatorsShown } from "@/lib/monkey/operators";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import { isCurrentTab, readsFor, SECTIONS } from "@/lib/nav";
 import { DelegationReads } from "@/lib/staking/delegation-reads";
+import { NO_EDITING, type DelegateEditing } from "@/lib/staking/delegation-form";
 import { EpochReads } from "@/lib/staking/epoch-reads";
 import { DistributionHistoryReads } from "@/lib/staking/history-reads";
 
@@ -34,9 +37,17 @@ export interface StakingReads {
   history: DistributionHistoryReads;
   /** Whether the operators card shows: from the node's first verdict, kept through a re-verification. */
   operatorsSettled: boolean;
+  /**
+   * The Delegate tab's editing context: which row's editor is open, the Move form's destination,
+   * the addresses typed and the amounts — kept here, not on the tab, so a tab switch loses none of
+   * it.
+   */
+  delegateEditing: DelegateEditing;
+  setDelegateEditing: (next: DelegateEditing) => void;
 }
 
-const StakingContext = createContext<StakingReads | null>(null);
+/** The context the Staking section provides its tabs; a test harness may stand it in without the section's route. */
+export const StakingContext = createContext<StakingReads | null>(null);
 
 /** The Staking section's reads and gates. Throws outside the Staking section. */
 export function useStaking(): StakingReads {
@@ -95,7 +106,14 @@ export function StakingSection({ children }: { children: ReactNode }) {
     if (trusted) void panel.refreshWallet();
   }, [panel, trusted, wallet]);
   useEffect(() => history.walletChanged(), [history, wallet]);
-  const reads: StakingReads = { panel, operators, epochs, delegations, history, operatorsSettled };
+  // The Delegate tab's editing context, keyed by the account it belongs to: what one account chose
+  // or typed is not another's, so another account reads as no editor open, and the next write is
+  // kept under the account then connected.
+  const account = wallet?.address ?? null;
+  const [editingState, setEditingState] = useState<{ account: string | null; editing: DelegateEditing }>({ account, editing: NO_EDITING });
+  const delegateEditing = editingState.account === account ? editingState.editing : NO_EDITING;
+  const setDelegateEditing = (next: DelegateEditing) => setEditingState({ account, editing: next });
+  const reads: StakingReads = { panel, operators, epochs, delegations, history, operatorsSettled, delegateEditing, setDelegateEditing };
   return (
     <StakingContext.Provider value={reads}>
       <MonkeyPanelProvider value={panel}>
