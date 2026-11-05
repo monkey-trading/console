@@ -226,8 +226,9 @@ describe("DistributionHistoryReads", () => {
 
   it("drops what it holds when the mock's account reset invalidates it while its reads are stopped, and reads afresh when they restart", async () => {
     const { history, node, store, pages, stop } = await started();
-    // The section holds this registration for its whole mount, so the reset reaches the retained rows from any tab.
-    store.monkeySession.history = history;
+    // The section attaches for its whole mount, so the reset reaches the retained rows from any tab.
+    history.attach();
+    expect(store.monkeySession.history).toBe(history);
     expect(epochsOf(history)).toHaveLength(1);
     stop();
     node.controls.resetAccount(DEMO_ADDRESS);

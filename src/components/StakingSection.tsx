@@ -86,11 +86,9 @@ export function StakingSection({ children }: { children: ReactNode }) {
   // The history's registration on the session lives for the section's whole mount, not for its
   // reads' run, so the mock's account reset reaches the retained rows from any tab.
   useEffect(() => {
-    store.monkeySession.history = history;
-    return () => {
-      if (store.monkeySession.history === history) store.monkeySession.history = null;
-    };
-  }, [history, store]);
+    history.attach();
+    return () => history.detach();
+  }, [history]);
   useEffect(() => {
     if (trusted) void panel.refreshWallet();
   }, [panel, trusted, wallet]);

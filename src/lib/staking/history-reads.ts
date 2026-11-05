@@ -113,6 +113,19 @@ export class DistributionHistoryReads {
     this.readAfresh(this.store.liveWallet?.address ?? null);
   }
 
+  /**
+   * Registers on the session for the section's mount, not for these reads' run, so the mock's
+   * account reset reaches the retained rows from any tab; `detach` clears it.
+   */
+  attach(): void {
+    this.store.monkeySession.history = this;
+  }
+
+  /** Clears the session registration `attach` made, when it is still the registered one. */
+  detach(): void {
+    if (this.store.monkeySession.history === this) this.store.monkeySession.history = null;
+  }
+
   private readAfresh(account: string | null): void {
     this.cycle += 1;
     this.backoff.reset();
