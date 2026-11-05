@@ -47,8 +47,11 @@ describe("the Staking page's unstake", () => {
     expect(unstakeButton(fresh)).toContain('aria-disabled="false"');
     expect(fresh).toContain("This takes 1 MONKEY from your delegation to alpha.example (0x000000…00a1).");
     // The stake's split as the chain tells it: all of it delegated to one candidate, none abstaining.
-    expect(fresh).toContain("12,000 MONKEY to 1");
-    expect(fresh).toContain("0 MONKEY (abstains)");
+    expect(fresh).toContain("12,000 MONKEY to 1 candidate");
+    expect(fresh).not.toContain("(abstains)");
+    // With undelegated stake, the split says what abstains.
+    const part: StakeDelegations = { staked, delegated: staked / 2n, delegations: [{ candidate: CANDIDATE, amount: staked / 2n }] };
+    expect(render(ready(part))).toContain("6,000 MONKEY (abstains)");
     // A landed change whose read again has not: the delegations held may be the ones before it.
     const settling = render(ready(chain), true);
     expect(unstakeButton(settling)).toContain('aria-disabled="true"');

@@ -21,8 +21,8 @@ export function StakingDelegate() {
   const labelOf = useOperatorLabel(operators);
   return (
     <div className="mt-4 space-y-4">
-      {/* The figures are hidden, not unmounted, while the node is not trusted: a typed amount survives a gap in the feed, and no figure from before it shows. */}
-      <div className={trusted ? "min-w-0" : "hidden"}>
+      {/* The figures keep their box while the node is not trusted — invisible and inert, not unmounted — so a typed amount survives a gap in the feed, no figure from before it shows, and the operators card below never moves. */}
+      <div className={trusted ? "min-w-0" : "invisible"} inert={!trusted}>
         <StakePanel delegations={wallet !== null && delegationsRead.account === wallet.address ? delegationsRead : null} labelOf={labelOf} />
       </div>
       {/* The operators card shows from the node's first verdict and stays through a re-verification, so what it holds is never taken away mid-way. */}

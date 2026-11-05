@@ -3,7 +3,7 @@
 import { formatMonkey, formatRate, shortHex } from "../format";
 import type { OperatorRole, OperatorRow } from "./operator-table";
 
-export const ROLE_LABELS: Record<OperatorRole, string> = { active: "Active", elected: "Elected", promoted: "Promoted", standby: "Standby", candidate: "Candidate" };
+export const ROLE_LABELS: Record<OperatorRole, string> = { active: "Active", elected: "Elected", promoted: "Promoted", standby: "Standby", candidate: "Candidate", unlisted: "Unlisted" };
 
 export interface OperatorCells {
   /** What the name cell shows, which may say why there is no hostname to show. */
@@ -26,13 +26,13 @@ export interface OperatorCells {
  */
 export function operatorCells(row: OperatorRow): OperatorCells {
   return {
-    // A row the list does not name carries no release (`yoursRows`' unlisted one): it is named by
-    // its address, like its label, not by the deployment words an unlisted operator in effect gets.
-    name: row.hostname ?? (row.release === "" ? shortHex(row.address) : row.bond === null ? "The deployment's initial operator" : "Not a plain hostname"),
+    // A row no list names (yoursRows' unlisted one) carries no release: it is named by its address,
+    // like its label, not by the deployment words an unlisted operator in effect gets.
+    name: row.hostname ?? (row.role === "unlisted" ? shortHex(row.address) : row.bond === null ? "The deployment's initial operator" : "Not a plain hostname"),
     label: row.hostname ?? shortHex(row.address),
     address: shortHex(row.address),
     role: ROLE_LABELS[row.role],
-    eligibility: !row.listed ? "Not listed" : row.eligible ? "Eligible" : "Not eligible",
+    eligibility: row.role === "unlisted" ? "—" : !row.listed ? "Not listed" : row.eligible ? "Eligible" : "Not eligible",
     delegated: row.votes === null ? "—" : `${formatMonkey(row.votes)} (${formatRate(row.shareBps)})`,
     bond: row.bond === null ? "—" : formatMonkey(row.bond),
     release: row.release === "" ? "—" : shortHex(row.release),

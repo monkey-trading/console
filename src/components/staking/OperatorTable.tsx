@@ -14,10 +14,11 @@ import type { StakeDelegations } from "@/lib/engine/staking";
 import { formatMonkey } from "@/lib/format";
 import type { DelegationChange } from "@/lib/monkey/actions";
 import type { CandidateSource } from "@/lib/staking/candidate-choice";
-import { openRowEditor, type DelegateEditing, type EditorMode } from "@/lib/staking/delegation-form";
+import { openRowEditor, type DelegateEditing, type EditingUpdate, type EditorMode } from "@/lib/staking/delegation-form";
 import { operatorCells, type OperatorCells } from "@/lib/staking/operator-cells";
 import { ariaSort, type OperatorRow, type SortId } from "@/lib/staking/operator-table";
 
+import { TOGGLE } from "../monkey/styles";
 import { DelegationEditor } from "./DelegationEditor";
 
 interface Props {
@@ -36,20 +37,20 @@ interface Props {
   source: CandidateSource;
   /** The Delegate tab's editing context: which editor is open and what it holds. */
   editing: DelegateEditing;
-  onEdit: (next: DelegateEditing) => void;
+  onEdit: (next: EditingUpdate) => void;
   nameOf: (address: string) => string;
   send: (change: DelegationChange, onLanded: () => void) => Promise<unknown>;
 }
 
 const TH = "px-3 py-2 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
 const TD = "px-3 py-2 align-top";
-const TOGGLE = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:text-fg-3 aria-disabled:hover:border-line-2 lg:min-h-0";
 const ROLE_TONE: Record<OperatorRow["role"], string> = {
   active: "border-glow/40 text-glow",
   elected: "border-amber/40 text-amber",
   promoted: "border-amber/40 text-amber",
   standby: "border-line-2 text-fg",
   candidate: "border-line-2 text-fg-2",
+  unlisted: "border-line-2 text-fg-3",
 };
 
 /** The row's role and whether it would count in an election close now. */

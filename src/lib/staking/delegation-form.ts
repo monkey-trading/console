@@ -26,6 +26,32 @@ export interface DelegateEditing {
 
 export const NO_EDITING: DelegateEditing = { editing: null, typedOpen: false, moveTo: "", typedMove: "", typedTo: "", amounts: {} };
 
+/**
+ * A write to the editing context: the next context, or an updater applied to what is stored now —
+ * a send that lands after other edits must not restore what a render captured when it was pressed.
+ */
+export type EditingUpdate = DelegateEditing | ((prev: DelegateEditing) => DelegateEditing);
+
+/** The editing context as the Staking section stores it, with the account it belongs to. */
+export interface EditingState {
+  account: string | null;
+  editing: DelegateEditing;
+}
+
+/** What the account connected now reads of the stored context: its own, or none. */
+export function editingFor(held: EditingState, account: string | null): DelegateEditing {
+  return held.account === account ? held.editing : NO_EDITING;
+}
+
+/**
+ * How a write lands: under the account connected when it is made, applied to what is stored now —
+ * an updater reads the current account's context, never another account's.
+ */
+export function keptFor(account: string | null, next: EditingUpdate, held: EditingState): EditingState {
+  const editing = typeof next === "function" ? next(editingFor(held, account)) : next;
+  return { account, editing };
+}
+
 /** The "Delegate to an address" editor's `amounts` candidate: no row, the address is typed. */
 export const TYPED_EDITOR = "typed";
 

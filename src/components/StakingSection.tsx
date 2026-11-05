@@ -18,9 +18,10 @@ import { OperatorReads, operatorsShown } from "@/lib/monkey/operators";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import { isCurrentTab, readsFor, SECTIONS } from "@/lib/nav";
 import { DelegationReads } from "@/lib/staking/delegation-reads";
-import { NO_EDITING, type DelegateEditing } from "@/lib/staking/delegation-form";
+import { editingFor, keptFor, NO_EDITING, type DelegateEditing, type EditingState, type EditingUpdate } from "@/lib/staking/delegation-form";
 import { EpochReads } from "@/lib/staking/epoch-reads";
 import { DistributionHistoryReads } from "@/lib/staking/history-reads";
+import { NO_TABLE_VIEW, type TableViewState } from "@/lib/staking/operator-table";
 
 import { useSession } from "./ConsoleProvider";
 import { MonkeyPanelProvider, useConsoleSelect } from "./monkey/use-monkey";
@@ -43,7 +44,10 @@ export interface StakingReads {
    * it.
    */
   delegateEditing: DelegateEditing;
-  setDelegateEditing: (next: DelegateEditing) => void;
+  setDelegateEditing: (next: EditingUpdate) => void;
+  /** The operator table's view — its search, sort, page and All/Yours choice — kept here beside the editing context, so the view an open editor sits on survives a tab switch too. */
+  table: TableViewState;
+  setTable: (next: TableViewState) => void;
 }
 
 /** The context the Staking section provides its tabs; a test harness may stand it in without the section's route. */
@@ -108,12 +112,14 @@ export function StakingSection({ children }: { children: ReactNode }) {
   useEffect(() => history.walletChanged(), [history, wallet]);
   // The Delegate tab's editing context, keyed by the account it belongs to: what one account chose
   // or typed is not another's, so another account reads as no editor open, and the next write is
-  // kept under the account then connected.
+  // kept under the account then connected. Writes may be updaters, applied to what is stored now,
+  // so a send that lands late never restores what a render captured when it was pressed.
   const account = wallet?.address ?? null;
-  const [editingState, setEditingState] = useState<{ account: string | null; editing: DelegateEditing }>({ account, editing: NO_EDITING });
-  const delegateEditing = editingState.account === account ? editingState.editing : NO_EDITING;
-  const setDelegateEditing = (next: DelegateEditing) => setEditingState({ account, editing: next });
-  const reads: StakingReads = { panel, operators, epochs, delegations, history, operatorsSettled, delegateEditing, setDelegateEditing };
+  const [editingState, setEditingState] = useState<EditingState>({ account, editing: NO_EDITING });
+  const delegateEditing = editingFor(editingState, account);
+  const setDelegateEditing = (next: EditingUpdate) => setEditingState((held) => keptFor(account, next, held));
+  const [table, setTable] = useState<TableViewState>(NO_TABLE_VIEW);
+  const reads: StakingReads = { panel, operators, epochs, delegations, history, operatorsSettled, delegateEditing, setDelegateEditing, table, setTable };
   return (
     <StakingContext.Provider value={reads}>
       <MonkeyPanelProvider value={panel}>

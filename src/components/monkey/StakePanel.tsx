@@ -50,6 +50,7 @@ export function StakePanel({ delegations = null, labelOf = shortHex }: { delegat
   const held = delegations === null || delegations.settling ? null : delegations.read.value;
   // The stake's split as the chain last told it, beside the node's own figures.
   const split = delegations?.read.value ?? null;
+  const undelegated = split === null ? null : undelegatedOf(split.staked, split.delegations);
   // Not read yet: no wallet the page load may still connect, or a connected one whose stake has not landed.
   const reading = wallet === null ? !decided : !readOnly && position === null && (!mine || figures.position.status === "loading");
   return (
@@ -61,8 +62,8 @@ export function StakePanel({ delegations = null, labelOf = shortHex }: { delegat
         <>
           <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
             <Row label="Staked">{position === null ? "—" : formatMonkey(position.staked)}</Row>
-            <Row label="Delegated">{split === null ? "—" : `${formatMonkey(split.delegated)} to ${split.delegations.length}`}</Row>
-            <Row label="Undelegated">{split === null ? "—" : `${formatMonkey(undelegatedOf(split.staked, split.delegations))} (abstains)`}</Row>
+            <Row label="Delegated">{split === null ? "—" : `${formatMonkey(split.delegated)} to ${split.delegations.length} ${split.delegations.length === 1 ? "candidate" : "candidates"}`}</Row>
+            <Row label="Undelegated">{split === null || undelegated === null ? "—" : `${formatMonkey(undelegated)}${undelegated > 0n ? " (abstains)" : ""}`}</Row>
             <Row label="Wallet balance">{position === null ? "—" : formatMonkey(position.balance)}</Row>
             <Row label="Share of all stake">{share === null ? "—" : formatRate(share)}</Row>
           </dl>

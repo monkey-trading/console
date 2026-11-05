@@ -13,8 +13,8 @@ import { shareBps } from "../monkey/figures";
 import { shownHostname } from "./hostnames";
 import { ADDRESS } from "./candidate-choice";
 
-/** `elected` and `promoted` wait on `pendingElection`; `standby` is the one `promote()` would pick now. */
-export type OperatorRole = "active" | "elected" | "promoted" | "standby" | "candidate";
+/** `elected` and `promoted` wait on `pendingElection`; `standby` is the one `promote()` would pick now; `unlisted` is a Yours row for an address no list names. */
+export type OperatorRole = "active" | "elected" | "promoted" | "standby" | "candidate" | "unlisted";
 
 export interface OperatorRow {
   address: string;
@@ -77,7 +77,7 @@ export const PAGE_SIZE = 25;
 /** The longest search the table takes: longer than any address, hostname or endpoint a visitor would type. */
 export const MAX_SEARCH = 100;
 
-const ROLE_ORDER: Record<OperatorRole, number> = { active: 0, promoted: 1, elected: 2, standby: 3, candidate: 4 };
+const ROLE_ORDER: Record<OperatorRole, number> = { active: 0, promoted: 1, elected: 2, standby: 3, candidate: 4, unlisted: 5 };
 const UNITS = /^\d+$/;
 
 /**
@@ -212,6 +212,23 @@ export function tableView(rows: readonly OperatorRow[], search: string, sort: So
   return { rows: kept.slice(shown * PAGE_SIZE, (shown + 1) * PAGE_SIZE), matched: kept.length, total: rows.length, page: shown, pages };
 }
 
+/**
+ * What the table's view controls hold. The Staking section keeps it beside the editing context, so
+ * the search, sort, page and All/Yours choice that locate an open editor survive a tab switch.
+ */
+export interface TableViewState {
+  /** The search text; "" for none. */
+  search: string;
+  sort: SortId;
+  /** Which rows show: every operator, or the account's delegations alone. */
+  show: "all" | "yours";
+  /** The page shown, from 0. */
+  page: number;
+}
+
+/** The table's view as it opens: no search, the registry's order, the first page, every operator. */
+export const NO_TABLE_VIEW: TableViewState = { search: "", sort: "role", show: "all", page: 0 };
+
 /** Which rows a page shows, in words, for the table's status line; `search` as typed. */
 export function countText(view: TableView, search: string): string {
   const noun = view.total === 1 ? "operator" : "operators";
@@ -223,9 +240,9 @@ export function countText(view: TableView, search: string): string {
   return `${view.matched} of ${view.total} ${noun} ${view.matched === 1 ? "matches" : "match"}; showing ${range}.`;
 }
 
-/** A row for an address the list does not name, which a delegation may still go to: it carries its address alone. */
+/** A row for an address no list names, which a delegation may still go to: it carries its address alone, never the Candidate words. */
 function unlistedRow(address: string): OperatorRow {
-  return { address, hostname: null, registeredHostname: "", role: "candidate", listed: false, eligible: false, votes: null, shareBps: 0, bond: null, release: "", endpoint: null, registration: null };
+  return { address, hostname: null, registeredHostname: "", role: "unlisted", listed: false, eligible: false, votes: null, shareBps: 0, bond: null, release: "", endpoint: null, registration: null };
 }
 
 /**

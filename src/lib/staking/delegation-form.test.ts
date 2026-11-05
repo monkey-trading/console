@@ -6,6 +6,8 @@ import {
   amountKey,
   clearAmount,
   closeEditor,
+  editingFor,
+  keptFor,
   NO_EDITING,
   openRowEditor,
   openTypedEditor,
@@ -14,6 +16,7 @@ import {
   setTypedMove,
   setTypedTo,
   TYPED_EDITOR,
+  type EditingState,
 } from "./delegation-form";
 
 const A = "0x00000000000000000000000000000000000000a1";
@@ -74,5 +77,56 @@ describe("amounts", () => {
 
   it("lowercases a candidate's address in its key, so the same row shares its amount across cases", () => {
     expect(amountKey("delegate", A.toUpperCase().replace("0X", "0x"))).toBe(amountKey("delegate", A));
+  });
+});
+
+describe("the account-keyed store (editingFor and keptFor)", () => {
+  const stored = (account: string | null, editing = NO_EDITING): EditingState => ({ account, editing });
+  const withAmount = setAmount(NO_EDITING, amountKey("delegate", A), "10");
+
+  it("masks another account's context, and keeps this account's across a disconnect and back", () => {
+    const held = stored(A, withAmount);
+    expect(editingFor(held, B)).toBe(NO_EDITING);
+    expect(editingFor(held, null)).toBe(NO_EDITING);
+    expect(editingFor(held, A)).toBe(withAmount);
+  });
+
+  it("stores a write under the account connected when it is made, whatever was stored before", () => {
+    expect(keptFor(B, withAmount, stored(A))).toEqual({ account: B, editing: withAmount });
+    expect(keptFor(null, withAmount, stored(A))).toEqual({ account: null, editing: withAmount });
+  });
+
+  it("a landed send leaves the amount empty and the editor closed, applied to what is stored now", () => {
+    const key = amountKey("delegate", A);
+    let held = keptFor(A, openRowEditor(NO_EDITING, { candidate: A, mode: "delegate" }), stored(A));
+    held = keptFor(A, setAmount(held.editing, key, "10"), held);
+    // The send lands: the amount clears at once, and the editor closes once the re-reads finish.
+    held = keptFor(A, (now) => clearAmount(now, key, "10"), held);
+    held = keptFor(A, (now) => closeEditor(now), held);
+    expect(held.editing.editing).toBeNull();
+    expect(held.editing.typedOpen).toBe(false);
+    expect(held.editing.amounts[key]).toBe("");
+  });
+
+  it("what was typed elsewhere while the wallet prompt was up is not overwritten by the landed send", () => {
+    const keyA = amountKey("delegate", A);
+    const keyB = amountKey("undelegate", B);
+    let held = keptFor(A, openRowEditor(NO_EDITING, { candidate: A, mode: "delegate" }), stored(A));
+    held = keptFor(A, setAmount(held.editing, keyA, "10"), held);
+    // The wallet prompt is up: the visitor opens bravo's Take back and types 5.
+    held = keptFor(A, openRowEditor(held.editing, { candidate: B, mode: "undelegate" }), held);
+    held = keptFor(A, setAmount(held.editing, keyB, "5"), held);
+    held = keptFor(A, (now) => clearAmount(now, keyA, "10"), held);
+    held = keptFor(A, (now) => closeEditor(now), held);
+    expect(held.editing.editing).toBeNull();
+    expect(held.editing.amounts[keyA]).toBe("");
+    expect(held.editing.amounts[keyB]).toBe("5");
+  });
+
+  it("a late landing after a switch to another account writes under that account, not over the stored one", () => {
+    // Account A typed 10 and sent; before the send landed, the wallet switched to B.
+    const held = stored(A, withAmount);
+    const next = keptFor(B, (now) => closeEditor(now), held);
+    expect(next).toEqual({ account: B, editing: NO_EDITING });
   });
 });

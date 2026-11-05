@@ -8,6 +8,7 @@ import { OperatorReads } from "@/lib/monkey/operators";
 import { DelegationReads } from "@/lib/staking/delegation-reads";
 import { NO_EDITING } from "@/lib/staking/delegation-form";
 import { EpochReads } from "@/lib/staking/epoch-reads";
+import { NO_TABLE_VIEW } from "@/lib/staking/operator-table";
 import { DistributionHistoryReads } from "@/lib/staking/history-reads";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import type { NoticeSurface } from "@/lib/store/state";
@@ -56,6 +57,7 @@ function Operators() {
   const reads: StakingReads = {
     panel: new MonkeyPanel(store, "staking"), operators, epochs: new EpochReads(store), delegations,
     history: new DistributionHistoryReads(store), operatorsSettled: true, delegateEditing: NO_EDITING, setDelegateEditing: () => undefined,
+    table: NO_TABLE_VIEW, setTable: () => undefined,
   };
   return createElement(StakingContext.Provider, { value: reads }, createElement(OperatorsPanel, { operators, delegations }));
 }

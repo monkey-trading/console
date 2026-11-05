@@ -19,6 +19,7 @@ import {
   setTypedTo,
   TYPED_EDITOR,
   type DelegateEditing,
+  type EditingUpdate,
   type EditorMode,
 } from "@/lib/staking/delegation-form";
 import { delegateWords, moveWords, takeBackWords } from "@/lib/staking/delegation-words";
@@ -40,7 +41,7 @@ interface Props {
   source: CandidateSource;
   /** The Delegate tab's editing context, which keeps what this editor holds across a tab switch. */
   editing: DelegateEditing;
-  onEdit: (next: DelegateEditing) => void;
+  onEdit: (next: EditingUpdate) => void;
   disabled: boolean;
   /** How a typed address is named once it resolves. */
   nameOf: (address: string) => string;
@@ -53,7 +54,9 @@ export function DelegationEditor({ mode, candidate, label, chain, options, sourc
   const draft: AmountDraft = {
     text: editing.amounts[key] ?? "",
     set: (text) => onEdit(setAmount(editing, key, text)),
-    clear: (sent) => onEdit(clearAmount(editing, key, sent)),
+    // Applied to what is stored now: a send that lands after other edits must not restore the render
+    // captured when it was pressed, nor clear what has been typed since.
+    clear: (sent) => onEdit((now) => clearAmount(now, key, sent)),
   };
   const delegated = chain.delegations;
   const undelegated = undelegatedOf(chain.staked, delegated);
@@ -61,7 +64,7 @@ export function DelegationEditor({ mode, candidate, label, chain, options, sourc
     const to = pickedCandidate(editing.typedTo, null);
     return (
       <div className="space-y-2">
-        <CandidatePicker label="A candidate's address" options={[]} value={null} onChange={() => undefined} source={source} typed={editing.typedTo} onTyped={(text) => onEdit(setTypedTo(editing, text))} />
+        <CandidatePicker label="A candidate's address" options={[]} value={null} onChange={() => undefined} source={source} typed={editing.typedTo} onTyped={(text) => onEdit(setTypedTo(editing, text))} keep />
         <AmountForm
           draft={draft} label="Amount to delegate" action="Delegate" max={undelegated} maxLabel="your undelegated stake" disabled={disabled || to === null}
           onSubmit={(amount, onLanded) => (to === null ? Promise.resolve() : send({ kind: "delegate", to, toLabel: nameOf(to), amount }, onLanded))}
