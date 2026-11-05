@@ -1,4 +1,4 @@
-/** The pages the top bar links to, in the order it shows them, and each page's section tabs. */
+/** The pages the top bar links to, in the order it shows them, each page's section tabs, and which reads the Staking section's tabs start. */
 
 export const PAGES = [
   { href: "/", label: "Trade" },
@@ -32,6 +32,32 @@ export const SECTIONS: Readonly<Record<"/staking", PageSection>> = {
     ],
   },
 };
+
+/** One of the Staking section's reads, keyed by what it reads. */
+export type StakingRead = "panel" | "operators" | "delegations" | "epochs" | "history";
+
+/**
+ * Which of the Staking section's reads each of its tabs starts (monkey-trading/console#308): the
+ * panel's overview and wallet reads on every tab, the operator reads on Delegate and Epochs (Epochs
+ * names the operator-share recipients), the delegation reads on Delegate, the epoch reads on Rewards
+ * and Epochs, and the history reads on Rewards.
+ */
+const STAKING_READS: Readonly<Record<string, readonly StakingRead[]>> = {
+  "/staking": ["panel", "operators", "delegations"],
+  "/staking/rewards": ["panel", "epochs", "history"],
+  "/staking/epochs": ["panel", "operators", "epochs"],
+};
+
+/**
+ * Which of the Staking section's reads its tab `tabHref` starts.
+ * Error cases:
+ * - `tabHref` is not one of the Staking section's tabs
+ */
+export function readsFor(tabHref: string): readonly StakingRead[] {
+  const reads = STAKING_READS[tabHref];
+  if (reads === undefined) throw new Error(`no reads recorded for the section tab ${tabHref}`);
+  return reads;
+}
 
 /**
  * Whether `pathname` is the page `href` names or one of its section's sub-routes; a trailing slash

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { currentMark, isCurrentPage, isCurrentTab, PAGES, SECTIONS } from "./nav";
+import { currentMark, isCurrentPage, isCurrentTab, PAGES, readsFor, SECTIONS } from "./nav";
 
 describe("isCurrentPage", () => {
   it("lists MONKEY after House, Staking after MONKEY, then Funding, and Settings last", () => {
@@ -77,5 +77,21 @@ describe("isCurrentTab", () => {
     expect(isCurrentTab("/staking", "/staking/rewards")).toBe(false);
     expect(isCurrentTab("/staking/epochs", "/staking/rewards")).toBe(false);
     expect(isCurrentTab(null, "/staking")).toBe(false);
+  });
+});
+
+describe("readsFor", () => {
+  it("starts the panel's reads on every tab, the operators' on Delegate and Epochs, the delegations' on Delegate, the epochs' on Rewards and Epochs, and the history's on Rewards", () => {
+    expect(readsFor("/staking")).toEqual(["panel", "operators", "delegations"]);
+    expect(readsFor("/staking/rewards")).toEqual(["panel", "epochs", "history"]);
+    expect(readsFor("/staking/epochs")).toEqual(["panel", "operators", "epochs"]);
+  });
+
+  it("records a table for every tab the section lists", () => {
+    for (const tab of SECTIONS["/staking"].tabs) expect(readsFor(tab.href).length).toBeGreaterThan(0);
+  });
+
+  it("throws for a path that is not one of the section's tabs", () => {
+    expect(() => readsFor("/stakingholder")).toThrow("no reads recorded for the section tab /stakingholder");
   });
 });

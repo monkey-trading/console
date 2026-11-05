@@ -14,7 +14,7 @@ import { usePathname } from "next/navigation";
 import { readBlock } from "@/lib/engine/attestation";
 import { OperatorReads, operatorsShown } from "@/lib/monkey/operators";
 import { MonkeyPanel } from "@/lib/monkey/panel";
-import { isCurrentTab, SECTIONS } from "@/lib/nav";
+import { isCurrentTab, readsFor, SECTIONS } from "@/lib/nav";
 import { DelegationReads } from "@/lib/staking/delegation-reads";
 import { EpochReads } from "@/lib/staking/epoch-reads";
 import { DistributionHistoryReads } from "@/lib/staking/history-reads";
@@ -64,9 +64,6 @@ export function StakingSection({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // The tab the route opens; a sub-route the table does not list opens the section's default tab.
   const href = SECTION.tabs.find((tab) => isCurrentTab(pathname, tab.href))?.href ?? "/staking";
-  const onDelegate = href === "/staking";
-  const onRewards = href === "/staking/rewards";
-  const onEpochs = href === "/staking/epochs";
   const scrollRef = useRef<HTMLDivElement>(null);
   // A tab switch shows the new tab from its top. Below lg the document scrolls, at lg and up the region
   // does; resetting both is a no-op on whichever does not scroll at the breakpoint.
@@ -75,14 +72,19 @@ export function StakingSection({ children }: { children: ReactNode }) {
     window.scrollTo({ top: 0 });
   }, [pathname]);
   // Each read starts once and stays started while any shown tab wants it, so moving between two
-  // tabs that share one never restarts it; the combined booleans are the effects' only deps.
-  const operatorsWanted = onDelegate || onEpochs;
-  const epochsWanted = trusted && (onRewards || onEpochs);
-  useEffect(() => (trusted ? panel.start(hidden) : undefined), [panel, trusted]);
+  // tabs that share one never restarts it; the booleans come from the tab's read table and are the
+  // effects' only deps.
+  const wanted = readsFor(href);
+  const panelWanted = wanted.includes("panel") && trusted;
+  const operatorsWanted = wanted.includes("operators");
+  const delegationsWanted = wanted.includes("delegations");
+  const epochsWanted = trusted && wanted.includes("epochs");
+  const historyWanted = trusted && wanted.includes("history");
+  useEffect(() => (panelWanted ? panel.start(hidden) : undefined), [panel, panelWanted]);
   useEffect(() => (operatorsWanted ? operators.start(hidden) : undefined), [operators, operatorsWanted]);
-  useEffect(() => (onDelegate ? delegations.start(hidden) : undefined), [delegations, onDelegate]);
+  useEffect(() => (delegationsWanted ? delegations.start(hidden) : undefined), [delegations, delegationsWanted]);
   useEffect(() => (epochsWanted ? epochs.start(hidden) : undefined), [epochs, epochsWanted]);
-  useEffect(() => (trusted && onRewards ? history.start(hidden) : undefined), [history, trusted, onRewards]);
+  useEffect(() => (historyWanted ? history.start(hidden) : undefined), [history, historyWanted]);
   // The history's registration on the session lives for the section's whole mount, not for its
   // reads' run, so the mock's account reset reaches the retained rows from any tab.
   useEffect(() => {
