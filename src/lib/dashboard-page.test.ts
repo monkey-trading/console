@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { houseGateLine, SECTION_IDS, sectionOfHash } from "./dashboard-page";
+import { houseGateLine, overviewProblem, SECTION_IDS, sectionOfHash } from "./dashboard-page";
 
 describe("sectionOfHash", () => {
   it("names the section a #hash load targets", () => {
@@ -36,5 +36,15 @@ describe("houseGateLine", () => {
   it("holds nothing once the figures are ready and fresh, and never overrides the not-trusted line", () => {
     expect(houseGateLine({ trusted: true, ready: true, fresh: true, simulated: false })).toBeNull();
     expect(houseGateLine({ trusted: false, ready: false, fresh: false, simulated: false })).toBeNull();
+  });
+});
+
+describe("overviewProblem", () => {
+  it.each(["the liquidity floor", "the emission budget and halving schedule"])("qualifies %s for first failures, held failures and unavailable routes", (what) => {
+    expect(overviewProblem({ status: "failed", value: null, message: "Timed out." }, what)).toBe(`The node did not answer for ${what} (Timed out), so there is nothing to show yet. The page keeps asking.`);
+    expect(overviewProblem({ status: "failed", value: {}, message: null }, what)).toBe(`The last read of ${what} failed, so this may be behind.`);
+    expect(overviewProblem({ status: "unavailable", value: null, message: null }, what)).toBe(`This node does not serve ${what} yet.`);
+    expect(overviewProblem({ status: "ready", value: {}, message: null }, what)).toBeNull();
+    expect(overviewProblem({ status: "loading", value: null, message: null }, what)).toBeNull();
   });
 });

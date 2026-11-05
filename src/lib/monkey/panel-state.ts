@@ -1,4 +1,4 @@
-/** What the MONKEY and Staking pages' store holds: the node's and the wallet's reads, what is typed, and which page an opening serves. */
+/** What the MONKEY, Staking and Dashboard pages' store holds: the node's and the wallet's reads, what is typed, and which page an opening serves. */
 
 import type { ActivityPage, DistributionProof, MonkeySeriesMetric, MonkeyView } from "../engine/stats-types";
 import type { StakingPosition } from "../engine/staking";
@@ -8,7 +8,7 @@ import type { TimeframeId } from "./timeframes";
 /**
  * The page a panel serves (monkey-trading/console#271): the MONKEY page reads the token, its emissions
  * and the public activity; the Staking page the account's stake and its USDC distributions; the
- * Dashboard every series chart (monkey-trading/console#310).
+ * Dashboard the house, emissions, supply and distribution histories (monkey-trading/console#310).
  */
 export type PanelPage = "monkey" | "staking" | "dashboard";
 

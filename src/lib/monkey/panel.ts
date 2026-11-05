@@ -1,12 +1,4 @@
-/**
- * The MONKEY, Staking and Dashboard pages' reads (monkey-trading/console#202, #271, #310), a store
- * opened only while its page is on screen and its tab visible, reading what that page shows
- * ([PanelPage]): the node's totals every 30 seconds, with the activity on the MONKEY page; the page's
- * charts every 5; the wallet's chain reads every 15 (one at a time, bounded, never asking the wallet
- * to do anything), the vault's MONKEY record on the MONKEY page, the stake and the distribution proof
- * on the Staking page; each straight away, at most once a second, on a stream event that changes it
- * (`live-reads.ts`). A failing read backs off, shows calmly on its panel, and leaves the vault's MONKEY record unread, which the emissions card says.
- */
+/** The pages' node figures, charts and wallet reads while trusted and visible, with bounded retries (monkey-trading/console#202, #271, #310). */
 
 import { carryAccrued } from "../engine/claim-standing";
 import { withTimeout } from "../engine/provider-errors";
@@ -43,11 +35,12 @@ export class MonkeyPanel {
   /** Counts the page's openings; work that began in an earlier one never writes into a later one. */
   private cycle = 0;
   private open = false;
+  private isHidden: () => boolean = () => false;
 
   constructor(readonly store: ConsoleStore, readonly page: PanelPage) {
     const reads = store.deps.client.stats;
     const now = () => store.getSnapshot().now;
-    const active = () => this.open;
+    const active = () => this.open && !this.isHidden();
     this.feeds = Object.fromEntries(PAGE_FEEDS[page].map((name) => [name, new ChartFeed(FEEDS[name].metrics, reads, now, active, FEEDS[name].initial)]));
   }
 
@@ -81,16 +74,19 @@ export class MonkeyPanel {
     for (const listener of this.listeners) listener();
   }
 
-  /**
-   * Starts the page's reads and its timer, and returns what stops them and forgets what they read.
-   * Called once the node is trusted; while `isHidden` says the tab is hidden the timer reads nothing.
-   */
+  /** Starts trusted reads and their timer, waiting while hidden; returns what stops and forgets them. */
   start(isHidden: () => boolean): () => void {
+    this.isHidden = isHidden;
     this.open = true;
     this.cycle = this.store.monkeySession.nextOpening();
     this.store.monkeySession.panel = this;
-    void this.refreshNode();
-    for (const feed of this.charts()) void feed.load();
+    let initialPending = isHidden();
+    const readInitial = () => {
+      initialPending = false;
+      void this.refreshNode();
+      for (const feed of this.charts()) void feed.load();
+    };
+    if (!initialPending) readInitial();
     const stopLive = followLive({
       isHidden, open: () => this.open, account: () => this.store.liveWallet?.address.toLowerCase() ?? null,
       subscribe: (onMessage) => this.store.deps.client.subscribe(onMessage),
@@ -99,7 +95,10 @@ export class MonkeyPanel {
       // A node that predates the routes the page reads is not asked again until the page is reopened.
       nodeDue: () => this.nodeBackoff.ready() && !(this.state.overview.status === "unavailable" && (this.page !== "monkey" || this.state.activity.status === "unavailable")),
       walletDue: () => this.walletBackoff.ready(),
-      tickCharts: () => { for (const feed of this.charts()) void feed.tickLive(); },
+      tickCharts: () => {
+        if (initialPending) readInitial();
+        else for (const feed of this.charts()) void feed.tickLive();
+      },
       // Each page awaits its own claim's proof: the reads the other claim needs stay loading, so it is never awaited here.
       awaitingProof: () => this.page !== "dashboard" && this.store.liveWallet !== null && proofAwaited({ ...this.state, ...this.state.wallet, account: this.store.liveWallet.address, entitlement: this.store.getSnapshot().entitlement, proof: this.state.wallet.proof, position: this.state.wallet.position }),
       readProofs: () => {

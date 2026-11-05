@@ -1,4 +1,4 @@
-/** Tests for the MONKEY and Staking pages' store's reads of the node: what each page reads, cadence, unavailable routes, trust and lifecycle. */
+/** Tests for the MONKEY, Staking and Dashboard pages' store's reads of the node: what each page reads, cadence, unavailable routes, trust and lifecycle. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -220,24 +220,27 @@ describe("MonkeyPanel", () => {
     stop();
   });
 
-  it("stops reading the charts, and the node's figures, on the timer and on events while the tab is hidden", async () => {
+  it("defers initial chart and node reads while hidden, as well as timer and event reads", async () => {
     const { node, store, stop: stopFirst } = await setup("dashboard");
     stopFirst();
     const fresh = new MonkeyPanel(store, "dashboard");
     let hidden = true;
+    const overview = vi.spyOn(node.client.stats, "monkey");
+    const series = vi.spyOn(node.client.stats, "series");
     const stop = fresh.start(() => hidden);
     for (const name of PAGE_FEEDS.dashboard) void fresh.feed(name).show();
     await flush();
-    const overview = vi.spyOn(node.client.stats, "monkey");
-    const series = vi.spyOn(node.client.stats, "series");
+    expect(overview).not.toHaveBeenCalled();
+    expect(series).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(120_000);
     node.client.state.emit({ type: "close_epoch" } as never, []);
     await vi.advanceTimersByTimeAsync(5_000);
     expect(overview).not.toHaveBeenCalled();
     expect(series).not.toHaveBeenCalled();
     hidden = false;
-    await vi.advanceTimersByTimeAsync(30_000);
-    expect(overview).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(overview).toHaveBeenCalledTimes(1);
+    expect(series.mock.calls.map(([query]) => query.metric).sort()).toEqual(["cumulative_distributed", "distributed_per_epoch", "monkey_per_loss", "total_allocated", "total_staked"]);
     stop();
   });
 

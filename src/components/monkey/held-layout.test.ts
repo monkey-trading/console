@@ -38,7 +38,7 @@ function render(card: ComponentType, state: Partial<ConsoleState>, page: PanelPa
 const Emissions = () => createElement(EmissionsCard, { claim: async () => undefined, pending: { kind: "reading" } });
 const Chart = () => {
   const { store } = useSession();
-  return createElement(ChartCard, { id: "chart", title: "Chart", feed: new MonkeyPanel(store, "dashboard").feed("epochs"), kind: "bars", lines: [{ metric: "distributed_per_epoch", label: "USDC distributed", tone: "glow" }], format: String });
+  return createElement(ChartCard, { id: "chart", title: "Chart", feed: new MonkeyPanel(store, "dashboard").feed("epochs"), kind: "bars", timeframe: "all", lines: [{ metric: "distributed_per_epoch", label: "USDC distributed", tone: "glow" }], format: String });
 };
 
 /** How many elements the markup holds unseen and hidden from assistive technology: a held place. */
@@ -117,5 +117,6 @@ describe("the cards while the node's totals are read", () => {
     const html = render(Chart, {});
     expect(html).toContain("Reading the chart&#x27;s data…");
     expect(html).toMatch(/aria-hidden="true" class="invisible"/);
+    expect(html).toContain("All covers the most recent 1,998 days");
   });
 });

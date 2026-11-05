@@ -1,18 +1,14 @@
 "use client";
 
 /**
- * The Dashboard screen: every series chart the node serves in three sections — House, MONKEY and
- * Staking — under one range control. The house charts read through the store's house feeds and the
- * MONKEY and Staking charts through a panel of this page's own; every read runs only while this
- * page is open, its tab is visible and the node is trusted, as on the House page. The House section
- * holds until the node's first signed house answers land, and says when they have stopped
- * refreshing; a #hash load scrolls to its section once the node is trusted.
+ * The house, MONKEY and Staking histories under one range control. Reads run while this page is
+ * open, visible and trusted; House charts wait for the first signed answers, and deep links restore once.
  */
 
-import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { DASHBOARD_RANGES, DEFAULT_DASHBOARD_RANGE, type DashboardRangeId } from "@/lib/dashboard-range";
-import { houseGateLine, sectionOfHash } from "@/lib/dashboard-page";
+import { houseGateLine, overviewProblem, SECTION_IDS, sectionOfHash } from "@/lib/dashboard-page";
 import { readBlock } from "@/lib/engine/attestation";
 import { fixedFromWire, fixedToNumber } from "@/lib/fixed";
 import { MonkeyPanel } from "@/lib/monkey/panel";
@@ -24,11 +20,7 @@ import { ExposureChart, NavChart, QueueChart } from "./house/Charts";
 import { MonkeyPanelProvider, useConsoleSelect } from "./monkey/use-monkey";
 import { Select } from "./Select";
 
-const SECTIONS = [
-  { href: "#house", label: "House" },
-  { href: "#monkey", label: "MONKEY" },
-  { href: "#staking", label: "Staking" },
-] as const;
+const SECTION_LABELS = { house: "House", monkey: "MONKEY", staking: "Staking" } as const;
 
 const SECTION_LINK = "inline-flex min-h-11 items-center text-caption text-glow hover:text-glow-hover focus-visible:outline-2 focus-visible:outline-glow lg:min-h-6";
 
@@ -48,6 +40,7 @@ export function DashboardPage() {
   const { store } = useSession();
   const [panel] = useState(() => new MonkeyPanel(store, "dashboard"));
   const [range, setRange] = useState<DashboardRangeId>(DEFAULT_DASHBOARD_RANGE);
+  const hashRestored = useRef(false);
   const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
   const houseReady = useConsoleSelect((state) => state.houseReady);
   const houseFresh = useConsoleSelect((state) => state.houseFresh);
@@ -58,7 +51,7 @@ export function DashboardPage() {
   const floorText = overview.value?.distribution?.liquidity_floor;
   const floor = {
     value: floorText === undefined ? null : fixedToNumber(fixedFromWire(floorText)),
-    note: floorText !== undefined && overview.status === "failed" ? `The node's MONKEY read is failing${overview.message === null ? "" : ` (${overview.message})`}, so the floor may be behind.` : null,
+    note: overviewProblem(overview, "the liquidity floor"),
   };
   // The house feeds read only while the Dashboard is open; visibility also asks that the tab shows and the node is trusted, as on the House page.
   useEffect(() => {
@@ -78,7 +71,8 @@ export function DashboardPage() {
   useEffect(() => (trusted ? panel.start(() => document.visibilityState === "hidden") : undefined), [panel, trusted]);
   // A cold load's hash scroll finds nothing while the sections are hidden (the node not yet trusted), so when trust first arrives the named section scrolls into view and takes focus, once.
   useEffect(() => {
-    if (!trusted) return;
+    if (!trusted || hashRestored.current) return;
+    hashRestored.current = true;
     const id = sectionOfHash(window.location.hash);
     if (id === null) return;
     const section = document.getElementById(id);
@@ -92,43 +86,51 @@ export function DashboardPage() {
         <div className="mx-auto flex w-full max-w-[120rem] flex-col gap-4 p-4 sm:p-6">
           <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <h2 className="text-lead tracking-caps text-glow uppercase">Dashboard</h2>
-            <p className="text-caption text-fg-3">Every time series the node serves — the house&apos;s NAV, exposure and withdrawal queue, MONKEY emissions and supply, and the USDC distributions — with one range setting every chart&apos;s window.</p>
+            <p className="text-caption text-fg-3">The history of the house&apos;s NAV, exposure and withdrawal queue, MONKEY emissions and supply, and the USDC distributions — with one range setting every chart&apos;s window.</p>
           </header>
           {!trusted && <p className="text-data text-fg-2">Figures appear once the node&apos;s attestation is verified and its feed is live.</p>}
-          {gate !== null && <p className="text-data text-fg-2">{gate}</p>}
           {/* The charts are hidden, not unmounted, while the node is not trusted, so no figure from before a gap in the feed shows. */}
           <div hidden={!trusted} className="flex flex-col gap-6">
             <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
               <nav aria-label="Dashboard sections" className="flex flex-wrap items-center gap-x-2">
-                {SECTIONS.map(({ href, label }, index) => (
-                  <span key={href} className="flex items-center gap-x-2">
+                {SECTION_IDS.map((id, index) => (
+                  <span key={id} className="flex items-center gap-x-2">
                     {index > 0 && <span aria-hidden="true" className="text-fg-3">·</span>}
-                    <a href={href} className={SECTION_LINK}>{label}</a>
+                    <a href={`#${id}`} className={SECTION_LINK}>{SECTION_LABELS[id]}</a>
                   </span>
                 ))}
               </nav>
-              <div className="w-28">
+              <div className="ml-auto w-28">
                 <Select<DashboardRangeId> label="Range" value={range} options={DASHBOARD_RANGES.map((entry) => ({ value: entry.id, label: entry.label }))} onChange={setRange} align="end" />
               </div>
             </div>
-            <Section id="house" title="House">
-              {houseReady && (
+            <Section id={SECTION_IDS[0]} title="House">
+              <p className="min-h-5 text-data text-fg-2">{gate}</p>
+              {houseReady ? (
                 <>
-                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                     <NavChart range={range} className="min-h-80" floor={floor} />
                     <ExposureChart range={range} className="min-h-80" />
                   </div>
                   <QueueChart range={range} className="min-h-64" walked={false} />
                 </>
+              ) : (
+                <div aria-hidden="true" className="flex flex-col gap-4">
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    <div className="min-h-80 rounded-xl border border-line-2 bg-ink-1" />
+                    <div className="min-h-80 rounded-xl border border-line-2 bg-ink-1" />
+                  </div>
+                  <div className="min-h-64 rounded-xl border border-line-2 bg-ink-1" />
+                </div>
               )}
             </Section>
-            <Section id="monkey" title="MONKEY">
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <Section id={SECTION_IDS[1]} title="MONKEY">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <MonkeyCharts range={range} />
               </div>
             </Section>
-            <Section id="staking" title="Staking">
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <Section id={SECTION_IDS[2]} title="Staking">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <StakingCharts range={range} />
               </div>
             </Section>

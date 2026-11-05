@@ -11,6 +11,7 @@ import { memo, useMemo, useState } from "react";
 
 import type { SeriesMetric } from "@/lib/engine/stats-types";
 import type { MarketId } from "@/lib/engine/types";
+import { groupThousands } from "@/lib/format";
 import { formatCompactUsd } from "@/lib/chart-format";
 import { beginsText, ALL_WINDOW_DAYS, DEFAULT_RANGE, RANGES, tableRows, type RangeId } from "@/lib/house-series";
 import { feedProblem } from "@/lib/store/house-feed-text";
@@ -110,7 +111,7 @@ function SeriesPanelView({ title, tip, lines, markets, range: driven, currents, 
           </div>
           <p className="text-label text-fg-3">
             {states.length === 0 || states.every((s) => s.status === "loading") ? "Reading the node's signed history…" : data === null ? null : beginsText(data, formatStamp)}
-            {range === "all" && data !== null && ` All covers the most recent ${ALL_WINDOW_DAYS} days, the most one read holds at daily buckets.`}
+            {range === "all" && data !== null && ` All covers the most recent ${groupThousands(ALL_WINDOW_DAYS)} days, the most one read holds at daily buckets.`}
             {lines.some((line) => line.sampled === true) && ` ${SAMPLED}`}
             {problem !== null && ` ${problem}`}
             {note !== null && ` ${note}`}

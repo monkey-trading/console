@@ -3,7 +3,7 @@
 The Monkey Trading web app, to be served at console.monkey.trading: the client for the open-source CFD
 engine in [monkey-trading/engine](https://github.com/monkey-trading/engine). One full-view trading
 terminal with a watchlist, a candlestick chart, a deal ticket that sends the quote you saw with your
-slippage bound, positions, orders, history, a P&L ledger of realised results with the MONKEY each loss earned, a Funding page, a Settings page for trading preferences and the browsers signed in to trade, a MONKEY page for the token and claiming its emissions, a Staking page for staking, delegation, the USDC distributions and the operators, a Dashboard page for every time-series chart the node serves (the house's NAV, exposure and withdrawal queue, MONKEY emissions and supply, and the USDC distributions, under one range), and a House page that shows the
+slippage bound, positions, orders, history, a P&L ledger of realised results with the MONKEY each loss earned, a Funding page, a Settings page for trading preferences and the browsers signed in to trade, a MONKEY page for the token and claiming its emissions, a Staking page for staking, delegation, the USDC distributions and the operators, a Dashboard page for the house's NAV, exposure and withdrawal queue histories, MONKEY emissions and supply, and the USDC distributions, under one range, and a House page that shows the
 house's solvency from the node's signed answers: its net asset value, cash and exposure against its
 caps, the withdrawal queue's size, and the signed checkpoint roots the figures stand on.
 
