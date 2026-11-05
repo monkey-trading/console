@@ -29,7 +29,7 @@ const usdc = (units: bigint | null) => (units === null ? "—" : formatUsdc(usdc
 /** `28 Oct 15:04`, in UTC, without the seconds the table has no room for. */
 const when = (ms: number) => formatStamp(ms).slice(0, -3);
 
-/** The card; `history` is the page's reads of it, which start and stop with the page. */
+/** The card; `history` is the section's reads of it, which start and stop with its tabs and keep what they read across a tab switch. */
 export function DistributionHistory({ history }: { history: DistributionHistoryReads }) {
   const state = useSyncExternalStore(history.subscribe, history.getSnapshot, history.getSnapshot);
   const account = useConsoleSelect((s) => s.wallet?.address ?? null);

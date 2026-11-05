@@ -93,6 +93,27 @@ export function addNewest(data: DistributionHistory, page: HistoryPage): Distrib
   return fold(data, page.events);
 }
 
+/**
+ * Where the held rows reached when the reads last stopped: the highest seq held, or `"empty"` for
+ * a history read to its start that held nothing; null before a stop and after a read that rebuilt
+ * the coverage. The resume's gap test measures the newest pages against it, not the live rows.
+ */
+export type StopMark = number | "empty" | null;
+
+/**
+ * Whether folding `page` in as the newest page would leave an interval nothing can reach: its
+ * oldest event is newer than the stop-time mark, so the page cannot be shown to overlap what the
+ * covers held when the reads last stopped, and the stream has more behind it. The reads start over
+ * rather than fold.
+ */
+export function gapBehind(page: HistoryPage, mark: StopMark): boolean {
+  if (page.next === null) return false;
+  const oldest = page.events.at(-1);
+  if (oldest === undefined || mark === null) return false;
+  if (mark === "empty") return true;
+  return seqOf(oldest.cursor) > mark;
+}
+
 /** Folds a stream message's allocations for `account` in; the same object when it carries none, so a price message changes nothing. */
 export function addMessage(data: DistributionHistory, message: StreamMessage, account: string): DistributionHistory {
   const mine = account.toLowerCase();

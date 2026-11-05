@@ -9,6 +9,7 @@ import type { OperatorRoute } from "../engine/stats-types";
 import { DelegationReads } from "../staking/delegation-reads";
 import { changeDelegation } from "./actions";
 import { hostnameListed, shownHostname } from "../staking/hostnames";
+import { operatorsView } from "../staking/operator-table";
 import { mirroredElection, OperatorReads, operatorsShown } from "./operators";
 import { NODE_READ_MS } from "./panel";
 import { flush, setup } from "./panel-kit";
@@ -175,20 +176,54 @@ describe("OperatorReads", () => {
     stop();
   });
 
-  it("stops following the node's trust once closed, and drops an answer that lands after it closed", async () => {
+  it("clears a retained list to loading when the reads restart while the node cannot be trusted, keeping the held one", async () => {
+    const { operators, store, counts, stop } = await started();
+    const held = operators.getSnapshot().list.value;
+    stop();
+    store.patch({ attestation: { kind: "unverified", reason: "gone" } });
+    const restart = operators.start(() => false);
+    expect(operators.getSnapshot()).toMatchObject({
+      route: { status: "loading", value: null, message: null },
+      list: { status: "loading", value: null, message: null },
+      held: { view: held },
+    });
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS * 2);
+    expect(counts).toEqual({ route: 1, list: 1 });
+    restart();
+  });
+
+  it("stops following the node's trust once closed, drops a distinguishable answer that lands after it closed, and adopts the one a restart begins", async () => {
     const { operators, store, node, counts, stop } = await started();
-    let release = () => {};
-    const real = node.client.stats.operators;
-    node.client.stats.operators = () => new Promise((resolve) => { release = () => { void real().then(resolve); }; });
+    const pending: ((list: OperatorList) => void)[] = [];
+    const listRead = node.client.stats.operators;
+    node.client.stats.operators = () => {
+      counts.list += 1;
+      return new Promise((resolve) => { pending.push(resolve); });
+    };
+    const original = await listRead();
+    // Answers the retained list can be told from: a late or resumed one that is adopted moves the total stake.
+    const withTotal = (extra: bigint): OperatorList => ({ ...original, total_staked: (BigInt(original.total_staked) + extra).toString() });
     const read = operators.refresh();
     stop();
-    release();
+    const retained = operators.getSnapshot().list.value;
+    pending[0]?.(withTotal(1n));
     await read;
+    // The late answer must not land: the retained snapshot is byte-identical once it has resolved.
+    expect(operators.getSnapshot().list.value).toBe(retained);
+    expect(operators.getSnapshot().list.value?.totalStaked).toBe(operatorsView(original).totalStaked);
     store.patch({ attestation: { kind: "unverified", reason: "gone" } });
     store.patch({ attestation: { kind: "mock" } });
     await flush();
     expect(counts.route).toBe(2);
-    expect(operators.getSnapshot()).toEqual({ route: { status: "loading", value: null, message: null }, list: { status: "loading", value: null, message: null }, held: null });
+    // What was read stays, so a tab switch back shows the last list while a read begun at the restart refreshes it.
+    const restart = operators.start(() => false);
+    await flush();
+    expect(counts.route).toBe(3);
+    expect(pending).toHaveLength(2);
+    pending[1]?.(withTotal(2n));
+    await flush();
+    expect(operators.getSnapshot().list.value?.totalStaked).toBe(operatorsView(original).totalStaked + 2n);
+    restart();
   });
 
   it("reads again at once on an election or rotation event in the stream, and not on other events", async () => {

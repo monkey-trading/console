@@ -7,8 +7,11 @@
  * read again a tick after the first read lands, and then on the node read's pace for as long as the
  * page is open and its tab visible. A failed read is made again by itself, further apart each time,
  * with no button.
- * The page opens these reads only while the node is trusted, which a gap in the feed ends, so a
- * reopening reads afresh and nothing the gap carried stays missing.
+ * The page opens these reads only while the node is trusted, which a gap in the feed ends. What was
+ * read stays across a stop, so the loaded pages survive a tab switch; the newest pages are read again
+ * a tick after the reads resume, and when they cannot reach what the covers held at the stop — a
+ * history read to its start that held nothing included — the history is read afresh instead, so no
+ * interval stays unreachable.
  */
 
 import { EngineError } from "../engine/client";
@@ -16,7 +19,7 @@ import type { HistoryPage } from "../engine/types";
 import { Backoff } from "../monkey/live-reads";
 import { NODE_READ_MS } from "../monkey/panel";
 import type { ConsoleStore } from "../store/store";
-import { addMessage, addNewest, addPage, emptyHistory, HISTORY_KINDS, limitingKinds, moreRemain, type DistributionHistory, type HistoryKind } from "./distribution-history";
+import { addMessage, addNewest, addPage, emptyHistory, gapBehind, HISTORY_KINDS, limitingKinds, moreRemain, type DistributionHistory, type HistoryKind, type StopMark } from "./distribution-history";
 
 export interface HistoryState {
   /** The account the history is for; null with no wallet. */
@@ -54,6 +57,8 @@ export class DistributionHistoryReads {
   private recheck: { cycle: number; after: number } | null = null;
   /** The cycle whose read of the newest pages again is in flight, so the timer does not start another beside it. */
   private rechecking: number | null = null;
+  /** Where the held rows reached when the reads last stopped; the resume's gap test reads it. */
+  private mark: StopMark = null;
 
   constructor(private readonly store: ConsoleStore) {}
 
@@ -71,12 +76,13 @@ export class DistributionHistoryReads {
     for (const listener of this.listeners) listener();
   }
 
-  /** Starts the reads for the connected wallet, and returns what stops them and forgets what they read. While `isHidden` says the tab is hidden, no failed read is made again. */
+  /** Starts the reads for the connected wallet, and returns what stops them. While `isHidden` says the tab is hidden, no failed read is made again. What was read stays across a stop, so the loaded pages survive a tab switch; the newest pages are read again a tick after the reads resume. */
   start(isHidden: () => boolean): () => void {
     this.open = true;
     this.cycle += 1;
-    this.store.monkeySession.history = this;
     this.walletChanged();
+    // Resuming after a tab switch: the newest pages are read again a tick later, for what the stream carried meanwhile.
+    if (this.state.status === "ready") this.recheck = { cycle: this.cycle, after: Date.now() + RETRY_TICK_MS };
     const unsubscribe = this.store.deps.client.subscribe((message) => {
       const { account, data } = this.state;
       if (account === null) return;
@@ -93,9 +99,14 @@ export class DistributionHistoryReads {
       this.cycle += 1;
       clearInterval(timer);
       unsubscribe();
-      if (this.store.monkeySession.history === this) this.store.monkeySession.history = null;
       this.backoff.reset();
-      this.set(IDLE);
+      // Record where the coverage reached, for the resume's gap test: the newest seq held, or an
+      // explicit marker for a history read to its start that held nothing. Only a ready history
+      // resumes over what it holds; one still reading, or failed, starts over by itself.
+      const { status, data } = this.state;
+      this.mark = status !== "ready" ? null : data.rows.length === 0 ? "empty" : Math.max(...data.rows.map((row) => row.seq));
+      // What was read stays, so the loaded pages survive a tab switch; a first read cut off mid-flight, or an older page read cut off, starts over when the reads resume. The session registration is the section's: it survives a stop, so the mock's account reset reaches these rows from any tab.
+      this.set({ more: false, ...(this.state.status === "reading" ? { status: "idle" as const } : {}) });
     };
   }
 
@@ -110,9 +121,23 @@ export class DistributionHistoryReads {
     this.readAfresh(this.store.liveWallet?.address ?? null);
   }
 
+  /**
+   * Registers on the session for the section's mount, not for these reads' run, so the mock's
+   * account reset reaches the retained rows from any tab; `detach` clears it.
+   */
+  attach(): void {
+    this.store.monkeySession.history = this;
+  }
+
+  /** Clears the session registration `attach` made, when it is still the registered one. */
+  detach(): void {
+    if (this.store.monkeySession.history === this) this.store.monkeySession.history = null;
+  }
+
   private readAfresh(account: string | null): void {
     this.cycle += 1;
     this.backoff.reset();
+    this.mark = null;
     this.set({ ...IDLE, account });
     if (this.open && account !== null) void this.first(this.cycle);
   }
@@ -150,8 +175,11 @@ export class DistributionHistoryReads {
 
   /**
    * The newest page of each kind again, folded in where the first read's covers stand: what the index
-   * had not taken then. The next is due on the node read's pace; a failure keeps this one due, says
-   * why on the card, and waits out the backoff.
+   * had not taken then. A newest page that cannot reach the stop-time mark — the newest seq held when
+   * the reads last stopped, or an explicit one for a history read to its start that held nothing —
+   * with more behind it, reads the history afresh instead, rebuilding the covers so no interval is
+   * unreachable. The next is due on the node read's pace; a failure keeps this one due, says why on
+   * the card, and waits out the backoff.
    */
   private async readNewest(cycle: number): Promise<void> {
     const { account } = this.state;
@@ -160,9 +188,20 @@ export class DistributionHistoryReads {
     try {
       const pages = await Promise.all(HISTORY_KINDS.map((kind) => this.page(account, kind, null)));
       if (cycle !== this.cycle) return;
+      // More than a page landed while the reads were stopped: folding the newest page in would leave
+      // the interval between it and what the covers held at the stop unreachable, so the coverage is
+      // rebuilt from scratch.
+      if (pages.some((page) => gapBehind(page, this.mark))) {
+        this.readAfresh(account);
+        return;
+      }
       this.recheck = { cycle, after: Date.now() + NODE_READ_MS };
       this.backoff.record(false);
       this.set({ recheckError: null, data: pages.reduce((held, page) => addNewest(held, page), this.state.data) });
+      // The fold extended what the reads hold: the mark moves to the top of it, so the next recheck
+      // measures against this read rather than the stop's.
+      const top = this.state.data.rows.reduce((newest, row) => Math.max(newest, row.seq), 0);
+      if (this.state.data.rows.length > 0) this.mark = top;
     } catch (error) {
       if (cycle !== this.cycle) return;
       this.backoff.record(true);

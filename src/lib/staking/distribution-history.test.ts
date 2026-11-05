@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { HistoryEvent, HistoryPage, StreamMessage } from "../engine/types";
-import { addMessage, addNewest, addPage, atBound, emptyHistory, emptyHistoryText, epochsLeftOut, hasOperatorShare, HISTORY_KINDS, limitingKinds, MAX_EPOCHS, moreRemain, shownRows, type HistoryKind } from "./distribution-history";
+import { addMessage, addNewest, addPage, atBound, emptyHistory, emptyHistoryText, epochsLeftOut, gapBehind, hasOperatorShare, HISTORY_KINDS, limitingKinds, MAX_EPOCHS, moreRemain, shownRows, type HistoryKind } from "./distribution-history";
 
 const ME = "0x00000000000000000000000000000000000000aa";
 const OTHER = "0x00000000000000000000000000000000000000bb";
@@ -172,6 +172,32 @@ describe("what is held and left out", () => {
     const again = addNewest(data, page("distribution_allocated", [10, 9], true));
     expect(again.cover).toEqual(data.cover);
     expect(epochs(shownRows(again))).toEqual([10, 9, 8]);
+  });
+});
+
+describe("gapBehind", () => {
+  // The reads stopped holding epochs 9 and 8 (seqs 90 and 80): the mark is the newest, 90.
+  const mark = 90;
+
+  it("is false where the newest page reaches the stop-time mark, whatever lies behind it", () => {
+    expect(gapBehind(page("distribution_allocated", [12, 11, 10, 9], true), mark)).toBe(false);
+    expect(gapBehind(page("distribution_allocated", [12, 9], true), mark)).toBe(false);
+  });
+
+  it("is true when the page's oldest event is newer than the stop-time mark and more pages lie behind it", () => {
+    expect(gapBehind(page("distribution_allocated", [60, 59, 58], true), mark)).toBe(true);
+  });
+
+  it("is false once the stream has nothing behind the page, before a stop has recorded a mark, and for an empty page", () => {
+    expect(gapBehind(page("distribution_allocated", [60, 59, 58], false), mark)).toBe(false);
+    expect(gapBehind(page("distribution_allocated", [60, 59, 58], true), null)).toBe(false);
+    expect(gapBehind(page("distribution_allocated", [], true), mark)).toBe(false);
+  });
+
+  it("is true for any page with more behind it after a read to the start that held nothing, and false for one without", () => {
+    expect(gapBehind(page("distribution_allocated", [60, 59], true), "empty")).toBe(true);
+    expect(gapBehind(page("distribution_allocated", [60, 59], false), "empty")).toBe(false);
+    expect(gapBehind(page("distribution_allocated", [], true), "empty")).toBe(false);
   });
 });
 

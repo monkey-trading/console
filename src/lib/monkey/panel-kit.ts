@@ -9,7 +9,7 @@ import { seedMonkeyDemo } from "../mock/monkey";
 import { connectWallet } from "../store/actions";
 import { ConsoleStore } from "../store/store";
 import { MonkeyPanel } from "./panel";
-import type { PanelPage } from "./panel-state";
+import { PAGE_FEEDS, type PanelPage } from "./panel-state";
 
 /** The mock node and a store with the demo wallet connected, and a started panel for `page`: the Staking page's, unless a test reads the MONKEY page's. */
 export async function setup(page: PanelPage = "staking") {
@@ -23,6 +23,8 @@ export async function setup(page: PanelPage = "staking") {
   await connectWallet(store, "browser");
   const panel = new MonkeyPanel(store, page);
   const stop = panel.start(() => false);
+  // The rig's page has its charts on screen, as a mounted card leaves them.
+  for (const name of PAGE_FEEDS[page]) void panel.feed(name).show();
   await panel.refreshWallet();
   return { node, store, panel, stop };
 }

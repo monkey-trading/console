@@ -144,16 +144,39 @@ describe("EpochReads", () => {
     stop();
   });
 
-  it("drops an answer that lands after the card closed, and forgets what it read", async () => {
-    const kit = await setup();
+  it("drops an answer that lands after the card closed, keeping the loaded pages for a tab switch back", async () => {
+    const { epochs, node, stop, served } = await started(EPOCH_PAGE + 5);
+    await epochs.loadMore();
+    expect(epochs.getSnapshot().epochs).toHaveLength(EPOCH_PAGE + 5);
     let release: (value: DistributionEpochsPage) => void = () => {};
-    kit.node.client.stats.distributionEpochs = () => new Promise((resolve) => { release = resolve; });
-    const epochs = new EpochReads(kit.store);
-    const stop = epochs.start(() => false);
+    node.client.stats.distributionEpochs = () => new Promise((resolve) => { release = resolve; });
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS);
     stop();
-    release(page([1], null));
+    release(page([99], null));
     await flush();
-    expect(epochs.getSnapshot()).toMatchObject({ status: "idle", epochs: [] });
+    // The late answer wrote nothing; what was read stays, so the tab switch back shows it while a read refreshes it.
+    expect(epochs.getSnapshot().epochs).toHaveLength(EPOCH_PAGE + 5);
+    node.client.stats.distributionEpochs = (params) => served.answer(params);
+    const restart = epochs.start(() => false);
+    await flush();
+    expect(epochs.getSnapshot().status).toBe("ready");
+    restart();
+  });
+
+  it("keeps the loaded pages across a stop and restart, and folds what closed meanwhile into the restart's read of the newest page", async () => {
+    const { epochs, stop, served } = await started(EPOCH_PAGE + 5);
+    await epochs.loadMore();
+    expect(epochs.getSnapshot().epochs).toHaveLength(EPOCH_PAGE + 5);
+    stop();
+    expect(epochs.getSnapshot()).toMatchObject({ status: "ready" });
+    expect(epochs.getSnapshot().epochs).toHaveLength(EPOCH_PAGE + 5);
+    served.more();
+    const reads = served.reads.length;
+    const restart = epochs.start(() => false);
+    await flush();
+    expect(served.reads).toHaveLength(reads + 1);
+    expect(epochs.getSnapshot().epochs.map((close) => close.epoch)).toEqual(Array.from({ length: EPOCH_PAGE + 6 }, (_, i) => EPOCH_PAGE + 6 - i));
+    restart();
   });
 
   it("keeps the epochs it holds and says why when a later read of the newest page fails, then clears the line once one lands", async () => {

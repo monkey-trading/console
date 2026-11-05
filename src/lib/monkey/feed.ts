@@ -1,7 +1,7 @@
 /**
  * One MONKEY chart's data: the series it plots read for a timeframe, kept bounded, and refreshed
- * on the page's tick. A feed is its own small store, so a chart redraws only when its own
- * data changes, never on the console's stream.
+ * on the page's tick while its card is on screen. A feed is its own small store, so a chart
+ * redraws only when its own data changes, never on the console's stream.
  */
 
 import type { SeriesMetric, SeriesPage, StatsReads } from "../engine/stats-types";
@@ -74,16 +74,35 @@ export class ChartFeed {
   /** Counts loads, so an answer a newer load or a close has overtaken is dropped. */
   private generation = 0;
   private reading = false;
+  /** Whether the chart's card is on screen; a hidden tab's chart is not read. */
+  private shown = false;
 
   constructor(
     readonly metrics: readonly SeriesMetric[],
     private readonly reads: StatsReads,
     private readonly nowMs: () => number,
     /** Whether the page that owns this chart is reading; nothing is read before it starts or after it stops. */
-    private readonly active: () => boolean,
+    private readonly pageOpen: () => boolean,
     initial: TimeframeId,
   ) {
     this.state = { timeframe: initial, read: LOADING };
+  }
+
+  /** Marks the chart shown: its reads may run, and its window is read now if the page is reading. */
+  show(): Promise<void> {
+    this.shown = true;
+    return this.load();
+  }
+
+  /** Marks the chart left: stands its reads down and forgets what they read, as the page's stop does. */
+  hide(): void {
+    this.shown = false;
+    this.close();
+  }
+
+  /** Whether the chart reads now: its page is reading and its card is on screen. */
+  private active(): boolean {
+    return this.pageOpen() && this.shown;
   }
 
   subscribe = (listener: () => void): (() => void) => {
