@@ -43,6 +43,17 @@ export function isCurrentPage(pathname: string | null, href: string): boolean {
   return path === href || (href !== "/" && path.startsWith(`${href}/`));
 }
 
+/**
+ * The `aria-current` value the top bar's link to `href` carries on `pathname`: `"page"` on the exact
+ * match, `"true"` when the path is one of the page's section's sub-routes, nothing elsewhere — a
+ * sub-route is not the page the link opens.
+ */
+export function currentMark(pathname: string | null, href: string): "page" | "true" | undefined {
+  if (pathname === null) return undefined;
+  if ((pathname.replace(/\/+$/, "") || "/") === href) return "page";
+  return isCurrentPage(pathname, href) ? "true" : undefined;
+}
+
 /** Whether `pathname` is the section tab `href` names; a trailing slash on the path does not change the tab. */
 export function isCurrentTab(pathname: string | null, href: string): boolean {
   if (pathname === null) return false;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isCurrentPage, isCurrentTab, PAGES, SECTIONS } from "./nav";
+import { currentMark, isCurrentPage, isCurrentTab, PAGES, SECTIONS } from "./nav";
 
 describe("isCurrentPage", () => {
   it("lists MONKEY after House, Staking after MONKEY, then Funding, and Settings last", () => {
@@ -36,6 +36,27 @@ describe("isCurrentPage", () => {
     expect(isCurrentPage("/notices", "/house")).toBe(false);
     expect(isCurrentPage("/stakingholder", "/staking")).toBe(false);
     expect(isCurrentPage(null, "/")).toBe(false);
+  });
+});
+
+describe("currentMark", () => {
+  it("marks the page on the exact match", () => {
+    expect(currentMark("/staking", "/staking")).toBe("page");
+    expect(currentMark("/staking/", "/staking")).toBe("page");
+    expect(currentMark("/", "/")).toBe("page");
+  });
+
+  it("marks the section link true on one of its sub-routes, not page", () => {
+    expect(currentMark("/staking/rewards", "/staking")).toBe("true");
+    expect(currentMark("/staking/epochs/", "/staking")).toBe("true");
+    expect(currentMark("/house/risk", "/house")).toBe("true");
+  });
+
+  it("marks nothing on another page's route, a path that merely starts with the href, or no path", () => {
+    expect(currentMark("/monkey", "/staking")).toBeUndefined();
+    expect(currentMark("/stakingholder", "/staking")).toBeUndefined();
+    expect(currentMark("/notices", "/")).toBeUndefined();
+    expect(currentMark(null, "/staking")).toBeUndefined();
   });
 });
 

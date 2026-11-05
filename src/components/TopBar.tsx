@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { formatFixedPlaces, type Fixed } from "@/lib/fixed";
-import { isCurrentPage, PAGES } from "@/lib/nav";
+import { currentMark, PAGES } from "@/lib/nav";
 import { formatClock } from "@/lib/time";
 
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -44,9 +44,9 @@ export function TopBar() {
         <span aria-hidden="true" className="hidden text-caption text-fg-3 sm:inline">/</span>
         <nav aria-label="Pages" className="flex flex-wrap items-center gap-x-1 sm:gap-x-2">
           {PAGES.map(({ href, label }) => {
-            const current = isCurrentPage(pathname, href);
+            const mark = currentMark(pathname, href);
             return (
-              <Link key={href} href={href} aria-current={current ? "page" : undefined} className={current ? NAV_CURRENT : NAV_ITEM}>{label}</Link>
+              <Link key={href} href={href} aria-current={mark} className={mark !== undefined ? NAV_CURRENT : NAV_ITEM}>{label}</Link>
             );
           })}
         </nav>
