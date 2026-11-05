@@ -175,6 +175,22 @@ describe("OperatorReads", () => {
     stop();
   });
 
+  it("clears a retained list to loading when the reads restart while the node cannot be trusted, keeping the held one", async () => {
+    const { operators, store, counts, stop } = await started();
+    const held = operators.getSnapshot().list.value;
+    stop();
+    store.patch({ attestation: { kind: "unverified", reason: "gone" } });
+    const restart = operators.start(() => false);
+    expect(operators.getSnapshot()).toMatchObject({
+      route: { status: "loading", value: null, message: null },
+      list: { status: "loading", value: null, message: null },
+      held: { view: held },
+    });
+    await vi.advanceTimersByTimeAsync(NODE_READ_MS * 2);
+    expect(counts).toEqual({ route: 1, list: 1 });
+    restart();
+  });
+
   it("stops following the node's trust once closed, drops an answer that lands after it closed, and keeps the last list for a tab switch back", async () => {
     const { operators, store, node, counts, stop } = await started();
     let release = () => {};

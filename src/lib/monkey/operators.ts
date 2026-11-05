@@ -86,6 +86,12 @@ export class OperatorReads {
     void this.refresh();
     // No figure from a node the console has stopped trusting stays on the card, and a node trusted again is read at once.
     let readable = this.nodeReadable();
+    if (!readable) {
+      // A list retained from before the trust loss must not show as current: the held one stays for the picker.
+      this.routeRead += 1;
+      this.listRead += 1;
+      this.set({ route: LOADING, list: LOADING });
+    }
     const stopFollowing = this.store.subscribe(() => {
       const now = this.nodeReadable();
       if (now === readable) return;
