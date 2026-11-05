@@ -9,6 +9,7 @@ import type { OperatorRoute } from "../engine/stats-types";
 import { DelegationReads } from "../staking/delegation-reads";
 import { changeDelegation } from "./actions";
 import { hostnameListed, shownHostname } from "../staking/hostnames";
+import { operatorsView } from "../staking/operator-table";
 import { mirroredElection, OperatorReads, operatorsShown } from "./operators";
 import { NODE_READ_MS } from "./panel";
 import { flush, setup } from "./panel-kit";
@@ -191,26 +192,37 @@ describe("OperatorReads", () => {
     restart();
   });
 
-  it("stops following the node's trust once closed, drops an answer that lands after it closed, and keeps the last list for a tab switch back", async () => {
+  it("stops following the node's trust once closed, drops a distinguishable answer that lands after it closed, and adopts the one a restart begins", async () => {
     const { operators, store, node, counts, stop } = await started();
-    let release = () => {};
-    const real = node.client.stats.operators;
-    node.client.stats.operators = () => new Promise((resolve) => { release = () => { void real().then(resolve); }; });
+    const pending: ((list: OperatorList) => void)[] = [];
+    const listRead = node.client.stats.operators;
+    node.client.stats.operators = () => {
+      counts.list += 1;
+      return new Promise((resolve) => { pending.push(resolve); });
+    };
+    const original = await listRead();
+    // Answers the retained list can be told from: a late or resumed one that is adopted moves the total stake.
+    const withTotal = (extra: bigint): OperatorList => ({ ...original, total_staked: (BigInt(original.total_staked) + extra).toString() });
     const read = operators.refresh();
     stop();
-    release();
+    const retained = operators.getSnapshot().list.value;
+    pending[0]?.(withTotal(1n));
     await read;
+    // The late answer must not land: the retained snapshot is byte-identical once it has resolved.
+    expect(operators.getSnapshot().list.value).toBe(retained);
+    expect(operators.getSnapshot().list.value?.totalStaked).toBe(operatorsView(original).totalStaked);
     store.patch({ attestation: { kind: "unverified", reason: "gone" } });
     store.patch({ attestation: { kind: "mock" } });
     await flush();
     expect(counts.route).toBe(2);
     // What was read stays, so a tab switch back shows the last list while a read begun at the restart refreshes it.
-    const held = operators.getSnapshot().list.value;
-    expect(held?.rows).toHaveLength(CANDIDATE_LIMIT);
     const restart = operators.start(() => false);
     await flush();
     expect(counts.route).toBe(3);
-    expect(operators.getSnapshot().list.value).not.toBeNull();
+    expect(pending).toHaveLength(2);
+    pending[1]?.(withTotal(2n));
+    await flush();
+    expect(operators.getSnapshot().list.value?.totalStaked).toBe(operatorsView(original).totalStaked + 2n);
     restart();
   });
 
