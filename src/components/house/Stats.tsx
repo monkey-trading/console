@@ -105,7 +105,7 @@ export function HouseFigures() {
         <Row label="NAV" tip="Net asset value: cash less the clients' unrealised profit at current marks." value={formatUsd(nav)} />
         <Row label="Unrealised P&L" tip="The house's result on the positions open now at current marks: NAV less cash. Negative when clients are ahead." value={formatUsd(unrealised)} tone={sign(unrealised)} />
         <Row label="Queued withdrawals" tip="What the vault still owes clients waiting in the withdrawal queue." value={queue === null ? "—" : formatUsd(queue.remaining)} />
-        <Row label="Distributed" tip="USDC the node has distributed in total out of NAV above the liquidity floor: to stakers, and while operator rotation is on, a fifth of each close to the operator in effect. Each epoch that pays steps NAV down by what it paid, marked on the NAV chart." value={paid === null ? "—" : formatUsdc(paid)} />
+        <Row label="Distributed" tip="USDC the node has distributed in total out of NAV above the liquidity floor: to stakers, and while operator rotation is on, a fifth of each close to the operator in effect. Each epoch that pays steps NAV down by what it paid, marked on the NAV chart on the Dashboard." value={paid === null ? "—" : formatUsdc(paid)} />
         <Row label="Gross exposure" tip="The sum of the house's absolute net exposure in each market, in dollars: opposite positions in different markets do not cancel." value={formatUsd(gross)} />
         <Row label="Volume" tip={scan === null ? "USD traded in the recent window." : `USD traded since ${formatStamp(scan.volumeSinceMs)} UTC, the start of the node's volume window.`} value={scan === null ? "—" : formatUsd(scan.volume)} />
       </dl>

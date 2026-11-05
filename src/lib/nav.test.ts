@@ -21,6 +21,8 @@ describe("isCurrentPage", () => {
     expect(isCurrentPage("/staking/rewards", "/staking")).toBe(true);
     expect(isCurrentPage("/staking/epochs/", "/staking")).toBe(true);
     expect(isCurrentPage("/house/risk", "/house")).toBe(true);
+    expect(isCurrentPage("/house/withdrawals", "/house")).toBe(true);
+    expect(isCurrentPage("/monkey/activity", "/monkey")).toBe(true);
   });
 
   it("marks `/` current only on `/`", () => {
@@ -67,6 +69,30 @@ describe("isCurrentTab", () => {
     const [delegate, rewards] = SECTIONS["/staking"].tabs;
     expect(isCurrentTab("/staking", delegate?.href ?? "")).toBe(true);
     expect(isCurrentTab("/staking/rewards", rewards?.href ?? "")).toBe(true);
+  });
+
+  it("marks the House and MONKEY section's tabs on their own routes", () => {
+    const [overview, risk, withdrawals] = SECTIONS["/house"].tabs;
+    const [emissions, activity] = SECTIONS["/monkey"].tabs;
+    expect(isCurrentTab("/house", overview?.href ?? "")).toBe(true);
+    expect(isCurrentTab("/house/risk", risk?.href ?? "")).toBe(true);
+    expect(isCurrentTab("/house/withdrawals", withdrawals?.href ?? "")).toBe(true);
+    expect(isCurrentTab("/house/risk", overview?.href ?? "")).toBe(false);
+    expect(isCurrentTab("/monkey", emissions?.href ?? "")).toBe(true);
+    expect(isCurrentTab("/monkey/activity", activity?.href ?? "")).toBe(true);
+    expect(isCurrentTab("/monkey/activity", emissions?.href ?? "")).toBe(false);
+  });
+
+  it("lists every section's tabs in the order the bar shows them", () => {
+    expect(SECTIONS["/house"].tabs.map((tab) => [tab.href, tab.label])).toEqual([
+      ["/house", "Overview"],
+      ["/house/risk", "Risk"],
+      ["/house/withdrawals", "Withdrawals"],
+    ]);
+    expect(SECTIONS["/monkey"].tabs.map((tab) => [tab.href, tab.label])).toEqual([
+      ["/monkey", "Emissions"],
+      ["/monkey/activity", "Activity"],
+    ]);
   });
 
   it("ignores a trailing slash on the path", () => {

@@ -1,12 +1,12 @@
-/** The MONKEY screen: the account's emissions and their claim, the token's state, activity and charts. */
+/** The MONKEY screen's Emissions tab: the account's MONKEY emissions with their claim, and the token. */
 
 import type { Metadata } from "next";
 
-import { MonkeyPage } from "@/components/MonkeyPage";
+import { MonkeyEmissions } from "@/components/monkey/MonkeyEmissions";
 import { SITE_NAME } from "@/lib/site";
 
 export const metadata: Metadata = { title: `MONKEY | ${SITE_NAME}` };
 
 export default function Page() {
-  return <MonkeyPage />;
+  return <MonkeyEmissions />;
 }
