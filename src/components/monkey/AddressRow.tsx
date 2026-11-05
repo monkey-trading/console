@@ -33,8 +33,8 @@ export function AddressRow({ label, address }: { label: string; address: string 
   return (
     <Row label={label}>
       {address === null ? <span className="text-fg-3">Not set in this build</span> : (
-        <span className="inline-flex items-center gap-2">
-          <span title={address} className="whitespace-nowrap">{shortHex(address, 4, 4)}</span>
+        <span className="inline-flex max-w-full flex-wrap items-center justify-end gap-2">
+          <span title={address} className="min-w-0 [overflow-wrap:anywhere]">{shortHex(address, 4, 4)}</span>
           <button type="button" onClick={copy} className="min-h-6 rounded border border-line-2 px-1.5 text-label text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">
             Copy<span className="sr-only"> {label} address</span>
           </button>

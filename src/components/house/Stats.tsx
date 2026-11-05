@@ -53,35 +53,37 @@ export function OpenPositions() {
             <Row label="Open margin" tip="The margin clients have posted against their open positions, in dollars." value={scan.openMargin === null ? "—" : formatUsd(scan.openMargin)} />
             <Row label="Open positions" tip="How many positions are open across all markets." value={scan.openPositions === null ? "—" : groupThousands(scan.openPositions)} />
           </dl>
-          <table className="w-full table-fixed border-collapse">
-            <caption className="sr-only">Clients&apos; long and short notional in each market, and the net of the two</caption>
-            <thead>
-              <tr>
-                <th scope="col" className="py-1 text-left text-label font-normal tracking-caps text-fg-3 uppercase">Market</th>
-                <th scope="col" className={HEAD}><Term label="Long" tip="Clients' long notional: positions that gain when the price rises, so the house loses." /></th>
-                <th scope="col" className={HEAD}><Term label="Short" tip="Clients' short notional: positions that gain when the price falls." /></th>
-                <th scope="col" className={HEAD}><Term label="Net" tip="Long less short. The house holds the opposite: a positive net leaves it short." /></th>
-              </tr>
-            </thead>
-            <tbody>
-              {scan.markets.map((m) => (
-                <tr key={m.market} className="border-t border-line">
-                  <th scope="row" className="truncate py-1 text-left text-caption font-normal text-fg-2">{m.symbol}</th>
-                  <td className={`${CELL} text-glow`}>{compact(m.long)}</td>
-                  <td className={`${CELL} text-ember`}>{compact(m.short)}</td>
-                  <td className={`${CELL} ${m.net !== null && m.net < 0n ? "text-ember" : "text-fg"}`}>{net(m.net)}</td>
+          <div role="region" aria-label="Open positions by market" tabIndex={0} className="max-w-full overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
+            <table className="w-full border-collapse">
+              <caption className="sr-only">Clients&apos; long and short notional in each market, and the net of the two</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="py-1 text-left text-label font-normal tracking-caps text-fg-3 uppercase">Market</th>
+                  <th scope="col" className={HEAD}><Term label="Long" tip="Clients' long notional: positions that gain when the price rises, so the house loses." /></th>
+                  <th scope="col" className={HEAD}><Term label="Short" tip="Clients' short notional: positions that gain when the price falls." /></th>
+                  <th scope="col" className={HEAD}><Term label="Net" tip="Long less short. The house holds the opposite: a positive net leaves it short." /></th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t border-line-2">
-                <th scope="row" className="py-1 text-left text-caption font-normal text-fg">Total</th>
-                <td className={`${CELL} text-glow`}>{compact(total.long)}</td>
-                <td className={`${CELL} text-ember`}>{compact(total.short)}</td>
-                <td className={`${CELL} text-fg`}>{net(total.net)}</td>
-              </tr>
-            </tfoot>
-          </table>
+              </thead>
+              <tbody>
+                {scan.markets.map((m) => (
+                  <tr key={m.market} className="border-t border-line">
+                    <th scope="row" className="truncate py-1 text-left text-caption font-normal text-fg-2">{m.symbol}</th>
+                    <td className={`${CELL} text-glow`}>{compact(m.long)}</td>
+                    <td className={`${CELL} text-ember`}>{compact(m.short)}</td>
+                    <td className={`${CELL} ${m.net !== null && m.net < 0n ? "text-ember" : "text-fg"}`}>{net(m.net)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-line-2">
+                  <th scope="row" className="py-1 text-left text-caption font-normal text-fg">Total</th>
+                  <td className={`${CELL} text-glow`}>{compact(total.long)}</td>
+                  <td className={`${CELL} text-ember`}>{compact(total.short)}</td>
+                  <td className={`${CELL} text-fg`}>{net(total.net)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
           <p className="text-label text-fg-3">Every account on the node, not only yours. {scan.snapshotMs === null ? "The node has not completed its first scan yet." : `Scanned at ${formatClock(scan.snapshotMs)} UTC.`}</p>
         </>
       )}

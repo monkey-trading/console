@@ -22,9 +22,11 @@ export function HouseOverview() {
           <CapPanel />
           <Parameters />
           <Checkpoints />
+          <div className="col-span-full">
+            <DashboardLink href="/dashboard#house">See the history of NAV, exposure and the queue on the Dashboard</DashboardLink>
+          </div>
         </div>
       )}
-      <DashboardLink href="/dashboard#house">See the history of NAV, exposure and the queue on the Dashboard</DashboardLink>
     </div>
   );
 }
