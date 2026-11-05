@@ -36,14 +36,14 @@ export type CandidateSource =
 /** The source for the node's list `list`, the last one verified `held`, and why the node's answers may not be read now (`blocked`, null while they may). */
 export function candidateSource(list: Read<OperatorsView>, held: { view: OperatorsView; verifiedAtMs: number } | null, blocked: NodeBlocked | null): CandidateSource {
   if (list.status === "ready" && list.value !== null) return { kind: "current" };
-  if (blocked === null && list.status === "loading") return { kind: "loading" };
+  if (blocked === null && list.status === "loading" && held === null) return { kind: "loading" };
   const why: NoList = blocked ?? "unread";
   return held === null ? { kind: "none", why } : { kind: "held", verifiedAtMs: held.verifiedAtMs, block: held.view.block.number, why };
 }
 
 /** Whether a picker offers the address field: off the node's list, and while anything typed stays, so a destination is never swapped under the visitor. */
 export function offersTyped(source: CandidateSource, typed: string): boolean {
-  return source.kind === "held" || source.kind === "none" || typed.trim() !== "";
+  return source.kind !== "current" || typed.trim() !== "";
 }
 
 /** The zero address, which no candidate has: the staking contract refuses it. */

@@ -17,6 +17,7 @@ import {
   setTypedTo,
   TYPED_EDITOR,
   type EditingState,
+  type EditingUpdate,
 } from "./delegation-form";
 
 const A = "0x00000000000000000000000000000000000000a1";
@@ -26,20 +27,20 @@ const C = "0x00000000000000000000000000000000000000c3";
 describe("openRowEditor", () => {
   it("starts another row's editor afresh: no destination chosen or address typed under the last row", () => {
     const moving = { ...NO_EDITING, editing: { candidate: A, mode: "move" as const }, moveTo: B, typedMove: "0x12" };
-    expect(openRowEditor(moving, { candidate: C, mode: "move" })).toEqual({ ...moving, editing: { candidate: C, mode: "move" }, moveTo: "", typedMove: "" });
-    expect(openRowEditor(moving, null)).toEqual({ ...moving, editing: null, moveTo: "", typedMove: "" });
+    expect(openRowEditor(moving, { candidate: C, mode: "move" })).toEqual({ ...moving, editorVersion: moving.editorVersion + 1, editing: { candidate: C, mode: "move" }, moveTo: "", typedMove: "" });
+    expect(openRowEditor(moving, null)).toEqual({ ...moving, editorVersion: moving.editorVersion + 1, editing: null, moveTo: "", typedMove: "" });
   });
 
   it("keeps what the same row's Move form holds when it switches to Take back", () => {
     const moving = { ...NO_EDITING, editing: { candidate: A, mode: "move" as const }, moveTo: B, typedMove: "" };
-    expect(openRowEditor(moving, { candidate: A, mode: "undelegate" })).toEqual({ ...moving, editing: { candidate: A, mode: "undelegate" } });
+    expect(openRowEditor(moving, { candidate: A, mode: "undelegate" })).toEqual({ ...moving, editorVersion: moving.editorVersion + 1, editing: { candidate: A, mode: "undelegate" } });
   });
 
   it("closes the typed-address editor, and opening it closes a row editor: one editor at a time", () => {
     const typed = openTypedEditor(NO_EDITING, true);
     expect(openRowEditor(typed, { candidate: A, mode: "delegate" }).typedOpen).toBe(false);
     const row = openRowEditor(NO_EDITING, { candidate: A, mode: "delegate" });
-    expect(openTypedEditor(row, true)).toEqual({ ...row, editing: null, typedOpen: true });
+    expect(openTypedEditor(row, true)).toEqual({ ...row, editorVersion: row.editorVersion + 1, editing: null, typedOpen: true });
   });
 
   it("keeps typed amounts across opens and closes: they are kept per editor, so none carries to another row", () => {
@@ -113,20 +114,47 @@ describe("the account-keyed store (editingFor and keptFor)", () => {
     const keyB = amountKey("undelegate", B);
     let held = keptFor(A, openRowEditor(NO_EDITING, { candidate: A, mode: "delegate" }), stored(A));
     held = keptFor(A, setAmount(held.editing, keyA, "10"), held);
+    const submittedVersion = held.editing.editorVersion;
     // The wallet prompt is up: the visitor opens bravo's Take back and types 5.
     held = keptFor(A, openRowEditor(held.editing, { candidate: B, mode: "undelegate" }), held);
     held = keptFor(A, setAmount(held.editing, keyB, "5"), held);
     held = keptFor(A, (now) => clearAmount(now, keyA, "10"), held);
-    held = keptFor(A, (now) => closeEditor(now), held);
-    expect(held.editing.editing).toBeNull();
+    held = keptFor(A, (now) => closeEditor(now, submittedVersion), held);
+    expect(held.editing.editing).toEqual({ candidate: B, mode: "undelegate" });
     expect(held.editing.amounts[keyA]).toBe("");
     expect(held.editing.amounts[keyB]).toBe("5");
   });
 
-  it("a late landing after a switch to another account writes under that account, not over the stored one", () => {
-    // Account A typed 10 and sent; before the send landed, the wallet switched to B.
-    const held = stored(A, withAmount);
-    const next = keptFor(B, (now) => closeEditor(now), held);
-    expect(next).toEqual({ account: B, editing: NO_EDITING });
+  it("ignores a setter retained by another account, before or after that account edits", () => {
+    let connected: string | null = A;
+    let held = stored(A, withAmount);
+    const captured = (next: EditingUpdate) => { held = keptFor(A, next, held, connected); };
+    for (const account of [B, null]) {
+      connected = account;
+      const before = held;
+      captured((now) => clearAmount(now, amountKey("delegate", A), "10"));
+      captured((now) => closeEditor(now));
+      expect(held).toBe(before);
+    }
+    connected = B;
+    held = keptFor(B, openRowEditor(withAmount, { candidate: B, mode: "delegate" }), held, connected);
+    const before = held;
+    captured((now) => clearAmount(now, amountKey("delegate", A), "10"));
+    captured((now) => closeEditor(now));
+    expect(held).toBe(before);
+    expect(held.editing.editing).toEqual({ candidate: B, mode: "delegate" });
+  });
+
+  it("does not close a different editor, or a reopened instance of the same row or typed editor", () => {
+    for (const typed of [false, true]) {
+      const sent = typed ? openTypedEditor(NO_EDITING, true) : openRowEditor(NO_EDITING, { candidate: A, mode: "delegate" });
+      expect(closeEditor(sent, sent.editorVersion).editing).toBeNull();
+      expect(closeEditor(sent, sent.editorVersion).typedOpen).toBe(false);
+      const other = openRowEditor(sent, { candidate: B, mode: "delegate" });
+      expect(closeEditor(other, sent.editorVersion)).toBe(other);
+      const closed = closeEditor(sent);
+      const reopened = typed ? openTypedEditor(closed, true) : openRowEditor(closed, { candidate: A, mode: "delegate" });
+      expect(closeEditor(reopened, sent.editorVersion)).toBe(reopened);
+    }
   });
 });

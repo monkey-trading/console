@@ -201,6 +201,12 @@ describe("ariaSort", () => {
 });
 
 describe("yoursRows", () => {
+  it("distinguishes unknown membership without a list from an address omitted by a verified list", () => {
+    const delegations = [{ candidate: DEPLOYER, amount: 1n }];
+    expect(yoursRows([], delegations, false).map((row) => row.role)).toEqual(["unknown"]);
+    expect(yoursRows([], delegations, true).map((row) => row.role)).toEqual(["unlisted"]);
+  });
+
   const rows = many(100);
 
   it("lists every delegation the chain reports, the list's row where it names the candidate, in the chain's order", () => {

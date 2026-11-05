@@ -10,6 +10,8 @@ export type EditorMode = "delegate" | "move" | "undelegate";
 
 /** The Delegate tab's editing context, as the Staking section holds it across its tabs. */
 export interface DelegateEditing {
+  /** Changes whenever an editor opens or closes, so an old completion cannot close a newer instance. */
+  editorVersion: number;
   /** The row editor open, if any: the row's candidate and which change it makes. */
   editing: { candidate: string; mode: EditorMode } | null;
   /** Whether the "Delegate to an address" editor is open. */
@@ -24,7 +26,7 @@ export interface DelegateEditing {
   amounts: Readonly<Record<string, string>>;
 }
 
-export const NO_EDITING: DelegateEditing = { editing: null, typedOpen: false, moveTo: "", typedMove: "", typedTo: "", amounts: {} };
+export const NO_EDITING: DelegateEditing = { editorVersion: 0, editing: null, typedOpen: false, moveTo: "", typedMove: "", typedTo: "", amounts: {} };
 
 /**
  * A write to the editing context: the next context, or an updater applied to what is stored now —
@@ -44,10 +46,11 @@ export function editingFor(held: EditingState, account: string | null): Delegate
 }
 
 /**
- * How a write lands: under the account connected when it is made, applied to what is stored now —
- * an updater reads the current account's context, never another account's.
+ * Applies a render's write only while its account is still connected; an updater reads that
+ * account's current context, never another account's.
  */
-export function keptFor(account: string | null, next: EditingUpdate, held: EditingState): EditingState {
+export function keptFor(account: string | null, next: EditingUpdate, held: EditingState, connected = account): EditingState {
+  if (account !== connected) return held;
   const editing = typeof next === "function" ? next(editingFor(held, account)) : next;
   return { account, editing };
 }
@@ -70,6 +73,7 @@ export function openRowEditor(state: DelegateEditing, next: DelegateEditing["edi
   const sameRow = next?.candidate === state.editing?.candidate;
   return {
     ...state,
+    editorVersion: state.editorVersion + 1,
     editing: next,
     typedOpen: false,
     moveTo: sameRow ? state.moveTo : "",
@@ -79,12 +83,13 @@ export function openRowEditor(state: DelegateEditing, next: DelegateEditing["edi
 
 /** Opens or closes the "Delegate to an address" editor; it is the one editor, so a row editor closes. */
 export function openTypedEditor(state: DelegateEditing, open: boolean): DelegateEditing {
-  return { ...state, editing: null, typedOpen: open };
+  return { ...state, editorVersion: state.editorVersion + 1, editing: null, typedOpen: open };
 }
 
-/** Closes whichever editor is open; what was typed stays for the next time it opens. */
-export function closeEditor(state: DelegateEditing): DelegateEditing {
-  return { ...state, editing: null, typedOpen: false };
+/** Closes the submitted editor instance, if still open; what was typed stays for its next opening. */
+export function closeEditor(state: DelegateEditing, submittedVersion = state.editorVersion): DelegateEditing {
+  if (state.editorVersion !== submittedVersion) return state;
+  return { ...state, editorVersion: state.editorVersion + 1, editing: null, typedOpen: false };
 }
 
 /** Chooses the Move form's destination; what was typed under it is not this destination's. */

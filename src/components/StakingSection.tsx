@@ -110,14 +110,11 @@ export function StakingSection({ children }: { children: ReactNode }) {
     if (trusted) void panel.refreshWallet();
   }, [panel, trusted, wallet]);
   useEffect(() => history.walletChanged(), [history, wallet]);
-  // The Delegate tab's editing context, keyed by the account it belongs to: what one account chose
-  // or typed is not another's, so another account reads as no editor open, and the next write is
-  // kept under the account then connected. Writes may be updaters, applied to what is stored now,
-  // so a send that lands late never restores what a render captured when it was pressed.
+  // Writes belong to their render's account; a late completion checks the connected wallet again.
   const account = wallet?.address ?? null;
   const [editingState, setEditingState] = useState<EditingState>({ account, editing: NO_EDITING });
   const delegateEditing = editingFor(editingState, account);
-  const setDelegateEditing = (next: EditingUpdate) => setEditingState((held) => keptFor(account, next, held));
+  const setDelegateEditing = (next: EditingUpdate) => setEditingState((held) => keptFor(account, next, held, store.getSnapshot().wallet?.address ?? null));
   const [table, setTable] = useState<TableViewState>(NO_TABLE_VIEW);
   const reads: StakingReads = { panel, operators, epochs, delegations, history, operatorsSettled, delegateEditing, setDelegateEditing, table, setTable };
   return (

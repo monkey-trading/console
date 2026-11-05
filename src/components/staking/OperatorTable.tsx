@@ -51,6 +51,7 @@ const ROLE_TONE: Record<OperatorRow["role"], string> = {
   standby: "border-line-2 text-fg",
   candidate: "border-line-2 text-fg-2",
   unlisted: "border-line-2 text-fg-3",
+  unknown: "border-line-2 text-fg-3",
 };
 
 /** The row's role and whether it would count in an election close now. */
@@ -85,7 +86,7 @@ function Actions({ row, label, held, listed, source, editing, onEdit, disabled, 
   const open = editing.editing?.candidate === row.address ? editing.editing.mode : null;
   const toggle = (mode: EditorMode) => onEdit(openRowEditor(editing, open === mode ? null : { candidate: row.address, mode }));
   if (!canVote || (!row.listed && mine === 0n)) return null;
-  const canMove = listed.some((candidate) => candidate.address !== row.address) || source.kind === "held" || source.kind === "none";
+  const canMove = listed.some((candidate) => candidate.address !== row.address) || source.kind === "held" || source.kind === "none" || source.kind === "loading";
   return (
     <div className="flex flex-wrap gap-2 lg:justify-end">
       {row.listed && (
@@ -114,7 +115,7 @@ function editorFor(idPrefix: string, row: OperatorRow, props: Props) {
   if (open === null || chain === null) return null;
   const options = listed.filter((candidate) => candidate.address !== row.address).map((candidate) => ({ value: candidate.address, label: nameOf(candidate.address) }));
   return (
-    <div id={`${idPrefix}-${open}`} className="space-y-2 rounded border border-line-2 p-3">
+    <div id={`${idPrefix}-${open}`} data-delegation-editor={editing.editorVersion} className="space-y-2 rounded border border-line-2 p-3">
       <DelegationEditor mode={open} candidate={row.address} label={nameOf(row.address)} chain={chain} options={options} source={source} editing={editing} onEdit={onEdit} disabled={disabled} nameOf={nameOf} send={send} />
     </div>
   );

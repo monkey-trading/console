@@ -40,8 +40,12 @@ describe("operatorCells", () => {
     });
   });
 
+  it("does not claim list membership for chain-only rows with no registry evidence", () => {
+    expect(operatorCells({ ...ROW, hostname: null, role: "unknown", listed: false, bond: null })).toMatchObject({ name: "0x000000…00a1", role: "—", eligibility: "—" });
+  });
+
   it("labels every role", () => {
-    expect(ROLE_LABELS).toEqual({ active: "Active", elected: "Elected", promoted: "Promoted", standby: "Standby", candidate: "Candidate", unlisted: "Unlisted" });
+    expect(ROLE_LABELS).toEqual({ active: "Active", elected: "Elected", promoted: "Promoted", standby: "Standby", candidate: "Candidate", unlisted: "Unlisted", unknown: "—" });
   });
 });
 

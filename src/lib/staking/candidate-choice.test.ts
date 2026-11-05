@@ -24,6 +24,7 @@ describe("candidateSource", () => {
     expect(candidateSource(failed(new Error("stale"), view), held, null)).toEqual({ kind: "held", verifiedAtMs: held.verifiedAtMs, block: 269, why: "unread" });
     expect(candidateSource({ status: "unavailable", value: null, message: null }, null, null)).toEqual({ kind: "none", why: "unread" });
     expect(candidateSource(LOADING, null, "unverified")).toEqual({ kind: "none", why: "unverified" });
+    expect(candidateSource(LOADING, held, null)).toEqual({ kind: "held", verifiedAtMs: held.verifiedAtMs, block: 269, why: "unread" });
     expect(candidateSource(LOADING, held, "clock")).toEqual({ kind: "held", verifiedAtMs: held.verifiedAtMs, block: 269, why: "clock" });
   });
 
@@ -38,7 +39,7 @@ describe("candidateSource", () => {
 describe("offersTyped and pickedCandidate", () => {
   it("offers the address field off the node's list, and while anything typed stays", () => {
     expect(offersTyped({ kind: "current" }, "")).toBe(false);
-    expect(offersTyped({ kind: "loading" }, "")).toBe(false);
+    expect(offersTyped({ kind: "loading" }, "")).toBe(true);
     expect(offersTyped({ kind: "none", why: "unverified" }, "")).toBe(true);
     expect(offersTyped({ kind: "current" }, "0xab")).toBe(true);
   });

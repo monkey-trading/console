@@ -130,22 +130,47 @@ describe("the operators card on the Delegate tab", () => {
     expect(html).toContain("Delegate to an address");
   });
 
+  it("keeps the held row and editor while a recovered node's replacement list loads, and explains a failed list", () => {
+    const editing = { ...NO_EDITING, editing: { candidate: BRAVO, mode: "delegate" as const } };
+    const held = { view, verifiedAtMs: VERIFIED_AT };
+    for (const list of [LOADING, { status: "failed" as const, value: null, message: "the node did not answer" }]) {
+      const html = render({ state: VERIFIED, operators: { route: LOADING, list, held }, read: chain(), editing });
+      expect(html).toContain(`${HELD_LINE} the node&#x27;s operator list cannot be read now.`);
+      expect(html).toContain("bravo.example");
+      expect(html).toContain("Amount to delegate");
+      expect(html).toContain('aria-expanded="true"');
+    }
+  });
+
+  it("keeps chain-only rows neutral and actionable while the first verified list loads", () => {
+    const html = render({ state: VERIFIED, operators: { route: LOADING, list: LOADING, held: null }, read: chain() });
+    expect(html).toContain("All —");
+    expect(html).not.toContain("Unlisted");
+    expect(html).toContain("0x000000…00a1");
+    expect(html.match(/aria-disabled="false"[^>]*>Move<span/g)).toHaveLength(2);
+    expect(html).toContain("Take back<span");
+    expect(html).toContain("Delegate to an address");
+  });
+
   it("blames the device clock, not the node, when the two disagree", () => {
     const state = { ...UNVERIFIED, attestation: { kind: "clock" as const, skewMs: 90_000 } };
     const html = render({ state, operators: { route: LOADING, list: LOADING, held: { view, verifiedAtMs: VERIFIED_AT } }, read: chain() });
     expect(html).toContain(`${HELD_LINE} your device clock differs from the node&#x27;s signed time.`);
   });
 
-  it("with no list held and no delegations, offers the typed address alone, refused when it fails its checksum or is the zero address", () => {
+  it("with no list held, gates the typed Delegate submit on the address checksum and nonzero value", () => {
     const mixed = "0x52908400098527886E0F7030069857D2E4169EE7";
     const base = { state: UNVERIFIED, operators: { route: LOADING, list: LOADING, held: null } as OperatorsState, read: chain(false, []) };
     expect(render(base)).toContain("Delegate to an address");
     expect(render(base)).not.toContain("Search operators");
-    const field = (typedTo: string) => render({ ...base, editing: { ...NO_EDITING, typedOpen: true, typedTo } });
+    const field = (typedTo: string) => render({ ...base, editing: { ...NO_EDITING, typedOpen: true, typedTo, amounts: { [amountKey("delegate", "typed")]: "10" } } });
     expect(field("")).toContain("A candidate&#x27;s address");
     expect(field(mixed.replace("E7", "e7"))).toContain("Enter a candidate&#x27;s 0x address of 40 hexadecimal digits, as its checksum has it.");
     expect(field("0x0000000000000000000000000000000000000000")).toContain("Enter a candidate&#x27;s 0x address");
     expect(field(mixed)).not.toContain("Enter a candidate&#x27;s 0x address");
+    expect(field(mixed.replace("E7", "e7"))).toMatch(/type="submit" aria-disabled="true"[^>]*>Delegate/);
+    expect(field("0x0000000000000000000000000000000000000000")).toMatch(/type="submit" aria-disabled="true"[^>]*>Delegate/);
+    expect(field(mixed)).toMatch(/type="submit" aria-disabled="false"[^>]*>Delegate/);
   });
 
   it("keeps each delegation's Take back and Move, read from the chain, with no list held", () => {
@@ -155,7 +180,8 @@ describe("the operators card on the Delegate tab", () => {
     ]);
     const html = render({ state: UNVERIFIED, operators: { route: LOADING, list: LOADING, held: null }, read, table: { ...NO_TABLE_VIEW, show: "yours" } });
     // No list names them: the Yours rows are the chain's read alone, each named by its address, with Move and Take back.
-    expect(html).toContain("All 0");
+    expect(html).toContain("All —");
+    expect(html).not.toContain("Unlisted");
     expect(html).toContain("Yours 2");
     expect(html).toContain("Showing 1–2 of 2 operators.");
     expect(html).toContain("0x000000…00a1");
@@ -180,7 +206,7 @@ describe("the operators card on the Delegate tab", () => {
   it("says on the card when the chain's delegation read runs or fails, and not for another account's read", () => {
     const operators = { route: LOADING, list: LOADING, held: { view, verifiedAtMs: VERIFIED_AT } } as OperatorsState;
     const loading = render({ state: UNVERIFIED, operators, read: { account: WALLET.address, read: LOADING, settling: false } });
-    expect(loading).toContain("Reading your delegations from the chain…");
+    expect(loading).toContain('class="sr-only">Reading your delegations from the chain…');
     const broken: DelegationsState = { account: WALLET.address, read: { status: "failed", value: chain().read.value, message: "the wallet did not answer" }, settling: true };
     const failed = render({ state: UNVERIFIED, operators, read: broken });
     expect(failed).toContain("Could not read: the wallet did not answer. It is tried again at the next refresh.");
@@ -189,7 +215,7 @@ describe("the operators card on the Delegate tab", () => {
     expect(render({ state: UNVERIFIED, operators, read: { ...broken, account: BRAVO } })).not.toContain("Could not read");
   });
 
-  it("holds the table view beside the editing context: a page-3 editor and a Yours-only row are on screen after a tab switch", () => {
+  it("renders the page-3 and Yours-only editors supplied by the section context", () => {
     // Thirty candidates page the table; the wallet delegates to the last of them.
     const many = operatorsView({
       block: { number: 4_321, hash: `0x${"cd".repeat(32)}`, time_ms: VERIFIED_AT }, registry: ALPHA, lens: ALPHA, rotation_enabled: true,
@@ -208,8 +234,6 @@ describe("the operators card on the Delegate tab", () => {
     const page3: TableViewState = { search: "", sort: "role", show: "all", page: 2 };
     const editing: DelegateEditing = { ...NO_EDITING, editing: { candidate: op30, mode: "delegate" }, amounts: { [amountKey("delegate", op30)]: "7" } };
     const read = chain(false, [{ candidate: op30, amount: 700n * MONKEY_UNIT }]);
-    render({ state: VERIFIED, operators, read, editing, table: page3 });
-    // Delegate → Rewards → Delegate unmounts the card; the section-held view and editor put the same row back on screen.
     const back = render({ state: VERIFIED, operators, read, editing, table: page3 });
     expect(back).toContain("Showing 26–30 of 30 operators.");
     expect(back).toContain("Undelegated 300 MONKEY → 293 MONKEY. Your delegation to op-30.example (0x000000…001e) 700 MONKEY → 707 MONKEY.");
@@ -218,7 +242,6 @@ describe("the operators card on the Delegate tab", () => {
     const yoursOnly = chain(false, [{ candidate: stranger, amount: 300n * MONKEY_UNIT }]);
     const yoursView: TableViewState = { ...NO_TABLE_VIEW, show: "yours" };
     const openStranger: DelegateEditing = { ...NO_EDITING, editing: { candidate: stranger, mode: "undelegate" }, amounts: { [amountKey("undelegate", stranger)]: "5" } };
-    render({ state: VERIFIED, operators, read: yoursOnly, editing: openStranger, table: yoursView });
     const backAgain = render({ state: VERIFIED, operators, read: yoursOnly, editing: openStranger, table: yoursView });
     expect(backAgain).toContain("0x000000…00ff");
     expect(backAgain).toContain("Amount to take back");

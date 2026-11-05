@@ -55,7 +55,7 @@ const hostOf = (origin: string) => new URL(origin).host;
 export function OperatorsPanel({ operators, delegations }: { operators: OperatorReads; delegations: DelegationReads }) {
   const { delegateEditing, setDelegateEditing, table, setTable } = useStaking();
   const panel = useMonkeyPanel();
-  const { deploy, node } = useSession();
+  const { deploy, node, store } = useSession();
   const follow = useNodeFollow();
   const searchId = useId();
   const showId = useId();
@@ -77,7 +77,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
   // render: they are the chain's read alone, no list's.
   const view = source.kind === "current" ? list : source.kind === "held" ? heldList?.view ?? null : null;
   const rows = useMemo(() => view?.rows ?? [], [view]);
-  const yours = useMemo(() => (mine === null ? [] : yoursRows(rows, mine.delegations)), [mine, rows]);
+  const yours = useMemo(() => (mine === null ? [] : yoursRows(rows, mine.delegations, view !== null)), [mine, rows, view]);
   const { search, sort, page, show } = table;
   const shown = view === null || show === "yours" ? yours : rows;
   const pageView = useMemo(() => tableView(shown, search, sort, page), [shown, search, sort, page]);
@@ -93,13 +93,18 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
   const rotation = view?.rotationEnabled ?? route.value?.rotation_enabled ?? null;
   // Every control a delegation sends through reopens on the chain's read alone, whatever the node's
   // own re-reads are doing: no operator may hold a staker's vote in place.
-  const send = (next: DelegationChange, onLanded: () => void) =>
-    changeDelegation(panel, operators, delegations, next, onLanded).then((landed) => {
-      if (landed) {
-        setDelegateEditing((now) => closeEditor(now));
-        focusHeading(TITLE_ID);
+  const send = (next: DelegationChange, onLanded: () => void) => {
+    const active = document.activeElement;
+    const origin = active?.closest("[data-delegation-editor]");
+    const account = wallet?.address ?? null;
+    const version = delegateEditing.editorVersion;
+    return changeDelegation(panel, operators, delegations, next, onLanded).then((landed) => {
+      if (landed && (store.getSnapshot().wallet?.address ?? null) === account) {
+        setDelegateEditing((now) => closeEditor(now, version));
+        if (active === document.activeElement && origin?.contains(active) && origin.getAttribute("data-delegation-editor") === String(version)) document.getElementById(TITLE_ID)?.focus();
       }
     });
+  };
   const setView = (part: Partial<typeof table>) => setTable({ ...table, ...part });
   return (
     <Card id={TITLE_ID} title="Operators">
@@ -129,7 +134,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
         <p className={NOTE}>From the operator list last verified at {formatStamp(source.verifiedAtMs)} UTC, as the registry stood at final block {groupThousands(BigInt(source.block))}: {WHY[source.why]}.</p>
       )}
       {wallet !== null && wallet.readOnly !== true && delegationsRead.account === wallet.address && (delegationsRead.read.status === "loading" || delegationsRead.read.status === "failed") && (
-        <ReadNote read={delegationsRead.read} loading="Reading your delegations from the chain…" />
+        <ReadNote read={delegationsRead.read} loading="Reading your delegations from the chain…" quiet />
       )}
       {/* No single operator may stop a staker voting away from it: off the node's current list, an address the chain alone checks stays a way. The block stays while its editor is open, so clearing the typed address never hides it under the visitor's cursor. */}
       {canVote && mine !== null && (offersTyped(source, delegateEditing.typedTo) || delegateEditing.typedOpen) && (
@@ -148,7 +153,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
             Delegate to an address
           </button>
           {delegateEditing.typedOpen && (
-            <div id={`${typedId}-editor`} className="mt-2 rounded border border-line-2 p-3">
+            <div id={`${typedId}-editor`} data-delegation-editor={delegateEditing.editorVersion} className="mt-2 rounded border border-line-2 p-3">
               <DelegationEditor mode="delegate" candidate={TYPED_EDITOR} label="" chain={mine} options={[]} source={source} editing={delegateEditing} onEdit={setDelegateEditing} disabled={busy || delegationsRead.settling} nameOf={nameOf} send={send} />
             </div>
           )}
@@ -165,7 +170,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
             <div className="space-y-1">
               <span id={showId} className="block text-caption text-fg-2">Show</span>
               <div role="group" aria-labelledby={showId} className="flex gap-2">
-                <button type="button" aria-pressed={view !== null && show === "all"} onClick={() => { setView({ show: "all", page: 0 }); }} className={TOGGLE}>All {rows.length}</button>
+                <button type="button" aria-pressed={view !== null && show === "all"} aria-disabled={view === null} onClick={() => { if (view !== null) setView({ show: "all", page: 0 }); }} className={TOGGLE}>All {view === null ? "—" : rows.length}</button>
                 <button type="button" aria-pressed={view === null || show === "yours"} onClick={() => { setView({ show: "yours", page: 0 }); }} className={TOGGLE}>Yours {yours.length}</button>
               </div>
             </div>
