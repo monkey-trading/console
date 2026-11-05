@@ -74,15 +74,14 @@ export function StakingSection({ children }: { children: ReactNode }) {
     scrollRef.current?.scrollTo({ top: 0 });
     window.scrollTo({ top: 0 });
   }, [pathname]);
-  // Each tab starts only the reads its cards show, and they stop when the tab is left; the panel's
-  // overview and wallet reads serve every tab. Reads start once the node's answers can be trusted,
-  // except the operator list, which follows the node's trust itself, and the delegations, which are
-  // the chain's whatever the node's state. The operator reads also serve the Epochs tab, which names
-  // the operator-share recipients, and the epoch reads the Rewards tab's pending line.
+  // Each read starts once and stays started while any shown tab wants it, so moving between two
+  // tabs that share one never restarts it; the combined booleans are the effects' only deps.
+  const operatorsWanted = onDelegate || onEpochs;
+  const epochsWanted = trusted && (onRewards || onEpochs);
   useEffect(() => (trusted ? panel.start(hidden) : undefined), [panel, trusted]);
-  useEffect(() => (onDelegate || onEpochs ? operators.start(hidden) : undefined), [operators, onDelegate, onEpochs]);
+  useEffect(() => (operatorsWanted ? operators.start(hidden) : undefined), [operators, operatorsWanted]);
   useEffect(() => (onDelegate ? delegations.start(hidden) : undefined), [delegations, onDelegate]);
-  useEffect(() => (trusted && (onRewards || onEpochs) ? epochs.start(hidden) : undefined), [epochs, trusted, onRewards, onEpochs]);
+  useEffect(() => (epochsWanted ? epochs.start(hidden) : undefined), [epochs, epochsWanted]);
   useEffect(() => (trusted && onRewards ? history.start(hidden) : undefined), [history, trusted, onRewards]);
   // The history's registration on the session lives for the section's whole mount, not for its
   // reads' run, so the mock's account reset reaches the retained rows from any tab.

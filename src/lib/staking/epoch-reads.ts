@@ -4,7 +4,8 @@
  * is read on open, again on the node read's pace while the tab is visible, and as soon as the stream
  * carries a distribution allocation, which only an epoch's close makes; a failed read is made again by
  * itself, further apart each time, with no button. The page opens these reads only while the node is
- * trusted, so a reopening reads afresh.
+ * trusted. What was read stays across a stop, so the loaded pages survive a tab switch; the newest page
+ * is read again at the restart, for what the stream carried meanwhile.
  */
 
 import type { DistributionEpochsPage, EpochClose } from "../engine/staking-reads";
@@ -109,11 +110,11 @@ export class EpochReads {
     for (const listener of this.listeners) listener();
   }
 
-  /** Starts the reads, and returns what stops them and forgets what they read. While `isHidden` says the tab is hidden nothing is read again. */
+  /** Starts the reads, and returns what stops them. While `isHidden` says the tab is hidden nothing is read again. What was read stays across a stop, so the loaded pages survive a tab switch; the newest page is read again at the restart, for what the stream carried meanwhile. */
   start(isHidden: () => boolean): () => void {
     this.cycle += 1;
     this.backoff.reset();
-    this.set({ ...IDLE, status: "reading" });
+    if (this.state.status === "idle") this.set({ status: "reading" });
     void this.readNewest(this.cycle);
     const unsubscribe = this.store.deps.client.subscribe((message) => {
       // An allocation is made only by an epoch's close, so a new epoch is on the node now.
@@ -127,7 +128,9 @@ export class EpochReads {
       this.cycle += 1;
       clearInterval(timer);
       unsubscribe();
-      this.set(IDLE);
+      this.reading = false;
+      // What was read stays, so the loaded pages survive a tab switch; a first read cut off mid-flight starts over when the reads resume.
+      this.set({ more: false, ...(this.state.status === "reading" ? { status: "idle" as const } : {}) });
     };
   }
 
