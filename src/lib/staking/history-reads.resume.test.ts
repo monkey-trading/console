@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HistoryPage } from "../engine/types";
 import { DEMO_ADDRESS } from "../mock/demo";
 import { flush, setup } from "../monkey/panel-kit";
+import { moreRemain } from "./distribution-history";
 import { DistributionHistoryReads, HISTORY_PAGE, RETRY_TICK_MS } from "./history-reads";
 import { epochsOf, mine, started } from "./history-reads-kit";
 
@@ -88,6 +89,74 @@ describe("DistributionHistoryReads stop and restart", () => {
     await flush();
     expect(history.getSnapshot()).toMatchObject({ account: DEMO_ADDRESS, status: "ready" });
     expect(epochsOf(history)).toHaveLength(1);
+    restart();
+  });
+
+  it("rebuilds on resume when epochs land on a history read to its start that held nothing, so the oldest of them stays reachable", async () => {
+    const kit = await setup();
+    kit.stop();
+    let count = 0;
+    const real = kit.node.client.history.bind(kit.node.client);
+    vi.spyOn(kit.node.client, "history").mockImplementation(async (address, params): Promise<HistoryPage> => {
+      if (params.kind !== "distribution_allocated") return real(address, params);
+      const events = () => Array.from({ length: count }, (_, i) => ({ type: "distribution_allocated" as const, account: DEMO_ADDRESS, epoch: count - i, amount: "1000", cursor: `${10 * (count - i)}:0`, ts: count - i }));
+      const older = events().filter((event) => params.before === undefined || Number(event.cursor.split(":")[0]) < Number(params.before.split(":")[0]));
+      const served = older.slice(0, params.limit ?? 50);
+      return { events: served, next: older.length > served.length ? (served[served.length - 1]?.cursor ?? null) : null };
+    });
+    const history = new DistributionHistoryReads(kit.store);
+    const stop = history.start(() => false);
+    await flush();
+    // The account has no allocations: both kinds are read to their start and nothing is held.
+    expect(history.getSnapshot()).toMatchObject({ account: DEMO_ADDRESS, status: "ready" });
+    expect(epochsOf(history)).toEqual([]);
+    stop();
+    // 51 epochs pay the account while the reads are stopped.
+    count = HISTORY_PAGE + 1;
+    const restart = history.start(() => false);
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
+    await flush();
+    // The recheck could not join the newest page to a history that held nothing: the cover rebuilt.
+    expect(history.getSnapshot()).toMatchObject({ account: DEMO_ADDRESS, status: "ready" });
+    expect(history.getSnapshot().data.cover.distribution_allocated.done).toBe(false);
+    expect(epochsOf(history)).toEqual(Array.from({ length: HISTORY_PAGE }, (_, i) => HISTORY_PAGE + 1 - i));
+    // The rebuilt cover paginates: Load more reaches the epoch the fold would have stranded.
+    await history.loadMore();
+    expect(epochsOf(history)).toEqual(Array.from({ length: HISTORY_PAGE + 1 }, (_, i) => HISTORY_PAGE + 1 - i));
+    restart();
+  });
+
+  it("catches the resume gap even when the stream folds a new allocation before the recheck reads the newest pages", async () => {
+    const kit = await setup();
+    kit.stop();
+    let count = HISTORY_PAGE;
+    const real = kit.node.client.history.bind(kit.node.client);
+    vi.spyOn(kit.node.client, "history").mockImplementation(async (address, params): Promise<HistoryPage> => {
+      if (params.kind !== "distribution_allocated") return real(address, params);
+      const events = () => Array.from({ length: count }, (_, i) => ({ type: "distribution_allocated" as const, account: DEMO_ADDRESS, epoch: count - i, amount: "1000", cursor: `${count - i}:0`, ts: count - i }));
+      const older = events().filter((event) => params.before === undefined || Number(event.cursor.split(":")[0]) < Number(params.before.split(":")[0]));
+      const served = older.slice(0, params.limit ?? 50);
+      return { events: served, next: older.length > served.length ? (served[served.length - 1]?.cursor ?? null) : null };
+    });
+    const history = new DistributionHistoryReads(kit.store);
+    const stop = history.start(() => false);
+    await flush();
+    expect(epochsOf(history)).toEqual(Array.from({ length: HISTORY_PAGE }, (_, i) => HISTORY_PAGE - i));
+    stop();
+    // 70 more epochs close while the reads are stopped; the newest reaches the stream first.
+    count = 2 * HISTORY_PAGE + 20;
+    const restart = history.start(() => false);
+    for (let i = 0; i < 100; i += 1) kit.node.client.state.emit({ type: "tick" }, []);
+    kit.node.client.state.emit({ type: "tick" }, [{ type: "distribution_allocated", account: DEMO_ADDRESS, epoch: count, amount: "1000" }]);
+    await flush();
+    // The folded row is held above the newest page's oldest event; it must not hide the gap.
+    expect(epochsOf(history)[0]).toBe(count);
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
+    await flush();
+    expect(history.getSnapshot()).toMatchObject({ account: DEMO_ADDRESS, status: "ready" });
+    // The coverage rebuilt: paging down reaches every epoch, the ones below the stop-time mark included.
+    while (moreRemain(history.getSnapshot().data)) await history.loadMore();
+    expect(epochsOf(history)).toEqual(Array.from({ length: count }, (_, i) => count - i));
     restart();
   });
 });

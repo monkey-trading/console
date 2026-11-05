@@ -176,22 +176,28 @@ describe("what is held and left out", () => {
 });
 
 describe("gapBehind", () => {
-  /** Epochs 9 and 8 held (seqs 90 and 80), the staker stream with more below, the operator stream read to its start. */
-  const held = () => addPage(addPage(emptyHistory(), "distribution_allocated", page("distribution_allocated", [9, 8], true)), "operator_share_allocated", page("operator_share_allocated", [], false));
+  // The reads stopped holding epochs 9 and 8 (seqs 90 and 80): the mark is the newest, 90.
+  const mark = 90;
 
-  it("is false where the newest page reaches what is held, whatever lies behind it", () => {
-    expect(gapBehind(held(), page("distribution_allocated", [12, 11, 10, 9], true))).toBe(false);
-    expect(gapBehind(held(), page("distribution_allocated", [12, 9], true))).toBe(false);
+  it("is false where the newest page reaches the stop-time mark, whatever lies behind it", () => {
+    expect(gapBehind(page("distribution_allocated", [12, 11, 10, 9], true), mark)).toBe(false);
+    expect(gapBehind(page("distribution_allocated", [12, 9], true), mark)).toBe(false);
   });
 
-  it("is false once the stream has nothing behind the page, with nothing held, and for an empty page", () => {
-    expect(gapBehind(held(), page("distribution_allocated", [60, 59], false))).toBe(false);
-    expect(gapBehind(emptyHistory(), page("distribution_allocated", [60, 59], true))).toBe(false);
-    expect(gapBehind(held(), page("distribution_allocated", [], true))).toBe(false);
+  it("is true when the page's oldest event is newer than the stop-time mark and more pages lie behind it", () => {
+    expect(gapBehind(page("distribution_allocated", [60, 59, 58], true), mark)).toBe(true);
   });
 
-  it("is true when the page's oldest event is newer than every held row and more pages lie behind it", () => {
-    expect(gapBehind(held(), page("distribution_allocated", [60, 59, 58], true))).toBe(true);
+  it("is false once the stream has nothing behind the page, before a stop has recorded a mark, and for an empty page", () => {
+    expect(gapBehind(page("distribution_allocated", [60, 59, 58], false), mark)).toBe(false);
+    expect(gapBehind(page("distribution_allocated", [60, 59, 58], true), null)).toBe(false);
+    expect(gapBehind(page("distribution_allocated", [], true), mark)).toBe(false);
+  });
+
+  it("is true for any page with more behind it after a read to the start that held nothing, and false for one without", () => {
+    expect(gapBehind(page("distribution_allocated", [60, 59], true), "empty")).toBe(true);
+    expect(gapBehind(page("distribution_allocated", [60, 59], false), "empty")).toBe(false);
+    expect(gapBehind(page("distribution_allocated", [], true), "empty")).toBe(false);
   });
 });
 
