@@ -28,8 +28,8 @@ export function faucetAvailable(deploy: Deploy): boolean {
   return deploy.mode === "live-dev" && deploy.usdc !== null && deploy.rpcUrl !== null;
 }
 
-/** JSON-RPC's code for a method the node does not have; Anvil answers every other node with it for `anvil_setBalance`. */
-const METHOD_NOT_FOUND = -32601;
+/** JSON-RPC's code for a method the node does not have; any node but Anvil answers an `anvil_` method with it. */
+export const METHOD_NOT_FOUND = -32601;
 
 /** The mock USDC's mint, which anyone may call: the local stack's MockUSDC (engine `contracts/test/mocks/MockUSDC.sol`). */
 const MINT = parseAbi(["function mint(address to, uint256 amount)"]);
@@ -107,7 +107,7 @@ export async function mintFromAnvil(rpcUrl: string, usdc: Address, to: Address, 
 }
 
 /** `n` as a `0x` quantity, as JSON-RPC encodes it. */
-function toQuantity(n: bigint): string {
+export function toQuantity(n: bigint): string {
   return `0x${n.toString(16)}`;
 }
 
@@ -128,7 +128,7 @@ export async function rpc(post: JsonRpcPost, url: string, body: unknown): Promis
 }
 
 /** The answer's `result` and error as values, so a caller can classify a refusal itself. An error answer carries no `result` key, so either field admits the response; an `error` member that is not a well-formed JSON-RPC error means the answer is not a JSON-RPC response. Error cases: the answer is not a JSON-RPC response. */
-async function rpcAllow(post: JsonRpcPost, url: string, body: unknown): Promise<{ result: unknown; error: { code: number; message: string } | null }> {
+export async function rpcAllow(post: JsonRpcPost, url: string, body: unknown): Promise<{ result: unknown; error: { code: number; message: string } | null }> {
   const response = await post(url, body);
   if (typeof response !== "object" || response === null || (!("result" in response) && !("error" in response))) {
     throw new Error(`The chain's RPC answered without a result: ${String(response)}.`);

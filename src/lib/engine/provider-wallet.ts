@@ -18,7 +18,7 @@ import { usdcBalanceRead, vaultDepositsRead } from "./provider-balance";
 import { ProviderExit } from "./provider-exit";
 import { ProviderDeployment } from "./provider-registry";
 import { ProviderStaking } from "./provider-staking";
-import { waitMined } from "./receipts";
+import { waitMined, type StuckVerdict } from "./receipts";
 import { serialized, WALLET_READ_MS, withinMs } from "./serialized-provider";
 import type { StakingWallet } from "./staking";
 import type { Address, SignedWithdrawal } from "./types";
@@ -48,8 +48,8 @@ export interface ProviderWalletDeps {
   wait(ms: number): Promise<void>;
   /** Ends the wallet's connection, such as a WalletConnect session; absent when there is nothing to end. */
   disconnect?: () => Promise<void>;
-  /** A dev build's check that sent transaction `hash` from `account` waits behind a nonce the chain has not reached (monkey-trading/console#291); absent elsewhere. */
-  stuck?: (hash: string, account: string) => Promise<boolean>;
+  /** A dev build's check that sent transaction `hash` from `account` waits behind a nonce the chain has not reached, and its move past it (monkey-trading/console#291, #304); absent elsewhere. */
+  stuck?: (hash: string, account: string) => Promise<StuckVerdict>;
 }
 
 const ERC20 = parseAbi([
