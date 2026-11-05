@@ -1,12 +1,11 @@
 /**
- * The MONKEY and Staking pages' reads (monkey-trading/console#202, #271). It is a store of its own,
+ * The MONKEY, Staking and Dashboard pages' reads (monkey-trading/console#202, #271, #310), a store
  * opened only while its page is on screen and its tab visible, reading what that page shows
  * ([PanelPage]): the node's totals every 30 seconds, with the activity on the MONKEY page; the page's
  * charts every 5; the wallet's chain reads every 15 (one at a time, bounded, never asking the wallet
- * to do anything) and after a transaction, the vault's MONKEY record on the MONKEY page and the stake
- * and the distribution proof on the Staking page; and each straight away, at most once a second, on a
- * stream event that changes it (`live-reads.ts`). A failing read backs off and shows calmly on its
- * panel, with no button; the vault's MONKEY record is unread after a failure, which the emissions card says.
+ * to do anything), the vault's MONKEY record on the MONKEY page, the stake and the distribution proof
+ * on the Staking page; each straight away, at most once a second, on a stream event that changes it
+ * (`live-reads.ts`). A failing read backs off, shows calmly on its panel, and leaves the vault's MONKEY record unread, which the emissions card says.
  */
 
 import { carryAccrued } from "../engine/claim-standing";
@@ -95,17 +94,18 @@ export class MonkeyPanel {
     const stopLive = followLive({
       isHidden, open: () => this.open, account: () => this.store.liveWallet?.address.toLowerCase() ?? null,
       subscribe: (onMessage) => this.store.deps.client.subscribe(onMessage),
-      readNode: () => void this.refreshNode(), readWallet: () => void this.refreshWallet(),
+      readNode: () => void this.refreshNode(),
+      readWallet: () => { if (this.page !== "dashboard") void this.refreshWallet(); },
       // A node that predates the routes the page reads is not asked again until the page is reopened.
       nodeDue: () => this.nodeBackoff.ready() && !(this.state.overview.status === "unavailable" && (this.page !== "monkey" || this.state.activity.status === "unavailable")),
       walletDue: () => this.walletBackoff.ready(),
       tickCharts: () => { for (const feed of this.charts()) void feed.tickLive(); },
       // Each page awaits its own claim's proof: the reads the other claim needs stay loading, so it is never awaited here.
-      awaitingProof: () => this.store.liveWallet !== null && proofAwaited({ ...this.state, ...this.state.wallet, account: this.store.liveWallet.address, entitlement: this.store.getSnapshot().entitlement, proof: this.state.wallet.proof, position: this.state.wallet.position }),
+      awaitingProof: () => this.page !== "dashboard" && this.store.liveWallet !== null && proofAwaited({ ...this.state, ...this.state.wallet, account: this.store.liveWallet.address, entitlement: this.store.getSnapshot().entitlement, proof: this.state.wallet.proof, position: this.state.wallet.position }),
       readProofs: () => {
         const wallet = this.store.liveWallet;
         if (this.page === "monkey") void readEntitlement(this.store, () => this.open);
-        else if (wallet !== null) void this.readProof(wallet, this.cycle);
+        else if (this.page === "staking" && wallet !== null) void this.readProof(wallet, this.cycle);
       },
       watchCheckpoints: (onCheckpoint) => this.store.deps.client.watch((event) => { if (event.type === "checkpoint") onCheckpoint(); }),
       tickMs: LIVE_READ_MS, nodeEveryMs: NODE_READ_MS,

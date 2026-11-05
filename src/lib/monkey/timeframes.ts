@@ -4,9 +4,11 @@ import type { SeriesResolution } from "../engine/stats-types";
 
 export const TIMEFRAMES = [
   { id: "6h", label: "6h", resolution: "1m", bucketMs: 60_000, windowMs: 6 * 3_600_000 },
+  { id: "1d", label: "1D", resolution: "1h", bucketMs: 3_600_000, windowMs: 86_400_000 },
   { id: "2d", label: "2d", resolution: "1h", bucketMs: 3_600_000, windowMs: 2 * 86_400_000 },
   { id: "7d", label: "7d", resolution: "1h", bucketMs: 3_600_000, windowMs: 7 * 86_400_000 },
   { id: "30d", label: "30d", resolution: "1d", bucketMs: 86_400_000, windowMs: 30 * 86_400_000 },
+  { id: "1y", label: "1Y", resolution: "1d", bucketMs: 86_400_000, windowMs: 365 * 86_400_000 },
   { id: "all", label: "All", resolution: "1d", bucketMs: 86_400_000, windowMs: null },
 ] as const satisfies readonly { id: string; label: string; resolution: SeriesResolution; bucketMs: number; windowMs: number | null }[];
 

@@ -1,4 +1,4 @@
-/** The Staking screen's Epochs tab: the distribution's state, every closed epoch, and the two distribution charts. */
+/** The Staking screen's Epochs tab: the distribution's state, every closed epoch, and a link to the distributions' charts on the Dashboard. */
 
 import type { Metadata } from "next";
 

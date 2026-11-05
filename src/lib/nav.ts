@@ -5,6 +5,7 @@ export const PAGES = [
   { href: "/house", label: "House" },
   { href: "/monkey", label: "MONKEY" },
   { href: "/staking", label: "Staking" },
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/funding", label: "Funding" },
   { href: "/settings", label: "Settings" },
 ] as const;

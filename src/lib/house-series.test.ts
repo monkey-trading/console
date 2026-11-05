@@ -17,7 +17,11 @@ describe("seriesQuery", () => {
   it("reads a month at hourly buckets and a year at daily ones, never past the node's page cap", () => {
     expect(seriesQuery("long", 2, "30d", 40 * 86_400_000)).toMatchObject({ resolution: "1h", market: 2, limit: 722 });
     expect(seriesQuery("nav", null, "1y", 400 * 86_400_000)).toMatchObject({ resolution: "1d", limit: 367 });
-    for (const r of ["1h", "6h", "1d", "7d", "30d", "1y"] as const) expect(seriesQuery("nav", null, r, 1e12).limit).toBeLessThanOrEqual(MAX_POINTS);
+    for (const r of ["1h", "6h", "1d", "7d", "30d", "1y", "all"] as const) expect(seriesQuery("nav", null, r, 1e12).limit).toBeLessThanOrEqual(MAX_POINTS);
+  });
+
+  it("reads the whole record for All, from the first bucket at daily ones and one full page", () => {
+    expect(seriesQuery("nav", null, "all", 400 * 86_400_000)).toEqual({ metric: "nav", market: null, resolution: "1d", fromMs: 0, toMs: 400 * 86_400_000, limit: MAX_POINTS });
   });
 
   it("refuses an unknown range", () => {

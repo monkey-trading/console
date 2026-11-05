@@ -35,7 +35,7 @@ describe("MonkeyPanel", () => {
     stop();
   });
 
-  it("reads the totals and the distributions' two charts, and no activity, as the Staking page starts", async () => {
+  it("reads the totals and nothing else as the Staking page starts, its charts having moved to the Dashboard", async () => {
     const { node, store, stop: stopFirst } = await setup();
     stopFirst();
     const fresh = new MonkeyPanel(store, "staking");
@@ -43,21 +43,38 @@ describe("MonkeyPanel", () => {
     const activity = vi.spyOn(node.client.stats, "activity");
     const series = vi.spyOn(node.client.stats, "series");
     const stop = fresh.start(() => false);
-    void fresh.feed("epochs").show();
-    void fresh.feed("rewards").show();
+    await flush();
+    expect(overview).toHaveBeenCalledTimes(1);
+    expect(activity).not.toHaveBeenCalled();
+    expect(series).not.toHaveBeenCalled();
+    expect(fresh.getSnapshot().activity.status).toBe("loading");
+    stop();
+  });
+
+  it("reads the totals and every chart as the Dashboard starts, and no activity", async () => {
+    const { node, store, stop: stopFirst } = await setup("dashboard");
+    stopFirst();
+    const fresh = new MonkeyPanel(store, "dashboard");
+    const overview = vi.spyOn(node.client.stats, "monkey");
+    const activity = vi.spyOn(node.client.stats, "activity");
+    const series = vi.spyOn(node.client.stats, "series");
+    const stop = fresh.start(() => false);
+    for (const name of ["epochs", "perLoss", "rewards", "supply"] as const) void fresh.feed(name).show();
     await flush();
     expect(overview).toHaveBeenCalledTimes(1);
     expect(activity).not.toHaveBeenCalled();
     expect(fresh.getSnapshot().activity.status).toBe("loading");
-    expect(series.mock.calls.map(([query]) => query.metric).sort()).toEqual(["cumulative_distributed", "distributed_per_epoch"]);
+    // Four charts, five metrics between them.
+    expect(series.mock.calls.map(([query]) => query.metric).sort()).toEqual(["cumulative_distributed", "distributed_per_epoch", "monkey_per_loss", "total_allocated", "total_staked"]);
     stop();
   });
 
   it("hands out its own page's charts, and refuses another page's, which only a component on the wrong page asks for", async () => {
     const { store } = await setup();
     expect(new MonkeyPanel(store, "monkey").feed("perLoss").metrics).toEqual(["monkey_per_loss"]);
-    expect(new MonkeyPanel(store, "staking").feed("rewards").metrics).toEqual(["cumulative_distributed"]);
+    expect(new MonkeyPanel(store, "dashboard").feed("rewards").metrics).toEqual(["cumulative_distributed"]);
     expect(() => new MonkeyPanel(store, "staking").feed("supply")).toThrow("The staking page draws no supply chart.");
+    expect(() => new MonkeyPanel(store, "staking").feed("epochs")).toThrow("The staking page draws no epochs chart.");
     expect(() => new MonkeyPanel(store, "monkey").feed("epochs")).toThrow("The monkey page draws no epochs chart.");
   });
 
@@ -77,12 +94,12 @@ describe("MonkeyPanel", () => {
   });
 
   it("reads every chart again every five seconds with no switch, as Live did", async () => {
-    const { node, panel, stop } = await setup();
+    const { node, panel, stop } = await setup("dashboard");
     await vi.advanceTimersByTimeAsync(0);
     const series = vi.spyOn(node.client.stats, "series");
     await vi.advanceTimersByTimeAsync(10_000);
-    // Each page draws two charts.
-    expect(series.mock.calls.length).toBeGreaterThanOrEqual(2 * 2);
+    // The page draws four charts.
+    expect(series.mock.calls.length).toBeGreaterThanOrEqual(4 * 2);
     expect(panel.feed("epochs").getSnapshot().read.status).toBe("ready");
     stop();
   });
@@ -157,13 +174,25 @@ describe("MonkeyPanel", () => {
   });
 
   it("forgets what it read when it stops, so a page that regains trust shows nothing of the last session", async () => {
-    const { panel, stop } = await setup();
+    const { panel, stop } = await setup("dashboard");
     await vi.advanceTimersByTimeAsync(0);
     expect(panel.getSnapshot().overview.status).toBe("ready");
     expect(panel.getSnapshot().wallet.address).not.toBeNull();
     stop();
     expect(panel.getSnapshot()).toMatchObject({ overview: { status: "loading" }, activity: { status: "loading" }, wallet: { address: null } });
     expect(panel.feed("epochs").getSnapshot().read.status).toBe("loading");
+  });
+
+  it("takes nothing from the wallet on the Dashboard, whatever the stream carries", async () => {
+    const { node, store, stop } = await setup("dashboard");
+    const work = vi.spyOn(store.monkeySession.walletWork, "read");
+    const distributions = vi.spyOn(node.client.stats, "distributions");
+    work.mockClear(); // the rig's own first read is not the page's
+    node.client.state.emit({ type: "stake" } as never, []);
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(work).not.toHaveBeenCalled();
+    expect(distributions).not.toHaveBeenCalled();
+    stop();
   });
 
 
