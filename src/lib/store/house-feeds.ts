@@ -39,7 +39,7 @@ export function seriesFeed(store: ConsoleStore, metric: SeriesMetric, market: Ma
       const full = seriesQuery(metric, market, range, now);
       const page = await store.deps.client.stats.series(nextQuery(full, previous));
       const { spanMs } = rangeOf(range);
-      return foldSeries(previous, page, spanMs === null ? 0 : now - spanMs);
+      return foldSeries(previous, page, now - spanMs);
     },
   };
 }

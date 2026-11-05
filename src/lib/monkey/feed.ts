@@ -151,7 +151,7 @@ export class ChartFeed {
     const stamp = ++this.generation;
     const frame = timeframe(this.state.timeframe);
     const now = this.nowMs();
-    const from = frame.windowMs === null ? 0 : Math.max(0, now - frame.windowMs);
+    const from = Math.max(0, now - frame.windowMs);
     this.reading = true;
     try {
       const results = await Promise.all(this.metrics.map((metric) => this.readMetric(metric, from, PAGE_LIMIT, MAX_PAGES, () => stamp === this.generation && this.active())));
@@ -185,10 +185,10 @@ export class ChartFeed {
     if (held.timeframe !== this.state.timeframe) return this.load();
     const stamp = this.generation;
     const frame = timeframe(this.state.timeframe);
-    const floorMs = frame.windowMs === null ? undefined : this.nowMs() - frame.windowMs - frame.bucketMs;
+    const floorMs = this.nowMs() - frame.windowMs - frame.bucketMs;
     this.reading = true;
     try {
-      const results = await Promise.all(this.metrics.map((metric) => this.readMetric(metric, held.lines[metric]?.at(-1)?.ms ?? Math.max(0, floorMs ?? 0), LIVE_LIMIT, 1, () => true)));
+      const results = await Promise.all(this.metrics.map((metric) => this.readMetric(metric, held.lines[metric]?.at(-1)?.ms ?? Math.max(0, floorMs), LIVE_LIMIT, 1, () => true)));
       const current = this.state.read.value;
       if (stamp !== this.generation || current === null) return;
       const lines: Record<string, readonly ChartPoint[]> = {};
@@ -197,7 +197,7 @@ export class ChartFeed {
         const result = results[index];
         lines[metric] = mergePoints(current.lines[metric] ?? [], result?.points ?? [], floorMs);
         // Only a bucket inside the window is the latest value; an older one a read of the record's start returned is not.
-        const last = result?.page.entries.filter((entry) => floorMs === undefined || entry.ts >= floorMs).at(-1);
+        const last = result?.page.entries.filter((entry) => entry.ts >= floorMs).at(-1);
         if (last !== undefined) latest[metric] = textOf(last);
         // No bucket left in the window means no latest value, not the one that aged out of it.
         else if ((lines[metric] ?? []).length === 0) latest[metric] = null;

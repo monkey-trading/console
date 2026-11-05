@@ -4,6 +4,7 @@
 
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
+import { ALL_WINDOW_DAYS } from "@/lib/house-series";
 import type { ChartFeed } from "@/lib/monkey/feed";
 import { latestText } from "@/lib/monkey/figures";
 import { TIMEFRAMES, timeframe as frameOf, type TimeframeId } from "@/lib/monkey/timeframes";
@@ -97,6 +98,7 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
           <p className="sr-only">{title}: {lines.map((line) => `${line.label} ${latestText(data.units[line.metric] ?? "", data.latest[line.metric])}`).join("; ")}.</p>
           <p className="mt-2 text-label text-fg-2" aria-hidden="true">{lines.map((line) => `${lines.length > 1 ? `${line.label} ` : "Latest "}${latestText(data.units[line.metric] ?? "", data.latest[line.metric])}`).join("  ·  ")}</p>
           <p className={`${NOTE} mt-1`}>{beginsText(data.begins_ms, data.from_genesis, data.retained_from_ms)}</p>
+          {(timeframe ?? held) === "all" && <p className={`${NOTE} mt-1`}>All covers the most recent {ALL_WINDOW_DAYS} days, the most one read holds at daily buckets.</p>}
           {data.lines[lines[0]?.metric ?? ""]?.length === 0 && <p className={NOTE}>No buckets fall in this window.</p>}
           <RecentTable title={title} lines={lines} data={data} format={format} />
         </>

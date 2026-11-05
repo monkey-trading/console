@@ -4,13 +4,17 @@
  * The Dashboard screen: every series chart the node serves in three sections — House, MONKEY and
  * Staking — under one range control. The house charts read through the store's house feeds and the
  * MONKEY and Staking charts through a panel of this page's own; every read runs only while this
- * page is open, its tab is visible and the node is trusted, as on the House page.
+ * page is open, its tab is visible and the node is trusted, as on the House page. The House section
+ * holds until the node's first signed house answers land, and says when they have stopped
+ * refreshing; a #hash load scrolls to its section once the node is trusted.
  */
 
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from "react";
 
-import { DASHBOARD_RANGES, DEFAULT_DASHBOARD_RANGE, HOUSE_RANGE, type DashboardRangeId } from "@/lib/dashboard-range";
+import { DASHBOARD_RANGES, DEFAULT_DASHBOARD_RANGE, type DashboardRangeId } from "@/lib/dashboard-range";
+import { houseGateLine, sectionOfHash } from "@/lib/dashboard-page";
 import { readBlock } from "@/lib/engine/attestation";
+import { fixedFromWire, fixedToNumber } from "@/lib/fixed";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 
 import { useSession } from "./ConsoleProvider";
@@ -28,7 +32,7 @@ const SECTIONS = [
 
 const SECTION_LINK = "inline-flex min-h-11 items-center text-caption text-glow hover:text-glow-hover focus-visible:outline-2 focus-visible:outline-glow lg:min-h-6";
 
-/** One Dashboard section: its heading carries the id the section links target. */
+/** One Dashboard section; the section element carries the id the in-page links and a #hash load target. */
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   const heading = useId();
   return (
@@ -45,6 +49,17 @@ export function DashboardPage() {
   const [panel] = useState(() => new MonkeyPanel(store, "dashboard"));
   const [range, setRange] = useState<DashboardRangeId>(DEFAULT_DASHBOARD_RANGE);
   const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
+  const houseReady = useConsoleSelect((state) => state.houseReady);
+  const houseFresh = useConsoleSelect((state) => state.houseFresh);
+  const simulated = store.deps.client.signatures === "none";
+  const gate = houseGateLine({ trusted, ready: houseReady, fresh: houseFresh, simulated });
+  // The NAV chart's liquidity floor comes from the panel's own MONKEY read, so the house feeds do not read the node again for it.
+  const overview = useSyncExternalStore(panel.subscribe, panel.getSnapshot, panel.getSnapshot).overview;
+  const floorText = overview.value?.distribution?.liquidity_floor;
+  const floor = {
+    value: floorText === undefined ? null : fixedToNumber(fixedFromWire(floorText)),
+    note: floorText !== undefined && overview.status === "failed" ? `The node's MONKEY read is failing${overview.message === null ? "" : ` (${overview.message})`}, so the floor may be behind.` : null,
+  };
   // The house feeds read only while the Dashboard is open; visibility also asks that the tab shows and the node is trusted, as on the House page.
   useEffect(() => {
     store.houseStats.setOpen(true);
@@ -61,7 +76,15 @@ export function DashboardPage() {
   }, [store, trusted]);
   // The panel's reads — the MONKEY and Staking charts and the totals the budget line leans on — start once the node's answers can be trusted and stop when the page is left.
   useEffect(() => (trusted ? panel.start(() => document.visibilityState === "hidden") : undefined), [panel, trusted]);
-  const houseRange = HOUSE_RANGE[range];
+  // A cold load's hash scroll finds nothing while the sections are hidden (the node not yet trusted), so when trust first arrives the named section scrolls into view and takes focus, once.
+  useEffect(() => {
+    if (!trusted) return;
+    const id = sectionOfHash(window.location.hash);
+    if (id === null) return;
+    const section = document.getElementById(id);
+    section?.scrollIntoView();
+    section?.focus();
+  }, [trusted]);
   return (
     <MonkeyPanelProvider value={panel}>
       {/* Keyboard scrolling needs a tab stop on the scroll container, as on the House and MONKEY pages. */}
@@ -72,6 +95,7 @@ export function DashboardPage() {
             <p className="text-caption text-fg-3">Every time series the node serves — the house&apos;s NAV, exposure and withdrawal queue, MONKEY emissions and supply, and the USDC distributions — with one range setting every chart&apos;s window.</p>
           </header>
           {!trusted && <p className="text-data text-fg-2">Figures appear once the node&apos;s attestation is verified and its feed is live.</p>}
+          {gate !== null && <p className="text-data text-fg-2">{gate}</p>}
           {/* The charts are hidden, not unmounted, while the node is not trusted, so no figure from before a gap in the feed shows. */}
           <div hidden={!trusted} className="flex flex-col gap-6">
             <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
@@ -84,15 +108,19 @@ export function DashboardPage() {
                 ))}
               </nav>
               <div className="w-28">
-                <Select<DashboardRangeId> label="Range" value={range} options={DASHBOARD_RANGES.map((entry) => ({ value: entry.id, label: entry.label }))} onChange={setRange} />
+                <Select<DashboardRangeId> label="Range" value={range} options={DASHBOARD_RANGES.map((entry) => ({ value: entry.id, label: entry.label }))} onChange={setRange} align="end" />
               </div>
             </div>
             <Section id="house" title="House">
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                <NavChart range={houseRange} className="min-h-80" />
-                <ExposureChart range={houseRange} className="min-h-80" />
-              </div>
-              <QueueChart range={houseRange} className="min-h-64" />
+              {houseReady && (
+                <>
+                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                    <NavChart range={range} className="min-h-80" floor={floor} />
+                    <ExposureChart range={range} className="min-h-80" />
+                  </div>
+                  <QueueChart range={range} className="min-h-64" walked={false} />
+                </>
+              )}
             </Section>
             <Section id="monkey" title="MONKEY">
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

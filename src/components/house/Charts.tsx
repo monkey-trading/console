@@ -32,12 +32,14 @@ const selectQueue = (s: ConsoleState) => {
 const selectExposure = (s: ConsoleState): Record<string, number | null> =>
   Object.fromEntries((s.house.scan?.markets ?? []).flatMap((m) => [[`${m.market}:long`, m.long === null ? null : fixedToNumber(m.long)], [`${m.market}:short`, m.short === null ? null : fixedToNumber(m.short)]]));
 
-/** House NAV over time, with everything below the distribution's liquidity floor shaded. */
-export function NavChart({ range, className }: { range?: RangeId; className?: string }) {
+/** House NAV over time, with everything below the distribution's liquidity floor shaded. The floor is read here, unless the page already holds it from its own MONKEY read (the Dashboard), with `note` saying when that read is failing. */
+export function NavChart({ range, className, floor }: { range?: RangeId; className?: string; floor?: { value: number | null; note: string | null } }) {
   const { store } = useSession();
-  const monkey = useFeed(useMemo(() => monkeyFeed(store), [store]));
-  const floorText = monkey.data?.distribution?.liquidity_floor;
-  const floorProblem = feedProblem(monkey, "the liquidity floor");
+  const readHere = floor === undefined;
+  const monkey = useFeed(useMemo(() => (readHere ? monkeyFeed(store) : null), [readHere, store]));
+  const floorText = readHere ? monkey.data?.distribution?.liquidity_floor : undefined;
+  const value = readHere ? (floorText === undefined ? null : fixedToNumber(fixedFromWire(floorText))) : floor.value;
+  const note = readHere ? feedProblem(monkey, "the liquidity floor") : floor.note;
   return (
     <SeriesPanel
       title="NAV"
@@ -46,8 +48,8 @@ export function NavChart({ range, className }: { range?: RangeId; className?: st
       markets={null}
       range={range}
       currents={useSelected(selectNav)}
-      floor={floorText === undefined ? null : fixedToNumber(fixedFromWire(floorText))}
-      note={floorProblem}
+      floor={value}
+      note={note}
       className={className}
     />
   );
@@ -69,8 +71,13 @@ export function ExposureChart({ range, className }: { range?: RangeId; className
   );
 }
 
-/** What the withdrawal queue owes over time. */
-export function QueueChart({ range, className }: { range?: RangeId; className?: string }) {
+/**
+ * What the withdrawal queue owes over time. The headline above the chart is the queue walk's
+ * totals where a walk runs and is current (the House page); the Dashboard passes `walked={false}`,
+ * since no walk runs there, and the chart's own last bucket stands in.
+ */
+export function QueueChart({ range, className, walked = true }: { range?: RangeId; className?: string; walked?: boolean }) {
+  const totals = useSelected(selectQueue);
   return (
     <SeriesPanel
       title="Queue total"
@@ -78,7 +85,7 @@ export function QueueChart({ range, className }: { range?: RangeId; className?: 
       lines={QUEUE_LINES}
       markets={null}
       range={range}
-      currents={useSelected(selectQueue)}
+      currents={walked ? totals : undefined}
       className={className}
     />
   );

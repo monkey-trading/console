@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EngineError } from "../engine/client";
 import type { PositionsView, SeriesPage } from "../engine/stats-types";
+import { ALL_WINDOW_MS } from "../house-series";
 import { candlesFeed, positionsFeed, seriesFeed } from "./house-feeds";
 import { MIN_EVERY_MS, type FeedSpec } from "./house-stats";
 import { setup } from "./live-fake";
@@ -121,6 +122,20 @@ describe("the House page's dashboard feeds", () => {
     expect(client.statsReads).toEqual([`series:nav:${NOW - 3_600_000}:62`, `series:nav:${NOW - 60_000}:200`]);
     const data = store.houseStats.state<{ points: { ts: number; value: number }[] }>(feed.key).data;
     expect(data?.points.map((p) => p.value)).toEqual([10, 12, 13]);
+  });
+
+  it("reads All as the recent window that fits one page, from an aligned start, and drops what is older", async () => {
+    const { client, store } = setup();
+    store.patch({ now: NOW });
+    const from = Math.floor((NOW - ALL_WINDOW_MS) / 86_400_000) * 86_400_000;
+    client.seriesPage = page([level(from - 86_400_000, "9"), level(NOW - 60_000, "11")]);
+    store.houseStats.setOpen(true);
+    const feed = seriesFeed(store, "nav", null, "all");
+    store.houseStats.follow(feed);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client.statsReads).toEqual([`series:nav:${from}:2000`]);
+    const data = store.houseStats.state<{ points: { ts: number; value: number }[] }>(feed.key).data;
+    expect(data?.points.map((p) => p.value)).toEqual([11]);
   });
 
   it("drops the oldest unfollowed feeds beyond a handful, so what is held stays bounded", async () => {

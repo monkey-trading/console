@@ -7,6 +7,7 @@ import { SIM_EPOCH_MS } from "../mock";
 import { mockHistory } from "../mock/history";
 import { ConsoleStore } from "../store/store";
 import { MonkeyPanel } from "./panel";
+import { PAGE_FEEDS } from "./panel-state";
 import { flush, setup } from "./panel-kit";
 
 beforeEach(() => {
@@ -187,9 +188,13 @@ describe("MonkeyPanel", () => {
     const { node, store, stop } = await setup("dashboard");
     const work = vi.spyOn(store.monkeySession.walletWork, "read");
     const distributions = vi.spyOn(node.client.stats, "distributions");
+    const overview = vi.spyOn(node.client.stats, "monkey");
     work.mockClear(); // the rig's own first read is not the page's
+    overview.mockClear();
     node.client.state.emit({ type: "stake" } as never, []);
-    await vi.advanceTimersByTimeAsync(90_000);
+    node.client.state.emit({ type: "close_epoch" } as never, []); // an EVERYONE event asks every connected wallet's reads again
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(overview).toHaveBeenCalled(); // the events re-read the node, so the wallet assertions below are about a read that ran
     expect(work).not.toHaveBeenCalled();
     expect(distributions).not.toHaveBeenCalled();
     stop();
@@ -215,12 +220,13 @@ describe("MonkeyPanel", () => {
     stop();
   });
 
-  it("stops reading on the timer, and on events, while the tab is hidden", async () => {
-    const { node, store, stop: stopFirst } = await setup();
+  it("stops reading the charts, and the node's figures, on the timer and on events while the tab is hidden", async () => {
+    const { node, store, stop: stopFirst } = await setup("dashboard");
     stopFirst();
-    const fresh = new MonkeyPanel(store, "staking");
+    const fresh = new MonkeyPanel(store, "dashboard");
     let hidden = true;
     const stop = fresh.start(() => hidden);
+    for (const name of PAGE_FEEDS.dashboard) void fresh.feed(name).show();
     await flush();
     const overview = vi.spyOn(node.client.stats, "monkey");
     const series = vi.spyOn(node.client.stats, "series");

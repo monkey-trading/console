@@ -25,7 +25,7 @@ export function StakingEpochs() {
         <EpochHistory epochs={epochs} labelOf={labelOf} />
       </div>
       <p className="text-caption">
-        <Link href="/dashboard#staking" className="text-glow hover:text-glow-hover focus-visible:outline-2 focus-visible:outline-glow">See the history of distributions on the Dashboard</Link>
+        <Link href="/dashboard#staking" className="inline-flex min-h-11 items-center text-glow hover:text-glow-hover focus-visible:outline-2 focus-visible:outline-glow lg:min-h-6">See the history of distributions on the Dashboard</Link>
       </p>
     </div>
   );

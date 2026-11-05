@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SeriesPage } from "./engine/stats-types";
-import { beginsOf, beginsText, foldSeries, FOLLOW_UP_LIMIT, MAX_POINTS, nextQuery, pointsOf, tableRows, rangeOf, seriesQuery } from "./house-series";
+import { ALL_WINDOW_MS, beginsOf, beginsText, foldSeries, FOLLOW_UP_LIMIT, MAX_POINTS, nextQuery, pointsOf, tableRows, rangeOf, seriesQuery } from "./house-series";
 
 const level = (ts: number, close: string) => ({ ts, open: close, high: close, low: close, close });
 const page = (entries: SeriesPage["entries"], extra: Partial<SeriesPage> = {}): SeriesPage => ({
@@ -20,8 +20,10 @@ describe("seriesQuery", () => {
     for (const r of ["1h", "6h", "1d", "7d", "30d", "1y", "all"] as const) expect(seriesQuery("nav", null, r, 1e12).limit).toBeLessThanOrEqual(MAX_POINTS);
   });
 
-  it("reads the whole record for All, from the first bucket at daily ones and one full page", () => {
-    expect(seriesQuery("nav", null, "all", 400 * 86_400_000)).toEqual({ metric: "nav", market: null, resolution: "1d", fromMs: 0, toMs: 400 * 86_400_000, limit: MAX_POINTS });
+  it("reads All as the most recent days that fit one page, at daily buckets from an aligned start", () => {
+    const now = 10_000 * 86_400_000;
+    expect(seriesQuery("nav", null, "all", now)).toEqual({ metric: "nav", market: null, resolution: "1d", fromMs: now - ALL_WINDOW_MS, toMs: now, limit: MAX_POINTS });
+    expect(seriesQuery("nav", null, "all", now).fromMs).toBeGreaterThan(0);
   });
 
   it("refuses an unknown range", () => {
@@ -49,6 +51,13 @@ describe("foldSeries", () => {
   it("drops buckets before the window, so a long-open page does not hold history it no longer shows", () => {
     const folded = foldSeries(null, page([level(60, "1"), level(120, "2"), level(180, "3")]), 100);
     expect(folded.points.map((p) => p.ts)).toEqual([120, 180]);
+  });
+
+  it("drops what is older than the All window, so a record longer than it shows the window's start, not genesis", () => {
+    const now = 10_000 * 86_400_000;
+    const floor = now - ALL_WINDOW_MS;
+    const folded = foldSeries(null, page([level(floor - 86_400_000, "9"), level(floor + 60_000, "10"), level(now, "11")]), floor);
+    expect(folded.points.map((p) => p.ts)).toEqual([floor + 60_000, now]);
   });
 
   it("holds at most the page cap of points", () => {

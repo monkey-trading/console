@@ -1,16 +1,17 @@
-/** The windows a MONKEY chart offers, each read at the resolution whose retention and page size suit it. */
+/** The windows a MONKEY chart offers, each read at the resolution whose retention and page size suit it; the labels read as the House ranges' do. */
 
 import type { SeriesResolution } from "../engine/stats-types";
+import { ALL_WINDOW_MS } from "../house-series";
 
 export const TIMEFRAMES = [
-  { id: "6h", label: "6h", resolution: "1m", bucketMs: 60_000, windowMs: 6 * 3_600_000 },
+  { id: "6h", label: "6H", resolution: "1m", bucketMs: 60_000, windowMs: 6 * 3_600_000 },
   { id: "1d", label: "1D", resolution: "1h", bucketMs: 3_600_000, windowMs: 86_400_000 },
-  { id: "2d", label: "2d", resolution: "1h", bucketMs: 3_600_000, windowMs: 2 * 86_400_000 },
-  { id: "7d", label: "7d", resolution: "1h", bucketMs: 3_600_000, windowMs: 7 * 86_400_000 },
-  { id: "30d", label: "30d", resolution: "1d", bucketMs: 86_400_000, windowMs: 30 * 86_400_000 },
+  { id: "2d", label: "2D", resolution: "1h", bucketMs: 3_600_000, windowMs: 2 * 86_400_000 },
+  { id: "7d", label: "7D", resolution: "1h", bucketMs: 3_600_000, windowMs: 7 * 86_400_000 },
+  { id: "30d", label: "30D", resolution: "1d", bucketMs: 86_400_000, windowMs: 30 * 86_400_000 },
   { id: "1y", label: "1Y", resolution: "1d", bucketMs: 86_400_000, windowMs: 365 * 86_400_000 },
-  { id: "all", label: "All", resolution: "1d", bucketMs: 86_400_000, windowMs: null },
-] as const satisfies readonly { id: string; label: string; resolution: SeriesResolution; bucketMs: number; windowMs: number | null }[];
+  { id: "all", label: "All", resolution: "1d", bucketMs: 86_400_000, windowMs: ALL_WINDOW_MS },
+] as const satisfies readonly { id: string; label: string; resolution: SeriesResolution; bucketMs: number; windowMs: number }[];
 
 export type TimeframeId = (typeof TIMEFRAMES)[number]["id"];
 
