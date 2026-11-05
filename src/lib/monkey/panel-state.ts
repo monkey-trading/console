@@ -1,4 +1,4 @@
-/** What the MONKEY and Staking pages' store holds: the node's and the wallet's reads, what is typed, and which page an opening serves. */
+/** What the MONKEY, Staking and Dashboard pages' store holds: the node's and the wallet's reads, what is typed, and which page an opening serves. */
 
 import type { ActivityPage, DistributionProof, MonkeySeriesMetric, MonkeyView } from "../engine/stats-types";
 import type { StakingPosition } from "../engine/staking";
@@ -7,9 +7,10 @@ import type { TimeframeId } from "./timeframes";
 
 /**
  * The page a panel serves (monkey-trading/console#271): the MONKEY page reads the token, its emissions
- * and the public activity; the Staking page the account's stake and its USDC distributions.
+ * and the public activity; the Staking page the account's stake and its USDC distributions; the
+ * Dashboard the house, emissions, supply and distribution histories (monkey-trading/console#310).
  */
-export type PanelPage = "monkey" | "staking";
+export type PanelPage = "monkey" | "staking" | "dashboard";
 
 export type FeedName = "epochs" | "perLoss" | "supply" | "rewards";
 
@@ -20,8 +21,11 @@ export const FEEDS: Readonly<Record<FeedName, { readonly metrics: readonly Monke
   supply: { metrics: ["total_allocated", "total_staked"], initial: "all" },
   rewards: { metrics: ["cumulative_distributed"], initial: "all" },
 };
-/** The charts each page draws: the MONKEY page its emissions and supply, the Staking page what stakers were paid. */
-export const PAGE_FEEDS: Readonly<Record<PanelPage, readonly FeedName[]>> = { monkey: ["perLoss", "supply"], staking: ["epochs", "rewards"] };
+/**
+ * The charts each page draws: the MONKEY page its emissions and supply, the Staking page none since
+ * its two charts moved to the Dashboard, the Dashboard all four.
+ */
+export const PAGE_FEEDS: Readonly<Record<PanelPage, readonly FeedName[]>> = { monkey: ["perLoss", "supply"], staking: [], dashboard: ["perLoss", "supply", "epochs", "rewards"] };
 
 /** What the connected account holds on chain and what the node proves it was distributed. */
 export interface WalletFigures {

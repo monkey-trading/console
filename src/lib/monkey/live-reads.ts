@@ -1,5 +1,5 @@
 /**
- * What keeps the MONKEY and Staking pages current without a button (monkey-trading/console#202): which events on
+ * What keeps the MONKEY, Staking and Dashboard pages current without a button (monkey-trading/console#202): which events on
  * the signed stream change a figure, a limiter that re-reads at most once a second per read, and
  * the backoff a failing read waits out by itself.
  */

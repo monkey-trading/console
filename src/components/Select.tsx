@@ -14,9 +14,11 @@ interface Props<T extends string> {
   value: T;
   options: readonly SelectOption<T>[];
   onChange: (value: T) => void;
+  /** Anchors the open listbox to the control's end side, for a control at its container's edge, so the wider list stays inside. */
+  align?: "start" | "end";
 }
 
-export function Select<T extends string>({ label, value, options, onChange }: Props<T>) {
+export function Select<T extends string>({ label, value, options, onChange, align = "start" }: Props<T>) {
   const id = useId();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -94,7 +96,7 @@ export function Select<T extends string>({ label, value, options, onChange }: Pr
           aria-labelledby={`${id}-label`}
           aria-activedescendant={`${id}-opt-${active}`}
           onKeyDown={onKey}
-          className="absolute z-50 mt-1 max-h-64 w-full min-w-40 overflow-y-auto rounded border border-line-2 bg-ink-2 p-1 shadow-platform outline-none"
+          className={`absolute z-50 mt-1 max-h-64 w-full min-w-40 overflow-y-auto rounded border border-line-2 bg-ink-2 p-1 shadow-platform outline-none ${align === "end" ? "right-0" : "left-0"}`}
         >
           {options.map((option, index) => (
             <div

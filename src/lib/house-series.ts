@@ -11,9 +11,17 @@ const DAY_MS = 24 * HOUR_MS;
 /** The most entries one read asks for: the node's own page cap. */
 export const MAX_POINTS = 2_000;
 
+/**
+ * How far back All reads, at daily buckets: two buckets short of the node's page, so the whole
+ * window — its alignment slack included — always fits the one read, and no chart ever pages
+ * oldest-first and misses the record's newest days.
+ */
+export const ALL_WINDOW_DAYS = MAX_POINTS - 2;
+export const ALL_WINDOW_MS = ALL_WINDOW_DAYS * DAY_MS;
+
 const BUCKET_MS = { "1m": MINUTE_MS, "1h": HOUR_MS, "1d": DAY_MS } as const satisfies Record<SeriesResolution, number>;
 
-/** The timeframes a chart offers: how far back it reads, at the finest resolution that fits one page. */
+/** The timeframes a chart offers: how far back it reads, at the finest resolution that fits one page. All reads the most recent days that fit the page at daily buckets, never the whole record. */
 export const RANGES = [
   { id: "1h", label: "1H", spanMs: HOUR_MS, resolution: "1m" },
   { id: "6h", label: "6H", spanMs: 6 * HOUR_MS, resolution: "1m" },
@@ -21,6 +29,7 @@ export const RANGES = [
   { id: "7d", label: "7D", spanMs: 7 * DAY_MS, resolution: "1h" },
   { id: "30d", label: "30D", spanMs: 30 * DAY_MS, resolution: "1h" },
   { id: "1y", label: "1Y", spanMs: 365 * DAY_MS, resolution: "1d" },
+  { id: "all", label: "All", spanMs: ALL_WINDOW_MS, resolution: "1d" },
 ] as const satisfies readonly { id: string; label: string; spanMs: number; resolution: SeriesResolution }[];
 
 export type RangeId = (typeof RANGES)[number]["id"];

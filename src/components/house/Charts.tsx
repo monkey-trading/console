@@ -6,6 +6,7 @@ import { useMemo } from "react";
 
 import { fixedFromWire, fixedToNumber } from "@/lib/fixed";
 import { exactTotals } from "@/lib/house";
+import type { RangeId } from "@/lib/house-series";
 import { feedProblem } from "@/lib/store/house-feed-text";
 import { monkeyFeed } from "@/lib/store/house-feeds";
 import type { ConsoleState } from "@/lib/store/state";
@@ -31,28 +32,31 @@ const selectQueue = (s: ConsoleState) => {
 const selectExposure = (s: ConsoleState): Record<string, number | null> =>
   Object.fromEntries((s.house.scan?.markets ?? []).flatMap((m) => [[`${m.market}:long`, m.long === null ? null : fixedToNumber(m.long)], [`${m.market}:short`, m.short === null ? null : fixedToNumber(m.short)]]));
 
-/** House NAV over time, with everything below the distribution's liquidity floor shaded. */
-export function NavChart({ className }: { className?: string }) {
+/** House NAV over time, with everything below the distribution's liquidity floor shaded. The floor is read here, unless the page already holds it from its own MONKEY read (the Dashboard), with `note` saying when that read is failing. */
+export function NavChart({ range, className, floor }: { range?: RangeId; className?: string; floor?: { value: number | null; note: string | null } }) {
   const { store } = useSession();
-  const monkey = useFeed(useMemo(() => monkeyFeed(store), [store]));
-  const floorText = monkey.data?.distribution?.liquidity_floor;
-  const floorProblem = feedProblem(monkey, "the liquidity floor");
+  const readHere = floor === undefined;
+  const monkey = useFeed(useMemo(() => (readHere ? monkeyFeed(store) : null), [readHere, store]));
+  const floorText = readHere ? monkey.data?.distribution?.liquidity_floor : undefined;
+  const value = readHere ? (floorText === undefined ? null : fixedToNumber(fixedFromWire(floorText))) : floor.value;
+  const note = readHere ? feedProblem(monkey, "the liquidity floor") : floor.note;
   return (
     <SeriesPanel
       title="NAV"
       tip="The house's net asset value: its cash less its clients' unrealised profit at current marks. Where the node reports one, the shaded area is below the liquidity floor, under which no staker distribution is paid."
       lines={NAV_LINES}
       markets={null}
+      range={range}
       currents={useSelected(selectNav)}
-      floor={floorText === undefined ? null : fixedToNumber(fixedFromWire(floorText))}
-      note={floorProblem}
+      floor={value}
+      note={note}
       className={className}
     />
   );
 }
 
 /** Clients' long and short notional in one market, from the node's account scans. */
-export function ExposureChart({ className }: { className?: string }) {
+export function ExposureChart({ range, className }: { range?: RangeId; className?: string }) {
   const markets = useMarketOptions();
   return (
     <SeriesPanel
@@ -60,21 +64,28 @@ export function ExposureChart({ className }: { className?: string }) {
       tip="What the house's clients hold in the market, long and short, in dollars of notional. The house takes the other side of both."
       lines={EXPOSURE_LINES}
       markets={markets}
+      range={range}
       currents={useSelected(selectExposure)}
       className={className}
     />
   );
 }
 
-/** What the withdrawal queue owes over time. */
-export function QueueChart({ className }: { className?: string }) {
+/**
+ * What the withdrawal queue owes over time. The headline above the chart is the queue walk's
+ * totals where a walk runs and is current (the House page); the Dashboard passes `walked={false}`,
+ * since no walk runs there, and the chart's own last bucket stands in.
+ */
+export function QueueChart({ range, className, walked = true }: { range?: RangeId; className?: string; walked?: boolean }) {
+  const totals = useSelected(selectQueue);
   return (
     <SeriesPanel
       title="Queue total"
       tip="The dollars waiting in the first-in first-out withdrawal queue: requests the vault could not pay yet."
       lines={QUEUE_LINES}
       markets={null}
-      currents={useSelected(selectQueue)}
+      range={range}
+      currents={walked ? totals : undefined}
       className={className}
     />
   );

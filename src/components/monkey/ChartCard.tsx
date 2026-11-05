@@ -4,6 +4,8 @@
 
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
+import { groupThousands } from "@/lib/format";
+import { ALL_WINDOW_DAYS } from "@/lib/house-series";
 import type { ChartFeed } from "@/lib/monkey/feed";
 import { latestText } from "@/lib/monkey/figures";
 import { TIMEFRAMES, timeframe as frameOf, type TimeframeId } from "@/lib/monkey/timeframes";
@@ -26,6 +28,8 @@ interface Props {
   lines: readonly LineSpec[];
   format: (value: number) => string;
   marks?: readonly number[];
+  /** The window the chart reads, when the page drives every chart's range with one control (the Dashboard); the card's own select shows otherwise. */
+  timeframe?: TimeframeId;
   /** What the chart measures, where its title does not say. */
   caption?: string;
   footer?: ReactNode;
@@ -42,23 +46,29 @@ function beginsText(begins: number | null, fromGenesis: boolean, retained: numbe
   return `${parts.join(", ")}.`;
 }
 
-export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MARKS, caption, footer }: Props) {
-  const { timeframe, read } = useSyncExternalStore(feed.subscribe, feed.getSnapshot, feed.getSnapshot);
+export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MARKS, timeframe, caption, footer }: Props) {
+  const { timeframe: held, read } = useSyncExternalStore(feed.subscribe, feed.getSnapshot, feed.getSnapshot);
   const data = read.value;
   // The chart's reads follow its card: they run while it is on screen and stop when it leaves.
   useEffect(() => {
     void feed.show();
     return () => feed.hide();
   }, [feed]);
+  // A page driving every chart's window (the Dashboard) sets this card's; the card keeps its own select otherwise.
+  useEffect(() => {
+    if (timeframe !== undefined) void feed.setTimeframe(timeframe);
+  }, [feed, timeframe]);
   return (
     <section aria-labelledby={id} className="min-w-0 rounded-xl border border-line-2 bg-ink-1 p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h3 id={id} tabIndex={-1} className="text-label tracking-caps text-fg uppercase outline-none">{title}</h3>
-        <div className="flex items-center gap-2">
-          <div className="w-24 [&>div>span:first-child]:sr-only">
-            <Select<TimeframeId> label={`${title} timeframe`} value={timeframe} options={OPTIONS} onChange={(value) => feed.setTimeframe(value)} />
+        {timeframe === undefined && (
+          <div className="flex items-center gap-2">
+            <div className="w-24 [&>div>span:first-child]:sr-only">
+              <Select<TimeframeId> label={`${title} timeframe`} value={held} options={OPTIONS} onChange={(value) => feed.setTimeframe(value)} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
       {caption !== undefined && <p className={`${NOTE} mt-1`}>{caption}</p>}
       {lines.length > 1 && (
@@ -82,6 +92,7 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
         <div aria-hidden="true" className="invisible">
           <p className="mt-2 text-label">Latest</p>
           <p className={`${NOTE} mt-1`}>Data begins</p>
+          {(timeframe ?? held) === "all" && <p className={`${NOTE} mt-1`}>All covers the most recent {groupThousands(ALL_WINDOW_DAYS)} days, the most one read holds at daily buckets.</p>}
         </div>
       )}
       {data !== null && (
@@ -89,13 +100,14 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
           <p className="sr-only">{title}: {lines.map((line) => `${line.label} ${latestText(data.units[line.metric] ?? "", data.latest[line.metric])}`).join("; ")}.</p>
           <p className="mt-2 text-label text-fg-2" aria-hidden="true">{lines.map((line) => `${lines.length > 1 ? `${line.label} ` : "Latest "}${latestText(data.units[line.metric] ?? "", data.latest[line.metric])}`).join("  ·  ")}</p>
           <p className={`${NOTE} mt-1`}>{beginsText(data.begins_ms, data.from_genesis, data.retained_from_ms)}</p>
+          {(timeframe ?? held) === "all" && <p className={`${NOTE} mt-1`}>All covers the most recent {groupThousands(ALL_WINDOW_DAYS)} days, the most one read holds at daily buckets.</p>}
           {data.lines[lines[0]?.metric ?? ""]?.length === 0 && <p className={NOTE}>No buckets fall in this window.</p>}
           <RecentTable title={title} lines={lines} data={data} format={format} />
         </>
       )}
       {data !== null && read.status === "failed" && (
         <p role="status" className="mt-1 text-caption text-amber">
-          Could not read the {frameOf(timeframe).label} window: {(read.message ?? "the read failed").replace(/\.+$/, "")}. The chart shows the {frameOf(data.timeframe).label} window it already holds.{" "}
+          Could not read the {frameOf(timeframe ?? held).label} window: {(read.message ?? "the read failed").replace(/\.+$/, "")}. The chart shows the {frameOf(data.timeframe).label} window it already holds.{" "}
           <button type="button" onClick={() => void feed.load().then(() => focusHeading(id))} className="min-h-6 rounded border border-line-2 px-2 text-fg-2 hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Try again</button>
         </p>
       )}

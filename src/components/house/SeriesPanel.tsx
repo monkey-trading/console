@@ -11,8 +11,9 @@ import { memo, useMemo, useState } from "react";
 
 import type { SeriesMetric } from "@/lib/engine/stats-types";
 import type { MarketId } from "@/lib/engine/types";
+import { groupThousands } from "@/lib/format";
 import { formatCompactUsd } from "@/lib/chart-format";
-import { beginsText, DEFAULT_RANGE, RANGES, tableRows, type RangeId } from "@/lib/house-series";
+import { beginsText, ALL_WINDOW_DAYS, DEFAULT_RANGE, RANGES, tableRows, type RangeId } from "@/lib/house-series";
 import { feedProblem } from "@/lib/store/house-feed-text";
 import { seriesFeed } from "@/lib/store/house-feeds";
 import { formatStamp } from "@/lib/time";
@@ -48,6 +49,8 @@ interface Props {
   lines: readonly LineSpec[];
   /** The markets a per-market series can be read for; null for a series that covers the house. */
   markets: readonly { id: MarketId; label: string }[] | null;
+  /** The window the chart reads, when the page drives every chart's range with one control (the Dashboard); the panel's own select shows otherwise. */
+  range?: RangeId;
   /** The fresher figures the page already holds, by line id (`<market>:<line id>` for a per-market chart); the chart's last bucket stands in where one is missing. */
   currents?: Readonly<Record<string, number | null>>;
   /** Shades the plane below this value. */
@@ -62,9 +65,10 @@ const TEXT = { fg: "text-fg", glow: "text-glow", ember: "text-ember", amber: "te
 /** The most points the keyboard-reachable table lists. */
 const TABLE_POINTS = 30;
 
-function SeriesPanelView({ title, tip, lines, markets, currents, floor = null, note = null, className }: Props) {
+function SeriesPanelView({ title, tip, lines, markets, range: driven, currents, floor = null, note = null, className }: Props) {
   const { store } = useSession();
-  const [range, setRange] = useState<RangeId>(DEFAULT_RANGE);
+  const [ownRange, setOwnRange] = useState<RangeId>(DEFAULT_RANGE);
+  const range = driven ?? ownRange;
   const [picked, setPicked] = useState<MarketId | null>(null);
   const market = markets === null ? null : (picked !== null && markets.some((m) => m.id === picked) ? picked : (markets[0]?.id ?? null));
   const first = lines[0];
@@ -87,7 +91,7 @@ function SeriesPanelView({ title, tip, lines, markets, currents, floor = null, n
       controls={
         <>
           {markets !== null && <Pick label={`${title} market`} value={market ?? 0} options={markets.map((m) => ({ value: m.id, label: m.label }))} onChange={setPicked} />}
-          <Pick label={`${title} timeframe`} value={range} options={RANGES.map((r) => ({ value: r.id, label: r.label }))} onChange={setRange} />
+          {driven === undefined && <Pick label={`${title} timeframe`} value={range} options={RANGES.map((r) => ({ value: r.id, label: r.label }))} onChange={setOwnRange} />}
         </>
       }
     >
@@ -107,6 +111,7 @@ function SeriesPanelView({ title, tip, lines, markets, currents, floor = null, n
           </div>
           <p className="text-label text-fg-3">
             {states.length === 0 || states.every((s) => s.status === "loading") ? "Reading the node's signed history…" : data === null ? null : beginsText(data, formatStamp)}
+            {range === "all" && data !== null && ` All covers the most recent ${groupThousands(ALL_WINDOW_DAYS)} days, the most one read holds at daily buckets.`}
             {lines.some((line) => line.sampled === true) && ` ${SAMPLED}`}
             {problem !== null && ` ${problem}`}
             {note !== null && ` ${note}`}

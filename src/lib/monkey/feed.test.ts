@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EngineError } from "../engine/client";
 import { NO_STATS } from "../engine/live-stats";
 import type { SeriesPage, SeriesQuery, StatsReads } from "../engine/stats-types";
+import { ALL_WINDOW_MS } from "../house-series";
 import { ChartFeed, MAX_POINTS, mergePoints } from "./feed";
 
 const on = () => true;
@@ -60,10 +61,11 @@ describe("ChartFeed", () => {
     expect(data?.begins_ms).toBe(100);
   });
 
-  it("reads from the start of the record for All", async () => {
+  it("reads All as the recent window that fits the pages, not from the record's start", async () => {
+    const later = () => 10_000 * 86_400_000;
     const { reads: client, queries } = reads((query) => page(query, []));
-    await new ChartFeed(["distributed_per_epoch"], client, now, on, "all").show();
-    expect(queries[0]).toMatchObject({ resolution: "1d", fromMs: 0 });
+    await new ChartFeed(["distributed_per_epoch"], client, later, on, "all").show();
+    expect(queries[0]).toMatchObject({ resolution: "1d", fromMs: later() - ALL_WINDOW_MS });
   });
 
   it("shows a node without the route as unavailable, not failed", async () => {
