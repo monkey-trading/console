@@ -79,10 +79,11 @@ minute. Two wallets (Anvil accounts 1 and 3, whose public test keys the script p
 and 100,000 mock USDC. In a second terminal, `scripts/dev-local-stack-ctl.sh` drives the rest:
 
 1. On the Staking page, connect the first wallet, stake its MONKEY and delegate an amount of it to
-   `127.0.0.1:8081`, the second engine. Do the same from the second wallet. The operators table, which the node
-   reads from the chain at a final block every five seconds here, lists both candidates with their delegated
-   stake and whether each is eligible. A delegation can be moved to another candidate or taken back in part, and
-   an unstake takes the undelegated stake first, then each delegation in proportion.
+   `127.0.0.1:8081`, the second engine, from that row's Delegate button. Do the same from the second wallet. The
+   operators table, which the node reads from the chain at a final block every five seconds here, lists both
+   candidates with their delegated stake and whether each is eligible. A delegation can be moved to another
+   candidate or taken back in part from its row, and an unstake takes the undelegated stake first, then each
+   delegation in proportion.
 2. `./scripts/dev-local-stack-ctl.sh elect` closes the election epoch. The candidate with the most delegated
    stake wins when it is eligible (5% of all stake), at least 20% of all stake is delegated, and its votes lead
    the operator in effect by 10%. The Staking page's operators then show the pending election.

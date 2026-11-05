@@ -6,6 +6,10 @@ import { describe, expect, it } from "vitest";
 
 import { OperatorReads } from "@/lib/monkey/operators";
 import { DelegationReads } from "@/lib/staking/delegation-reads";
+import { NO_EDITING } from "@/lib/staking/delegation-form";
+import { EpochReads } from "@/lib/staking/epoch-reads";
+import { NO_TABLE_VIEW } from "@/lib/staking/operator-table";
+import { DistributionHistoryReads } from "@/lib/staking/history-reads";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import type { NoticeSurface } from "@/lib/store/state";
 
@@ -26,6 +30,7 @@ import { SessionsCard } from "./SessionsCard";
 import { SetupSteps } from "./SetupSteps";
 import { Shell } from "./Shell";
 import { OperatorsPanel } from "./staking/OperatorsPanel";
+import { StakingContext, type StakingReads } from "./StakingSection";
 import { WithdrawForm } from "./WithdrawForm";
 
 const TEXT = "a message the trader must read";
@@ -44,10 +49,17 @@ function OnMonkeyPage({ children }: { children: ReactNode }) {
   return createElement(MonkeyPanelProvider, { value: new MonkeyPanel(store, "staking") }, children);
 }
 
-/** The Staking page's operators, over reads that have not started. */
+/** The Staking page's operators, over reads that have not started, under the section's context. */
 function Operators() {
   const { store } = useSession();
-  return createElement(OperatorsPanel, { operators: new OperatorReads(store), delegations: new DelegationReads(store) });
+  const operators = new OperatorReads(store);
+  const delegations = new DelegationReads(store);
+  const reads: StakingReads = {
+    panel: new MonkeyPanel(store, "staking"), operators, epochs: new EpochReads(store), delegations,
+    history: new DistributionHistoryReads(store), operatorsSettled: true, delegateEditing: NO_EDITING, setDelegateEditing: () => undefined,
+    table: NO_TABLE_VIEW, setTable: () => undefined,
+  };
+  return createElement(StakingContext.Provider, { value: reads }, createElement(OperatorsPanel, { operators, delegations }));
 }
 
 function render(surface: NoticeSurface, screen: ReactNode, tone: "error" | "info" = "error", stale = false): string {

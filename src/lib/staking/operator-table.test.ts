@@ -3,8 +3,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { ListedCandidate, OperatorList } from "../engine/staking-reads";
+import { shortHex } from "../format";
+import { operatorCells } from "./operator-cells";
 import answer from "./operator-list-answer.json";
-import { ariaSort, countText, MAX_SEARCH, operatorsView, PAGE_SIZE, SORTS, tableView, type OperatorRow, type SortId } from "./operator-table";
+import { ariaSort, countText, MAX_SEARCH, operatorsView, PAGE_SIZE, SORTS, tableView, yoursRows, type OperatorRow, type SortId } from "./operator-table";
 
 const RELEASE = `0x${"ab".repeat(32)}`;
 const DEPLOYER = "0x00000000000000000000000000000000000000aa";
@@ -195,5 +197,40 @@ describe("ariaSort", () => {
     expect(ariaSort("role", "role")).toBe("other");
     expect(ariaSort("role", "votes-desc")).toBeUndefined();
     expect(ariaSort("votes", "role")).toBeUndefined();
+  });
+});
+
+describe("yoursRows", () => {
+  it("distinguishes unknown membership without a list from an address omitted by a verified list", () => {
+    const delegations = [{ candidate: DEPLOYER, amount: 1n }];
+    expect(yoursRows([], delegations, false).map((row) => row.role)).toEqual(["unknown"]);
+    expect(yoursRows([], delegations, true).map((row) => row.role)).toEqual(["unlisted"]);
+  });
+
+  const rows = many(100);
+
+  it("lists every delegation the chain reports, the list's row where it names the candidate, in the chain's order", () => {
+    const delegations = [{ candidate: candidate(7).address, amount: 5n }, { candidate: candidate(2).address, amount: 3n }];
+    expect(yoursRows(rows, delegations).map((row) => row.hostname)).toEqual(["op-7.example", "op-2.example"]);
+  });
+
+  it("keeps a delegation to an address neither list names, as an unlisted row named by its address", () => {
+    const stranger = "0x0000000000000000000000000000000000000fff";
+    const [row] = yoursRows(rows, [{ candidate: stranger, amount: 1n }]);
+    if (row === undefined) throw new Error("a delegation gives a row");
+    expect(row).toMatchObject({ address: stranger, hostname: null, listed: false, votes: null, bond: null });
+    const cells = operatorCells(row);
+    expect(cells.label).toBe(shortHex(stranger));
+    expect(cells.name).toBe(shortHex(stranger));
+  });
+
+  it("pages and searches a staker's 100 delegations like the full list, in four pages of the page size", () => {
+    const delegations = Array.from({ length: 100 }, (_, i) => ({ candidate: candidate(i + 1).address, amount: BigInt(i) }));
+    const yours = yoursRows(rows, delegations);
+    expect(yours).toHaveLength(100);
+    const pages = [0, 1, 2, 3].map((page) => tableView(yours, "", "votes-asc", page));
+    expect(pages.map((view) => view.rows.length)).toEqual([25, 25, 25, 25]);
+    expect(countText(pages[1] ?? tableView([], "", "role", 0), "")).toBe("Showing 26–50 of 100 operators.");
+    expect(tableView(yours, "op-7.", "name-asc", 0).matched).toBe(1);
   });
 });

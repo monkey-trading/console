@@ -4,8 +4,10 @@
  * The Staking screen (monkey-trading/console#271) as a section: its heading, the Delegate, Rewards
  * and Epochs tab bar, and one provider for the reads its tabs share (monkey-trading/console#308).
  * The reads are created once per visit to the section, so what they hold — a typed amount, a loaded
- * page of history, the operator list — survives a tab switch. Each tab starts only the reads its
- * cards show, and they stop when the tab is left.
+ * page of history, the operator list — survives a tab switch, and the Delegate tab's editing
+ * context (its open editor, the Move form's destination, the addresses typed) is kept here too
+ * (monkey-trading/console#309). Each tab starts only the reads its cards show, and they stop when
+ * the tab is left.
  */
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
@@ -16,8 +18,10 @@ import { OperatorReads, operatorsShown } from "@/lib/monkey/operators";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import { isCurrentTab, readsFor, SECTIONS } from "@/lib/nav";
 import { DelegationReads } from "@/lib/staking/delegation-reads";
+import { editingFor, keptFor, NO_EDITING, type DelegateEditing, type EditingState, type EditingUpdate } from "@/lib/staking/delegation-form";
 import { EpochReads } from "@/lib/staking/epoch-reads";
 import { DistributionHistoryReads } from "@/lib/staking/history-reads";
+import { NO_TABLE_VIEW, type TableViewState } from "@/lib/staking/operator-table";
 
 import { useSession } from "./ConsoleProvider";
 import { MonkeyPanelProvider, useConsoleSelect } from "./monkey/use-monkey";
@@ -34,9 +38,20 @@ export interface StakingReads {
   history: DistributionHistoryReads;
   /** Whether the operators card shows: from the node's first verdict, kept through a re-verification. */
   operatorsSettled: boolean;
+  /**
+   * The Delegate tab's editing context: which row's editor is open, the Move form's destination,
+   * the addresses typed and the amounts — kept here, not on the tab, so a tab switch loses none of
+   * it.
+   */
+  delegateEditing: DelegateEditing;
+  setDelegateEditing: (next: EditingUpdate) => void;
+  /** The operator table's view — its search, sort, page and All/Yours choice — kept here beside the editing context, so the view an open editor sits on survives a tab switch too. */
+  table: TableViewState;
+  setTable: (next: TableViewState) => void;
 }
 
-const StakingContext = createContext<StakingReads | null>(null);
+/** The context the Staking section provides its tabs; a test harness may stand it in without the section's route. */
+export const StakingContext = createContext<StakingReads | null>(null);
 
 /** The Staking section's reads and gates. Throws outside the Staking section. */
 export function useStaking(): StakingReads {
@@ -95,7 +110,13 @@ export function StakingSection({ children }: { children: ReactNode }) {
     if (trusted) void panel.refreshWallet();
   }, [panel, trusted, wallet]);
   useEffect(() => history.walletChanged(), [history, wallet]);
-  const reads: StakingReads = { panel, operators, epochs, delegations, history, operatorsSettled };
+  // Writes belong to their render's account; a late completion checks the connected wallet again.
+  const account = wallet?.address ?? null;
+  const [editingState, setEditingState] = useState<EditingState>({ account, editing: NO_EDITING });
+  const delegateEditing = editingFor(editingState, account);
+  const setDelegateEditing = (next: EditingUpdate) => setEditingState((held) => keptFor(account, next, held, store.getSnapshot().wallet?.address ?? null));
+  const [table, setTable] = useState<TableViewState>(NO_TABLE_VIEW);
+  const reads: StakingReads = { panel, operators, epochs, delegations, history, operatorsSettled, delegateEditing, setDelegateEditing, table, setTable };
   return (
     <StakingContext.Provider value={reads}>
       <MonkeyPanelProvider value={panel}>

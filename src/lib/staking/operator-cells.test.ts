@@ -34,8 +34,18 @@ describe("operatorCells", () => {
     });
   });
 
+  it("names a row no list names by its address, as Unlisted — never the Candidate words", () => {
+    expect(operatorCells({ ...ROW, hostname: null, role: "unlisted", listed: false, eligible: false, votes: null, shareBps: 0, bond: null, release: "", endpoint: null })).toMatchObject({
+      name: "0x000000…00a1", label: "0x000000…00a1", role: "Unlisted", eligibility: "—",
+    });
+  });
+
+  it("does not claim list membership for chain-only rows with no registry evidence", () => {
+    expect(operatorCells({ ...ROW, hostname: null, role: "unknown", listed: false, bond: null })).toMatchObject({ name: "0x000000…00a1", role: "—", eligibility: "—" });
+  });
+
   it("labels every role", () => {
-    expect(ROLE_LABELS).toEqual({ active: "Active", elected: "Elected", promoted: "Promoted", standby: "Standby", candidate: "Candidate" });
+    expect(ROLE_LABELS).toEqual({ active: "Active", elected: "Elected", promoted: "Promoted", standby: "Standby", candidate: "Candidate", unlisted: "Unlisted", unknown: "—" });
   });
 });
 

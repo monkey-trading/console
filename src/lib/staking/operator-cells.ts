@@ -3,7 +3,7 @@
 import { formatMonkey, formatRate, shortHex } from "../format";
 import type { OperatorRole, OperatorRow } from "./operator-table";
 
-export const ROLE_LABELS: Record<OperatorRole, string> = { active: "Active", elected: "Elected", promoted: "Promoted", standby: "Standby", candidate: "Candidate" };
+export const ROLE_LABELS: Record<OperatorRole, string> = { active: "Active", elected: "Elected", promoted: "Promoted", standby: "Standby", candidate: "Candidate", unlisted: "Unlisted", unknown: "—" };
 
 export interface OperatorCells {
   /** What the name cell shows, which may say why there is no hostname to show. */
@@ -26,14 +26,15 @@ export interface OperatorCells {
  */
 export function operatorCells(row: OperatorRow): OperatorCells {
   return {
-    name: row.hostname ?? (row.bond === null ? "The deployment's initial operator" : "Not a plain hostname"),
+    // Chain-only rows are named by their address, never the deployment's initial-operator words.
+    name: row.hostname ?? ((row.role === "unlisted" || row.role === "unknown") ? shortHex(row.address) : row.bond === null ? "The deployment's initial operator" : "Not a plain hostname"),
     label: row.hostname ?? shortHex(row.address),
     address: shortHex(row.address),
     role: ROLE_LABELS[row.role],
-    eligibility: !row.listed ? "Not listed" : row.eligible ? "Eligible" : "Not eligible",
+    eligibility: (row.role === "unlisted" || row.role === "unknown") ? "—" : !row.listed ? "Not listed" : row.eligible ? "Eligible" : "Not eligible",
     delegated: row.votes === null ? "—" : `${formatMonkey(row.votes)} (${formatRate(row.shareBps)})`,
     bond: row.bond === null ? "—" : formatMonkey(row.bond),
-    release: shortHex(row.release),
+    release: row.release === "" ? "—" : shortHex(row.release),
     endpoint: row.endpoint === null || row.endpoint === "" ? "—" : row.endpoint,
   };
 }

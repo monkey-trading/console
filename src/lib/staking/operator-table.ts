@@ -8,12 +8,13 @@
  */
 
 import { CANDIDATE_LIMIT, type OperatorList } from "../engine/staking-reads";
+import type { Delegation } from "../engine/staking";
 import { shareBps } from "../monkey/figures";
 import { shownHostname } from "./hostnames";
 import { ADDRESS } from "./candidate-choice";
 
-/** `elected` and `promoted` wait on `pendingElection`; `standby` is the one `promote()` would pick now. */
-export type OperatorRole = "active" | "elected" | "promoted" | "standby" | "candidate";
+/** `elected` and `promoted` wait on `pendingElection`; `standby` is the one `promote()` would pick now; `unlisted` is a Yours row omitted by a verified list; `unknown` has no list to compare. */
+export type OperatorRole = "active" | "elected" | "promoted" | "standby" | "candidate" | "unlisted" | "unknown";
 
 export interface OperatorRow {
   address: string;
@@ -76,7 +77,7 @@ export const PAGE_SIZE = 25;
 /** The longest search the table takes: longer than any address, hostname or endpoint a visitor would type. */
 export const MAX_SEARCH = 100;
 
-const ROLE_ORDER: Record<OperatorRole, number> = { active: 0, promoted: 1, elected: 2, standby: 3, candidate: 4 };
+const ROLE_ORDER: Record<OperatorRole, number> = { active: 0, promoted: 1, elected: 2, standby: 3, candidate: 4, unlisted: 5, unknown: 5 };
 const UNITS = /^\d+$/;
 
 /**
@@ -211,6 +212,23 @@ export function tableView(rows: readonly OperatorRow[], search: string, sort: So
   return { rows: kept.slice(shown * PAGE_SIZE, (shown + 1) * PAGE_SIZE), matched: kept.length, total: rows.length, page: shown, pages };
 }
 
+/**
+ * What the table's view controls hold. The Staking section keeps it beside the editing context, so
+ * the search, sort, page and All/Yours choice that locate an open editor survive a tab switch.
+ */
+export interface TableViewState {
+  /** The search text; "" for none. */
+  search: string;
+  sort: SortId;
+  /** Which rows show: every operator, or the account's delegations alone. */
+  show: "all" | "yours";
+  /** The page shown, from 0. */
+  page: number;
+}
+
+/** The table's view as it opens: no search, the registry's order, the first page, every operator. */
+export const NO_TABLE_VIEW: TableViewState = { search: "", sort: "role", show: "all", page: 0 };
+
 /** Which rows a page shows, in words, for the table's status line; `search` as typed. */
 export function countText(view: TableView, search: string): string {
   const noun = view.total === 1 ? "operator" : "operators";
@@ -220,4 +238,21 @@ export function countText(view: TableView, search: string): string {
   if (search.slice(0, MAX_SEARCH).trim() === "") return view.total === 0 ? "No operators." : `Showing ${range} of ${view.total} ${noun}.`;
   if (view.matched === 0) return "No operator matches.";
   return `${view.matched} of ${view.total} ${noun} ${view.matched === 1 ? "matches" : "match"}; showing ${range}.`;
+}
+
+/** A chain-only row, with membership unknown without a list or unlisted when a verified list omits it. */
+function unlistedRow(address: string, hasList: boolean): OperatorRow {
+  return { address, hostname: null, registeredHostname: "", role: hasList ? "unlisted" : "unknown", listed: false, eligible: false, votes: null, shareBps: 0, bond: null, release: "", endpoint: null, registration: null };
+}
+
+/**
+ * A row for each delegation the chain reports, in its order: the list's own row where it names the
+ * candidate, else a chain-only one, so a staker finds every delegation they hold — one to an address
+ * neither list names included — each with Move and Take back.
+ */
+export function yoursRows(rows: readonly OperatorRow[], delegations: readonly Delegation[], hasList = true): readonly OperatorRow[] {
+  return delegations.map(({ candidate }) => {
+    const address = candidate.toLowerCase();
+    return rows.find((row) => row.address === address) ?? unlistedRow(address, hasList);
+  });
 }

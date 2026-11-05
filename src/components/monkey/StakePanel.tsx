@@ -11,6 +11,7 @@ import { completeUnstake, stakeMonkey, startUnstake } from "@/lib/monkey/actions
 import { formatDuration, shareBps } from "@/lib/monkey/figures";
 import type { StakeDelegations } from "@/lib/engine/staking";
 import type { Read } from "@/lib/monkey/figures";
+import { undelegatedOf } from "@/lib/staking/delegations";
 import { unstakeWords } from "@/lib/staking/delegation-words";
 import { withAddress } from "@/lib/staking/operator-cells";
 
@@ -47,6 +48,9 @@ export function StakePanel({ delegations = null, labelOf = shortHex }: { delegat
   const readOnly = wallet?.readOnly === true;
   // The delegations an unstake would reduce, as the chain last told them, never from before the last landed transaction.
   const held = delegations === null || delegations.settling ? null : delegations.read.value;
+  // The stake's split as the chain last told it, beside the node's own figures.
+  const split = delegations?.read.value ?? null;
+  const undelegated = split === null ? null : undelegatedOf(split.staked, split.delegations);
   // Not read yet: no wallet the page load may still connect, or a connected one whose stake has not landed.
   const reading = wallet === null ? !decided : !readOnly && position === null && (!mine || figures.position.status === "loading");
   return (
@@ -56,19 +60,23 @@ export function StakePanel({ delegations = null, labelOf = shortHex }: { delegat
     >
       {reading || position?.stakingEnabled === true ? (
         <>
-          <dl className="space-y-2">
+          <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
             <Row label="Staked">{position === null ? "—" : formatMonkey(position.staked)}</Row>
+            <Row label="Delegated">{split === null ? "—" : `${formatMonkey(split.delegated)} to ${split.delegations.length} ${split.delegations.length === 1 ? "candidate" : "candidates"}`}</Row>
+            <Row label="Undelegated">{split === null || undelegated === null ? "—" : `${formatMonkey(undelegated)}${undelegated > 0n ? " (abstains)" : ""}`}</Row>
             <Row label="Wallet balance">{position === null ? "—" : formatMonkey(position.balance)}</Row>
             <Row label="Share of all stake">{share === null ? "—" : formatRate(share)}</Row>
           </dl>
           {reading ? <p className="sr-only">Reading your stake…</p> : <ReadNote read={figures.position} />}
-          <AmountForm field="stake" label="Stake" action="Stake" max={position?.balance ?? 0n} maxLabel="your wallet balance" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => stakeMonkey(panel, amount, onLanded)} />
-          <AmountForm
-            field="unstake" label="Unstake" action="Start unstake" max={position?.staked ?? 0n} maxLabel="your stake"
-            disabled={busy || settling || position === null || (delegations !== null && held === null)}
-            onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)}
-            preview={held === null ? undefined : (amount) => unstakeWords(held.staked, held.delegations, amount, (address) => withAddress(labelOf(address), address))}
-          />
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <AmountForm field="stake" label="Stake" action="Stake" max={position?.balance ?? 0n} maxLabel="your wallet balance" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => stakeMonkey(panel, amount, onLanded)} />
+            <AmountForm
+              field="unstake" label="Unstake" action="Start unstake" max={position?.staked ?? 0n} maxLabel="your stake"
+              disabled={busy || settling || position === null || (delegations !== null && held === null)}
+              onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)}
+              preview={held === null ? undefined : (amount) => unstakeWords(held.staked, held.delegations, amount, (address) => withAddress(labelOf(address), address))}
+            />
+          </div>
           {delegations !== null && delegations.read.status === "failed" && <ReadNote read={delegations.read} />}
           <Notice surface="stake" />
           <p className={NOTE}>
