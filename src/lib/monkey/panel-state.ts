@@ -22,10 +22,9 @@ export const FEEDS: Readonly<Record<FeedName, { readonly metrics: readonly Monke
   rewards: { metrics: ["cumulative_distributed"], initial: "all" },
 };
 /**
- * The charts each page draws: the MONKEY page its emissions and supply, the Staking page none since
- * its two charts moved to the Dashboard, the Dashboard all four.
+ * The charts each page draws: the Dashboard all four, the MONKEY and Staking sections none.
  */
-export const PAGE_FEEDS: Readonly<Record<PanelPage, readonly FeedName[]>> = { monkey: ["perLoss", "supply"], staking: [], dashboard: ["perLoss", "supply", "epochs", "rewards"] };
+export const PAGE_FEEDS: Readonly<Record<PanelPage, readonly FeedName[]>> = { monkey: [], staking: [], dashboard: ["perLoss", "supply", "epochs", "rewards"] };
 
 /** What the connected account holds on chain and what the node proves it was distributed. */
 export interface WalletFigures {

@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 describe("MonkeyPanel", () => {
-  it("reads the totals, the activity and the token's two charts as the MONKEY page starts", async () => {
+  it("reads totals and activity without charts as the MONKEY section starts", async () => {
     const { node, store, stop: stopFirst } = await setup("monkey");
     stopFirst();
     const fresh = new MonkeyPanel(store, "monkey");
@@ -26,13 +26,12 @@ describe("MonkeyPanel", () => {
     const activity = vi.spyOn(node.client.stats, "activity");
     const series = vi.spyOn(node.client.stats, "series");
     const stop = fresh.start(() => false);
-    void fresh.feed("perLoss").show();
-    void fresh.feed("supply").show();
     await flush();
     expect(overview).toHaveBeenCalledTimes(1);
     expect(activity).toHaveBeenCalledWith({ limit: 25 });
-    // Two charts, three metrics between them.
-    expect(series.mock.calls.map(([query]) => query.metric).sort()).toEqual(["monkey_per_loss", "total_allocated", "total_staked"]);
+    for (const name of PAGE_FEEDS.monkey) void fresh.feed(name).show();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(series).not.toHaveBeenCalled();
     stop();
   });
 
@@ -72,10 +71,11 @@ describe("MonkeyPanel", () => {
 
   it("hands out its own page's charts, and refuses another page's, which only a component on the wrong page asks for", async () => {
     const { store } = await setup();
-    expect(new MonkeyPanel(store, "monkey").feed("perLoss").metrics).toEqual(["monkey_per_loss"]);
+    expect(new MonkeyPanel(store, "dashboard").feed("perLoss").metrics).toEqual(["monkey_per_loss"]);
     expect(new MonkeyPanel(store, "dashboard").feed("rewards").metrics).toEqual(["cumulative_distributed"]);
     expect(() => new MonkeyPanel(store, "staking").feed("supply")).toThrow("The staking page draws no supply chart.");
     expect(() => new MonkeyPanel(store, "staking").feed("epochs")).toThrow("The staking page draws no epochs chart.");
+    expect(() => new MonkeyPanel(store, "monkey").feed("supply")).toThrow("The monkey page draws no supply chart.");
     expect(() => new MonkeyPanel(store, "monkey").feed("epochs")).toThrow("The monkey page draws no epochs chart.");
   });
 
@@ -112,12 +112,9 @@ describe("MonkeyPanel", () => {
     const overview = vi.spyOn(quiet.stats, "monkey");
     const panel = new MonkeyPanel(bare, "monkey");
     const stop = panel.start(() => false);
-    void panel.feed("perLoss").show();
-    void panel.feed("supply").show();
     await vi.advanceTimersByTimeAsync(0);
     expect(panel.getSnapshot().overview.status).toBe("unavailable");
     expect(panel.getSnapshot().activity.status).toBe("unavailable");
-    expect(panel.feed("supply").getSnapshot().read.status).toBe("unavailable");
     expect(bare.getSnapshot().notices).toEqual({});
     await vi.advanceTimersByTimeAsync(120_000);
     expect(overview).toHaveBeenCalledTimes(1);
@@ -129,6 +126,13 @@ describe("MonkeyPanel", () => {
     expect(staking.getSnapshot().overview.status).toBe("unavailable");
     expect(overview).toHaveBeenCalledTimes(2);
     stopStaking();
+    const dashboard = new MonkeyPanel(bare, "dashboard");
+    const stopDashboard = dashboard.start(() => false);
+    void dashboard.feed("supply").show();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(dashboard.feed("supply").getSnapshot().read.status).toBe("unavailable");
+    expect(overview).toHaveBeenCalledTimes(3);
+    stopDashboard();
   });
 
   it("does not let a totals read from before the page stopped overwrite the one after it reopened", async () => {
