@@ -2,9 +2,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { HistoryPage } from "../engine/types";
 import { DEMO_ADDRESS } from "../mock/demo";
 import { flush, setup } from "../monkey/panel-kit";
-import { DistributionHistoryReads, RETRY_TICK_MS } from "./history-reads";
+import { DistributionHistoryReads, HISTORY_PAGE, RETRY_TICK_MS } from "./history-reads";
 import { epochsOf, mine, started } from "./history-reads-kit";
 
 beforeEach(() => {
@@ -30,6 +31,39 @@ describe("DistributionHistoryReads stop and restart", () => {
     await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
     expect(mine(pages)).toHaveLength(2);
     expect(epochsOf(history)).toHaveLength(1);
+    restart();
+  });
+
+  it("reads afresh on resume when more than a page landed while the reads were stopped, so no interval is left unreachable", async () => {
+    const kit = await setup();
+    kit.stop();
+    let count = HISTORY_PAGE + 5;
+    const events = () => Array.from({ length: count }, (_, i) => ({ type: "distribution_allocated" as const, account: DEMO_ADDRESS, epoch: count - i, amount: "1000", cursor: `${10 * (count - i)}:0`, ts: count - i }));
+    const real = kit.node.client.history.bind(kit.node.client);
+    const pages = vi.spyOn(kit.node.client, "history").mockImplementation(async (address, params): Promise<HistoryPage> => {
+      if (params.kind !== "distribution_allocated") return real(address, params);
+      const older = events().filter((event) => params.before === undefined || Number(event.cursor.split(":")[0]) < Number(params.before.split(":")[0]));
+      const served = older.slice(0, params.limit ?? 50);
+      return { events: served, next: older.length > served.length ? (served[served.length - 1]?.cursor ?? null) : null };
+    });
+    const history = new DistributionHistoryReads(kit.store);
+    const stop = history.start(() => false);
+    await flush();
+    expect(epochsOf(history)).toEqual(Array.from({ length: HISTORY_PAGE }, (_, i) => HISTORY_PAGE + 5 - i));
+    stop();
+    // 70 more epochs close while the reads are stopped: the newest page cannot reach what is held.
+    count = 2 * HISTORY_PAGE + 20;
+    const restart = history.start(() => false);
+    pages.mockClear();
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
+    await flush();
+    // The recheck found the gap and started over: two reads for the recheck, then the afresh first read.
+    expect(mine(pages)).toHaveLength(4);
+    expect(history.getSnapshot()).toMatchObject({ account: DEMO_ADDRESS, status: "ready" });
+    expect(epochsOf(history)).toEqual(Array.from({ length: HISTORY_PAGE }, (_, i) => 2 * HISTORY_PAGE + 20 - i));
+    // The coverage was rebuilt: Load more reads below the afresh page and reaches what the gap would have hidden.
+    await history.loadMore();
+    expect(epochsOf(history)).toEqual(Array.from({ length: 2 * HISTORY_PAGE }, (_, i) => 2 * HISTORY_PAGE + 20 - i));
     restart();
   });
 

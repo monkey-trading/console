@@ -8,8 +8,9 @@
  * page is open and its tab visible. A failed read is made again by itself, further apart each time,
  * with no button.
  * The page opens these reads only while the node is trusted, which a gap in the feed ends. What was
- * read stays across a stop, so the loaded pages survive a tab switch; the newest pages are read
- * again a tick after the reads resume, so nothing the gap carried stays missing.
+ * read stays across a stop, so the loaded pages survive a tab switch; the newest pages are read again
+ * a tick after the reads resume, and when more than a page of them landed while the reads were stopped
+ * the history is read afresh instead, so no interval stays unreachable.
  */
 
 import { EngineError } from "../engine/client";
@@ -17,7 +18,7 @@ import type { HistoryPage } from "../engine/types";
 import { Backoff } from "../monkey/live-reads";
 import { NODE_READ_MS } from "../monkey/panel";
 import type { ConsoleStore } from "../store/store";
-import { addMessage, addNewest, addPage, emptyHistory, HISTORY_KINDS, limitingKinds, moreRemain, type DistributionHistory, type HistoryKind } from "./distribution-history";
+import { addMessage, addNewest, addPage, emptyHistory, gapBehind, HISTORY_KINDS, limitingKinds, moreRemain, type DistributionHistory, type HistoryKind } from "./distribution-history";
 
 export interface HistoryState {
   /** The account the history is for; null with no wallet. */
@@ -152,8 +153,9 @@ export class DistributionHistoryReads {
 
   /**
    * The newest page of each kind again, folded in where the first read's covers stand: what the index
-   * had not taken then. The next is due on the node read's pace; a failure keeps this one due, says
-   * why on the card, and waits out the backoff.
+   * had not taken then. A newest page that cannot reach what is held, with more behind it, reads the
+   * history afresh instead, rebuilding the covers so no interval is unreachable. The next is due on
+   * the node read's pace; a failure keeps this one due, says why on the card, and waits out the backoff.
    */
   private async readNewest(cycle: number): Promise<void> {
     const { account } = this.state;
@@ -162,6 +164,12 @@ export class DistributionHistoryReads {
     try {
       const pages = await Promise.all(HISTORY_KINDS.map((kind) => this.page(account, kind, null)));
       if (cycle !== this.cycle) return;
+      // More than a page landed while the reads were stopped: folding the newest page in would leave
+      // the interval between it and what is held unreachable, so the coverage is rebuilt from scratch.
+      if (pages.some((page) => gapBehind(this.state.data, page))) {
+        this.readAfresh(account);
+        return;
+      }
       this.recheck = { cycle, after: Date.now() + NODE_READ_MS };
       this.backoff.record(false);
       this.set({ recheckError: null, data: pages.reduce((held, page) => addNewest(held, page), this.state.data) });

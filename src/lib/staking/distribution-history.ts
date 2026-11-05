@@ -93,6 +93,19 @@ export function addNewest(data: DistributionHistory, page: HistoryPage): Distrib
   return fold(data, page.events);
 }
 
+/**
+ * Whether folding `page` in as the newest page would leave an interval nothing can reach: its oldest
+ * event is newer than every held row and the stream has more behind it, so what landed between the
+ * held rows and this page is on no cover the reads still hold. The reads start over rather than fold.
+ */
+export function gapBehind(data: DistributionHistory, page: HistoryPage): boolean {
+  if (page.next === null || data.rows.length === 0) return false;
+  const oldest = page.events.at(-1);
+  if (oldest === undefined) return false;
+  const newestHeld = data.rows.reduce((newest, row) => Math.max(newest, row.seq), 0);
+  return seqOf(oldest.cursor) > newestHeld;
+}
+
 /** Folds a stream message's allocations for `account` in; the same object when it carries none, so a price message changes nothing. */
 export function addMessage(data: DistributionHistory, message: StreamMessage, account: string): DistributionHistory {
   const mine = account.toLowerCase();

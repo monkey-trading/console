@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { HistoryEvent, HistoryPage, StreamMessage } from "../engine/types";
-import { addMessage, addNewest, addPage, atBound, emptyHistory, emptyHistoryText, epochsLeftOut, hasOperatorShare, HISTORY_KINDS, limitingKinds, MAX_EPOCHS, moreRemain, shownRows, type HistoryKind } from "./distribution-history";
+import { addMessage, addNewest, addPage, atBound, emptyHistory, emptyHistoryText, epochsLeftOut, gapBehind, hasOperatorShare, HISTORY_KINDS, limitingKinds, MAX_EPOCHS, moreRemain, shownRows, type HistoryKind } from "./distribution-history";
 
 const ME = "0x00000000000000000000000000000000000000aa";
 const OTHER = "0x00000000000000000000000000000000000000bb";
@@ -172,6 +172,26 @@ describe("what is held and left out", () => {
     const again = addNewest(data, page("distribution_allocated", [10, 9], true));
     expect(again.cover).toEqual(data.cover);
     expect(epochs(shownRows(again))).toEqual([10, 9, 8]);
+  });
+});
+
+describe("gapBehind", () => {
+  /** Epochs 9 and 8 held (seqs 90 and 80), the staker stream with more below, the operator stream read to its start. */
+  const held = () => addPage(addPage(emptyHistory(), "distribution_allocated", page("distribution_allocated", [9, 8], true)), "operator_share_allocated", page("operator_share_allocated", [], false));
+
+  it("is false where the newest page reaches what is held, whatever lies behind it", () => {
+    expect(gapBehind(held(), page("distribution_allocated", [12, 11, 10, 9], true))).toBe(false);
+    expect(gapBehind(held(), page("distribution_allocated", [12, 9], true))).toBe(false);
+  });
+
+  it("is false once the stream has nothing behind the page, with nothing held, and for an empty page", () => {
+    expect(gapBehind(held(), page("distribution_allocated", [60, 59], false))).toBe(false);
+    expect(gapBehind(emptyHistory(), page("distribution_allocated", [60, 59], true))).toBe(false);
+    expect(gapBehind(held(), page("distribution_allocated", [], true))).toBe(false);
+  });
+
+  it("is true when the page's oldest event is newer than every held row and more pages lie behind it", () => {
+    expect(gapBehind(held(), page("distribution_allocated", [60, 59, 58], true))).toBe(true);
   });
 });
 
