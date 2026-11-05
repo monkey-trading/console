@@ -75,12 +75,14 @@ export function PnlCurve({ className }: { className?: string }) {
             <line x1={x(0)} x2={x(0)} y1={PAD} y2={H - PAD} className="stroke-edge" strokeDasharray="3 3" />
             <path d={path} fill="none" strokeWidth="2" className="stroke-fg" />
           </svg>
-          <div aria-hidden="true" className="flex justify-between text-label text-fg-3 tabular-nums">
-            <span>-1% {price(-RANGE_BPS)}</span><span className="text-fg-2">{price(0)}</span><span>+1% {price(RANGE_BPS)}</span>
+          <div aria-hidden="true" className="grid grid-cols-3 items-end gap-2 text-label text-fg-3 tabular-nums">
+            <span className="min-w-0 [overflow-wrap:anywhere]"><span className="block">-1%</span>{price(-RANGE_BPS)}</span>
+            <span className="min-w-0 text-center text-fg-2 [overflow-wrap:anywhere]">{price(0)}</span>
+            <span className="min-w-0 text-right [overflow-wrap:anywhere]"><span className="block">+1%</span>{price(RANGE_BPS)}</span>
           </div>
-          <p aria-hidden="true" className="flex justify-between text-caption tabular-nums">
-            <span className={first.usd < 0 ? "text-ember" : "text-glow"}>{formatCompactUsd(first.usd)}</span>
-            <span className={last.usd < 0 ? "text-ember" : "text-glow"}>{formatCompactUsd(last.usd)}</span>
+          <p aria-hidden="true" className="grid grid-cols-2 gap-2 text-caption tabular-nums">
+            <span className={`min-w-0 [overflow-wrap:anywhere] ${first.usd < 0 ? "text-ember" : "text-glow"}`}>{formatCompactUsd(first.usd)}</span>
+            <span className={`min-w-0 text-right [overflow-wrap:anywhere] ${last.usd < 0 ? "text-ember" : "text-glow"}`}>{formatCompactUsd(last.usd)}</span>
           </p>
           <p className="text-label text-fg-3">A straight line from net exposure, before close-outs.</p>
         </>

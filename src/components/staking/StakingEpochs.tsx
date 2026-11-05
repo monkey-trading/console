@@ -2,10 +2,9 @@
 
 /** The Staking section's Epochs tab: the distribution's state and every closed epoch, with the distributions' history charts on the Dashboard. */
 
-import Link from "next/link";
-
 import { readBlock } from "@/lib/engine/attestation";
 
+import { DashboardLink } from "../DashboardLink";
 import { DistributionPanel } from "../monkey/DistributionPanel";
 import { useConsoleSelect } from "../monkey/use-monkey";
 import { useStaking } from "../StakingSection";
@@ -24,9 +23,7 @@ export function StakingEpochs() {
         <DistributionPanel />
         <EpochHistory epochs={epochs} labelOf={labelOf} />
       </div>
-      <p className="text-caption">
-        <Link href="/dashboard#staking" className="inline-flex min-h-11 items-center text-glow hover:text-glow-hover focus-visible:outline-2 focus-visible:outline-glow lg:min-h-6">See the history of distributions on the Dashboard</Link>
-      </p>
+      <DashboardLink href="/dashboard#staking">See the history of distributions on the Dashboard</DashboardLink>
     </div>
   );
 }

@@ -184,7 +184,7 @@ export function CloseoutMap({ className }: { className?: string }) {
       }
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-label text-fg-3" aria-hidden="true">
-        {mark !== null && <span className="flex items-center gap-2">$0<span className="h-2 w-24 bg-linear-to-r from-amber/5 to-amber/65" />{formatCompactUsd(maxUsd)}</span>}
+        {mark !== null && <span className="flex max-w-full flex-wrap items-center gap-2">$0<span className="h-2 min-w-0 w-24 shrink bg-linear-to-r from-amber/5 to-amber/65" />{formatCompactUsd(maxUsd)}</span>}
         <span className="min-h-4 text-fg-2">{detail ?? "Move over the chart to read a band."}</span>
       </div>
       <div className="relative min-h-80 flex-1">

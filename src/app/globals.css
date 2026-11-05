@@ -44,8 +44,8 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Below lg the document scrolls: a focused control clears the phone's bar on every page. The
-   Staking section's tab bar also sticks to the viewport top there, so a focused control clears it
+/* Below lg the document scrolls: a focused control clears the phone's bar on every page. A
+   section's tab bar also sticks to the viewport top there, so a focused control clears it
    too, but only while the section's bar is on the page. */
 html {
   @variant max-lg {

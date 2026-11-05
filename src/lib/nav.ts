@@ -23,7 +23,22 @@ export interface PageSection {
 }
 
 /** The section tabs each page's layout shows, by the page's href. */
-export const SECTIONS: Readonly<Record<"/staking", PageSection>> = {
+export const SECTIONS: Readonly<Record<"/house" | "/monkey" | "/staking", PageSection>> = {
+  "/house": {
+    label: "House sections",
+    tabs: [
+      { href: "/house", label: "Overview" },
+      { href: "/house/risk", label: "Risk" },
+      { href: "/house/withdrawals", label: "Withdrawals" },
+    ],
+  },
+  "/monkey": {
+    label: "MONKEY sections",
+    tabs: [
+      { href: "/monkey", label: "Emissions" },
+      { href: "/monkey/activity", label: "Activity" },
+    ],
+  },
   "/staking": {
     label: "Staking sections",
     tabs: [
