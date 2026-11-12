@@ -192,6 +192,37 @@ describe("OperatorReads", () => {
     restart();
   });
 
+  it("reads both routes afresh when another verified enclave holds the node at the restart or while the card is open, and keeps them for the same one", async () => {
+    const { operators, store, counts, stop } = await started();
+    const enclave = (address: string) => ({ kind: "verified", release: "r", config: "c", address }) as const;
+    stop();
+    store.patch({ attestation: enclave("0xA1") });
+    const first = operators.start(() => false);
+    await flush();
+    first();
+    // The same enclave again: what was read stays on the card until the read at the restart lands.
+    store.patch({ attestation: enclave("0xa1") });
+    const same = operators.start(() => false);
+    expect(operators.getSnapshot()).toMatchObject({ route: { status: "ready" }, list: { status: "ready" } });
+    await flush();
+    same();
+    // Another one: the retained answers are the old enclave's, so the card holds nothing until a read lands, and the held list stays for the picker.
+    const held = operators.getSnapshot().held;
+    store.patch({ attestation: enclave("0xB2") });
+    const restart = operators.start(() => false);
+    expect(operators.getSnapshot()).toMatchObject({ route: { status: "loading", value: null }, list: { status: "loading", value: null }, held });
+    await flush();
+    expect(operators.getSnapshot().list.status).toBe("ready");
+    // While open, a different enclave replacing it without the node ever reading as blocked is dropped the same way.
+    const reads = counts.list;
+    store.patch({ attestation: enclave("0xC3") });
+    expect(operators.getSnapshot()).toMatchObject({ route: { status: "loading", value: null }, list: { status: "loading", value: null } });
+    await flush();
+    expect(counts.list).toBe(reads + 1);
+    expect(operators.getSnapshot().list.status).toBe("ready");
+    restart();
+  });
+
   it("stops following the node's trust once closed, drops a distinguishable answer that lands after it closed, and adopts the one a restart begins", async () => {
     const { operators, store, node, counts, stop } = await started();
     const pending: ((list: OperatorList) => void)[] = [];

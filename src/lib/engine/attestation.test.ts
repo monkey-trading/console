@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { checkAttestation, readBlock, signBlock } from "./attestation";
+import { checkAttestation, enclaveOf, readBlock, signBlock } from "./attestation";
 import type { Attestation } from "./types";
 
 const toHex = (text: string) => Array.from(text, (c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
@@ -67,5 +67,18 @@ describe("signBlock", () => {
     expect(signBlock({ kind: "mock" }, "live", true)).toContain("read-only");
     expect(signBlock({ kind: "checking" }, "stale", true)).toContain("read-only");
     expect(signBlock({ kind: "mock" }, "live")).toBeNull();
+  });
+});
+
+describe("enclaveOf", () => {
+  it("names the verified signer by its lowercased address, whether or not the vault's release was checked, and the mock node as mock", () => {
+    const verified = { kind: "verified", release: "r", config: "c", address: "0xABCD" } as const;
+    expect(enclaveOf(verified)).toBe("0xabcd");
+    expect(enclaveOf({ kind: "attested", release: "r", address: "0xabcd", why: "w" })).toBe("0xabcd");
+    expect(enclaveOf({ kind: "mock" })).toBe("mock");
+  });
+
+  it("names none while no enclave is verified", () => {
+    for (const status of [{ kind: "checking" }, { kind: "reverifying" }, { kind: "clock", skewMs: 5 }, { kind: "unverified", reason: "x" }] as const) expect(enclaveOf(status), status.kind).toBeNull();
   });
 });

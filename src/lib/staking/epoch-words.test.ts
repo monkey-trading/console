@@ -3,7 +3,8 @@
 import { describe, expect, it } from "vitest";
 
 import { formatStamp } from "../time";
-import { coverText, problemText } from "./epoch-words";
+import { close } from "./epoch-reads-kit";
+import { coverText, problemText, unavailableText } from "./epoch-words";
 
 describe("coverText", () => {
   const whole = { begins_ms: 0, from_genesis: true, truncated: false, retained_from_epoch: null };
@@ -31,5 +32,14 @@ describe("problemText", () => {
     expect(problemText({ status: "ready", error: "The node did not answer.", moreError: "gone" })).toBe("Could not check for newly closed epochs: The node did not answer. The check is made again by itself.");
     expect(problemText({ status: "ready", error: null, moreError: "The node did not answer." })).toBe("Could not read older epochs: The node did not answer.");
     expect(problemText({ status: "ready", error: null, moreError: null })).toBe("");
+  });
+});
+
+describe("unavailableText", () => {
+  it("says the list is no longer updated only where the node stopped serving the route with epochs held", () => {
+    const held = [close(2), close(1)];
+    expect(unavailableText({ status: "unavailable", epochs: held })).toBe("This node no longer serves the closed epochs, so these are the ones read earlier and the list is not updated.");
+    expect(unavailableText({ status: "unavailable", epochs: [] })).toBe("");
+    expect(unavailableText({ status: "ready", epochs: held })).toBe("");
   });
 });

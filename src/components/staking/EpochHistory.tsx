@@ -13,7 +13,7 @@ import { formatUsd, parseFixed } from "@/lib/fixed";
 import { usdcFixed } from "@/lib/monkey/figures";
 import type { EpochClose } from "@/lib/engine/staking-reads";
 import { EPOCH_PAGE, type EpochReads } from "@/lib/staking/epoch-reads";
-import { coverText, problemText } from "@/lib/staking/epoch-words";
+import { coverText, problemText, unavailableText } from "@/lib/staking/epoch-words";
 import { withAddress } from "@/lib/staking/operator-cells";
 import { formatStampWithYear } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
@@ -74,6 +74,7 @@ export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf:
   const covered = state.cover === null ? null : coverText(state.cover);
   const read = { status: state.status === "reading" || state.status === "idle" ? ("loading" as const) : state.status === "ready" ? ("ready" as const) : state.status, value: state.epochs.length > 0 ? state.epochs : null, message: state.error };
   const problem = problemText(state);
+  const gone = unavailableText(state);
   const loadMore = () => {
     if (state.more) return;
     void epochs.loadMore().then(() => {
@@ -89,6 +90,7 @@ export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf:
           number of epochs — so the charts below the card never move; the empty and failure lines
           sit inside it. */}
       <div role="region" aria-label="Closed distribution epochs" tabIndex={0} className="relative -mx-1 h-96 overflow-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
+        {gone !== "" && <p role="status" className={`${NOTE} px-1 pb-1`}>{gone}</p>}
         {state.epochs.length > 0 ? (
           <table className="w-full min-w-[36rem] text-label sm:text-caption">
             <caption className="sr-only">Each closed distribution epoch, newest first: when it closed, the house NAV against the floor, what went to stakers, and each recipient of the operator&apos;s share. Times are UTC.</caption>

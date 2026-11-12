@@ -19,3 +19,12 @@ export function problemText(state: Pick<EpochsState, "status" | "error" | "moreE
   if (state.error !== null) return `Could not check for newly closed epochs: ${state.error.replace(/\.+$/, "")}. The check is made again by itself.`;
   return state.moreError === null ? "" : `Could not read older epochs: ${state.moreError.replace(/\.+$/, "")}.`;
 }
+
+/**
+ * What the card says beside epochs it holds when the node stopped serving the route: the list is
+ * what was read before and no longer updates. Empty otherwise; with nothing held, the card's own
+ * unavailable line says it.
+ */
+export function unavailableText(state: Pick<EpochsState, "status" | "epochs">): string {
+  return state.status === "unavailable" && state.epochs.length > 0 ? "This node no longer serves the closed epochs, so these are the ones read earlier and the list is not updated." : "";
+}

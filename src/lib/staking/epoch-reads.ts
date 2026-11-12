@@ -11,6 +11,7 @@
 import type { DistributionEpochsPage, EpochClose } from "../engine/staking-reads";
 import { Backoff } from "../monkey/live-reads";
 import { NODE_READ_MS } from "../monkey/panel";
+import { EnclaveBinding } from "../store/enclave-binding";
 import type { ConsoleStore } from "../store/store";
 import { ADDRESS } from "./candidate-choice";
 import { RETRY_TICK_MS } from "./history-reads";
@@ -93,8 +94,11 @@ export class EpochReads {
   /** When the newest page is next read again, by the device's clock. */
   private dueAt = 0;
   private reading = false;
+  private readonly enclave: EnclaveBinding;
 
-  constructor(private readonly store: ConsoleStore) {}
+  constructor(private readonly store: ConsoleStore) {
+    this.enclave = new EnclaveBinding(store);
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -114,6 +118,8 @@ export class EpochReads {
   start(isHidden: () => boolean): () => void {
     this.cycle += 1;
     this.backoff.reset();
+    // Pages another enclave signed are not this one's: a restart under a new verified enclave reads afresh.
+    if (this.enclave.replaced()) this.set(IDLE);
     if (this.state.status === "idle") this.set({ status: "reading" });
     void this.readNewest(this.cycle);
     const unsubscribe = this.store.deps.client.subscribe((message) => {
