@@ -23,6 +23,9 @@ import { Row } from "./Row";
 import { BUTTON, NOTE } from "./styles";
 import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
 
+/** The longest figure the split rows are likely to show, laid out unseen so the split landing wraps nothing the dashes did not. */
+const SPLIT_RESERVE = "12,345 MONKEY to 10 candidates";
+
 /**
  * `delegations` is the chain's read of the account's delegations, which an unstake reduces, and
  * `labelOf` names their candidates; with it, the unstake waits for a fresh read, so its preview of
@@ -60,21 +63,22 @@ export function StakePanel({ delegations = null, labelOf = shortHex }: { delegat
     >
       {reading || position?.stakingEnabled === true ? (
         <>
-          <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
             <Row label="Staked">{position === null ? "—" : formatMonkey(position.staked)}</Row>
-            <Row label="Delegated">{split === null ? "—" : `${formatMonkey(split.delegated)} to ${split.delegations.length} ${split.delegations.length === 1 ? "candidate" : "candidates"}`}</Row>
-            <Row label="Undelegated">{split === null || undelegated === null ? "—" : `${formatMonkey(undelegated)}${undelegated > 0n ? " (abstains)" : ""}`}</Row>
+            <Row label="Delegated" reserve={SPLIT_RESERVE}>{split === null ? "—" : `${formatMonkey(split.delegated)} to ${split.delegations.length} ${split.delegations.length === 1 ? "candidate" : "candidates"}`}</Row>
+            <Row label="Undelegated" reserve={SPLIT_RESERVE}>{split === null || undelegated === null ? "—" : `${formatMonkey(undelegated)}${undelegated > 0n ? " (abstains)" : ""}`}</Row>
             <Row label="Wallet balance">{position === null ? "—" : formatMonkey(position.balance)}</Row>
             <Row label="Share of all stake">{share === null ? "—" : formatRate(share)}</Row>
           </dl>
           {reading ? <p className="sr-only">Reading your stake…</p> : <ReadNote read={figures.position} />}
-          <div className="grid items-start gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
             <AmountForm field="stake" label="Stake" action="Stake" max={position?.balance ?? 0n} maxLabel="your wallet balance" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => stakeMonkey(panel, amount, onLanded)} />
             <AmountForm
               field="unstake" label="Unstake" action="Start unstake" max={position?.staked ?? 0n} maxLabel="your stake"
               disabled={busy || settling || position === null || (delegations !== null && held === null)}
               onSubmit={(amount, onLanded) => startUnstake(panel, amount, onLanded)}
-              preview={held === null ? undefined : (amount) => unstakeWords(held.staked, held.delegations, amount, (address) => withAddress(labelOf(address), address))}
+              // Always laid out, empty until the chain's read can say what an unstake reduces, so its arrival moves nothing.
+              preview={(amount) => (held === null ? null : unstakeWords(held.staked, held.delegations, amount, (address) => withAddress(labelOf(address), address)))}
             />
           </div>
           {delegations !== null && delegations.read.status === "failed" && <ReadNote read={delegations.read} />}

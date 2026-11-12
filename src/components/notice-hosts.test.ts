@@ -57,7 +57,7 @@ function Operators() {
   const reads: StakingReads = {
     panel: new MonkeyPanel(store, "staking"), operators, epochs: new EpochReads(store), delegations,
     history: new DistributionHistoryReads(store), operatorsSettled: true, delegateEditing: NO_EDITING, setDelegateEditing: () => undefined,
-    table: NO_TABLE_VIEW, setTable: () => undefined,
+    table: NO_TABLE_VIEW, setTable: () => undefined, typedSlot: false, setTypedSlot: () => undefined,
   };
   return createElement(StakingContext.Provider, { value: reads }, createElement(OperatorsPanel, { operators, delegations }));
 }

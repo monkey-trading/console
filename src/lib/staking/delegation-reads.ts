@@ -26,6 +26,18 @@ export interface DelegationsState {
 const NONE = { status: "unavailable", value: null, message: null } as const;
 const IDLE: DelegationsState = { account: null, read: LOADING, settling: false };
 
+/**
+ * Whether the connected account's own reads have each given an answer, a failure or "unavailable"
+ * included, so a card laid out from them can be shown without growing when they land: the wallet
+ * decided, and — for a wallet that reads — this account's delegations and its stake position.
+ * `position` is the stake card's read status for this account ("ready" where it is not waited for).
+ */
+export function accountReadsSettled({ wallet, decided, delegations, position }: { wallet: { address: string; readOnly?: boolean } | null; decided: boolean; delegations: DelegationsState; position: Read<unknown>["status"] }): boolean {
+  if (wallet === null) return decided;
+  if (wallet.readOnly === true) return true;
+  return delegations.account === wallet.address && delegations.read.status !== "loading" && position !== "loading";
+}
+
 export class DelegationReads {
   private state: DelegationsState = IDLE;
   private readonly listeners = new Set<() => void>();
@@ -60,7 +72,14 @@ export class DelegationReads {
     for (const listener of this.listeners) listener();
   }
 
-  /** Starts the reads, and returns what stops them and forgets what they read. While `isHidden` says the tab is hidden the timer reads nothing. */
+  /**
+   * Starts the reads, and returns what stops them. What they read stays for the account it was read
+   * for, so a tab return keeps the rows and editors that read laid out (monkey-trading/console#329),
+   * but counts as a change nobody observed: it stays settling, its forms shut, until a read begun
+   * after the restart succeeds. Another account's stays until the first read replaces it, and no
+   * consumer takes it for its own; a read that holds no figures is forgotten.
+   * While `isHidden` says the tab is hidden the timer reads nothing.
+   */
   start(isHidden: () => boolean): () => void {
     this.open = true;
     this.cycle += 1;
@@ -83,8 +102,13 @@ export class DelegationReads {
       if (this.store.monkeySession.delegations === this) this.store.monkeySession.delegations = null;
       this.reading = null;
       this.backoff.reset();
-      this.caughtUp = this.landed;
-      this.set(IDLE);
+      if (this.state.read.value === null) {
+        this.caughtUp = this.landed;
+        this.set(IDLE);
+      } else {
+        this.landed += 1;
+        this.set({ settling: true });
+      }
     };
   }
 

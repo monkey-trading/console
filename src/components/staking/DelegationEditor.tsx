@@ -13,6 +13,7 @@ import { pickedCandidate, type CandidateSource } from "@/lib/staking/candidate-c
 import {
   amountKey,
   clearAmount,
+  revisionOf,
   setAmount,
   setMoveTo,
   setTypedMove,
@@ -51,12 +52,14 @@ interface Props {
 /** The Delegate tab's per-row editor; the words of each preview are `delegation-words.ts`. */
 export function DelegationEditor({ mode, candidate, label, chain, options, source, editing, onEdit, disabled, nameOf, send }: Props) {
   const key = amountKey(mode, candidate);
+  // The draft this render shows: a send pressed from it clears exactly that draft once it lands.
+  const revision = revisionOf(editing, key);
   const draft: AmountDraft = {
     text: editing.amounts[key] ?? "",
     set: (text) => onEdit(setAmount(editing, key, text)),
     // Applied to what is stored now: a send that lands after other edits must not restore the render
-    // captured when it was pressed, nor clear what has been typed since.
-    clear: (sent) => onEdit((now) => clearAmount(now, key, sent)),
+    // captured when it was pressed, nor clear a draft changed since, whatever its text.
+    clear: (sent) => onEdit((now) => clearAmount(now, key, sent, revision)),
   };
   const delegated = chain.delegations;
   const undelegated = undelegatedOf(chain.staked, delegated);
