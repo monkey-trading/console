@@ -20,5 +20,8 @@ describe("MonkeyCharts before its overview is read", () => {
     const html = renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Section)));
     expect(html).toMatch(/aria-hidden="true" class="[^"]*\binvisible\b[^"]*">The budget is 1,000 MONKEY per period, and halves at 1 Jan 00:00:00 UTC\. Halvings that have passed are marked\./);
     expect(html).toMatch(/aria-hidden="true" class="invisible">[^]*Data begins 1 Jan 00:00:00 UTC\.[^]*All covers the most recent 1,998 days/);
+    // The supply card's two figures wrap onto two lines once read, so the held line carries both labels with a typical figure.
+    expect(html).toContain("Allocated 000,000,000 MONKEY  ·  Staked 000,000,000 MONKEY");
+    expect(html).toContain("Latest —");
   });
 });

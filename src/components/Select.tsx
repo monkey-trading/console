@@ -8,6 +8,8 @@ import { placeListbox } from "@/lib/listbox-placement";
 
 /** The gap kept between an open list and the viewport's edges, in CSS pixels. */
 const VIEWPORT_MARGIN = 8;
+/** The gap between the control and a list opened above it, as `mt-1` leaves below. */
+const VIEWPORT_GAP = 4;
 
 export interface SelectOption<T extends string> {
   value: T;
@@ -55,10 +57,10 @@ export function Select<T extends string>({ label, value, options, onChange, alig
       const placed = placeListbox({ control, list: { width: box.getBoundingClientRect().width, contentHeight: box.scrollHeight }, viewport, margin: VIEWPORT_MARGIN, align });
       box.style.transform = `translateX(${placed.shiftX}px)`;
       box.style.maxHeight = `min(16rem, ${placed.maxHeight}px)`;
+      // Above, the list's bottom edge sits a gap over the button, not over the label the button's container starts with.
       box.style.top = placed.above ? "auto" : "";
-      box.style.bottom = placed.above ? "100%" : "";
+      box.style.bottom = placed.above ? `${anchor.getBoundingClientRect().bottom - control.top + VIEWPORT_GAP}px` : "";
       box.style.marginTop = placed.above ? "0" : "";
-      box.style.marginBottom = placed.above ? "0.25rem" : "";
     };
     place();
     window.addEventListener("resize", place);
