@@ -54,3 +54,22 @@ describe("the House charts under a driven range", () => {
     expect(render(queue({ range: "7d", walked: false }), state)).not.toContain("$1.23K");
   });
 });
+
+/** What the pending panel's unseen footnote holds: the loaded footnote's sentences, in an element hidden from sight and assistive technology. */
+const heldFootnote = (html: string) => html.match(/<span aria-hidden="true" class="invisible">([^<]*)<\/span>/)?.[1] ?? null;
+
+describe("the House charts while their page waits for the first answers (monkey-trading/console#319)", () => {
+  it("holds the loaded footnote's sentences unseen under the reading line, the All window's and the scan's included", () => {
+    const html = render(() => createElement(ExposureChart, { range: "all", pending: true }));
+    expect(heldFootnote(html)).toBe("Data begins 1 Jan 00:00:00 UTC, from the log&#x27;s first command. All covers the most recent 1,998 days, the most one read holds at daily buckets. These figures are the node&#x27;s periodic scan of every account, so a position opened and closed between two scans does not show.");
+    expect(html).toContain("Reading the node&#x27;s signed history…");
+    expect(heldFootnote(render(nav({ range: "7d", pending: true, floor: { value: null, note: null } })))).toBe("Data begins 1 Jan 00:00:00 UTC, from the log&#x27;s first command.");
+  });
+
+  it("shows no figure while pending, even where the store holds a queue total", () => {
+    const state = { withdrawalTotals: WALKED, queueFailed: false };
+    expect(render(queue({ range: "7d", pending: true }), state)).not.toContain("$1.23K");
+    expect(render(queue({ range: "7d", pending: true }), state)).toContain("—");
+  });
+});
+

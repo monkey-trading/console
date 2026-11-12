@@ -32,10 +32,14 @@ interface Props {
   timeframe?: TimeframeId;
   /** What the chart measures, where its title does not say. */
   caption?: string;
+  /** A typical latest value's text, held unseen while the chart is read so a card whose figures wrap onto several lines keeps its loaded height. */
+  heldFigure?: string;
   footer?: ReactNode;
 }
 
 const NO_MARKS: readonly number[] = [];
+
+const ALL_LINE = `All covers the most recent ${groupThousands(ALL_WINDOW_DAYS)} days, the most one read holds at daily buckets.`;
 
 /** Where the node's record for this chart begins, and why it might not reach further back. */
 function beginsText(begins: number | null, fromGenesis: boolean, retained: number | null): string {
@@ -46,7 +50,7 @@ function beginsText(begins: number | null, fromGenesis: boolean, retained: numbe
   return `${parts.join(", ")}.`;
 }
 
-export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MARKS, timeframe, caption, footer }: Props) {
+export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MARKS, timeframe, caption, heldFigure = "—", footer }: Props) {
   const { timeframe: held, read } = useSyncExternalStore(feed.subscribe, feed.getSnapshot, feed.getSnapshot);
   const data = read.value;
   // The chart's reads follow its card: they run while it is on screen and stop when it leaves.
@@ -90,9 +94,9 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
       {data === null && read.status === "loading" && (
         // The lines under a read chart, held while it is read so the card keeps its loaded height.
         <div aria-hidden="true" className="invisible">
-          <p className="mt-2 text-label">Latest</p>
-          <p className={`${NOTE} mt-1`}>Data begins</p>
-          {(timeframe ?? held) === "all" && <p className={`${NOTE} mt-1`}>All covers the most recent {groupThousands(ALL_WINDOW_DAYS)} days, the most one read holds at daily buckets.</p>}
+          <p className="mt-2 text-label">{lines.map((line) => `${lines.length > 1 ? `${line.label} ` : "Latest "}${heldFigure}`).join("  ·  ")}</p>
+          <p className={`${NOTE} mt-1`}>{beginsText(0, true, null)}</p>
+          {(timeframe ?? held) === "all" && <p className={`${NOTE} mt-1`}>{ALL_LINE}</p>}
         </div>
       )}
       {data !== null && (
@@ -100,8 +104,8 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
           <p className="sr-only">{title}: {lines.map((line) => `${line.label} ${latestText(data.units[line.metric] ?? "", data.latest[line.metric])}`).join("; ")}.</p>
           <p className="mt-2 text-label text-fg-2" aria-hidden="true">{lines.map((line) => `${lines.length > 1 ? `${line.label} ` : "Latest "}${latestText(data.units[line.metric] ?? "", data.latest[line.metric])}`).join("  ·  ")}</p>
           <p className={`${NOTE} mt-1`}>{beginsText(data.begins_ms, data.from_genesis, data.retained_from_ms)}</p>
-          {/* Under loaded data the line describes that data's window, which lags the requested one while a change loads or after it fails. */}
-          {data.timeframe === "all" && <p className={`${NOTE} mt-1`}>All covers the most recent {groupThousands(ALL_WINDOW_DAYS)} days, the most one read holds at daily buckets.</p>}
+          {/* Under loaded data the line describes that data's window, which lags the requested one while a change loads or after it fails; a change to All holds the line's place unseen. */}
+          {data.timeframe === "all" ? <p className={`${NOTE} mt-1`}>{ALL_LINE}</p> : (timeframe ?? held) === "all" && <p aria-hidden="true" className={`${NOTE} invisible mt-1`}>{ALL_LINE}</p>}
           {data.lines[lines[0]?.metric ?? ""]?.length === 0 && <p className={NOTE}>No buckets fall in this window.</p>}
           <RecentTable title={title} lines={lines} data={data} format={format} />
         </>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SeriesPage } from "./engine/stats-types";
-import { ALL_WINDOW_MS, beginsOf, beginsText, foldSeries, FOLLOW_UP_LIMIT, MAX_POINTS, nextQuery, pointsOf, tableRows, rangeOf, seriesQuery } from "./house-series";
+import { ALL_WINDOW_MS, beginsOf, beginsText, foldSeries, heldBeginsText, FOLLOW_UP_LIMIT, MAX_POINTS, nextQuery, pointsOf, tableRows, rangeOf, seriesQuery } from "./house-series";
 
 const level = (ts: number, close: string) => ({ ts, open: close, high: close, low: close, close });
 const page = (entries: SeriesPage["entries"], extra: Partial<SeriesPage> = {}): SeriesPage => ({
@@ -84,6 +84,10 @@ describe("where a chart's data begins", () => {
   it("is the record's start from genesis, and says so", () => {
     expect(beginsOf(data({ begins_ms: 5 }))).toEqual({ ms: 5, reason: "genesis" });
     expect(beginsText(data({ begins_ms: 5 }), stamp)).toBe("Data begins t5 UTC, from the log's first command.");
+  });
+
+  it("holds a footnote's place with the sentence a record from the log's first command gives, so it wraps as the read one will", () => {
+    expect(heldBeginsText(stamp)).toBe(beginsText(data({ begins_ms: 0 }), stamp));
   });
 
   it("says the history after a snapshot recovery is partial", () => {

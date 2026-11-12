@@ -16,6 +16,8 @@ import type { TimeframeId } from "@/lib/monkey/timeframes";
 import { ChartCard } from "./ChartCard";
 
 const ALL_LINE = "All covers the most recent 1,998 days";
+/** The All line as a visible paragraph, not the unseen one that holds its place. */
+const SHOWN_ALL = /<p class="(?![^"]*\binvisible\b)[^"]*">All covers/;
 
 const page = (query: SeriesQuery): SeriesPage => ({
   metric: query.metric, market: null, resolution: query.resolution, kind: "flow", unit: "usdc_base_units", begins_ms: 100, begins_seq: 0, from_genesis: true, retained_from_ms: null,
@@ -46,6 +48,7 @@ describe("ChartCard's window line", () => {
     const week = feedOn("7d");
     await week.feed.show();
     expect(card(week.feed)).not.toContain(ALL_LINE);
+    expect(card(all.feed)).toMatch(SHOWN_ALL);
   });
 
   it("keeps the All line beside the All data it holds while a change to 7D loads or fails", async () => {
@@ -66,7 +69,9 @@ describe("ChartCard's window line", () => {
     await feed.setTimeframe("all");
     const html = card(feed, "all");
     expect(html).toContain("The chart shows the 7D window it already holds.");
-    expect(html).not.toContain(ALL_LINE);
+    // The line is not shown beside 7D data: only its unseen place is held, for the All the card asked for.
+    expect(html).not.toMatch(SHOWN_ALL);
+    expect(html).toMatch(/aria-hidden="true" class="[^"]*\binvisible\b[^"]*">All covers/);
     // With nothing held, the placeholder keeps the loaded height, so it describes the window asked for.
     expect(card(feedOn("all").feed, "all")).toContain(ALL_LINE);
   });

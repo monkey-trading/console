@@ -33,7 +33,7 @@ const selectExposure = (s: ConsoleState): Record<string, number | null> =>
   Object.fromEntries((s.house.scan?.markets ?? []).flatMap((m) => [[`${m.market}:long`, m.long === null ? null : fixedToNumber(m.long)], [`${m.market}:short`, m.short === null ? null : fixedToNumber(m.short)]]));
 
 /** House NAV over time, with everything below the distribution's liquidity floor shaded. The floor is read here, unless the page already holds it from its own MONKEY read (the Dashboard), with `note` saying when that read is failing. */
-export function NavChart({ range, className, floor }: { range?: RangeId; className?: string; floor?: { value: number | null; note: string | null } }) {
+export function NavChart({ range, className, floor, pending }: { range?: RangeId; className?: string; floor?: { value: number | null; note: string | null }; pending?: boolean }) {
   const { store } = useSession();
   const readHere = floor === undefined;
   const monkey = useFeed(useMemo(() => (readHere ? monkeyFeed(store) : null), [readHere, store]));
@@ -50,13 +50,14 @@ export function NavChart({ range, className, floor }: { range?: RangeId; classNa
       currents={useSelected(selectNav)}
       floor={value}
       note={note}
+      pending={pending}
       className={className}
     />
   );
 }
 
 /** Clients' long and short notional in one market, from the node's account scans. */
-export function ExposureChart({ range, className }: { range?: RangeId; className?: string }) {
+export function ExposureChart({ range, className, pending }: { range?: RangeId; className?: string; pending?: boolean }) {
   const markets = useMarketOptions();
   return (
     <SeriesPanel
@@ -66,6 +67,7 @@ export function ExposureChart({ range, className }: { range?: RangeId; className
       markets={markets}
       range={range}
       currents={useSelected(selectExposure)}
+      pending={pending}
       className={className}
     />
   );
@@ -74,9 +76,9 @@ export function ExposureChart({ range, className }: { range?: RangeId; className
 /**
  * What the withdrawal queue owes over time. The headline above the chart is the queue walk's
  * totals where a walk runs and is current (the House page); the Dashboard passes `walked={false}`,
- * since no walk runs there, and the chart's own last bucket stands in.
+ * since no walk runs there, and the chart's own last bucket stands in. Each chart takes `pending` while its page waits for the first signed answers.
  */
-export function QueueChart({ range, className, walked = true }: { range?: RangeId; className?: string; walked?: boolean }) {
+export function QueueChart({ range, className, walked = true, pending }: { range?: RangeId; className?: string; walked?: boolean; pending?: boolean }) {
   const totals = useSelected(selectQueue);
   return (
     <SeriesPanel
@@ -86,6 +88,7 @@ export function QueueChart({ range, className, walked = true }: { range?: RangeI
       markets={null}
       range={range}
       currents={walked ? totals : undefined}
+      pending={pending}
       className={className}
     />
   );
