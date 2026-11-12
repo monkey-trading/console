@@ -48,6 +48,9 @@ export interface StakingReads {
   /** The operator table's view — its search, sort, page and All/Yours choice — kept here beside the editing context, so the view an open editor sits on survives a tab switch too. */
   table: TableViewState;
   setTable: (next: TableViewState) => void;
+  /** Whether the "Delegate to an address" way has been offered on this visit, so its slot stays when the node's current list withdraws it and nothing under it moves (monkey-trading/console#331). */
+  typedSlot: boolean;
+  setTypedSlot: (next: boolean) => void;
 }
 
 /** The context the Staking section provides its tabs; a test harness may stand it in without the section's route. */
@@ -112,11 +115,12 @@ export function StakingSection({ children }: { children: ReactNode }) {
   useEffect(() => history.walletChanged(), [history, wallet]);
   // Writes belong to their render's account; a late completion checks the connected wallet again.
   const account = wallet?.address ?? null;
-  const [editingState, setEditingState] = useState<EditingState>({ account, editing: NO_EDITING });
+  const [editingState, setEditingState] = useState<EditingState>({ account, editing: NO_EDITING, issued: 0 });
   const delegateEditing = editingFor(editingState, account);
   const setDelegateEditing = (next: EditingUpdate) => setEditingState((held) => keptFor(account, next, held, store.getSnapshot().wallet?.address ?? null));
   const [table, setTable] = useState<TableViewState>(NO_TABLE_VIEW);
-  const reads: StakingReads = { panel, operators, epochs, delegations, history, operatorsSettled, delegateEditing, setDelegateEditing, table, setTable };
+  const [typedSlot, setTypedSlot] = useState(false);
+  const reads: StakingReads = { panel, operators, epochs, delegations, history, operatorsSettled, delegateEditing, setDelegateEditing, table, setTable, typedSlot, setTypedSlot };
   return (
     <StakingContext.Provider value={reads}>
       <MonkeyPanelProvider value={panel}>

@@ -13,7 +13,7 @@
  * chain alone checks.
  */
 
-import { useId, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useId, useMemo, useSyncExternalStore } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
 import { groupThousands, shortHex } from "@/lib/format";
@@ -23,6 +23,7 @@ import { mirroredElection, type OperatorReads } from "@/lib/monkey/operators";
 import { candidateSource, nodeBlocked, offersTyped, type NoList } from "@/lib/staking/candidate-choice";
 import type { DelegationReads } from "@/lib/staking/delegation-reads";
 import { closeEditor, openTypedEditor, TYPED_EDITOR } from "@/lib/staking/delegation-form";
+import { editorOwnsFocusLoss } from "@/lib/staking/delegation-focus";
 import { delegationTo } from "@/lib/staking/delegations";
 import { hostnameListed } from "@/lib/staking/hostnames";
 import { withAddress } from "@/lib/staking/operator-cells";
@@ -53,7 +54,7 @@ const hostOf = (origin: string) => new URL(origin).host;
 
 /** The operators section. The list is the node's, shown once its answers may be read; the account's delegations are the chain's, shown whatever the node's state. */
 export function OperatorsPanel({ operators, delegations }: { operators: OperatorReads; delegations: DelegationReads }) {
-  const { delegateEditing, setDelegateEditing, table, setTable } = useStaking();
+  const { delegateEditing, setDelegateEditing, table, setTable, typedSlot, setTypedSlot } = useStaking();
   const panel = useMonkeyPanel();
   const { deploy, node, store } = useSession();
   const follow = useNodeFollow();
@@ -94,17 +95,21 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
   // Every control a delegation sends through reopens on the chain's read alone, whatever the node's
   // own re-reads are doing: no operator may hold a staker's vote in place.
   const send = (next: DelegationChange, onLanded: () => void) => {
-    const active = document.activeElement;
-    const origin = active?.closest("[data-delegation-editor]");
+    const origin = document.activeElement?.closest("[data-delegation-editor]") ?? null;
     const account = wallet?.address ?? null;
     const version = delegateEditing.editorVersion;
     return changeDelegation(panel, operators, delegations, next, onLanded).then((landed) => {
       if (landed && (store.getSnapshot().wallet?.address ?? null) === account) {
         setDelegateEditing((now) => closeEditor(now, version));
-        if (active === document.activeElement && origin?.contains(active) && origin.getAttribute("data-delegation-editor") === String(version)) document.getElementById(TITLE_ID)?.focus();
+        // The sending editor closes with its focus, wherever it moved within it or however the refreshed read removed its row first.
+        if (editorOwnsFocusLoss(origin, document.activeElement, document.body, version)) document.getElementById(TITLE_ID)?.focus();
       }
     });
   };
+  const typedOffered = canVote && (offersTyped(source, delegateEditing.typedTo) || delegateEditing.typedOpen);
+  useEffect(() => {
+    if (typedOffered && !typedSlot) setTypedSlot(true);
+  }, [typedOffered, typedSlot, setTypedSlot]);
   const setView = (part: Partial<typeof table>) => setTable({ ...table, ...part });
   return (
     <Card id={TITLE_ID} title="Operators">
@@ -124,7 +129,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
           The node has logged an election naming {withAddress(labelOf(mirrored.candidate), mirrored.candidate)}, which applies its admin key at {formatStamp(mirrored.effectiveAtMs)} UTC, in {formatDuration(mirrored.effectiveAtMs - nowMs)}.
         </p>
       )}
-      <ReadNote read={route} loading={nodeReadable ? "Reading the node's figures…" : "The node's figures wait until it is verified."} />
+      <ReadNote read={route} loading={nodeReadable ? "Reading the node's figures…" : "The node's figures wait until it is verified."} quiet />
       {wallet === null && decided && <p className={NOTE}>Connect a wallet to delegate your stake.</p>}
       {wallet?.readOnly === true && <p className={NOTE}>This account is read-only, so its delegations are not read and nothing can be delegated for it.</p>}
       {wallet !== null && wallet.readOnly !== true && mine === null && delegationsRead.read.status === "unavailable" && (
@@ -137,7 +142,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
         <ReadNote read={delegationsRead.read} loading="Reading your delegations from the chain…" quiet />
       )}
       {/* No single operator may stop a staker voting away from it: off the node's current list, an address the chain alone checks stays a way. The block stays while its editor is open, so clearing the typed address never hides it under the visitor's cursor. */}
-      {canVote && mine !== null && (offersTyped(source, delegateEditing.typedTo) || delegateEditing.typedOpen) && (
+      {typedOffered && mine !== null && (
         <div>
           <button
             type="button"
@@ -159,11 +164,14 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
           )}
         </div>
       )}
+      {/* Once offered, the slot stays when the node's current list withdraws the way — the chain's read can land before the first list does — so the toolbar and rows shown under it do not move up. */}
+      {!typedOffered && typedSlot && canVote && (
+        <div aria-hidden="true" inert className="invisible"><span className={`${TOGGLE} inline-block`}>Delegate to an address</span></div>
+      )}
       {(view !== null || yours.length > 0) && (
         <>
-          {view !== null && <p className={NOTE}>As the registry stood at final block {groupThousands(BigInt(view.block.number))}, at {formatStamp(view.block.timeMs)} UTC, read by the node from the chain. It is read again by itself, and counts a delegation once its block is final.</p>}
           <div className="flex flex-wrap items-end gap-2">
-            <div className="min-w-56 flex-1 space-y-1">
+            <div className="min-w-[min(14rem,100%)] flex-1 space-y-1">
               <label htmlFor={searchId} className="block text-caption text-fg-2">Search operators</label>
               <input id={searchId} type="search" value={search} maxLength={MAX_SEARCH} spellCheck={false} autoComplete="off" placeholder="Hostname or address" onChange={(event) => { setView({ search: event.target.value, page: 0 }); }} className={FIELD} />
             </div>
@@ -174,7 +182,9 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
                 <button type="button" aria-pressed={view === null || show === "yours"} onClick={() => { setView({ show: "yours", page: 0 }); }} className={TOGGLE}>Yours {yours.length}</button>
               </div>
             </div>
-            <Select<SortId> label="Sort by" value={sort} options={SORTS} onChange={(value) => { setView({ sort: value, page: 0 }); }} />
+            <div className="min-w-0 max-w-full">
+              <Select<SortId> label="Sort by" value={sort} options={SORTS} onChange={(value) => { setView({ sort: value, page: 0 }); }} />
+            </div>
           </div>
           {view !== null && !rows.some((row) => row.listed) && <p className={NOTE}>No candidate&apos;s release has been approved yet.</p>}
           <p role="status" className="text-caption text-fg-2">{countText(pageView, search)}</p>
@@ -191,13 +201,20 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
               <button type="button" aria-disabled={pageView.page >= pageView.pages - 1} onClick={() => { if (pageView.page < pageView.pages - 1) setView({ page: pageView.page + 1 }); }} className={TOGGLE}>Next<span className="sr-only"> page of operators</span></button>
             </nav>
           )}
+          {/* After the rows, where it arrives with the list: the toolbar and the chain's rows already shown above never move for it. */}
+          {view !== null && <p className={NOTE}>As the registry stood at final block {groupThousands(BigInt(view.block.number))}, at {formatStamp(view.block.timeMs)} UTC, read by the node from the chain. It is read again by itself, and counts a delegation once its block is final.</p>}
         </>
       )}
       {/* Beside the table, and there with no wallet too: a change's outcome outlives the connection that sent it. */}
       <Notice surface="operator" />
-      <p className={NOTE}>You delegate amounts of your stake to any candidates the registry lists, and may move or take them back at any time; the next election close counts them. Stake you have not delegated abstains, and stake you have started to unstake does not vote. Delegation changes nothing about distributions, and delegators share no rewards.</p>
-      {unreachable.size > 0 && <p className={NOTE}>Not in this build: this console build does not list that operator&apos;s hostname, so it could not connect there if the operator were elected.</p>}
-      <p className={NOTE}>The standby is the eligible candidate the registry would promote, while rotation is on and no election waits, once the vault has gone its liveness timeout without a checkpoint. The release is the enclave build and configuration an operator runs, as the vault names it.</p>
+      {/* Not painted while the first list is on its way: the rows it brings land above these notes, and what is shown never moves for them. */}
+      {source.kind !== "loading" && (
+        <>
+          <p className={NOTE}>You delegate amounts of your stake to any candidates the registry lists, and may move or take them back at any time; the next election close counts them. Stake you have not delegated abstains, and stake you have started to unstake does not vote. Delegation changes nothing about distributions, and delegators share no rewards.</p>
+          {unreachable.size > 0 && <p className={NOTE}>Not in this build: this console build does not list that operator&apos;s hostname, so it could not connect there if the operator were elected.</p>}
+          <p className={NOTE}>The standby is the eligible candidate the registry would promote, while rotation is on and no election waits, once the vault has gone its liveness timeout without a checkpoint. The release is the enclave build and configuration an operator runs, as the vault names it.</p>
+        </>
+      )}
       <ReadNote read={listRead} loading={nodeReadable ? "Reading the operator list…" : "The operator list waits until the node is verified."} />
     </Card>
   );

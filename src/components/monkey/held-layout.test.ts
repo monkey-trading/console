@@ -78,6 +78,22 @@ describe("the cards while a connected wallet's first reads run", () => {
     expect(html).toContain("Reading your stake…");
   });
 
+  it("holds the stake card's split rows at the wrapped size their figures take, and the unstake preview's place, so the reads landing move nothing (monkey-trading/console#332)", () => {
+    const html = render(StakePanel, { wallet: WALLET, walletDecided: true });
+    // Each split row lays the longest likely figure out unseen under its dash.
+    expect(html.match(/<span aria-hidden="true" class="invisible col-start-1 row-start-1">12,345 MONKEY to 10 candidates<\/span>/g)).toHaveLength(2);
+    // The unstake form's preview line is there from the first paint, empty: its arrival adds no gap.
+    expect(html.match(/<div role="status" class="text-caption leading-relaxed text-fg-2"><\/div>/g)).toHaveLength(1);
+  });
+
+  it("constrains the stake and unstake forms' grid and the summary to one shrinkable column below the breakpoints, and wraps a form's buttons under its field (monkey-trading/console#333)", () => {
+    const html = render(StakePanel, { wallet: WALLET, walletDecided: true });
+    expect(html).toContain('<div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">');
+    expect(html).toContain('<dl class="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">');
+    expect(html).toContain('<div class="flex flex-wrap gap-2">');
+    expect(html).toContain("flex-[1_1_6rem]");
+  });
+
   it("holds no button's place on the emissions card for a watched account, which can claim nothing", () => {
     const entitlement = { seq: 1, root: `0x${"ab".repeat(32)}`, account: WALLET.address, entitled: "5", siblings: [] };
     const watched = render(Emissions, { wallet: { ...WALLET, readOnly: true }, walletDecided: true, accountRead: true, entitlement, emissionsVault: null }, "monkey");

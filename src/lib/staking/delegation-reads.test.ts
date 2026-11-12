@@ -8,7 +8,7 @@ import { stakeMonkey } from "../monkey/actions";
 import { WALLET_READ_EVERY_MS } from "../monkey/live-reads";
 import { flush, setup } from "../monkey/panel-kit";
 import { connectWallet, disconnectWallet } from "../store/actions";
-import { DelegationReads } from "./delegation-reads";
+import { accountReadsSettled, DelegationReads, type DelegationsState } from "./delegation-reads";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -123,7 +123,7 @@ describe("DelegationReads", () => {
     answers.shift()?.();
     await second;
     expect(reads.getSnapshot().settling).toBe(false);
-    // Closing the page while one is on its way leaves nothing settling for the next opening, and writes nothing after.
+    // Closing the page while one is on its way writes nothing after; what was read stays, still settling, for the next opening.
     const closing = reads.settleAfter();
     await flush();
     stop();
@@ -131,8 +131,42 @@ describe("DelegationReads", () => {
     reads.subscribe(() => { writes += 1; });
     answers.shift()?.();
     await closing;
-    expect(reads.getSnapshot().settling).toBe(false);
+    expect(reads.getSnapshot().settling).toBe(true);
     expect(writes).toBe(0);
+  });
+
+  it("keeps the figures it read across a stop and a restart, shut as settling until a read begun after the restart succeeds (monkey-trading/console#329)", async () => {
+    const { reads, stop, staking, store } = await started();
+    const held = reads.getSnapshot().read.value;
+    expect(held).not.toBeNull();
+    expect(reads.getSnapshot().settling).toBe(false);
+    stop();
+    // The tab is returned to: the rows and editors the figures lay out are still there, the forms not yet open.
+    expect(reads.getSnapshot()).toMatchObject({ account: DEMO_ADDRESS, read: { status: "ready", value: held }, settling: true });
+    const real = staking.delegations.bind(staking);
+    let answer = () => {};
+    staking.delegations = () => new Promise((resolve) => { answer = () => { void real().then(resolve); }; });
+    const restart = reads.start(() => false);
+    await flush();
+    expect(reads.getSnapshot()).toMatchObject({ read: { status: "ready", value: held }, settling: true });
+    answer();
+    await flush();
+    expect(reads.getSnapshot()).toMatchObject({ read: { status: "ready" }, settling: false });
+    restart();
+    // A failed read after a return leaves the forms shut, with the figures held.
+    staking.delegations = () => Promise.reject(new Error("the wallet did not answer"));
+    const again = reads.start(() => false);
+    await flush();
+    expect(reads.getSnapshot()).toMatchObject({ read: { status: "failed", value: held }, settling: true });
+    again();
+    // Another account's figures are never this account's: the first read after the wallet changed drops them.
+    staking.delegations = real;
+    disconnectWallet(store);
+    await flush();
+    const third = reads.start(() => false);
+    await flush();
+    expect(reads.getSnapshot()).toMatchObject({ account: null, settling: false });
+    third();
   });
 
   it("reads again after a stake or an unstake lands, which moves the undelegated stake", async () => {
@@ -197,5 +231,29 @@ describe("DelegationReads", () => {
     await vi.advanceTimersByTimeAsync(WALLET_READ_EVERY_MS * 2);
     expect(failures).toBe(after);
     stop();
+  });
+});
+
+describe("accountReadsSettled (monkey-trading/console#328)", () => {
+  const WALLET = { address: DEMO_ADDRESS };
+  const read = (status: DelegationsState["read"]["status"], account: string | null = DEMO_ADDRESS): DelegationsState => ({ account, read: { status, value: null, message: null }, settling: false });
+
+  it("waits for the account's delegations and its stake position, each answering, failing or unavailable, before the card below them shows", () => {
+    expect(accountReadsSettled({ wallet: WALLET, decided: true, delegations: read("loading"), position: "ready" })).toBe(false);
+    expect(accountReadsSettled({ wallet: WALLET, decided: true, delegations: read("ready"), position: "loading" })).toBe(false);
+    expect(accountReadsSettled({ wallet: WALLET, decided: true, delegations: read("ready"), position: "ready" })).toBe(true);
+    expect(accountReadsSettled({ wallet: WALLET, decided: true, delegations: read("failed"), position: "failed" })).toBe(true);
+    expect(accountReadsSettled({ wallet: WALLET, decided: true, delegations: read("unavailable"), position: "ready" })).toBe(true);
+  });
+
+  it("never takes another account's read for this one's", () => {
+    expect(accountReadsSettled({ wallet: WALLET, decided: true, delegations: read("ready", "0x00000000000000000000000000000000000000b2"), position: "ready" })).toBe(false);
+    expect(accountReadsSettled({ wallet: WALLET, decided: true, delegations: read("ready", null), position: "ready" })).toBe(false);
+  });
+
+  it("waits for the page load's wallet decision, then shows with no wallet or one that reads nothing", () => {
+    expect(accountReadsSettled({ wallet: null, decided: false, delegations: read("loading", null), position: "loading" })).toBe(false);
+    expect(accountReadsSettled({ wallet: null, decided: true, delegations: read("loading", null), position: "loading" })).toBe(true);
+    expect(accountReadsSettled({ wallet: { ...WALLET, readOnly: true }, decided: true, delegations: read("loading"), position: "loading" })).toBe(true);
   });
 });
