@@ -15,6 +15,7 @@ import { mockHex } from "./client";
 import { houseNav } from "./accounts";
 import { COOLDOWN_MS, EPOCH_MS, FLOOR_USD, HALVING_PERIODS, PERIOD_BUDGET, PERIOD_MS, postedStanding } from "./monkey-state";
 import type { MockState } from "./state";
+import { within } from "./within";
 
 const RESOLUTION_MS: Record<SeriesResolution, number> = { "1m": 60_000, "1h": 3_600_000, "1d": 86_400_000 };
 const MAX_LIMIT = 2_000;
@@ -93,26 +94,6 @@ export function activityPage(state: MockState, params: { limit?: number; before?
     next: older.length > limit && lastEntry ? String(lastEntry.id) : null,
     begins_ms: monkey.begins, begins_seq: 0, from_genesis: true, truncated: false, retained_from_ms: null,
   };
-}
-
-/**
- * The entries of `sorted`, which `time` orders ascending, with `from <= time < to`: found by bisection
- * rather than a scan of every close for every bucket, which a seven-day window at hourly buckets
- * repeats a hundred and sixty-eight times over the mock's whole history.
- */
-export function within<T>(sorted: readonly T[], time: (entry: T) => number, from: number, to: number): readonly T[] {
-  const lowerBound = (bound: number) => {
-    let low = 0;
-    let high = sorted.length;
-    while (low < high) {
-      const mid = (low + high) >> 1;
-      const entry = sorted[mid];
-      if (entry !== undefined && time(entry) < bound) low = mid + 1;
-      else high = mid;
-    }
-    return low;
-  };
-  return sorted.slice(lowerBound(from), lowerBound(to));
 }
 
 /** `GET /v1/stats/series`, bucketed as the node buckets: oldest first, from `from_ms`, at most `limit`. */

@@ -3,8 +3,9 @@
 import { describe, expect, it } from "vitest";
 
 import { createMockNode } from "./index";
-import { monkeySeries, within } from "./monkey";
+import { monkeySeries } from "./monkey";
 import { START } from "./test-helpers";
+import { within } from "./within";
 
 /** A series read from `fromMs`, to the clock, a page of `limit`. */
 function series(state: ReturnType<typeof createMockNode>["client"]["state"], query: { metric: "distributed_per_epoch"; resolution: "1h"; fromMs: number; limit: number }) {
