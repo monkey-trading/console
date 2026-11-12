@@ -171,7 +171,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
       {(view !== null || yours.length > 0) && (
         <>
           <div className="flex flex-wrap items-end gap-2">
-            <div className="min-w-56 flex-1 space-y-1">
+            <div className="min-w-[min(14rem,100%)] flex-1 space-y-1">
               <label htmlFor={searchId} className="block text-caption text-fg-2">Search operators</label>
               <input id={searchId} type="search" value={search} maxLength={MAX_SEARCH} spellCheck={false} autoComplete="off" placeholder="Hostname or address" onChange={(event) => { setView({ search: event.target.value, page: 0 }); }} className={FIELD} />
             </div>
@@ -182,7 +182,9 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
                 <button type="button" aria-pressed={view === null || show === "yours"} onClick={() => { setView({ show: "yours", page: 0 }); }} className={TOGGLE}>Yours {yours.length}</button>
               </div>
             </div>
-            <Select<SortId> label="Sort by" value={sort} options={SORTS} onChange={(value) => { setView({ sort: value, page: 0 }); }} />
+            <div className="min-w-0 max-w-full">
+              <Select<SortId> label="Sort by" value={sort} options={SORTS} onChange={(value) => { setView({ sort: value, page: 0 }); }} />
+            </div>
           </div>
           {view !== null && !rows.some((row) => row.listed) && <p className={NOTE}>No candidate&apos;s release has been approved yet.</p>}
           <p role="status" className="text-caption text-fg-2">{countText(pageView, search)}</p>

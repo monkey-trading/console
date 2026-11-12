@@ -39,6 +39,12 @@ describe("the operators card on the Delegate tab", () => {
     expect(html).toContain("300 MONKEY");
   });
 
+  it("lets the search field and the sort select shrink to a narrow card, so the toolbar wraps at 320 px and at enlarged text (monkey-trading/console#333)", () => {
+    const html = render({ state: VERIFIED, operators: { route: LOADING, list: ready(view), held: null }, read: chain() });
+    expect(html).toContain('<div class="min-w-[min(14rem,100%)] flex-1 space-y-1"><label');
+    expect(html).toMatch(/<div class="min-w-0 max-w-full"><div class="relative"><span id="[^"]*-label" class="block text-caption text-fg-2">Sort by/);
+  });
+
   it("renders an open editor from the section's editing context, with its preview's words", () => {
     const editing: DelegateEditing = { ...NO_EDITING, editing: { candidate: ALPHA, mode: "delegate" }, amounts: { [amountKey("delegate", ALPHA)]: "10" } };
     const html = render({ state: VERIFIED, operators: { route: LOADING, list: ready(view), held: null }, read: chain(), editing });
