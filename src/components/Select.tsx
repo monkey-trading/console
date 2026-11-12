@@ -2,7 +2,12 @@
 
 /** A custom select in the console's style: a button that opens a listbox, usable by keyboard and screen reader. */
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+
+import { placeListbox } from "@/lib/listbox-placement";
+
+/** The gap kept between an open list and the viewport's edges, in CSS pixels. */
+const VIEWPORT_MARGIN = 8;
 
 export interface SelectOption<T extends string> {
   value: T;
@@ -29,6 +34,36 @@ export function Select<T extends string>({ label, value, options, onChange, alig
   useEffect(() => {
     if (open) list.current?.focus();
   }, [open]);
+
+  // The open list stays inside the viewport whatever the text size or spacing: it is narrowed to the
+  // viewport, shifted back from an edge it would cross, and opened above the control when the options
+  // do not fit below. Measured on open and again when the viewport changes, so it never relies on page overflow.
+  useLayoutEffect(() => {
+    const box = list.current;
+    const anchor = root.current;
+    if (!open || box === null || anchor === null) return;
+    const place = () => {
+      const viewport = { width: document.documentElement.clientWidth, height: window.innerHeight };
+      box.style.transform = "";
+      box.style.maxHeight = "";
+      const room = `${Math.max(0, viewport.width - 2 * VIEWPORT_MARGIN)}px`;
+      box.style.maxWidth = room;
+      // The class's minimum width gives way to the room there is, since a minimum beats a maximum.
+      box.style.minWidth = `min(10rem, ${room})`;
+      const control = anchor.querySelector("button")?.getBoundingClientRect();
+      if (control === undefined) return;
+      const placed = placeListbox({ control, list: { width: box.getBoundingClientRect().width, contentHeight: box.scrollHeight }, viewport, margin: VIEWPORT_MARGIN, align });
+      box.style.transform = `translateX(${placed.shiftX}px)`;
+      box.style.maxHeight = `min(16rem, ${placed.maxHeight}px)`;
+      box.style.top = placed.above ? "auto" : "";
+      box.style.bottom = placed.above ? "100%" : "";
+      box.style.marginTop = placed.above ? "0" : "";
+      box.style.marginBottom = placed.above ? "0.25rem" : "";
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open, align, options.length]);
 
   // A list taller than its box keeps the option the keyboard is on in view, as a native select does.
   useEffect(() => {
