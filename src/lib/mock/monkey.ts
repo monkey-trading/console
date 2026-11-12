@@ -95,6 +95,26 @@ export function activityPage(state: MockState, params: { limit?: number; before?
   };
 }
 
+/**
+ * The entries of `sorted`, which `time` orders ascending, with `from <= time < to`: found by bisection
+ * rather than a scan of every close for every bucket, which a seven-day window at hourly buckets
+ * repeats a hundred and sixty-eight times over the mock's whole history.
+ */
+export function within<T>(sorted: readonly T[], time: (entry: T) => number, from: number, to: number): readonly T[] {
+  const lowerBound = (bound: number) => {
+    let low = 0;
+    let high = sorted.length;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      const entry = sorted[mid];
+      if (entry !== undefined && time(entry) < bound) low = mid + 1;
+      else high = mid;
+    }
+    return low;
+  };
+  return sorted.slice(lowerBound(from), lowerBound(to));
+}
+
 /** `GET /v1/stats/series`, bucketed as the node buckets: oldest first, from `from_ms`, at most `limit`. */
 export function monkeySeries(state: MockState, query: SeriesQuery & { metric: MonkeySeriesMetric }): SeriesPage {
   const { monkey, now } = state;
@@ -117,10 +137,10 @@ export function monkeySeries(state: MockState, query: SeriesQuery & { metric: Mo
     else if (query.metric === "total_allocated") entries.push(level((at) => monkey.allocatedAt(at), ts));
     else if (query.metric === "cumulative_distributed") entries.push(level((at) => DISTRIBUTED_BEFORE + prefix.upTo(at), ts));
     else if (query.metric === "distributed_per_epoch") {
-      const inside = monkey.epochs.filter((close) => close.closedMs >= ts && close.closedMs < end);
+      const inside = within(monkey.epochs, (close) => close.closedMs, ts, end);
       if (inside.length > 0) entries.push({ ts, value: inside.reduce((sum, close) => sum + close.allocated, 0n).toString() });
     } else {
-      const inside = monkey.periods.filter((close) => close.ts >= ts && close.ts < end);
+      const inside = within(monkey.periods, (close) => close.ts, ts, end);
       const weight = inside.reduce((sum, close) => sum + close.weight, 0n);
       // Base units per dollar with nine decimals, as the engine's ratio: amount * 10^18 / weight, the weight being dollars * 10^9.
       if (weight > 0n) entries.push({ ts, value: fixedToWire((inside.reduce((sum, close) => sum + close.amount, 0n) * 10n ** 18n) / weight) });
