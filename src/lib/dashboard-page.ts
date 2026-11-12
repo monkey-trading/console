@@ -13,6 +13,23 @@ export function sectionOfHash(hash: string): DashboardSectionId | null {
   return null;
 }
 
+/** The parts of a click that decide whether it is the plain primary click an in-page link takes over. */
+export interface ClickKeys {
+  button: number;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+}
+
+/**
+ * Whether a click on a section link is the plain primary one the page handles itself. A click with a
+ * modifier or another button is the browser's: a new tab or window, a download.
+ */
+export function isPlainClick(click: ClickKeys): boolean {
+  return click.button === 0 && !click.metaKey && !click.ctrlKey && !click.shiftKey && !click.altKey;
+}
+
 /** What the page says above its charts while the house read warms up or has stopped refreshing; null when nothing holds it (the not-trusted line covers that wait). */
 export function houseGateLine({ trusted, ready, fresh, simulated }: { trusted: boolean; ready: boolean; fresh: boolean; simulated: boolean }): string | null {
   if (!trusted) return null;

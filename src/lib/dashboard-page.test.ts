@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { houseGateLine, overviewProblem, SECTION_IDS, sectionOfHash } from "./dashboard-page";
+import { houseGateLine, isPlainClick, overviewProblem, SECTION_IDS, sectionOfHash } from "./dashboard-page";
 
 describe("sectionOfHash", () => {
   it("names the section a #hash load targets", () => {
@@ -46,5 +46,17 @@ describe("overviewProblem", () => {
     expect(overviewProblem({ status: "unavailable", value: null, message: null }, what)).toBe(`This node does not serve ${what} yet.`);
     expect(overviewProblem({ status: "ready", value: {}, message: null }, what)).toBeNull();
     expect(overviewProblem({ status: "loading", value: null, message: null }, what)).toBeNull();
+  });
+});
+
+describe("isPlainClick", () => {
+  const plain = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false };
+
+  it("takes over the primary button with no modifier", () => {
+    expect(isPlainClick(plain)).toBe(true);
+  });
+
+  it("leaves a click with any modifier, or another button, to the browser", () => {
+    for (const other of [{ metaKey: true }, { ctrlKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }, { button: 2 }]) expect(isPlainClick({ ...plain, ...other }), JSON.stringify(other)).toBe(false);
   });
 });

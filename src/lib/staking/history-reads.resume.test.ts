@@ -159,4 +159,66 @@ describe("DistributionHistoryReads stop and restart", () => {
     expect(epochsOf(history)).toEqual(Array.from({ length: count }, (_, i) => count - i));
     restart();
   });
+
+  it("keeps the stop-time mark through a second stop before the recheck, so a stream row folded meanwhile cannot hide the gap", async () => {
+    const kit = await setup();
+    kit.stop();
+    let count = HISTORY_PAGE;
+    const real = kit.node.client.history.bind(kit.node.client);
+    vi.spyOn(kit.node.client, "history").mockImplementation(async (address, params): Promise<HistoryPage> => {
+      if (params.kind !== "distribution_allocated") return real(address, params);
+      const events = () => Array.from({ length: count }, (_, i) => ({ type: "distribution_allocated" as const, account: DEMO_ADDRESS, epoch: count - i, amount: "1000", cursor: `${count - i}:0`, ts: count - i }));
+      const older = events().filter((event) => params.before === undefined || Number(event.cursor.split(":")[0]) < Number(params.before.split(":")[0]));
+      const served = older.slice(0, params.limit ?? 50);
+      return { events: served, next: older.length > served.length ? (served[served.length - 1]?.cursor ?? null) : null };
+    });
+    const history = new DistributionHistoryReads(kit.store);
+    const stop = history.start(() => false);
+    await flush();
+    stop();
+    // Epochs 1 to 50 are read; 70 more close while the reads are stopped.
+    count = 2 * HISTORY_PAGE + 20;
+    const resume = history.start(() => false);
+    // The stream folds the newest, and the reads stop again before the recheck's tick.
+    for (let i = 0; i < 100; i += 1) kit.node.client.state.emit({ type: "tick" }, []);
+    kit.node.client.state.emit({ type: "tick" }, [{ type: "distribution_allocated", account: DEMO_ADDRESS, epoch: count, amount: "1000" }]);
+    await flush();
+    resume();
+    const second = history.start(() => false);
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
+    await flush();
+    // The recheck's page does not reach epoch 50: the coverage was rebuilt, and paging down reaches every epoch.
+    while (moreRemain(history.getSnapshot().data)) await history.loadMore();
+    expect(epochsOf(history)).toEqual(Array.from({ length: count }, (_, i) => count - i));
+    second();
+  });
+});
+
+describe("DistributionHistoryReads across a change of verified enclave", () => {
+  const enclave = (address: string) => ({ kind: "verified", release: "r", config: "c", address }) as const;
+
+  it("reads afresh when the reads restart under another verified enclave, and keeps its rows under the same one", async () => {
+    const { history, pages, stop, store } = await started({ epochs: 30 });
+    stop();
+    store.patch({ attestation: enclave("0xA1") });
+    const first = history.start(() => false);
+    await flush();
+    first();
+    store.patch({ attestation: { kind: "reverifying" } });
+    store.patch({ attestation: enclave("0xa1") });
+    pages.mockClear();
+    const same = history.start(() => false);
+    expect(epochsOf(history)).toHaveLength(30);
+    expect(mine(pages)).toEqual([]);
+    same();
+    store.patch({ attestation: { kind: "reverifying" } });
+    store.patch({ attestation: enclave("0xB2") });
+    const other = history.start(() => false);
+    expect(history.getSnapshot()).toMatchObject({ account: DEMO_ADDRESS, status: "reading" });
+    expect(epochsOf(history)).toEqual([]);
+    await flush();
+    expect(mine(pages)).toHaveLength(2);
+    expect(epochsOf(history)).toHaveLength(30);
+    other();
+  });
 });

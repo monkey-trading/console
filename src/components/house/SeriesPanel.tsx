@@ -13,7 +13,7 @@ import type { SeriesMetric } from "@/lib/engine/stats-types";
 import type { MarketId } from "@/lib/engine/types";
 import { groupThousands } from "@/lib/format";
 import { formatCompactUsd } from "@/lib/chart-format";
-import { beginsText, ALL_WINDOW_DAYS, DEFAULT_RANGE, RANGES, tableRows, type RangeId } from "@/lib/house-series";
+import { beginsText, heldBeginsText, ALL_WINDOW_DAYS, DEFAULT_RANGE, RANGES, tableRows, type RangeId } from "@/lib/house-series";
 import { feedProblem } from "@/lib/store/house-feed-text";
 import { seriesFeed } from "@/lib/store/house-feeds";
 import { formatStamp } from "@/lib/time";
@@ -41,6 +41,8 @@ export interface LineSpec {
 }
 
 /** What the footnote says of a sampled line. The answers carry the time of the last scan but not how often the node scans, so it says periodic. */
+const ALL = `All covers the most recent ${groupThousands(ALL_WINDOW_DAYS)} days, the most one read holds at daily buckets.`;
+
 const SAMPLED = "These figures are the node's periodic scan of every account, so a position opened and closed between two scans does not show.";
 
 interface Props {
@@ -57,6 +59,8 @@ interface Props {
   floor?: number | null;
   /** A line about a figure the chart leans on beyond its own series, such as a floor that may be old. */
   note?: string | null;
+  /** Holds the panel's whole shape with dashes while its page waits for its first answers: nothing is read, and no figure shows. */
+  pending?: boolean;
   className?: string;
 }
 
@@ -65,7 +69,7 @@ const TEXT = { fg: "text-fg", glow: "text-glow", ember: "text-ember", amber: "te
 /** The most points the keyboard-reachable table lists. */
 const TABLE_POINTS = 30;
 
-function SeriesPanelView({ title, tip, lines, markets, range: driven, currents, floor = null, note = null, className }: Props) {
+function SeriesPanelView({ title, tip, lines, markets, range: driven, currents, floor = null, note = null, pending = false, className }: Props) {
   const { store } = useSession();
   const [ownRange, setOwnRange] = useState<RangeId>(DEFAULT_RANGE);
   const range = driven ?? ownRange;
@@ -73,9 +77,11 @@ function SeriesPanelView({ title, tip, lines, markets, range: driven, currents, 
   const market = markets === null ? null : (picked !== null && markets.some((m) => m.id === picked) ? picked : (markets[0]?.id ?? null));
   const first = lines[0];
   const current = (id: string): number | null => currents?.[markets === null ? id : `${market}:${id}`] ?? null;
-  const specs = useMemo(() => (markets !== null && market === null ? [] : lines.map((line) => seriesFeed(store, line.metric, market, range))), [store, lines, markets, market, range]);
+  const specs = useMemo(() => (pending || (markets !== null && market === null) ? [] : lines.map((line) => seriesFeed(store, line.metric, market, range))), [store, lines, markets, market, range, pending]);
   const states = useFeeds(specs);
   const plotted: ChartSeries[] = useMemo(() => lines.map((line, i) => ({ id: `${line.id}:${market ?? "-"}`, label: line.label, tone: line.tone, kind: line.area === true ? "area" as const : "line" as const, points: states[i]?.data?.points ?? [] })), [lines, market, states]);
+  const reading = states.length === 0 || states.every((s) => s.status === "loading");
+  const sampled = lines.some((line) => line.sampled === true);
   const nonNegative = lines.every((line) => line.nonNegative === true);
   const data = states[0]?.data ?? null;
   // A node that stops serving a route keeps the chart it already holds; only a chart with nothing to show says it is not available.
@@ -97,7 +103,7 @@ function SeriesPanelView({ title, tip, lines, markets, range: driven, currents, 
     >
       <p className="flex flex-wrap gap-x-5 gap-y-1 text-data">
         {lines.map((line, i) => {
-          const value = current(line.id) ?? states[i]?.data?.points.at(-1)?.value ?? null;
+          const value = pending ? null : (current(line.id) ?? states[i]?.data?.points.at(-1)?.value ?? null);
           return <span key={line.id} className={TEXT[line.tone]}><span className="text-fg-3"><Term label={line.label} tip={line.tip} /> </span>{value === null ? "—" : formatCompactUsd(value)}</span>;
         })}
       </p>
@@ -109,13 +115,21 @@ function SeriesPanelView({ title, tip, lines, markets, range: driven, currents, 
             <Chart series={plotted} nonNegative={nonNegative} floor={floor} format={formatCompactUsd} label={`${title} chart, ${RANGES.find((r) => r.id === range)?.label ?? range}`} />
             <DataTable summary={`${title} as a table`} caption={`The latest ${rows.length} buckets of ${title}, newest first`} columns={["Time (UTC)", ...lines.map((line) => line.label)]} rows={rows} />
           </div>
-          <p className="text-label text-fg-3">
-            {states.length === 0 || states.every((s) => s.status === "loading") ? "Reading the node's signed history…" : data === null ? null : beginsText(data, formatStamp)}
-            {range === "all" && data !== null && ` All covers the most recent ${groupThousands(ALL_WINDOW_DAYS)} days, the most one read holds at daily buckets.`}
-            {lines.some((line) => line.sampled === true) && ` ${SAMPLED}`}
-            {problem !== null && ` ${problem}`}
-            {note !== null && ` ${note}`}
-          </p>
+          {reading ? (
+            // The loaded footnote's sentences, unseen, hold its wrapped height while the first read runs.
+            <p className="relative text-label text-fg-3">
+              <span aria-hidden="true" className="invisible">{[heldBeginsText(formatStamp), range === "all" ? ALL : null, sampled ? SAMPLED : null, note].filter((part) => part !== null).join(" ")}</span>
+              <span className="absolute inset-x-0 top-0">Reading the node&apos;s signed history…</span>
+            </p>
+          ) : (
+            <p className="text-label text-fg-3">
+              {data === null ? null : beginsText(data, formatStamp)}
+              {range === "all" && data !== null && ` ${ALL}`}
+              {sampled && ` ${SAMPLED}`}
+              {problem !== null && ` ${problem}`}
+              {note !== null && ` ${note}`}
+            </p>
+          )}
         </>
       )}
     </Panel>

@@ -15,6 +15,7 @@ import { mockHex } from "./client";
 import { houseNav } from "./accounts";
 import { COOLDOWN_MS, EPOCH_MS, FLOOR_USD, HALVING_PERIODS, PERIOD_BUDGET, PERIOD_MS, postedStanding } from "./monkey-state";
 import type { MockState } from "./state";
+import { within } from "./within";
 
 const RESOLUTION_MS: Record<SeriesResolution, number> = { "1m": 60_000, "1h": 3_600_000, "1d": 86_400_000 };
 const MAX_LIMIT = 2_000;
@@ -117,10 +118,10 @@ export function monkeySeries(state: MockState, query: SeriesQuery & { metric: Mo
     else if (query.metric === "total_allocated") entries.push(level((at) => monkey.allocatedAt(at), ts));
     else if (query.metric === "cumulative_distributed") entries.push(level((at) => DISTRIBUTED_BEFORE + prefix.upTo(at), ts));
     else if (query.metric === "distributed_per_epoch") {
-      const inside = monkey.epochs.filter((close) => close.closedMs >= ts && close.closedMs < end);
+      const inside = within(monkey.epochs, (close) => close.closedMs, ts, end);
       if (inside.length > 0) entries.push({ ts, value: inside.reduce((sum, close) => sum + close.allocated, 0n).toString() });
     } else {
-      const inside = monkey.periods.filter((close) => close.ts >= ts && close.ts < end);
+      const inside = within(monkey.periods, (close) => close.ts, ts, end);
       const weight = inside.reduce((sum, close) => sum + close.weight, 0n);
       // Base units per dollar with nine decimals, as the engine's ratio: amount * 10^18 / weight, the weight being dollars * 10^9.
       if (weight > 0n) entries.push({ ts, value: fixedToWire((inside.reduce((sum, close) => sum + close.amount, 0n) * 10n ** 18n) / weight) });

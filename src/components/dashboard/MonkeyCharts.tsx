@@ -19,6 +19,11 @@ const SUPPLY_LINES: readonly LineSpec[] = [
   { metric: "total_staked", label: "Staked", tone: "glow" },
 ];
 
+const FOOTER = "mt-1 text-caption leading-relaxed text-fg-3";
+
+/** The budget line's wording, which the placeholder held while the overview is read shares, so it wraps as the loaded line will. */
+const budgetLine = (budget: string, haltAt: string | null) => `The budget is ${budget} per period${haltAt === null ? "" : `, and halves at ${haltAt} UTC`}. Halvings that have passed are marked.`;
+
 /** The two MONKEY charts; the page's range drives their window. */
 export function MonkeyCharts({ range }: { range: DashboardRangeId }) {
   const panel = useMonkeyPanel();
@@ -40,15 +45,12 @@ export function MonkeyCharts({ range }: { range: DashboardRangeId }) {
         id="dash-per-loss" title="MONKEY per $1 of realised loss" feed={panel.feed("perLoss")} kind="steps" lines={PER_LOSS_LINES} format={perUsdFigure} marks={marks} timeframe={range}
         caption="By emission period: each ten-minute budget is shared between that period's realised losses, less write-offs, so the rate is set by how much was lost in the period and a small loss in a quiet period reads high."
         footer={<>
-          {problem !== null && <p className="mt-1 text-caption leading-relaxed text-fg-3">{problem}</p>}
-          {emissions !== null && (
-            <p className="mt-1 text-caption leading-relaxed text-fg-3">
-              The budget is {monkeyText(emissions.current_budget)} per period{emissions.next_halving_ms === null ? "" : `, and halves at ${formatStamp(emissions.next_halving_ms)} UTC`}. Halvings that have passed are marked.
-            </p>
-          )}
+          {problem !== null && <p className={FOOTER}>{problem}</p>}
+          {emissions !== null && <p className={FOOTER}>{budgetLine(monkeyText(emissions.current_budget), emissions.next_halving_ms === null ? null : formatStamp(emissions.next_halving_ms))}</p>}
+          {overview.status === "loading" && overview.value === null && <p aria-hidden="true" className={`${FOOTER} invisible`}>{budgetLine("1,000 MONKEY", formatStamp(0))}</p>}
         </>}
       />
-      <ChartCard id="dash-supply" title="MONKEY allocated and staked" feed={panel.feed("supply")} kind="lines" lines={SUPPLY_LINES} format={compactNumber} timeframe={range} />
+      <ChartCard id="dash-supply" title="MONKEY allocated and staked" feed={panel.feed("supply")} kind="lines" lines={SUPPLY_LINES} format={compactNumber} timeframe={range} heldFigure="000,000,000 MONKEY" />
     </>
   );
 }

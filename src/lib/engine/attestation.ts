@@ -49,6 +49,16 @@ export function checkAttestation(attestation: Attestation, acceptsMock: boolean)
   return null;
 }
 
+/**
+ * The enclave whose answers the console is reading: the verified signer's address, lowercased, or
+ * `"mock"` for the mock node; null while no enclave is verified. Two statuses that name the same
+ * address are the same enclave, whether or not the vault's release was also checked.
+ */
+export function enclaveOf(status: AttestationStatus): string | null {
+  if (status.kind === "mock") return "mock";
+  return status.kind === "verified" || status.kind === "attested" ? status.address.toLowerCase() : null;
+}
+
 /** Why the console may not sign now, as a clause, or null when it may: the account can sign, the node is attested and its feed is arriving. */
 export function signBlock(status: AttestationStatus, feed: FeedStatus, readOnly = false): string | null {
   if (readOnly) return "this account is read-only, so nothing can be signed for it";

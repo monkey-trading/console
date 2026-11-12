@@ -10,6 +10,7 @@
 import { readBlock, type AttestationStatus, type FeedStatus } from "../engine/attestation";
 import type { OperatorRoute } from "../engine/stats-types";
 import { operatorsView, type OperatorsView } from "../staking/operator-table";
+import { EnclaveBinding } from "../store/enclave-binding";
 import type { ConsoleStore } from "../store/store";
 import { failed, LOADING, ready, type Read } from "./figures";
 import { NODE_READ_MS } from "./panel";
@@ -57,8 +58,11 @@ export class OperatorReads {
   /** Numbers each read: only the latest of a kind may land. */
   private routeRead = 0;
   private listRead = 0;
+  private readonly enclave: EnclaveBinding;
 
-  constructor(private readonly store: ConsoleStore) {}
+  constructor(private readonly store: ConsoleStore) {
+    this.enclave = new EnclaveBinding(store);
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -83,26 +87,20 @@ export class OperatorReads {
   start(isHidden: () => boolean): () => void {
     this.open = true;
     this.cycle += 1;
-    void this.refresh();
     // No figure from a node the console has stopped trusting stays on the card, and a node trusted again is read at once.
     let readable = this.nodeReadable();
-    if (!readable) {
-      // A list retained from before the trust loss must not show as current: the held one stays for the picker.
-      this.routeRead += 1;
-      this.listRead += 1;
-      this.set({ route: LOADING, list: LOADING });
-    }
+    // A list retained from before the trust loss must not show as current, whether the node cannot be trusted now or another verified enclave has since taken it: the held one stays for the picker.
+    if (!readable || this.enclave.replaced()) this.drop();
+    void this.refresh();
     const stopFollowing = this.store.subscribe(() => {
       const now = this.nodeReadable();
-      if (now === readable) return;
+      // An enclave replaced while the node stays readable is a node trust left and came back to.
+      const replaced = now && this.enclave.replaced();
+      if (now === readable && !replaced) return;
       readable = now;
+      if (replaced) this.drop();
       if (now) void this.refresh();
-      else {
-        // An answer on its way came from the node trust just left.
-        this.routeRead += 1;
-        this.listRead += 1;
-        this.set({ route: LOADING, list: LOADING });
-      }
+      else this.drop();
     });
     const timer = setInterval(() => {
       if (!isHidden()) void this.refresh();
@@ -118,6 +116,13 @@ export class OperatorReads {
       stopFollowing();
       // What was read stays, so the operator list survives a tab switch.
     };
+  }
+
+  /** Empties both reads: an answer on its way came from a node trust has left. */
+  private drop(): void {
+    this.routeRead += 1;
+    this.listRead += 1;
+    this.set({ route: LOADING, list: LOADING });
   }
 
   /** Reads both routes, while the node's answers may be read; a route the node does not serve is not asked again. */

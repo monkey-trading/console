@@ -18,6 +18,7 @@ import { EngineError } from "../engine/client";
 import type { HistoryPage } from "../engine/types";
 import { Backoff } from "../monkey/live-reads";
 import { NODE_READ_MS } from "../monkey/panel";
+import { EnclaveBinding } from "../store/enclave-binding";
 import type { ConsoleStore } from "../store/store";
 import { addMessage, addNewest, addPage, emptyHistory, gapBehind, HISTORY_KINDS, limitingKinds, moreRemain, type DistributionHistory, type HistoryKind, type StopMark } from "./distribution-history";
 
@@ -59,8 +60,13 @@ export class DistributionHistoryReads {
   private rechecking: number | null = null;
   /** Where the held rows reached when the reads last stopped; the resume's gap test reads it. */
   private mark: StopMark = null;
+  /** Whether the held rows have not yet been joined to the newest pages since the reads resumed over them; a stop meanwhile keeps `mark`, which no stream row may advance. */
+  private unreconciled = false;
+  private readonly enclave: EnclaveBinding;
 
-  constructor(private readonly store: ConsoleStore) {}
+  constructor(private readonly store: ConsoleStore) {
+    this.enclave = new EnclaveBinding(store);
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -80,9 +86,14 @@ export class DistributionHistoryReads {
   start(isHidden: () => boolean): () => void {
     this.open = true;
     this.cycle += 1;
-    this.walletChanged();
+    // Rows another enclave signed are not this one's: a restart under a new verified enclave reads afresh.
+    if (this.enclave.replaced()) this.readAfresh(this.store.liveWallet?.address ?? null);
+    else this.walletChanged();
     // Resuming after a tab switch: the newest pages are read again a tick later, for what the stream carried meanwhile.
-    if (this.state.status === "ready") this.recheck = { cycle: this.cycle, after: Date.now() + RETRY_TICK_MS };
+    if (this.state.status === "ready") {
+      this.recheck = { cycle: this.cycle, after: Date.now() + RETRY_TICK_MS };
+      this.unreconciled = true;
+    }
     const unsubscribe = this.store.deps.client.subscribe((message) => {
       const { account, data } = this.state;
       if (account === null) return;
@@ -103,8 +114,9 @@ export class DistributionHistoryReads {
       // Record where the coverage reached, for the resume's gap test: the newest seq held, or an
       // explicit marker for a history read to its start that held nothing. Only a ready history
       // resumes over what it holds; one still reading, or failed, starts over by itself.
+      // A stop before the resume's recheck joined the newest pages to the rows keeps the earlier mark: rows the stream folded since are not continuous with it.
       const { status, data } = this.state;
-      this.mark = status !== "ready" ? null : data.rows.length === 0 ? "empty" : Math.max(...data.rows.map((row) => row.seq));
+      if (!this.unreconciled) this.mark = status !== "ready" ? null : data.rows.length === 0 ? "empty" : Math.max(...data.rows.map((row) => row.seq));
       // What was read stays, so the loaded pages survive a tab switch; a first read cut off mid-flight, or an older page read cut off, starts over when the reads resume. The session registration is the section's: it survives a stop, so the mock's account reset reaches these rows from any tab.
       this.set({ more: false, ...(this.state.status === "reading" ? { status: "idle" as const } : {}) });
     };
@@ -138,6 +150,7 @@ export class DistributionHistoryReads {
     this.cycle += 1;
     this.backoff.reset();
     this.mark = null;
+    this.unreconciled = false;
     this.set({ ...IDLE, account });
     if (this.open && account !== null) void this.first(this.cycle);
   }
@@ -196,6 +209,7 @@ export class DistributionHistoryReads {
         return;
       }
       this.recheck = { cycle, after: Date.now() + NODE_READ_MS };
+      this.unreconciled = false;
       this.backoff.record(false);
       this.set({ recheckError: null, data: pages.reduce((held, page) => addNewest(held, page), this.state.data) });
       // The fold extended what the reads hold: the mark moves to the top of it, so the next recheck

@@ -5,10 +5,10 @@
  * open, visible and trusted; House charts wait for the first signed answers, and deep links restore once.
  */
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
 
 import { DASHBOARD_RANGES, DEFAULT_DASHBOARD_RANGE, type DashboardRangeId } from "@/lib/dashboard-range";
-import { houseGateLine, overviewProblem, SECTION_IDS, sectionOfHash } from "@/lib/dashboard-page";
+import { houseGateLine, isPlainClick, overviewProblem, SECTION_IDS, sectionOfHash, type DashboardSectionId } from "@/lib/dashboard-page";
 import { readBlock } from "@/lib/engine/attestation";
 import { fixedFromWire, fixedToNumber } from "@/lib/fixed";
 import { MonkeyPanel } from "@/lib/monkey/panel";
@@ -33,6 +33,21 @@ function Section({ id, title, children }: { id: string; title: string; children:
       <div className="mt-4 flex flex-col gap-4">{children}</div>
     </section>
   );
+}
+
+/**
+ * A section link's click: scrolls to the section, focuses it and puts its hash in the address
+ * by replacing the current history entry, keeping the state Next.js holds for it. A native fragment
+ * jump pushes an entry with no state, which Next.js ignores on Back, leaving the page it left on
+ * screen under the Dashboard's address.
+ */
+function openSection(event: MouseEvent<HTMLAnchorElement>, id: DashboardSectionId) {
+  if (!isPlainClick(event)) return;
+  event.preventDefault();
+  const section = document.getElementById(id);
+  section?.scrollIntoView();
+  section?.focus({ preventScroll: true });
+  window.history.replaceState(window.history.state, "", `#${id}`);
 }
 
 /** The Dashboard; the console's layout supplies the provider, the access gate and the shell. */
@@ -96,7 +111,7 @@ export function DashboardPage() {
                 {SECTION_IDS.map((id, index) => (
                   <span key={id} className="flex items-center gap-x-2">
                     {index > 0 && <span aria-hidden="true" className="text-fg-3">·</span>}
-                    <a href={`#${id}`} className={SECTION_LINK}>{SECTION_LABELS[id]}</a>
+                    <a href={`#${id}`} onClick={(event) => openSection(event, id)} className={SECTION_LINK}>{SECTION_LABELS[id]}</a>
                   </span>
                 ))}
               </nav>
@@ -106,23 +121,12 @@ export function DashboardPage() {
             </div>
             <Section id={SECTION_IDS[0]} title="House">
               <p className="min-h-5 text-data text-fg-2">{gate}</p>
-              {houseReady ? (
-                <>
-                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                    <NavChart range={range} className="min-h-80" floor={floor} />
-                    <ExposureChart range={range} className="min-h-80" />
-                  </div>
-                  <QueueChart range={range} className="min-h-64" walked={false} />
-                </>
-              ) : (
-                <div aria-hidden="true" className="flex flex-col gap-4">
-                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                    <div className="min-h-80 rounded-xl border border-line-2 bg-ink-1" />
-                    <div className="min-h-80 rounded-xl border border-line-2 bg-ink-1" />
-                  </div>
-                  <div className="min-h-64 rounded-xl border border-line-2 bg-ink-1" />
-                </div>
-              )}
+              {/* Until the first signed answers land the panels hold their whole shape, so the sections below stay in place. */}
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <NavChart range={range} className="min-h-80" floor={floor} pending={!houseReady} />
+                <ExposureChart range={range} className="min-h-80" pending={!houseReady} />
+              </div>
+              <QueueChart range={range} className="min-h-64" walked={false} pending={!houseReady} />
             </Section>
             <Section id={SECTION_IDS[1]} title="MONKEY">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

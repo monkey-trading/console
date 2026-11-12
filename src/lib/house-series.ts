@@ -107,8 +107,18 @@ export function beginsOf(data: SeriesData): Begins | null {
 export function beginsText(data: SeriesData | null, stamp: (ms: number) => string): string {
   const begins = data === null ? null : beginsOf(data);
   if (begins === null) return "The node has recorded nothing for this chart yet.";
-  const why = { genesis: "from the log's first command", recovery: "since the node last recovered from a snapshot, so earlier history is not in its answer", retention: "the oldest this node keeps at this resolution" }[begins.reason];
-  return `Data begins ${stamp(begins.ms)} UTC, ${why}.`;
+  return `Data begins ${stamp(begins.ms)} UTC, ${BEGINS_WHY[begins.reason]}.`;
+}
+
+/** Why a chart's data begins where it does, by reason. */
+const BEGINS_WHY = { genesis: "from the log's first command", recovery: "since the node last recovered from a snapshot, so earlier history is not in its answer", retention: "the oldest this node keeps at this resolution" } as const satisfies Record<Begins["reason"], string>;
+
+/**
+ * The sentence a chart whose data has not landed holds its place with, unseen: the one a node whose
+ * record starts at its log's first command gives, so the footnote wraps as it will once read.
+ */
+export function heldBeginsText(stamp: (ms: number) => string): string {
+  return `Data begins ${stamp(0)} UTC, ${BEGINS_WHY.genesis}.`;
 }
 
 /** The buckets a follow-up read asks for beyond the last one held. */
