@@ -120,12 +120,12 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
         <Row label="This console talks to">{node !== null ? "The simulated node" : follow === null ? "—" : hostOf(follow.origin)}</Row>
       </dl>
       {pending !== null && (
-        <p className="rounded border border-amber/40 bg-amber/10 p-3 text-caption leading-relaxed text-amber">
+        <p className="rounded border border-amber/40 bg-amber/10 p-3 text-caption leading-relaxed text-amber [overflow-wrap:anywhere]">
           {pending.promoted ? `A liveness promotion names ${withAddress(labelOf(pending.candidate), pending.candidate)}: its release applies now, and its admin key` : `An election named ${withAddress(labelOf(pending.candidate), pending.candidate)}, which`} takes effect at {formatStamp(pending.effectiveAtMs)} UTC{nowMs > 0 && pending.effectiveAtMs > nowMs ? `, in ${formatDuration(pending.effectiveAtMs - nowMs)}` : ""}.
         </p>
       )}
       {mirrored !== null && (
-        <p className="rounded border border-amber/40 bg-amber/10 p-3 text-caption leading-relaxed text-amber">
+        <p className="rounded border border-amber/40 bg-amber/10 p-3 text-caption leading-relaxed text-amber [overflow-wrap:anywhere]">
           The node has logged an election naming {withAddress(labelOf(mirrored.candidate), mirrored.candidate)}, which applies its admin key at {formatStamp(mirrored.effectiveAtMs)} UTC, in {formatDuration(mirrored.effectiveAtMs - nowMs)}.
         </p>
       )}

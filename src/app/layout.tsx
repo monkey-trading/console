@@ -12,6 +12,9 @@ const mono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
   display: "swap",
+  // Metric-compatible while the font loads: Geist Mono and these are all 0.6 em wide per character, so a line wraps the same before and after the swap. Next's own fallback is Arial scaled to its average width, which does not.
+  adjustFontFallback: false,
+  fallback: ["Courier New", "Menlo", "Liberation Mono", "ui-monospace", "monospace"],
 });
 
 export const metadata: Metadata = {
