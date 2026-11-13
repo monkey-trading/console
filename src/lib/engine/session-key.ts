@@ -12,17 +12,7 @@ import { generatePrivateKey, privateKeyToAccount, type LocalAccount } from "viem
 import type { TypedRequest } from "./eip712";
 import type { Address } from "./types";
 
-/** The engine's registration cap (`MAX_SESSION_KEY_EXPIRY_MS`). */
-export const MAX_SESSION_KEY_EXPIRY_MS = 24 * 60 * 60 * 1000;
-
-/** The engine's live-key cap (`MAX_SESSION_KEYS_PER_ACCOUNT`); a refusal naming any other maximum is its budget of new keys, which no revocation refills. */
-export const MAX_SESSION_KEYS_PER_ACCOUNT = 10;
-
-/** How long one login authorizes the key: the engine's registration cap, less a minute so a clock step cannot pass it. */
-export const SESSION_KEY_TTL_MS = MAX_SESSION_KEY_EXPIRY_MS - 60_000;
-
-/** The expiry a registration signed at node time `nowMs` may name. */
-export const sessionKeyExpiry = (nowMs: number): number => nowMs + SESSION_KEY_TTL_MS;
+export { MAX_SESSION_KEY_EXPIRY_MS, MAX_SESSION_KEYS_PER_ACCOUNT, SESSION_KEY_TTL_MS, sessionKeyExpiry } from "./session-key-limits";
 
 /** One session keypair and its signatures. The private key sits in a true private field, so no serialization or inspection of a signer shows it. */
 export class SessionKeySigner {

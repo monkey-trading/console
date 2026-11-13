@@ -7,9 +7,8 @@ import { AttestationBanner } from "./AttestationBanner";
 import { ExitNotice } from "./ExitNotice";
 import { PageNotices } from "./PageNotices";
 import { RiskStrip } from "./RiskStrip";
-import { SetupDialog } from "./SetupDialog";
 import { TopBar } from "./TopBar";
-import { WalletConnectPairing } from "./WalletConnectPairing";
+import { LazyOverlays } from "./LazyOverlays";
 
 /** Fills the viewport on large screens and scrolls as one page on small ones. */
 export function Shell({ children }: { children: ReactNode }) {
@@ -26,8 +25,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <AccessGate>{children}</AccessGate>
       </main>
       <RiskStrip />
-      <WalletConnectPairing />
-      <SetupDialog />
+      <LazyOverlays />
     </div>
   );
 }

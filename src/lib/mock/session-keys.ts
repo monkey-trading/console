@@ -10,7 +10,7 @@
  */
 
 import { EngineError, type ActionResult } from "../engine/client";
-import { MAX_SESSION_KEY_EXPIRY_MS, MAX_SESSION_KEYS_PER_ACCOUNT } from "../engine/session-key";
+import { MAX_SESSION_KEY_EXPIRY_MS, MAX_SESSION_KEYS_PER_ACCOUNT } from "../engine/session-key-limits";
 import type { Reject, SessionKeyRequest, SessionKeyRevocationRequest } from "../engine/types";
 import { checkAccess, checkAuth } from "./orders";
 import type { MockSessionKey, MockState } from "./state";

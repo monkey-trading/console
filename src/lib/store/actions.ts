@@ -1,12 +1,12 @@
 /** What the user can do: connect a wallet, deposit, declare eligibility, trade, and withdraw. */
 
 import type { Deploy } from "../engine/deploy";
-import { FAUCET_USDC, faucetAvailable, mintFromAnvil, postJsonRpc, topUpGas } from "../engine/faucet";
+import { FAUCET_USDC, faucetAvailable } from "../engine/faucet-gate";
 import { cancelTypedData, eligibilityTypedData, orderTypedData, STATEMENTS, withdrawalTypedData } from "../engine/eip712";
 import type { EligibilityClass, OrderKind, Side } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
 import { saveChoice } from "../engine/wallet-persist";
-import { UntrustedError } from "../engine/trust";
+import { UntrustedError } from "../engine/trust-errors";
 import { fixedToWire, formatFixedPlaces, parseFixed, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
 import { describeReject } from "../messages";
@@ -168,6 +168,8 @@ export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy, surface
   if (rpcUrl === null || usdc === null) return false;
   store.patch({ busy: true });
   try {
+    // The transport and its ABI encoding load with the first funding request, not with the page.
+    const { mintFromAnvil, postJsonRpc, topUpGas } = await import("../engine/faucet");
     const gas = await topUpGas(rpcUrl, wallet.address, postJsonRpc);
     if (!gas.ok) {
       if (store.liveWallet === wallet) store.notify(surface, gas.notAnvil

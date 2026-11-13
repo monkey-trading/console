@@ -4,7 +4,8 @@
 
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 
-import { WALLETCONNECT_ICON, type WalletConnectConnector } from "@/lib/engine/walletconnect";
+import { WALLETCONNECT_ICON } from "@/lib/engine/walletconnect-icon";
+import type { WalletConnectConnector } from "@/lib/engine/walletconnect";
 import { qrPath } from "@/lib/qr";
 
 import { useSession } from "./ConsoleProvider";

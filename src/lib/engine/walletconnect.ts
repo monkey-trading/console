@@ -19,8 +19,8 @@ export type PairingState =
   | { status: "ready"; uri: string };
 
 const IDLE: PairingState = { status: "idle" };
-/** WalletConnect's logo, which its licence asks the connect screens to show. */
-export const WALLETCONNECT_ICON = "/walletconnect/icon.svg";
+export { WALLETCONNECT_ICON } from "./walletconnect-icon";
+import { WALLETCONNECT_ICON } from "./walletconnect-icon";
 const SIGN = "eth_signTypedData_v4";
 /** What `ProviderWallet` asks of a wallet: signatures, the vault's transactions, and the chain reads around them. */
 const WALLET_METHODS: readonly string[] = [SIGN, "eth_sendTransaction", "eth_call", "eth_getTransactionReceipt"];

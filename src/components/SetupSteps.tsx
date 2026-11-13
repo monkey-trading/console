@@ -4,7 +4,7 @@
 
 import { useEffect, useId, useState } from "react";
 
-import { FAUCET_USDC } from "@/lib/engine/faucet";
+import { FAUCET_USDC } from "@/lib/engine/faucet-gate";
 import type { EligibilityClass } from "@/lib/engine/types";
 import type { SetupStep } from "@/lib/setup-steps";
 import { attestEligibility, authorizeBrowser, fundWithAnvil, STATEMENTS } from "@/lib/store/actions";

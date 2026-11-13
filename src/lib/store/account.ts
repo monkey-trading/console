@@ -2,7 +2,7 @@
 
 import { carryAccrued } from "../engine/claim-standing";
 import { EngineError } from "../engine/client";
-import { UntrustedError } from "../engine/trust";
+import { UntrustedError } from "../engine/trust-errors";
 import { decodeAccount } from "../models";
 import { emptyHistoryKey, NOT_CREDITED_MS, uncreditedKey, UNTIL_EVENT } from "./quiet-reads";
 import { decideSetup } from "./setup";

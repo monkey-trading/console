@@ -2,7 +2,7 @@
 
 /** The dev-only faucet: in a live-dev build, funds the connected wallet from Anvil. */
 
-import { faucetAvailable } from "@/lib/engine/faucet";
+import { faucetAvailable } from "@/lib/engine/faucet-gate";
 import { fundWithAnvil } from "@/lib/store/actions";
 
 import { useConsole, useSession } from "./ConsoleProvider";

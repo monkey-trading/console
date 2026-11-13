@@ -3,7 +3,7 @@
 /** Compact lines saying what the console found when it checked the node, and what it cannot vouch for. */
 
 import { shortHex } from "@/lib/format";
-import { CONNECT_TO_CHECK } from "@/lib/engine/trust";
+import { CONNECT_TO_CHECK } from "@/lib/engine/trust-errors";
 import { describeMockAttestation, describeReverifying } from "@/lib/messages";
 
 import { recheckNode } from "@/lib/store/node-move";
