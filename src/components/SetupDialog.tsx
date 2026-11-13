@@ -4,7 +4,7 @@
 
 import { useEffect, useId, useRef } from "react";
 
-import { faucetAvailable } from "@/lib/engine/faucet";
+import { faucetAvailable } from "@/lib/engine/faucet-gate";
 import { currentStep, setupSteps, stepNumber, type SetupStep } from "@/lib/setup-steps";
 import { dismissSetup, setupFacts, setupVisible } from "@/lib/store/setup";
 

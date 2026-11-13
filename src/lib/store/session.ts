@@ -11,7 +11,9 @@ import { signBlock } from "../engine/attestation";
 import { EngineError, type ActionResult } from "../engine/client";
 import { registerSessionKeyTypedData, revokeSessionKeyTypedData, type Terms } from "../engine/eip712";
 import { saveSessionKey, type KeyScope } from "../engine/session-key-store";
-import { SessionKeySigner, sessionKeyExpiry } from "../engine/session-key";
+import { sessionKeyExpiry } from "../engine/session-key-limits";
+import type { SessionKeySigner } from "../engine/session-key";
+import { sessionKeySigner } from "../engine/session-key-class";
 import type { Wallet } from "../engine/wallet";
 import { formatStamp } from "../time";
 import { describeReject } from "../messages";
@@ -52,7 +54,7 @@ export async function loginSession(store: ConsoleStore, surface: NoticeSurface):
   const blocked = signBlock(store.getSnapshot().attestation, store.getSnapshot().stream, false);
   if (blocked !== null) return false;
   store.patch({ sessionRefusal: null });
-  const key = (store.sessionKey ??= SessionKeySigner.generate());
+  const key = (store.sessionKey ??= sessionKeySigner().generate());
   try {
     const { next_nonce, time_ms } = await store.deps.client.nonce(wallet.address);
     const now = time_ms ?? store.getSnapshot().now;

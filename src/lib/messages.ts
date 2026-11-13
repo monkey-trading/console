@@ -1,6 +1,6 @@
 /** Plain-language text for what the engine refused or did. */
 
-import { MAX_SESSION_KEYS_PER_ACCOUNT } from "./engine/session-key";
+import { MAX_SESSION_KEYS_PER_ACCOUNT } from "./engine/session-key-limits";
 import type { EngineEvent, MarketId, Reject } from "./engine/types";
 import { fixedFromWire, formatFixedPlaces, formatUsd } from "./fixed";
 import { formatMonkey } from "./format";

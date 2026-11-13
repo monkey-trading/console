@@ -4,129 +4,31 @@
 
 import { createContext, Fragment, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
-import { MultiConnector } from "@/lib/engine/connectors";
-import { parseDeploy, rawDeploy, type Deploy } from "@/lib/engine/deploy";
-import { InjectedConnector } from "@/lib/engine/injected";
-import { createLiveClient, GLUE_PATH, walletDeps } from "@/lib/engine/live-session";
-import { OperatorFollower, type FollowStatus } from "@/lib/engine/operator-follow";
-import type { EngineClient } from "@/lib/engine/client";
-import type { Eip1193Provider } from "@/lib/engine/provider-wallet";
-import type { KeyStorage } from "@/lib/engine/session-key-store";
-import { WalletConnectConnector } from "@/lib/engine/walletconnect";
-import type { VerifierModule } from "@/lib/engine/wasm-verifier";
-import { WatchConnector } from "@/lib/engine/watch-wallet";
+import { parseDeploy, rawDeploy } from "@/lib/engine/deploy";
+import { loadSessionKeySigner } from "@/lib/engine/session-key-class";
+import type { FollowStatus } from "@/lib/engine/operator-follow";
 import { DEMO_ADDRESS } from "@/lib/mock/demo";
 import { queuePage } from "@/lib/mock/funds";
 import { mockHistory } from "@/lib/mock/history";
-import { createMockNode, SIM_EPOCH_MS, type MockNode } from "@/lib/mock";
-import { connectWallet, storedKeyChanged, walletSessionEnded } from "@/lib/store/actions";
-import { followNode, MoveAnnouncer, moveToNode } from "@/lib/store/node-move";
+import { createMockNode, SIM_EPOCH_MS } from "@/lib/mock";
+import { connectWallet, storedKeyChanged } from "@/lib/store/actions";
+import { followNode, MoveAnnouncer } from "@/lib/store/node-move";
 import { reconnectWallet } from "@/lib/store/reconnect";
-import { scanBarsHistory } from "@/lib/store/bars-scan";
 import { followAccountFeeds, quoteSyncKey, syncQuotes } from "@/lib/store/funds";
-import { PREFS_KEY, SIZES_KEY } from "@/lib/prefs";
-import { PrefsStore } from "@/lib/prefs-store";
 import { ConsoleStore } from "@/lib/store/store";
 import type { ConsoleState } from "@/lib/store/state";
 
-interface Session {
-  store: ConsoleStore;
-  /** The deployment this build pins; what the faucet gates on, among the rest. */
-  deploy: Deploy;
-  /** The in-browser node; null when the console talks to a live one. */
-  node: MockNode | null;
-  /** The WalletConnect connector, whose pairing link the pairing dialog shows; null when the build has none. */
-  walletConnect: WalletConnectConnector | null;
-  /** The trading preferences kept in this browser, apart from the store so a stream message re-renders nothing that reads them. */
-  prefs: PrefsStore;
-  /** Which node a live session should talk to, from the chain; null for the mock. */
-  follower: OperatorFollower | null;
-  /** Counts the moves to another node, each of which remounts every screen on a fresh store. */
-  moves: number;
-  /** Posts the move notice at most once per move and holds its dismissal for that move alone. */
-  announcer: MoveAnnouncer;
-  /** Hears each move to another node, which brings a fresh store; absent for the mock, which has one node. */
-  onMove?: (listener: (store: ConsoleStore) => void) => void;
-}
+import { createPrefs, exitStorage, injectedProvider, scheduler, type Session } from "./session-env";
 
 const SessionContext = createContext<Session | null>(null);
-
-/** The browser's timers; a handle is the one this scheduler's own setTimeout returned. */
-const scheduler = { setTimeout: (run: () => void, ms: number): unknown => setTimeout(run, ms), clearTimeout: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
-/** The browser's storage for the account's exit proof, reached only from effects and handlers; it throws where the browser denies it. */
-const exitStorage = () => window.localStorage;
 
 /** How often the page advances the mock node, in milliseconds. */
 const TICK_MS = 1_000;
 
-/** The page's injected EIP-1193 provider, when a browser wallet put one there. */
-function injectedProvider(): Eip1193Provider | undefined {
-  // EIP-1193 providers sit at `window.ethereum`, which the DOM types do not declare.
-  return (window as Window & { ethereum?: Eip1193Provider }).ethereum;
-}
-
-/** The preferences over `localStorage`, which is reached only from effects and handlers, never in the server render; another tab's write is heard through the `storage` event. */
-function createPrefs(): PrefsStore {
-  return new PrefsStore(() => window.localStorage, (onChange) => {
-    const heard = (event: StorageEvent) => { if (event.key === null || event.key === PREFS_KEY || event.key === SIZES_KEY) onChange(); };
-    window.addEventListener("storage", heard);
-    return () => window.removeEventListener("storage", heard);
-  });
-}
-
-/** The store for a live node: nothing is loaded until its attestation is trusted. */
-function createLiveSession(deploy: Deploy): Session {
-  const nowMs = () => Date.now();
-  const browser = {
-    fetch: (input: Parameters<typeof fetch>[0], init?: RequestInit) => fetch(input, init),
-    openSocket: (url: string) => new WebSocket(url),
-    scheduler, nowMs,
-    // The glue is a static file of the app, loaded as it is rather than bundled; the bundler would otherwise look for the .wasm beside it.
-    loadGlue: () => import(/* webpackIgnore: true */ /* turbopackIgnore: true */ GLUE_PATH) as Promise<VerifierModule>,
-  };
-  const client = createLiveClient(deploy, browser);
-  if (deploy.origin === null || deploy.chainId === null || deploy.vault === null) throw new Error("A live session needs the deployment's node, chain id and vault.");
-  const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, staking: deploy.staking, registry: deploy.registry, add: deploy.rpcUrl === null ? null : { name: deploy.chainId === 31337 ? "Anvil (local)" : `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
-  const deps = walletDeps(deploy, (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  // The choice and the session key persist in localStorage, reached lazily: this function also runs on
-  // the server, where `window` does not exist, so the storage is touched only from effects and handlers.
-  const persistence: KeyStorage = {
-    getItem: (key) => window.localStorage.getItem(key),
-    setItem: (key, value) => window.localStorage.setItem(key, value),
-    removeItem: (key) => window.localStorage.removeItem(key),
-    keys: () => Object.keys(window.localStorage),
-  };
-  // When the wallet app ends the session, the console shows the wallet disconnected rather than
-  // failing every action, and forgets the choice: the remembered connection has ended. (The dead
-  // session cannot sign a revocation: walletSessionEnded leaves the key's registration to expire.)
-  const ended = (topic: string) => walletSessionEnded(store, topic);
-  const walletConnect = deploy.walletConnectProjectId === null ? null : new WalletConnectConnector(
-    { projectId: deploy.walletConnectProjectId, url: () => window.location.origin }, chain, deps, () => import("@walletconnect/universal-provider"), ended,
-  );
-  const wallets = new MultiConnector([new InjectedConnector(injectedProvider, chain, deps), ...(walletConnect === null ? [] : [walletConnect]), new WatchConnector(() => window.location.search)]);
-  // A node without the marks endpoint 404s it; the chart's archive scan then seeds its history.
-  const storeFor = (forClient: EngineClient) => new ConsoleStore({ client: forClient, wallets, persistence, exitStorage, history: () => [], historyScan: (store, markets) => scanBarsHistory(store, markets, store.deps.scanClock), initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
-  // The store in use, which a move to another node replaces; `ended` above and the follower below read it when they run.
-  let store = storeFor(client);
-  let moved: ((next: ConsoleStore) => void) | null = null;
-  const follower = new OperatorFollower({
-    deploy, origin: deploy.origin, scheduler, nowMs,
-    chain: () => store.liveWallet?.chainReads ?? null,
-    open: (origin) => createLiveClient(deploy, browser, undefined, origin),
-    busy: () => store.getSnapshot().busy,
-    adopt: (next) => {
-      const old = store;
-      store = storeFor(next);
-      void moveToNode(old, store);
-      moved?.(store);
-    },
-  });
-  return { store, deploy, node: null, walletConnect, prefs: createPrefs(), follower, moves: 0, announcer: new MoveAnnouncer(), onMove: (listener) => { moved = listener; } };
-}
-
-function createSession(): Session {
+/** The session over the in-browser node, built at once; null for a build that pins a live node, whose session is built apart from the page (`createLiveSession`). */
+function createMockSession(): Session | null {
   const deploy = parseDeploy(rawDeploy());
-  if (deploy.mode !== "mock") return createLiveSession(deploy);
+  if (deploy.mode !== "mock") return null;
   const node = createMockNode(SIM_EPOCH_MS, true);
   const store = new ConsoleStore({
     client: node.client,
@@ -157,7 +59,28 @@ const MAX_TICK_MS = 5_000;
  * and from the start for a visitor who prefers reduced motion, until they press play.
  */
 export function ConsoleProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState(createSession);
+  const [built, setBuilt] = useState(createMockSession);
+  const [failure, setFailure] = useState<Error | null>(null);
+  // A build that pins a node builds its session here, once the browser has the page: the connectors, the verifier and the wallet's
+  // chain code (viem and its curves among them) are a chunk of their own, so the first paint waits for none of it. Nothing of a live
+  // node shows before its attestation passes, so the page has nothing to show until then either.
+  useEffect(() => {
+    if (built !== null) return;
+    let current = true;
+    void import("./live-session-setup")
+      .then(({ createLiveSession }) => createLiveSession(parseDeploy(rawDeploy())))
+      .then((session) => { if (current) setBuilt(session); }, (error: unknown) => { if (current) setFailure(error instanceof Error ? error : new Error(String(error))); });
+    return () => { current = false; };
+  }, [built]);
+  // A session that cannot be built is as fatal as it was when it was built in the render.
+  if (failure !== null) throw failure;
+  if (built === null) return <p role="status" className="min-h-dvh bg-ink-1 p-6 text-data text-fg-2">Loading the console…</p>;
+  return <LoadedConsole initial={built}>{children}</LoadedConsole>;
+}
+
+/** The provider over a built session: its reads, follows and clock. */
+function LoadedConsole({ initial, children }: { initial: Session; children: ReactNode }) {
+  const [session, setSession] = useState(initial);
   const { store, follower, onMove } = session;
   /** Set once a stored choice has been reconnected, so a repeated effect run (React StrictMode) does not start a second one. */
   const reconnected = useRef(false);
@@ -205,8 +128,8 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       };
     }
     const stop = store.start(SIM_EPOCH_MS);
-    // The demo account is connected on load, so no screen starts empty.
-    void connectWallet(store, "browser", true).finally(() => store.patch({ walletDecided: true }));
+    // The demo account is connected on load, so no screen starts empty. Its login signs with a session key, whose signer (and the curves under it) loads after the page does.
+    void loadSessionKeySigner().then(() => connectWallet(store, "browser", true)).finally(() => store.patch({ walletDecided: true }));
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) store.setPaused(true);
     let simulated = SIM_EPOCH_MS;
     let last = Date.now();

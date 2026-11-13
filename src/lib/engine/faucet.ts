@@ -9,24 +9,17 @@
 
 import { encodeFunctionData, parseAbi, type Hex } from "viem";
 
-import { fixedFromInt, type Fixed } from "../fixed";
+import type { Fixed } from "../fixed";
 import { USDC_UNIT } from "../vault";
-import type { Deploy } from "./deploy";
 import type { Address } from "./types";
 
-/** The demo amount the faucet mints: 10,000 USDC. */
-export const FAUCET_USDC: Fixed = fixedFromInt(10_000);
+export { FAUCET_USDC, faucetAvailable } from "./faucet-gate";
 
 /** The gas balance the faucet ensures, in wei: 1 ETH. */
 export const FAUCET_GAS_WEI = 1_000_000_000_000_000_000n;
 
 /** A JSON-RPC POST: `body` is the request object, the answer is the decoded response body. */
 export type JsonRpcPost = (url: string, body: unknown) => Promise<unknown>;
-
-/** Whether this build shows the faucet: a live-dev deployment naming the mock USDC and the Anvil RPC. */
-export function faucetAvailable(deploy: Deploy): boolean {
-  return deploy.mode === "live-dev" && deploy.usdc !== null && deploy.rpcUrl !== null;
-}
 
 /** JSON-RPC's code for a method the node does not have; any node but Anvil answers an `anvil_` method with it. */
 export const METHOD_NOT_FOUND = -32601;

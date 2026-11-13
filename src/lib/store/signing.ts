@@ -5,7 +5,7 @@ import { EngineError, type ActionResult } from "../engine/client";
 import { requestDomain, type Terms, type TypedRequest } from "../engine/eip712";
 import { declinedByUser } from "../engine/provider-errors";
 import type { Reject, RequestAuth } from "../engine/types";
-import { NotSentError, UntrustedError } from "../engine/trust";
+import { NotSentError, UntrustedError } from "../engine/trust-errors";
 import type { Progress, Wallet } from "../engine/wallet";
 import { describeReject } from "../messages";
 import type { BlockReason, NoticeSurface } from "./state";

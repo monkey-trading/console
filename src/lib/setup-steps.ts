@@ -4,8 +4,8 @@
  * and a session key before any deposit (monkey-trading/engine#470).
  */
 
-import { FAUCET_USDC } from "./engine/faucet";
-import { MAX_SESSION_KEYS_PER_ACCOUNT } from "./engine/session-key";
+import { FAUCET_USDC } from "./engine/faucet-gate";
+import { MAX_SESSION_KEYS_PER_ACCOUNT } from "./engine/session-key-limits";
 import type { EligibilityClass, Reject } from "./engine/types";
 import type { Fixed } from "./fixed";
 import { formatStamp } from "./time";

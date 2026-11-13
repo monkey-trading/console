@@ -9,7 +9,8 @@
  */
 
 import type { ChoiceStorage } from "./wallet-persist";
-import { SessionKeySigner } from "./session-key";
+import type { SessionKeySigner } from "./session-key";
+import { sessionKeySigner } from "./session-key-class";
 
 /** `ChoiceStorage`, and what the sweep of dead entries reads. */
 export interface KeyStorage extends ChoiceStorage {
@@ -64,8 +65,9 @@ function decode(raw: string | null): Entry | null {
 
 /** The signer of `privateKey` when it derives `address`, or null; the error a bad key throws names nothing and goes no further. */
 function signerOf(privateKey: `0x${string}`, address: string): SessionKeySigner | null {
+  const signers = sessionKeySigner();
   try {
-    const signer = SessionKeySigner.fromPrivateKey(privateKey);
+    const signer = signers.fromPrivateKey(privateKey);
     return signer.address.toLowerCase() === address.toLowerCase() ? signer : null;
   } catch {
     return null;
