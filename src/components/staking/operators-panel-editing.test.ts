@@ -69,4 +69,12 @@ describe("the operators card's editors and slot", () => {
     });
   });
 
+
+  it("breaks a long candidate name inside the pending-election and liveness-promotion notes, so they never widen a narrow card or enlarged text", () => {
+    for (const promoted of [false, true]) {
+      const pending = { ...view, pending: { candidate: ALPHA, effectiveAtMs: 1_794_000_000_000, promoted } };
+      const html = render({ state: VERIFIED, operators: { route: LOADING, list: ready(pending), held: null }, read: chain() });
+      expect(html).toMatch(/<p class="rounded border border-amber\/40 bg-amber\/10 p-3 text-caption leading-relaxed text-amber \[overflow-wrap:anywhere\]">(An election named|A liveness promotion names)/);
+    }
+  });
 });
