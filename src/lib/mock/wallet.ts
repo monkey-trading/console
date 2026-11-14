@@ -76,6 +76,7 @@ export class MockWalletConnector implements WalletConnector {
         },
       },
       governance: {
+        onChain: async () => undefined,
         proposal: async (_vote: string, id: number) => controls.governance.proposal(id),
         set: async (_vote: string, setId: number) => controls.governance.set(setId),
         voted: async (_vote: string, id: number, member: string) => controls.governance.voted(id, member),

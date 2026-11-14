@@ -3,8 +3,9 @@
  * Governance tab shows (monkey-trading/console#281), from the vote contract through the wallet: each
  * proposal's set (`OperatorSchedule.setOf`, fixed once adopted), the set a passed proposal opened under
  * with its final tally (`ParameterVote.proposalOf`, which the node does not serve), and whether each
- * member voted (`ParameterVote.voted`). A yes vote is final, and so is any answer read once the
- * proposal no longer takes votes, so only an open proposal's members who have not voted are read again.
+ * member voted (`ParameterVote.voted`). An answer read once the proposal no longer takes votes is
+ * final; one read while it does, a yes included, is read again, since the latest block it was read at
+ * could still be reorganised away.
  */
 
 import type { ChainProposal } from "../engine/governance-wallet";
@@ -93,14 +94,14 @@ export function plan(facts: MemberVoteFacts, targets: readonly VoteTarget[], mem
   return [...calls, ...again.map(({ call }) => call)].slice(0, MAX_CALLS);
 }
 
-/** `facts` with one call's answer folded in; a set fixes once read, and a vote once yes or read while the proposal took none. */
+/** `facts` with one call's answer folded in; a set fixes once read, and a vote once read while the proposal took none. */
 export function fold(facts: MemberVoteFacts, answer: VoteAnswer): MemberVoteFacts {
   switch (answer.kind) {
     case "proposal": return { ...facts, proposals: new Map(facts.proposals).set(answer.id, answer.proposal) };
     case "set": return { ...facts, sets: new Map(facts.sets).set(answer.setId, answer.members) };
     case "voted": {
       const reads = facts.reads + 1;
-      return { ...facts, reads, voted: new Map(facts.voted).set(voteKey(answer.id, answer.member), { voted: answer.voted, final: answer.voted || !answer.open, at: reads }) };
+      return { ...facts, reads, voted: new Map(facts.voted).set(voteKey(answer.id, answer.member), { voted: answer.voted, final: !answer.open, at: reads }) };
     }
     default: {
       const never: never = answer;

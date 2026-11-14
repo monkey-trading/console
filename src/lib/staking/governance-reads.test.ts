@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EngineClient } from "../engine/client";
 import { NODE_READ_MS } from "../monkey/panel";
 import { flush, setup } from "../monkey/panel-kit";
+import { RETRY_TICK_MS } from "./history-reads";
 import { GovernanceReads } from "./governance-reads";
 
 beforeEach(() => vi.useFakeTimers());
@@ -35,21 +36,30 @@ describe("GovernanceReads", () => {
     stop();
   });
 
-  it("reads again at the node read's pace, at once on a vote's outcome in the stream, and not in a hidden tab", async () => {
+  it("reads again at the node read's pace, and at the next tick after a vote's outcome in the stream", async () => {
     const visible = await started();
     await vi.advanceTimersByTimeAsync(NODE_READ_MS);
     expect(visible.calls.count).toBe(2);
     visible.node.client.state.emit({ type: "tick" }, [{ type: "restriction_lapsed", proposal: 6 }]);
-    await flush();
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
     expect(visible.calls.count).toBe(3);
     visible.node.client.state.emit({ type: "tick" }, [{ type: "market_opened", market: 1 }]);
-    await flush();
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
     expect(visible.calls.count).toBe(3);
     visible.stop();
-    const hidden = await started(() => true);
+  });
+
+  it("reads nothing in a hidden tab, a vote's outcome included, and reads once the tab is seen", async () => {
+    let hidden = true;
+    const kit = await started(() => hidden);
     await vi.advanceTimersByTimeAsync(NODE_READ_MS * 3);
-    expect(hidden.calls.count).toBe(1);
-    hidden.stop();
+    kit.node.client.state.emit({ type: "tick" }, [{ type: "proposal_scheduled", proposal: 7, applies_at: 1 }]);
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS * 2);
+    expect(kit.calls.count).toBe(1);
+    hidden = false;
+    await vi.advanceTimersByTimeAsync(RETRY_TICK_MS);
+    expect(kit.calls.count).toBe(2);
+    kit.stop();
   });
 
   it("drops what it read when the node is no longer trusted, and reads again once it is", async () => {

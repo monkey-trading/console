@@ -2,8 +2,10 @@
  * The Governance tab's chain read of how the account and the members it delegates to stand on each
  * proposal shown (`member-votes.ts`), through the connected wallet, one call at a time behind its
  * other work. Read when the tab opens, when the proposals, the account's delegations or the wallet
- * change, after a vote, and every 15 seconds while the tab is visible for the open proposals' members
- * who have not voted yet; a failure backs off. A wallet that reads no chain reads nothing.
+ * change, after a vote, and every 15 seconds while the tab is visible for the open proposals' votes,
+ * which a reorganised block could still undo; a failure backs off. A hidden tab reads nothing: a change
+ * while it is hidden is read at the next five-second tick once it is seen. A wallet that reads no chain
+ * reads nothing.
  */
 
 import type { GovernanceWallet } from "../engine/governance-wallet";
@@ -13,6 +15,7 @@ import type { OperatorReads } from "../monkey/operators";
 import type { ConsoleStore } from "../store/store";
 import type { DelegationReads } from "./delegation-reads";
 import type { GovernanceReads } from "./governance-reads";
+import { RETRY_TICK_MS } from "./history-reads";
 import { fold, MAX_CALLS, NO_FACTS, plan, type MemberVoteFacts, type VoteAnswer, type VoteCall, type VoteTarget } from "./member-votes";
 
 export interface MemberVotesState {
@@ -20,6 +23,8 @@ export interface MemberVotesState {
   account: string | null;
   /** The proposal the account last voted on from this tab, where the `governance` notice shows. */
   votingOn: number | null;
+  /** The proposal the account's last vote from this tab landed on, which the tab reads out wherever the proposal now sits. */
+  landed: number | null;
   /** The vote contract the facts are for. */
   vote: string | null;
   /** `unavailable` for a wallet that reads no chain, or none. */
@@ -28,7 +33,7 @@ export interface MemberVotesState {
   error: string | null;
 }
 
-const IDLE: MemberVotesState = { account: null, votingOn: null, vote: null, status: "idle", facts: NO_FACTS, error: null };
+const IDLE: MemberVotesState = { account: null, votingOn: null, landed: null, vote: null, status: "idle", facts: NO_FACTS, error: null };
 
 /** The vote contract and the proposals the tab shows, open ones first, from the node's two reads at `nowMs`. */
 export function targetsOf(operators: OperatorReads, governance: GovernanceReads, nowMs: number): { vote: string | null; targets: VoteTarget[] } {
@@ -55,6 +60,7 @@ async function ask(governance: GovernanceWallet, vote: string, call: VoteCall): 
   }
 }
 
+/** The Governance tab's chain read of how the account and the members it delegates to voted. */
 export class MemberVoteReads {
   private state: MemberVotesState = IDLE;
   private readonly listeners = new Set<() => void>();
@@ -107,19 +113,26 @@ export class MemberVoteReads {
     this.backoff.reset();
     const refresh = () => void this.refresh();
     // The node's reads and the delegations notify on every answer; only a change in what is shown, or in the wallet, needs a read.
-    let shown = "";
+    // Taken now, so the store's first patch after the start is no change and asks for no second read.
+    let shown = this.shown();
     let wallet = this.store.liveWallet;
+    let pending = false;
     const changed = () => {
       const now = this.shown();
       if (now === shown && this.store.liveWallet === wallet) return;
       shown = now;
       wallet = this.store.liveWallet;
-      refresh();
+      if (isHidden()) pending = true;
+      else refresh();
     };
     const stops = [this.operators.subscribe(changed), this.governance.subscribe(changed), this.delegations.subscribe(changed), this.store.subscribe(changed)];
+    let next = Date.now() + WALLET_READ_EVERY_MS;
     const timer = setInterval(() => {
-      if (!isHidden() && this.backoff.ready()) refresh();
-    }, WALLET_READ_EVERY_MS);
+      if (isHidden() || (!pending && (Date.now() < next || !this.backoff.ready()))) return;
+      pending = false;
+      next = Date.now() + WALLET_READ_EVERY_MS;
+      refresh();
+    }, RETRY_TICK_MS);
     refresh();
     return () => {
       this.open = false;
@@ -166,6 +179,8 @@ export class MemberVoteReads {
       const asked = new Set<string>();
       let facts = this.state.facts;
       try {
+        // On another chain the contract's address names something else: checked before the reads and after them.
+        await governance.onChain();
         for (;;) {
           const calls = plan(facts, targets, members).filter((call) => !asked.has(callKey(call))).slice(0, MAX_CALLS - asked.size);
           if (calls.length === 0) break;
@@ -176,6 +191,14 @@ export class MemberVoteReads {
             facts = fold(facts, answer);
           }
         }
+        if (asked.size > 0) {
+          // A wallet that moved chain during the reads may have read another chain's contract: none of them is kept.
+          await governance.onChain().catch((error: unknown) => {
+            facts = this.state.facts;
+            throw error;
+          });
+        }
+        if (!current()) return;
         if (asked.size > 0) this.backoff.record(false);
         this.set({ facts, status: "ready", error: null });
       } catch (error) {
@@ -194,9 +217,9 @@ export class MemberVoteReads {
     if (this.state.votingOn !== id) this.set({ votingOn: id });
   }
 
-  /** After the account's vote on `id` landed: the contract holds it, so it shows at once, before a read confirms it. */
+  /** After the account's vote on `id` landed: the contract holds it, so it shows at once and is read out, and the reads confirm it. */
   votedLanded(vote: string, id: number, member: string): void {
     if (vote !== this.state.vote) return;
-    this.set({ facts: fold(this.state.facts, { kind: "voted", id, member: member.toLowerCase(), open: true, voted: true }) });
+    this.set({ landed: id, facts: fold(this.state.facts, { kind: "voted", id, member: member.toLowerCase(), open: true, voted: true }) });
   }
 }

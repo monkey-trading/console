@@ -4,7 +4,7 @@
  * A member's yes vote on an open proposal (`ParameterVote.vote`): the button while the account may
  * vote, what it did once it has, and, under the proposal it was pressed on, the wallet's request and
  * any refusal or failure. A vote that lands needs no message: the line saying the account voted
- * replaces the button, in a status region kept mounted while the account is a member, so it is read out.
+ * replaces the button, and the tab reads the outcome out wherever the proposal then sits.
  */
 
 import type { ReactNode } from "react";
@@ -36,6 +36,7 @@ export interface VoteControlProps {
   headingId: string;
 }
 
+/** A member's vote on one open proposal: the button, the line saying it voted, or nothing, with the `governance` notice where it was pressed. */
 export function VoteControl({ vote, id, standing, weight, rotationOn, closesAtMs, noticeHere: here, headingId }: VoteControlProps) {
   const { panel, operators, memberVotes } = useStaking();
   const busy = useConsoleSelect((state) => state.busy);
@@ -53,7 +54,8 @@ export function VoteControl({ vote, id, standing, weight, rotationOn, closesAtMs
         aria-label={`Vote yes with ${formatMonkey(weight)} on proposal ${id}`}
         className={BUTTON}
         onClick={() => {
-          if (!busy) void castVote(panel, operators, memberVotes, vote, id).then((landed) => landed && focusHeading(headingId));
+          // The button goes the moment the vote lands, and focus moves then, only from this proposal: one moved to another proposal meanwhile stays there.
+          if (!busy) void castVote(panel, operators, memberVotes, vote, id, () => focusHeading(headingId, "li"));
         }}
       >
         Vote yes with {formatMonkey(weight)}
@@ -64,7 +66,7 @@ export function VoteControl({ vote, id, standing, weight, rotationOn, closesAtMs
   return (
     <div>
       {control}
-      {member && <div role="status">{standing === "yes" && <p className="text-caption text-glow">You voted yes with {formatMonkey(weight)}.</p>}</div>}
+      {member && standing === "yes" && <p className="text-caption text-glow">You voted yes with {formatMonkey(weight)}.</p>}
       {notice}
     </div>
   );

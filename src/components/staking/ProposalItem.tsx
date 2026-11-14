@@ -80,6 +80,7 @@ function TallyLine({ tally, open }: { tally: Tally; open: boolean }) {
   );
 }
 
+/** One proposal, as the open, waiting and in-force lists show it. */
 export function ProposalItem({ id, headingId, fast, stage, title, details, tally, wait, command, members, vote }: ProposalItemProps) {
   const open = stage === "open";
   return (

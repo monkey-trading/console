@@ -21,12 +21,15 @@ export interface SetMember {
 
 /**
  * A wallet's vote calls. The vote contract's address comes from the node's signed answers; every
- * read goes through the wallet to the chain, refused while the wallet is on another chain.
+ * read goes through the wallet to the chain, and a caller brackets its reads with `onChain`, since on
+ * another chain the contract's address names something else.
  * Error cases (every method):
- * - the wallet is on another chain than the deployment's, or a read fails
- * - for `vote`: the user declines, or the transaction reverts or is not confirmed
+ * - a read fails; for `onChain`, the wallet is on another chain than the deployment's
+ * - for `vote`: the user declines, the wallet is on another chain, or the transaction reverts or is not confirmed
  */
 export interface GovernanceWallet {
+  /** Resolves when the wallet is on the deployment's chain, and rejects when it is not. */
+  onChain(): Promise<void>;
   /** Proposal `id` on the vote contract `vote`; null when it holds none by that id. */
   proposal(vote: string, id: number): Promise<ChainProposal | null>;
   /** The members of rotation set `setId` of the schedule the vote contract follows, each once with its whole weight. */

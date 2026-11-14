@@ -2,8 +2,9 @@
  * The Governance tab's read of the node's signed `GET /v1/house/state` (monkey-trading/console#281):
  * the passed changes waiting out their notice, the restrictions in force, and the parameters in force
  * they are told against. Read on open, at the node read's 30-second pace while the tab is visible,
- * as soon as the stream carries a vote's outcome (a change scheduled or applied, a restriction applied
- * or lapsed), when a countdown reaches its time, and only while the node's answers may be read. What
+ * at the next five-second tick of a visible tab after the stream carries a vote's outcome (a change
+ * scheduled or applied, a restriction applied or lapsed), when a countdown reaches its time, and only
+ * while the node's answers may be read. What
  * was read stays across a tab switch, unless trust is lost or another verified enclave holds the node.
  */
 
@@ -14,6 +15,7 @@ import { NODE_READ_MS } from "../monkey/panel";
 import { EnclaveBinding } from "../store/enclave-binding";
 import type { ConsoleStore } from "../store/store";
 import { governanceView, type GovernanceView } from "./governance";
+import { RETRY_TICK_MS } from "./history-reads";
 
 /** What the tab shows from the house state: the votes the log holds, and the parameters in force at the same seq. */
 export interface GovernanceRead {
@@ -26,6 +28,7 @@ const OUTCOMES: ReadonlySet<string> = new Set(["proposal_scheduled", "restrictio
 
 const UNAVAILABLE = { status: "unavailable", value: null, message: null } as const;
 
+/** The Governance tab's read of the votes the log holds, while the node may be read. */
 export class GovernanceReads {
   private state: Read<GovernanceRead> = LOADING;
   private readonly listeners = new Set<() => void>();
@@ -34,6 +37,8 @@ export class GovernanceReads {
   private open = false;
   /** Numbers each read: only the latest may land. */
   private ticket = 0;
+  /** When the house state is next read, by the device's clock; a vote's outcome brings it forward to now. */
+  private dueAt = 0;
   private readonly enclave: EnclaveBinding;
 
   constructor(private readonly store: ConsoleStore) {
@@ -79,11 +84,12 @@ export class GovernanceReads {
       if (!now || replaced) this.drop();
       if (now) void this.refresh();
     });
+    // A hidden tab reads nothing: an outcome only brings the next read forward, which the tick makes once the tab is seen.
     const timer = setInterval(() => {
-      if (!isHidden()) void this.refresh();
-    }, NODE_READ_MS);
+      if (!isHidden() && Date.now() >= this.dueAt) void this.refresh();
+    }, RETRY_TICK_MS);
     const unsubscribe = this.store.deps.client.subscribe((message) => {
-      if (message.events.some((event) => OUTCOMES.has(event.type))) void this.refresh();
+      if (message.events.some((event) => OUTCOMES.has(event.type))) this.dueAt = 0;
     });
     return () => {
       this.open = false;
@@ -99,6 +105,7 @@ export class GovernanceReads {
     if (!this.open || !this.nodeReadable() || this.state.status === "unavailable") return;
     const ticket = ++this.ticket;
     const cycle = this.cycle;
+    this.dueAt = Date.now() + NODE_READ_MS;
     const current = () => ticket === this.ticket && cycle === this.cycle;
     try {
       const state = await this.store.deps.client.houseState();

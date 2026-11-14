@@ -72,6 +72,8 @@ describe("restrictions in the mock's trading", () => {
     expect(mock.floorAt(4, START)).toBe(1);
     expect(mock.floorAt(1, START)).toBe(0);
     expect(mock.floorAt(4, START + 22 * 3_600_000)).toBe(0);
+    // Logged two hours before the clock starts: before then, as in the demo's backstory, it holds nothing.
+    expect(mock.floorAt(4, START - 2 * 3_600_000 - 1)).toBe(0);
     const node = createMockNode(NODE_START);
     node.client.tick(NODE_START + 5_000);
     expect(node.client.marketViews().find((market) => market.id === 4)?.stress_level).toBe(1);

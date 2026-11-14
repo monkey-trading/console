@@ -44,7 +44,7 @@ async function tab({ member = false, hidden = (): boolean => false } = {}) {
   const votes = new MemberVoteReads(kit.store, operators, governance, delegations);
   const stops = [operators.start(hidden), governance.start(hidden), delegations.start(hidden), votes.start(hidden)];
   await flush();
-  return { ...kit, alpha, bravo, charlie, operators, governance, votes, calls, wallet: governanceWallet, stop: () => { for (const stop of stops) stop(); kit.stop(); } };
+  return { ...kit, alpha, bravo, charlie, operators, governance, delegations, votes, calls, wallet: governanceWallet, stop: () => { for (const stop of stops) stop(); kit.stop(); } };
 }
 
 describe("MemberVoteReads", () => {
@@ -63,12 +63,12 @@ describe("MemberVoteReads", () => {
     stop();
   });
 
-  it("reads again every 15 seconds only the open proposals' members who have not voted, and nothing in a hidden tab", async () => {
+  it("reads the open proposals' votes again every 15 seconds, a yes included, and nothing in a hidden tab", async () => {
     const visible = await tab();
     const first = visible.calls.voted;
     await vi.advanceTimersByTimeAsync(WALLET_READ_EVERY_MS);
-    // Bravo on proposals 7 and 8: each passed answer and each yes is final.
-    expect(visible.calls.voted - first).toBe(2);
+    // Alpha and bravo on proposals 7 and 8: a passed proposal's answers are final, an open one's are read again.
+    expect(visible.calls.voted - first).toBe(4);
     visible.stop();
     const hidden = await tab({ hidden: () => true });
     const before = hidden.calls.voted;
@@ -87,6 +87,21 @@ describe("MemberVoteReads", () => {
     expect(votes.getSnapshot()).toMatchObject({ status: "ready", vote: null });
     stop();
     kit.stop();
+  });
+
+  it("reads nothing it keeps while the wallet is on another chain, checked before and after the reads", async () => {
+    const { votes, wallet, stop } = await tab();
+    const held = votes.getSnapshot().facts;
+    let checks = 0;
+    wallet.onChain = async () => {
+      checks += 1;
+      if (checks === 2) throw new Error("your wallet is on chain 1, not chain 31337");
+    };
+    wallet.voted = async () => true; // what another chain's contract would answer
+    await votes.refresh();
+    expect(votes.getSnapshot()).toMatchObject({ status: "failed", error: "your wallet is on chain 1, not chain 31337" });
+    expect(votes.getSnapshot().facts).toBe(held);
+    stop();
   });
 
   it("is unavailable without a wallet that reads the chain, and keeps what it read through a failed read", async () => {
@@ -110,7 +125,7 @@ describe("castVote", () => {
     expect(weightIn(votes.getSnapshot().facts, { id: 7, setId: 1 }, ME)).toBe(200_000n * MONKEY_UNIT);
     expect(standing(votes.getSnapshot().facts, { id: 7, setId: 1 }, ME)).toBe("no");
     await expect(castVote(panel, operators, votes, vote, 7)).resolves.toBe(true);
-    expect(votes.getSnapshot()).toMatchObject({ votingOn: 7 });
+    expect(votes.getSnapshot()).toMatchObject({ votingOn: 7, landed: 7 });
     expect(standing(votes.getSnapshot().facts, { id: 7, setId: 1 }, ME)).toBe("yes");
     expect(store.getSnapshot().notices.governance).toBeUndefined();
     await flush();
@@ -118,6 +133,21 @@ describe("castVote", () => {
     expect(operators.getSnapshot().list.value?.proposals?.open.map((proposal) => proposal.id)).toEqual([8]);
     await governance.refresh();
     expect(governance.getSnapshot().value?.view.waiting.map((change) => [change.id, change.appliesAtMs - store.getSnapshot().now])).toEqual([[5, expect.any(Number)], [7, 7 * 86_400_000]]);
+    stop();
+  });
+
+  it("sends no vote on a verdict that may not sign, saying why at the control, and reads no delegations again after one", async () => {
+    const { votes, operators, panel, store, delegations, stop } = await tab({ member: true });
+    const vote = operators.getSnapshot().list.value?.proposals?.vote ?? "";
+    const attestation = store.getSnapshot().attestation;
+    store.patch({ attestation: { kind: "unverified", reason: "the quote did not verify" } });
+    await expect(castVote(panel, operators, votes, vote, 7)).resolves.toBe(false);
+    expect(store.getSnapshot().notices.governance?.text).toMatch(/^The console will not vote: /);
+    store.patch({ attestation });
+    let landedAt = "";
+    await expect(castVote(panel, operators, votes, vote, 7, () => { landedAt = standing(votes.getSnapshot().facts, { id: 7, setId: 1 }, ME); })).resolves.toBe(true);
+    expect(landedAt).toBe("yes");
+    expect(delegations.getSnapshot().settling).toBe(false);
     stop();
   });
 

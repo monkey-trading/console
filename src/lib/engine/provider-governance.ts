@@ -22,6 +22,7 @@ const NO_PROPOSER = "0x0000000000000000000000000000000000000000";
 /** How the wallet sends a transaction and waits for it to mine. */
 export type GovernanceSend = (to: string, data: Hex, action: string, progress: Progress) => Promise<string>;
 
+/** The vote contract's reads and vote through one wallet's provider. */
 export class ProviderGovernance implements GovernanceWallet {
   /** Each vote contract's schedule, which never changes. */
   private readonly schedules = new Map<string, Hex>();
@@ -33,7 +34,7 @@ export class ProviderGovernance implements GovernanceWallet {
   ) {}
 
   /** Refused while the wallet is on another chain, where the contract's address names something else. */
-  private async onChain(): Promise<void> {
+  async onChain(): Promise<void> {
     const current = Number(await withinMs(this.provider, { method: "eth_chainId" }, WALLET_READ_MS));
     if (current !== this.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chainId}`);
   }
@@ -43,7 +44,6 @@ export class ProviderGovernance implements GovernanceWallet {
   }
 
   async proposal(vote: string, id: number): Promise<ChainProposal | null> {
-    await this.onChain();
     const data = encodeFunctionData({ abi: VOTE, functionName: "proposalOf", args: [BigInt(id)] });
     const [proposal] = decodeFunctionResult({ abi: VOTE, functionName: "proposalOf", data: await this.call(vote, data) });
     // An id the contract never gave holds zeros.
@@ -52,7 +52,6 @@ export class ProviderGovernance implements GovernanceWallet {
   }
 
   async set(vote: string, setId: number): Promise<SetMember[]> {
-    await this.onChain();
     let schedule = this.schedules.get(vote);
     if (schedule === undefined) {
       schedule = decodeFunctionResult({ abi: VOTE, functionName: "schedule", data: await this.call(vote, encodeFunctionData({ abi: VOTE, functionName: "schedule" })) });
@@ -69,7 +68,6 @@ export class ProviderGovernance implements GovernanceWallet {
   }
 
   async voted(vote: string, id: number, member: string): Promise<boolean> {
-    await this.onChain();
     const data = encodeFunctionData({ abi: VOTE, functionName: "voted", args: [BigInt(id), hexOf(member)] });
     return decodeFunctionResult({ abi: VOTE, functionName: "voted", data: await this.call(vote, data) });
   }

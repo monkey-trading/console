@@ -75,11 +75,9 @@ describe("ProviderGovernance", () => {
     await expect(governance.voted(VOTE, 3, B)).resolves.toBe(false);
   });
 
-  it("refuses every read while the wallet is on another chain", async () => {
-    const { governance, calls } = rig(1);
-    await expect(governance.proposal(VOTE, 3)).rejects.toThrow("your wallet is on chain 1, not chain 31337");
-    await expect(governance.voted(VOTE, 3, A)).rejects.toThrow("not chain 31337");
-    expect(calls).toEqual([]);
+  it("says whether the wallet is on the deployment's chain, which a caller checks around its reads", async () => {
+    await expect(rig(1).governance.onChain()).rejects.toThrow("your wallet is on chain 1, not chain 31337");
+    await expect(rig().governance.onChain()).resolves.toBeUndefined();
   });
 
   it("sends one vote transaction to the vote contract, naming the proposal", async () => {

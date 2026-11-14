@@ -44,21 +44,20 @@ const vote = (over: Partial<VoteControlProps> = {}, busy = false) => {
 };
 
 describe("VoteControl", () => {
-  it("offers a member that has not voted one yes vote, named for its weight and proposal, with an empty status region ready for the outcome", () => {
+  it("offers a member that has not voted one yes vote, named for its weight and proposal", () => {
     const html = vote();
     expect(html).toContain('aria-label="Vote yes with 200,000 MONKEY on proposal 7"');
     expect(html).toContain(">Vote yes with 200,000 MONKEY</button>");
     expect(html).toContain('aria-disabled="false"');
-    expect(html).toContain('<div role="status"></div>');
   });
 
   it("holds the button while another request is in progress", () => {
     expect(vote({}, true)).toContain('aria-disabled="true"');
   });
 
-  it("says a member voted, in its status region, in place of the button", () => {
+  it("says a member voted in place of the button", () => {
     const html = vote({ standing: "yes" });
-    expect(html).toMatch(/<div role="status"><p[^>]*>You voted yes with 200,000 MONKEY\.<\/p><\/div>/);
+    expect(html).toMatch(/<p[^>]*>You voted yes with 200,000 MONKEY\.<\/p>/);
     expect(html).not.toContain("<button");
   });
 

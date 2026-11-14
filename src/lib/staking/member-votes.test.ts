@@ -26,8 +26,8 @@ describe("plan", () => {
 
   it("reads nothing for an account that delegates to no one and is no member, and nothing more once every answer is final", () => {
     expect(plan(NO_FACTS, [{ id: 1, setId: 1, open: true }], [])).toEqual([]);
-    const final = after([SET_1, { kind: "voted", id: 1, member: A, open: true, voted: true }, { kind: "voted", id: 2, member: A, open: false, voted: false }]);
-    expect(plan(final, [{ id: 1, setId: 1, open: true }, { id: 2, setId: 1, open: false }], [A, C])).toEqual([]);
+    const final = after([SET_1, { kind: "voted", id: 1, member: A, open: false, voted: true }, { kind: "voted", id: 2, member: A, open: false, voted: false }]);
+    expect(plan(final, [{ id: 1, setId: 1, open: false }, { id: 2, setId: 1, open: false }], [A, C])).toEqual([]);
   });
 
   it("reads an open proposal's member again while it has not voted, and a closed one's once", () => {
@@ -84,8 +84,10 @@ describe("standing and weight", () => {
     expect(setOf(facts, { id: 3, setId: null })).toBe(2);
   });
 
-  it("keeps a yes final whatever the proposal's state, and a no final only when read while it took no votes", () => {
-    expect(facts.voted.get(voteKey(1, A))).toEqual({ voted: true, final: true, at: 1 });
+  it("keeps a vote read while the proposal took votes, a yes included, to be read again, and one read after as final", () => {
+    expect(facts.voted.get(voteKey(1, A))).toEqual({ voted: true, final: false, at: 1 });
     expect(facts.voted.get(voteKey(1, B))).toEqual({ voted: false, final: false, at: 2 });
+    expect(fold(facts, { kind: "voted", id: 1, member: A, open: false, voted: true }).voted.get(voteKey(1, A))).toEqual({ voted: true, final: true, at: 3 });
+    expect(plan(facts, [{ id: 1, setId: 1, open: true }], [A])).toEqual([{ kind: "voted", id: 1, member: A, open: true }]);
   });
 });

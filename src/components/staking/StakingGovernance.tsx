@@ -6,10 +6,11 @@
  * restrictions in force, from its house state (monkey-trading/engine#548), each with how the members
  * the account delegates to voted, from the chain through the wallet, and a member's own vote. The
  * figures land together, once the node's two reads, the account's delegations and the wallet's first
- * vote read have answered, so nothing on the tab moves when one of them does.
+ * vote read have answered, so nothing on the tab moves when one of them does; a wallet slow to answer
+ * holds them back three seconds at most.
  */
 
-import { useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
 import { accountReadsSettled } from "@/lib/staking/delegation-reads";
@@ -33,11 +34,15 @@ function chainTally(facts: MemberVoteFacts, id: number): Tally | null {
   return proposal === undefined || proposal === null ? null : { yes: proposal.yes, total: proposal.total };
 }
 
+/** How long the figures wait for the wallet's first vote read before they show anyway, as the Delegate tab's operators card waits. */
+const VOTES_WAIT_MS = 3_000;
+
 /** A list of proposals in a card, or the sentence that says there are none. */
 function Items({ empty, children }: { empty: string; children: ReactNode[] }) {
   return children.length === 0 ? <p className={NOTE}>{empty}</p> : <ul className="space-y-3">{children}</ul>;
 }
 
+/** The Governance tab: the open proposals, then the passed changes waiting and the restrictions in force, in two columns from 1280 px. */
 export function StakingGovernance() {
   const { operators, governance, memberVotes, delegations } = useStaking();
   const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
@@ -52,7 +57,18 @@ export function StakingGovernance() {
   const chain = useSyncExternalStore(delegations.subscribe, delegations.getSnapshot, delegations.getSnapshot);
   const labelOf = useOperatorLabel(operators);
   const readable = votes.status !== "unavailable" && chain.read.status !== "unavailable";
-  const settled = list.status !== "loading" && held.status !== "loading" && accountReadsSettled({ wallet, decided, delegations: chain, position: "ready" }) && (!readable || votes.status !== "idle");
+  const nodeSettled = list.status !== "loading" && held.status !== "loading" && accountReadsSettled({ wallet, decided, delegations: chain, position: "ready" });
+  const votesSettled = !readable || votes.status !== "idle";
+  // Once shown, the figures stay: a later read of the votes only fills in what they hold.
+  const [shownOnce, setShownOnce] = useState(false);
+  const [waited, setWaited] = useState(false);
+  const settled = shownOnce || (nodeSettled && (votesSettled || waited));
+  if (settled && !shownOnce) setShownOnce(true);
+  useEffect(() => {
+    if (!nodeSettled || shownOnce) return;
+    const timer = setTimeout(() => setWaited(true), VOTES_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [nodeSettled, shownOnce]);
   const inForce: InForce = { params: held.value?.params ?? null, market };
   const proposals = list.value?.proposals ?? null;
   const view = held.value?.view ?? null;
@@ -83,8 +99,16 @@ export function StakingGovernance() {
       const item = event.target instanceof HTMLElement ? event.target.closest("[data-proposal]") : null;
       focused.current = item === null ? null : Number(item.getAttribute("data-proposal"));
     };
+    // Focus the visitor takes out of the cards is no longer a proposal's to follow.
+    const forget = (event: FocusEvent) => {
+      if (!(event.relatedTarget instanceof Node) || !list.contains(event.relatedTarget)) focused.current = null;
+    };
     list.addEventListener("focusin", noteFocus);
-    return () => list.removeEventListener("focusin", noteFocus);
+    list.addEventListener("focusout", forget);
+    return () => {
+      list.removeEventListener("focusin", noteFocus);
+      list.removeEventListener("focusout", forget);
+    };
   }, [settled]);
   const membersOf = (target: { id: number; setId: number | null }): MemberLine[] | null =>
     readable ? delegated.map((address) => ({ address, label: labelOf(address), standing: standing(votes.facts, target, address) })) : null;
@@ -92,23 +116,24 @@ export function StakingGovernance() {
   return (
     // The figures are hidden, not unmounted, while the node is not trusted, as on the other tabs.
     <div className={`mt-4 ${trusted ? "grid" : "hidden"} gap-4`}>
+      {/* Mounted before any vote, so a vote that lands is read out wherever its proposal now sits. */}
+      <p role="status" className="sr-only">{votes.landed === null ? "" : `Your yes vote on proposal ${votes.landed} landed.`}</p>
       <p className={`${NOTE} max-w-prose`}>
         Members of the rotation set vote with the stake the set adopted, and a proposal passes once more than two thirds of its set&apos;s weight has voted yes; a member that does not vote counts against it.
         A normal change takes effect seven days after the engine logs it, so anyone holding a position can act first.
         A fast-path change takes effect at once, but only as a restriction that reduces risk, which lapses {ttl === null ? "after a recorded lifetime" : `after ${lifetimeText(ttl)}`} unless another vote renews it.
       </p>
       {!readable && <p className={NOTE}>{walletLine(wallet, readable)}</p>}
-      {chain.read.status === "failed" && <p role="status" className="text-caption leading-relaxed text-amber">{failureLine("your delegations", chain.read.message)}</p>}
       {/* Said only from a read that succeeded: a failed one is not an empty list. */}
       {readable && settled && chain.read.status === "ready" && delegated.length === 0 && <p className={NOTE}>This account delegates to no member, so no member&apos;s vote is shown for it.</p>}
-      {votes.status === "failed" && <p role="status" className="text-caption leading-relaxed text-amber">{failureLine("the votes", votes.error)}</p>}
       {!settled ? (
-        <p className={NOTE}>Reading the node&apos;s proposals…</p>
+        <p className={NOTE}>{nodeSettled ? "Reading the votes through your wallet…" : "Reading the node's proposals…"}</p>
       ) : (
         <div ref={grid} className="grid items-start gap-4 xl:grid-cols-2">
           <Card id="open-proposals-title" title="Open proposals" aside={list.value === null ? undefined : <span className="text-label text-fg-3">At final block {list.value.block.number}</span>}>
             <ReadNote read={list} />
             {list.value !== null && proposals === null && <p className={NOTE}>This node follows no vote contract.</p>}
+            {list.value?.proposalsProblem != null && <p role="status" className="text-caption leading-relaxed text-amber">The node&apos;s open proposals did not pass the console&apos;s check: {list.value.proposalsProblem}</p>}
             {proposals?.unavailable === true && <p role="status" className="text-caption leading-relaxed text-amber">The node could not read the open proposals at its last read; they are read again shortly.</p>}
             {proposals !== null && !proposals.unavailable && (
               <Items empty="No proposal is taking votes.">
@@ -119,7 +144,7 @@ export function StakingGovernance() {
                     <ProposalItem
                       key={proposal.id} id={proposal.id} headingId={headingId} fast={proposal.fast} stage="open" title={commandTitle(proposal.command, inForce)} details={commandDetails(proposal.command, inForce)}
                       tally={proposal.tally} command={proposal.command} members={membersOf(target)}
-                      wait={{ label: "Voting closes", atMs: proposal.closesAtMs, reached: "Voting has closed; the node's next read drops it", onReached: () => void operators.refresh() }}
+                      wait={{ label: "Voting closes", atMs: proposal.closesAtMs, reached: "Voting has closed; it leaves this list once the node reads a final block past the close", onReached: () => void operators.refresh() }}
                       vote={account === null ? null : (
                         <VoteControl
                           vote={proposals.vote} id={proposal.id} standing={standing(votes.facts, target, account)} weight={weightIn(votes.facts, target, account)}
@@ -133,7 +158,12 @@ export function StakingGovernance() {
             )}
             {proposals?.truncated === true && <p className={NOTE}>The node read the newest proposals only; older ones may still be open.</p>}
             {/* A vote's request or refusal keeps a place once its proposal has left the list. */}
-            {votes.votingOn !== null && !open.some((proposal) => proposal.id === votes.votingOn) && <Notice surface="governance" />}
+            {votes.votingOn !== null && !open.some((proposal) => proposal.id === votes.votingOn) && (
+              <div>
+                <p className="text-label tracking-caps text-fg-3 uppercase">Your vote on proposal {votes.votingOn}</p>
+                <Notice surface="governance" />
+              </div>
+            )}
           </Card>
           <div className="grid gap-4">
             <Card id="waiting-changes-title" title="Passed, waiting out the notice">
@@ -168,6 +198,9 @@ export function StakingGovernance() {
           </div>
         </div>
       )}
+      {/* Below the cards, so a line that comes and goes with a flaky wallet moves nothing above it. */}
+      {chain.read.status === "failed" && <p role="status" className="text-caption leading-relaxed text-amber">{failureLine("your delegations", chain.read.message)}</p>}
+      {votes.status === "failed" && <p role="status" className="text-caption leading-relaxed text-amber">{failureLine("the votes", votes.error)}</p>}
     </div>
   );
 }

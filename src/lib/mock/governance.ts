@@ -48,7 +48,8 @@ export class MockGovernance {
   private readonly members: ReadonlyMap<string, bigint>;
   private readonly proposals = new Map<number, Proposal>();
   private pending: { proposal: number; command: AdminCommandWire; appliesAtMs: number }[];
-  private readonly restrictions = new Map<number, { limit: LimitWire; expiresAtMs: number }>();
+  /** In force from `fromMs`, when the node logged it, to `expiresAtMs`. */
+  private readonly restrictions = new Map<number, { limit: LimitWire; fromMs: number; expiresAtMs: number }>();
 
   /** The node's clock starts at `startMs`; `candidates` are the registry's, the first four of which make the set. */
   constructor(startMs: number, candidates: readonly { address: string }[]) {
@@ -66,7 +67,7 @@ export class MockGovernance {
     proposal(7, false, startMs - DAY_MS, 6 * DAY_MS, relisting, [alpha, delta], false);
     proposal(8, true, startMs - 10 * MINUTE_MS, 3_600_000, goldReduceOnly, [alpha], false);
     this.pending = [{ proposal: 5, command: ceiling, appliesAtMs: startMs + 3 * MINUTE_MS }];
-    this.restrictions.set(6, { limit: { kind: "stress_floor", market: 4, level: 1 }, expiresAtMs: startMs - 2 * 3_600_000 + RESTRICTION_TTL_MS });
+    this.restrictions.set(6, { limit: { kind: "stress_floor", market: 4, level: 1 }, fromMs: startMs - 2 * 3_600_000, expiresAtMs: startMs - 2 * 3_600_000 + RESTRICTION_TTL_MS });
   }
 
   /** The tally of `proposal`: its voters' weights against the set's. */
@@ -90,7 +91,8 @@ export class MockGovernance {
   floorAt(market: number, now: number): number {
     this.settle(now);
     let level = 0;
-    for (const { limit } of this.restrictions.values()) {
+    for (const { limit, fromMs } of this.restrictions.values()) {
+      if (fromMs > now) continue;
       if (limit.kind === "stress_floor" && (limit.market === null || limit.market === market)) level = Math.max(level, limit.level);
     }
     return level;
@@ -99,7 +101,7 @@ export class MockGovernance {
   /** Whether a restriction in force at `now` stops new risk in `market`. */
   reduceOnlyAt(market: number, now: number): boolean {
     this.settle(now);
-    return [...this.restrictions.values()].some(({ limit }) => limit.kind === "reduce_only" && (limit.market === null || limit.market === market));
+    return [...this.restrictions.values()].some(({ limit, fromMs }) => fromMs <= now && limit.kind === "reduce_only" && (limit.market === null || limit.market === market));
   }
 
   /** `GET /v1/operators`' proposals at `now`: those still taking votes, newest first. */
@@ -163,7 +165,7 @@ export class MockGovernance {
     if (!passes(this.tally(proposal))) return;
     proposal.passed = true;
     const limit = limitOf(proposal.command);
-    if (proposal.fast && limit !== null) this.restrictions.set(id, { limit, expiresAtMs: now + RESTRICTION_TTL_MS });
+    if (proposal.fast && limit !== null) this.restrictions.set(id, { limit, fromMs: now, expiresAtMs: now + RESTRICTION_TTL_MS });
     else if (!proposal.fast) this.pending.push({ proposal: id, command: proposal.command, appliesAtMs: now + NOTICE_MS });
   }
 }

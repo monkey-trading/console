@@ -51,8 +51,10 @@ export interface OperatorsView {
   /** An election or promotion waiting to take effect. */
   pending: { candidate: string; effectiveAtMs: number; promoted: boolean } | null;
   rows: readonly OperatorRow[];
-  /** The vote contract's open proposals at the same block; null from a node that follows no vote contract. */
+  /** The vote contract's open proposals at the same block; null from a node that follows no vote contract, or when they did not pass their check. */
   proposals: ProposalsView | null;
+  /** Why the open proposals did not pass their check; checked apart from the candidates, so the rows still show. */
+  proposalsProblem: string | null;
 }
 
 export type SortId = "role" | "votes-desc" | "votes-asc" | "bond-desc" | "bond-asc" | "name-asc" | "name-desc";
@@ -123,7 +125,6 @@ function standbyOf(rows: readonly OperatorRow[], inEffect: string, open: boolean
  * the registry does not list it.
  * Error cases:
  * - an amount or address is malformed, or the list names more candidates than the registry holds
- * - an open proposal is malformed (`proposalsView`)
  */
 export function operatorsView(list: OperatorList): OperatorsView {
   if (list.candidates.length > CANDIDATE_LIMIT) throw new Error("The operator list named more candidates than the registry can hold.");
@@ -151,8 +152,14 @@ export function operatorsView(list: OperatorList): OperatorsView {
       bond: null, release: list.operator_in_effect.release.toLowerCase(), endpoint: null, registration: null,
     });
   }
-  const proposals = list.proposals === undefined ? null : proposalsView(list.proposals);
-  return { block: { number: list.block.number, hash: list.block.hash, timeMs: list.block.time_ms }, rotationEnabled: list.rotation_enabled, totalStaked, inEffect, pending, rows, proposals };
+  let proposals: ProposalsView | null = null;
+  let proposalsProblem: string | null = null;
+  try {
+    proposals = list.proposals === undefined ? null : proposalsView(list.proposals);
+  } catch (error) {
+    proposalsProblem = error instanceof Error ? error.message : "The operator list named malformed open proposals.";
+  }
+  return { block: { number: list.block.number, hash: list.block.hash, timeMs: list.block.time_ms }, rotationEnabled: list.rotation_enabled, totalStaked, inEffect, pending, rows, proposals, proposalsProblem };
 }
 
 /** Whether `row` holds `query` (lowercase, trimmed) in its hostname, address, release or endpoint. */
