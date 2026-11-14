@@ -9,7 +9,7 @@ import type { HouseParams } from "./house";
 import type { AccountModel, MarketModel } from "./models";
 import { initialState, type ConsoleState } from "./store/state";
 import { btcAt, NAV, q } from "./ticket-fixtures";
-import { positionFeeNow, ticketFigures } from "./ticket-figures";
+import { currentParams, houseTermsNote, positionFeeNow, ticketFigures } from "./ticket-figures";
 
 const OPENED = 1_000_000;
 const PARAMS: HouseParams = { profitFeeBps: 1_000, closeoutLevelBps: 5_000, totalCapBps: 20_000, totalCapFloor: 0n, stressLevels: [{ size_spread_multiplier_bps: 10_000, min_spread_bps: 0 }], profitFeeCurve: [...LAUNCH_CURVE], seq: 1 };
@@ -75,5 +75,18 @@ describe("positionFeeNow", () => {
     if (position === undefined) throw new Error("no position");
     expect(positionFeeNow(state(market, true, { now: OPENED + 60_000 }), position)).toMatchObject({ feeBps: 6_421, fallsAt: OPENED + 60_005 });
     expect(positionFeeNow(state(market, true, { now: OPENED + 60_000, pricingCurrent: false }), position)).toEqual({ holdMs: 60_000, feeBps: 10_000, fallsAt: OPENED + 10_007, baseAt: null });
+  });
+});
+
+describe("the house state's terms on the trading surfaces", () => {
+  it("are shown only while current, and say why when they are not: a failed or absent first read, an unread change, or a failed read since", async () => {
+    const market = await btcAt(101_000);
+    const at = (extra: Partial<ConsoleState>) => { const s = state(market, true, extra); return [currentParams(s) === null ? null : "params", houseTermsNote(s)]; };
+    expect(at({})).toEqual(["params", null]);
+    expect(at({ houseParams: null, pricingCurrent: false, houseStateStatus: "pending" })).toEqual([null, null]);
+    expect(at({ houseParams: null, pricingCurrent: false, houseStateStatus: "failed" })).toEqual([null, "The node's parameters could not be read; the console reads them again by itself."]);
+    expect(at({ houseParams: null, pricingCurrent: false, houseStateStatus: "unavailable" })).toEqual([null, "This node does not serve its parameters."]);
+    expect(at({ pricingCurrent: false, houseStateStatus: "read" })).toEqual([null, "Reading the node's parameters again after a change."]);
+    expect(at({ pricingCurrent: false, houseStateStatus: "failed" })).toEqual([null, "The node's parameters changed and could not be read again; the console reads them again by itself."]);
   });
 });

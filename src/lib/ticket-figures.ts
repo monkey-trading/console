@@ -9,6 +9,7 @@ import type { Side } from "./engine/types";
 import { positionFee } from "./fee-words";
 import type { Fixed } from "./fixed";
 import type { FeeNow } from "./holding-fee";
+import type { HouseParams } from "./house";
 import type { MarketModel, PositionModel } from "./models";
 import { stressTermsAt } from "./pricing";
 import { ticketPrices, type TicketPrices } from "./quotes";
@@ -31,12 +32,31 @@ export interface TicketFigures {
   close: ClosePreview | null;
 }
 
+/** The house state's parameters while they are current: read since every change to them the stream carried; null otherwise. */
+export function currentParams(state: ConsoleState): HouseParams | null {
+  return state.pricingCurrent ? state.houseParams : null;
+}
+
+/**
+ * Why the trading surfaces show no terms from the house state: its first read failed or the node serves
+ * none, or a change the stream carried is unread, or its read failed since. Null while the terms are current.
+ */
+export function houseTermsNote(state: ConsoleState): string | null {
+  const status = state.houseStateStatus;
+  if (state.houseParams === null) {
+    if (status === "failed") return "The node's parameters could not be read; the console reads them again by itself.";
+    return status === "unavailable" ? "This node does not serve its parameters." : null;
+  }
+  if (state.pricingCurrent) return null;
+  return status === "failed" ? "The node's parameters changed and could not be read again; the console reads them again by itself." : "Reading the node's parameters again after a change.";
+}
+
 /**
  * What closing `position` pays at the node's clock: run from its open time under the node's curve while
  * the house state held is current, else as the account read gave it (`positionFee`). Null before V55.
  */
 export function positionFeeNow(state: ConsoleState, position: PositionModel): FeeNow | null {
-  return positionFee(position.closeFee, state.pricingCurrent ? state.houseParams : null, state.now);
+  return positionFee(position.closeFee, currentParams(state), state.now);
 }
 
 /** The ticket's figures for `order` in `market`: a whole close's price is the node's exact quote, or the mock's own price, which its fill uses. */

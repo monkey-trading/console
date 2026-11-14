@@ -76,10 +76,10 @@ describe("the house state the trading surfaces read, with the House page closed"
     client.houseStateError = new Error("the house state is unavailable");
     client.onMessage?.(message(12, { type: "admin_applied" }));
     expect(store.getSnapshot().pricingCurrent).toBe(false);
-    // The re-read fails: the parameters held stay, and they are not current.
+    // The re-read fails: the parameters held stay, not current, and the failure shows.
     await store.refresh(false);
     await settle();
-    expect(store.getSnapshot()).toMatchObject({ houseParams: PARAMS, pricingCurrent: false });
+    expect(store.getSnapshot()).toMatchObject({ houseParams: PARAMS, pricingCurrent: false, houseStateStatus: "failed" });
     client.houseStateError = null;
     await store.refresh(false);
     await settle();

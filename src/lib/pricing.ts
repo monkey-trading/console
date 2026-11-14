@@ -28,13 +28,6 @@ export function stressTermsAt(levels: readonly StressLevel[] | undefined, level:
   return found === undefined ? undefined : { minSpreadBps: found.min_spread_bps, sizeMultiplierBps: found.size_spread_multiplier_bps };
 }
 
-/** Why the node's parameters, which hold the stress levels' terms, are missing: their read failed, the node serves none, or the read has not landed (null, nothing to say yet). */
-export function paramsMissing(status: "pending" | "read" | "unavailable" | "failed"): string | null {
-  if (status === "failed") return "The node's parameters could not be read; the console reads them again by itself.";
-  if (status === "unavailable") return "This node does not serve its parameters.";
-  return null;
-}
-
 /** How a market's quote currency converts to USD and back at its FX index, each rounded as asked (`QuoteCurrency::to_usd`, `from_usd`). */
 export interface Conversion {
   toUsd(amount: Fixed, rounding: Rounding): Fixed;

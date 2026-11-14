@@ -55,22 +55,26 @@ export function decodeHouseState(wire: HouseStateWire): HouseState {
 /**
  * The newest parameters and checkpoint seen, from reads of the route and from the stream. A value
  * replaces the held one only when its seq is newer, so a read that raced a stream message, or the
- * stream's replay of what a read already holds, never moves the page back.
+ * stream's replay of what a read already holds, never moves the page back. Parameters at the same
+ * `SetParams` seq are replaced by a read at a newer log head: a protocol activation changes them in
+ * place (V52's multipliers, V55's curve and base) without a new `SetParams`.
  */
 export class HouseFold {
   private params: HouseParams | null = null;
   private paramsAt = -1;
+  /** The log head the held parameters were read at, or the stream's seq that carried them. */
+  private paramsHead = -1;
   private checkpoint: CheckpointEntry | null = null;
 
   /** Folds a read; parameters with no seq (a restore from an older snapshot) stand at the read's log head. */
   foldRead(state: HouseState): void {
-    if (state.params !== null) this.foldParams(state.params, state.params.seq ?? state.seq ?? 0);
+    if (state.params !== null) this.foldParams(state.params, state.params.seq ?? state.seq ?? 0, state.seq ?? -1);
     if (state.checkpoint !== null) this.foldCheckpoint(state.checkpoint);
   }
 
   /** Folds a `set_params` the stream carried at `seq`. */
   foldStreamParams(seq: number, entry: SetParams): void {
-    this.foldParams(houseParamsOf(entry, seq), seq);
+    this.foldParams(houseParamsOf(entry, seq), seq, seq);
   }
 
   foldCheckpoint(entry: CheckpointEntry): void {
@@ -82,9 +86,10 @@ export class HouseFold {
     return { params: this.params, checkpoint: this.checkpoint };
   }
 
-  private foldParams(params: HouseParams, at: number): void {
-    if (at <= this.paramsAt) return;
+  private foldParams(params: HouseParams, at: number, head: number): void {
+    if (at < this.paramsAt || (at === this.paramsAt && head <= this.paramsHead)) return;
     this.params = params;
     this.paramsAt = at;
+    this.paramsHead = head;
   }
 }

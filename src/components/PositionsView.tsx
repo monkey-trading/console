@@ -16,7 +16,7 @@ import { closingPrice } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
 import { closeAll } from "@/lib/store/batch-actions";
 import { previewTicket, unrealisedPnl, usdConverter } from "@/lib/ticket";
-import { positionFeeNow } from "@/lib/ticket-figures";
+import { currentParams, positionFeeNow } from "@/lib/ticket-figures";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
@@ -35,8 +35,8 @@ const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-g
 const CLOSEOUT_TIP = "Where this market must reach for your account to fall below its close-out level, with your other positions held at their marks. Margin is shared, and the largest losing position closes first, which may be another. Due: already below it. None: no price in the node's range reaches it.";
 
 /** What the hold, fee and close columns mean, shared by the table's head and the phone rows' labels. */
-const HOLD_TIP = "How long the position has been held, from its open time: an add moves the open time towards now by the share it adds, and a reduction leaves it.";
-const CLOSE_TIP = "What closing the whole position now moves your cash by: the realised result at the node's closing price, less the profit fee. Exact while the price and the fee rate hold; a figure after ≥ is the least a close keeps while the price holds and the rate falls.";
+const HOLD_TIP = "How long the position has been held, from its open time: an add moves the open time to the size-weighted average of now and the open time, counting the units already held as no older than the fee curve's end (15 minutes at launch); a reduction leaves it.";
+const CLOSE_TIP = "What closing the whole position now moves your cash by: the realised result at the node's closing price, less the profit fee. Exact while the price, the fee rate and, for a market quoted in another currency, the FX rate hold; a figure after ≥ is the least a close keeps while the price and the FX rate hold and the fee rate falls.";
 
 /** The slippage bound a Close sends, capped at the market's own. */
 const CLOSE_SLIPPAGE_BPS = 25;
@@ -119,7 +119,8 @@ export function PositionsView() {
   // A held Enter repeats its click: only a separate press may confirm.
   const holdsDown = (event: { repeat: boolean; preventDefault: () => void }) => { if (event.repeat) event.preventDefault(); };
   const noteId = `${id}-left-out`;
-  const feeTip = `The profit fee a close of this position pays on a gain now. ${params === null ? "It falls as the hold lengthens." : describeSchedule(params)}`;
+  const terms = currentParams(snapshot);
+  const feeTip = `The profit fee a close of this position pays on a gain now. ${terms === null ? "It falls as the hold lengthens to the curve's end." : describeSchedule(terms)}`;
   const describedBy = readOnly.describedBy ?? (leftOutNote === null ? undefined : noteId);
   return (
     <>

@@ -136,6 +136,18 @@ describe("the stream beside the read", () => {
     await expect(client.houseState()).resolves.toMatchObject({ params: { profitFeeBps: 1500, stressLevels: levels, profitFeeCurve: raised, seq: 106 } });
   });
 
+  it("takes parameters a protocol activation changed in place, at the same SetParams seq, from a read at a newer log head", async () => {
+    const { client, reply } = house();
+    reply(200, { seq: 100, params: { ...WIRE_PARAMS, profit_fee_curve: undefined }, checkpoint: null });
+    await expect(client.houseState()).resolves.toMatchObject({ params: { profitFeeCurve: [], seq: 12 } });
+    // V55's activation installs the default curve over the parameters set at seq 12.
+    reply(200, { seq: 140, params: WIRE_PARAMS, checkpoint: null });
+    await expect(client.houseState()).resolves.toMatchObject({ params: { profitFeeCurve: CURVE, seq: 12 } });
+    // A read at an older head, racing the newer one, does not move the parameters back.
+    reply(200, { seq: 120, params: { ...WIRE_PARAMS, profit_fee_curve: undefined }, checkpoint: null });
+    await expect(client.houseState()).resolves.toMatchObject({ params: { profitFeeCurve: CURVE } });
+  });
+
   it("compares a null params seq at the read's log head", async () => {
     const { client, reply, stream } = house();
     reply(200, { seq: 100, params: { ...WIRE_PARAMS, seq: null }, checkpoint: null });

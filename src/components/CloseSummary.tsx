@@ -11,9 +11,12 @@ const ROW = "flex justify-between gap-3";
 /**
  * The close figures under the deal ticket's size. Exact ones are the fill's while nothing moves; a bound
  * says which way the fill can differ while the price holds: its price no worse, and what it keeps no less.
+ * `converts` marks a market quoted in another currency, whose USD figures also need the FX rate to hold.
  */
-export function CloseSummary({ close, side, places }: { close: ClosePreview; side: Side; places: number }) {
+export function CloseSummary({ close, side, places, converts }: { close: ClosePreview; side: Side; places: number; converts: boolean }) {
   const bound = !close.exact;
+  // A market quoted in another currency books its result in USD at the FX index the fill meets.
+  const holds = converts ? "the price and the FX rate hold" : "the price holds";
   // A sell closes a long at this price or better, a buy a short at this price or better.
   const priceWord = bound ? (side === "sell" ? "at least " : "at most ") : "";
   return (
@@ -28,8 +31,8 @@ export function CloseSummary({ close, side, places }: { close: ClosePreview; sid
       </dl>
       <p className="mt-2 text-label leading-relaxed text-fg-3">
         {bound
-          ? "A bound while the price holds: the fill's price is no worse than this and its fee rate, which falls as the hold lengthens, no higher, so it keeps at least this. A move against you fills as far as the worst price your slippage bound allows."
-          : "Exact while the price and the fee rate hold. A move against you fills as far as the worst price your slippage bound allows."}
+          ? `A bound while ${holds}: the fill's price is no worse than this and its fee rate, which falls as the hold lengthens, no higher, so it keeps at least this. A move against you fills as far as the worst price your slippage bound allows.`
+          : `Exact while ${converts ? "the price, the FX rate" : "the price"} and the fee rate hold. A move against you fills as far as the worst price your slippage bound allows.`}
       </p>
     </div>
   );

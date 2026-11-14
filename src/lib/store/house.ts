@@ -36,7 +36,8 @@ export function readHouseState(store: ConsoleStore): Promise<boolean> {
     (error: unknown) => {
       store.noteAccess(error);
       // Until a read has landed the panels would wait for ever; they say it failed, and the next read tries again.
-      if (!awaitsTrust(error) && store.getSnapshot().houseStateStatus === "pending") store.patch({ houseStateStatus: "failed" });
+      // So does a read after a change the stream carried: the trading surfaces then say the terms they held are not current.
+      if (!awaitsTrust(error) && (store.getSnapshot().houseStateStatus === "pending" || store.pricingAsked > store.pricingRead)) store.patch({ houseStateStatus: "failed" });
       return false;
     },
   );

@@ -2,7 +2,7 @@
 
 import { EngineError, type ActionResult } from "../engine/client";
 import type { CancelRequest, EligibilityRequest, EngineEvent, OrderRequest, RequestAuth, Reject, RestingOrder } from "../engine/types";
-import { fixedFromInt, fixedFromWire, parseFixed } from "../fixed";
+import { absFixed, fixedFromInt, fixedFromWire, minFixed, parseFixed, type Fixed } from "../fixed";
 import { growthOf, notionalOf } from "../pricing";
 import { fillEvents, fillOrder, liveQuote } from "./execute";
 import type { AccountState, MockState } from "./state";
@@ -158,14 +158,37 @@ export function triggerResting(state: MockState, only?: string, orderId?: number
     const quote = liveQuote(state, address, order.market, order.side, qty);
     if (!quote) continue;
     const buy = order.side === "buy";
-    // A limit the pricing refuses has no price to reach; a stop the index triggers goes to the fill, which cancels it as unfillable.
-    const hit =
-      order.kind.kind === "limit" ? quote.kind === "priced" && (buy ? quote.price <= level : quote.price >= level) : buy ? runtime.mid >= level : runtime.mid <= level;
+    const limit = order.kind.kind === "limit" ? level : null;
+    // A limit waits for its price to reach it, or, for a reversal the close-spread ceiling refuses, for the index to, as the
+    // engine's limits trigger (`trigger_order`); a stop waits for the index to trade through its price.
+    const refused = quote.kind === "refused" && quote.reject.kind === "close_spread_ceiling";
+    const limitHit = limit === null ? false : refused ? (buy ? runtime.mid <= limit : runtime.mid >= limit) : quote.kind === "priced" && (buy ? quote.price <= limit : quote.price >= limit);
+    const hit = limit !== null ? limitHit : buy ? runtime.mid >= level : runtime.mid <= level;
     if (!hit) continue;
     account.orders.delete(order.order_id);
     const outcome = fillOrder(state, { address, market: order.market, side: order.side, qty, reduceOnly: order.reduce_only, orderId: order.order_id });
     if (outcome.ok) events.push(...fillEvents(outcome.fill, outcome.badDebt));
+    else if (outcome.reject.kind === "close_spread_ceiling") events.push(...fillClosingSlice(state, address, order, qty, limit));
     else events.push({ type: "order_cancelled", account: address, order_id: order.order_id, reason: "unfillable" });
   }
+  return events;
+}
+
+/**
+ * A triggered reversal the close-spread ceiling refuses fills its closing slice, a pure close, within a
+ * limit's price, and the order cancels, as the engine's `fill_closing_slice` does: a triggered order has
+ * no client at hand to send the reduce-only close the refusal asks for.
+ */
+function fillClosingSlice(state: MockState, address: string, order: RestingOrder, qty: Fixed, limit: Fixed | null): EngineEvent[] {
+  const held = state.account(address).positions.get(order.market)?.qty ?? 0n;
+  const closing = minFixed(absFixed(held), qty);
+  const events: EngineEvent[] = [];
+  const quote = closing > 0n ? liveQuote(state, address, order.market, order.side, closing) : null;
+  const within = quote !== null && quote.kind === "priced" && (limit === null || (order.side === "buy" ? quote.price <= limit : quote.price >= limit));
+  if (within) {
+    const outcome = fillOrder(state, { address, market: order.market, side: order.side, qty: closing, reduceOnly: true, orderId: order.order_id });
+    if (outcome.ok) events.push(...fillEvents(outcome.fill, outcome.badDebt));
+  }
+  events.push({ type: "order_cancelled", account: address, order_id: order.order_id, reason: "unfillable" });
   return events;
 }

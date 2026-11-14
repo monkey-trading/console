@@ -9,7 +9,6 @@ import { signBlock } from "@/lib/engine/attestation";
 import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { ORDER_LABELS, ORDER_TYPES, type OrderType } from "@/lib/prefs";
 import { formatMark } from "@/lib/price-format";
-import { paramsMissing } from "@/lib/pricing";
 import { describeSchedule } from "@/lib/schedule";
 import { setupGate } from "@/lib/setup-steps";
 import { placeOrder } from "@/lib/store/actions";
@@ -18,7 +17,7 @@ import { SessionRefusalNote } from "./SessionRefusalNote";
 import { openSetup } from "@/lib/store/setup";
 import { formatTenthBps, formatTenthPercent } from "@/lib/spread-bands";
 import { belowMinimum, contractUnit, MARGIN_SHORT, MARKET_CLOSED, NO_SIZE, parseSize, REDUCE_ONLY, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
-import { ticketFigures } from "@/lib/ticket-figures";
+import { currentParams, houseTermsNote, ticketFigures } from "@/lib/ticket-figures";
 import { tradingPaused } from "@/lib/trading-paused";
 
 import { CloseSummary } from "./CloseSummary";
@@ -69,7 +68,8 @@ export function DealTicket() {
   const parsedSize = parseSize(size);
   const qty = parsedSize.kind === "qty" ? parsedSize.qty : 0n;
   const live = state.signatures === "checked";
-  const params = state.houseParams;
+  // The stress levels' terms and the listing notices show only while the house state is current.
+  const terms = currentParams(state);
   const { preview, prices, close } = ticketFigures(state, market, { side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice });
   // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
   // A size the field refuses says why, so the generic prompt would only repeat it.
@@ -144,7 +144,7 @@ export function DealTicket() {
             {sizeProblems.map((p) => <p key={p} className="mt-1">{p}</p>)}
           </div>
         </div>
-        {close !== null && <CloseSummary close={close} side={side} places={market.places} />}
+        {close !== null && <CloseSummary close={close} side={side} places={market.places} converts={market.view.quote_currency !== undefined} />}
         <details className="mt-4 rounded border border-line-2">
           <summary className="px-3 py-3.5 text-caption lg:py-2 text-fg-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-glow">Advanced</summary>
           <fieldset className="px-3 pb-3">
@@ -169,7 +169,7 @@ export function DealTicket() {
           {!gate && shownProblems.map((p) => <p key={p}>{p}{p === "Fund your account to trade." && <> <FundingLink /></>}</p>)}
         </div>
       </form>
-      <MarketInfo market={market} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={params?.stressLevels[market.stress] ?? null} notice={state.listingNotices[market.id] ?? null} paramsNote={params !== null ? null : paramsMissing(state.houseStateStatus)} />
+      <MarketInfo market={market} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={terms?.stressLevels[market.stress] ?? null} notice={terms === null ? null : (state.listingNotices[market.id] ?? null)} paramsNote={houseTermsNote(state)} />
     </>
   );
 }

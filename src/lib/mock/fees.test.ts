@@ -61,6 +61,35 @@ describe("the mock's spreads, as the engine charges them from V52", () => {
   });
 });
 
+describe("a triggered reversal the close-spread ceiling refuses, in the mock", () => {
+  /** A 0.01 BTC long at level 2, whose 500 BTC reversal pays 38.48 bps, past BTC-USD's 30 bps ceiling. */
+  async function heldAtLevelTwo() {
+    const node = await funded(100_000);
+    pin(node, 100_000);
+    await trade(node, "0.01", "buy");
+    const runtime = node.client.state.markets.get(1);
+    if (runtime === undefined) throw new Error("no BTC-USD");
+    runtime.stress = 2;
+    return node;
+  }
+  const kinds = (events: EngineEvent[]) => events.map((e) => (e.type === "fill" ? `fill ${e.qty} ${e.position}` : e.type === "order_cancelled" ? `cancelled ${e.reason}` : e.type));
+
+  it("fills a stop's closing slice and cancels the rest, as the engine's fill_closing_slice does", async () => {
+    const node = await heldAtLevelTwo();
+    const result = await order(node, "500", "sell", { kind: { kind: "stop", price: "100001" } });
+    expect(kinds(result.events)).toEqual(["order_accepted", "fill 0.01 0", "cancelled unfillable"]);
+  });
+
+  it("fills a limit's closing slice only within the limit, and cancels the order either way", async () => {
+    // The closing slice sells at 18 bps under the index: 99,820.
+    const within = await heldAtLevelTwo();
+    expect(kinds((await order(within, "500", "sell", { kind: { kind: "limit", price: "99000" } })).events)).toEqual(["order_accepted", "fill 0.01 0", "cancelled unfillable"]);
+    const beyond = await heldAtLevelTwo();
+    expect(kinds((await order(beyond, "500", "sell", { kind: { kind: "limit", price: "99900" } })).events)).toEqual(["order_accepted", "cancelled unfillable"]);
+    expect(beyond.client.state.account(ME).positions.get(1)?.qty).toBe(fixedFromInt(1) / 100n);
+  });
+});
+
 describe("the mock's holding-time fee, as the engine charges it from V55", () => {
   it("takes all of a gain closed within ten seconds, the curve's rate after, and the base from fifteen minutes, naming each close's hold and rate", async () => {
     const node = await funded(1_000_000);

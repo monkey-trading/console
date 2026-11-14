@@ -34,8 +34,8 @@ function stressTerms(level: StressLevel): string {
 /**
  * `price` is the price a market order on `side` would be sent at, with the worst price `slippageBps`
  * allows; null shows neither. `stress` is the market's level's terms from the node's parameters, and
- * `notice` its pending listing notice; null when the node has given neither. `paramsNote` says why
- * the parameters are missing when their read failed or the node does not serve them.
+ * `notice` its pending listing notice; null when the node has given neither or they are not current.
+ * `paramsNote` says why they are missing: a read failed, the node serves none, or a change is unread.
  */
 export function MarketInfo({ market, preview, side, price, slippageBps, stress, notice, paramsNote }: { market: MarketModel; preview: TicketPreview; side: Side; price: Fixed | null; slippageBps: number; stress: StressLevel | null; notice: ListingNotice | null; paramsNote: string | null }) {
   const worst = price === null ? null : side === "buy" ? price + bpsOf(price, slippageBps) : price - bpsOf(price, slippageBps);
