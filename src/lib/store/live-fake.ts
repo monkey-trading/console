@@ -7,7 +7,7 @@ import type { ScanBudget, ScannedMark } from "../engine/live-marks";
 import type { SessionRule } from "../engine/mark-session";
 import type { DistributionEpochsPage, OperatorList } from "../engine/staking-reads";
 import type { ActivityPage, MonkeyView, OperatorRoute, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "../engine/stats-types";
-import type { AccountView, EligibilityClass, HistoryPage, MarketId, PriceRules, StreamMessage, MarketView } from "../engine/types";
+import type { AccountView, EligibilityClass, HistoryPage, ListingNotices, MarketId, PriceRules, StreamMessage, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
@@ -85,6 +85,7 @@ export class FakeClient implements EngineClient {
   /** Canned house-state reads, patched by a test; nulls answer "not read yet". */
   params: HouseParams | null = null;
   checkpoint: CheckpointEntry | null = null;
+  listingNotices: ListingNotices = {};
   totals: QueueTotals = { count: 0, remaining: 0n, largest: null, head: null, seq: null, complete: true, stable: true };
   /** When set, the queue totals read rejects with it, as a failing node answers. */
   totalsError: Error | null = null;
@@ -98,7 +99,7 @@ export class FakeClient implements EngineClient {
   async houseState() {
     this.houseStateReads++;
     if (this.houseStateError !== null) throw this.houseStateError;
-    return this.unavailable ? null : { seq: this.houseSeq, params: this.params, checkpoint: this.checkpoint, governance: null };
+    return this.unavailable ? null : { seq: this.houseSeq, params: this.params, checkpoint: this.checkpoint, listingNotices: this.listingNotices, governance: null };
   }
   async withdrawalTotals() { if (this.totalsError !== null) throw this.totalsError; return this.totals; }
   /** Whether the account read answers as a credited account; false answers the node's 404. How many times the account and its entitlement were read. */

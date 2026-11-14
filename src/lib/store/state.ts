@@ -4,7 +4,7 @@ import { DEFAULT_TIMEFRAME, TIMEFRAMES, type Bar, type TimeframeId } from "../ba
 import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { SignatureChecks } from "../engine/client";
 import type { EntitlementProof } from "../engine/emissions";
-import type { HistoryEvent, HouseView, QueuedWithdrawal, Reject, SignedWithdrawal, MarketId, MarketQuote, MarketView } from "../engine/types";
+import type { HistoryEvent, HouseView, ListingNotices, QueuedWithdrawal, Reject, SignedWithdrawal, MarketId, MarketQuote, MarketView } from "../engine/types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
 import type { MarkProvenance } from "../engine/mark-types";
@@ -118,6 +118,8 @@ export interface ConsoleState {
   houseParams: HouseParams | null;
   /** The latest checkpoint the node's log holds; null before one is posted or read. */
   checkpoint: CheckpointEntry | null;
+  /** Each listed market's pending listing notice, from the node's house state; empty before a read and while none waits. */
+  listingNotices: ListingNotices;
   /** Whether the parameters and checkpoint have been read: `unavailable` from a node that predates the route that serves them, `failed` when the first read did not land. */
   houseStateStatus: "pending" | "read" | "unavailable" | "failed";
   /** The public FIFO withdrawal queue's size; null before the first read. */
@@ -233,6 +235,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     houseFresh: true,
     houseParams: housePanel?.params ?? null,
     checkpoint: housePanel?.checkpoint ?? null,
+    listingNotices: {},
     houseStateStatus: signatures === "none" ? "read" : "pending",
     withdrawalTotals: housePanel?.totals ?? null,
     queueFailed: false,

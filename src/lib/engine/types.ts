@@ -8,6 +8,8 @@ import type { EngineEvent } from "./event-types";
 export type { EngineEvent } from "./event-types";
 export type { AccountView } from "./account-types";
 import type { HouseScanView } from "./stats-types";
+import type { CurvePoint, SpreadTier, StressLevel } from "./pricing-types";
+export type { CloseFee, CurvePoint, ListingNotice, ListingNotices, SpreadTier, StressLevel } from "./pricing-types";
 
 export type Address = string;
 export type MarketId = number;
@@ -41,7 +43,7 @@ export interface MarketView {
   asset_class: AssetClass;
   schedule: Schedule;
   margin_tiers: Tier[];
-  spread_tiers: Tier[];
+  spread_tiers: SpreadTier[];
   price_rules: PriceRules;
   /** From V21, the futures contracts the market prices from, in roll order; absent for a market priced from spot quotes. */
   contracts?: FuturesContract[];
@@ -163,6 +165,8 @@ export type Reject =
   | { kind: "insufficient_margin"; equity: string; required: string }
   | { kind: "insufficient_funds"; available: string }
   | { kind: "house_capacity" }
+  /** From V40, a reversal whose spread is over its market's close-spread ceiling: a reduce-only close still fills. */
+  | { kind: "close_spread_ceiling"; ceiling_bps: number }
   | { kind: "invalid_signature" }
   | { kind: "missing_signature" }
   | { kind: "invalid_nonce"; expected: number }
@@ -187,6 +191,9 @@ export interface Fill {
   spread_bps: number;
   realised_pnl: string;
   profit_fee: string;
+  /** From V55, for a fill that closes some of a position: the hold of the slice it closes and the fee rate a gain on it paid. */
+  hold_ms?: number;
+  profit_fee_bps?: number;
   position: string;
   liquidation: boolean;
 }
@@ -226,6 +233,9 @@ export interface SetParams {
   house_total_cap_bps: number;
   /** The total cap's dollar floor, a decimal string as every `Fixed` on the wire. */
   house_total_cap_floor: string;
+  stress_levels?: StressLevel[];
+  /** From V55, the hold curve the profit fee falls along; absent while empty. */
+  profit_fee_curve?: CurvePoint[];
 }
 
 /** One message of the WebSocket stream at `/v1/stream`: a sequenced command with its events. */

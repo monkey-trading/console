@@ -10,7 +10,7 @@ import { delegatedOf } from "../staking/delegations";
 import { chainDeposit, payQueue } from "./funds";
 import { claimDistribution, completeUnstake, distributionProof, stake, startUnstake, walletBalance } from "./monkey";
 import { delegationsOf, mockChainReads, moveDelegation, reduceForUnstake } from "./operators";
-import { MAX_STRESS } from "../pricing";
+import { MAX_STRESS } from "./state";
 import type { Region } from "./state";
 
 /** What each mock wallet starts with on the simulated chain. */

@@ -2,6 +2,7 @@
 
 /** The panels that stay from the old page, in compact form: the exposure cap, market caps, parameters, checkpoints and withdrawal health. */
 
+import { describeSchedule, formatCurveHold } from "@/lib/fee-words";
 import { formatUsd } from "@/lib/fixed";
 import { formatRate } from "@/lib/format";
 import { capFor, paramsSource, queueCaveats, utilBps } from "@/lib/house";
@@ -74,21 +75,31 @@ export function MarketCaps() {
   );
 }
 
-/** The profit fee and close-out level in force. */
+/** The profit fee's schedule and the close-out level in force. */
 export function Parameters() {
   const { params, status } = useSelected(selectParams);
   const simulated = useSession().store.deps.client.signatures === "none";
   const source = params === null ? null : paramsSource(params, simulated);
   return (
-    <Panel title="Parameters" tip="The profit fee and close-out level the operator may move within half of their launch values, only after a public notice of at least seven days.">
+    <Panel title="Parameters" tip="The operator may raise the profit fee's base by up to half its launch value and raise its hold curve, never below launch, and move the close-out level within half of its launch value, each only after a public notice of at least seven days.">
       {params === null ? (
         <Quiet>{unread(status, "No parameters have been set in the log yet.")}</Quiet>
       ) : (
         <>
           <dl className="space-y-1">
-            <Row label="Profit fee" tip="The share of a winning trade's realised profit the house keeps." value={formatRate(params.profitFeeBps)} />
+            <Row label="Profit fee" tip="The share of a winning close's realised profit the house keeps: the larger of the base and the hold curve's rate at the hold of what it closes." value={`${formatRate(params.profitFeeBps)} base`} />
             <Row label="Close-out level" tip="The share of an account's margin requirement below which its positions close." value={`${formatRate(params.closeoutLevelBps)} of margin`} />
           </dl>
+          <p className={NOTE}>{describeSchedule(params)}</p>
+          {params.profitFeeCurve.length > 0 && (
+            <table className="w-full text-caption">
+              <caption className="sr-only">The profit fee&apos;s hold curve: the rate a gain pays at each hold, linear between them</caption>
+              <thead><tr className="text-label text-fg-3"><th scope="col" className="py-0.5 text-left font-normal">Held</th><th scope="col" className="py-0.5 text-right font-normal">Curve rate</th></tr></thead>
+              <tbody>
+                {params.profitFeeCurve.map((point) => <tr key={point.hold_ms}><td className="py-0.5 text-fg-2">{formatCurveHold(point.hold_ms)}</td><td className="py-0.5 text-right tabular-nums">{formatRate(point.fee_bps)}</td></tr>)}
+              </tbody>
+            </table>
+          )}
           {source !== null && <p className={NOTE}>{source}</p>}
         </>
       )}

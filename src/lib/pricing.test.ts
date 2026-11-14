@@ -1,107 +1,124 @@
-/** Tests for the mock's tiers, quotes and margin. */
+/** Tests for the engine's V52 pricing, against its own fill vectors (`crates/core/tests/fill_spreads.rs`), and the margin bands. */
 
 import { describe, expect, it } from "vitest";
 
-import { fixedFromInt } from "./fixed";
-import type { Tier } from "./engine/types";
-import { adverseBps, executionCost, exceedsSlippage, growthOf, quoteFor, slicedBps, tierCost, tieredMargin } from "./pricing";
+import { fixedFromInt, parseFixed, type Fixed } from "./fixed";
+import type { MarketView, SpreadTier, Tier } from "./engine/types";
+import { adverseBps, CALM, closing, conversionAt, exceedsSlippage, executionCost, growth, growthOf, priceOrder, slicedBps, tierCost, tieredMargin, USD, type PricingInput } from "./pricing";
 
-const SPREAD: Tier[] = [
-  { up_to: "250000", bps: 0 },
-  { up_to: "1000000", bps: 3 },
-  { up_to: null, bps: 8 },
-];
-const MARGIN: Tier[] = [
-  { up_to: "100000", bps: 200 },
-  { up_to: null, bps: 500 },
-];
+/** The engine harness's bands from V52: 1bp to $1m, 2bp to $5m and 5bp above, in tenths. */
+const BANDS: SpreadTier[] = [{ up_to: "1000000", tenth_bps: 10 }, { up_to: "5000000", tenth_bps: 20 }, { up_to: null, tenth_bps: 50 }];
+const MARGIN: Tier[] = [{ up_to: "100000", bps: 200 }, { up_to: null, bps: 500 }];
+const MID = fixedFromInt(100_000);
 
-describe("slicedBps", () => {
-  it("charges nothing inside the free band and weights a slice that crosses bands", () => {
-    expect(slicedBps(SPREAD, 0n, fixedFromInt(100_000))).toBe(0);
-    // 250k free + 250k at 3 bps over a 500k slice: 1.5 bps, truncated.
-    expect(slicedBps(SPREAD, 0n, fixedFromInt(500_000))).toBe(1);
-    expect(slicedBps(SPREAD, fixedFromInt(1_000_000), fixedFromInt(2_000_000))).toBe(8);
-    expect(slicedBps(SPREAD, fixedFromInt(5), fixedFromInt(5))).toBe(0);
+const f = (text: string): Fixed => {
+  const value = parseFixed(text);
+  if (value === null) throw new Error(`bad fixture ${text}`);
+  return value;
+};
+const units = fixedFromInt;
+
+/** The price of `qty` units on `side` against `held`, at the engine harness's calm level with no ceiling, unless `extra` says otherwise. */
+function price(side: "buy" | "sell", held: number, qty: string, extra: Partial<PricingInput> = {}): Fixed {
+  const priced = priceOrder({ mid: MID, side, held: units(held), qty: f(qty), tiers: BANDS, stress: CALM, toxicityBps: 0, ceilingBps: null, conversion: USD, ...extra });
+  if (priced.kind !== "priced") throw new Error(`refused: ${JSON.stringify(priced.reject)}`);
+  return priced.price;
+}
+
+describe("priceOrder", () => {
+  it("charges a round trip the bands on the open and again on the close", () => {
+    // $2m pays 100 + 200 = 300, 15 a unit, each way.
+    expect([price("buy", 0, "20"), price("sell", 20, "20")]).toEqual([f("100015"), f("99985")]);
+  });
+
+  it("charges partial closes each band they close through, rounded up per unit", () => {
+    // Opening $12m pays 1m at 1bp, 4m at 2bp and 7m at 5bp: 4400 over 120 units, rounded up.
+    expect(price("buy", 0, "120")).toBe(f("100036.666666667"));
+    // 12m to 5m at 5bp; 5m to 2m at 2bp; 2m to 0.5m across two bands (200 + 50 over 15); the last 0.5m at 1bp.
+    expect([price("sell", 120, "70"), price("sell", 50, "30"), price("sell", 20, "15"), price("sell", 5, "5")]).toEqual([f("99950"), f("99980"), f("99983.333333333"), f("99990")]);
+  });
+
+  it("charges a reversal its close through the bands and then its open, over the whole order", () => {
+    // Closing $2m pays 300 and opening $1m short pays 100: 400 over 30 units, rounded up.
+    expect(price("sell", 20, "30")).toBe(f("99986.666666666"));
+  });
+
+  it("scales the closing slice by the stress multiplier and adds the level's minimum", () => {
+    // Level 1 doubles the $1m close's 100 to 200, 20 a unit, and adds its 5bp minimum.
+    expect(price("sell", 10, "10", { stress: { minSpreadBps: 5, sizeMultiplierBps: 20_000 } })).toBe(f("99930"));
+  });
+
+  it("adds a toxicity add-on over the whole quantity", () => {
+    expect(price("buy", 0, "1", { toxicityBps: 3 })).toBe(f("100040"));
+  });
+
+  it("clamps a pure close to its ceiling, refuses a reversal over it, and lets one under it pay its charge", () => {
+    const wide = { stress: { minSpreadBps: 9_996, sizeMultiplierBps: 100_000 }, toxicityBps: 1, ceilingBps: 20 };
+    // The charge reaches the price; clamped to 20bp, the close fills at the ceiling.
+    expect(price("sell", 10, "4", wide)).toBe(f("99800"));
+    expect(priceOrder({ mid: MID, side: "sell", held: units(10), qty: units(14), tiers: BANDS, conversion: USD, ...wide })).toEqual({ kind: "refused", reject: { kind: "close_spread_ceiling", ceiling_bps: 20 } });
+    expect(price("sell", 10, "14", { ceilingBps: 20 })).toBe(f("99990"));
+  });
+
+  it("refuses an opening spread that reaches the price, and no close at its ceiling", () => {
+    const wide = { mid: MID, side: "buy" as const, held: 0n, qty: units(1), tiers: BANDS, stress: { minSpreadBps: 10_000, sizeMultiplierBps: 10_000 }, toxicityBps: 0, conversion: USD };
+    expect(priceOrder({ ...wide, ceilingBps: 20 })).toEqual({ kind: "refused", reject: { kind: "invalid_order", reason: "spread at this size reaches the price" } });
+    expect(priceOrder({ ...wide, side: "sell", held: units(1), ceilingBps: null })).toEqual({ kind: "refused", reject: { kind: "invalid_order", reason: "spread at this size reaches the price" } });
+  });
+
+  it("charges an FX band in tenths of a bp, below one bp", () => {
+    // EUR-USD's 0.4bp first band on $1.08m: 43.2 USD over 1m units.
+    const eur = { mid: f("1.08"), held: 0n, qty: units(1_000_000), tiers: [{ up_to: "10000000", tenth_bps: 4 }, { up_to: null, tenth_bps: 8 }], stress: CALM, toxicityBps: 0, ceilingBps: 17, conversion: USD };
+    expect(priceOrder({ ...eur, side: "buy" })).toEqual({ kind: "priced", price: f("1.0800432"), spread: f("0.0000432"), increases: true });
+  });
+
+  it("converts the bands' USD charge to the quote currency for a market quoted in euros", () => {
+    const view = { id: 23, quote_currency: { currency: "eur", fx_market: 10 }, fx_mark: "1.25" } as MarketView;
+    const conversion = conversionAt(view, f("20000"));
+    if (conversion === null) throw new Error("no conversion");
+    // $250k at 1bp is 25 USD, 20 EUR, over 10 units.
+    expect(price("buy", 0, "10", { mid: f("20000"), tiers: [{ up_to: null, tenth_bps: 10 }], conversion })).toBe(f("20002"));
+    expect(conversionAt({ ...view, fx_mark: null }, f("20000"))).toBeNull();
   });
 });
 
-describe("tieredMargin", () => {
-  it("applies each band to the slice inside it", () => {
-    expect(tieredMargin(MARGIN, fixedFromInt(100_000))).toBe(fixedFromInt(2_000));
-    expect(tieredMargin(MARGIN, fixedFromInt(200_000))).toBe(fixedFromInt(7_000));
+describe("growth and closing", () => {
+  it("split an order into the slice that grows the position and the slice that closes it", () => {
+    const cases: [number, number, [number, number], [number, number]][] = [
+      [10, 5, [10, 15], [0, 0]], [10, -4, [0, 0], [6, 10]], [10, -13, [0, 3], [0, 10]], [10, -10, [0, 0], [0, 10]], [0, -2, [0, 2], [0, 0]],
+    ];
+    for (const [held, delta, grows, closes] of cases) {
+      expect([growth(units(held), units(delta)), closing(units(held), units(delta))], `${held} ${delta}`).toEqual([grows.map(units), closes.map(units)]);
+    }
+    expect([growthOf(units(10), units(-4)), growthOf(units(10), units(-13))]).toEqual([{ grows: false }, { grows: true }]);
+  });
+});
+
+describe("margin bands", () => {
+  it("apply each band to the slice inside it, exactly, and weight a slice that crosses bands", () => {
+    expect(tieredMargin(MARGIN, fixedFromInt(110_000))).toBe(fixedFromInt(2_500));
     expect(tieredMargin(MARGIN, fixedFromInt(-200_000))).toBe(fixedFromInt(7_000));
-  });
-
-});
-
-describe("quoteFor", () => {
-  const base = { index: fixedFromInt(100), baseSpreadBps: 10, spreadTiers: SPREAD, stress: 0, heldNotional: 0n, orderNotional: fixedFromInt(1_000), executedNotional: fixedFromInt(1_000) };
-
-  it("moves a buy up and a sell down by the spread", () => {
-    expect(quoteFor({ ...base, side: "buy" }).price).toBe(fixedFromInt(100) + fixedFromInt(100) / 1000n);
-    expect(quoteFor({ ...base, side: "sell" }).price).toBe(fixedFromInt(100) - fixedFromInt(100) / 1000n);
-  });
-
-  it("adds the stress and size spreads, but no size spread to an order that does not grow the position", () => {
-    expect(quoteFor({ ...base, side: "buy", stress: 2 }).spreadBps).toBe(22);
-    expect(quoteFor({ ...base, side: "buy", orderNotional: 0n, executedNotional: fixedFromInt(1_000) }).spreadBps).toBe(10);
-    expect(quoteFor({ ...base, side: "buy", orderNotional: fixedFromInt(2_000_000), executedNotional: fixedFromInt(2_000_000) }).spreadBps).toBe(10 + 5);
-  });
-});
-
-describe("adverseBps", () => {
-  it("counts only a worse live price", () => {
-    expect(adverseBps("buy", fixedFromInt(100), fixedFromInt(101))).toBe(100);
-    expect(adverseBps("buy", fixedFromInt(100), fixedFromInt(99))).toBe(0);
-    expect(adverseBps("sell", fixedFromInt(100), fixedFromInt(99))).toBe(100);
-  });
-});
-
-describe("exact tier charges", () => {
-  it("keeps fractional basis points: a 110,000 position pays 2,500 of margin, not 2,497", () => {
-    expect(tieredMargin(MARGIN, fixedFromInt(110_000))).toBe(fixedFromInt(2_000) + fixedFromInt(10_000) * 500n / 10_000n);
     expect(tierCost(MARGIN, 0n, fixedFromInt(110_000))).toBe(fixedFromInt(2_500));
+    expect(slicedBps(MARGIN, 0n, fixedFromInt(200_000))).toBe(350);
   });
 });
 
-describe("growthOf", () => {
-  it("counts the whole new side of a reversal as growth, and a pure reduction as none", () => {
-    expect(growthOf(fixedFromInt(10), fixedFromInt(5))).toEqual({ grows: true, fromQty: fixedFromInt(10), toQty: fixedFromInt(15) });
-    expect(growthOf(fixedFromInt(10), fixedFromInt(-4))).toMatchObject({ grows: false });
-    expect(growthOf(fixedFromInt(10), fixedFromInt(-13))).toEqual({ grows: true, fromQty: 0n, toQty: fixedFromInt(3) });
-    expect(growthOf(fixedFromInt(10), fixedFromInt(-10))).toMatchObject({ grows: false });
-    expect(growthOf(0n, fixedFromInt(-2))).toEqual({ grows: true, fromQty: 0n, toQty: fixedFromInt(2) });
-  });
-});
-
-describe("exceedsSlippage", () => {
-  it("compares the exact difference, so 20.9 bps does not pass a 20 bps bound", () => {
-    const quoted = fixedFromInt(10_000);
+describe("adverseBps and exceedsSlippage", () => {
+  it("count only a worse live price, compared exactly", () => {
+    expect([adverseBps("buy", units(100), units(101)), adverseBps("buy", units(100), units(99)), adverseBps("sell", units(100), units(99))]).toEqual([100, 0, 100]);
+    const quoted = units(10_000);
     expect(exceedsSlippage("buy", quoted, quoted + (quoted * 209n) / 10_000n / 10n, 20)).toBe(true);
     expect(exceedsSlippage("buy", quoted, quoted + (quoted * 20n) / 10_000n, 20)).toBe(false);
-    expect(exceedsSlippage("sell", quoted, quoted + 1n, 0)).toBe(false);
-  });
-});
-
-describe("a reversal's size charge", () => {
-  it("is spread over the whole order, not only its growing slice", () => {
-    const base = { index: fixedFromInt(100), side: "buy" as const, baseSpreadBps: 0, spreadTiers: SPREAD, stress: 0 };
-    const reversal = quoteFor({ ...base, heldNotional: 0n, orderNotional: fixedFromInt(1_000_000), executedNotional: fixedFromInt(2_000_000) });
-    const full = quoteFor({ ...base, heldNotional: 0n, orderNotional: fixedFromInt(1_000_000), executedNotional: fixedFromInt(1_000_000) });
-    expect(reversal.spreadBps).toBeLessThan(full.spreadBps);
   });
 });
 
 describe("executionCost", () => {
-  const index = fixedFromInt(100);
-  it("charges the profit fee on a partial reduction, an exact close and a reversal, but not on a loss or an add", () => {
-    const profitable = { entry: fixedFromInt(80), price: fixedFromInt(100), index };
-    const fee = (held: number, delta: number) => executionCost({ held: fixedFromInt(held), delta: fixedFromInt(delta), ...profitable });
-    expect(fee(10, -4)).toBe(fixedFromInt(4 * 20) / 10n); // 4 units close at +20: the fee is a tenth of 80
-    expect(fee(10, -10)).toBe(fixedFromInt(200) / 10n);
-    expect(fee(10, -13)).toBe(fixedFromInt(200) / 10n);
-    expect(fee(10, 5)).toBe(0n);
-    expect(executionCost({ held: fixedFromInt(10), delta: fixedFromInt(-4), entry: fixedFromInt(120), price: fixedFromInt(100), index })).toBe(0n);
+  const index = units(100);
+  it("charges the profit fee at the given rate on a partial reduction, an exact close and a reversal, but not on a loss or an add", () => {
+    const fee = (held: number, delta: number, feeBps: number) => executionCost({ held: units(held), delta: units(delta), entry: units(80), price: units(100), index, feeBps });
+    expect(fee(10, -4, 1_000)).toBe(units(8)); // 4 units close at +20: a tenth of 80
+    expect([fee(10, -10, 1_000), fee(10, -13, 1_000), fee(10, -10, 10_000)]).toEqual([units(20), units(20), units(200)]);
+    expect(fee(10, 5, 1_000)).toBe(0n);
+    expect(executionCost({ held: units(10), delta: units(-4), entry: units(120), price: units(100), index, feeBps: 10_000 })).toBe(0n);
   });
 });

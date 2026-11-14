@@ -1,17 +1,21 @@
 "use client";
 
-/** Open positions with their profit and loss, a Close button each and a Close all above them: a table from 1024 px, cards below. */
+/** Open positions with their profit and loss, hold and close fee, a Close button each and a Close all above them: a table from 1024 px, cards below. */
 
 import { useEffect, useId } from "react";
 
 import { CONFIRM_MIN_GAP_MS, CONFIRM_MS } from "@/lib/confirm-window";
 import { describeLeftOut, planCloseAll, pressBatch, targetsKey } from "@/lib/close-all";
+import { ticketClose } from "@/lib/close-preview";
+import { describeNextFall, describeSchedule, formatHold, positionFee } from "@/lib/fee-words";
+import { formatRate } from "@/lib/format";
+import { stressTermsAt } from "@/lib/pricing";
 import { formatCloseout, formatMark } from "@/lib/price-format";
 import { absFixed, formatFixedPlaces, formatUsd } from "@/lib/fixed";
 import { closingPrice } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
 import { closeAll } from "@/lib/store/batch-actions";
-import { previewTicket, unrealisedPnl } from "@/lib/ticket";
+import { previewTicket, unrealisedPnl, usdConverter } from "@/lib/ticket";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
@@ -29,11 +33,15 @@ const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-g
 /** What the Close-out value means, shared by the table's head and the phone rows' label. */
 const CLOSEOUT_TIP = "Where this market must reach for your account to fall below its close-out level, with your other positions held at their marks. Margin is shared, and the largest losing position closes first, which may be another. Due: already below it. None: no price in the node's range reaches it.";
 
+/** What the hold, fee and close columns mean, shared by the table's head and the phone rows' labels. */
+const HOLD_TIP = "How long the position has been held, from its open time: an add moves the open time towards now by the share it adds, and a reduction leaves it.";
+const CLOSE_TIP = "What closing the whole position now moves your cash by: the realised result at the node's closing price, less the profit fee. Exact while the price and the fee rate hold; a figure after ≥ is the least a close keeps while the rate falls.";
+
 /** The slippage bound a Close sends, capped at the market's own. */
 const CLOSE_SLIPPAGE_BPS = 25;
 
 export function PositionsView() {
-  const { account, markets, busy, signatures, quotes, house, quoted: asked, notices } = useConsole();
+  const { account, markets, busy, signatures, quotes, house, quoted: asked, notices, houseParams: params, now } = useConsole();
   const { store } = useSession();
   const id = useId();
   const readOnly = useReadOnlyNote(id, "Close");
@@ -50,9 +58,14 @@ export function PositionsView() {
     const qty = absFixed(p.qty);
     // A live node quotes the price of closing the whole position; the mock's is the console's own estimate.
     const quote = quotes[p.market];
+    // The rate a close pays now runs on the node's clock; before V55 a close pays the base.
+    const fee = positionFee(p.closeFee, params, now);
+    const feeBps = fee?.feeBps ?? params?.profitFeeBps ?? null;
     const quoted = signatures === "checked"
       ? (quote === undefined ? null : closingPrice(quote, side, qty))
-      : market === undefined ? null : (previewTicket({ market, side, qty, slippageBps: CLOSE_SLIPPAGE_BPS, account, houseNav: house.nav }).quote?.price ?? null);
+      : market === undefined ? null : (previewTicket({ market, side, qty, slippageBps: CLOSE_SLIPPAGE_BPS, account, houseNav: house.nav, stress: stressTermsAt(params?.stressLevels, market.stress), closeFeeBps: feeBps ?? undefined }).quote?.price ?? null);
+    // The node's whole-close quote is exact, as is the mock's own price, which its fill uses.
+    const closeNow = market === undefined || known === null ? null : ticketClose({ position: p, side, qty, price: quoted, exactPrice: true, feeBps, fallsAt: fee?.fallsAt ?? null, now, toUsdDown: usdConverter(market.view, known, "down") });
     const slippageBps = Math.min(CLOSE_SLIPPAGE_BPS, market?.view.max_slippage_bps ?? CLOSE_SLIPPAGE_BPS);
     const close = (event: { currentTarget: HTMLElement }) => {
       if (quoted === null) return;
@@ -68,6 +81,10 @@ export function PositionsView() {
       mark: known === null ? "—" : formatMark(known, places),
       pnl: pnl === null ? "—" : formatUsd(pnl),
       closeout: formatCloseout(p.closeout, places),
+      hold: fee === null ? "—" : formatHold(fee.holdMs),
+      fee: feeBps === null ? "—" : formatRate(feeBps),
+      falls: fee === null ? null : describeNextFall(fee, params?.profitFeeBps ?? null, now),
+      proceeds: closeNow === null ? "—" : `${closeNow.exact ? "" : "≥ "}${formatUsd(closeNow.net)}`,
       loss: pnl !== null && pnl < 0n,
       open: market?.open === true,
       // An unpriced market has no closing price, whatever a quote says.
@@ -100,6 +117,7 @@ export function PositionsView() {
   // A held Enter repeats its click: only a separate press may confirm.
   const holdsDown = (event: { repeat: boolean; preventDefault: () => void }) => { if (event.repeat) event.preventDefault(); };
   const noteId = `${id}-left-out`;
+  const feeTip = `The profit fee a close of this position pays on a gain now. ${params === null ? "It falls as the hold lengthens." : describeSchedule(params)}`;
   const describedBy = readOnly.describedBy ?? (leftOutNote === null ? undefined : noteId);
   return (
     <>
@@ -124,6 +142,9 @@ export function PositionsView() {
               <div><dt className="text-label text-fg-3">Entry</dt><dd>{r.entry}</dd></div>
               <div><dt className="text-label text-fg-3">Mark</dt><dd>{r.mark}</dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Close-out" tip={CLOSEOUT_TIP} /></dt><dd>{r.closeout}</dd></div>
+              <div><dt className="text-label text-fg-3"><Term label="Held" tip={HOLD_TIP} /></dt><dd>{r.hold}</dd></div>
+              <div><dt className="text-label text-fg-3"><Term label="Profit fee" tip={feeTip} /></dt><dd>{r.fee}{r.falls !== null && <span className="block text-label text-fg-3">{r.falls}</span>}</dd></div>
+              <div><dt className="text-label text-fg-3"><Term label="Close now" tip={CLOSE_TIP} /></dt><dd>{r.proceeds}</dd></div>
             </dl>
             <button type="button" disabled={!r.closable} className={`${BUTTON} mt-3 w-full`} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
             {r.unquoted && <p className="mt-2 text-label text-fg-3">Select {r.symbol} to get its closing price.</p>}
@@ -131,8 +152,8 @@ export function PositionsView() {
         ))}
       </ul>
       <div className="relative hidden overflow-x-auto lg:block">
-        <table className="w-full min-w-[720px] text-caption">
-          <thead><tr className="border-b border-line"><th className={TH}>Market</th><th className={TH}>Side</th><th className={TH}>Size</th><th className={TH}>Entry</th><th className={TH}>Mark</th><th className={TH}><Term label="Close-out" tip={CLOSEOUT_TIP} /></th><th className={TH}>P&amp;L</th><th className={TH}><span className="sr-only">Actions</span></th></tr></thead>
+        <table className="w-full min-w-[1040px] text-caption">
+          <thead><tr className="border-b border-line"><th className={TH}>Market</th><th className={TH}>Side</th><th className={TH}>Size</th><th className={TH}>Entry</th><th className={TH}>Mark</th><th className={TH}><Term label="Close-out" tip={CLOSEOUT_TIP} /></th><th className={TH}>P&amp;L</th><th className={TH}><Term label="Held" tip={HOLD_TIP} /></th><th className={TH}><Term label="Profit fee" tip={feeTip} /></th><th className={TH}><Term label="Close now" tip={CLOSE_TIP} /></th><th className={TH}><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.key} className="border-b border-line last:border-b-0">
@@ -143,6 +164,9 @@ export function PositionsView() {
                 <td className="px-4 py-4">{r.mark}</td>
                 <td className="px-4 py-4">{r.closeout}</td>
                 <td className={`px-4 py-4 ${r.loss ? "text-ember" : "text-glow"}`}>{r.pnl}</td>
+                <td className="px-4 py-4">{r.hold}</td>
+                <td className="px-4 py-4">{r.fee}{r.falls !== null && <span className="block text-label text-fg-3">{r.falls}</span>}</td>
+                <td className="px-4 py-4">{r.proceeds}</td>
                 <td className="px-4 py-4 text-right">
                   <button type="button" disabled={!r.closable} className={BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
                   {r.unquoted && <p className="mt-1 text-label text-fg-3">Select {r.symbol} to get its closing price.</p>}

@@ -158,8 +158,9 @@ export function triggerResting(state: MockState, only?: string, orderId?: number
     const quote = liveQuote(state, address, order.market, order.side, qty);
     if (!quote) continue;
     const buy = order.side === "buy";
+    // A limit the pricing refuses has no price to reach; a stop the index triggers goes to the fill, which cancels it as unfillable.
     const hit =
-      order.kind.kind === "limit" ? (buy ? quote.price <= level : quote.price >= level) : buy ? runtime.mid >= level : runtime.mid <= level;
+      order.kind.kind === "limit" ? quote.kind === "priced" && (buy ? quote.price <= level : quote.price >= level) : buy ? runtime.mid >= level : runtime.mid <= level;
     if (!hit) continue;
     account.orders.delete(order.order_id);
     const outcome = fillOrder(state, { address, market: order.market, side: order.side, qty, reduceOnly: order.reduce_only, orderId: order.order_id });

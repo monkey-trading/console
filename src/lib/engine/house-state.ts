@@ -1,9 +1,9 @@
-/** `GET /v1/house/state`: the house's latest parameters and checkpoint, the parameter votes the log holds, and what keeps the first two current between reads. */
+/** `GET /v1/house/state`: the house's latest parameters and checkpoint, the pending listing notices, the parameter votes the log holds, and what keeps the first two current between reads. */
 
 import { fixedFromWire } from "../fixed";
 import type { HouseParams } from "../house";
 import type { GovernanceWire } from "./governance-types";
-import type { SetParams } from "./types";
+import type { ListingNotice, ListingNotices, SetParams } from "./types";
 import type { CheckpointEntry } from "./wire";
 
 /** What the node answers: the log head and the latest parameters and checkpoint its log holds. */
@@ -14,6 +14,8 @@ export interface HouseState {
   params: HouseParams | null;
   /** The latest checkpoint; null before the log holds one. */
   checkpoint: CheckpointEntry | null;
+  /** Each listed market's pending listing notice, as of `seq`; empty while none waits. */
+  listingNotices: ListingNotices;
   /** From V56, the passed changes waiting and the restrictions in force, as of `seq`; null before any vote is recorded. */
   governance: GovernanceWire | null;
 }
@@ -23,6 +25,8 @@ export interface HouseStateWire {
   seq: number | null;
   params: (Omit<SetParams, "house_total_cap_floor"> & { house_total_cap_floor?: string; seq: number | null }) | null;
   checkpoint: CheckpointEntry | null;
+  /** From V49, absent from a node that predates the field; keyed by market id as JSON keys are. */
+  listing_notices?: Record<string, ListingNotice>;
   governance?: GovernanceWire;
 }
 
@@ -33,6 +37,8 @@ export function houseParamsOf(entry: Omit<SetParams, "house_total_cap_floor"> & 
     closeoutLevelBps: entry.closeout_level_bps,
     totalCapBps: entry.house_total_cap_bps,
     totalCapFloor: fixedFromWire(entry.house_total_cap_floor ?? "0"),
+    stressLevels: entry.stress_levels ?? [],
+    profitFeeCurve: entry.profit_fee_curve ?? [],
     seq,
   };
 }
@@ -42,7 +48,8 @@ export function houseParamsOf(entry: Omit<SetParams, "house_total_cap_floor"> & 
  * engine's; a floor that is not a decimal throws.
  */
 export function decodeHouseState(wire: HouseStateWire): HouseState {
-  return { seq: wire.seq, params: wire.params === null ? null : houseParamsOf(wire.params, wire.params.seq), checkpoint: wire.checkpoint, governance: wire.governance ?? null };
+  const listingNotices: ListingNotices = Object.fromEntries(Object.entries(wire.listing_notices ?? {}).map(([market, notice]) => [Number(market), notice]));
+  return { seq: wire.seq, params: wire.params === null ? null : houseParamsOf(wire.params, wire.params.seq), checkpoint: wire.checkpoint, listingNotices, governance: wire.governance ?? null };
 }
 
 /**

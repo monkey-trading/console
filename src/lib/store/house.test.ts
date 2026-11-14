@@ -9,7 +9,7 @@ import { loadAccount } from "./account";
 import { openHousePanel } from "./house";
 import { ACCOUNT, setup as setupClosed } from "./live-fake";
 
-const PARAMS = { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, totalCapFloor: fixedFromWire("2000000"), seq: 7 };
+const PARAMS = { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, totalCapFloor: fixedFromWire("2000000"), stressLevels: [], profitFeeCurve: [], seq: 7 };
 const CHECKPOINT = { type: "checkpoint" as const, offset: "1200:1", seq: 1200, root: `0x${"ab".repeat(32)}` };
 
 /** A store with the House page on screen, as the panel's reads need. */
@@ -226,35 +226,22 @@ describe("the store's house panel state", () => {
 });
 
 describe("the house panel's reads, by whether the page is on screen", () => {
-  it("reads nothing while the House page is closed, though the house figures still load", async () => {
-    const { client, store } = setupClosed();
-    client.params = PARAMS;
-    client.checkpoint = CHECKPOINT;
-    client.totals = { count: 2, remaining: fixedFromWire("30.5"), largest: null, head: null, seq: 9, complete: true, stable: true };
-    store.start(0);
-    await settle();
-    await store.refresh(false);
-    await settle();
-    expect(store.getSnapshot()).toMatchObject({ houseReady: true, houseParams: null, checkpoint: null, withdrawalTotals: null });
-    expect(client.houseStateReads).toBe(0);
-    expect(store.getSnapshot().houseStateStatus).toBe("pending");
-  });
-
   it("reads at once when the page opens after the first refresh, and stops when it closes", async () => {
     const { client, store } = setupClosed();
     client.params = PARAMS;
     store.start(0);
     await settle();
+    expect(client.houseStateReads).toBe(1); // the trading surfaces' first read
     const close = openHousePanel(store);
     await settle();
     expect(store.getSnapshot().houseParams).toEqual(PARAMS);
     close();
-    expect(client.houseStateReads).toBe(1);
+    expect(client.houseStateReads).toBe(2);
     client.params = { ...PARAMS, seq: 8 };
     await store.refresh(false);
     await settle();
     expect(store.getSnapshot().houseParams).toEqual(PARAMS); // closed: the newer answer was never read
-    expect(client.houseStateReads).toBe(1);
+    expect(client.houseStateReads).toBe(2);
   });
 
   it("starts the dashboard feeds with the page and stops them when it closes", async () => {
