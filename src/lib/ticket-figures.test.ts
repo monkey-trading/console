@@ -41,11 +41,17 @@ describe("ticketFigures", () => {
     expect(close).toMatchObject({ whole: true, exact: true, feeBps: 1_000, realised: q("1959.6"), fee: q("195.96"), net: q("1763.64") });
   });
 
-  it("prices a live partial close at the ladder's covering step, a bound", async () => {
+  it("bounds a live partial close at the ladder's covering step, less the engine's rounding slack for its size", async () => {
     const market = await btcAt(101_000);
     const { prices, close } = ticketFigures(state(market, true), market, order("1"));
     expect([prices.price, prices.exactClose]).toEqual([q("100970"), false]);
-    expect(close).toMatchObject({ whole: false, exact: false, realised: q("970") });
+    // One unit through three bands: 9 raw units of slack.
+    expect(close).toMatchObject({ whole: false, exact: false, price: q("100969.999999991"), realised: q("969.999999991") });
+  });
+
+  it("states no close while the house state held is not current, since a change to the fee may be unread", async () => {
+    const market = await btcAt(101_000);
+    expect(ticketFigures(state(market, true, { pricingCurrent: false }), market, order("2")).close).toBeNull();
   });
 
   it("takes the rate on the curve at the node's clock, a bound while it falls", async () => {

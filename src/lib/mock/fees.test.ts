@@ -88,6 +88,13 @@ describe("a triggered reversal the close-spread ceiling refuses, in the mock", (
     expect(kinds((await order(beyond, "500", "sell", { kind: { kind: "limit", price: "99900" } })).events)).toEqual(["order_accepted", "cancelled unfillable"]);
     expect(beyond.client.state.account(ME).positions.get(1)?.qty).toBe(fixedFromInt(1) / 100n);
   });
+
+  it("prices an oversized reduce-only limit as the close it is clamped to, so it rests until that close's price reaches the limit", async () => {
+    const node = await heldAtLevelTwo();
+    const result = await order(node, "500", "sell", { kind: { kind: "limit", price: "99900" }, reduce_only: true });
+    expect(kinds(result.events)).toEqual(["order_accepted"]);
+    expect([node.client.state.account(ME).orders.size, node.client.state.account(ME).positions.get(1)?.qty]).toEqual([1, fixedFromInt(1) / 100n]);
+  });
 });
 
 describe("the mock's holding-time fee, as the engine charges it from V55", () => {

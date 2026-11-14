@@ -5,12 +5,24 @@
  */
 
 import type { Side } from "./engine/types";
-import { absFixed, minFixed, ZERO, type Fixed } from "./fixed";
+import { absFixed, minFixed, SCALE, ZERO, type Fixed } from "./fixed";
 import { mulRounded } from "./fixed-rounding";
 import { profitFee } from "./holding-fee";
 
 /** How near the rate's next fall may be for a whole close to stay exact: an order placed now reaches the node well within it. */
 export const RATE_HOLD_MS = 1_000;
+
+/**
+ * How much worse than the quote ladder's step that covers it an order of `qty` units can price, in raw
+ * price units: the engine rounds a fill's cost up to a raw unit once for each band charge on the slices
+ * it opens and closes, once for the stress multiplier and once for the conversion from USD, then rounds
+ * its division by the size up, while the step's larger size can round less (`Quoter::quote`, `ladder.rs`).
+ * Each raw unit of cost is `SCALE / qty` raw units of price.
+ */
+export function ladderSlack(qty: Fixed, bands: number): Fixed {
+  const roundings = BigInt(2 * bands + 2);
+  return (roundings * SCALE + qty - 1n) / qty + 1n;
+}
 
 export interface ClosePreview {
   /** The units the order closes: all of it, or the whole position for one that reverses it. */
@@ -43,7 +55,7 @@ export interface CloseOrder {
   entry: Fixed;
   side: Side;
   qty: Fixed;
-  /** The price the order fills at: the node's whole-close quote, its ladder step, or the mock's own price. */
+  /** The price the order fills at: the node's whole-close quote, its ladder step moved against the trader by `ladderSlack`, or the mock's own price. */
   price: Fixed;
   /** Whether `price` is exact for this order: the whole-close quote for a whole close, or the mock's own price, which its fill uses. */
   exactPrice: boolean;

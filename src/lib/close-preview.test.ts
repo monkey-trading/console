@@ -2,7 +2,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import { previewClose, RATE_HOLD_MS, ticketClose, type CloseOrder } from "./close-preview";
+import { ladderSlack, previewClose, RATE_HOLD_MS, ticketClose, type CloseOrder } from "./close-preview";
+import type { SpreadTier } from "./engine/types";
+import { CALM, priceOrder, USD } from "./pricing";
+import { mulberry32 } from "./prng";
 import { fixedFromInt, parseFixed, type Fixed } from "./fixed";
 import { mulRounded } from "./fixed-rounding";
 
@@ -65,5 +68,30 @@ describe("ticketClose", () => {
 
   it("previews nothing without a position, a price, a rate, an FX price or a size", () => {
     for (const missing of [{ position: null }, { price: null }, { feeBps: null }, { toUsdDown: null }, { qty: 0n }]) expect(ticketClose({ ...input, ...missing })).toBeNull();
+  });
+});
+
+describe("ladderSlack", () => {
+  it("is a raw unit of cost per rounding, spread over the size and rounded up, plus the division's own unit", () => {
+    // The dev scenario's BTC-USD half close: 0.29964 BTC through three bands, which filled 4 raw units under its step.
+    expect(ladderSlack(f("0.29964"), 3)).toBe(28n);
+    expect([ladderSlack(fixedFromInt(1), 3), ladderSlack(fixedFromInt(1_000_000), 3)]).toEqual([9n, 2n]);
+  });
+
+  it("covers every smaller close's price against the step that covers it, through bands, multipliers and mids with odd decimals", () => {
+    const tiers: SpreadTier[] = [{ up_to: "2000000", tenth_bps: 20 }, { up_to: "10000000", tenth_bps: 40 }, { up_to: null, tenth_bps: 80 }];
+    const rand = mulberry32(0x5ac);
+    for (let i = 0; i < 500; i += 1) {
+      // A long, a covering step inside its top band, and a smaller close: the step's average is no better than the close's but for rounding.
+      const mid = fixedFromInt(90_000) + BigInt(Math.floor(rand() * 1e9)) * 20_000n + BigInt(Math.floor(rand() * 1e9));
+      const held = fixedFromInt(1) + BigInt(Math.floor(rand() * 1e9)) * 15n;
+      const step = BigInt(Math.floor(rand() * Number(held))) + 1n;
+      const qty = BigInt(Math.floor(rand() * Number(step))) + 1n;
+      const stress = rand() < 0.5 ? CALM : { minSpreadBps: 2, sizeMultiplierBps: 20_000 };
+      const sell = (size: bigint) => priceOrder({ mid, side: "sell", held, qty: size, tiers, stress, toxicityBps: 0, ceilingBps: null, conversion: USD });
+      const [order, cover] = [sell(qty), sell(step)];
+      if (order.kind !== "priced" || cover.kind !== "priced") throw new Error("refused");
+      expect(order.price, `mid ${mid} held ${held} step ${step} qty ${qty}`).toBeGreaterThanOrEqual(cover.price - ladderSlack(qty, tiers.length));
+    }
   });
 });

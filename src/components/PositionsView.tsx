@@ -12,6 +12,7 @@ import { formatRate } from "@/lib/format";
 import { stressTermsAt } from "@/lib/pricing";
 import { formatCloseout, formatMark } from "@/lib/price-format";
 import { absFixed, formatFixedPlaces, formatUsd } from "@/lib/fixed";
+import { roundToPlaces } from "@/lib/fixed-rounding";
 import { closingPrice } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
 import { closeAll } from "@/lib/store/batch-actions";
@@ -43,7 +44,9 @@ const CLOSE_SLIPPAGE_BPS = 25;
 
 export function PositionsView() {
   const snapshot = useConsole();
-  const { account, markets, busy, signatures, quotes, house, quoted: asked, notices, houseParams: params, now } = snapshot;
+  const { account, markets, busy, signatures, quotes, house, quoted: asked, notices, now } = snapshot;
+  // The house state's terms, only while current: a change to the fee may otherwise be unread.
+  const terms = currentParams(snapshot);
   const { store } = useSession();
   const id = useId();
   const readOnly = useReadOnlyNote(id, "Close");
@@ -62,12 +65,12 @@ export function PositionsView() {
     const quote = quotes[p.market];
     // The rate a close pays now runs on the node's clock; before V55 a close pays the base.
     const fee = positionFeeNow(snapshot, p);
-    const feeBps = fee?.feeBps ?? params?.profitFeeBps ?? null;
+    const feeBps = fee?.feeBps ?? terms?.profitFeeBps ?? null;
     const quoted = signatures === "checked"
       ? (quote === undefined ? null : closingPrice(quote, side, qty))
-      : market === undefined ? null : (previewTicket({ market, side, qty, slippageBps: CLOSE_SLIPPAGE_BPS, account, houseNav: house.nav, stress: stressTermsAt(params?.stressLevels, market.stress), closeFeeBps: feeBps ?? undefined }).quote?.price ?? null);
+      : market === undefined ? null : (previewTicket({ market, side, qty, slippageBps: CLOSE_SLIPPAGE_BPS, account, houseNav: house.nav, stress: stressTermsAt(terms?.stressLevels, market.stress), closeFeeBps: feeBps ?? undefined }).quote?.price ?? null);
     // The node's whole-close quote is exact, as is the mock's own price, which its fill uses.
-    const closeNow = market === undefined || known === null ? null : ticketClose({ position: p, side, qty, price: quoted, exactPrice: true, feeBps, fallsAt: fee?.fallsAt ?? null, now, toUsdDown: usdConverter(market.view, known, "down") });
+    const closeNow = market === undefined || known === null || !snapshot.pricingCurrent ? null : ticketClose({ position: p, side, qty, price: quoted, exactPrice: true, feeBps, fallsAt: fee?.fallsAt ?? null, now, toUsdDown: usdConverter(market.view, known, "down") });
     const slippageBps = Math.min(CLOSE_SLIPPAGE_BPS, market?.view.max_slippage_bps ?? CLOSE_SLIPPAGE_BPS);
     const close = (event: { currentTarget: HTMLElement }) => {
       if (quoted === null) return;
@@ -85,8 +88,9 @@ export function PositionsView() {
       closeout: formatCloseout(p.closeout, places),
       hold: fee === null ? "—" : formatHold(fee.holdMs),
       fee: feeBps === null ? "—" : formatRate(feeBps),
-      falls: fee === null ? null : describeNextFall(fee, params?.profitFeeBps ?? null, now),
-      proceeds: closeNow === null ? "—" : `${closeNow.exact ? "" : "≥ "}${formatUsd(closeNow.net)}`,
+      falls: fee === null ? null : describeNextFall(fee, terms?.profitFeeBps ?? null, now),
+      // A bound's figure rounds down, the way "at least" reads.
+      proceeds: closeNow === null ? "—" : closeNow.exact ? formatUsd(closeNow.net) : `≥ ${formatUsd(roundToPlaces(closeNow.net, 2, "down"))}`,
       loss: pnl !== null && pnl < 0n,
       open: market?.open === true,
       // An unpriced market has no closing price, whatever a quote says.
@@ -119,7 +123,6 @@ export function PositionsView() {
   // A held Enter repeats its click: only a separate press may confirm.
   const holdsDown = (event: { repeat: boolean; preventDefault: () => void }) => { if (event.repeat) event.preventDefault(); };
   const noteId = `${id}-left-out`;
-  const terms = currentParams(snapshot);
   const feeTip = `The profit fee a close of this position pays on a gain now. ${terms === null ? "It falls as the hold lengthens to the curve's end." : describeSchedule(terms)}`;
   const describedBy = readOnly.describedBy ?? (leftOutNote === null ? undefined : noteId);
   return (
@@ -176,7 +179,7 @@ export function PositionsView() {
               {/* The hold and the close's fee and proceeds, on a line of their own so the table keeps its width. */}
               <tr className="border-b border-line last:border-b-0">
                 <td colSpan={8} className="px-4 pb-4 text-label leading-relaxed text-fg-3">
-                  <Term label="Held" tip={HOLD_TIP} /> <span className="text-fg-2">{r.hold}</span> · <Term label="Profit fee" tip={feeTip} /> <span className="text-fg-2">{r.fee}</span>{r.falls !== null && `, ${r.falls.charAt(0).toLowerCase()}${r.falls.slice(1)}`} · <Term label="Close now" tip={CLOSE_TIP} /> <span className="text-fg-2">{r.proceeds}</span>
+                  <span className="sr-only">{r.symbol}: </span><Term label="Held" tip={HOLD_TIP} /> <span className="text-fg-2">{r.hold}</span> · <Term label="Profit fee" tip={feeTip} /> <span className="text-fg-2">{r.fee}</span>{r.falls !== null && `, ${r.falls.charAt(0).toLowerCase()}${r.falls.slice(1)}`} · <Term label="Close now" tip={CLOSE_TIP} /> <span className="text-fg-2">{r.proceeds}</span>
                 </td>
               </tr>
               </Fragment>

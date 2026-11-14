@@ -100,6 +100,7 @@ describe("margin bands", () => {
     expect(tieredMargin(MARGIN, fixedFromInt(-200_000))).toBe(fixedFromInt(7_000));
     expect(tierCost(MARGIN, 0n, fixedFromInt(110_000))).toBe(fixedFromInt(2_500));
     expect(slicedBps(MARGIN, 0n, fixedFromInt(200_000))).toBe(350);
+    expect(slicedBps(MARGIN, fixedFromInt(5), fixedFromInt(5))).toBe(0);
   });
 });
 
@@ -109,6 +110,7 @@ describe("adverseBps and exceedsSlippage", () => {
     const quoted = units(10_000);
     expect(exceedsSlippage("buy", quoted, quoted + (quoted * 209n) / 10_000n / 10n, 20)).toBe(true);
     expect(exceedsSlippage("buy", quoted, quoted + (quoted * 20n) / 10_000n, 20)).toBe(false);
+    expect(exceedsSlippage("sell", quoted, quoted + 1n, 0)).toBe(false);
   });
 });
 

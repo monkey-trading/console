@@ -155,7 +155,10 @@ export function triggerResting(state: MockState, only?: string, orderId?: number
     const qty = parseFixed(order.qty);
     const level = order.kind.kind === "market" ? null : parseFixed(order.kind.price);
     if (!runtime || !runtime.open || runtime.halted || qty === null || level === null) continue;
-    const quote = liveQuote(state, address, order.market, order.side, qty);
+    // A reduce-only order prices as the fill clamps it, to what it can reduce, so an oversized one is a close, never a reversal.
+    const held = account.positions.get(order.market)?.qty ?? 0n;
+    const reducible = (order.side === "buy") === (held < 0n) ? absFixed(held) : 0n;
+    const quote = liveQuote(state, address, order.market, order.side, order.reduce_only && qty > reducible && reducible > 0n ? reducible : qty);
     if (!quote) continue;
     const buy = order.side === "buy";
     const limit = order.kind.kind === "limit" ? level : null;

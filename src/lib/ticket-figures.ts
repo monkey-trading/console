@@ -4,7 +4,7 @@
  * trading dev scenario both read it here, so the scenario checks the figures the ticket shows.
  */
 
-import { ticketClose, type ClosePreview } from "./close-preview";
+import { ladderSlack, ticketClose, type ClosePreview } from "./close-preview";
 import type { Side } from "./engine/types";
 import { positionFee } from "./fee-words";
 import type { Fixed } from "./fixed";
@@ -59,10 +59,15 @@ export function positionFeeNow(state: ConsoleState, position: PositionModel): Fe
   return positionFee(position.closeFee, currentParams(state), state.now);
 }
 
-/** The ticket's figures for `order` in `market`: a whole close's price is the node's exact quote, or the mock's own price, which its fill uses. */
+/**
+ * The ticket's figures for `order` in `market`: a whole close's price is the node's exact quote, or the
+ * mock's own price, which its fill uses; any other live close is a bound at the covering ladder step,
+ * moved against the trader by the engine's rounding slack (`ladderSlack`). While the house state held is
+ * not current, a change to the fee may be unread, so no close preview is stated.
+ */
 export function ticketFigures(state: ConsoleState, market: MarketModel, order: TicketOrder): TicketFigures {
   const live = state.signatures === "checked";
-  const params = state.houseParams;
+  const params = currentParams(state);
   const position = state.account?.positions.find((p) => p.market === market.id) ?? null;
   // Before V55 a close pays the base, which the parameters name.
   const fee = position === null ? null : positionFeeNow(state, position);
@@ -73,8 +78,11 @@ export function ticketFigures(state: ConsoleState, market: MarketModel, order: T
     houseNav: state.house.nav, estimates: !live, stress: stressTermsAt(params?.stressLevels, market.stress), closeFeeBps: feeBps ?? undefined,
   });
   const prices = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview, side: order.side, mark: market.mark });
-  const close = order.resting ? null : ticketClose({
-    position, side: order.side, qty: preview.qty, price: prices.price, exactPrice: live ? prices.exactClose : true, feeBps,
+  const exactPrice = live ? prices.exactClose : true;
+  const slack = exactPrice || prices.price === null || preview.qty <= 0n ? 0n : ladderSlack(preview.qty, market.view.spread_tiers.length);
+  const price = prices.price === null ? null : order.side === "sell" ? prices.price - slack : prices.price + slack;
+  const close = order.resting || !state.pricingCurrent ? null : ticketClose({
+    position, side: order.side, qty: preview.qty, price, exactPrice, feeBps,
     fallsAt: fee?.fallsAt ?? null, now: state.now, toUsdDown: market.mark === null ? null : usdConverter(market.view, market.mark, "down"),
   });
   return { preview, prices, close };

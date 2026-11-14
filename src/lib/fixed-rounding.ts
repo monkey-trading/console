@@ -43,3 +43,12 @@ export function mulBpsRounded(value: Fixed, bps: number, rounding: Rounding): Fi
 export function mulTenthBpsRounded(value: Fixed, tenthBps: number, rounding: Rounding): Fixed {
   return roundDiv(value * BigInt(Math.trunc(tenthBps)), 100_000n, rounding);
 }
+
+/**
+ * `value` rounded to `places` decimal places (0 to 9) as `rounding` says, so a bound shown to the cent or
+ * to a market's places stays true: an "at most" figure rounds up, an "at least" one down.
+ */
+export function roundToPlaces(value: Fixed, places: number, rounding: Rounding): Fixed {
+  const unit = 10n ** BigInt(9 - places);
+  return roundDiv(value, unit, rounding) * unit;
+}
