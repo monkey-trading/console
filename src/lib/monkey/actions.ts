@@ -24,10 +24,11 @@ const CLAIM_ATTEMPTS = 3;
  * Runs one wallet transaction for the panel on `surface`. `step` returns true when the transaction was
  * sent, or false when it has already said why nothing was. `onLanded` runs the moment a transaction
  * has landed, before the wallet and the node are read again. `movesDelegations` is false for a transaction
- * that changes no delegation, such as a vote, after which the delegations are not read again. Resolves
- * true once one landed.
+ * that changes no delegation, such as a vote, after which the delegations are not read again.
+ * `onQueued` runs when the wallet's queue has accepted the transaction, not for a request it
+ * refuses. Resolves true once one landed.
  */
-async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, step: (wallet: Wallet, staking: StakingWallet, progress: Progress) => Promise<boolean>, movesStake = false, onLanded?: () => void, movesDelegations = true): Promise<boolean> {
+async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, step: (wallet: Wallet, staking: StakingWallet, progress: Progress) => Promise<boolean>, movesStake = false, onLanded?: () => void, movesDelegations = true, onQueued?: () => void): Promise<boolean> {
   const { store } = panel;
   store.clearNotice(surface);
   const wallet = store.liveWallet;
@@ -65,7 +66,7 @@ async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, s
     } finally {
       notBusy(store, wallet);
     }
-  });
+  }, onQueued);
   if (ran === null) {
     store.notify(surface, "Your earlier request is still with your wallet.", "info");
     return false;
@@ -154,9 +155,11 @@ export async function changeDelegation(panel: MonkeyPanel, operators: OperatorRe
  * The contract's address is the node's word, so like a claim built from the node's proof it waits on
  * a verdict that may sign: one the vault's release has bound to the node's config. The vote shows,
  * and `onLanded` runs, the moment it lands; the node's tally counts it from the next final block it reads.
+ * The `governance` notice speaks for the vote the wallet's queue accepted, so a press the queue
+ * refuses leaves it where it is.
  */
 export async function castVote(panel: MonkeyPanel, operators: OperatorReads, votes: MemberVoteReads, vote: string, id: number, onLanded?: () => void): Promise<boolean> {
-  votes.voting(id);
+  let queued = false;
   const landed = await run(panel, "governance", `vote yes on proposal ${id}`, async (wallet, _staking, progress) => {
     if (wallet.governance === undefined) {
       panel.store.notify("governance", "This wallet cannot send transactions.");
@@ -166,7 +169,13 @@ export async function castVote(panel: MonkeyPanel, operators: OperatorReads, vot
     await wallet.governance.vote(vote, id, progress);
     votes.votedLanded(vote, id, wallet.address);
     return true;
-  }, false, onLanded, false);
+  }, false, onLanded, false, () => {
+    queued = true;
+    votes.voting(id);
+  });
+  // A press the wallet refused before its queue, or that no vote is queued for, still needs a place for its words.
+  if (!queued) votes.refused(id);
+  votes.finished(id);
   void operators.refresh();
   void votes.refresh();
   return landed;

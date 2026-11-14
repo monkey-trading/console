@@ -41,11 +41,13 @@ export class WalletQueue {
   /**
    * Queues a transaction for `wallet` behind its earlier work, or resolves null without running
    * `task` when another transaction is already waiting or running for it, so a repeated click does
-   * not queue a second one. A rejection reaches the caller and does not stop the queue.
+   * not queue a second one. A rejection reaches the caller and does not stop the queue. `onQueued`
+   * runs, before this returns, only when the transaction was accepted.
    */
-  transaction<T>(wallet: Wallet, task: () => Promise<T>): Promise<T | null> {
+  transaction<T>(wallet: Wallet, task: () => Promise<T>, onQueued?: () => void): Promise<T | null> {
     if (this.sending.has(wallet)) return Promise.resolve(null);
     this.sending.add(wallet);
+    onQueued?.();
     return this.enqueue(wallet, false, 0, async () => {
       try {
         return await task();

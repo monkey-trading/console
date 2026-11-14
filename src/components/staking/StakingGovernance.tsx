@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactN
 
 import { readBlock } from "@/lib/engine/attestation";
 import { accountReadsSettled } from "@/lib/staking/delegation-reads";
-import { focusAfterLeaving, stillOpen, type Tally } from "@/lib/staking/governance";
+import { awayLabelShown, focusAfterLeaving, focusLeftCards, governanceGate, stillOpen, type Tally } from "@/lib/staking/governance";
 import { commandDetails, commandTitle, failureLine, lifetimeText, limitDetails, limitTitle, listingsKey, listingsOf, walletLine, type InForce } from "@/lib/staking/governance-words";
 import { standing, weightIn, type MemberVoteFacts } from "@/lib/staking/member-votes";
 
@@ -48,6 +48,8 @@ export function StakingGovernance() {
   const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
   const wallet = useConsoleSelect((state) => state.wallet);
   const decided = useConsoleSelect((state) => state.walletDecided);
+  // Whether the `governance` surface has a notice or the wallet's request to show.
+  const speaks = useConsoleSelect((state) => state.notices.governance !== undefined || state.promptAt === "governance");
   // The listings' terms, not the markets themselves, which every price patches.
   const listings = useConsoleSelect((state) => listingsKey(state.markets));
   const market = useMemo(() => listingsOf(listings), [listings]);
@@ -57,18 +59,19 @@ export function StakingGovernance() {
   const chain = useSyncExternalStore(delegations.subscribe, delegations.getSnapshot, delegations.getSnapshot);
   const labelOf = useOperatorLabel(operators);
   const readable = votes.status !== "unavailable" && chain.read.status !== "unavailable";
-  const nodeSettled = list.status !== "loading" && held.status !== "loading" && accountReadsSettled({ wallet, decided, delegations: chain, position: "ready" });
   const votesSettled = !readable || votes.status !== "idle";
-  // Once shown, the figures stay: a later read of the votes only fills in what they hold.
+  // Once shown, the figures stay: a later read of the wallet only fills in what they hold.
   const [shownOnce, setShownOnce] = useState(false);
   const [waited, setWaited] = useState(false);
-  const settled = shownOnce || (nodeSettled && (votesSettled || waited));
+  const walletSettled = accountReadsSettled({ wallet, decided, delegations: chain, position: "ready" }) && votesSettled;
+  const gate = governanceGate({ list: list.status, held: held.status, wallet: walletSettled, waited, shown: shownOnce });
+  const settled = gate === "shown";
   if (settled && !shownOnce) setShownOnce(true);
   useEffect(() => {
-    if (!nodeSettled || shownOnce) return;
+    if (gate !== "wallet") return;
     const timer = setTimeout(() => setWaited(true), VOTES_WAIT_MS);
     return () => clearTimeout(timer);
-  }, [nodeSettled, shownOnce]);
+  }, [gate]);
   const inForce: InForce = { params: held.value?.params ?? null, market };
   const proposals = list.value?.proposals ?? null;
   const view = held.value?.view ?? null;
@@ -99,9 +102,14 @@ export function StakingGovernance() {
       const item = event.target instanceof HTMLElement ? event.target.closest("[data-proposal]") : null;
       focused.current = item === null ? null : Number(item.getAttribute("data-proposal"));
     };
-    // Focus the visitor takes out of the cards is no longer a proposal's to follow.
+    // Focus the visitor takes out of the cards is no longer a proposal's to follow, but a removed element fires the same event.
     const forget = (event: FocusEvent) => {
-      if (!(event.relatedTarget instanceof Node) || !list.contains(event.relatedTarget)) focused.current = null;
+      const from = event.target;
+      const movedTo = !(event.relatedTarget instanceof Node) ? "nowhere" : list.contains(event.relatedTarget) ? "cards" : "outside";
+      // Whether the element is gone shows once its removal has finished, which the event may precede.
+      queueMicrotask(() => {
+        if (focusLeftCards(movedTo, !(from instanceof Node) || !from.isConnected)) focused.current = null;
+      });
     };
     list.addEventListener("focusin", noteFocus);
     list.addEventListener("focusout", forget);
@@ -127,7 +135,7 @@ export function StakingGovernance() {
       {/* Said only from a read that succeeded: a failed one is not an empty list. */}
       {readable && settled && chain.read.status === "ready" && delegated.length === 0 && <p className={NOTE}>This account delegates to no member, so no member&apos;s vote is shown for it.</p>}
       {!settled ? (
-        <p className={NOTE}>{nodeSettled ? "Reading the votes through your wallet…" : "Reading the node's proposals…"}</p>
+        <p className={NOTE}>{gate === "wallet" ? "Reading the votes through your wallet…" : "Reading the node's proposals…"}</p>
       ) : (
         <div ref={grid} className="grid items-start gap-4 xl:grid-cols-2">
           <Card id="open-proposals-title" title="Open proposals" aside={list.value === null ? undefined : <span className="text-label text-fg-3">At final block {list.value.block.number}</span>}>
@@ -158,7 +166,7 @@ export function StakingGovernance() {
             )}
             {proposals?.truncated === true && <p className={NOTE}>The node read the newest proposals only; older ones may still be open.</p>}
             {/* A vote's request or refusal keeps a place once its proposal has left the list. */}
-            {votes.votingOn !== null && !open.some((proposal) => proposal.id === votes.votingOn) && (
+            {awayLabelShown(votes.votingOn, open.map((proposal) => proposal.id), speaks) && (
               <div>
                 <p className="text-label tracking-caps text-fg-3 uppercase">Your vote on proposal {votes.votingOn}</p>
                 <Notice surface="governance" />

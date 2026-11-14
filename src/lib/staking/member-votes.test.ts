@@ -37,10 +37,15 @@ describe("plan", () => {
     expect(plan(after([{ kind: "voted", id: 1, member: A, open: false, voted: false }], facts), [{ id: 1, setId: 1, open: false }], [A])).toEqual([]);
   });
 
-  it("asks nothing again of a proposal the chain does not hold", () => {
-    const facts = after([{ kind: "proposal", id: 9, proposal: null }]);
-    expect(plan(facts, [{ id: 9, setId: null, open: false }], [A])).toEqual([]);
-    expect(standing(facts, { id: 9, setId: null }, A)).toBe("unknown");
+  it("asks again for a proposal the node names but the chain read does not hold yet, and keeps only what the chain returned (monkey-trading/console#345)", () => {
+    const target = [{ id: 9, setId: null, open: false }];
+    const behind = after([{ kind: "proposal", id: 9, proposal: null }]);
+    expect(behind.proposals.has(9)).toBe(false);
+    expect(plan(behind, target, [A])).toEqual([{ kind: "proposal", id: 9 }]);
+    expect(standing(behind, { id: 9, setId: null }, A)).toBe("unknown");
+    const caughtUp = after([{ kind: "proposal", id: 9, proposal: PASSED }], behind);
+    expect(caughtUp.proposals.get(9)).toBe(PASSED);
+    expect(plan(caughtUp, target, [A])).toEqual([{ kind: "set", setId: PASSED.setId }]);
   });
 
   it("makes at most MAX_CALLS calls in one read, and reaches every vote in turn across reads", () => {

@@ -8,6 +8,7 @@
 
 import type { AdminCommandWire, GovernanceWire, LimitWire, OpenProposalsWire } from "../engine/governance-types";
 import type { Tier } from "../engine/types";
+import type { Read } from "../monkey/figures";
 import { ADDRESS } from "./candidate-choice";
 
 /** A proposal's yes weight and its set's total weight, in MONKEY base units. */
@@ -162,4 +163,37 @@ export function focusAfterLeaving(left: readonly number[], focused: number | nul
   if (view.waiting.some((change) => change.id === focused)) return `proposal-waiting-${focused}`;
   if (view.inForce.some((restriction) => restriction.id === focused)) return `proposal-restriction-${focused}`;
   return "open-proposals-title";
+}
+
+/**
+ * Whether a `focusout` from the cards ends the proposal the tab remembers focus in: focus moved to a
+ * node outside them, or to none while the element stays in the page. An element's removal fires a
+ * `focusout` with no node to move to, and the removal is what `focusAfterLeaving` follows.
+ */
+export function focusLeftCards(movedTo: "cards" | "outside" | "nowhere", removed: boolean): boolean {
+  return movedTo === "outside" || (movedTo === "nowhere" && !removed);
+}
+
+/**
+ * Whether the open card names the proposal the `governance` notice speaks for: the vote was pressed
+ * on one that has left the list, and the surface still has a notice or the wallet's prompt to show
+ * under the name. A vote that landed leaves neither, and a name with nothing under it says nothing.
+ */
+export function awayLabelShown(votingOn: number | null, openIds: readonly number[], speaks: boolean): boolean {
+  return votingOn !== null && speaks && !openIds.includes(votingOn);
+}
+
+/** What the tab shows before its cards: the node's reads, the wallet's, or the cards. */
+export type GovernanceGate = "node" | "wallet" | "shown";
+
+/**
+ * The cards show once the node's two reads have landed and the wallet's answers (the account's
+ * delegations and votes) have, or have been waited for (`waited`); the wallet's reads never hold
+ * the node's up, since a request waiting elsewhere in the wallet can hold them for good. Once
+ * `shown`, they stay.
+ */
+export function governanceGate({ list, held, wallet, waited, shown }: { list: Read<unknown>["status"]; held: Read<unknown>["status"]; wallet: boolean; waited: boolean; shown: boolean }): GovernanceGate {
+  if (shown) return "shown";
+  if (list === "loading" || held === "loading") return "node";
+  return wallet || waited ? "shown" : "wallet";
 }

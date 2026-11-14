@@ -107,6 +107,10 @@ export function StakingSection({ children }: { children: ReactNode }) {
   const historyWanted = trusted && wanted.includes("history");
   const governanceWanted = wanted.includes("governance");
   const votesWanted = wanted.includes("votes");
+  // Declared before the panel's start: it reads nothing while the panel is closed, and the start reads the wallet itself, so a mount or a tab switch reads it once and a change of wallet reads it again.
+  useEffect(() => {
+    void panel.refreshWallet();
+  }, [panel, wallet]);
   useEffect(() => (panelWanted ? panel.start(hidden) : undefined), [panel, panelWanted]);
   useEffect(() => (operatorsWanted ? operators.start(hidden) : undefined), [operators, operatorsWanted]);
   useEffect(() => (delegationsWanted ? delegations.start(hidden) : undefined), [delegations, delegationsWanted]);
@@ -120,9 +124,6 @@ export function StakingSection({ children }: { children: ReactNode }) {
     history.attach();
     return () => history.detach();
   }, [history]);
-  useEffect(() => {
-    if (trusted) void panel.refreshWallet();
-  }, [panel, trusted, wallet]);
   useEffect(() => history.walletChanged(), [history, wallet]);
   // Writes belong to their render's account; a late completion checks the connected wallet again.
   const account = wallet?.address ?? null;
