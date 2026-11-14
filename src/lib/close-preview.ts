@@ -8,29 +8,37 @@ import type { Side } from "./engine/types";
 import { absFixed, minFixed, SCALE, ZERO, type Fixed } from "./fixed";
 import { mulRounded } from "./fixed-rounding";
 import { profitFee } from "./holding-fee";
+import type { Conversion } from "./pricing";
 
 /** How near the rate's next fall may be for a whole close to stay exact: an order placed now reaches the node well within it. */
 export const RATE_HOLD_MS = 1_000;
 
 /**
  * How much worse than the quote ladder's step that covers it an order of `qty` units can price, in raw
- * price units: the engine rounds a fill's cost up to a raw unit once for each band charge on the slices
- * it opens and closes, once for the stress multiplier and once for the conversion from USD, then rounds
- * its division by the size up, while the step's larger size can round less (`Quoter::quote`, `ladder.rs`).
- * Each raw unit of cost is `SCALE / qty` raw units of price.
+ * price units. The engine rounds each band charge on the slices it opens and closes up to a raw unit of
+ * USD, rounds the stress multiplier's product up, converts the size charge from USD to the quote currency
+ * rounded up, and rounds its division by the size up, while the step's larger size can round less
+ * (`Quoter::quote`, `ladder.rs`). So the USD roundings are counted through the multiplier and the
+ * market's conversion, never as raw units of the quote currency, plus the conversion's own unit; each
+ * raw unit of cost is `SCALE / qty` raw units of price.
  */
-export function ladderSlack(qty: Fixed, bands: number): Fixed {
-  const roundings = BigInt(2 * bands + 2);
-  return (roundings * SCALE + qty - 1n) / qty + 1n;
+export function ladderSlack(qty: Fixed, bands: number, sizeMultiplierBps: number, conversion: Conversion): Fixed {
+  const usdUnits = (BigInt(2 * bands) * BigInt(sizeMultiplierBps) + 9_999n) / 10_000n + 1n;
+  const costUnits = conversion.fromUsd(usdUnits, "up") + 1n;
+  return (costUnits * SCALE + qty - 1n) / qty + 1n;
 }
 
-export interface ClosePreview {
+/** How much of a position an order closes, which its price does not change. */
+export interface CloseShape {
   /** The units the order closes: all of it, or the whole position for one that reverses it. */
   closed: Fixed;
   /** Whether it closes the whole position and no more. */
   whole: boolean;
   /** Whether it closes the whole position and opens the other side. */
   reverses: boolean;
+}
+
+export interface ClosePreview extends CloseShape {
   /** The price it closes at: the fill's while nothing moves when `exact`, else one the fill meets or beats. */
   price: Fixed;
   /** The realised result in USD, rounded down as the engine books it. */
@@ -67,17 +75,24 @@ export interface CloseOrder {
   toUsdDown: (amount: Fixed) => Fixed;
 }
 
+/** What an order of `qty` on `side` closes of the position `held`, or null for one that closes nothing: no position, or one on the order's own side. */
+export function closeShape(held: Fixed, side: Side, qty: Fixed): CloseShape | null {
+  if (held === ZERO || (side === "buy") === (held > ZERO)) return null;
+  return { closed: minFixed(qty, absFixed(held)), whole: qty === absFixed(held), reverses: qty > absFixed(held) };
+}
+
 /** The preview of an order's close, or null for an order that closes nothing: no position, or one on the order's own side. */
 export function previewClose(order: CloseOrder): ClosePreview | null {
-  const { held, side } = order;
-  if (held === ZERO || (side === "buy") === (held > ZERO)) return null;
-  const closed = minFixed(order.qty, absFixed(held));
+  const { held } = order;
+  const shape = closeShape(held, order.side, order.qty);
+  if (shape === null) return null;
+  const { closed } = shape;
   // `(price - entry) * sign(held)` over the units closed, rounded down, then to USD rounded down.
   const move = held > ZERO ? order.price - order.entry : order.entry - order.price;
   const realised = order.toUsdDown(mulRounded(move, closed, "down"));
   const fee = profitFee(realised, order.feeBps);
   const rateHolds = order.fallsAt === null || order.fallsAt - order.now >= RATE_HOLD_MS;
-  return { closed, whole: order.qty === absFixed(held), reverses: order.qty > absFixed(held), price: order.price, realised, feeBps: order.feeBps, fee, net: realised - fee, exact: order.exactPrice && rateHolds };
+  return { ...shape, price: order.price, realised, feeBps: order.feeBps, fee, net: realised - fee, exact: order.exactPrice && rateHolds };
 }
 
 /** What the deal ticket knows of an order that may close a position. */

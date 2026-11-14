@@ -8,8 +8,10 @@ import { LAUNCH_CURVE } from "./holding-fee";
 import type { HouseParams } from "./house";
 import type { AccountModel, MarketModel } from "./models";
 import { initialState, type ConsoleState } from "./store/state";
-import { btcAt, NAV, q } from "./ticket-fixtures";
-import { currentParams, houseTermsNote, positionFeeNow, ticketFigures } from "./ticket-figures";
+import { btcAt, heldIn, NAV, q, quotedIn } from "./ticket-fixtures";
+import { currentParams, houseTermsNote, positionClose, positionFeeNow, ticketFigures, type TicketOrder } from "./ticket-figures";
+import { ladderSlack } from "./close-preview";
+import { conversionAt, USD } from "./pricing";
 
 const OPENED = 1_000_000;
 const PARAMS: HouseParams = { profitFeeBps: 1_000, closeoutLevelBps: 5_000, totalCapBps: 20_000, totalCapFloor: 0n, stressLevels: [{ size_spread_multiplier_bps: 10_000, min_spread_bps: 0 }], profitFeeCurve: [...LAUNCH_CURVE], seq: 1 };
@@ -71,6 +73,55 @@ describe("ticketFigures", () => {
     const market = await btcAt(101_000);
     expect(ticketFigures(state(market, true), market, { ...order("1"), resting: true, triggerPrice: q("100000") }).close).toBeNull();
     expect(ticketFigures(state(market, true), market, { ...order("1"), side: "buy" }).close).toBeNull();
+  });
+});
+
+describe("a partial close's bound in a market quoted in yen", () => {
+  it("moves the covering step by the rounding slack counted through the multiplier and the conversion from USD", async () => {
+    const market = await quotedIn("jpy", 30_000, "150");
+    const held = { ...heldIn(market, "2"), positions: [{ market: 9, qty: q("2"), entry: q("30000"), closeout: null, closeFee: null }] };
+    const quote: MarketQuote = { ...QUOTE, market: 9, mark: "30000", bid: [{ qty: "1", price: "29990" }], close: { side: "sell", qty: "2", price: "29989" } };
+    const params = { ...PARAMS, stressLevels: [{ size_spread_multiplier_bps: 25_000, min_spread_bps: 0 }] };
+    const figures = ticketFigures(state(market, true, { account: held, houseParams: params, quotes: { 9: quote } }), market, order("1"));
+    const slack = ladderSlack(q("1"), market.view.spread_tiers.length, 25_000, conversionAt(market.view, q("30000")) ?? USD);
+    // 150 yen per USD unit, at 2.5x: far more than the raw units of yen the old count allowed.
+    expect(slack).toBeGreaterThan(ladderSlack(q("1"), market.view.spread_tiers.length, 10_000, USD) * 100n);
+    expect(figures.close).toMatchObject({ exact: false, price: q("29990") - slack });
+  });
+});
+
+describe("the close summary's state", () => {
+  it("is present for an order that closes some of the position, and carries the reason while its figures are withheld", async () => {
+    const market = await btcAt(101_000);
+    const shown = ticketFigures(state(market, true), market, order("1"));
+    expect([shown.closing?.whole, shown.close === null, shown.closeWithheld]).toEqual([false, false, null]);
+    const unread = ticketFigures(state(market, true, { pricingCurrent: false, houseStateStatus: "failed" }), market, order("1"));
+    expect([unread.closing?.closed, unread.close, unread.closeWithheld]).toEqual([q("1"), null, "The node's parameters changed and could not be read again; the console reads them again by itself."]);
+    // With no quote yet the figures are withheld too, and still say so.
+    const unquoted = ticketFigures(state(market, true, { quotes: {} }), market, order("1"));
+    expect([unquoted.closing === null, unquoted.close, typeof unquoted.closeWithheld]).toEqual([false, null, "string"]);
+  });
+
+  it("is absent for a resting order, an order on the position's own side, and no size", async () => {
+    const market = await btcAt(101_000);
+    const none = (extra: Partial<TicketOrder>) => ticketFigures(state(market, true), market, { ...order("1"), ...extra });
+    for (const figures of [none({ resting: true, triggerPrice: q("100000") }), none({ side: "buy" }), none({ qty: 0n })]) expect([figures.closing, figures.closeWithheld]).toEqual([null, null]);
+  });
+});
+
+describe("positionClose", () => {
+  const position = () => { const p = HOLDING.positions[0]; if (p === undefined) throw new Error("no position"); return p; };
+
+  it("states nothing for a position in a closed market, whatever the mock's price, as its Close button is off", async () => {
+    const market = { ...(await btcAt(101_000)), open: false };
+    expect(positionClose(state(market, false), market, position(), q("100979.8"))).toEqual({ close: null, why: null });
+    const open = await btcAt(101_000);
+    expect(positionClose(state(open, false), open, position(), q("100979.8")).close).not.toBeNull();
+  });
+
+  it("says why while the house state held is not current", async () => {
+    const market = await btcAt(101_000);
+    expect(positionClose(state(market, true, { pricingCurrent: false, houseStateStatus: "read" }), market, position(), q("100979.8"))).toEqual({ close: null, why: "Reading the node's parameters again after a change." });
   });
 });
 

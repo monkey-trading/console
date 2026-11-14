@@ -70,7 +70,7 @@ export function DealTicket() {
   const live = state.signatures === "checked";
   // The stress levels' terms and the listing notices show only while the house state is current.
   const terms = currentParams(state);
-  const { preview, prices, close } = ticketFigures(state, market, { side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice });
+  const { preview, prices, close, closing, closeWithheld } = ticketFigures(state, market, { side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice });
   // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
   // A size the field refuses says why, so the generic prompt would only repeat it.
   const listed = preview.problems.filter((p) => (!live || p !== MARGIN_SHORT) && (parsedSize.kind !== "refused" || p !== NO_SIZE));
@@ -144,7 +144,7 @@ export function DealTicket() {
             {sizeProblems.map((p) => <p key={p} className="mt-1">{p}</p>)}
           </div>
         </div>
-        {close !== null && <CloseSummary close={close} side={side} places={market.places} converts={market.view.quote_currency !== undefined} />}
+        {closing !== null && <CloseSummary shape={closing} close={close} why={closeWithheld} side={side} places={market.places} converts={market.view.quote_currency !== undefined} />}
         <details className="mt-4 rounded border border-line-2">
           <summary className="px-3 py-3.5 text-caption lg:py-2 text-fg-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-glow">Advanced</summary>
           <fieldset className="px-3 pb-3">
