@@ -126,6 +126,16 @@ describe("the stream beside the read", () => {
     await expect(client.houseState()).resolves.toMatchObject({ params: { profitFeeBps: 1200, seq: 105 } });
   });
 
+  it("folds a stream set_params's stress levels and fee curve, which the trading pages read", async () => {
+    const { client, reply, stream } = house();
+    reply(200, { seq: 100, params: WIRE_PARAMS, checkpoint: null });
+    const send = await stream();
+    const raised = [{ hold_ms: 10_000, fee_bps: 10_000 }, { hold_ms: 1_200_000, fee_bps: 1_500 }];
+    const levels = [STRESS[0], { size_spread_multiplier_bps: 30_000, min_spread_bps: 4 }];
+    send({ ...setParams(106, 1500), cmd: { ...setParams(106, 1500).cmd, stress_levels: levels, profit_fee_curve: raised } });
+    await expect(client.houseState()).resolves.toMatchObject({ params: { profitFeeBps: 1500, stressLevels: levels, profitFeeCurve: raised, seq: 106 } });
+  });
+
   it("compares a null params seq at the read's log head", async () => {
     const { client, reply, stream } = house();
     reply(200, { seq: 100, params: { ...WIRE_PARAMS, seq: null }, checkpoint: null });

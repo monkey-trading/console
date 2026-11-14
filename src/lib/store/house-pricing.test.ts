@@ -52,4 +52,37 @@ describe("the house state the trading surfaces read, with the House page closed"
     await settle();
     expect(client.houseStateReads).toBe(3);
   });
+
+  it("reads again on a later refresh after a failed read, until one lands", async () => {
+    const { client, store } = setupClosed();
+    client.params = PARAMS;
+    client.houseStateError = new Error("the house state is unavailable");
+    store.start(0);
+    await settle();
+    expect(store.getSnapshot()).toMatchObject({ houseStateStatus: "failed", houseParams: null, pricingCurrent: false });
+    client.houseStateError = null;
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot()).toMatchObject({ houseStateStatus: "read", houseParams: PARAMS, pricingCurrent: true });
+    expect(client.houseStateReads).toBe(2);
+  });
+
+  it("is current only while no change the stream carried is unread, so a position's fee falls back to the account read meanwhile", async () => {
+    const { client, store } = setupClosed();
+    client.params = PARAMS;
+    store.start(0);
+    await settle();
+    expect(store.getSnapshot().pricingCurrent).toBe(true);
+    client.houseStateError = new Error("the house state is unavailable");
+    client.onMessage?.(message(12, { type: "admin_applied" }));
+    expect(store.getSnapshot().pricingCurrent).toBe(false);
+    // The re-read fails: the parameters held stay, and they are not current.
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot()).toMatchObject({ houseParams: PARAMS, pricingCurrent: false });
+    client.houseStateError = null;
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot().pricingCurrent).toBe(true);
+  });
 });

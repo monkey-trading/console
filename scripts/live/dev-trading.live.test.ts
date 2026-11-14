@@ -15,13 +15,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ClosePreview } from "../../src/lib/close-preview";
 import type { Fill, MarketId, Side } from "../../src/lib/engine/types";
 import { ACCOUNT } from "../../src/lib/engine/wallet-kit";
-import { positionFee } from "../../src/lib/fee-words";
+
 import { absFixed, fixedFromWire, fixedToWire, parseFixed, type Fixed } from "../../src/lib/fixed";
 import { LAUNCH_CURVE } from "../../src/lib/holding-fee";
 import { describeEvent } from "../../src/lib/messages";
 import { closingPrice } from "../../src/lib/quotes";
 import { describeNotice, spreadRate } from "../../src/lib/spread-bands";
 import { attestEligibility, authorizeBrowser, cancelOrder, placeOrder } from "../../src/lib/store/actions";
+import { positionFeeNow } from "../../src/lib/ticket-figures";
 import { admin, curl, marketOf, restartNode, sizeFor, startRig, ticketFor, until, WORK, type Rig } from "./trading-kit";
 
 const [BTC, ETH, EUR] = [1, 2, 10];
@@ -46,6 +47,8 @@ async function fillsOf(place: () => Promise<unknown>): Promise<Fill[]> {
 
 /** Places a market order of `qty` at the deal ticket's price for it, and returns its one fill and the ticket's figures. */
 async function trade(id: MarketId, side: Side, qty: Fixed, reduceOnly = false): Promise<{ fill: Fill; close: ClosePreview | null; mark: string | null }> {
+  // The console asks quotes for the selected market and those held, so a trader selects a market to trade it.
+  rig.store.select(id);
   await wait(() => snapshot().quotes[id] !== undefined, 30_000, `a quote for market ${id}`);
   const mark = snapshot().quotes[id]?.mark ?? null;
   const { prices, close, slippage } = ticketFor(rig.store, id, side, qty);
@@ -130,6 +133,7 @@ describe("spreads in tenths of a bp and the holding-time fee", () => {
     expect(snapshot().houseParams?.stressLevels.map((level) => [level.size_spread_multiplier_bps, level.min_spread_bps])).toEqual([[10_000, 0], [20_000, 2], [40_000, 10]]);
     const eur = marketOf(rig.store, EUR);
     expect(eur.view.spread_tiers.map(spreadRate)).toEqual(["0.4 bps", "0.8 bps", "1.6 bps"]);
+    rig.store.select(EUR);
     await wait(() => snapshot().quotes[EUR] !== undefined, 30_000, "a EUR-USD quote");
     // 0.4 bp each side of the mark, each rounded up to a raw unit: 0.8 bp across.
     expect(ticketFor(rig.store, EUR, "buy", sizeFor(eur, 10_000)).prices.spreadTenths).toBe(8);
@@ -182,7 +186,7 @@ describe("spreads in tenths of a bp and the holding-time fee", () => {
   it("after the curve's fifteen minutes, closes BTC-USD and EUR-USD whole at their previews: the price, the fee and the cash move", async () => {
     for (const id of [BTC, EUR]) {
       // The base from the curve's end, when the rate no longer falls: the account read and the console's clock agree on it.
-      await wait(() => { const held = position(id); const fee = held === null ? null : positionFee(held.closeFee, snapshot().houseParams, snapshot().now); return fee !== null && fee.holdMs >= CURVE_END_MS && fee.fallsAt === null; }, CURVE_END_MS + 60_000, `market ${id} past the fee's curve`);
+      await wait(() => { const held = position(id); const fee = held === null ? null : positionFeeNow(snapshot(), held); return fee !== null && fee.holdMs >= CURVE_END_MS && fee.fallsAt === null; }, CURVE_END_MS + 60_000, `market ${id} past the fee's curve`);
       await freshPrice(id);
       const qty = absFixed(position(id)?.qty ?? 0n);
       expect(qty).toBe(left[id]);

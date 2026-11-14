@@ -17,6 +17,8 @@ export interface ClosePreview {
   closed: Fixed;
   /** Whether it closes the whole position and no more. */
   whole: boolean;
+  /** Whether it closes the whole position and opens the other side. */
+  reverses: boolean;
   /** The price it closes at: the fill's while nothing moves when `exact`, else one the fill meets or beats. */
   price: Fixed;
   /** The realised result in USD, rounded down as the engine books it. */
@@ -63,7 +65,7 @@ export function previewClose(order: CloseOrder): ClosePreview | null {
   const realised = order.toUsdDown(mulRounded(move, closed, "down"));
   const fee = profitFee(realised, order.feeBps);
   const rateHolds = order.fallsAt === null || order.fallsAt - order.now >= RATE_HOLD_MS;
-  return { closed, whole: order.qty === absFixed(held), price: order.price, realised, feeBps: order.feeBps, fee, net: realised - fee, exact: order.exactPrice && rateHolds };
+  return { closed, whole: order.qty === absFixed(held), reverses: order.qty > absFixed(held), price: order.price, realised, feeBps: order.feeBps, fee, net: realised - fee, exact: order.exactPrice && rateHolds };
 }
 
 /** What the deal ticket knows of an order that may close a position. */

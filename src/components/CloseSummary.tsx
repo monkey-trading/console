@@ -10,7 +10,7 @@ const ROW = "flex justify-between gap-3";
 
 /**
  * The close figures under the deal ticket's size. Exact ones are the fill's while nothing moves; a bound
- * says which way the fill can differ: its price no worse, and what it keeps no less.
+ * says which way the fill can differ while the price holds: its price no worse, and what it keeps no less.
  */
 export function CloseSummary({ close, side, places }: { close: ClosePreview; side: Side; places: number }) {
   const bound = !close.exact;
@@ -18,17 +18,18 @@ export function CloseSummary({ close, side, places }: { close: ClosePreview; sid
   const priceWord = bound ? (side === "sell" ? "at least " : "at most ") : "";
   return (
     <div className="mt-4 rounded border border-line-2 px-3 py-3 text-caption">
-      <p className="text-label tracking-caps text-fg-3 uppercase">{close.whole ? "Closes the whole position" : `Closes ${formatFixedPlaces(close.closed, 6)} of the position`}</p>
+      <p className="text-label tracking-caps text-fg-3 uppercase">{close.whole ? "Closes the whole position" : close.reverses ? "Closes the whole position and opens the other side" : `Closes ${formatFixedPlaces(close.closed, 6)} of the position`}</p>
       <dl className="mt-2 space-y-1">
         <div className={ROW}><dt className="text-fg-3">Price</dt><dd>{priceWord}{formatMark(close.price, places)}</dd></div>
         <div className={ROW}><dt className="text-fg-3">Realised</dt><dd>{bound ? "at least " : ""}{formatUsd(close.realised)}</dd></div>
-        <div className={ROW}><dt className="text-fg-3">Profit fee</dt><dd>{close.realised > 0n ? `${formatRate(close.feeBps)} of the gain, ${formatUsd(close.fee)}` : "none on a loss"}</dd></div>
+        {/* A bound's fill can do better, and a better price can turn a loss into a gain that pays the fee. */}
+        <div className={ROW}><dt className="text-fg-3">Profit fee</dt><dd>{bound ? `${formatRate(close.feeBps)} of any gain, ${formatUsd(close.fee)} at this price` : close.realised > 0n ? `${formatRate(close.feeBps)} of the gain, ${formatUsd(close.fee)}` : "none on a loss"}</dd></div>
         <div className={ROW}><dt className="text-fg-2">You keep</dt><dd className={close.net < 0n ? "text-ember" : "text-glow"}>{bound ? "at least " : ""}{formatUsd(close.net)}</dd></div>
       </dl>
       <p className="mt-2 text-label leading-relaxed text-fg-3">
         {bound
-          ? "A bound: the fill's price is no worse than this and its fee rate, which falls as the hold lengthens, no higher, so it keeps at least this."
-          : "Exact while the price and the fee rate hold."}
+          ? "A bound while the price holds: the fill's price is no worse than this and its fee rate, which falls as the hold lengthens, no higher, so it keeps at least this. A move against you fills as far as the worst price your slippage bound allows."
+          : "Exact while the price and the fee rate hold. A move against you fills as far as the worst price your slippage bound allows."}
       </p>
     </div>
   );

@@ -25,10 +25,11 @@ export function readHouseState(store: ConsoleStore): Promise<boolean> {
     (read) => {
       if (read === null) store.quiet.rest(HOUSE_STATE, ROUTE_ABSENT_MS, mark);
       store.pricingRead = Math.max(store.pricingRead, asked);
+      const pricingCurrent = store.pricingRead >= store.pricingAsked;
       store.patch(
         read === null
-          ? { houseParams: null, checkpoint: null, listingNotices: {}, houseStateStatus: "unavailable" }
-          : { houseParams: read.params, checkpoint: read.checkpoint, listingNotices: read.listingNotices, houseStateStatus: "read" },
+          ? { houseParams: null, checkpoint: null, listingNotices: {}, houseStateStatus: "unavailable", pricingCurrent }
+          : { houseParams: read.params, checkpoint: read.checkpoint, listingNotices: read.listingNotices, houseStateStatus: "read", pricingCurrent },
       );
       return true;
     },
@@ -39,6 +40,16 @@ export function readHouseState(store: ConsoleStore): Promise<boolean> {
       return false;
     },
   );
+}
+
+/**
+ * Marks the house state the store holds as behind the node's: the stream carried a change to the
+ * parameters, a listing or a notice, or resumed after a gap that may have held one. The next refresh
+ * reads it again; until a read after this lands, a position's fee is the account read's own.
+ */
+export function stalePricing(store: ConsoleStore): void {
+  store.pricingAsked += 1;
+  if (store.getSnapshot().pricingCurrent) store.patch({ pricingCurrent: false });
 }
 
 /** Reads the public withdrawal queue's size into the store; resolves true when the walk succeeded. */

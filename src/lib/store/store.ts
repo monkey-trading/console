@@ -16,7 +16,7 @@ import { ExitWatch } from "./exit";
 import { eventAccount, FEED_LIMIT, feedFrom, isMine } from "./feed";
 import { LedgerReads } from "./ledger";
 import { initialState, KEPT_ON_WALLET_CHANGE, seedAllBars, type ConsoleState, type Notice, type NoticeSurface } from "./state";
-import { readHousePanelSoon } from "./house";
+import { readHousePanelSoon, stalePricing } from "./house";
 import { HouseStats } from "./house-stats";
 import { PacedReads } from "./paced-reads";
 import { QuietReads } from "./quiet-reads";
@@ -190,7 +190,7 @@ export class ConsoleStore {
       this.patch({ stream: event.status, ...(event.time !== undefined && event.time > this.snapshot.now ? { now: event.time } : {}) });
       if (read) {
         this.ledger.invalidate(); // the stream resumes at the live end: events from the gap are read again
-        this.quiet.reset(); this.pricingAsked += 1; // a node that was away may have restarted with the route, credited the account, or changed its parameters
+        this.quiet.reset(); stalePricing(this); // a node that was away may have restarted with the route, credited the account, or changed its parameters
         void this.refresh(true);
       }
     } else if (event.type === "problem") this.notify("feed", event.reason);
@@ -238,7 +238,7 @@ export class ConsoleStore {
     if (closedOut) this.notify("account", "Your account was closed out: its equity fell below half its margin, so positions were closed at market. See History.");
     else if (cancelled.length > 0) this.notify("account", `${cancelled.length === 1 ? `Order ${cancelled[0]}` : `Orders ${cancelled.join(", ")}`} could not be filled and ${cancelled.length === 1 ? "was" : "were"} cancelled.`);
     this.pacing?.observe(message);
-    if (message.events.some((event) => event.type === "admin_applied")) this.pricingAsked += 1; // parameters, listings or notices may have changed
+    if (message.events.some((event) => event.type === "admin_applied")) stalePricing(this); // parameters, listings or notices may have changed
     this.ledger.ingest(message);
     const lines = feedFrom([message], this.snapshot.markets, viewer, () => this.id());
     // Price updates change nothing on screen by themselves; only the node's tick moves the clock and the log.

@@ -16,7 +16,7 @@ const LONG: CloseOrder = { held: fixedFromInt(2), entry: f("100000"), side: "sel
 
 describe("previewClose", () => {
   it("closes a whole long at its quote: the gain, a tenth of it as the fee, and the rest kept, exactly", () => {
-    expect(previewClose(LONG)).toEqual({ closed: fixedFromInt(2), whole: true, price: f("100100"), realised: f("200"), feeBps: 1_000, fee: f("20"), net: f("180"), exact: true });
+    expect(previewClose(LONG)).toEqual({ closed: fixedFromInt(2), whole: true, reverses: false, price: f("100100"), realised: f("200"), feeBps: 1_000, fee: f("20"), net: f("180"), exact: true });
   });
 
   it("rounds a short's realised result down and its fee up, as the engine books them", () => {
@@ -30,9 +30,9 @@ describe("previewClose", () => {
 
   it("closes only the order's size of a larger position, and the whole position of a reversal", () => {
     const part = previewClose({ ...LONG, qty: fixedFromInt(1) });
-    expect([part?.closed, part?.whole, part?.realised]).toEqual([fixedFromInt(1), false, f("100")]);
+    expect([part?.closed, part?.whole, part?.reverses, part?.realised]).toEqual([fixedFromInt(1), false, false, f("100")]);
     const reversal = previewClose({ ...LONG, qty: fixedFromInt(5) });
-    expect([reversal?.closed, reversal?.whole, reversal?.realised]).toEqual([fixedFromInt(2), false, f("200")]);
+    expect([reversal?.closed, reversal?.whole, reversal?.reverses, reversal?.realised]).toEqual([fixedFromInt(2), false, true, f("200")]);
   });
 
   it("takes all of a gain at the full fee, so nothing is kept", () => {
@@ -60,7 +60,7 @@ describe("ticketClose", () => {
   const input = { position: { qty: fixedFromInt(2), entry: f("100000") }, side: "sell" as const, qty: fixedFromInt(1), price: f("100100"), exactPrice: false, feeBps: 10_000, fallsAt: NOW + 6_000, now: NOW, toUsdDown: (amount: Fixed) => amount };
 
   it("previews an order that closes part of a position as a bound", () => {
-    expect(ticketClose(input)).toEqual({ closed: fixedFromInt(1), whole: false, price: f("100100"), realised: f("100"), feeBps: 10_000, fee: f("100"), net: 0n, exact: false });
+    expect(ticketClose(input)).toEqual({ closed: fixedFromInt(1), whole: false, reverses: false, price: f("100100"), realised: f("100"), feeBps: 10_000, fee: f("100"), net: 0n, exact: false });
   });
 
   it("previews nothing without a position, a price, a rate, an FX price or a size", () => {

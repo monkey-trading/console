@@ -5,14 +5,11 @@
 import Link from "next/link";
 import { useId, useState } from "react";
 
-import { ticketClose } from "@/lib/close-preview";
 import { signBlock } from "@/lib/engine/attestation";
-import { positionFee } from "@/lib/fee-words";
 import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { ORDER_LABELS, ORDER_TYPES, type OrderType } from "@/lib/prefs";
 import { formatMark } from "@/lib/price-format";
-import { paramsMissing, stressTermsAt } from "@/lib/pricing";
-import { ticketPrices } from "@/lib/quotes";
+import { paramsMissing } from "@/lib/pricing";
 import { describeSchedule } from "@/lib/schedule";
 import { setupGate } from "@/lib/setup-steps";
 import { placeOrder } from "@/lib/store/actions";
@@ -20,7 +17,8 @@ import { AMOUNT_INPUT } from "./amount-input";
 import { SessionRefusalNote } from "./SessionRefusalNote";
 import { openSetup } from "@/lib/store/setup";
 import { formatTenthBps, formatTenthPercent } from "@/lib/spread-bands";
-import { belowMinimum, contractUnit, MARGIN_SHORT, MARKET_CLOSED, NO_SIZE, parseSize, previewTicket, REDUCE_ONLY, SLIPPAGE_CHOICES, slippageBound, sizeShown, usdConverter } from "@/lib/ticket";
+import { belowMinimum, contractUnit, MARGIN_SHORT, MARKET_CLOSED, NO_SIZE, parseSize, REDUCE_ONLY, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
+import { ticketFigures } from "@/lib/ticket-figures";
 import { tradingPaused } from "@/lib/trading-paused";
 
 import { CloseSummary } from "./CloseSummary";
@@ -72,17 +70,7 @@ export function DealTicket() {
   const qty = parsedSize.kind === "qty" ? parsedSize.qty : 0n;
   const live = state.signatures === "checked";
   const params = state.houseParams;
-  const position = state.account?.positions.find((p) => p.market === market.id) ?? null;
-  // The rate a close pays now runs on the node's clock; before V55 a close pays the base.
-  const fee = position === null ? null : positionFee(position.closeFee, params, state.now);
-  // The margin use after the order comes from the console's own quote model, which does not know a live node's toxicity spread, so it is shown only for the in-browser node.
-  const preview = previewTicket({ market, side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice, account: state.account, houseNav: state.house.nav, estimates: !live, stress: stressTermsAt(params?.stressLevels, market.stress), closeFeeBps: fee?.feeBps ?? params?.profitFeeBps });
-  const prices = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview, side, mark: market.mark });
-  // A market order that closes some of the position: exact at the node's whole-close quote, or the mock's own price, which its fill uses.
-  const close = kind !== "market" ? null : ticketClose({
-    position, side, qty: preview.qty, price: prices.price, exactPrice: live ? prices.exactClose : true, feeBps: fee?.feeBps ?? params?.profitFeeBps ?? null,
-    fallsAt: fee?.fallsAt ?? null, now: state.now, toUsdDown: market.mark === null ? null : usdConverter(market.view, market.mark, "down"),
-  });
+  const { preview, prices, close } = ticketFigures(state, market, { side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice });
   // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
   // A size the field refuses says why, so the generic prompt would only repeat it.
   const listed = preview.problems.filter((p) => (!live || p !== MARGIN_SHORT) && (parsedSize.kind !== "refused" || p !== NO_SIZE));

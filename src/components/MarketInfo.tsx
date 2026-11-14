@@ -81,7 +81,7 @@ export function MarketInfo({ market, preview, side, price, slippageBps, stress, 
         </div>
         <dl className="space-y-3 border-t border-line pt-4 text-label leading-relaxed text-fg-3">
           <div><dt className="text-fg-2">Reference</dt><dd>The multi-venue median of the node's price feeds.</dd></div>
-          <div><dt className="text-fg-2">Execution</dt><dd>Fills at the reference price moved by the spread: the size bands on the part of your position the order opens or closes, and any stress minimum.</dd></div>
+          <div><dt className="text-fg-2">Execution</dt><dd>Fills at the reference price moved by the spread: the size bands on the part of your position the order opens or closes, any stress minimum, and any toxicity add-on your account carries.</dd></div>
           <div><dt className="text-fg-2">Risk</dt><dd>Stress widens the spread. Your account is closed out when equity falls below {CLOSE_OUT_BPS / 100}% of its margin.</dd></div>
         </dl>
       </div>

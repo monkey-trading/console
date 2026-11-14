@@ -7,21 +7,20 @@
 import { execFileSync, spawn } from "node:child_process";
 import { openSync, readFileSync, writeFileSync } from "node:fs";
 
-import { ticketClose, type ClosePreview } from "../../src/lib/close-preview";
+import type { ClosePreview } from "../../src/lib/close-preview";
 import { LiveEngineClient } from "../../src/lib/engine/live";
 import { ProviderWallet } from "../../src/lib/engine/provider-wallet";
 import { realVerifier } from "../../src/lib/engine/test-vectors";
 import type { EngineEvent, MarketId, OrderRequest, Side } from "../../src/lib/engine/types";
 import { ACCOUNT, StubProvider } from "../../src/lib/engine/wallet-kit";
-import { positionFee } from "../../src/lib/fee-words";
 import { divFixed, fixedFromInt, fixedToWire, type Fixed } from "../../src/lib/fixed";
 import type { MarketModel } from "../../src/lib/models";
-import { stressTermsAt } from "../../src/lib/pricing";
-import { ticketPrices, type TicketPrices } from "../../src/lib/quotes";
+import type { TicketPrices } from "../../src/lib/quotes";
 import { loadAccount } from "../../src/lib/store/account";
 import { followAccountFeeds, syncQuotes } from "../../src/lib/store/funds";
 import { ConsoleStore } from "../../src/lib/store/store";
-import { parseSize, previewTicket, slippageBound, usdConverter } from "../../src/lib/ticket";
+import { parseSize, slippageBound } from "../../src/lib/ticket";
+import { ticketFigures } from "../../src/lib/ticket-figures";
 import { startProxy, type Proxy } from "./tamper-proxy";
 
 export const NODE = process.env.ENGINE_NODE_URL ?? "";
@@ -157,19 +156,10 @@ export function sizeFor(market: MarketModel, dollars: number): Fixed {
   return size.qty;
 }
 
-/** What the deal ticket shows for a market order of `qty` on `side`: its prices from the node's quote, and its close preview, computed as `DealTicket` computes them. */
+/** What the deal ticket shows for a market order of `qty` on `side`: its prices from the node's quote and its close preview, from the same `ticketFigures` `DealTicket` reads. */
 export function ticketFor(store: ConsoleStore, id: MarketId, side: Side, qty: Fixed): { prices: TicketPrices; close: ClosePreview | null; slippage: number } {
-  const state = store.getSnapshot();
   const market = marketOf(store, id);
-  const params = state.houseParams;
-  const position = state.account?.positions.find((p) => p.market === id) ?? null;
-  const fee = position === null ? null : positionFee(position.closeFee, params, state.now);
   const slippage = slippageBound(SLIPPAGE_BPS, market);
-  const preview = previewTicket({ market, side, qty, slippageBps: slippage, account: state.account, houseNav: state.house.nav, estimates: false, stress: stressTermsAt(params?.stressLevels, market.stress), closeFeeBps: fee?.feeBps ?? params?.profitFeeBps });
-  const prices = ticketPrices({ live: true, quote: state.quotes[id] ?? null, quoteError: state.quoteError, preview, side, mark: market.mark });
-  const close = ticketClose({
-    position, side, qty: preview.qty, price: prices.price, exactPrice: prices.exactClose, feeBps: fee?.feeBps ?? params?.profitFeeBps ?? null,
-    fallsAt: fee?.fallsAt ?? null, now: state.now, toUsdDown: market.mark === null ? null : usdConverter(market.view, market.mark, "down"),
-  });
+  const { prices, close } = ticketFigures(store.getSnapshot(), market, { side, qty, slippageBps: slippage, resting: false, triggerPrice: null });
   return { prices, close, slippage };
 }

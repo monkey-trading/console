@@ -55,10 +55,9 @@ export interface TicketInput {
   closeFeeBps?: number;
 }
 
-/** The price an order fills at, and the spread in it in tenths of a bp of the mark, truncated. */
+/** The price an order fills at. */
 export interface Quote {
   price: Fixed;
-  spreadTenths: number;
 }
 
 export interface TicketPreview {
@@ -241,7 +240,7 @@ export function previewTicket(input: TicketInput): TicketPreview {
   const [offer, bid] = [priced("buy"), priced("sell")];
   const mine = side === "buy" ? offer : bid;
   const priceOf = (p: typeof mine) => (p.kind === "priced" ? p.price : null);
-  const quote: Quote | null = mine.kind === "priced" ? { price: mine.price, spreadTenths: tenthBpsOfValue(mine.spread, mark) } : null;
+  const quote: Quote | null = mine.kind === "priced" ? { price: mine.price } : null;
   const delta = side === "buy" ? qty : -qty;
   const grows = growthOf(current, delta).grows;
   const before = tieredMargin(spec.margin_tiers, usdAtMark(current));
