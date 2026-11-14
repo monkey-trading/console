@@ -75,8 +75,11 @@ SECOND_ENGINE=1 ./scripts/dev-local-stack.sh
 The first engine runs under sealed keys with operator rotation on, as the operator in effect. A second engine
 is registered as a candidate with an approved release; the stack starts it once an election has made the
 vault name that release, and it then takes the first engine's keys and log. The registry's election epoch is a
-minute. Two wallets (Anvil accounts 1 and 3, whose public test keys the script prints) each hold 20,000 MONKEY
-and 100,000 mock USDC. In a second terminal, `scripts/dev-local-stack-ctl.sh` drives the rest:
+minute. A rotating node must post its log heads on chain, so the stack also deploys the `LogHeads` contract
+(from Anvil account 8) and funds a log-head relayer, Anvil account 10 (the stack starts Anvil with eleven
+accounts), apart from the checkpoint relayer; each engine's config names both in `[log_heads]`, with a
+ten-second posting interval. Two wallets (Anvil accounts 1 and 3, whose public test keys the script prints) each
+hold 20,000 MONKEY and 100,000 mock USDC. In a second terminal, `scripts/dev-local-stack-ctl.sh` drives the rest:
 
 1. On the Staking page, connect the first wallet, stake its MONKEY and delegate an amount of it to
    `127.0.0.1:8081`, the second engine, from that row's Delegate button. Do the same from the second wallet. The

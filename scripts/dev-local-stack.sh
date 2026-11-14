@@ -15,6 +15,8 @@
 # `scripts/dev-local-stack-ctl.sh` drives it (see the README): the first engine runs under sealed
 # keys with operator rotation on, a second engine is registered as a candidate and starts once an
 # election has put its release in the vault's hands, and two wallets hold MONKEY to stake.
+# A rotating node posts its log heads on chain, so the nodes' configs name a deployed LogHeads
+# contract and a log-head relayer (Anvil account 10).
 #
 # GOVERNANCE=1, with SECOND_ENGINE=1, sets up parameter votes as the engine's V56 has them: the operator
 # schedule and the vote contract, a third candidate, and the first engine's candidate, the second
@@ -250,7 +252,8 @@ step_log="$work/forge-build.log"
 (cd "$engine_dir/contracts" && nice -n 10 forge build) >"$step_log" 2>&1 || die "the contracts did not build"
 
 # Anvil's default test mnemonic: account 0 deploys and signs the synthetic access source's
-# screenings, 1 is the dev wallet, 2 funds the house, 8 deploys the registry lens, and 9 relays checkpoints.
+# screenings, 1 is the dev wallet, 2 funds the house, 8 deploys the registry lens (and, with SECOND_ENGINE=1,
+# LogHeads), 9 relays checkpoints and, with SECOND_ENGINE=1, account 10 relays log heads.
 mnemonic="test test test test test test test test test test test junk"
 key() { cast wallet private-key --mnemonic "$mnemonic" --mnemonic-index "$1"; }
 address() { cast wallet address --private-key "$1"; }
@@ -303,6 +306,17 @@ staking="$(cast compute-address "$registry" --nonce 1 | awk '{print $NF}')"
 # The registry lens the node reads GET /v1/operators through: account 8's first transaction.
 lens_key="$(key 8)"
 lens="$(cast compute-address "$(address "$lens_key")" --nonce 0 | awk '{print $NF}')"
+# With SECOND_ENGINE=1 the nodes rotate, and a rotating node posts its log heads on chain through
+# its own relayer, apart from the checkpoint relayer: LogHeads is account 8's second transaction, and
+# the relayer is Anvil's eleventh account (`--accounts 11`).
+logheads=""
+heads_relayer=""
+anvil_accounts=10
+if [[ "$second_engine" == 1 ]]; then
+  logheads="$(cast compute-address "$(address "$lens_key")" --nonce 1 | awk '{print $NF}')"
+  heads_relayer="$(address "$(key 10)")"
+  anvil_accounts=11
+fi
 # With GOVERNANCE=1, Anvil account 5 deploys the seed receiver the schedule is built over (no turn is
 # drawn here, so no seed is relayed), the schedule and the vote contract, at its first three nonces,
 # and account 6 is the third candidate.
@@ -324,7 +338,7 @@ step_log="$work/config.log"
 # dev.toml with EVM custody, as config/anvil.toml has it, against Anvil itself: the three
 # providers must have distinct URLs, and Anvil ignores the query that sets them apart.
 STACK_SCRIPTS="$root/scripts" python3 - "$engine_dir/config" "$work" "$rpc" "$api_port" "$metrics_port" "$console_port" "$access_port" \
-  "$relayer" "$deployer" "$registry" "$staking" "$lens" "$schedule" "$vote" "$restriction_ttl" >"$work/config-values" 2>"$step_log" <<'PY' || die "could not write the node config"
+  "$relayer" "$deployer" "$registry" "$staking" "$lens" "$schedule" "$vote" "$restriction_ttl" "$logheads" "$heads_relayer" >"$work/config-values" 2>"$step_log" <<'PY' || die "could not write the node config"
 import json
 import os
 import re
@@ -335,7 +349,7 @@ from pathlib import Path
 sys.path.insert(0, os.environ["STACK_SCRIPTS"])
 from stack_toml import dumps  # noqa: E402
 
-config, work, rpc, api, metrics, console, access, relayer, source, registry, staking, lens, schedule, vote, ttl = sys.argv[1:]
+config, work, rpc, api, metrics, console, access, relayer, source, registry, staking, lens, schedule, vote, ttl, logheads, heads_relayer = sys.argv[1:]
 cfg = tomllib.loads(Path(config, "dev.toml").read_text())
 anvil = tomllib.loads(Path(config, "anvil.toml").read_text())
 
@@ -372,6 +386,10 @@ cfg["feeds"]["provider"] = "venues"
 # With EVM custody, house capital comes from vault deposits to the house.
 cfg["genesis"]["house_capital"] = "0"
 cfg["checkpoints"] = {"rpc_url": rpc, "relayer": relayer, "retry_interval": "500ms", "rpc_timeout": "5s"}
+# A rotating node's handovers check the log against the head posted on chain: the poster sends the
+# newest released head every few seconds through its own relayer.
+if logheads:
+    cfg["log_heads"] = {"contract": logheads, "relayer": heads_relayer, "interval": "10s"}
 cfg["access"] = {"source": source, "endpoint": f"http://127.0.0.1:{access}", "timeout": "2s", "max_age": "30s",
                  "max_response_bytes": 4096, "max_in_flight": 8}
 
@@ -400,7 +418,7 @@ step_log="$work/anvil.log"
 # once while deposits keep confirming; with one slot per epoch, the safe and finalized blocks trail
 # the head by one and two.
 nice -n 10 anvil --host 127.0.0.1 --port "$anvil_port" --chain-id 31337 --block-time 1 --mixed-mining \
-  --slots-in-an-epoch 1 --silent >"$step_log" 2>&1 &
+  --slots-in-an-epoch 1 --accounts "$anvil_accounts" --silent >"$step_log" 2>&1 &
 anvil_pid=$!
 rpc_up() {
   alive "$anvil_pid" || die "Anvil exited"
@@ -464,6 +482,10 @@ registry="$deployed_registry"
 staking="$deployed_staking"
 deployed_lens="$(create --private-key "$lens_key" src/RegistryLens.sol:RegistryLens --constructor-args "$registry")"
 [[ "$(lower "$deployed_lens")" == "$(lower "$lens")" ]] || die "the registry lens deployed at $deployed_lens, not at $lens"
+if [[ -n "$logheads" ]]; then
+  deployed_logheads="$(create --private-key "$lens_key" src/LogHeads.sol:LogHeads --constructor-args "$vault")"
+  [[ "$(lower "$deployed_logheads")" == "$(lower "$logheads")" ]] || die "LogHeads deployed at $deployed_logheads, not at $logheads"
+fi
 
 step "Fund the house with $house_usdc USDC in the vault, and the dev wallet with $dev_usdc USDC"
 send() { nice -n 10 cast send "$@" --rpc-url "$rpc" >>"$step_log" 2>&1; }
@@ -785,6 +807,9 @@ Two engines        The first engine ($api) is the operator in effect, under seal
                    The second ($second_api) is registered with an approved release, and
                    the stack starts it once an election has made the vault name its release;
                    then open $second_api/v1/health once and accept its certificate.
+Log heads          Each engine posts its newest log head every 10 seconds to the LogHeads contract $logheads,
+                   through its own relayer $heads_relayer (Anvil account 10), apart from the checkpoint
+                   relayer $relayer.
 Second wallet      $wallet2_line
 MONKEY to stake    Both wallets hold $wallet_monkey MONKEY to stake and delegate on the Staking page; the stack also gave the
                    second wallet $dev_usdc mock USDC.
