@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * The Staking screen (monkey-trading/console#271) as a section: its heading, the Delegate, Rewards
- * and Epochs tab bar, and one provider for the reads its tabs share (monkey-trading/console#308).
+ * The Staking screen (monkey-trading/console#271) as a section: its heading, the Delegate, Rewards,
+ * Epochs and Governance tab bar, and one provider for the reads its tabs share (monkey-trading/console#308).
  * The reads are created once per visit to the section, so what they hold — a typed amount, a loaded
  * page of history, the operator list — survives a tab switch, and the Delegate tab's editing
  * context (its open editor, the Move form's destination, the addresses typed) is kept here too
@@ -20,7 +20,9 @@ import { isCurrentTab, readsFor, SECTIONS } from "@/lib/nav";
 import { DelegationReads } from "@/lib/staking/delegation-reads";
 import { editingFor, keptFor, NO_EDITING, type DelegateEditing, type EditingState, type EditingUpdate } from "@/lib/staking/delegation-form";
 import { EpochReads } from "@/lib/staking/epoch-reads";
+import { GovernanceReads } from "@/lib/staking/governance-reads";
 import { DistributionHistoryReads } from "@/lib/staking/history-reads";
+import { MemberVoteReads } from "@/lib/staking/member-vote-reads";
 import { NO_TABLE_VIEW, type TableViewState } from "@/lib/staking/operator-table";
 
 import { useSession } from "./ConsoleProvider";
@@ -36,6 +38,9 @@ export interface StakingReads {
   epochs: EpochReads;
   delegations: DelegationReads;
   history: DistributionHistoryReads;
+  /** The Governance tab's reads: the node's house state for the votes the log holds, and how the account and the members it delegates to voted. */
+  governance: GovernanceReads;
+  memberVotes: MemberVoteReads;
   /** Whether the operators card shows: from the node's first verdict, kept through a re-verification. */
   operatorsSettled: boolean;
   /**
@@ -73,6 +78,8 @@ export function StakingSection({ children }: { children: ReactNode }) {
   const [history] = useState(() => new DistributionHistoryReads(store));
   const [epochs] = useState(() => new EpochReads(store));
   const [delegations] = useState(() => new DelegationReads(store));
+  const [governance] = useState(() => new GovernanceReads(store));
+  const [memberVotes] = useState(() => new MemberVoteReads(store, operators, governance, delegations));
   const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
   const [shownOnce, setShownOnce] = useState(false);
   const operatorsSettled = useConsoleSelect((state) => operatorsShown(state.attestation, state.stream, shownOnce));
@@ -98,11 +105,15 @@ export function StakingSection({ children }: { children: ReactNode }) {
   const delegationsWanted = wanted.includes("delegations");
   const epochsWanted = trusted && wanted.includes("epochs");
   const historyWanted = trusted && wanted.includes("history");
+  const governanceWanted = wanted.includes("governance");
+  const votesWanted = wanted.includes("votes");
   useEffect(() => (panelWanted ? panel.start(hidden) : undefined), [panel, panelWanted]);
   useEffect(() => (operatorsWanted ? operators.start(hidden) : undefined), [operators, operatorsWanted]);
   useEffect(() => (delegationsWanted ? delegations.start(hidden) : undefined), [delegations, delegationsWanted]);
   useEffect(() => (epochsWanted ? epochs.start(hidden) : undefined), [epochs, epochsWanted]);
   useEffect(() => (historyWanted ? history.start(hidden) : undefined), [history, historyWanted]);
+  useEffect(() => (governanceWanted ? governance.start(hidden) : undefined), [governance, governanceWanted]);
+  useEffect(() => (votesWanted ? memberVotes.start(hidden) : undefined), [memberVotes, votesWanted]);
   // The history's registration on the session lives for the section's whole mount, not for its
   // reads' run, so the mock's account reset reaches the retained rows from any tab.
   useEffect(() => {
@@ -120,7 +131,7 @@ export function StakingSection({ children }: { children: ReactNode }) {
   const setDelegateEditing = (next: EditingUpdate) => setEditingState((held) => keptFor(account, next, held, store.getSnapshot().wallet?.address ?? null));
   const [table, setTable] = useState<TableViewState>(NO_TABLE_VIEW);
   const [typedSlot, setTypedSlot] = useState(false);
-  const reads: StakingReads = { panel, operators, epochs, delegations, history, operatorsSettled, delegateEditing, setDelegateEditing, table, setTable, typedSlot, setTypedSlot };
+  const reads: StakingReads = { panel, operators, epochs, delegations, history, governance, memberVotes, operatorsSettled, delegateEditing, setDelegateEditing, table, setTable, typedSlot, setTypedSlot };
   return (
     <StakingContext.Provider value={reads}>
       <MonkeyPanelProvider value={panel}>

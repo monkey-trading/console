@@ -1,7 +1,8 @@
-/** `GET /v1/house/state`: the house's latest parameters and checkpoint, and what keeps them current between reads. */
+/** `GET /v1/house/state`: the house's latest parameters and checkpoint, the parameter votes the log holds, and what keeps the first two current between reads. */
 
 import { fixedFromWire } from "../fixed";
 import type { HouseParams } from "../house";
+import type { GovernanceWire } from "./governance-types";
 import type { SetParams } from "./types";
 import type { CheckpointEntry } from "./wire";
 
@@ -13,6 +14,8 @@ export interface HouseState {
   params: HouseParams | null;
   /** The latest checkpoint; null before the log holds one. */
   checkpoint: CheckpointEntry | null;
+  /** From V56, the passed changes waiting and the restrictions in force, as of `seq`; null before any vote is recorded. */
+  governance: GovernanceWire | null;
 }
 
 /** The route's body, with the floor the engine leaves out when zero and the `seq` a restored snapshot may not know. */
@@ -20,6 +23,7 @@ export interface HouseStateWire {
   seq: number | null;
   params: (Omit<SetParams, "house_total_cap_floor"> & { house_total_cap_floor?: string; seq: number | null }) | null;
   checkpoint: CheckpointEntry | null;
+  governance?: GovernanceWire;
 }
 
 /** The house parameters a `set_params` sets, from the log's seq or null when the node does not know it. */
@@ -38,7 +42,7 @@ export function houseParamsOf(entry: Omit<SetParams, "house_total_cap_floor"> & 
  * engine's; a floor that is not a decimal throws.
  */
 export function decodeHouseState(wire: HouseStateWire): HouseState {
-  return { seq: wire.seq, params: wire.params === null ? null : houseParamsOf(wire.params, wire.params.seq), checkpoint: wire.checkpoint };
+  return { seq: wire.seq, params: wire.params === null ? null : houseParamsOf(wire.params, wire.params.seq), checkpoint: wire.checkpoint, governance: wire.governance ?? null };
 }
 
 /**

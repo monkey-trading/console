@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Drives the two-engine option of `dev-local-stack.sh` (SECOND_ENGINE=1) from a second terminal, on
-# the running stack's Anvil chain. Development only: it moves the local chain's clock and sends
-# transactions from the stack's published test keys.
+# Drives the two-engine option of `dev-local-stack.sh` (SECOND_ENGINE=1), and its parameter votes
+# (GOVERNANCE=1), from a second terminal, on the running stack's Anvil chain. Development only: it
+# moves the local chain's clock and sends transactions from the stack's published test keys.
 #
 #   status            the registry's election, the vault's release, both engines, the chain's clock
 #   elect             closes the election epoch once it has ended (the registry's epoch is a minute);
@@ -13,6 +13,10 @@
 #                     which takes the first one's keys and log
 #   fund-house [USDC] adds mock USDC (default 100000) to the house's capital in the vault, so the
 #                     next MONKEY epoch that closes with a stake pays it out above the floor
+#   propose MEMBER normal|fast JSON
+#                     with GOVERNANCE=1, proposes the admin command JSON (its canonical form, as the
+#                     engine serialises it) as MEMBER (operator, second or third), which votes yes
+#   vote MEMBER ID    with GOVERNANCE=1, votes yes on proposal ID as MEMBER
 #
 # What `handover` leaves alone and what it does not is in the README's walkthrough: the chain's
 # clock moves, the engine's does not. Withdrawal authorizations expire on the chain's clock, so none
@@ -43,6 +47,8 @@ first_release="$(field firstRelease)"
 second_release="$(field secondRelease)"
 first_candidate="$(field operator)"
 second_candidate="$(field secondCandidate)"
+third_candidate="$(field thirdCandidate)"
+vote_contract="$(field vote)"
 usdc_units=1000000
 
 two_engines() {
@@ -161,6 +167,48 @@ handover() {
   echo "The second engine serves at $second_api. Open $second_api/v1/health once in your browser and accept its certificate if the console has not moved."
 }
 
+parameter_votes() {
+  [[ -n "$vote_contract" ]] || die "this stack has no vote contract; start it with GOVERNANCE=1 SECOND_ENGINE=1"
+}
+# The rotation set member a name stands for.
+member() {
+  case "$1" in
+    operator) echo "$first_candidate" ;;
+    second) echo "$second_candidate" ;;
+    third) echo "$third_candidate" ;;
+    *) die "a member is operator, second or third: $1" ;;
+  esac
+}
+# Sends as `$1`, which the chain lets the stack act for: the members' keys are test keys, and one is no Anvil account.
+send_as() {
+  local from="$1"
+  shift
+  cast rpc anvil_impersonateAccount "$from" --rpc-url "$rpc" >/dev/null
+  send "$@" --unlocked --from "$from"
+  cast rpc anvil_stopImpersonatingAccount "$from" --rpc-url "$rpc" >/dev/null
+}
+
+propose() {
+  parameter_votes
+  local from fast
+  from="$(member "$1")"
+  case "$2" in
+    normal) fast=false ;;
+    fast) fast=true ;;
+    *) die "a proposal is normal or fast: $2" ;;
+  esac
+  [[ -n "${3:-}" ]] || die "propose needs the admin command's JSON"
+  send_as "$from" "$vote_contract" 'propose(bytes,bool)' "$(cast from-utf8 "$3")" "$fast"
+  echo "Proposal $(call "$vote_contract" 'proposalCount()(uint256)' | first_of) is open, proposed by $1 with its yes vote."
+}
+
+vote() {
+  parameter_votes
+  [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || die "vote needs a proposal number"
+  send_as "$(member "$1")" "$vote_contract" 'vote(uint256)' "$2"
+  echo "$1 voted yes on proposal $2."
+}
+
 fund_house() {
   local amount="${1:-100000}" house
   [[ "$amount" =~ ^[0-9]+$ ]] || die "the amount is whole USDC: $amount"
@@ -176,5 +224,7 @@ case "${1:-}" in
   elect) elect ;;
   handover) handover ;;
   fund-house) fund_house "${2:-}" ;;
-  *) die "usage: $0 status | elect | handover | fund-house [USDC]" ;;
+  propose) propose "${2:-}" "${3:-}" "${4:-}" ;;
+  vote) vote "${2:-}" "${3:-}" ;;
+  *) die "usage: $0 status | elect | handover | fund-house [USDC] | propose MEMBER normal|fast JSON | vote MEMBER ID" ;;
 esac

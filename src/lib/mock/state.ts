@@ -14,6 +14,7 @@ import type {
 } from "../engine/types";
 import { MARKETS, type ListedMarket } from "./markets";
 import { MockMonkey } from "./monkey-state";
+import { MockGovernance } from "./governance";
 import { MockOperators } from "./operators";
 import { isOpen } from "../schedule";
 
@@ -139,12 +140,15 @@ export class MockState {
   /** What the MONKEY and Staking pages read: stakers, the feed, closed epochs and periods. */
   readonly monkey: MockMonkey;
   readonly operators: MockOperators;
+  /** The vote contract and what the node mirrors of it, anchored where the node's clock starts. */
+  governance: MockGovernance;
 
   /** Starts at `startMs` with every market at its starting index; open per its schedule. */
   constructor(startMs: number) {
     this.now = startMs;
     this.monkey = new MockMonkey(startMs);
     this.operators = new MockOperators(startMs);
+    this.governance = new MockGovernance(startMs, this.operators.candidates);
     this.emission = { period: this.monkey.periodAt(startMs), results: new Map() };
     for (const listed of MARKETS) {
       this.markets.set(listed.spec.id, {

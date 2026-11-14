@@ -35,6 +35,13 @@ describe("describeEvent", () => {
     expect(describeEvent({ type: "emission_allocated", account: "0x1", period: 12, weight: "250.5", amount }, symbol)).toBe("MONKEY allocated: 18.44 MONKEY (period 12)");
     expect(describeEvent({ type: "emission_period_closed", period: 12, budget: "1000", allocated: "999", cancelled: "1" }, symbol)).toBeNull();
   });
+
+  it("leaves a vote's outcome to the Governance tab, out of the viewer's activity", () => {
+    expect(describeEvent({ type: "proposal_scheduled", proposal: 7, applies_at: 1 }, symbol)).toBeNull();
+    expect(describeEvent({ type: "restriction_applied", proposal: 8, expires_at: 1 }, symbol)).toBeNull();
+    expect(describeEvent({ type: "proposal_refused", proposal: 9, reason: "rotation is off" }, symbol)).toBeNull();
+    expect(describeEvent({ type: "restriction_lapsed", proposal: 8 }, symbol)).toBeNull();
+  });
 });
 
 describe("describeMockAttestation", () => {

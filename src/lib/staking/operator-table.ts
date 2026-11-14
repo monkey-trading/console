@@ -12,6 +12,7 @@ import type { Delegation } from "../engine/staking";
 import { shareBps } from "../monkey/figures";
 import { shownHostname } from "./hostnames";
 import { ADDRESS } from "./candidate-choice";
+import { proposalsView, type ProposalsView } from "./governance";
 
 /** `elected` and `promoted` wait on `pendingElection`; `standby` is the one `promote()` would pick now; `unlisted` is a Yours row omitted by a verified list; `unknown` has no list to compare. */
 export type OperatorRole = "active" | "elected" | "promoted" | "standby" | "candidate" | "unlisted" | "unknown";
@@ -50,6 +51,8 @@ export interface OperatorsView {
   /** An election or promotion waiting to take effect. */
   pending: { candidate: string; effectiveAtMs: number; promoted: boolean } | null;
   rows: readonly OperatorRow[];
+  /** The vote contract's open proposals at the same block; null from a node that follows no vote contract. */
+  proposals: ProposalsView | null;
 }
 
 export type SortId = "role" | "votes-desc" | "votes-asc" | "bond-desc" | "bond-asc" | "name-asc" | "name-desc";
@@ -120,6 +123,7 @@ function standbyOf(rows: readonly OperatorRow[], inEffect: string, open: boolean
  * the registry does not list it.
  * Error cases:
  * - an amount or address is malformed, or the list names more candidates than the registry holds
+ * - an open proposal is malformed (`proposalsView`)
  */
 export function operatorsView(list: OperatorList): OperatorsView {
   if (list.candidates.length > CANDIDATE_LIMIT) throw new Error("The operator list named more candidates than the registry can hold.");
@@ -147,7 +151,8 @@ export function operatorsView(list: OperatorList): OperatorsView {
       bond: null, release: list.operator_in_effect.release.toLowerCase(), endpoint: null, registration: null,
     });
   }
-  return { block: { number: list.block.number, hash: list.block.hash, timeMs: list.block.time_ms }, rotationEnabled: list.rotation_enabled, totalStaked, inEffect, pending, rows };
+  const proposals = list.proposals === undefined ? null : proposalsView(list.proposals);
+  return { block: { number: list.block.number, hash: list.block.hash, timeMs: list.block.time_ms }, rotationEnabled: list.rotation_enabled, totalStaked, inEffect, pending, rows, proposals };
 }
 
 /** Whether `row` holds `query` (lowercase, trimmed) in its hostname, address, release or endpoint. */

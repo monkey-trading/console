@@ -127,9 +127,9 @@ export class MockEngineClient implements EngineClient {
     return houseFigures(this.state);
   }
 
-  /** The solvency parameters in force, as the mock's launch genesis set them, and the checkpoint its log would hold. */
+  /** The solvency parameters in force, as the mock's launch genesis set them, the checkpoint its log would hold, and the votes it mirrors. */
   async houseState(): Promise<HouseState> {
-    return { seq: this.headSeq, params: this.state.params, checkpoint: mockCheckpoint(this.headSeq ?? 0) };
+    return { seq: this.headSeq, params: this.state.params, checkpoint: mockCheckpoint(this.headSeq ?? 0), governance: this.state.governance.houseGovernance(this.state.now) };
   }
 
   /**

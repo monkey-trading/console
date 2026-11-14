@@ -1,6 +1,6 @@
 /**
  * The MONKEY and Staking pages' transactions: staking, starting and completing an unstake, delegating,
- * moving and taking back amounts of stake, and claiming a USDC distribution. Each goes through the connected wallet, shows the wallet prompt while it waits,
+ * moving and taking back amounts of stake, claiming a USDC distribution, and a member's vote. Each goes through the connected wallet, shows the wallet prompt while it waits,
  * says on its panel why nothing was sent or what failed, and reads the wallet and the node again so
  * the figures follow it.
  */
@@ -13,6 +13,7 @@ import { checkpointOf } from "../engine/claim-standing";
 import { claimEmissions, emissionsPosition, WAITING_ON_VAULT } from "../store/emissions";
 import type { NoticeSurface } from "../store/state";
 import type { DelegationReads } from "../staking/delegation-reads";
+import type { MemberVoteReads } from "../staking/member-vote-reads";
 import type { OperatorReads } from "./operators";
 import type { MonkeyPanel } from "./panel";
 
@@ -142,6 +143,27 @@ export async function changeDelegation(panel: MonkeyPanel, operators: OperatorRe
   // The list is the node's, which may be down: the change's outcome waits on the chain's read alone, which `run` makes for the page's own reader.
   void operators.refresh();
   if (panel.store.monkeySession.delegations !== delegations) await delegations.refresh();
+  return landed;
+}
+
+/**
+ * Votes yes on proposal `id` of the vote contract `vote` with the account's weight in the set it
+ * opened under (`ParameterVote.vote`), then reads the account's votes and the node's tally again.
+ * The vote shows at once once it lands; the node's tally counts it from the next final block it reads.
+ */
+export async function castVote(panel: MonkeyPanel, operators: OperatorReads, votes: MemberVoteReads, vote: string, id: number): Promise<boolean> {
+  votes.voting(id);
+  const landed = await run(panel, "governance", `vote yes on proposal ${id}`, async (wallet, _staking, progress) => {
+    if (wallet.governance === undefined) {
+      panel.store.notify("governance", "This wallet cannot send transactions.");
+      return false;
+    }
+    await wallet.governance.vote(vote, id, progress);
+    votes.votedLanded(vote, id, wallet.address);
+    return true;
+  });
+  void operators.refresh();
+  void votes.refresh();
   return landed;
 }
 

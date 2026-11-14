@@ -4,6 +4,7 @@ import { fixedToWire } from "../fixed";
 import { MockEngineClient } from "./client";
 import { MockControls, SEEDED_QUEUE } from "./controls";
 import { DEMO_ADDRESS, DEMO_SPAN_MS, seedDemoAccount } from "./demo";
+import { MockGovernance } from "./governance";
 import { seedMonkeyDemo } from "./monkey";
 import { MockState } from "./state";
 import { MockWalletConnector } from "./wallet";
@@ -31,6 +32,8 @@ export function createMockNode(startMs: number, demo = false): MockNode {
   if (demo) {
     seedMonkeyDemo(state, DEMO_ADDRESS);
     seedDemoAccount(state, startMs);
+    // The votes are timed from when the node's clock starts, not from the backstory's beginning.
+    state.governance = new MockGovernance(startMs, state.operators.candidates);
   }
   const client = new MockEngineClient(state);
   const controls = new MockControls(client);

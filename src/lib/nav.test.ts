@@ -93,6 +93,18 @@ describe("isCurrentTab", () => {
       ["/monkey", "Emissions"],
       ["/monkey/activity", "Activity"],
     ]);
+    expect(SECTIONS["/staking"].tabs.map((tab) => [tab.href, tab.label])).toEqual([
+      ["/staking", "Delegate"],
+      ["/staking/rewards", "Rewards"],
+      ["/staking/epochs", "Epochs"],
+      ["/staking/governance", "Governance"],
+    ]);
+  });
+
+  it("marks the Governance tab on its own route, and the top bar's Staking link there", () => {
+    expect(isCurrentTab("/staking/governance", "/staking/governance")).toBe(true);
+    expect(isCurrentTab("/staking/governance", "/staking")).toBe(false);
+    expect(currentMark("/staking/governance", "/staking")).toBe("true");
   });
 
   it("ignores a trailing slash on the path", () => {
@@ -109,10 +121,11 @@ describe("isCurrentTab", () => {
 });
 
 describe("readsFor", () => {
-  it("starts the panel's reads on every tab, the operators' on Delegate and Epochs, the delegations' on Delegate, the epochs' on Rewards and Epochs, and the history's on Rewards", () => {
+  it("starts the panel's reads on Delegate, Rewards and Epochs, the operators' on Delegate, Epochs and Governance, the delegations' on Delegate and Governance, the epochs' on Rewards and Epochs, the history's on Rewards, and the votes' on Governance", () => {
     expect(readsFor("/staking")).toEqual(["panel", "operators", "delegations"]);
     expect(readsFor("/staking/rewards")).toEqual(["panel", "epochs", "history"]);
     expect(readsFor("/staking/epochs")).toEqual(["panel", "operators", "epochs"]);
+    expect(readsFor("/staking/governance")).toEqual(["operators", "delegations", "governance", "votes"]);
   });
 
   it("records a table for every tab the section lists", () => {

@@ -119,6 +119,35 @@ local stack cannot move. After `handover` the chain is a week ahead of the engin
   signed by the elected key are not accepted either.
 - One handover per stack. Stop the stack and start it again for a fresh chain.
 
+## Try parameter votes
+
+While operator rotation is on, the engine's parameters change only by a vote of the rotation set's members,
+weighted by the stake the set adopted. The two-engine stack can run them:
+
+```sh
+GOVERNANCE=1 SECOND_ENGINE=1 ./scripts/dev-local-stack.sh
+```
+
+The stack deploys the operator schedule and the vote contract, which the node follows, registers a third
+candidate, and stakes for the three candidates: 40,000 MONKEY for the first engine's, 24,000 for the second
+engine's and 35,000 for the third. It then moves the chain's clock past the registry's one-day epoch, which
+adopts the three as the rotation set, and past the set's seven-day notice, so the set is in effect. Import the
+second engine's candidate (Anvil account 4, whose public test key the script prints) into a dev wallet to vote
+as a member; it delegates to itself and to the third candidate.
+
+1. `./scripts/dev-local-stack-ctl.sh propose operator fast '{"action":"set_stress_floor","market":null,"level":1}'`
+   proposes a fast-path stress floor as the first engine's candidate, which votes yes with its 40%. The command
+   is the admin command's JSON as the engine serialises it; `normal` proposes on the normal path.
+2. The Staking page's Governance tab lists the proposal with its tally against two thirds, how the members the
+   account delegates to voted, and a Vote yes button. A vote moves the tally once the node reads the next final
+   block.
+3. `./scripts/dev-local-stack-ctl.sh vote third 1` adds the third candidate's yes, which passes it. A fast-path
+   change is in force at once as a restriction, which lapses after three minutes here (`RESTRICTION_TTL`); a
+   normal change waits seven days of the engine's clock, which a local stack cannot move.
+
+As after a handover, the chain's clock is then ahead of the engine's, eight days here, so withdrawals do not pay,
+and with a schedule the registry's closes adopt rotation sets, so `elect` and `handover` do not apply.
+
 ## Read a local engine development node
 
 Needs the engine's repository, Cargo, and a development node (`config/dev.toml` lists

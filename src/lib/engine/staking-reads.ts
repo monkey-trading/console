@@ -6,6 +6,7 @@
  * `stats/distributions.rs`). Amounts are decimal strings in base units; times are milliseconds.
  */
 
+import type { OpenProposalsWire } from "./governance-types";
 import type { Address } from "./types";
 
 /** The block a list was read at: its height, hash and chain time, which a majority of providers declared final. */
@@ -86,6 +87,8 @@ export interface OperatorList {
   pending_promotion: boolean;
   /** Listed candidates by registration order, at most 100. */
   candidates: ListedCandidate[];
+  /** From V56, the vote contract's proposals still taking votes, read at the same block; absent from a node that follows no vote contract. */
+  proposals?: OpenProposalsWire;
 }
 
 /** One recipient of a close's operator share. */

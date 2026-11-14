@@ -6,6 +6,7 @@ import type { ExitWallet } from "./exit-types";
 import type { TypedRequest } from "./eip712";
 import type { VaultDeposit } from "./provider-deposits";
 import type { DeploymentReads } from "./registry";
+import type { GovernanceWallet } from "./governance-wallet";
 import type { StakingWallet } from "./staking";
 import type { Address, SignedWithdrawal } from "./types";
 
@@ -59,6 +60,8 @@ export interface Wallet {
   suggestMonkey?(): Promise<boolean>;
   /** Staking, unstaking and USDC distribution claims; absent from a wallet that reads no chain, such as a watched account's. */
   staking?: StakingWallet;
+  /** The vote contract's reads and the vote; absent from a wallet that reads no chain, such as a watched account's. */
+  governance?: GovernanceWallet;
   /** The vault's and the operator registry's reads; absent from a wallet that reads no chain, such as a watched account's. */
   chainReads?: DeploymentReads;
   /** The vault's exit, which needs no node; absent from a wallet that reads no chain, such as a watched account's. */

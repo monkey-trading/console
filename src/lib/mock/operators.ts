@@ -155,7 +155,7 @@ export function operatorList(state: MockState): OperatorList {
     open_epoch: 42, open_epoch_start_ms: state.now - DAY_MS, total_staked: totalStaked.toString(),
     operator_in_effect: operator(named.candidate, named.sinceMs), named_operator: operator(named.candidate, named.sinceMs),
     pending_election: pending === null ? null : { epoch: pending.epoch, candidate: pending.candidate, admin_key: pending.adminKey, release: operator(pending.candidate, 0).release, effective_at_ms: pending.effectiveAtMs, promoted: pending.promoted },
-    pending_promotion: false, candidates,
+    pending_promotion: false, candidates, proposals: state.governance.openProposals(state.now),
   };
 }
 

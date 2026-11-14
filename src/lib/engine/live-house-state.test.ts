@@ -51,14 +51,26 @@ describe("reading the house state", () => {
       seq: 946_000,
       params: { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 3000, totalCapFloor: 50_000_000_000_000n, seq: 12 },
       checkpoint: wireCheckpoint(945_999),
+      governance: null,
     });
     expect(node.requests.filter((r) => r.path === "/v1/house/state")).toHaveLength(1);
+  });
+
+  it("passes the parameter votes the log holds through as the node signed them", async () => {
+    const { client, reply } = house();
+    const governance = {
+      config: { vote: "0x00000000000000000000000000000000000000a1", restriction_ttl_ms: 86_400_000 },
+      pending: [{ proposal: 4, command: { action: "set_stress_floor", market: null, level: 2 }, applies_at: 1_700_604_800_000 }],
+      restrictions: { "5": { limit: { kind: "reduce_only", market: 2 }, command_hash: `0x${"ab".repeat(32)}`, expires_at: 1_700_086_400_000 } },
+    };
+    reply(200, { seq: 946_000, params: WIRE_PARAMS, checkpoint: null, governance });
+    await expect(client.houseState()).resolves.toMatchObject({ seq: 946_000, governance });
   });
 
   it("answers an empty log with no parameters and no checkpoint", async () => {
     const { client, reply } = house();
     reply(200, { seq: null, params: null, checkpoint: null });
-    await expect(client.houseState()).resolves.toEqual({ seq: null, params: null, checkpoint: null });
+    await expect(client.houseState()).resolves.toEqual({ seq: null, params: null, checkpoint: null, governance: null });
   });
 
   it("reads a floor the node left out as zero", async () => {

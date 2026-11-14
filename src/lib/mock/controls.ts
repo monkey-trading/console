@@ -22,6 +22,16 @@ export class MockControls {
 
   constructor(private readonly client: MockEngineClient) {}
 
+  /** The simulated vote contract, which the mock wallet reads and votes on. */
+  get governance(): MockEngineClient["state"]["governance"] {
+    return this.client.state.governance;
+  }
+
+  /** A yes vote on proposal `id` by `address`, at the mock's clock. */
+  castVote(id: number, address: string): void {
+    this.client.state.governance.castVote(id, address, this.client.state.now);
+  }
+
   /** The simulated vault's exit: what its wallet side and these controls act on. */
   get exit(): MockEngineClient["vaultExit"] {
     return this.client.vaultExit;

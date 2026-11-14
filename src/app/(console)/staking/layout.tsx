@@ -1,4 +1,4 @@
-/** The Staking screen's section: the heading and the Delegate, Rewards and Epochs tab bar over the tab the route opens. */
+/** The Staking screen's section: the heading and the Delegate, Rewards, Epochs and Governance tab bar over the tab the route opens. */
 
 import type { ReactNode } from "react";
 

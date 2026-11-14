@@ -1,4 +1,4 @@
-/** What the vault's refusal of a claim says in plain words: the MONKEY and USDC distribution claims, and a withdrawal's claim. */
+/** What a contract's refusal says in plain words: the vault's refusal of the MONKEY and USDC distribution claims and of a withdrawal's claim, and the vote contract's refusal of a vote. */
 
 import { toFunctionSelector } from "viem";
 
@@ -34,6 +34,18 @@ const WITHDRAWAL_REFUSALS = [
   ["ExitActive()", "The vault is in its exit, which ends claims, so nothing was sent."],
 ] as const;
 const WITHDRAWAL_SELECTORS = tableOf(WITHDRAWAL_REFUSALS);
+
+/** The vote contract's custom errors a vote can end in (`ParameterVote.vote`). */
+const VOTE_REFUSALS = [
+  ["AlreadyVoted(uint256,address)", "The vote contract already holds this account's vote on this proposal, so nothing was sent."],
+  ["AlreadyPassed(uint256)", "This proposal has already passed, so the vote contract takes no more votes on it and nothing was sent."],
+  ["VotingClosed(uint256,uint64)", "This proposal's voting window has closed, so the vote contract refused the vote and nothing was sent."],
+  ["NotAMember(address)", "This account is not a member of the set this proposal opened under, so the vote contract refused the vote and nothing was sent."],
+  ["RotationOff()", "Operator rotation is off, which closes voting, so nothing was sent."],
+  ["UnknownProposal(uint256)", "The vote contract holds no proposal by this number, so nothing was sent."],
+] as const;
+const VOTE_SELECTORS = tableOf(VOTE_REFUSALS);
+const VOTE_GENERIC = "The vote contract refused the vote and nothing was sent. Try again shortly.";
 
 /** The vault's refusal of a withdrawal's claim for any revert whose error is not named above. */
 const WITHDRAWAL_GENERIC = "The vault refused the claim and nothing was sent: it did not accept this authorization. Try again shortly, or ask for a new authorization if the withdrawal offers one.";
@@ -71,3 +83,6 @@ export const claimFailure = (error: unknown): unknown => refusal(error, SELECTOR
 
 /** `claimFailure` for a withdrawal's claim, whose errors and next steps differ. */
 export const withdrawalFailure = (error: unknown): unknown => refusal(error, WITHDRAWAL_SELECTORS, WITHDRAWAL_GENERIC);
+
+/** `claimFailure` for a vote, whose refusals are the vote contract's. */
+export const voteFailure = (error: unknown): unknown => refusal(error, VOTE_SELECTORS, VOTE_GENERIC);
