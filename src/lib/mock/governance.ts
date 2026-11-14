@@ -4,7 +4,9 @@
  * passed change due three minutes after the node's clock starts, and a fast-path restriction in
  * force, as `GET /v1/operators`' proposals, `GET /v1/house/state`'s governance and the contract's own
  * reads hold them. The mock's clock applies a due change and lapses a restriction; a proposal passes
- * as the contract passes it, once its yes weight is more than two thirds of its set's.
+ * as the contract passes it, once its yes weight is more than two thirds of its set's; and a
+ * restriction in force holds its market's stress level or stops new risk there, as the engine's
+ * values in force do.
  */
 
 import type { ChainProposal, SetMember } from "../engine/governance-wallet";
@@ -54,17 +56,17 @@ export class MockGovernance {
     this.members = new Map(members.map((member, i) => [member, (WEIGHTS[i] ?? 0n) * MONKEY_UNIT]));
     const [alpha = "", bravo = "", , delta = ""] = members;
     const ceiling: AdminCommandWire = { action: "adopt_close_spread_ceiling", market: 3, max_close_spread_bps: 12, effective_at: startMs + 3 * MINUTE_MS };
-    const reduceOnly: AdminCommandWire = { action: "set_reduce_only", market: 2, reduce_only: true };
+    const usFloor: AdminCommandWire = { action: "set_stress_floor", market: 4, level: 1 };
     const relisting: AdminCommandWire = { action: "upsert_market", id: 1, symbol: "BTC-USD", margin_tiers: [{ up_to: "1000000", bps: 200 }, { up_to: null, bps: 500 }], house_cap_bps: 2500 };
-    const floor: AdminCommandWire = { action: "set_stress_floor", market: null, level: 1 };
+    const goldReduceOnly: AdminCommandWire = { action: "set_reduce_only", market: 5, reduce_only: true };
     const proposal = (id: number, fast: boolean, opensAtMs: number, windowMs: number, command: AdminCommandWire, voters: string[], passed: boolean) =>
       this.proposals.set(id, { id, proposer: voters[0] ?? alpha, fast, opensAtMs, closesAtMs: opensAtMs + windowMs, command, voters: new Set(voters), passed });
     proposal(5, false, startMs - 8 * DAY_MS, 3 * DAY_MS, ceiling, [alpha, bravo, delta], true);
-    proposal(6, true, startMs - 2 * 3_600_000, 3_600_000, reduceOnly, [bravo, alpha], true);
+    proposal(6, true, startMs - 2 * 3_600_000, 3_600_000, usFloor, [bravo, alpha], true);
     proposal(7, false, startMs - DAY_MS, 6 * DAY_MS, relisting, [alpha, delta], false);
-    proposal(8, true, startMs - 10 * MINUTE_MS, 3_600_000, floor, [alpha], false);
+    proposal(8, true, startMs - 10 * MINUTE_MS, 3_600_000, goldReduceOnly, [alpha], false);
     this.pending = [{ proposal: 5, command: ceiling, appliesAtMs: startMs + 3 * MINUTE_MS }];
-    this.restrictions.set(6, { limit: { kind: "reduce_only", market: 2 }, expiresAtMs: startMs - 2 * 3_600_000 + RESTRICTION_TTL_MS });
+    this.restrictions.set(6, { limit: { kind: "stress_floor", market: 4, level: 1 }, expiresAtMs: startMs - 2 * 3_600_000 + RESTRICTION_TTL_MS });
   }
 
   /** The tally of `proposal`: its voters' weights against the set's. */
@@ -82,6 +84,22 @@ export class MockGovernance {
   private settle(now: number): void {
     this.pending = this.pending.filter((change) => change.appliesAtMs > now);
     for (const [id, restriction] of this.restrictions) if (restriction.expiresAtMs <= now) this.restrictions.delete(id);
+  }
+
+  /** The least stress level the restrictions in force at `now` hold `market` at; zero with none. */
+  floorAt(market: number, now: number): number {
+    this.settle(now);
+    let level = 0;
+    for (const { limit } of this.restrictions.values()) {
+      if (limit.kind === "stress_floor" && (limit.market === null || limit.market === market)) level = Math.max(level, limit.level);
+    }
+    return level;
+  }
+
+  /** Whether a restriction in force at `now` stops new risk in `market`. */
+  reduceOnlyAt(market: number, now: number): boolean {
+    this.settle(now);
+    return [...this.restrictions.values()].some(({ limit }) => limit.kind === "reduce_only" && (limit.market === null || limit.market === market));
   }
 
   /** `GET /v1/operators`' proposals at `now`: those still taking votes, newest first. */

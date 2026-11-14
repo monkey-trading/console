@@ -32,6 +32,7 @@ import { SessionsCard } from "./SessionsCard";
 import { SetupSteps } from "./SetupSteps";
 import { Shell } from "./Shell";
 import { OperatorsPanel } from "./staking/OperatorsPanel";
+import { VoteControl } from "./staking/VoteControl";
 import { StakingContext, type StakingReads } from "./StakingSection";
 import { WithdrawForm } from "./WithdrawForm";
 
@@ -65,6 +66,22 @@ function Operators() {
   return createElement(StakingContext.Provider, { value: reads }, createElement(OperatorsPanel, { operators, delegations }));
 }
 
+/** A member's vote on a Governance tab proposal, the one the account last voted from, under the section's context. */
+function GovernanceVote() {
+  const { store } = useSession();
+  store.patch({ now: 1 });
+  const operators = new OperatorReads(store);
+  const delegations = new DelegationReads(store);
+  const governance = new GovernanceReads(store);
+  const reads: StakingReads = {
+    panel: new MonkeyPanel(store, "staking"), operators, epochs: new EpochReads(store), delegations, governance, memberVotes: new MemberVoteReads(store, operators, governance, delegations),
+    history: new DistributionHistoryReads(store), operatorsSettled: true, delegateEditing: NO_EDITING, setDelegateEditing: () => undefined,
+    table: NO_TABLE_VIEW, setTable: () => undefined, typedSlot: false, setTypedSlot: () => undefined,
+  };
+  const props = { vote: `0x${"7a".repeat(20)}`, id: 7, standing: "no" as const, weight: 1n, rotationOn: true, closesAtMs: 2, noticeHere: true, headingId: "proposal-open-7" };
+  return createElement(StakingContext.Provider, { value: reads }, createElement(VoteControl, props));
+}
+
 function render(surface: NoticeSurface, screen: ReactNode, tone: "error" | "info" = "error", stale = false): string {
   return renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Seed, { surface, tone, stale }), screen));
 }
@@ -91,6 +108,7 @@ const HOSTS: readonly [NoticeSurface, string, ReactNode][] = [
   ["emissions", "the MONKEY emissions card", createElement(OnMonkeyPage, null, createElement(EmissionsCard, { claim: () => Promise.resolve() }))],
   ["distribution", "the distribution claim", createElement(OnMonkeyPage, null, el(DistributionClaim))],
   ["operator", "the Staking page's operators", createElement(OnMonkeyPage, null, el(Operators))],
+  ["governance", "a proposal's vote control", el(GovernanceVote)],
   ["settings", "Settings' sessions", el(SessionsCard)],
   ["chart", "the chart", el(ChartPanel)],
   ["wallet", "the top bar", el(Shell)],

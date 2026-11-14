@@ -83,7 +83,7 @@ function TallyLine({ tally, open }: { tally: Tally; open: boolean }) {
 export function ProposalItem({ id, headingId, fast, stage, title, details, tally, wait, command, members, vote }: ProposalItemProps) {
   const open = stage === "open";
   return (
-    <li className="space-y-2 border-t border-line-2 pt-3 first:border-t-0 first:pt-0">
+    <li data-proposal={id} className="space-y-2 border-t border-line-2 pt-3 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h4 id={headingId} tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">
           Proposal {id} · {fast ? "fast path" : "normal path"}

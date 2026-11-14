@@ -5,8 +5,8 @@
 #
 #   status            the registry's election, the vault's release, both engines, the chain's clock
 #   elect             closes the election epoch once it has ended (the registry's epoch is a minute);
-#                     the candidate with the most delegated stake wins if it leads the operator in
-#                     effect by the margin, has the quorum, and is eligible
+#                     the candidate with the most delegated stake wins if it is eligible, has the
+#                     quorum, and is not the operator in effect already
 #   handover          passes the seven-day notice of a pending election (closing the epoch first
 #                     when none is) by moving the chain's clock to its effective time, which makes
 #                     the vault name the elected release; the stack then starts the second engine,
@@ -97,7 +97,7 @@ status() {
   echo "Second engine      $(monkey_units "$votes_second") MONKEY delegated, $(health "$second_api") at $second_api"
   local epoch_start epoch_length
   epoch_start="$(call "$registry" 'openEpochStart()(uint64)' | first_of)"
-  epoch_length="$(call "$registry" 'parameters()(uint64,uint64,uint64,uint16,uint16,uint16,uint16,uint256,uint64)' | first_of)"
+  epoch_length="$(call "$registry" 'parameters()(uint64,uint64,uint16,uint16,uint16,uint256,uint64)' | first_of)"
   if [[ "$pending" != 0 ]]; then
     echo "Election           pending, effective $(stamp "$pending"): run \`handover\` to pass its notice"
   elif ((epoch_start + epoch_length > now)); then
@@ -112,7 +112,7 @@ elect() {
   [[ "$(call "$registry" 'rotationEnabled()(bool)')" == true ]] || die "rotation is off"
   [[ "$(pending_effective_at)" == 0 ]] || die "an election is already pending: run \`handover\`"
   local ends now
-  ends=$(($(call "$registry" 'openEpochStart()(uint64)' | first_of) + $(call "$registry" 'parameters()(uint64,uint64,uint64,uint16,uint16,uint16,uint16,uint256,uint64)' | first_of)))
+  ends=$(($(call "$registry" 'openEpochStart()(uint64)' | first_of) + $(call "$registry" 'parameters()(uint64,uint64,uint16,uint16,uint16,uint256,uint64)' | first_of)))
   while now="$(chain_time)" && ((now < ends)); do
     echo "The election epoch ends in $((ends - now)) s"
     sleep $((ends - now > 5 ? 5 : ends - now))
@@ -121,7 +121,7 @@ elect() {
   local effective
   effective="$(pending_effective_at)"
   if [[ "$effective" == 0 ]]; then
-    echo "The epoch closed and elected nobody. The winner needs a delegated share to be eligible (5% of the stake), 20% of all stake delegated, and 10% more votes than the operator in effect."
+    echo "The epoch closed and elected nobody. The winner needs a delegated share to be eligible (5% of the stake), 20% of all stake delegated, and not to be the operator in effect already."
     status
     return
   fi
@@ -205,7 +205,9 @@ propose() {
 vote() {
   parameter_votes
   [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || die "vote needs a proposal number"
-  send_as "$(member "$1")" "$vote_contract" 'vote(uint256)' "$2"
+  local from
+  from="$(member "$1")"
+  send_as "$from" "$vote_contract" 'vote(uint256)' "$2"
   echo "$1 voted yes on proposal $2."
 }
 

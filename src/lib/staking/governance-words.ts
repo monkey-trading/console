@@ -5,13 +5,13 @@
  * as the node signed it, so these words never stand in for it.
  */
 
-import type { AdminCommandWire, GovernanceWire, LimitWire } from "../engine/governance-types";
+import type { AdminCommandWire, GovernanceWire } from "../engine/governance-types";
 import type { MarketView, Tier } from "../engine/types";
 import { formatUsd, parseFixed } from "../fixed";
 import { formatMonkey, formatRate, MONKEY_UNIT } from "../format";
 import type { HouseParams } from "../house";
 import { formatStampWithYear } from "../time";
-import { passes, weightToPass, yesShareBps, type Tally } from "./governance";
+import { passes, weightToPass, yesShareBps, type ShownLimit, type Tally } from "./governance";
 
 /** A listed market's terms as the words name and compare them. */
 export type ListingTerms = Pick<MarketView, "symbol" | "margin_tiers" | "spread_tiers" | "house_cap_bps" | "house_cap_floor">;
@@ -110,8 +110,9 @@ export function commandDetails(command: AdminCommandWire | null, inForce: InForc
 }
 
 /** What a restriction holds, in one line. */
-export function limitTitle(limit: LimitWire, inForce: InForce): string {
+export function limitTitle(limit: ShownLimit, inForce: InForce): string {
   switch (limit.kind) {
+    case "unknown": return `A restriction of a kind this console does not describe (${limit.name})`;
     case "params": return "Tighter house limits";
     case "market": return `Tighter terms for ${marketName(limit.market, inForce)}`;
     case "stress_floor": return `A stress floor at level ${limit.level} in ${marketName(limit.market, inForce)}`;
@@ -124,7 +125,7 @@ export function limitTitle(limit: LimitWire, inForce: InForce): string {
 }
 
 /** Each bound a restriction holds, beside the baseline it sits over where the log keeps one. */
-export function limitDetails(limit: LimitWire, baselines: Pick<GovernanceWire, "params_baseline" | "market_baselines">): string[] {
+export function limitDetails(limit: ShownLimit, baselines: Pick<GovernanceWire, "params_baseline" | "market_baselines">): string[] {
   const bound = (label: string, value: string | null, baseline: string | null) => (value === null ? null : baseline === null ? `${label} ${value}` : `${label} ${value} (baseline ${baseline})`);
   const rate = (bps: number | undefined) => (bps === undefined ? null : formatRate(bps));
   let lines: (string | null)[] = [];
@@ -183,4 +184,20 @@ export function lifetimeText(ms: number): string {
   const [days, hours, rest] = [Math.floor(minutes / 1440), Math.floor((minutes % 1440) / 60), minutes % 60];
   const parts = [days > 0 ? plural(days, "day") : null, hours > 0 ? plural(hours, "hour") : null, rest > 0 ? plural(rest, "minute") : null].filter((part) => part !== null);
   return parts.length === 0 ? "under a minute" : parts.join(" ");
+}
+
+/**
+ * Why the tab cannot show how members voted, by the kind of wallet: none, a watched account, or one
+ * that reads no chain; null when it can.
+ */
+export function walletLine(wallet: { readOnly?: boolean } | null, reads: boolean): string | null {
+  if (reads) return null;
+  if (wallet === null) return "Connect a wallet to see how the members you delegate to voted, and to vote as a member.";
+  if (wallet.readOnly === true) return "A watched account is not read through a wallet, so how the members it delegates to voted is not shown.";
+  return "This wallet does not read the chain here, so how the members you delegate to voted is not shown.";
+}
+
+/** A failed wallet read of `what`, in one sentence, with the wallet's own words and their full stop trimmed. */
+export function failureLine(what: string, message: string | null): string {
+  return `Could not read ${what} through your wallet: ${(message ?? "the read failed").replace(/\.+$/, "")}. They are read again shortly.`;
 }

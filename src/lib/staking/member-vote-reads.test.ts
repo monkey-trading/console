@@ -77,6 +77,18 @@ describe("MemberVoteReads", () => {
     hidden.stop();
   });
 
+  it("counts as answered with no vote contract shown, so the tab does not wait on it", async () => {
+    const kit = await setup();
+    const operators = new OperatorReads(kit.store);
+    const governance = new GovernanceReads(kit.store);
+    const votes = new MemberVoteReads(kit.store, operators, governance, new DelegationReads(kit.store));
+    const stop = votes.start(() => false);
+    await flush();
+    expect(votes.getSnapshot()).toMatchObject({ status: "ready", vote: null });
+    stop();
+    kit.stop();
+  });
+
   it("is unavailable without a wallet that reads the chain, and keeps what it read through a failed read", async () => {
     const { votes, store, wallet, stop } = await tab();
     const held = votes.getSnapshot().facts;

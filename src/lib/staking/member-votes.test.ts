@@ -43,9 +43,26 @@ describe("plan", () => {
     expect(standing(facts, { id: 9, setId: null }, A)).toBe("unknown");
   });
 
-  it("makes at most MAX_CALLS calls in one read", () => {
+  it("makes at most MAX_CALLS calls in one read, and reaches every vote in turn across reads", () => {
     const targets = Array.from({ length: MAX_CALLS + 5 }, (_, i) => ({ id: i + 1, setId: 1, open: true }));
-    expect(plan(after([SET_1]), targets, [A])).toHaveLength(MAX_CALLS);
+    let facts = after([SET_1]);
+    const asked = new Set<number>();
+    for (let read = 0; read < 3; read += 1) {
+      const calls = plan(facts, targets, [A]);
+      expect(calls).toHaveLength(MAX_CALLS);
+      for (const call of calls) {
+        if (call.kind !== "voted") throw new Error("only votes are left to read");
+        asked.add(call.id);
+        facts = fold(facts, { ...call, voted: false });
+      }
+    }
+    expect(asked.size).toBe(MAX_CALLS + 5);
+  });
+
+  it("reads a vote not read yet before one read again, and the ones read again the longest ago first", () => {
+    const facts = after([SET_1, { kind: "voted", id: 2, member: A, open: true, voted: false }, { kind: "voted", id: 1, member: A, open: true, voted: false }]);
+    const targets = [{ id: 1, setId: 1, open: true }, { id: 2, setId: 1, open: true }, { id: 3, setId: 1, open: false }];
+    expect(plan(facts, targets, [A]).map((call) => (call.kind === "voted" ? call.id : null))).toEqual([3, 2, 1]);
   });
 });
 
@@ -68,7 +85,7 @@ describe("standing and weight", () => {
   });
 
   it("keeps a yes final whatever the proposal's state, and a no final only when read while it took no votes", () => {
-    expect(facts.voted.get(voteKey(1, A))).toEqual({ voted: true, final: true });
-    expect(facts.voted.get(voteKey(1, B))).toEqual({ voted: false, final: false });
+    expect(facts.voted.get(voteKey(1, A))).toEqual({ voted: true, final: true, at: 1 });
+    expect(facts.voted.get(voteKey(1, B))).toEqual({ voted: false, final: false, at: 2 });
   });
 });

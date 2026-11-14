@@ -89,7 +89,7 @@ staking_cooldown_secs="$staking_epoch_secs"
 staking_floor_usdc=4900000
 if [[ "$second_engine" == 1 ]]; then staking_floor_usdc=$house_usdc; fi
 # The two-engine option's registry, in development values within the bounds given at its deployment: an
-# election epoch of a minute, no minimum term, a one-minute finality margin, a 1 MONKEY self-bond (a
+# election epoch of a minute, a one-minute finality margin, a 1 MONKEY self-bond (a
 # larger one would take a share of every distribution), and the seven-day notice the contract fixes.
 registry_epoch_secs=60
 # A schedule needs an epoch of at least a day (`OperatorRegistry.MIN_SCHEDULED_EPOCH`).
@@ -443,14 +443,16 @@ step "Deploy the operator registry, which deploys the MONKEY staking contract, a
 # in the engine's election scenario, within the bounds given after them.
 initial_operator="($deployer,$(hex_bytes d0 48),$(hex_bytes c0 32))"
 mon=000000000000000000
-parameters="(3600,3600,600,1000,500,2000,10,1000$mon,604800)"
-minimums="(60,0,0,0,0,0,1,0,60)"
-maximums="(2592000,31536000,86400,10000,10000,10000,100,1000000$mon,2592000)"
+# `OperatorRegistry.Parameters`: epoch, finality margin, eligibility and quorum shares, most candidates,
+# least self-bond, liveness timeout.
+parameters="(3600,600,500,2000,10,1000$mon,604800)"
+minimums="(60,0,0,0,1,0,60)"
+maximums="(2592000,86400,10000,10000,100,1000000$mon,2592000)"
 if [[ "$second_engine" == 1 ]]; then
   # The first engine's own operator key and release are the operator in effect, so the vault's
   # release, which follows the registry once rotation is on, names what the first engine runs.
   initial_operator="($operator,$first_digest,$first_config_hash)"
-  parameters="($registry_epoch_secs,0,60,1000,500,2000,10,${candidate_bond_monkey}$mon,604800)"
+  parameters="($registry_epoch_secs,60,500,2000,10,${candidate_bond_monkey}$mon,604800)"
 fi
 deployed_registry="$(create --private-key "$deployer_key" src/OperatorRegistry.sol:OperatorRegistry \
   --constructor-args "$monkey" "$staking_cooldown_secs" "$staking_epoch_secs" "$governance" \
@@ -800,7 +802,8 @@ Member wallet      To vote on the Staking page's Governance tab, import the seco
 Propose and vote   ./scripts/dev-local-stack-ctl.sh propose operator|second|third normal|fast '<admin command JSON>'
                    ./scripts/dev-local-stack-ctl.sh vote operator|second|third <proposal>
                    A fast-path restriction lasts $restriction_ttl. The chain's clock is eight days ahead of the
-                   engine's, so withdrawal authorizations do not pay, and \`elect\` and \`handover\` do not apply.
+                   engine's, so withdrawal authorizations do not pay, \`elect\` and \`handover\` do not apply,
+                   and the Governance tab counts a voting window, which runs on the chain's clock, eight days long.
 "
   fi
 else

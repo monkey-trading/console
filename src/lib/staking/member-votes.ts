@@ -22,11 +22,13 @@ export interface MemberVoteFacts {
   sets: ReadonlyMap<number, ReadonlyMap<string, bigint>>;
   /** Proposals the node names no set for, as the chain holds them, by id; null for one the chain does not hold. */
   proposals: ReadonlyMap<number, ChainProposal | null>;
-  /** Whether each member voted, by `voteKey`; `final` once it cannot change. */
-  voted: ReadonlyMap<string, { voted: boolean; final: boolean }>;
+  /** Whether each member voted, by `voteKey`; `final` once it cannot change, and `at` the count of vote reads when it was read. */
+  voted: ReadonlyMap<string, { voted: boolean; final: boolean; at: number }>;
+  /** How many votes have been read, which orders the ones read again oldest first. */
+  reads: number;
 }
 
-export const NO_FACTS: MemberVoteFacts = { sets: new Map(), proposals: new Map(), voted: new Map() };
+export const NO_FACTS: MemberVoteFacts = { sets: new Map(), proposals: new Map(), voted: new Map(), reads: 0 };
 
 /** One wallet read the facts lack. */
 export type VoteCall =
@@ -55,8 +57,9 @@ export function setOf(facts: MemberVoteFacts, target: Pick<VoteTarget, "id" | "s
 
 /**
  * The reads `facts` lacks for `targets` and `members` (lowercase, the account and the candidates it
- * delegates to), in the order the page needs them: the open proposals first, then the sets, then
- * each member's vote; at most `MAX_CALLS`. A set is read only for a proposal a member may be in.
+ * delegates to), in the order the page needs them: the passed proposals' sets from the chain, then the
+ * sets, then each member's vote not read yet, open proposals first, then the votes read again, the
+ * longest ago first, so a list past `MAX_CALLS` is read through in turn. Each set is read once.
  */
 export function plan(facts: MemberVoteFacts, targets: readonly VoteTarget[], members: readonly string[]): VoteCall[] {
   if (members.length === 0) return [];
@@ -73,16 +76,21 @@ export function plan(facts: MemberVoteFacts, targets: readonly VoteTarget[], mem
       calls.push({ kind: "set", setId });
     }
   }
+  const again: { call: VoteCall; at: number }[] = [];
   for (const target of ordered) {
     const setId = setOf(facts, target);
     const set = setId === null ? undefined : facts.sets.get(setId);
     if (set === undefined) continue;
     for (const member of members) {
-      if (!set.has(member) || facts.voted.get(voteKey(target.id, member))?.final === true) continue;
-      calls.push({ kind: "voted", id: target.id, member, open: target.open });
+      const read = facts.voted.get(voteKey(target.id, member));
+      if (!set.has(member) || read?.final === true) continue;
+      const call: VoteCall = { kind: "voted", id: target.id, member, open: target.open };
+      if (read === undefined) calls.push(call);
+      else again.push({ call, at: read.at });
     }
   }
-  return calls.slice(0, MAX_CALLS);
+  again.sort((a, b) => a.at - b.at);
+  return [...calls, ...again.map(({ call }) => call)].slice(0, MAX_CALLS);
 }
 
 /** `facts` with one call's answer folded in; a set fixes once read, and a vote once yes or read while the proposal took none. */
@@ -90,7 +98,10 @@ export function fold(facts: MemberVoteFacts, answer: VoteAnswer): MemberVoteFact
   switch (answer.kind) {
     case "proposal": return { ...facts, proposals: new Map(facts.proposals).set(answer.id, answer.proposal) };
     case "set": return { ...facts, sets: new Map(facts.sets).set(answer.setId, answer.members) };
-    case "voted": return { ...facts, voted: new Map(facts.voted).set(voteKey(answer.id, answer.member), { voted: answer.voted, final: answer.voted || !answer.open }) };
+    case "voted": {
+      const reads = facts.reads + 1;
+      return { ...facts, reads, voted: new Map(facts.voted).set(voteKey(answer.id, answer.member), { voted: answer.voted, final: answer.voted || !answer.open, at: reads }) };
+    }
     default: {
       const never: never = answer;
       throw new Error(`Unknown vote read ${String(never)}.`);

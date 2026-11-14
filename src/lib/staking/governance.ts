@@ -48,9 +48,12 @@ export interface WaitingChange {
   appliesAtMs: number;
 }
 
+/** A restriction's limit as the page shows it: one of the engine's kinds, or one a later engine added, named by its kind. */
+export type ShownLimit = LimitWire | { kind: "unknown"; name: string };
+
 export interface RestrictionInForce {
   id: number;
-  limit: LimitWire;
+  limit: ShownLimit;
   expiresAtMs: number;
 }
 
@@ -69,6 +72,7 @@ export interface GovernanceView {
 export const NO_GOVERNANCE: GovernanceView = { vote: null, restrictionTtlMs: null, waiting: [], inForce: [], paramsBaseline: null, marketBaselines: {} };
 
 const UNITS = /^\d+$/;
+const LIMIT_KINDS: ReadonlySet<string> = new Set(["params", "market", "stress_floor", "reduce_only"]);
 const HASH = /^0x[0-9a-fA-F]{64}$/;
 const whole = (n: unknown): n is number => typeof n === "number" && Number.isSafeInteger(n) && n >= 0;
 const isCommand = (command: unknown): command is AdminCommandWire =>
@@ -114,7 +118,9 @@ export function governanceView(wire: GovernanceWire | null): GovernanceView {
   const inForce = Object.entries(wire.restrictions ?? {}).map(([key, restriction]): RestrictionInForce => {
     const id = Number(key);
     if (!/^\d+$/.test(key) || !whole(id) || !whole(restriction.expires_at) || typeof restriction.limit?.kind !== "string") throw new Error("The house state named a malformed restriction.");
-    return { id, limit: restriction.limit, expiresAtMs: restriction.expires_at };
+    // A kind a later engine added is listed by its name, so the rest still show.
+    const limit: ShownLimit = LIMIT_KINDS.has(restriction.limit.kind) ? restriction.limit : { kind: "unknown", name: restriction.limit.kind };
+    return { id, limit, expiresAtMs: restriction.expires_at };
   });
   inForce.sort((a, b) => a.expiresAtMs - b.expiresAtMs || a.id - b.id);
   return {
@@ -138,4 +144,22 @@ export function weightToPass(tally: Tally): bigint {
 /** The yes weight as a share of the total, in basis points, truncated; zero for an empty set. */
 export function yesShareBps(tally: Tally): number {
   return tally.total === 0n ? 0 : Number((tally.yes * 10_000n) / tally.total);
+}
+
+/** The open proposals the votes the log holds have not overtaken: one the node's next list will drop, once it passed, is shown with the passed ones only. */
+export function stillOpen(proposals: ProposalsView, view: GovernanceView): readonly OpenProposal[] {
+  const passed = new Set([...view.waiting.map((change) => change.id), ...view.inForce.map((restriction) => restriction.id)]);
+  return proposals.open.filter((proposal) => !passed.has(proposal.id));
+}
+
+/**
+ * Where focus goes when open proposals leave the list: when it was in proposal `focused` and that one
+ * left, to the same proposal's heading in the passed lists if it moved there, else to the open
+ * list's heading; null when focus was not in a proposal that left.
+ */
+export function focusAfterLeaving(left: readonly number[], focused: number | null, view: GovernanceView): string | null {
+  if (focused === null || !left.includes(focused)) return null;
+  if (view.waiting.some((change) => change.id === focused)) return `proposal-waiting-${focused}`;
+  if (view.inForce.some((restriction) => restriction.id === focused)) return `proposal-restriction-${focused}`;
+  return "open-proposals-title";
 }

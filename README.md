@@ -85,8 +85,8 @@ and 100,000 mock USDC. In a second terminal, `scripts/dev-local-stack-ctl.sh` dr
    candidate or taken back in part from its row, and an unstake takes the undelegated stake first, then each
    delegation in proportion.
 2. `./scripts/dev-local-stack-ctl.sh elect` closes the election epoch. The candidate with the most delegated
-   stake wins when it is eligible (5% of all stake), at least 20% of all stake is delegated, and its votes lead
-   the operator in effect by 10%. The Staking page's operators then show the pending election.
+   stake wins when it is eligible (5% of all stake), at least 20% of all stake is delegated, and it is not the
+   operator in effect already. The Staking page's operators then show the pending election.
 3. Claim any withdrawal you want paid (see below), then run `./scripts/dev-local-stack-ctl.sh handover`. It
    moves the chain's clock past the election's seven-day notice, so the vault names the second engine's
    release; the stack starts that engine, which takes the keys and the log, and the first engine exits. The
@@ -146,7 +146,9 @@ as a member; it delegates to itself and to the third candidate.
    normal change waits seven days of the engine's clock, which a local stack cannot move.
 
 As after a handover, the chain's clock is then ahead of the engine's, eight days here, so withdrawals do not pay,
-and with a schedule the registry's closes adopt rotation sets, so `elect` and `handover` do not apply.
+and with a schedule the registry's closes adopt rotation sets, so `elect` and `handover` do not apply. A
+proposal's voting window runs on the chain's clock and the tab counts it down on the engine's, so here it reads
+about eight days longer than it is, and the contract closes voting while the tab still counts.
 
 ## Read a local engine development node
 

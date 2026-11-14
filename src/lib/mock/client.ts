@@ -113,7 +113,7 @@ export class MockEngineClient implements EngineClient {
     return [...this.state.markets.values()].map(({ listed, open, halted, reduceOnly, mid, stress }) => ({
       ...listed.spec,
       open: open && !halted,
-      reduce_only: reduceOnly,
+      reduce_only: reduceOnly || this.state.governance.reduceOnlyAt(listed.spec.id, this.state.now),
       mark: fixedToWire(mid),
       stress_level: stress,
     }));

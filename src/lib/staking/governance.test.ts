@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { GovernanceWire, OpenProposalWire, OpenProposalsWire } from "../engine/governance-types";
-import { governanceView, NO_GOVERNANCE, passes, proposalsView, weightToPass, yesShareBps } from "./governance";
+import { focusAfterLeaving, governanceView, NO_GOVERNANCE, passes, proposalsView, stillOpen, weightToPass, yesShareBps } from "./governance";
 
 const VOTE = "0x00000000000000000000000000000000000000A1";
 const PROPOSER = "0x00000000000000000000000000000000000000B2";
@@ -71,6 +71,14 @@ describe("governanceView", () => {
     expect(view.inForce.map((restriction) => [restriction.id, restriction.expiresAtMs])).toEqual([[8, 8_000], [9, 8_000], [3, 9_500]]);
   });
 
+  it("lists a restriction of a kind a later engine added by its name, so the rest still show", () => {
+    // A kind the wire type does not list, as a later engine could send: only a cast can build one.
+    const later = { limit: { kind: "spread_floor", market: 1 }, command_hash: HASH, expires_at: 7_000 } as unknown as NonNullable<GovernanceWire["restrictions"]>[string];
+    const view = governanceView({ ...governance, restrictions: { ...governance.restrictions, "10": later } });
+    expect(view.inForce.map((restriction) => [restriction.id, restriction.limit.kind])).toEqual([[10, "unknown"], [8, "stress_floor"], [9, "reduce_only"], [3, "params"]]);
+    expect(view.inForce[0]?.limit).toEqual({ kind: "unknown", name: "spread_floor" });
+  });
+
   it("refuses a malformed vote contract, change or restriction", () => {
     expect(() => governanceView({ config: { vote: "nope", restriction_ttl_ms: 1 } })).toThrow("malformed vote contract");
     expect(() => governanceView({ pending: [{ proposal: 1, command: { action: "x" }, applies_at: -5 }] })).toThrow("malformed waiting change");
@@ -100,5 +108,27 @@ describe("the two-thirds rule", () => {
     expect(yesShareBps({ yes: 2n, total: 3n })).toBe(6_666);
     expect(yesShareBps({ yes: 900n, total: 900n })).toBe(10_000);
     expect(yesShareBps({ yes: 0n, total: 0n })).toBe(0);
+  });
+});
+
+describe("stillOpen and focusAfterLeaving", () => {
+  const listed = proposalsView(wire([open(9), open(8), open(7)]));
+  const view = governanceView({ pending: [{ proposal: 8, command: { action: "set_params" }, applies_at: 1 }], restrictions: { "7": { limit: { kind: "reduce_only", market: null }, command_hash: HASH, expires_at: 1 } } });
+
+  it("leaves out of the open list a proposal the log already holds as passed", () => {
+    expect(stillOpen(listed, view).map((proposal) => proposal.id)).toEqual([9]);
+    expect(stillOpen(listed, NO_GOVERNANCE).map((proposal) => proposal.id)).toEqual([9, 8, 7]);
+  });
+
+  it("sends focus from a proposal that left to where it went, or to the open list's heading", () => {
+    expect(focusAfterLeaving([8], 8, view)).toBe("proposal-waiting-8");
+    expect(focusAfterLeaving([7], 7, view)).toBe("proposal-restriction-7");
+    expect(focusAfterLeaving([6], 6, view)).toBe("open-proposals-title");
+  });
+
+  it("moves no focus that was not in a proposal that left", () => {
+    expect(focusAfterLeaving([8], 9, view)).toBeNull();
+    expect(focusAfterLeaving([8], null, view)).toBeNull();
+    expect(focusAfterLeaving([], 8, view)).toBeNull();
   });
 });

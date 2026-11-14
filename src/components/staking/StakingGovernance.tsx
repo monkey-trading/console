@@ -5,18 +5,19 @@
  * from the node's operator list, and the passed changes waiting out their notice and the fast-path
  * restrictions in force, from its house state (monkey-trading/engine#548), each with how the members
  * the account delegates to voted, from the chain through the wallet, and a member's own vote. The
- * figures land together, once the node's two reads and the account's delegations have answered, so
- * nothing on the tab moves when one of them does.
+ * figures land together, once the node's two reads, the account's delegations and the wallet's first
+ * vote read have answered, so nothing on the tab moves when one of them does.
  */
 
-import { useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
 import { accountReadsSettled } from "@/lib/staking/delegation-reads";
-import type { Tally } from "@/lib/staking/governance";
-import { commandDetails, commandTitle, lifetimeText, limitDetails, limitTitle, listingsKey, listingsOf, type InForce } from "@/lib/staking/governance-words";
+import { focusAfterLeaving, stillOpen, type Tally } from "@/lib/staking/governance";
+import { commandDetails, commandTitle, failureLine, lifetimeText, limitDetails, limitTitle, listingsKey, listingsOf, walletLine, type InForce } from "@/lib/staking/governance-words";
 import { standing, weightIn, type MemberVoteFacts } from "@/lib/staking/member-votes";
 
+import { Notice } from "../Notice";
 import { Card } from "../monkey/Card";
 import { ReadNote } from "../monkey/ReadNote";
 import { NOTE } from "../monkey/styles";
@@ -50,13 +51,41 @@ export function StakingGovernance() {
   const votes = useSyncExternalStore(memberVotes.subscribe, memberVotes.getSnapshot, memberVotes.getSnapshot);
   const chain = useSyncExternalStore(delegations.subscribe, delegations.getSnapshot, delegations.getSnapshot);
   const labelOf = useOperatorLabel(operators);
-  const settled = list.status !== "loading" && held.status !== "loading" && accountReadsSettled({ wallet, decided, delegations: chain, position: "ready" });
+  const readable = votes.status !== "unavailable" && chain.read.status !== "unavailable";
+  const settled = list.status !== "loading" && held.status !== "loading" && accountReadsSettled({ wallet, decided, delegations: chain, position: "ready" }) && (!readable || votes.status !== "idle");
   const inForce: InForce = { params: held.value?.params ?? null, market };
   const proposals = list.value?.proposals ?? null;
   const view = held.value?.view ?? null;
   const account = votes.account;
   const delegated = chain.account !== null && chain.account.toLowerCase() === account ? [...new Set((chain.read.value?.delegations ?? []).map((delegation) => delegation.candidate.toLowerCase()))] : [];
-  const readable = votes.status !== "unavailable" && chain.read.status !== "unavailable";
+  const open = proposals === null ? [] : view === null ? proposals.open : stillOpen(proposals, view);
+  // Focus left in an open proposal that leaves the list goes where that proposal went, as `keep-focus.ts` keeps a tab panel's.
+  const focused = useRef<number | null>(null);
+  const shown = useRef<readonly number[]>([]);
+  const openIds = open.map((proposal) => proposal.id).join(",");
+  useEffect(() => {
+    const now = openIds === "" ? [] : openIds.split(",").map(Number);
+    const left = shown.current.filter((id) => !now.includes(id));
+    shown.current = now;
+    const active = document.activeElement;
+    if (view === null || (active !== null && active !== document.body)) return;
+    const target = focusAfterLeaving(left, focused.current, view);
+    if (target === null) return;
+    focused.current = null;
+    document.getElementById(target)?.focus();
+  }, [openIds, view]);
+  // The cards' grid exists whenever the figures have settled; a proposal's focus is noted wherever in it.
+  const grid = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const list = grid.current;
+    if (list === null) return;
+    const noteFocus = (event: FocusEvent) => {
+      const item = event.target instanceof HTMLElement ? event.target.closest("[data-proposal]") : null;
+      focused.current = item === null ? null : Number(item.getAttribute("data-proposal"));
+    };
+    list.addEventListener("focusin", noteFocus);
+    return () => list.removeEventListener("focusin", noteFocus);
+  }, [settled]);
   const membersOf = (target: { id: number; setId: number | null }): MemberLine[] | null =>
     readable ? delegated.map((address) => ({ address, label: labelOf(address), standing: standing(votes.facts, target, address) })) : null;
   const ttl = view?.restrictionTtlMs ?? null;
@@ -68,20 +97,22 @@ export function StakingGovernance() {
         A normal change takes effect seven days after the engine logs it, so anyone holding a position can act first.
         A fast-path change takes effect at once, but only as a restriction that reduces risk, which lapses {ttl === null ? "after a recorded lifetime" : `after ${lifetimeText(ttl)}`} unless another vote renews it.
       </p>
-      {!readable && <p className={NOTE}>Connect a wallet to see how the members you delegate to voted, and to vote as a member.</p>}
-      {readable && settled && delegated.length === 0 && <p className={NOTE}>This account delegates to no member, so no member&apos;s vote is shown for it.</p>}
-      {votes.status === "failed" && <p role="status" className="text-caption leading-relaxed text-amber">Could not read the votes through your wallet: {votes.error ?? "the read failed"}. They are read again shortly.</p>}
+      {!readable && <p className={NOTE}>{walletLine(wallet, readable)}</p>}
+      {chain.read.status === "failed" && <p role="status" className="text-caption leading-relaxed text-amber">{failureLine("your delegations", chain.read.message)}</p>}
+      {/* Said only from a read that succeeded: a failed one is not an empty list. */}
+      {readable && settled && chain.read.status === "ready" && delegated.length === 0 && <p className={NOTE}>This account delegates to no member, so no member&apos;s vote is shown for it.</p>}
+      {votes.status === "failed" && <p role="status" className="text-caption leading-relaxed text-amber">{failureLine("the votes", votes.error)}</p>}
       {!settled ? (
         <p className={NOTE}>Reading the node&apos;s proposals…</p>
       ) : (
-        <div className="grid items-start gap-4 xl:grid-cols-2">
+        <div ref={grid} className="grid items-start gap-4 xl:grid-cols-2">
           <Card id="open-proposals-title" title="Open proposals" aside={list.value === null ? undefined : <span className="text-label text-fg-3">At final block {list.value.block.number}</span>}>
             <ReadNote read={list} />
             {list.value !== null && proposals === null && <p className={NOTE}>This node follows no vote contract.</p>}
             {proposals?.unavailable === true && <p role="status" className="text-caption leading-relaxed text-amber">The node could not read the open proposals at its last read; they are read again shortly.</p>}
             {proposals !== null && !proposals.unavailable && (
               <Items empty="No proposal is taking votes.">
-                {proposals.open.map((proposal) => {
+                {open.map((proposal) => {
                   const target = { id: proposal.id, setId: proposal.setId };
                   const headingId = `proposal-open-${proposal.id}`;
                   return (
@@ -101,6 +132,8 @@ export function StakingGovernance() {
               </Items>
             )}
             {proposals?.truncated === true && <p className={NOTE}>The node read the newest proposals only; older ones may still be open.</p>}
+            {/* A vote's request or refusal keeps a place once its proposal has left the list. */}
+            {votes.votingOn !== null && !open.some((proposal) => proposal.id === votes.votingOn) && <Notice surface="governance" />}
           </Card>
           <div className="grid gap-4">
             <Card id="waiting-changes-title" title="Passed, waiting out the notice">

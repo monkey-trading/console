@@ -145,7 +145,11 @@ export class MemberVoteReads {
       return Promise.resolve();
     }
     const { vote } = targetsOf(this.operators, this.governance, this.store.getSnapshot().now);
-    if (vote === null) return Promise.resolve();
+    // No vote contract shown: nothing to read, which the tab takes as answered.
+    if (vote === null) {
+      if (this.state.status === "idle") this.set({ status: "ready" });
+      return Promise.resolve();
+    }
     // Another contract's facts say nothing of this one's.
     if (vote !== this.state.vote) this.set({ vote, facts: NO_FACTS, status: "idle" });
     const cycle = this.cycle;

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "../fixed";
 import { MONKEY_UNIT } from "../format";
-import { commandDetails, commandTitle, lifetimeText, limitDetails, limitTitle, listingsKey, listingsOf, standingText, tallyText, tiersText, type InForce } from "./governance-words";
+import { commandDetails, commandTitle, failureLine, lifetimeText, limitDetails, limitTitle, listingsKey, listingsOf, standingText, tallyText, tiersText, walletLine, type InForce } from "./governance-words";
 
 const BTC = { symbol: "BTC-USD", margin_tiers: [{ up_to: "1000000", bps: 100 }, { up_to: null, bps: 200 }], spread_tiers: [{ up_to: null, bps: 5 }], house_cap_bps: 3000, house_cap_floor: "2000000" };
 const IN_FORCE: InForce = {
@@ -72,6 +72,8 @@ describe("restrictions", () => {
     expect(limitTitle({ kind: "market", market: 1 }, IN_FORCE)).toBe("Tighter terms for BTC-USD");
     expect(limitTitle({ kind: "stress_floor", market: 1, level: 3 }, IN_FORCE)).toBe("A stress floor at level 3 in BTC-USD");
     expect(limitTitle({ kind: "reduce_only", market: null }, IN_FORCE)).toBe("Reduce-only in every market");
+    expect(limitTitle({ kind: "unknown", name: "spread_floor" }, IN_FORCE)).toBe("A restriction of a kind this console does not describe (spread_floor)");
+    expect(limitDetails({ kind: "unknown", name: "spread_floor" }, {})).toEqual([]);
   });
 
   it("states each bound beside the baseline it holds the value from, and only the bounds it carries", () => {
@@ -129,5 +131,19 @@ describe("listingsKey", () => {
     const lookup = listingsOf(listingsKey([market(1, "100")]));
     expect(lookup(1)).toEqual(BTC);
     expect(lookup(2)).toBeNull();
+  });
+});
+
+describe("walletLine and failureLine", () => {
+  it("says why the members' votes are not shown by the kind of wallet, and nothing when they are", () => {
+    expect(walletLine(null, false)).toBe("Connect a wallet to see how the members you delegate to voted, and to vote as a member.");
+    expect(walletLine({ readOnly: true }, false)).toBe("A watched account is not read through a wallet, so how the members it delegates to voted is not shown.");
+    expect(walletLine({}, false)).toBe("This wallet does not read the chain here, so how the members you delegate to voted is not shown.");
+    expect(walletLine({}, true)).toBeNull();
+  });
+
+  it("gives a failed read in one sentence, trimming the wallet's own full stop", () => {
+    expect(failureLine("the votes", "Your wallet did not answer in time.")).toBe("Could not read the votes through your wallet: Your wallet did not answer in time. They are read again shortly.");
+    expect(failureLine("your delegations", null)).toBe("Could not read your delegations through your wallet: the read failed. They are read again shortly.");
   });
 });
