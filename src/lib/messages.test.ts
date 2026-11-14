@@ -64,3 +64,22 @@ describe("describeReverifying", () => {
     expect(rest).not.toContain("nothing is shown as trusted");
   });
 });
+
+describe("a fill's line", () => {
+  const fill = { type: "fill" as const, account: "0x1", order_id: 1, market: 10, side: "buy" as const, qty: "1000000", price: "1.0800432", index: "1.08", spread_bps: 0, realised_pnl: "0", profit_fee: "0", position: "1000000", liquidation: false };
+
+  it("states the spread paid in tenths of a bp, which the event's whole-bps field truncates to zero", () => {
+    expect(describeEvent(fill, () => "EUR-USD")).toBe("buy 1,000,000 EUR-USD at 1.08004 (spread 0.4 bps)");
+  });
+
+  it("adds a close's hold and fee rate, and marks a close-out", () => {
+    const close = { ...fill, side: "sell" as const, price: "1.0799568", hold_ms: 65_000, profit_fee_bps: 6_301, position: "0", liquidation: true };
+    expect(describeEvent(close, () => "EUR-USD")).toBe("Close-out sell 1,000,000 EUR-USD at 1.07995 (spread 0.4 bps, held 1m 05s, fee 63.01% of a gain)");
+  });
+});
+
+describe("describeReject for a reversal over the close ceiling", () => {
+  it("names the ceiling and the way through", () => {
+    expect(describeReject({ kind: "close_spread_ceiling", ceiling_bps: 30 })).toBe("Reversing this position here would pay a spread over its 30 bps close ceiling. Close it first, then open the other side.");
+  });
+});

@@ -7,9 +7,8 @@ import { closeEmissionPeriods } from "./emissions";
 import { closeDistributionEpochs } from "./monkey";
 import { creditFinal, payQueue } from "./funds";
 import { triggerResting } from "./orders";
-import { MAX_STRESS } from "../pricing";
 import { isOpen } from "../schedule";
-import type { MarketRuntime, MockState } from "./state";
+import { MAX_STRESS, type MarketRuntime, type MockState } from "./state";
 
 /** The stress window, in milliseconds. */
 const STRESS_WINDOW_MS = 60_000;

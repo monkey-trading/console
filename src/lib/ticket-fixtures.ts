@@ -33,4 +33,4 @@ export async function quotedIn(currency: "eur" | "gbp" | "jpy", mark: number | s
   return { ...base, id: 9, view };
 }
 
-export const heldIn = (market: MarketModel, qty: string): AccountModel => ({ ...account(10_000), positions: [{ market: market.id, qty: q(qty), entry: market.mark ?? 0n, closeout: null }] });
+export const heldIn = (market: MarketModel, qty: string): AccountModel => ({ ...account(10_000), positions: [{ market: market.id, qty: q(qty), entry: market.mark ?? 0n, closeout: null, closeFee: null }] });

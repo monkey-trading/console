@@ -2,6 +2,7 @@
 
 import { fixedFromInt, type Fixed } from "../fixed";
 import type { HouseParams } from "../house";
+import { LAUNCH_CURVE } from "../holding-fee";
 import { mulberry32, SEED } from "../prng";
 import type {
   EligibilityClass,
@@ -41,6 +42,8 @@ export interface MarketRuntime {
 export interface Holding {
   qty: Fixed;
   entry: Fixed;
+  /** When the position opened, as the engine's hold clock moves it (`holding_fee::opened_after`). */
+  openedAt: number;
 }
 
 export interface PendingDeposit {
@@ -95,14 +98,23 @@ export const FINALITY_MS = 6_000;
 export const CHECKPOINT_EVERY = 50;
 const LOG_LIMIT = 1_000;
 
-/** The launch solvency parameters the mock mirrors from the engine's dev genesis (`config/dev.toml`). */
+/** The launch parameters the mock mirrors from the engine's dev genesis (`config/dev.toml`): solvency, its three stress levels and the fee's hold curve. */
 const LAUNCH_PARAMS: HouseParams = {
   profitFeeBps: 1000,
   closeoutLevelBps: 5000,
   totalCapBps: 20000,
   totalCapFloor: fixedFromInt(2_000_000),
+  stressLevels: [
+    { size_spread_multiplier_bps: 10_000, min_spread_bps: 0 },
+    { size_spread_multiplier_bps: 20_000, min_spread_bps: 2 },
+    { size_spread_multiplier_bps: 40_000, min_spread_bps: 10 },
+  ],
+  profitFeeCurve: [...LAUNCH_CURVE],
   seq: null,
 };
+
+/** The highest stress level the mock's parameters list. */
+export const MAX_STRESS = LAUNCH_PARAMS.stressLevels.length - 1;
 
 export class MockState {
   now: number;

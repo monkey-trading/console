@@ -6,6 +6,7 @@
 import type { MarketId, MarketQuote, Reject, Side } from "./engine/types";
 import { fixedFromWire, fixedToWire, type Fixed } from "./fixed";
 import { describeReject } from "./messages";
+import { tenthBpsOfValue } from "./spread-bands";
 import { truncateToStep, type TicketPreview } from "./ticket";
 
 /** The most markets one connection may ask quotes for: the node's `api.quote_max_markets` default. */
@@ -50,8 +51,10 @@ export interface TicketPrices {
   offer: Fixed | null;
   /** The price a market order is sent with as its quoted price. */
   price: Fixed | null;
-  /** The offer over the bid, in basis points of the mark. */
-  spreadBps: number | null;
+  /** Whether `price` is the node's exact quote for closing the account's whole position, rather than a ladder step that covers the order. */
+  exactClose: boolean;
+  /** The offer over the bid, in tenths of a bp of the mark, truncated. */
+  spreadTenths: number | null;
   /** Why a market order cannot be sent at a price now; null when it can. */
   problem: string | null;
   /** Whether that problem is about the order's size, so it belongs under the size field. */
@@ -60,29 +63,35 @@ export interface TicketPrices {
 
 /**
  * The ticket's prices. A live node's come from its executable quote for the connected account and
- * this size, which already counts the account's toxicity, position and margin; the mock's are the
- * console's own estimate.
+ * this size, which already counts the account's toxicity, position, margin and the close-spread
+ * ceiling: an order that closes the whole position takes the exact close quote on its side, and any
+ * other the ladder's step. The mock's are the console's own prices, which its fills use.
  */
 export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; quoteError: string | null; preview: TicketPreview; side: Side; mark: Fixed | null }): TicketPrices {
   const { preview, side } = input;
   if (!input.live) {
-    return { bid: preview.bid, offer: preview.offer, price: preview.quote?.price ?? null, spreadBps: preview.spreadBps, problem: null, problemIsSize: false };
+    return { bid: preview.bid, offer: preview.offer, price: preview.quote?.price ?? null, exactClose: false, spreadTenths: preview.spreadTenths, problem: null, problemIsSize: false };
   }
-  const none = (problem: string): TicketPrices => ({ bid: null, offer: null, price: null, spreadBps: null, problem, problemIsSize: false });
+  const none = (problem: string): TicketPrices => ({ bid: null, offer: null, price: null, exactClose: false, spreadTenths: null, problem, problemIsSize: false });
   const { quote } = input;
   if (quote === null) {
     if (input.quoteError === null) return none("Waiting for the node's executable quote.");
     return none(input.quoteError === UNCREDITED ? "The node quotes an account once it has credited it: deposit first." : `The node will not quote this market: ${input.quoteError}.`);
   }
   if (quote.unavailable !== undefined) return none(describeReject(quote.unavailable));
-  const ask = executablePrice(quote, "buy", preview.qty);
-  const bid = executablePrice(quote, "sell", preview.qty);
+  // The side that closes the whole position, when the order is that size, prices at the node's exact close quote.
+  const exact = (s: Side): ExecutablePrice | null => {
+    const price = closingPrice(quote, s, preview.qty);
+    return price === null ? executablePrice(quote, s, preview.qty) : { price, declined: null };
+  };
+  const ask = exact("buy");
+  const bid = exact("sell");
   const mine = side === "buy" ? ask : bid;
-  const spreadBps = ask !== null && bid !== null && input.mark !== null && input.mark > 0n ? Number(((ask.price - bid.price) * 10_000n) / input.mark) : null;
+  const spreadTenths = ask !== null && bid !== null && input.mark !== null && input.mark > 0n ? tenthBpsOfValue(ask.price - bid.price, input.mark) : null;
   const problem = mine === null ? "The node would not open an order this large. Try a smaller size." : mine.declined === null ? null : declinedProblem(quote, side, mine.declined);
   // The node declining for margin or the house's capacity, or having no step this large, is a matter of the size.
   const problemIsSize = mine === null || (mine.declined !== null && (mine.declined.kind === "insufficient_margin" || mine.declined.kind === "house_capacity"));
-  return { bid: bid?.price ?? null, offer: ask?.price ?? null, price: mine?.price ?? null, spreadBps, problem, problemIsSize };
+  return { bid: bid?.price ?? null, offer: ask?.price ?? null, price: mine?.price ?? null, exactClose: closingPrice(quote, side, preview.qty) !== null, spreadTenths, problem, problemIsSize };
 }
 
 /**

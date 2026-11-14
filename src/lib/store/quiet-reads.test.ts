@@ -10,7 +10,7 @@ import { ACCOUNT, setup } from "./live-fake";
 import { NOT_CREDITED_MS, ROUTE_ABSENT_MS } from "./quiet-reads";
 import { ConsoleStore } from "./store";
 
-const PARAMS = { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, totalCapFloor: 0n, seq: 7 };
+const PARAMS = { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, totalCapFloor: 0n, stressLevels: [], profitFeeCurve: [], seq: 7 };
 const message = (seq: number, events: EngineEvent[]): StreamMessage => ({ offset: `${seq}:0`, type: "command", seq, ts: seq, cmd: { type: "deposit" }, events });
 /** The credit a deposit's screening retry makes: its one event names the account only inside the receipt, as the node's does (the command's own type is not one the console reads). */
 const retryCredit = (seq: number, account: string): StreamMessage => message(seq, [{ type: "custody_deposit_changed", receipt: { deposit_id: 1, amount: "1000000000", beneficiary: { kind: "trader", account } } }]);

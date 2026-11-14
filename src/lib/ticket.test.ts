@@ -144,13 +144,15 @@ describe("previewTicket", () => {
     expect(previewTicket({ ...base, market: floored, houseNav: NAV }).houseCap).toBe(NAV / 20n);
   });
 
-  it("shows the best bid and offer for the size, and the spread widens as the size grows", async () => {
+  it("shows the best bid and offer for the size, and the spread widens as the size crosses a band", async () => {
     const market = await btcAt(100_000);
     const small = previewTicket({ market, side: "buy", qty: q("0.1"), slippageBps: 10, account: account(1_000_000), houseNav: NAV });
-    const large = previewTicket({ market, side: "buy", qty: q("9"), slippageBps: 10, account: account(1_000_000), houseNav: NAV });
+    // $3m reaches past BTC-USD's first band, $2m at 2 bps, into its 4 bps one.
+    const large = previewTicket({ market, side: "buy", qty: q("30"), slippageBps: 10, account: account(1_000_000), houseNav: NAV });
     expect(small.bid).toBeLessThan(market.mark ?? 0n);
     expect(small.offer).toBeGreaterThan(market.mark ?? 0n);
-    expect(large.spreadBps).toBeGreaterThan(small.spreadBps);
+    // Two bps each side at the first band; $1m of the $3m at 4 bps lifts each side to 2.66 bps.
+    expect([small.spreadTenths, large.spreadTenths]).toEqual([40, 53]);
     expect(small.quote?.price).toBe(small.offer);
   });
 

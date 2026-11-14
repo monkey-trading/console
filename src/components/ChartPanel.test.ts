@@ -27,7 +27,7 @@ const order = (id: number, side: Side, kind: "limit" | "stop", market = 1): Rest
 
 const account = (qty: bigint, orders: RestingOrder[]): AccountModel => ({
   balance: fixedFromInt(1_000), unfinalised: 0n, equity: fixedFromInt(1_000), margin: fixedFromInt(400),
-  positions: qty === 0n ? [] : [{ market: 1, qty, entry: fixedFromInt(60_000), closeout: { reach: "at", price: fixedFromInt(qty > 0n ? 59_000 : 61_000) } }], orders,
+  positions: qty === 0n ? [] : [{ market: 1, qty, entry: fixedFromInt(60_000), closeout: { reach: "at", price: fixedFromInt(qty > 0n ? 59_000 : 61_000) }, closeFee: null }], orders,
 });
 
 const withAccount = (base: ConsoleState, a: AccountModel): ConsoleState => ({ ...base, account: a });

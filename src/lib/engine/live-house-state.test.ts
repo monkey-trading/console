@@ -9,7 +9,10 @@ import { VECTORS, vectorResponse } from "./test-vectors";
 
 const conflict = vectorResponse("nonce conflict");
 const ROOT = `0x${"ab".repeat(32)}`;
-const WIRE_PARAMS = { seq: 12, profit_fee_bps: 1000, closeout_level_bps: 5000, house_total_cap_bps: 3000, house_total_cap_floor: "50000", stress_levels: [] };
+const STRESS = [{ size_spread_multiplier_bps: 10_000, min_spread_bps: 0 }, { size_spread_multiplier_bps: 20_000, min_spread_bps: 2, trigger: { move_bps: 150 } }];
+const CURVE = [{ hold_ms: 10_000, fee_bps: 10_000 }, { hold_ms: 900_000, fee_bps: 1_000 }];
+const WIRE_PARAMS = { seq: 12, profit_fee_bps: 1000, closeout_level_bps: 5000, house_total_cap_bps: 3000, house_total_cap_floor: "50000", stress_levels: STRESS, profit_fee_curve: CURVE };
+const NOTICE = { spread_tiers: [{ up_to: "2000000", tenth_bps: 30 }, { up_to: null, tenth_bps: 60 }], effective_at: 1_700_000_000_000 };
 const wireCheckpoint = (seq: number) => ({ offset: `${seq}:1`, type: "checkpoint", seq, root: ROOT, signature: "0x11", signer: "0x22", parent: "0x33", domain: "d", deferred_withdrawals: false });
 const frame = (n: number, msg: object) => JSON.stringify({ v: 1, n, time: 1_000, msg: JSON.stringify(msg), sig: "0x00" });
 const setParams = (seq: number, profitFeeBps: number) => ({
@@ -44,13 +47,14 @@ function house() {
 }
 
 describe("reading the house state", () => {
-  it("answers the parameters and checkpoint in one read, with the floor as a fixed-point amount", async () => {
+  it("answers the parameters, the stress levels, the fee curve, the listing notices and the checkpoint in one read, with the floor as a fixed-point amount", async () => {
     const { node, client, reply } = house();
-    reply(200, { seq: 946_000, params: WIRE_PARAMS, checkpoint: wireCheckpoint(945_999) });
+    reply(200, { seq: 946_000, params: WIRE_PARAMS, params_notice: null, listing_notices: { "1": NOTICE }, checkpoint: wireCheckpoint(945_999) });
     await expect(client.houseState()).resolves.toEqual({
       seq: 946_000,
-      params: { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 3000, totalCapFloor: 50_000_000_000_000n, seq: 12 },
+      params: { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 3000, totalCapFloor: 50_000_000_000_000n, stressLevels: STRESS, profitFeeCurve: CURVE, seq: 12 },
       checkpoint: wireCheckpoint(945_999),
+      listingNotices: { 1: NOTICE },
       governance: null,
     });
     expect(node.requests.filter((r) => r.path === "/v1/house/state")).toHaveLength(1);
@@ -70,7 +74,7 @@ describe("reading the house state", () => {
   it("answers an empty log with no parameters and no checkpoint", async () => {
     const { client, reply } = house();
     reply(200, { seq: null, params: null, checkpoint: null });
-    await expect(client.houseState()).resolves.toEqual({ seq: null, params: null, checkpoint: null, governance: null });
+    await expect(client.houseState()).resolves.toEqual({ seq: null, params: null, checkpoint: null, listingNotices: {}, governance: null });
   });
 
   it("reads a floor the node left out as zero", async () => {
@@ -120,6 +124,28 @@ describe("the stream beside the read", () => {
     // A read at 100 predates the stream's value and does not replace it.
     reply(200, { seq: 104, params: { ...WIRE_PARAMS, profit_fee_bps: 1000 }, checkpoint: null });
     await expect(client.houseState()).resolves.toMatchObject({ params: { profitFeeBps: 1200, seq: 105 } });
+  });
+
+  it("folds a stream set_params's stress levels and fee curve, which the trading pages read", async () => {
+    const { client, reply, stream } = house();
+    reply(200, { seq: 100, params: WIRE_PARAMS, checkpoint: null });
+    const send = await stream();
+    const raised = [{ hold_ms: 10_000, fee_bps: 10_000 }, { hold_ms: 1_200_000, fee_bps: 1_500 }];
+    const levels = [STRESS[0], { size_spread_multiplier_bps: 30_000, min_spread_bps: 4 }];
+    send({ ...setParams(106, 1500), cmd: { ...setParams(106, 1500).cmd, stress_levels: levels, profit_fee_curve: raised } });
+    await expect(client.houseState()).resolves.toMatchObject({ params: { profitFeeBps: 1500, stressLevels: levels, profitFeeCurve: raised, seq: 106 } });
+  });
+
+  it("takes parameters a protocol activation changed in place, at the same SetParams seq, from a read at a newer log head", async () => {
+    const { client, reply } = house();
+    reply(200, { seq: 100, params: { ...WIRE_PARAMS, profit_fee_curve: undefined }, checkpoint: null });
+    await expect(client.houseState()).resolves.toMatchObject({ params: { profitFeeCurve: [], seq: 12 } });
+    // V55's activation installs the default curve over the parameters set at seq 12.
+    reply(200, { seq: 140, params: WIRE_PARAMS, checkpoint: null });
+    await expect(client.houseState()).resolves.toMatchObject({ params: { profitFeeCurve: CURVE, seq: 12 } });
+    // A read at an older head, racing the newer one, does not move the parameters back.
+    reply(200, { seq: 120, params: { ...WIRE_PARAMS, profit_fee_curve: undefined }, checkpoint: null });
+    await expect(client.houseState()).resolves.toMatchObject({ params: { profitFeeCurve: CURVE } });
   });
 
   it("compares a null params seq at the read's log head", async () => {

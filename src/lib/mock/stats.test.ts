@@ -58,9 +58,9 @@ describe("the mock node's dashboard routes", () => {
     const count = async () => (await client.stats.positions(1)).long.count + (await client.stats.positions(1)).short.count;
     const baseline = await count();
     const account = client.state.account("0x" + "ab".repeat(20));
-    account.positions.set(1, { qty: 5_000_000_000n, entry: 1n });
+    account.positions.set(1, { qty: 5_000_000_000n, entry: 1n, openedAt: 0 });
     const withOne = await count();
-    account.positions.set(1, { qty: 500_000_000_000n, entry: 1n });
+    account.positions.set(1, { qty: 500_000_000_000n, entry: 1n, openedAt: 0 });
     expect(await count()).toBe(withOne);
     expect(withOne).toBe(baseline + 1);
   });

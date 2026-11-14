@@ -14,9 +14,9 @@ describe("close-out of several positions", () => {
     const { state } = node.client;
     const account = state.account(ME);
     const mid = (id: number) => state.markets.get(id)?.mid ?? 0n;
-    account.positions.set(1, { qty: fixedFromInt(1), entry: mid(1) + fixedFromInt(btcLoss) });
-    account.positions.set(2, { qty: fixedFromInt(1), entry: mid(2) + fixedFromInt(50) });
-    account.positions.set(3, { qty: fixedFromInt(1_000), entry: mid(3) + fixedFromInt(1) });
+    account.positions.set(1, { qty: fixedFromInt(1), entry: mid(1) + fixedFromInt(btcLoss), openedAt: 0 });
+    account.positions.set(2, { qty: fixedFromInt(1), entry: mid(2) + fixedFromInt(50), openedAt: 0 });
+    account.positions.set(3, { qty: fixedFromInt(1_000), entry: mid(3) + fixedFromInt(1), openedAt: 0 });
     return { node, account };
   }
 
@@ -57,9 +57,9 @@ describe("engine rules the mock follows", () => {
   it("triggers a stop on the index, not on a spread that stress has widened", async () => {
     const node = await funded(100_000);
     const mark = parseFixed((await node.client.markets())[0]?.mark ?? "0") ?? 0n;
-    const level = fixedToWire(mark + mark / 1_000n); // 0.1% above the index: inside the stress-3 spread but above the index
+    const level = fixedToWire(mark + mark / 1_000n); // 0.1% above the index: inside the stress-2 spread but above the index
     await order(node, "0.1", "buy", { kind: { kind: "stop", price: level } });
-    node.controls.setStressFloor(1, 3);
+    node.controls.setStressFloor(1, 2);
     node.client.tick(START + 9_000);
     expect(Object.keys((await node.client.account(ME)).orders)).toHaveLength(1);
   });
@@ -81,8 +81,8 @@ describe("engine rules the mock follows", () => {
     const account = state.account(ME);
     // A large loser in BTC and a flat position in ETH; the balance cannot cover the loss.
     account.balance = fixedFromInt(10);
-    account.positions.set(1, { qty: fixedFromInt(1), entry: fixedFromInt(70_000) });
-    account.positions.set(2, { qty: fixedFromInt(1), entry: state.markets.get(2)?.mid ?? 0n });
+    account.positions.set(1, { qty: fixedFromInt(1), entry: fixedFromInt(70_000), openedAt: 0 });
+    account.positions.set(2, { qty: fixedFromInt(1), entry: state.markets.get(2)?.mid ?? 0n, openedAt: 0 });
     const houseBefore = state.houseCash;
     const first = fillOrder(state, { address: ME, market: 1, side: "sell", qty: fixedFromInt(1), reduceOnly: true, orderId: 0, liquidation: true });
     expect(first).toMatchObject({ ok: true, badDebt: 0n });

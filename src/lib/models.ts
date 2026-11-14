@@ -1,7 +1,7 @@
 /** The console's decoded view models: engine wire shapes with amounts parsed into `Fixed`. */
 
 import { metaFor } from "./engine/meta";
-import type { AccountView, EligibilityClass, HouseView, MarketId, MarketView, PriceRules, RestingOrder } from "./engine/types";
+import type { AccountView, CloseFee, EligibilityClass, HouseView, MarketId, MarketView, PriceRules, RestingOrder } from "./engine/types";
 import { fixedFromWire, parseFixed, type Fixed } from "./fixed";
 import { decodeHouseScan, type HouseScan } from "./house-scan";
 
@@ -11,7 +11,8 @@ export interface MarketModel {
   symbol: string;
   name: string;
   places: number;
-  baseSpreadBps: number;
+  /** The mock's close-spread ceiling, which its own prices clamp a close to; null for a live node, which serves none and prices from its quotes. */
+  ceilingBps: number | null;
   /** The market's index rules, for the chart's log scan; what the engine prices from. */
   priceRules: PriceRules;
   open: boolean;
@@ -23,15 +24,12 @@ export interface MarketModel {
   reference: Fixed | null;
 }
 
-/**
- * `simulated` adds the mock's base spread; a live node has none, since the engine charges only its
- * stress, toxicity and size spreads (and the quote route is still to come).
- */
+/** `simulated` keeps the mock's close-spread ceiling, which the console's own prices for the mock clamp to. */
 export function decodeMarket(view: MarketView, previous: MarketModel | undefined, simulated: boolean): MarketModel {
   const meta = metaFor(view.symbol);
   const mark = view.mark === null ? null : fixedFromWire(view.mark);
   return {
-    view, id: view.id, symbol: view.symbol, name: meta.name, places: meta.places, baseSpreadBps: simulated ? meta.baseSpreadBps : 0,
+    view, id: view.id, symbol: view.symbol, name: meta.name, places: meta.places, ceilingBps: simulated ? meta.closeCeilingBps : null,
     priceRules: view.price_rules,
     open: view.open, reduceOnly: view.reduce_only, stress: view.stress_level, mark,
     reference: previous?.reference ?? mark,
@@ -47,6 +45,22 @@ export interface PositionModel {
   entry: Fixed;
   /** Null from a node that does not serve close-outs, or whose entry for the market is malformed. */
   closeout: CloseoutModel | null;
+  /** From V55, when the position opened and what a close of it paid at the read; null before V55 or from a node that does not serve it. */
+  closeFee: CloseFeeModel | null;
+}
+
+/** A position's close fee as the account read gave it: its open time, the rate a gain paid then, and when that rate next fell. */
+export interface CloseFeeModel {
+  openedAt: number;
+  feeBps: number;
+  fallsAt: number | null;
+}
+
+/** The close fee the node gave for `market`, if it gave a well-formed one. */
+function decodeCloseFee(view: AccountView, market: MarketId): CloseFeeModel | null {
+  const found: CloseFee | undefined = view.close_fees?.[String(market)];
+  if (found === undefined || !Number.isSafeInteger(found.opened_at) || !Number.isSafeInteger(found.fee_bps)) return null;
+  return { openedAt: found.opened_at, feeBps: found.fee_bps, fallsAt: Number.isSafeInteger(found.falls_at) ? found.falls_at : null };
 }
 
 /** The close-out the node gave for `market`, if it gave a well-formed one. */
@@ -74,7 +88,7 @@ export function decodeAccount(view: AccountView): AccountModel {
     unfinalised: fixedFromWire(view.unfinalised_deposits ?? "0"),
     equity: fixedFromWire(view.equity),
     margin: fixedFromWire(view.margin),
-    positions: Object.entries(view.positions).map(([id, p]) => ({ market: Number(id), qty: fixedFromWire(p.qty), entry: fixedFromWire(p.entry), closeout: decodeCloseout(view, Number(id)) })),
+    positions: Object.entries(view.positions).map(([id, p]) => ({ market: Number(id), qty: fixedFromWire(p.qty), entry: fixedFromWire(p.entry), closeout: decodeCloseout(view, Number(id)), closeFee: decodeCloseFee(view, Number(id)) })),
     orders: Object.values(view.orders),
   };
 }

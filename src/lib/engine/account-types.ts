@@ -1,5 +1,6 @@
 /** The account read's shape, `GET /v1/accounts/{address}`. */
 
+import type { CloseFee } from "./pricing-types";
 import type { MarketId, Position, RestingOrder } from "./types";
 
 /** Where one position's account closes out; `price` is set only for `at`, in the market's quote currency. */
@@ -20,4 +21,6 @@ export interface AccountView {
   toxicity_bps: number;
   /** Each position's close-out; absent from a node that predates it. */
   closeouts?: PositionCloseout[];
+  /** From V55, what closing each position pays now, keyed by market id; empty before V55 and absent from a node that predates it. */
+  close_fees?: Record<string, CloseFee>;
 }

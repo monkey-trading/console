@@ -17,7 +17,7 @@ function build(balance: number, held: [number, number, number?][]): MockState {
   for (const [id, qty, above = 0] of held) {
     const mid = state.markets.get(id)?.mid;
     if (mid === undefined) throw new Error(`market ${id} is listed`);
-    account.positions.set(id, { qty: fixedFromInt(qty), entry: (mid * BigInt(100 + above)) / 100n });
+    account.positions.set(id, { qty: fixedFromInt(qty), entry: (mid * BigInt(100 + above)) / 100n, openedAt: 0 });
   }
   return state;
 }
@@ -96,7 +96,7 @@ describe("the mock's close-out prices", () => {
   it("are served in the account read beside the positions", async () => {
     const node = await funded(2_000);
     const account = node.client.state.account(ME);
-    account.positions.set(1, { qty: fixedFromInt(1), entry: node.client.state.markets.get(1)?.mid ?? 0n });
+    account.positions.set(1, { qty: fixedFromInt(1), entry: node.client.state.markets.get(1)?.mid ?? 0n, openedAt: 0 });
     const view = await node.client.account(ME);
     expect(view.closeouts).toHaveLength(1);
     expect(view.closeouts?.[0]).toMatchObject({ market: 1, reach: "at" });

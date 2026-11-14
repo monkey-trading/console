@@ -6,8 +6,7 @@ import { useId, useRef, useState } from "react";
 
 import { fixedFromInt } from "@/lib/fixed";
 import type { MockNode } from "@/lib/mock";
-import type { Region } from "@/lib/mock/state";
-import { MAX_STRESS } from "@/lib/pricing";
+import { MAX_STRESS, type Region } from "@/lib/mock/state";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { Select } from "./Select";

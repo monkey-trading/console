@@ -2,8 +2,10 @@
 
 import { MAX_SESSION_KEYS_PER_ACCOUNT } from "./engine/session-key-limits";
 import type { EngineEvent, MarketId, Reject } from "./engine/types";
-import { fixedFromWire, formatFixedPlaces, formatUsd } from "./fixed";
-import { formatMonkey } from "./format";
+import { formatHold } from "./fee-words";
+import { absFixed, fixedFromWire, formatFixedPlaces, formatUsd } from "./fixed";
+import { formatMonkey, formatRate } from "./format";
+import { formatTenthBps, tenthBpsOfValue } from "./spread-bands";
 
 /** An engine decimal with at most `places` places, grouped in thousands. */
 function decimals(wire: string, places: number): string {
@@ -45,6 +47,7 @@ export function describeReject(reject: Reject): string {
     case "insufficient_margin": return `Not enough equity: you have ${usd(reject.equity)} and the account needs ${usd(reject.required)} of margin.`;
     case "insufficient_funds": return `You can withdraw up to ${usd(reject.available)} now.`;
     case "house_capacity": return "The house cannot take more in this market. Try a smaller size.";
+    case "close_spread_ceiling": return `Reversing this position here would pay a spread over its ${reject.ceiling_bps} bps close ceiling. Close it first, then open the other side.`;
     case "invalid_signature": return "The signature was not accepted.";
     case "missing_signature": return "The request was not signed.";
     case "invalid_nonce": return "The request was out of order. Try again.";
@@ -71,8 +74,13 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
     case "market_opened": return `${symbolOf(event.market)} opened`;
     case "market_closed": return `${symbolOf(event.market)} closed`;
     case "stress_changed": return `${symbolOf(event.market)} stress level ${event.level}`;
-    case "fill":
-      return `${event.liquidation ? "Close-out " : ""}${event.side} ${decimals(event.qty, 6)} ${symbolOf(event.market)} at ${decimals(event.price, 5)}`;
+    case "fill": {
+      // The spread paid exactly, in tenths of a bp of the index: `spread_bps` truncates to whole bps.
+      const index = fixedFromWire(event.index);
+      const spread = formatTenthBps(tenthBpsOfValue(absFixed(fixedFromWire(event.price) - index), index));
+      const closed = event.hold_ms === undefined || event.profit_fee_bps === undefined ? "" : `, held ${formatHold(event.hold_ms)}, fee ${formatRate(event.profit_fee_bps)} of a gain`;
+      return `${event.liquidation ? "Close-out " : ""}${event.side} ${decimals(event.qty, 6)} ${symbolOf(event.market)} at ${decimals(event.price, 5)} (spread ${spread}${closed})`;
+    }
     case "close_out": return "Account closed out";
     case "deposited": return `Deposit credited: ${usd(event.amount)}`;
     case "withdrawal_approved": return `Withdrawal approved: ${usd(event.amount)}`;

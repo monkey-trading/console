@@ -158,7 +158,7 @@ export class LiveEngineClient implements EngineClient {
     }
     const read = decodeHouseState(wire);
     this.houseFold.foldRead(read);
-    return { seq: read.seq, ...this.houseFold.current(), governance: read.governance };
+    return { seq: read.seq, ...this.houseFold.current(), listingNotices: read.listingNotices, governance: read.governance };
   }
 
 

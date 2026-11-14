@@ -6,7 +6,7 @@ import { commandDetails, commandTitle, failureLine, lifetimeText, limitDetails, 
 
 const BTC = { symbol: "BTC-USD", margin_tiers: [{ up_to: "1000000", bps: 100 }, { up_to: null, bps: 200 }], spread_tiers: [{ up_to: null, bps: 5 }], house_cap_bps: 3000, house_cap_floor: "2000000" };
 const IN_FORCE: InForce = {
-  params: { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 3000, totalCapFloor: fixedFromInt(50_000_000), seq: 3 },
+  params: { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 3000, totalCapFloor: fixedFromInt(50_000_000), stressLevels: [], profitFeeCurve: [], seq: 3 },
   market: (id) => (id === 1 ? BTC : null),
 };
 const NOTHING: InForce = { params: null, market: () => null };
@@ -46,6 +46,9 @@ describe("commandDetails", () => {
   it("lists a relisting's bands and caps that differ from the market in force", () => {
     const command = { action: "upsert_market", id: 1, margin_tiers: [{ up_to: "1000000", bps: 200 }, { up_to: null, bps: 500 }], spread_tiers: [{ up_to: null, bps: 5 }], house_cap_bps: 3000, house_cap_floor: "2000000" };
     expect(commandDetails(command, IN_FORCE)).toEqual(["Margin 2.00% up to $1,000,000.00, then 5.00% (now 1.00% up to $1,000,000.00, then 2.00%)"]);
+    // From V52 a relisting names its spread bands in tenths of a bp, against bands in force however written.
+    const tenths = { ...command, margin_tiers: BTC.margin_tiers, spread_tiers: [{ up_to: "1000000", tenth_bps: 4 }, { up_to: null, tenth_bps: 55 }] };
+    expect(commandDetails(tenths, IN_FORCE)).toEqual(["Spread 0.4 bps up to $1,000,000.00, then 5.5 bps (now 5 bps)"]);
   });
 
   it("says when an adopted ceiling takes effect, in UTC, and nothing for bytes that are no command", () => {

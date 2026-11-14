@@ -21,12 +21,12 @@ describe("decodeMarket", () => {
     expect(moved.reference).toBe(first.reference);
   });
 
-  it("adds the mock's base spread only to a simulated market, never to a live node's", async () => {
+  it("keeps the mock's close-spread ceiling only for a simulated market, never for a live node's, which serves none", async () => {
     const node = createMockNode(START);
     const [view] = await node.client.markets();
     if (!view) throw new Error("a market is listed");
-    expect(decodeMarket(view, undefined, true).baseSpreadBps).toBeGreaterThan(0);
-    expect(decodeMarket(view, undefined, false).baseSpreadBps).toBe(0);
+    expect(decodeMarket(view, undefined, true).ceilingBps).toBe(30);
+    expect(decodeMarket(view, undefined, false).ceilingBps).toBeNull();
   });
 
   it("has no mark or reference before the first price", async () => {
@@ -42,7 +42,21 @@ describe("decodeMarket", () => {
 describe("metaFor", () => {
   it("names the listed markets and falls back plainly for an unknown one", () => {
     expect(metaFor("BTC-USD")).toMatchObject({ name: "Bitcoin", places: 2 });
-    expect(metaFor("NEW-USD")).toEqual({ name: "NEW-USD", places: 4, baseSpreadBps: 5 });
+    expect(metaFor("NEW-USD")).toEqual({ name: "NEW-USD", places: 4, closeCeilingBps: null });
+  });
+});
+
+describe("decodeAccount's close fees", () => {
+  it("reads each position's open time, rate and next fall, and none for a node that sends none or a malformed one", () => {
+    const view = { balance: "1", equity: "1", margin: "0", toxicity_bps: 0, orders: {}, positions: { "1": { qty: "1", entry: "100" }, "2": { qty: "1", entry: "100" }, "3": { qty: "1", entry: "100" }, "4": { qty: "1", entry: "100" } } };
+    const close_fees = { "1": { opened_at: 1_000, fee_bps: 6_421, falls_at: 61_005 }, "2": { opened_at: 1_000, fee_bps: 1_000, falls_at: null }, "3": { opened_at: "soon", fee_bps: 1_000, falls_at: null } as never };
+    expect(decodeAccount({ ...view, close_fees }).positions.map((p) => p.closeFee)).toEqual([
+      { openedAt: 1_000, feeBps: 6_421, fallsAt: 61_005 },
+      { openedAt: 1_000, feeBps: 1_000, fallsAt: null },
+      null,
+      null,
+    ]);
+    expect(decodeAccount(view).positions.map((p) => p.closeFee)).toEqual([null, null, null, null]);
   });
 });
 
@@ -54,7 +68,7 @@ describe("decodeAccount", () => {
     });
     expect(account.balance).toBe(100_500_000_000n);
     expect(account.unfinalised).toBe(fixedFromInt(5));
-    expect(account.positions).toEqual([{ market: 1, qty: fixedFromInt(-2), entry: fixedFromInt(30_000), closeout: null }]);
+    expect(account.positions).toEqual([{ market: 1, qty: fixedFromInt(-2), entry: fixedFromInt(30_000), closeout: null, closeFee: null }]);
   });
 
   it("reads each position's close-out, and leaves a dash for a node that sends none or a malformed one", () => {

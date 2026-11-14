@@ -6,10 +6,11 @@
  */
 
 import type { AdminCommandWire, GovernanceWire } from "../engine/governance-types";
-import type { MarketView, Tier } from "../engine/types";
+import type { MarketView, SpreadTier, Tier } from "../engine/types";
 import { formatUsd, parseFixed } from "../fixed";
 import { formatMonkey, formatRate, MONKEY_UNIT } from "../format";
 import type { HouseParams } from "../house";
+import { formatTenthBps, tenthBpsOf } from "../spread-bands";
 import { formatStampWithYear } from "../time";
 import { passes, weightToPass, yesShareBps, type ShownLimit, type Tally } from "./governance";
 
@@ -41,6 +42,9 @@ const usd = (value: unknown): string | null => {
 };
 const isTiers = (value: unknown): value is Tier[] =>
   Array.isArray(value) && value.every((tier: unknown) => typeof tier === "object" && tier !== null && int((tier as Tier).bps) !== null);
+// From V52 a spread band names its rate in tenths of a bp; a listing from before it in whole bps.
+const isSpreadTiers = (value: unknown): value is SpreadTier[] =>
+  Array.isArray(value) && value.every((tier: unknown) => typeof tier === "object" && tier !== null && (int((tier as { tenth_bps?: unknown }).tenth_bps) !== null || int((tier as Tier).bps) !== null));
 
 /** A market by its symbol where the page lists it, else by its id. */
 function marketName(market: unknown, inForce: InForce): string {
@@ -51,11 +55,20 @@ function marketName(market: unknown, inForce: InForce): string {
 
 /** A band table as "1.00% up to $1,000,000.00, then 2.00%". */
 export function tiersText(tiers: readonly Tier[]): string {
+  return bandsText(tiers, (tier) => formatRate(tier.bps));
+}
+
+/** Spread bands as one line, each rate in bps to the tenth: `0.4 bps up to $10,000,000.00, then 0.8 bps`. */
+export function spreadTiersText(tiers: readonly SpreadTier[]): string {
+  return bandsText(tiers, (tier) => formatTenthBps(tenthBpsOf(tier)));
+}
+
+/** Bands as one line, each with its `rate` and the bound it runs to. */
+function bandsText<T extends { up_to: string | null }>(tiers: readonly T[], rate: (tier: T) => string): string {
   return tiers.map((tier, i) => {
     const bound = usd(tier.up_to);
-    const rate = formatRate(tier.bps);
-    if (bound !== null) return i === 0 ? `${rate} up to ${bound}` : `then ${rate} up to ${bound}`;
-    return i === 0 ? rate : `then ${rate}`;
+    if (bound !== null) return i === 0 ? `${rate(tier)} up to ${bound}` : `then ${rate(tier)} up to ${bound}`;
+    return i === 0 ? rate(tier) : `then ${rate(tier)}`;
   }).join(", ");
 }
 
@@ -99,7 +112,7 @@ export function commandDetails(command: AdminCommandWire | null, inForce: InForc
     const tiers = (value: unknown) => (isTiers(value) ? tiersText(value) : null);
     lines.push(
       change("Margin", tiers(command.margin_tiers), market === null ? null : tiersText(market.margin_tiers)),
-      change("Spread", tiers(command.spread_tiers), market === null ? null : tiersText(market.spread_tiers)),
+      change("Spread", isSpreadTiers(command.spread_tiers) ? spreadTiersText(command.spread_tiers) : null, market === null ? null : spreadTiersText(market.spread_tiers)),
       change("House cap", int(command.house_cap_bps) === null ? null : formatRate(int(command.house_cap_bps) ?? 0), market === null ? null : formatRate(market.house_cap_bps)),
       change("House cap floor", usd(command.house_cap_floor ?? "0"), market === null ? null : usd(market.house_cap_floor ?? "0")),
     );

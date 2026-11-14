@@ -11,11 +11,10 @@ import type { StatsReads } from "../engine/stats-types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
 import { fixedToWire } from "../fixed";
-import { equityOf, marginOf } from "./accounts";
 import { MockVaultExit } from "./exit";
+import { accountViewOf } from "./account-view";
 import { mockHex } from "./hex";
 import { cancelAll, closeAll } from "./batch";
-import { closeoutsOf } from "./closeout-price";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";
 import { mockTotals, queuePage, withdraw } from "./funds";
 import { postedStanding } from "./monkey-state";
@@ -127,9 +126,9 @@ export class MockEngineClient implements EngineClient {
     return houseFigures(this.state);
   }
 
-  /** The solvency parameters in force, as the mock's launch genesis set them, the checkpoint its log would hold, and the votes it mirrors. */
+  /** The parameters in force, as the mock's launch genesis set them, the checkpoint its log would hold, and the votes it mirrors; the mock relists nothing, so no listing notice waits. */
   async houseState(): Promise<HouseState> {
-    return { seq: this.headSeq, params: this.state.params, checkpoint: mockCheckpoint(this.headSeq ?? 0), governance: this.state.governance.houseGovernance(this.state.now) };
+    return { seq: this.headSeq, params: this.state.params, checkpoint: mockCheckpoint(this.headSeq ?? 0), listingNotices: {}, governance: this.state.governance.houseGovernance(this.state.now) };
   }
 
   /**
@@ -157,24 +156,7 @@ export class MockEngineClient implements EngineClient {
 
   /** `GET /v1/accounts/{address}` now, without waiting; null for an account the node has never credited. */
   accountView(address: Address): AccountView | null {
-    const account = this.state.accounts.get(address.toLowerCase());
-    // A declared account the node has not credited answers 404 like any other: the engine's `accounts` map holds credits, not references.
-    if (!account || !this.state.credited.has(address.toLowerCase())) return null;
-    const positions: AccountView["positions"] = {};
-    for (const [id, held] of account.positions) positions[id] = { qty: fixedToWire(held.qty), entry: fixedToWire(held.entry) };
-    const orders: AccountView["orders"] = {};
-    for (const [id, order] of account.orders) orders[id] = order;
-    const pending = account.pending.reduce((sum, deposit) => sum + deposit.amount, 0n);
-    return {
-      balance: fixedToWire(account.balance),
-      ...(pending > 0n ? { unfinalised_deposits: fixedToWire(pending) } : {}),
-      equity: fixedToWire(equityOf(this.state, account)),
-      margin: fixedToWire(marginOf(this.state, account)),
-      positions,
-      orders,
-      toxicity_bps: 0,
-      closeouts: closeoutsOf(this.state, account),
-    };
+    return accountViewOf(this.state, address);
   }
 
   /** Mock only: what a live node would tell the console about the caller's region. It is not a node route. */

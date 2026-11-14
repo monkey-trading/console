@@ -1,19 +1,55 @@
-/** Spreads, quotes and margin from a market's tiers, as the engine charges them. */
+/**
+ * Spreads, prices and margin from a market's bands, as the engine charges them from V52
+ * (`crates/core/src/execution/mod.rs`, `Engine::price`): the mock node fills with these, and the
+ * mock build's ticket shows them; a live build takes its prices from the node's signed quotes.
+ */
 
 import { absFixed, bpsOf, fixedFromWire, maxFixed, minFixed, mulFixed, type Fixed, ZERO } from "./fixed";
-import type { Side, Tier } from "./engine/types";
-
-/** Extra spread each side pays, in basis points, at stress levels 0 to 3. */
-export const STRESS_SPREAD_BPS = [0, 4, 12, 30] as const;
-
-/** The share of a realised profit the house keeps, in basis points. */
-export const PROFIT_FEE_BPS = 1_000;
+import { divRounded, mulBpsRounded, mulRounded, type Rounding } from "./fixed-rounding";
+import type { MarketView, Reject, Side, SpreadTier, StressLevel, Tier } from "./engine/types";
+import { profitFee } from "./holding-fee";
+import { spreadStaircase } from "./spread-bands";
 
 /** An account is closed out when its equity falls below this share of its margin, in basis points. */
 export const CLOSE_OUT_BPS = 5_000;
 
-/** The highest stress level. */
-export const MAX_STRESS = STRESS_SPREAD_BPS.length - 1;
+/** What a market's stress level adds to a fill: a spread on every fill, in bps, and a multiplier on the size spread, in bps (10,000 is 1x). */
+export interface StressTerms {
+  minSpreadBps: number;
+  sizeMultiplierBps: number;
+}
+
+/** Level 0 as the engine's genesis lists it: no minimum and the size spread at 1x. */
+export const CALM: StressTerms = { minSpreadBps: 0, sizeMultiplierBps: 10_000 };
+
+/** The terms of stress `level` from the node's levels, or undefined when they are not known (no parameters read, or a level they do not list). */
+export function stressTermsAt(levels: readonly StressLevel[] | undefined, level: number): StressTerms | undefined {
+  const found = levels?.[level];
+  return found === undefined ? undefined : { minSpreadBps: found.min_spread_bps, sizeMultiplierBps: found.size_spread_multiplier_bps };
+}
+
+/** How a market's quote currency converts to USD and back at its FX index, each rounded as asked (`QuoteCurrency::to_usd`, `from_usd`). */
+export interface Conversion {
+  toUsd(amount: Fixed, rounding: Rounding): Fixed;
+  fromUsd(amount: Fixed, rounding: Rounding): Fixed;
+}
+
+/** A USD market's conversion: none. */
+export const USD: Conversion = { toUsd: (amount) => amount, fromUsd: (amount) => amount };
+
+/**
+ * The conversion for `view` when its price is `price`: through its FX mark, or `price` itself for the
+ * pair's own listing (USD-JPY). Null for a market quoted in another currency with no FX price yet.
+ */
+export function conversionAt(view: MarketView, price: Fixed): Conversion | null {
+  const currency = view.quote_currency;
+  if (currency === undefined) return USD;
+  const fx = currency.fx_market === view.id ? price : view.fx_mark == null ? null : fixedFromWire(view.fx_mark);
+  if (fx === null) return null;
+  return currency.currency === "jpy"
+    ? { toUsd: (amount, rounding) => divRounded(amount, fx, rounding), fromUsd: (amount, rounding) => mulRounded(amount, fx, rounding) }
+    : { toUsd: (amount, rounding) => mulRounded(amount, fx, rounding), fromUsd: (amount, rounding) => divRounded(amount, fx, rounding) };
+}
 
 /** The part of `[from, to)` inside a band that ends at `upTo` (unbounded when null) and starts at `lower`. */
 function overlap(from: Fixed, to: Fixed, lower: Fixed, upTo: Fixed | null): Fixed {
@@ -21,7 +57,7 @@ function overlap(from: Fixed, to: Fixed, lower: Fixed, upTo: Fixed | null): Fixe
   return maxFixed(ZERO, top - maxFixed(from, lower));
 }
 
-/** What `tiers` charge on the slice of notional between `from` and `to`, each band on the part inside it, exactly. */
+/** What margin `tiers` charge on the slice of notional between `from` and `to`, each band on the part inside it, exactly. */
 export function tierCost(tiers: readonly Tier[], from: Fixed, to: Fixed): Fixed {
   if (to <= from) return ZERO;
   let lower = ZERO;
@@ -34,7 +70,7 @@ export function tierCost(tiers: readonly Tier[], from: Fixed, to: Fixed): Fixed 
   return charged;
 }
 
-/** The weighted basis points `tiers` charge on that slice, truncated toward zero, for display. */
+/** The weighted basis points margin `tiers` charge on that slice, truncated toward zero, for display. */
 export function slicedBps(tiers: readonly Tier[], from: Fixed, to: Fixed): number {
   return to <= from ? 0 : Number((tierCost(tiers, from, to) * 10_000n) / (to - from));
 }
@@ -44,74 +80,79 @@ export function tieredMargin(tiers: readonly Tier[], notional: Fixed): Fixed {
   return tierCost(tiers, ZERO, absFixed(notional));
 }
 
-/**
- * How an order of signed quantity `delta` against a holding of `held` adds risk. The slice that
- * grows the absolute position runs from the held size, or from zero when the order flips the
- * position to the other side, up to the new size; an order that only reduces adds none.
- */
-export function growthOf(held: Fixed, delta: Fixed): { grows: boolean; fromQty: Fixed; toQty: Fixed } {
+/** The slice of a trade that grows |position|, as absolute quantities: the whole of an increase, the new side of a flip, nothing for a pure reduction (`validation::growth`). */
+export function growth(held: Fixed, delta: Fixed): [Fixed, Fixed] {
   const next = held + delta;
-  const flips = held !== ZERO && (held > ZERO) !== (next > ZERO) && next !== ZERO;
-  if (flips) return { grows: true, fromQty: ZERO, toQty: absFixed(next) };
-  const grows = absFixed(next) > absFixed(held);
-  return { grows, fromQty: absFixed(held), toQty: absFixed(next) };
+  if (held === ZERO || (held > ZERO) === (delta > ZERO)) return [absFixed(held), absFixed(next)];
+  if (next !== ZERO && (next > ZERO) === (delta > ZERO)) return [ZERO, absFixed(next)];
+  return [ZERO, ZERO];
 }
 
-export interface Quote {
-  /** The price the order fills at, in dollars. */
-  price: Fixed;
-  /** The whole spread against the index, in basis points. */
-  spreadBps: number;
+/** The slice of a trade that closes |position|: from what the position falls to up to what it held, for a trade on the other side (`validation::closing`). */
+export function closing(held: Fixed, delta: Fixed): [Fixed, Fixed] {
+  if (held === ZERO || (held > ZERO) === (delta > ZERO)) return [ZERO, ZERO];
+  const size = absFixed(held);
+  return [size - minFixed(absFixed(delta), size), size];
 }
+
+/** Whether an order of signed quantity `delta` against a holding of `held` adds risk: it grows the absolute position. */
+export function growthOf(held: Fixed, delta: Fixed): { grows: boolean } {
+  const [from, to] = growth(held, delta);
+  return { grows: to > from };
+}
+
+export interface PricingInput {
+  /** The market's index mid. */
+  mid: Fixed;
+  side: Side;
+  /** The signed quantity the account holds. */
+  held: Fixed;
+  /** The order's quantity, above zero. */
+  qty: Fixed;
+  tiers: readonly SpreadTier[];
+  stress: StressTerms;
+  /** The account's toxicity add-on, in bps; a close-out pays none. */
+  toxicityBps: number;
+  /** The market's close-spread ceiling in bps, or null with none. */
+  ceilingBps: number | null;
+  conversion: Conversion;
+}
+
+/** An order's price and the spread in it (exact: `price` minus `mid`, signed for the side), or the engine's refusal of it. */
+export type Priced = { kind: "priced"; price: Fixed; spread: Fixed; increases: boolean } | { kind: "refused"; reject: Reject };
 
 /**
- * The quote for an order whose growing slice runs from `heldNotional` to `heldNotional +
- * orderNotional` (see `growthOf`): the index, moved against the trader by the base spread, the
- * stress add-on, and the exact size charge spread over the order.
+ * The price a market order of `qty` pays now, as `Engine::price` computes it from V52 (the market's
+ * hours, its index and the order's minimum are the caller's): the stress minimum and toxicity add-on
+ * over the whole quantity, and the size spread on the slice that grows the position and the slice that
+ * closes it, both at the stress multiplier, every charge rounded up. A pure close's charge is clamped
+ * to its ceiling, a reversal over it is refused, and a spread that reaches the price is refused.
  */
-export function quoteFor(args: {
-  index: Fixed;
-  side: Side;
-  baseSpreadBps: number;
-  spreadTiers: readonly Tier[];
-  stress: number;
-  /** Notional where the growing slice starts, in dollars. */
-  heldNotional: Fixed;
-  /** Notional of the growing slice, in dollars; zero for an order that only reduces. */
-  orderNotional: Fixed;
-  /** Notional of the whole order, which the size charge is spread over; the engine divides by the full quantity. */
-  executedNotional: Fixed;
-}): Quote {
-  const { index, side, spreadTiers, heldNotional, orderNotional, executedNotional } = args;
-  const stressBps = STRESS_SPREAD_BPS[Math.min(args.stress, MAX_STRESS)] ?? 0;
-  const flat = bpsOf(index, args.baseSpreadBps + stressBps);
-  const sizeCost = orderNotional > ZERO ? tierCost(spreadTiers, heldNotional, heldNotional + orderNotional) : ZERO;
-  const size = orderNotional > ZERO && executedNotional > ZERO ? (index * sizeCost) / executedNotional : ZERO;
-  const move = flat + size;
-  const spreadBps = Number((move * 10_000n) / index);
-  return { price: side === "buy" ? index + move : index - move, spreadBps };
-}
-
-/** The quote for `qty` units on `side` against a holding of `held` units, with whether the order adds risk. */
-export function quoteOrder(args: {
-  index: Fixed;
-  side: Side;
-  baseSpreadBps: number;
-  spreadTiers: readonly Tier[];
-  stress: number;
-  held: Fixed;
-  qty: Fixed;
-  /** Converts an amount in the market's quote currency to USD, which the spread tiers are in; omitted for a USD market. */
-  toUsd?: (amount: Fixed) => Fixed;
-}): Quote & { grows: boolean } {
-  const growth = growthOf(args.held, args.side === "buy" ? args.qty : -args.qty);
-  const usd = args.toUsd ?? ((amount: Fixed) => amount);
-  const quote = quoteFor({
-    index: args.index, side: args.side, baseSpreadBps: args.baseSpreadBps, spreadTiers: args.spreadTiers, stress: args.stress,
-    heldNotional: usd(mulFixed(growth.fromQty, args.index)), orderNotional: usd(mulFixed(growth.toQty - growth.fromQty, args.index)),
-    executedNotional: usd(mulFixed(args.qty, args.index)),
-  });
-  return { ...quote, grows: growth.grows };
+export function priceOrder(input: PricingInput): Priced {
+  const { mid, side, held, qty, conversion } = input;
+  const delta = side === "buy" ? qty : -qty;
+  const [growFrom, growTo] = growth(held, delta);
+  const [closeFrom, closeTo] = closing(held, delta);
+  const increases = growTo > growFrom;
+  const parts = (charge: Rounding): Fixed => {
+    const slice = (from: Fixed, to: Fixed) =>
+      spreadStaircase(input.tiers, conversion.toUsd(mulFixed(from, mid), "down"), conversion.toUsd(mulRounded(to, mid, charge), "up"), charge);
+    const sizeUsd = mulBpsRounded(slice(growFrom, growTo) + slice(closeFrom, closeTo), input.stress.sizeMultiplierBps, charge);
+    const size = conversion.fromUsd(sizeUsd, "up");
+    return mulBpsRounded(mid, input.stress.minSpreadBps + input.toxicityBps, charge) + divRounded(size, qty, charge);
+  };
+  const closes = held !== ZERO && (side === "buy") !== (held > ZERO);
+  const bound = input.ceilingBps === null ? null : (mid * BigInt(input.ceilingBps)) / 10_000n;
+  const overCeiling = (charge: Fixed) => input.ceilingBps !== null && charge * 10_000n > mid * BigInt(input.ceilingBps);
+  // The truncated spread decides whether it reaches the price: a reversal over its ceiling is classified first, and a pure close is clamped to its ceiling before the check.
+  const truncated = parts("toward-zero");
+  const checked = closes && !increases && bound !== null ? minFixed(truncated, bound) : truncated;
+  if (!(closes && increases && overCeiling(truncated)) && checked >= mid) return { kind: "refused", reject: { kind: "invalid_order", reason: "spread at this size reaches the price" } };
+  const charge = parts("up");
+  if (closes && increases && input.ceilingBps !== null && overCeiling(charge)) return { kind: "refused", reject: { kind: "close_spread_ceiling", ceiling_bps: input.ceilingBps } };
+  const rounded = closes && !increases && bound !== null ? minFixed(charge, bound) : charge;
+  const spread = side === "sell" ? minFixed(rounded, mid - 1n) : rounded;
+  return { kind: "priced", price: side === "buy" ? mid + spread : mid - spread, spread, increases };
 }
 
 /** Whether the live price is further from the quote than `capBps` allows, compared exactly in fixed point. */
@@ -134,14 +175,13 @@ export function notionalOf(qty: Fixed, price: Fixed): Fixed {
 
 /**
  * What filling `qty` units at `price` costs the account's equity right away: the spread paid against
- * the index, and the fee on any profit realised by closing all or part of the old side first.
+ * the index, and the fee at `feeBps` on any profit realised by closing all or part of the old side first.
  */
-export function executionCost(args: { held: Fixed; entry: Fixed | null; delta: Fixed; price: Fixed; index: Fixed }): Fixed {
+export function executionCost(args: { held: Fixed; entry: Fixed | null; delta: Fixed; price: Fixed; index: Fixed; feeBps: number }): Fixed {
   const { held, delta, price, index } = args;
   // Any order against the other side of the holding closes up to the whole holding, and realises P&L on that part.
   const against = held !== ZERO && delta !== ZERO && (held > ZERO) !== (delta > ZERO);
-  const closing = against ? (absFixed(delta) < absFixed(held) ? -delta : held) : ZERO;
-  const realised = mulFixed(closing, price - (args.entry ?? price));
-  const fee = realised > ZERO ? bpsOf(realised, PROFIT_FEE_BPS) : ZERO;
-  return mulFixed(absFixed(delta), absFixed(price - index)) + fee;
+  const closingQty = against ? (absFixed(delta) < absFixed(held) ? -delta : held) : ZERO;
+  const realised = mulFixed(closingQty, price - (args.entry ?? price));
+  return mulFixed(absFixed(delta), absFixed(price - index)) + profitFee(realised, args.feeBps);
 }

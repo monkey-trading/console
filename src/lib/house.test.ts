@@ -39,6 +39,13 @@ describe("setParamsOf", () => {
     expect(setParamsOf(cmd, [ADMIN_REJECTED])).toBeNull();
   });
 
+  it("carries the stress levels and the fee's hold curve the command names, which the trading pages price and charge with", () => {
+    const stress_levels = [{ size_spread_multiplier_bps: 10_000, min_spread_bps: 0 }, { size_spread_multiplier_bps: 20_000, min_spread_bps: 2 }];
+    const profit_fee_curve = [{ hold_ms: 10_000, fee_bps: 10_000 }, { hold_ms: 900_000, fee_bps: 1_000 }];
+    const cmd = { type: "signed_admin", command: { ...SET_PARAMS, stress_levels, profit_fee_curve } } as unknown as EngineCommand;
+    expect(setParamsOf(cmd, [])).toEqual({ ...PARAMS_FIELDS, stress_levels, profit_fee_curve });
+  });
+
   it("answers null for other commands", () => {
     const upsert = { type: "admin", action: "upsert_market", id: 1 } as unknown as EngineCommand;
     const tick = { type: "tick" } as EngineCommand;
