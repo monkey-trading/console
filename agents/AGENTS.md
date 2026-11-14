@@ -197,7 +197,8 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
 - Two-engine local stack: `SECOND_ENGINE=1 ./scripts/dev-local-stack.sh`, then, from another terminal,
   `./scripts/dev-local-stack-ctl.sh status | elect | handover | fund-house [USDC]` (the README's walkthrough: stake and
   delegate from the Staking page, `elect`, `handover`, then `fund-house` and claim; the stack writes its addresses to
-  `STACK_INFO_FILE`, by default `monkey-local-stack.json` in the temporary directory, which the control script reads)
+  `STACK_INFO_FILE`, by default `monkey-local-stack.json` in the temporary directory, which the control script reads; rotation needs the engine's `[log_heads]`, so the stack also deploys `LogHeads`
+  and funds a log-head relayer, Anvil account 10, apart from the checkpoint relayer)
 - Parameter votes on the local stack: `GOVERNANCE=1 SECOND_ENGINE=1 ./scripts/dev-local-stack.sh` (the operator schedule and
   the vote contract, three candidates adopted as the rotation set with the chain's clock moved past the registry's day and the
   set's seven days, a fast-path restriction lasting `RESTRICTION_TTL`, default 3m), then
