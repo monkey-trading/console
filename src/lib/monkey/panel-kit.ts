@@ -17,7 +17,8 @@ export async function setup(page: PanelPage = "staking") {
   seedMonkeyDemo(node.client.state, DEMO_ADDRESS);
   const store = new ConsoleStore({
     client: node.client, wallets: node.wallets, drive: (ms) => node.client.tick(ms), history: mockHistory,
-    initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS },
+    // As the mock session starts it: its first state carries the house state, so the store reads none it already holds.
+    initial: { markets: node.client.marketViews(), house: node.client.houseView(), startMs: SIM_EPOCH_MS, housePanel: node.client.housePanelSnapshot() },
   });
   store.start(SIM_EPOCH_MS);
   await connectWallet(store, "browser");

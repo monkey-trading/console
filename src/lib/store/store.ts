@@ -72,7 +72,7 @@ export class ConsoleStore {
   readonly exit = new ExitWatch(this); // keeps the account's exit proof at the vault's latest root
   constructor(deps: StoreDeps) {
     this.deps = deps;
-    this.viewer = deps.initial.viewer;
+    this.viewer = deps.initial.viewer; this.pricingRead = deps.initial.housePanel === undefined ? 0 : 1; // a mock session's first state carries its parameters
     this.pacing = deps.client.signatures === "none" ? null : new PacedReads(this, (accountChanged) => void this.refresh(accountChanged));
     const state = initialState(deps.initial.markets, deps.initial.house, deps.initial.startMs, deps.history, deps.client.signatures, deps.initial.housePanel);
     const session = deps.initial.session;
