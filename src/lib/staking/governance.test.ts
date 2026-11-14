@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { GovernanceWire, OpenProposalWire, OpenProposalsWire } from "../engine/governance-types";
-import { focusAfterLeaving, governanceView, NO_GOVERNANCE, passes, proposalsView, stillOpen, weightToPass, yesShareBps } from "./governance";
+import { awayLabelShown, focusAfterLeaving, focusLeftCards, governanceGate, governanceView, NO_GOVERNANCE, passes, proposalsView, stillOpen, weightToPass, yesShareBps } from "./governance";
 
 const VOTE = "0x00000000000000000000000000000000000000A1";
 const PROPOSER = "0x00000000000000000000000000000000000000B2";
@@ -130,5 +130,49 @@ describe("stillOpen and focusAfterLeaving", () => {
     expect(focusAfterLeaving([8], 9, view)).toBeNull();
     expect(focusAfterLeaving([8], null, view)).toBeNull();
     expect(focusAfterLeaving([], 8, view)).toBeNull();
+  });
+});
+
+describe("focusLeftCards", () => {
+  it("ends the note when focus moves to a node outside the cards, or to none while the element stays", () => {
+    expect(focusLeftCards("outside", false)).toBe(true);
+    expect(focusLeftCards("nowhere", false)).toBe(true);
+  });
+
+  it("keeps the note through the focusout a removal fires, and while focus moves within the cards", () => {
+    expect(focusLeftCards("nowhere", true)).toBe(false);
+    expect(focusLeftCards("cards", false)).toBe(false);
+  });
+});
+
+describe("governanceGate (monkey-trading/console#343)", () => {
+  const land = { list: "ready", held: "ready", wallet: false, waited: false, shown: false } as const;
+
+  it("waits for the node's two reads first, whatever the wallet has answered", () => {
+    expect(governanceGate({ ...land, list: "loading", wallet: true })).toBe("node");
+    expect(governanceGate({ ...land, held: "loading", wallet: true, waited: true })).toBe("node");
+  });
+
+  it("starts the wallet's bounded wait once the node's reads have landed, and shows when the wallet answers or the wait ends", () => {
+    expect(governanceGate(land)).toBe("wallet");
+    expect(governanceGate({ ...land, wallet: true })).toBe("shown");
+    expect(governanceGate({ ...land, waited: true })).toBe("shown");
+  });
+
+  it("counts a failed or unavailable node read as landed, and keeps the cards once shown", () => {
+    expect(governanceGate({ ...land, list: "failed", held: "unavailable" })).toBe("wallet");
+    expect(governanceGate({ ...land, list: "loading", shown: true })).toBe("shown");
+  });
+});
+
+describe("awayLabelShown (monkey-trading/console#346)", () => {
+  it("names a proposal that left the open list only while the surface has a notice or prompt to show under it", () => {
+    expect(awayLabelShown(7, [8, 9], true)).toBe(true);
+    expect(awayLabelShown(7, [8, 9], false)).toBe(false);
+  });
+
+  it("names nothing for a proposal still listed, where its own control shows the notice, or for no vote", () => {
+    expect(awayLabelShown(8, [8, 9], true)).toBe(false);
+    expect(awayLabelShown(null, [8, 9], true)).toBe(false);
   });
 });

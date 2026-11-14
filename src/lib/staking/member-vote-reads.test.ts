@@ -5,10 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MONKEY_UNIT } from "../format";
 import { DEMO_ADDRESS } from "../mock/demo";
 import { MockGovernance } from "../mock/governance";
-import { castVote } from "../monkey/actions";
+import { castVote, stakeMonkey } from "../monkey/actions";
 import { WALLET_READ_EVERY_MS } from "../monkey/live-reads";
 import { OperatorReads } from "../monkey/operators";
-import { flush, setup } from "../monkey/panel-kit";
+import { flush, holdReads, setup } from "../monkey/panel-kit";
 import { disconnectWallet } from "../store/actions";
 import { DelegationReads } from "./delegation-reads";
 import { GovernanceReads } from "./governance-reads";
@@ -104,6 +104,27 @@ describe("MemberVoteReads", () => {
     stop();
   });
 
+  it("reads a passed proposal again when the wallet's chain does not hold it yet (monkey-trading/console#345)", async () => {
+    const kit = await setup();
+    const governanceWallet = kit.store.liveWallet?.governance;
+    if (governanceWallet === undefined) throw new Error("the mock wallet votes");
+    const real = governanceWallet.proposal.bind(governanceWallet);
+    let behind = true;
+    governanceWallet.proposal = (vote, id) => (behind ? Promise.resolve(null) : real(vote, id));
+    const operators = new OperatorReads(kit.store);
+    const governance = new GovernanceReads(kit.store);
+    const delegations = new DelegationReads(kit.store);
+    const votes = new MemberVoteReads(kit.store, operators, governance, delegations);
+    const stops = [operators.start(() => false), governance.start(() => false), delegations.start(() => false), votes.start(() => false)];
+    await flush();
+    expect(votes.getSnapshot().facts.proposals.has(5)).toBe(false);
+    behind = false;
+    await votes.refresh();
+    expect(votes.getSnapshot().facts.proposals.get(5)).toMatchObject({ passed: true });
+    for (const stop of stops) stop();
+    kit.stop();
+  });
+
   it("is unavailable without a wallet that reads the chain, and keeps what it read through a failed read", async () => {
     const { votes, store, wallet, stop } = await tab();
     const held = votes.getSnapshot().facts;
@@ -157,6 +178,63 @@ describe("castVote", () => {
     await expect(castVote(panel, operators, votes, vote, 5)).resolves.toBe(false);
     expect(store.getSnapshot().notices.governance).toMatchObject({ tone: "error", text: "This proposal has already passed, so the vote contract takes no more votes on it and nothing was sent." });
     expect(votes.getSnapshot().votingOn).toBe(5);
+    stop();
+  });
+
+  it("keeps the notice with the vote the wallet's queue accepted, and a second press the queue refuses does not take it over (monkey-trading/console#344)", async () => {
+    const { votes, operators, panel, store, stop } = await tab({ member: true });
+    const vote = operators.getSnapshot().list.value?.proposals?.vote ?? "";
+    const held = holdReads(store);
+    void panel.refreshWallet(true);
+    await flush();
+    const first = castVote(panel, operators, votes, vote, 7);
+    const second = castVote(panel, operators, votes, vote, 8);
+    await expect(second).resolves.toBe(false);
+    expect(store.getSnapshot().notices.governance?.text).toBe("Your earlier request is still with your wallet.");
+    expect(votes.getSnapshot().votingOn).toBe(7);
+    held.release();
+    await expect(first).resolves.toBe(true);
+    expect(votes.getSnapshot().votingOn).toBe(7);
+    stop();
+  });
+
+  it("puts a refusal at the pressed proposal when no vote of the tab is the one waiting", async () => {
+    const { votes, operators, panel, store, stop } = await tab({ member: true });
+    const vote = operators.getSnapshot().list.value?.proposals?.vote ?? "";
+    const held = holdReads(store);
+    void panel.refreshWallet(true);
+    await flush();
+    const staked = stakeMonkey(panel, MONKEY_UNIT);
+    await expect(castVote(panel, operators, votes, vote, 8)).resolves.toBe(false);
+    expect(votes.getSnapshot().votingOn).toBe(8);
+    held.release();
+    await staked;
+    // The next vote is a new press: it takes the place.
+    await expect(castVote(panel, operators, votes, vote, 7)).resolves.toBe(true);
+    expect(votes.getSnapshot().votingOn).toBe(7);
+    stop();
+  });
+});
+
+describe("a change of account (monkey-trading/console#348)", () => {
+  it("clears the vote's notice place and landing, so the next account's landing reads out as a new message", async () => {
+    const { votes, operators, panel, store, stop } = await tab({ member: true });
+    const vote = operators.getSnapshot().list.value?.proposals?.vote ?? "";
+    await expect(castVote(panel, operators, votes, vote, 7)).resolves.toBe(true);
+    expect(votes.getSnapshot()).toMatchObject({ votingOn: 7, landed: 7 });
+    disconnectWallet(store);
+    await flush();
+    expect(votes.getSnapshot()).toMatchObject({ account: null, votingOn: null, landed: null });
+    stop();
+  });
+
+  it("does not read a landing out to the account the wallet has moved to", async () => {
+    const { votes, operators, stop } = await tab({ member: true });
+    const vote = operators.getSnapshot().list.value?.proposals?.vote ?? "";
+    votes.votedLanded(vote, 7, "0x00000000000000000000000000000000000000b2");
+    expect(votes.getSnapshot().landed).toBeNull();
+    votes.votedLanded(vote, 7, DEMO_ADDRESS);
+    expect(votes.getSnapshot().landed).toBe(7);
     stop();
   });
 });

@@ -2,6 +2,7 @@
 
 import { carryAccrued } from "../engine/claim-standing";
 import { withTimeout } from "../engine/provider-errors";
+import { WALLET_READ_MS } from "../engine/serialized-provider";
 import type { StakingPosition } from "../engine/staking";
 import type { Wallet } from "../engine/wallet";
 import { checkEmissionsClaimed } from "../store/emissions";
@@ -87,6 +88,7 @@ export class MonkeyPanel {
       for (const feed of this.charts()) void feed.load();
     };
     if (!initialPending) readInitial();
+    if (this.page !== "dashboard") void this.refreshWallet();
     const stopLive = followLive({
       isHidden, open: () => this.open, account: () => this.store.liveWallet?.address.toLowerCase() ?? null,
       subscribe: (onMessage) => this.store.deps.client.subscribe(onMessage),
@@ -181,11 +183,12 @@ export class MonkeyPanel {
   /**
    * Reads what the page shows of the connected wallet: on the Staking page its stake on chain and the
    * node's distribution proof for it, on the MONKEY page the vault's record of its MONKEY claims.
-   * Called on load, when the wallet changes, when the node is trusted again and after a transaction. It queues behind the
+   * Called when the page opens (its stop cleared them), when the wallet changes and after a transaction; it reads nothing while the page is closed. It queues behind the
    * wallet's earlier work ([WalletQueue]): a read already waiting or running serves this one too,
    * unless `fresh` asks for one that starts after what is running now, which a transaction needs.
    */
   refreshWallet(fresh = false): Promise<void> {
+    if (!this.open) return Promise.resolve();
     const wallet = this.store.liveWallet;
     if (wallet === null) {
       this.accountRound += 1;
@@ -224,11 +227,12 @@ export class MonkeyPanel {
   /**
    * Runs `task`, which asks `wallet`'s provider things, behind the wallet's earlier work, so a
    * transaction's own reads and the confirmation it waits for hold up the page's reads. Resolves
-   * null, without running `task`, when another transaction is already waiting or running.
+   * null, without running `task`, when another transaction is already waiting or running; `onQueued` runs for one accepted.
    */
-  exclusive<T>(task: () => Promise<T>): Promise<T | null> {
+  exclusive<T>(task: () => Promise<T>, onQueued?: () => void): Promise<T | null> {
     const wallet = this.store.liveWallet;
-    return wallet === null ? task() : this.store.monkeySession.walletWork.transaction(wallet, task);
+    if (wallet === null) onQueued?.();
+    return wallet === null ? task() : this.store.monkeySession.walletWork.transaction(wallet, task, onQueued);
   }
 
   /** The node's distribution proof for `wallet`, into the figures; a failure lands there, so this never rejects. */
@@ -294,6 +298,3 @@ export class MonkeyPanel {
     await Promise.all(outstanding);
   }
 }
-
-/** How long the wallet's reads may take before a read fails into its figures, in milliseconds. */
-const WALLET_READ_MS = 30_000;

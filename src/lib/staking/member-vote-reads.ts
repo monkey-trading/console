@@ -67,6 +67,8 @@ export class MemberVoteReads {
   /** Counts openings and wallet changes; a read begun before one never writes after it. */
   private cycle = 0;
   private open = false;
+  /** The proposal whose vote the wallet's queue accepted and whose transaction has not ended: the notice speaks for it. */
+  private queuedVote: number | null = null;
   /** A read waiting for the wallet, which another ask joins until it has begun. */
   private reading: { wallet: Wallet; cycle: number; read: Promise<void>; started: boolean } | null = null;
   private readonly backoff = new Backoff();
@@ -150,7 +152,9 @@ export class MemberVoteReads {
     const account = wallet?.address.toLowerCase() ?? null;
     if (account !== this.state.account) {
       this.cycle += 1;
-      this.set({ account, status: "idle", error: null });
+      // Another account's vote says nothing of this one's: its notice place and its landing go.
+      this.queuedVote = null;
+      this.set({ account, status: "idle", error: null, votingOn: null, landed: null });
     }
     const governance = wallet?.governance;
     if (wallet === null || account === null || governance === undefined || wallet.readOnly === true) {
@@ -212,14 +216,27 @@ export class MemberVoteReads {
     return entry.read;
   }
 
-  /** Marks proposal `id` as the one the `governance` notice speaks for, so it shows at that proposal's vote control. */
+  /** Marks proposal `id`, whose vote the wallet's queue accepted, as the one the `governance` notice speaks for, so it shows at that proposal's vote control. */
   voting(id: number): void {
+    this.queuedVote = id;
     if (this.state.votingOn !== id) this.set({ votingOn: id });
+  }
+
+  /** Where the words of a press of `id` go when the queue took no vote for it: with the vote it accepted, if one is waiting, else at `id`. */
+  refused(id: number): void {
+    if (this.queuedVote === null && this.state.votingOn !== id) this.set({ votingOn: id });
+  }
+
+  /** After the transaction for `id` has ended, landed or not: a later press is a new one. */
+  finished(id: number): void {
+    if (this.queuedVote === id) this.queuedVote = null;
   }
 
   /** After the account's vote on `id` landed: the contract holds it, so it shows at once and is read out, and the reads confirm it. */
   votedLanded(vote: string, id: number, member: string): void {
     if (vote !== this.state.vote) return;
-    this.set({ landed: id, facts: fold(this.state.facts, { kind: "voted", id, member: member.toLowerCase(), open: true, voted: true }) });
+    // A vote landing after the wallet moved to another account is not that account's to hear.
+    const mine = member.toLowerCase() === this.store.liveWallet?.address.toLowerCase();
+    this.set({ ...(mine ? { landed: id } : {}), facts: fold(this.state.facts, { kind: "voted", id, member: member.toLowerCase(), open: true, voted: true }) });
   }
 }

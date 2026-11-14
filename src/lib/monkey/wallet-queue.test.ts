@@ -72,6 +72,19 @@ describe("WalletQueue", () => {
     expect(runs).toBe(2);
   });
 
+  it("tells the caller of a transaction it accepted, at once, and not of one it refused", async () => {
+    const queue = new WalletQueue();
+    const w = wallet();
+    const held = gate();
+    const accepted: string[] = [];
+    const first = queue.transaction(w, () => held.open, () => accepted.push("one"));
+    expect(accepted).toEqual(["one"]);
+    await expect(queue.transaction(w, async () => "two", () => accepted.push("two"))).resolves.toBeNull();
+    expect(accepted).toEqual(["one"]);
+    held.release();
+    await first;
+  });
+
   it("refuses a second transaction while one waits or runs, even with a read queued between them, and takes one again once it has settled", async () => {
     const queue = new WalletQueue();
     const w = wallet();

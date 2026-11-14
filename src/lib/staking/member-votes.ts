@@ -21,7 +21,7 @@ export interface VoteTarget {
 export interface MemberVoteFacts {
   /** Each set's members with their weights, by set id. */
   sets: ReadonlyMap<number, ReadonlyMap<string, bigint>>;
-  /** Proposals the node names no set for, as the chain holds them, by id; null for one the chain does not hold. */
+  /** Proposals the node names no set for, as the chain returned them, by id. One the chain did not hold at the block read is absent, and read again. */
   proposals: ReadonlyMap<number, ChainProposal | null>;
   /** Whether each member voted, by `voteKey`; `final` once it cannot change, and `at` the count of vote reads when it was read. */
   voted: ReadonlyMap<string, { voted: boolean; final: boolean; at: number }>;
@@ -94,10 +94,11 @@ export function plan(facts: MemberVoteFacts, targets: readonly VoteTarget[], mem
   return [...calls, ...again.map(({ call }) => call)].slice(0, MAX_CALLS);
 }
 
-/** `facts` with one call's answer folded in; a set fixes once read, and a vote once read while the proposal took none. */
+/** `facts` with one call's answer folded in; a set fixes once read, a vote once read while the proposal took none, and a proposal once the chain returned it. */
 export function fold(facts: MemberVoteFacts, answer: VoteAnswer): MemberVoteFacts {
   switch (answer.kind) {
-    case "proposal": return { ...facts, proposals: new Map(facts.proposals).set(answer.id, answer.proposal) };
+    // A wallet whose chain is behind the node's holds no such proposal yet: that is not an answer to keep.
+    case "proposal": return answer.proposal === null ? facts : { ...facts, proposals: new Map(facts.proposals).set(answer.id, answer.proposal) };
     case "set": return { ...facts, sets: new Map(facts.sets).set(answer.setId, answer.members) };
     case "voted": {
       const reads = facts.reads + 1;
