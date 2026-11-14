@@ -252,7 +252,7 @@ describe("the mock's distribution bound by cash", () => {
     // Cash sits on the floor while NAV is far above it, as when clients' open positions are losing.
     state.houseCash = FLOOR_USD;
     const mid = state.markets.get(1)?.mid ?? 0n;
-    state.account(ME).positions.set(1, { qty: fixedFromInt(1), entry: mid * 2n });
+    state.account(ME).positions.set(1, { qty: fixedFromInt(1), entry: mid * 2n, openedAt: 0 });
     expect(houseNav(state)).toBeGreaterThan(state.houseCash);
     advance(state, state.now + EPOCH_MS);
     expect(state.monkey.epochs.at(-1)?.allocated).toBe(0n);

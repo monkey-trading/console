@@ -74,7 +74,7 @@ describe("previewTicket for a market quoted in another currency", () => {
     const sameInUsd = previewTicket({ ...base, market: await btcAt(200), qty: q("10") });
     const ten = previewTicket({ ...base, market: nikkei, qty: q("10") });
     expect(ten.markNotional).toBe(fixedFromInt(2_000));
-    expect(ten.spreadBps).toBe(sameInUsd.spreadBps);
+    expect(ten.spreadTenths).toBe(sameInUsd.spreadTenths);
     // The spread this fill pays comes off equity in USD: $41 covers the $40 margin of ten contracts plus a spread of well under a dollar, though the spread is dozens of yen.
     expect(previewTicket({ ...base, market: nikkei, qty: q("10"), account: account(41) }).problems).toEqual([]);
     expect(previewTicket({ ...base, market: nikkei, qty: q("10"), account: account(40) }).problems).toContain("Not enough equity for the margin this needs.");

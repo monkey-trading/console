@@ -3,8 +3,10 @@
 import { absFixed, bpsOf, divFixed, divFixedDown, fixedFromWire, fixedToWire, mulFixed, mulFixedDown, parseFixed, SCALE, type Fixed } from "./fixed";
 import { capFor } from "./house";
 import type { MarketView, Side } from "./engine/types";
+import { describeReject } from "./messages";
 import type { AccountModel, MarketModel } from "./models";
-import { executionCost, growthOf, quoteOrder, slicedBps, tieredMargin, type Quote } from "./pricing";
+import { CALM, conversionAt, executionCost, growthOf, priceOrder, slicedBps, tieredMargin, type StressTerms } from "./pricing";
+import { tenthBpsOfValue } from "./spread-bands";
 
 /** The decimal places of a size: a millionth of a unit is the smallest step. */
 const QTY_PLACES = 6;
@@ -47,6 +49,15 @@ export interface TicketInput {
   houseNav: Fixed;
   /** False for a live node, whose executable quote the console cannot know: the margin use, which depends on it, is then null. */
   estimates?: boolean;
+  /** The market's stress level's terms from the node's parameters; level 0's without them. */
+  stress?: StressTerms;
+  /** The profit fee rate a close of the held position pays now, which a reversal's realised gain pays; the full fee without it, the most a close can pay. */
+  closeFeeBps?: number;
+}
+
+/** The price an order fills at. */
+export interface Quote {
+  price: Fixed;
 }
 
 export interface TicketPreview {
@@ -56,12 +67,12 @@ export interface TicketPreview {
   notional: Fixed | null;
   /** The order's value in USD at the mark, which margin and the house's cap are measured on. */
   markNotional: Fixed;
-  /** The price the order would fill at now; this is sent as the order's quoted price. */
+  /** The price the order would fill at now; this is sent as the order's quoted price. Null when the market has no price or the engine's pricing refuses the order. */
   quote: Quote | null;
-  /** The best offer and bid for this size, and the spread between them in basis points of the index. */
+  /** The offer and bid for this size, null for a side the pricing refuses, and the spread between them in tenths of a bp of the index. */
   offer: Fixed | null;
   bid: Fixed | null;
-  spreadBps: number;
+  spreadTenths: number | null;
   /** The worst price the slippage bound allows. */
   worstPrice: Fixed | null;
   /** Margin the whole account needs after this order. */
@@ -203,7 +214,7 @@ export function previewTicket(input: TicketInput): TicketPreview {
   const problems: string[] = [];
   const houseCap = capFor(input.houseNav, spec.house_cap_bps, spec.house_cap_floor === undefined ? 0n : fixedFromWire(spec.house_cap_floor));
   const unpriced = (problem: string): TicketPreview => ({
-    qty, notional: null, markNotional: 0n, quote: null, offer: null, bid: null, spreadBps: 0, worstPrice: null, marginAfter: account?.margin ?? 0n, marginAdded: 0n,
+    qty, notional: null, markNotional: 0n, quote: null, offer: null, bid: null, spreadTenths: null, worstPrice: null, marginAfter: account?.margin ?? 0n, marginAdded: 0n,
     marginUseBps: null, marginRateBps: null, impliedLeverage: null, houseCap, problems: [problem],
   });
   if (mark === null || mark <= 0n) return unpriced("No price yet.");
@@ -221,11 +232,15 @@ export function previewTicket(input: TicketInput): TicketPreview {
   if (toUsdAtBasis === null) throw new Error(`no USD conversion at the trigger price ${trigger} for market ${market.id}, though one exists at the mark`);
   const notional = toUsdAtBasis(mulFixed(qty, trigger ?? mark));
   const current = held(account, market.id);
-  const quoteSide = (s: Side) =>
-    quoteOrder({ index: mark, side: s, baseSpreadBps: market.baseSpreadBps, spreadTiers: spec.spread_tiers, stress: market.stress, held: current, qty, toUsd });
-  const offer = quoteSide("buy");
-  const bid = quoteSide("sell");
-  const quote = side === "buy" ? offer : bid;
+  const conversion = conversionAt(spec, mark);
+  // `usdConverter` at the mark is null only for want of an FX mark, which `conversionAt` reads the same way.
+  if (conversion === null) throw new Error(`no conversion at the mark for market ${market.id}, though a USD converter exists`);
+  // An empty size prices the smallest order, so the ticket still shows a bid and an offer.
+  const priced = (s: Side) => priceOrder({ mid: mark, side: s, held: current, qty: qty > 0n ? qty : QTY_STEP, tiers: spec.spread_tiers, stress: input.stress ?? CALM, toxicityBps: 0, ceilingBps: market.ceilingBps, conversion });
+  const [offer, bid] = [priced("buy"), priced("sell")];
+  const mine = side === "buy" ? offer : bid;
+  const priceOf = (p: typeof mine) => (p.kind === "priced" ? p.price : null);
+  const quote: Quote | null = mine.kind === "priced" ? { price: mine.price } : null;
   const delta = side === "buy" ? qty : -qty;
   const grows = growthOf(current, delta).grows;
   const before = tieredMargin(spec.margin_tiers, usdAtMark(current));
@@ -236,10 +251,11 @@ export function previewTicket(input: TicketInput): TicketPreview {
   const positionRate = resulting > 0n ? Number((after * 10_000n) / resulting) : markNotional > 0n ? rate : null;
   const equity = account?.equity ?? 0n;
   // The check the node runs: equity after the spread this fill pays, against the margin the account then needs.
-  const cost = toUsd(executionCost({ held: current, entry: account?.positions.find((p) => p.market === market.id)?.entry ?? null, delta, price: quote.price, index: mark }));
+  const cost = quote === null ? 0n : toUsd(executionCost({ held: current, entry: account?.positions.find((p) => p.market === market.id)?.entry ?? null, delta, price: quote.price, index: mark, feeBps: input.closeFeeBps ?? 10_000 }));
   const afterCost = equity - cost;
   const useBps = afterCost > 0n ? Number((marginAfter * 10_000n) / afterCost) : equity > 0n ? 10_001 : null;
-  const worst = side === "buy" ? bpsOf(quote.price, input.slippageBps) : -bpsOf(quote.price, input.slippageBps);
+  // A live node's own quote says whether it prices the order; its ceiling is not served, so the console's estimate does not judge it.
+  if (mine.kind === "refused" && qty > 0n && !input.resting && input.estimates !== false) problems.push(describeReject(mine.reject));
   if (!market.open && !input.resting) problems.push(MARKET_CLOSED);
   if (market.reduceOnly && grows) problems.push(REDUCE_ONLY);
   if (input.resting && input.triggerPrice != null && input.triggerPrice <= 0n) problems.push(TRIGGER_NOT_POSITIVE);
@@ -249,8 +265,10 @@ export function previewTicket(input: TicketInput): TicketPreview {
     if (equity <= 0n) problems.push("Fund your account to trade.");
     else if (marginAfter > afterCost) problems.push(MARGIN_SHORT);
   }
+  const [offerPrice, bidPrice] = [priceOf(offer), priceOf(bid)];
+  const worst = quote === null || input.resting ? null : quote.price + (side === "buy" ? bpsOf(quote.price, input.slippageBps) : -bpsOf(quote.price, input.slippageBps));
   return {
-    qty, notional, markNotional, quote, offer: offer.price, bid: bid.price, spreadBps: Number(((offer.price - bid.price) * 10_000n) / mark), worstPrice: input.resting ? null : quote.price + worst,
+    qty, notional, markNotional, quote, offer: offerPrice, bid: bidPrice, spreadTenths: offerPrice === null || bidPrice === null ? null : tenthBpsOfValue(offerPrice - bidPrice, mark), worstPrice: worst,
     marginAfter, marginAdded: after - before, marginUseBps: input.estimates === false ? null : useBps, marginRateBps: positionRate,
     impliedLeverage: after > 0n ? Number((resulting * 100n) / after) / 100 : null, houseCap, problems,
   };

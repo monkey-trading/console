@@ -4,8 +4,13 @@
 # trades against it through the console's store and actions: a fixed-key wallet funds itself
 # through the mock-custody dev endpoint, declares eligibility, fills a market order at the streamed
 # executable quote sent as the quoted price with a slippage bound, rests and cancels a limit order,
-# closes a position reduce only at the streamed closing price, and is closed out when the
-# operator's upsert-market raises the margin tier past its equity.
+# and closes a position reduce only at the streamed closing price. It then opens BTC-USD and
+# EUR-USD positions, checks each partial close's preview is a bound the fill meets, restarts the
+# node with their mock mids raised and ETH-USD's, which closes out an ETH-USD short, and after the
+# fee's 15-minute curve checks each whole close's preview equals the fill: price, fee and cash move.
+# It runs for about twenty minutes. The private genesis quotes every mock market every 3 s and keeps
+# a quote fresh for 10 s on BTC-USD, ETH-USD and EUR-USD, so the index holds between a quote and its
+# fill, and keeps EUR-USD open every day.
 #
 # Needs Node, curl, python3 (3.11 or later), and either ENGINE_BIN (a built `engine` binary with
 # the access_source example built beside it) with ENGINE_DIR (the engine checkout holding
@@ -36,6 +41,12 @@ access_pid=""
 cleanup() {
   # Quietly: bash reports each child a signal stops.
   [[ -z "$node_pid" ]] || { kill "$node_pid" 2>/dev/null || true; wait "$node_pid" 2>/dev/null || true; }
+  # The node the test restarted, if it did: its PID is the one the test recorded.
+  if [[ -s "$work/node.pid" && "$(cat "$work/node.pid")" != "$node_pid" ]]; then
+    restarted="$(cat "$work/node.pid")"
+    kill "$restarted" 2>/dev/null || true
+    for _ in $(seq 1 50); do kill -0 "$restarted" 2>/dev/null || break; sleep 0.2; done
+  fi
   [[ -z "$access_pid" ]] || { kill "$access_pid" 2>/dev/null || true; wait "$access_pid" 2>/dev/null || true; }
   rm -rf "$work"
 }
@@ -60,6 +71,14 @@ src, out, api, access, metrics = sys.argv[1:]
 cfg = tomllib.loads(Path(src).read_text())
 cfg["node"]["listen"] = f"127.0.0.1:{api}"
 cfg["node"]["auth"] = "eip712"
+# One mock quote every 3 s, fresh for 10 s on the scenario's markets, so the index holds between a quote and its fill.
+cfg["feeds"]["interval"] = "3s"
+for market in cfg["genesis"]["markets"]:
+    if market["id"] in (1, 2, 10):
+        market["price_rules"]["max_age_ms"] = 10000
+    # EUR-USD trades every day here, so the scenario runs on a weekend too.
+    if market["id"] == 10:
+        market["schedule"] = {"kind": "always_open"}
 cfg["metrics"]["listen"] = f"127.0.0.1:{metrics}"
 # Anvil account 0, the published access-source test authority the fixture signs with.
 cfg["access"] = {"source": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "endpoint": f"http://127.0.0.1:{access}",
@@ -107,6 +126,8 @@ fi
 [[ -x "$access_source" ]] || { echo "FAIL: $access_source is not built; build the access_source example beside $engine_bin" >&2; exit 1; }
 "$engine_bin" run --config "$node_config" > "$work/node.log" 2>&1 &
 node_pid=$!
+# The test restarts the node by this PID, and records the new one here.
+echo "$node_pid" > "$work/node.pid"
 
 printf '%s\n' '{"mode":"clear","jurisdictions":{},"sanctioned":[]}' >"$work/access-fixture.json"
 "$access_source" "127.0.0.1:$access_port" 31337 0x0000000000000000000000000000000000000000 "$work/access-fixture.json" >"$work/access-source.log" 2>&1 &
@@ -131,4 +152,4 @@ if ! ENGINE_NODE_URL="$api" ENGINE_BIN="$engine_bin" NODE_CONFIG="$node_config" 
   tail -n 20 "$work/access-source.log" >&2
   exit 1
 fi
-echo "PASS: funded, declared, filled at the streamed quote with the slippage bound, rested and cancelled, closed reduce only, and traded through a close-out"
+echo "PASS: funded, declared, filled at the streamed quote with the slippage bound, rested and cancelled, closed reduce only, priced partial closes as bounds and whole closes exactly in BTC-USD and EUR-USD, and traded through a close-out"

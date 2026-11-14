@@ -19,7 +19,7 @@ async function btcMarket() {
 
 const held = (closeout: CloseoutModel | null): AccountModel => ({
   balance: fixedFromInt(1_000), unfinalised: 0n, equity: fixedFromInt(1_000), margin: fixedFromInt(400),
-  positions: [{ market: 1, qty: fixedFromInt(1), entry: fixedFromInt(60_000), closeout }], orders: [],
+  positions: [{ market: 1, qty: fixedFromInt(1), entry: fixedFromInt(60_000), closeout, closeFee: null }], orders: [],
 });
 
 describe("closeOutMarker", () => {

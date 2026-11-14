@@ -62,7 +62,7 @@ class Script {
     const mid = this.state.markets.get(market)?.mid ?? 1n;
     const qty = (divFixed(fixedFromInt(dollars), mid) / 1_000n) * 1_000n;
     const quote = liveQuote(this.state, DEMO_ADDRESS, market, side, qty);
-    if (!quote) throw new Error("demo: no quote");
+    if (!quote || quote.kind === "refused") throw new Error("demo: no quote");
     return placeOrder(this.state, {
       account: DEMO_ADDRESS, client_id: this.state.seq, market, side, qty: fixedToWire(qty),
       kind: { kind: "market", quoted: fixedToWire(quote.price), max_slippage_bps: 50 }, auth: this.auth(),

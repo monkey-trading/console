@@ -94,11 +94,11 @@ describe("a live client's trust and feed", () => {
     expect(client.marketReads).toBe(3);
   });
 
-  it("decodes a live node's markets without the mock's base spread", async () => {
+  it("decodes a live node's markets without the mock's close-spread ceiling", async () => {
     const { store } = setup();
     store.start(0);
     await settle();
-    expect(store.getSnapshot().markets[0]?.baseSpreadBps).toBe(0);
+    expect(store.getSnapshot().markets[0]?.ceilingBps).toBeNull();
   });
 
   it("refreshes the watched account's history for an event of its own from any command, and for no other account's", async () => {
