@@ -4,14 +4,14 @@
  * trading dev scenario both read it here, so the scenario checks the figures the ticket shows.
  */
 
-import { ladderSlack, ticketClose, type ClosePreview } from "./close-preview";
+import { closeShape, ladderSlack, ticketClose, type CloseShape, type ClosePreview } from "./close-preview";
 import type { Side } from "./engine/types";
 import { positionFee } from "./fee-words";
-import type { Fixed } from "./fixed";
+import { absFixed, type Fixed } from "./fixed";
 import type { FeeNow } from "./holding-fee";
 import type { HouseParams } from "./house";
 import type { MarketModel, PositionModel } from "./models";
-import { stressTermsAt } from "./pricing";
+import { CALM, conversionAt, stressTermsAt, USD } from "./pricing";
 import { ticketPrices, type TicketPrices } from "./quotes";
 import type { ConsoleState } from "./store/state";
 import { previewTicket, usdConverter, type TicketPreview } from "./ticket";
@@ -30,6 +30,10 @@ export interface TicketFigures {
   prices: TicketPrices;
   /** A market order's close of some of the position, or null for one that closes nothing or a resting order. */
   close: ClosePreview | null;
+  /** How much of the position a market order closes, whatever its figures; null for one that closes nothing or a resting order. */
+  closing: CloseShape | null;
+  /** Why a closing order's figures are withheld; null while they are shown or the order closes nothing. */
+  closeWithheld: string | null;
 }
 
 /** The house state's parameters while they are current: read since every change to them the stream carried; null otherwise. */
@@ -79,11 +83,32 @@ export function ticketFigures(state: ConsoleState, market: MarketModel, order: T
   });
   const prices = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview, side: order.side, mark: market.mark });
   const exactPrice = live ? prices.exactClose : true;
-  const slack = exactPrice || prices.price === null || preview.qty <= 0n ? 0n : ladderSlack(preview.qty, market.view.spread_tiers.length);
+  const stress = stressTermsAt(params?.stressLevels, market.stress) ?? CALM;
+  const conversion = market.mark === null ? USD : conversionAt(market.view, market.mark) ?? USD;
+  const slack = exactPrice || prices.price === null || preview.qty <= 0n ? 0n : ladderSlack(preview.qty, market.view.spread_tiers.length, stress.sizeMultiplierBps, conversion);
   const price = prices.price === null ? null : order.side === "sell" ? prices.price - slack : prices.price + slack;
   const close = order.resting || !state.pricingCurrent ? null : ticketClose({
     position, side: order.side, qty: preview.qty, price, exactPrice, feeBps,
     fallsAt: fee?.fallsAt ?? null, now: state.now, toUsdDown: market.mark === null ? null : usdConverter(market.view, market.mark, "down"),
   });
-  return { preview, prices, close };
+  const closing = order.resting || position === null || preview.qty <= 0n ? null : closeShape(position.qty, order.side, preview.qty);
+  const closeWithheld = closing === null || close !== null ? null : houseTermsNote(state) ?? "The close figures show once the node's price and fee rate are read.";
+  return { preview, prices, close, closing, closeWithheld };
+}
+
+/**
+ * What closing the whole of `position` pays now in `market`, at `quoted`, the node's closing price or the
+ * mock's own; or why it is withheld. Nothing is stated for a closed or unpriced market, as its Close button
+ * is off; while the house state held is not current, none is, and `why` says so.
+ */
+export function positionClose(state: ConsoleState, market: MarketModel | undefined, position: PositionModel, quoted: Fixed | null): { close: ClosePreview | null; why: string | null } {
+  if (market === undefined || !market.open || market.mark === null) return { close: null, why: null };
+  if (!state.pricingCurrent) return { close: null, why: houseTermsNote(state) };
+  const fee = positionFeeNow(state, position);
+  const feeBps = fee?.feeBps ?? currentParams(state)?.profitFeeBps ?? null;
+  const side = position.qty > 0n ? "sell" : "buy";
+  const close = ticketClose({
+    position, side, qty: absFixed(position.qty), price: quoted, exactPrice: true, feeBps, fallsAt: fee?.fallsAt ?? null, now: state.now, toUsdDown: usdConverter(market.view, market.mark, "down"),
+  });
+  return { close, why: null };
 }
