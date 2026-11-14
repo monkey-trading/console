@@ -9,12 +9,12 @@
  * nothing on the tab moves when one of them does.
  */
 
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useMemo, useSyncExternalStore, type ReactNode } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
 import { accountReadsSettled } from "@/lib/staking/delegation-reads";
 import type { Tally } from "@/lib/staking/governance";
-import { commandDetails, commandTitle, lifetimeText, limitDetails, limitTitle, type InForce } from "@/lib/staking/governance-words";
+import { commandDetails, commandTitle, lifetimeText, limitDetails, limitTitle, listingsKey, listingsOf, type InForce } from "@/lib/staking/governance-words";
 import { standing, weightIn, type MemberVoteFacts } from "@/lib/staking/member-votes";
 
 import { Card } from "../monkey/Card";
@@ -42,14 +42,16 @@ export function StakingGovernance() {
   const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
   const wallet = useConsoleSelect((state) => state.wallet);
   const decided = useConsoleSelect((state) => state.walletDecided);
-  const markets = useConsoleSelect((state) => state.markets);
+  // The listings' terms, not the markets themselves, which every price patches.
+  const listings = useConsoleSelect((state) => listingsKey(state.markets));
+  const market = useMemo(() => listingsOf(listings), [listings]);
   const { list } = useSyncExternalStore(operators.subscribe, operators.getSnapshot, operators.getSnapshot);
   const held = useSyncExternalStore(governance.subscribe, governance.getSnapshot, governance.getSnapshot);
   const votes = useSyncExternalStore(memberVotes.subscribe, memberVotes.getSnapshot, memberVotes.getSnapshot);
   const chain = useSyncExternalStore(delegations.subscribe, delegations.getSnapshot, delegations.getSnapshot);
   const labelOf = useOperatorLabel(operators);
   const settled = list.status !== "loading" && held.status !== "loading" && accountReadsSettled({ wallet, decided, delegations: chain, position: "ready" });
-  const inForce: InForce = { params: held.value?.params ?? null, market: (id) => markets.find((market) => market.id === id)?.view ?? null };
+  const inForce: InForce = { params: held.value?.params ?? null, market };
   const proposals = list.value?.proposals ?? null;
   const view = held.value?.view ?? null;
   const account = votes.account;

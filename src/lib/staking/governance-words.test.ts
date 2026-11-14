@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "../fixed";
 import { MONKEY_UNIT } from "../format";
-import { commandDetails, commandTitle, lifetimeText, limitDetails, limitTitle, standingText, tallyText, tiersText, type InForce } from "./governance-words";
+import { commandDetails, commandTitle, lifetimeText, limitDetails, limitTitle, listingsKey, listingsOf, standingText, tallyText, tiersText, type InForce } from "./governance-words";
 
 const BTC = { symbol: "BTC-USD", margin_tiers: [{ up_to: "1000000", bps: 100 }, { up_to: null, bps: 200 }], spread_tiers: [{ up_to: null, bps: 5 }], house_cap_bps: 3000, house_cap_floor: "2000000" };
 const IN_FORCE: InForce = {
@@ -117,5 +117,17 @@ describe("lifetimeText", () => {
     expect(lifetimeText(90 * 60_000)).toBe("1 hour 30 minutes");
     expect(lifetimeText(180_000)).toBe("3 minutes");
     expect(lifetimeText(30_000)).toBe("under a minute");
+  });
+});
+
+describe("listingsKey", () => {
+  const market = (id: number, mark: string) => ({ id, view: { ...BTC, mark } });
+
+  it("changes with a listing's terms and not with its price, and looks each market up by id", () => {
+    expect(listingsKey([market(1, "100")])).toBe(listingsKey([market(1, "101")]));
+    expect(listingsKey([market(1, "100")])).not.toBe(listingsKey([{ id: 1, view: { ...BTC, house_cap_bps: 2000 } }]));
+    const lookup = listingsOf(listingsKey([market(1, "100")]));
+    expect(lookup(1)).toEqual(BTC);
+    expect(lookup(2)).toBeNull();
   });
 });

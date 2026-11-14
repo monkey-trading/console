@@ -13,10 +13,25 @@ import type { HouseParams } from "../house";
 import { formatStampWithYear } from "../time";
 import { passes, weightToPass, yesShareBps, type Tally } from "./governance";
 
+/** A listed market's terms as the words name and compare them. */
+export type ListingTerms = Pick<MarketView, "symbol" | "margin_tiers" | "spread_tiers" | "house_cap_bps" | "house_cap_floor">;
+
 /** What the page holds of the values in force: the parameters, and each listed market by id. */
 export interface InForce {
   params: HouseParams | null;
-  market: (id: number) => Pick<MarketView, "symbol" | "margin_tiers" | "spread_tiers" | "house_cap_bps" | "house_cap_floor"> | null;
+  market: (id: number) => ListingTerms | null;
+}
+
+/** The listed markets' terms as text that changes when a listing does and not with each price, so a page can select it from the store. */
+export function listingsKey(markets: readonly { id: number; view: ListingTerms }[]): string {
+  return JSON.stringify(markets.map(({ id, view }) => [id, { symbol: view.symbol, margin_tiers: view.margin_tiers, spread_tiers: view.spread_tiers, house_cap_bps: view.house_cap_bps, house_cap_floor: view.house_cap_floor }]));
+}
+
+/** The lookup `InForce.market` makes from `listingsKey`'s text. */
+export function listingsOf(key: string): InForce["market"] {
+  // `listingsKey` wrote the text, so it parses to its pairs.
+  const listings = new Map(JSON.parse(key) as [number, ListingTerms][]);
+  return (id) => listings.get(id) ?? null;
 }
 
 const int = (value: unknown): number | null => (typeof value === "number" && Number.isSafeInteger(value) ? value : null);

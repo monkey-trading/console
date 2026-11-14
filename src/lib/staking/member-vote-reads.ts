@@ -89,7 +89,7 @@ export class MemberVoteReads {
   /** The account and the candidates its delegations name, as the chain last reported them for it, lowercase and once each. */
   private members(account: string): string[] {
     const read = this.delegations.getSnapshot();
-    const delegated = read.account === account ? (read.read.value?.delegations ?? []).map((delegation) => delegation.candidate.toLowerCase()) : [];
+    const delegated = read.account?.toLowerCase() === account ? (read.read.value?.delegations ?? []).map((delegation) => delegation.candidate.toLowerCase()) : [];
     return [...new Set([account.toLowerCase(), ...delegated])];
   }
 
