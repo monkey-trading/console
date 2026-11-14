@@ -17,6 +17,7 @@ import { unknownChain, walletError } from "./provider-errors";
 import { usdcBalanceRead, vaultDepositsRead } from "./provider-balance";
 import { ProviderExit } from "./provider-exit";
 import { ProviderDeployment } from "./provider-registry";
+import { ProviderGovernance } from "./provider-governance";
 import { ProviderStaking } from "./provider-staking";
 import { waitMined, type StuckVerdict } from "./receipts";
 import { serialized, WALLET_READ_MS, withinMs } from "./serialized-provider";
@@ -94,6 +95,8 @@ export class ProviderWallet implements Wallet {
   topic?: string;
   /** The staking and distribution calls. */
   readonly staking: StakingWallet;
+  /** The vote contract's reads and the vote. */
+  readonly governance: ProviderGovernance;
   readonly chainReads: ProviderDeployment; // the vault's and the operator registry's reads
   readonly exit: ProviderExit; // the vault's exit, which needs no node
 
@@ -109,6 +112,7 @@ export class ProviderWallet implements Wallet {
   ) {
     this.provider = serialized(provider);
     this.staking = new ProviderStaking(address, chain, this.provider, { send: (to, data, action, progress) => this.send(to, data, action, progress), ensureChain: () => this.ensureChain() });
+    this.governance = new ProviderGovernance(chain.chainId, this.provider, (to, data, action, progress) => this.send(to, data, action, progress));
     this.chainReads = new ProviderDeployment(chain, this.provider);
     this.exit = new ProviderExit(address, chain, this.provider, (data, action, progress) => this.send(chain.vault, data, action, progress));
   }

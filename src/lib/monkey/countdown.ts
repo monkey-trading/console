@@ -1,4 +1,4 @@
-/** When the next MONKEY budget and the next USDC epoch close come, from the node's `/v1/monkey` answer and its clock, and how a wait reads. */
+/** When the next MONKEY budget and the next USDC epoch close come, from the node's `/v1/monkey` answer and its clock, and how a wait reads, in minutes and hours or, for a vote's days, in days. */
 
 import type { DistributionView, EmissionsView } from "../engine/stats-types";
 
@@ -74,4 +74,22 @@ export function spokenCountdown(targetMs: number, nowMs: number): string {
   const m = minutes % 60;
   if (h === 0) return plural(m, "minute");
   return m === 0 ? plural(h, "hour") : `${plural(h, "hour")} ${plural(m, "minute")}`;
+}
+
+const DAY_S = 86_400;
+
+/** A wait that may run to days, such as a vote's seven days: `6d 23h 59m` from a day, as `formatCountdown` below one. */
+export function formatLongCountdown(targetMs: number, nowMs: number): string {
+  const total = seconds(targetMs, nowMs);
+  if (total < DAY_S) return formatCountdown(targetMs, nowMs);
+  return `${Math.floor(total / DAY_S)}d ${two(Math.floor((total % DAY_S) / 3600))}h ${two(Math.floor((total % 3600) / 60))}m`;
+}
+
+/** `formatLongCountdown` in words, to the hour from a day, so it changes once an hour: "6 days 23 hours"; as `spokenCountdown` below a day. */
+export function spokenLongCountdown(targetMs: number, nowMs: number): string {
+  const total = seconds(targetMs, nowMs);
+  if (total < DAY_S) return spokenCountdown(targetMs, nowMs);
+  const days = Math.floor(total / DAY_S);
+  const hours = Math.floor((total % DAY_S) / 3600);
+  return hours === 0 ? plural(days, "day") : `${plural(days, "day")} ${plural(hours, "hour")}`;
 }

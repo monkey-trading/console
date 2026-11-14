@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { DistributionView, EmissionsView } from "../engine/stats-types";
-import { budgetAwaitingCheckpoint, closeAwaitingCheckpoint, formatCountdown, nextBudgetMs, nextCloseMs, spokenCountdown } from "./countdown";
+import { budgetAwaitingCheckpoint, closeAwaitingCheckpoint, formatCountdown, formatLongCountdown, nextBudgetMs, nextCloseMs, spokenCountdown, spokenLongCountdown } from "./countdown";
 
 const START = 1_793_662_020_000;
 const emissions = { start_ms: START, period_ms: 600_000 } as EmissionsView;
@@ -132,5 +132,42 @@ describe("closeAwaitingCheckpoint", () => {
 
   it("never waits without a distribution", () => {
     expect(closeAwaitingCheckpoint(null, NEXT)).toBe(false);
+  });
+});
+
+describe("formatLongCountdown", () => {
+  const at = (ms: number) => formatLongCountdown(1_000_000_000, 1_000_000_000 - ms);
+
+  it("reads days, hours and minutes from a day, the seconds rounded up first", () => {
+    expect(at(7 * 86_400_000)).toBe("7d 00h 00m");
+    expect(at(7 * 86_400_000 - 1)).toBe("7d 00h 00m");
+    expect(at(6 * 86_400_000 + 23 * 3_600_000 + 59 * 60_000 + 1_000)).toBe("6d 23h 59m");
+    expect(at(86_400_000)).toBe("1d 00h 00m");
+  });
+
+  it("reads as formatCountdown below a day, down to the last second", () => {
+    expect(at(86_399_000)).toBe("23h 59m 59s");
+    expect(at(462_000)).toBe("7m 42s");
+    expect(at(1)).toBe("1s");
+  });
+
+  it("holds at 0s once the time has passed", () => {
+    expect(at(0)).toBe("0s");
+    expect(at(-5_000)).toBe("0s");
+  });
+});
+
+describe("spokenLongCountdown", () => {
+  const at = (ms: number) => spokenLongCountdown(1_000_000_000, 1_000_000_000 - ms);
+
+  it("names days and hours from a day, changing once an hour", () => {
+    expect(at(7 * 86_400_000)).toBe("7 days");
+    expect(at(6 * 86_400_000 + 23 * 3_600_000 + 59 * 60_000)).toBe("6 days 23 hours");
+    expect(at(86_400_000 + 3_600_000)).toBe("1 day 1 hour");
+  });
+
+  it("speaks as spokenCountdown below a day", () => {
+    expect(at(86_399_000)).toBe("24 hours");
+    expect(at(60_000)).toBe("under a minute");
   });
 });

@@ -57,7 +57,7 @@ export class ActionClient implements EngineClient {
   watch(listener: (event: ClientEvent) => void) { this.listener = listener; listener({ type: "feed", status: "live" }); return () => {}; }
   async markets() { this.marketReads++; return [BTC]; }
   async house() { return { cash: "0", nav: "0", gross_exposure: "0" }; }
-  async houseState() { return { seq: null, params: null, checkpoint: null }; }
+  async houseState() { return { seq: null, params: null, checkpoint: null, governance: null }; }
   async withdrawalTotals() { return { count: 0, remaining: 0n, largest: null, head: null, seq: null, complete: true, stable: true }; }
   private absent = async (): Promise<never> => { throw new EngineError(404, "not found"); };
   readonly stats = { positions: this.absent, series: this.absent, monkey: this.absent, activity: this.absent, distributions: async () => null, operator: this.absent, operators: this.absent, distributionEpochs: this.absent };

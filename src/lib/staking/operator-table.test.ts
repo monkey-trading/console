@@ -86,6 +86,17 @@ describe("operatorsView", () => {
     expect(() => operatorsView(list(Array.from({ length: 101 }, (_, i) => candidate(i + 1))))).toThrow("more candidates than the registry can hold");
   });
 
+  it("keeps the candidates when the open proposals fail their check, saying why apart", () => {
+    const vote = "0x00000000000000000000000000000000000000a1";
+    const proposal = { id: 1, proposer: vote, set_id: 1, fast: false, opens_at_ms: 5, closes_at_ms: 5, total_weight: "9", yes_weight: "4", command_hash: `0x${"ab".repeat(32)}`, command: null };
+    const view = operatorsView(list([candidate(1), candidate(2)], undefined, { proposals: { vote, open: [proposal], truncated: false } }));
+    expect(view.rows).toHaveLength(2);
+    expect(view).toMatchObject({ proposals: null, proposalsProblem: "The operator list named a malformed open proposal 1." });
+    const fine = operatorsView(list([candidate(1)], undefined, { proposals: { vote, open: [{ ...proposal, closes_at_ms: 9 }], truncated: false } }));
+    expect(fine).toMatchObject({ proposals: { vote, truncated: false, unavailable: false }, proposalsProblem: null });
+    expect(operatorsView(list([candidate(1)]))).toMatchObject({ proposals: null, proposalsProblem: null });
+  });
+
   it("sorts, searches and pages a full list of 100 candidates in four pages", () => {
     const { rows } = operatorsView(list(Array.from({ length: 100 }, (_, i) => candidate(i + 1)), undefined, { rotation_enabled: false, total_staked: "100000" }));
     expect(rows).toHaveLength(100);

@@ -81,7 +81,7 @@ export function fillOrder(state: MockState, order: FillRequest): FillOutcome {
   if (!req.liquidation && grows) {
     // The account as the fill leaves it: the spread just paid, and the fee on a profit a reversal realises.
     const spreadLoss = executionCost({ held, entry: account.positions.get(req.market)?.entry ?? null, delta, price: quote.price, index: runtime.mid });
-    const refusal = riskRefusal(state, req, runtime.reduceOnly, delta, held, spreadLoss);
+    const refusal = riskRefusal(state, req, runtime.reduceOnly || state.governance.reduceOnlyAt(req.market, state.now), delta, held, spreadLoss);
     if (refusal) return { ok: false, reject: refusal };
   }
   const holding = account.positions.get(req.market) ?? { qty: 0n, entry: 0n };

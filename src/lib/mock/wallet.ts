@@ -75,6 +75,16 @@ export class MockWalletConnector implements WalletConnector {
           return `0x${mockHex(`redelegate-${from}-${to}-${amount}-${address}`, 32)}`;
         },
       },
+      governance: {
+        onChain: async () => undefined,
+        proposal: async (_vote: string, id: number) => controls.governance.proposal(id),
+        set: async (_vote: string, setId: number) => controls.governance.set(setId),
+        voted: async (_vote: string, id: number, member: string) => controls.governance.voted(id, member),
+        async vote(_vote: string, id: number) {
+          controls.castVote(id, address);
+          return `0x${mockHex(`vote-${id}-${address}`, 32)}`;
+        },
+      },
       async usdcBalance() {
         return { kind: "held" as const, amount: controls.walletUsdc(address) };
       },

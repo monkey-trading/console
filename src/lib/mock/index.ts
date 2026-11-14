@@ -4,6 +4,7 @@ import { fixedToWire } from "../fixed";
 import { MockEngineClient } from "./client";
 import { MockControls, SEEDED_QUEUE } from "./controls";
 import { DEMO_ADDRESS, DEMO_SPAN_MS, seedDemoAccount } from "./demo";
+import { MockGovernance } from "./governance";
 import { seedMonkeyDemo } from "./monkey";
 import { MockState } from "./state";
 import { MockWalletConnector } from "./wallet";
@@ -29,6 +30,9 @@ export function createMockNode(startMs: number, demo = false): MockNode {
     state.emit({ type: "withdraw" }, [{ type: "withdrawal_queued", account: entry.account, amount: fixedToWire(entry.amount), requested_seq: state.seq + 1 }]);
   }
   if (demo) {
+    // The votes are timed from when the node's clock starts, not from the backstory's beginning, and a
+    // restriction holds from when it was logged, so the backstory plays without it.
+    state.governance = new MockGovernance(startMs, state.operators.candidates);
     seedMonkeyDemo(state, DEMO_ADDRESS);
     seedDemoAccount(state, startMs);
   }

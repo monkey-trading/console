@@ -18,7 +18,9 @@ import { setup } from "@/lib/monkey/panel-kit";
 import { DelegationReads, type DelegationsState } from "@/lib/staking/delegation-reads";
 import { NO_EDITING } from "@/lib/staking/delegation-form";
 import { EpochReads } from "@/lib/staking/epoch-reads";
+import { GovernanceReads } from "@/lib/staking/governance-reads";
 import { DistributionHistoryReads } from "@/lib/staking/history-reads";
+import { MemberVoteReads } from "@/lib/staking/member-vote-reads";
 import { NO_TABLE_VIEW } from "@/lib/staking/operator-table";
 import type { ConsoleState } from "@/lib/store/state";
 
@@ -54,8 +56,11 @@ function Tab({ state, read, delegations }: { state: Partial<ConsoleState>; read:
   store.patch(state);
   const panel = read ? loaded : new MonkeyPanel(store, "staking");
   const operators = operatorsLike({ route: LOADING, list: LOADING, held: null });
+  const delegationReads = delegationsLike(delegations);
+  const governance = new GovernanceReads(store);
   const reads: StakingReads = {
-    panel, operators, epochs: new EpochReads(store), delegations: delegationsLike(delegations), history: new DistributionHistoryReads(store),
+    panel, operators, epochs: new EpochReads(store), delegations: delegationReads, history: new DistributionHistoryReads(store),
+    governance, memberVotes: new MemberVoteReads(store, operators, governance, delegationReads),
     operatorsSettled: true, delegateEditing: NO_EDITING, setDelegateEditing: () => undefined, table: NO_TABLE_VIEW, setTable: () => undefined,
     typedSlot: false, setTypedSlot: () => undefined,
   };

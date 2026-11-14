@@ -55,7 +55,8 @@ function stepMarket(state: MockState, market: MarketRuntime, seconds: number): E
     market.shockBps = 0;
     market.window.push({ t: state.now, mid: market.mid });
   }
-  const level = stressFor(market, state.now);
+  // A fast-path restriction's floor holds as the operator's does: the stricter applies.
+  const level = Math.min(MAX_STRESS, Math.max(stressFor(market, state.now), state.governance.floorAt(id, state.now)));
   if (level !== market.stress) {
     market.stress = level;
     events.push({ type: "stress_changed", market: id, level });

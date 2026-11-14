@@ -96,6 +96,11 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
     case "admin_applied": return null;
     case "rotation_switched": return null;
     case "operator_elected": return null;
+    // A vote's outcome is the Staking page's Governance tab's to show, not the viewer's activity.
+    case "proposal_scheduled": return null;
+    case "restriction_applied": return null;
+    case "proposal_refused": return null;
+    case "restriction_lapsed": return null;
     // The deposit's custody steps are not the viewer's activity; `deposited` is the credit's line.
     case "custody_deposit_changed": return null;
     // A screened deposit waiting or held is custody bookkeeping, and a house deposit names no account.

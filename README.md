@@ -85,8 +85,8 @@ and 100,000 mock USDC. In a second terminal, `scripts/dev-local-stack-ctl.sh` dr
    candidate or taken back in part from its row, and an unstake takes the undelegated stake first, then each
    delegation in proportion.
 2. `./scripts/dev-local-stack-ctl.sh elect` closes the election epoch. The candidate with the most delegated
-   stake wins when it is eligible (5% of all stake), at least 20% of all stake is delegated, and its votes lead
-   the operator in effect by 10%. The Staking page's operators then show the pending election.
+   stake wins when it is eligible (5% of all stake), at least 20% of all stake is delegated, and it is not the
+   operator in effect already. The Staking page's operators then show the pending election.
 3. Claim any withdrawal you want paid (see below), then run `./scripts/dev-local-stack-ctl.sh handover`. It
    moves the chain's clock past the election's seven-day notice, so the vault names the second engine's
    release; the stack starts that engine, which takes the keys and the log, and the first engine exits. The
@@ -118,6 +118,37 @@ local stack cannot move. After `handover` the chain is a week ahead of the engin
   elected key pending, because it applies a new key only after seven days of its own time, so admin commands
   signed by the elected key are not accepted either.
 - One handover per stack. Stop the stack and start it again for a fresh chain.
+
+## Try parameter votes
+
+While operator rotation is on, the engine's parameters change only by a vote of the rotation set's members,
+weighted by the stake the set adopted. The two-engine stack can run them:
+
+```sh
+GOVERNANCE=1 SECOND_ENGINE=1 ./scripts/dev-local-stack.sh
+```
+
+The stack deploys the operator schedule and the vote contract, which the node follows, registers a third
+candidate, and stakes for the three candidates: 40,000 MONKEY for the first engine's, 24,000 for the second
+engine's and 35,000 for the third. It then moves the chain's clock past the registry's one-day epoch, which
+adopts the three as the rotation set, and past the set's seven-day notice, so the set is in effect. Import the
+second engine's candidate (Anvil account 4, whose public test key the script prints) into a dev wallet to vote
+as a member; it delegates to itself and to the third candidate.
+
+1. `./scripts/dev-local-stack-ctl.sh propose operator fast '{"action":"set_stress_floor","market":null,"level":1}'`
+   proposes a fast-path stress floor as the first engine's candidate, which votes yes with its 40%. The command
+   is the admin command's JSON as the engine serialises it; `normal` proposes on the normal path.
+2. The Staking page's Governance tab lists the proposal with its tally against two thirds, how the members the
+   account delegates to voted, and a Vote yes button. A vote moves the tally once the node reads the next final
+   block.
+3. `./scripts/dev-local-stack-ctl.sh vote third 1` adds the third candidate's yes, which passes it. A fast-path
+   change is in force at once as a restriction, which lapses after three minutes here (`RESTRICTION_TTL`); a
+   normal change waits seven days of the engine's clock, which a local stack cannot move.
+
+As after a handover, the chain's clock is then ahead of the engine's, eight days here, so withdrawals do not pay,
+and with a schedule the registry's closes adopt rotation sets, so `elect` and `handover` do not apply. A
+proposal's voting window runs on the chain's clock and the tab counts it down on the engine's, so here it reads
+about eight days longer than it is, and the contract closes voting while the tab still counts.
 
 ## Read a local engine development node
 

@@ -41,5 +41,13 @@ export type EngineEvent =
   | { type: "rotation_switched"; enabled: boolean; election_cancelled: boolean }
   /** An election the operator registry made, mirrored; `admin_key` signs admin commands from `effective_at`. */
   | { type: "operator_elected"; epoch: number; candidate: Address; admin_key: Address; effective_at: number }
+  /** From V56, a passed normal change mirrored, which applies from `applies_at`. */
+  | { type: "proposal_scheduled"; proposal: number; applies_at: number }
+  /** From V56, a passed fast-path proposal mirrored and in force as a restriction until `expires_at`. */
+  | { type: "restriction_applied"; proposal: number; expires_at: number }
+  /** From V56, a passed proposal the rules refused, which changes nothing. */
+  | { type: "proposal_refused"; proposal: number; reason: string }
+  /** From V56, a restriction whose lifetime ran out. */
+  | { type: "restriction_lapsed"; proposal: number }
   | { type: "admin_applied" }
   | { type: "admin_rejected"; reason: string };

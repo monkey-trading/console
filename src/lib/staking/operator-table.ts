@@ -12,6 +12,7 @@ import type { Delegation } from "../engine/staking";
 import { shareBps } from "../monkey/figures";
 import { shownHostname } from "./hostnames";
 import { ADDRESS } from "./candidate-choice";
+import { proposalsView, type ProposalsView } from "./governance";
 
 /** `elected` and `promoted` wait on `pendingElection`; `standby` is the one `promote()` would pick now; `unlisted` is a Yours row omitted by a verified list; `unknown` has no list to compare. */
 export type OperatorRole = "active" | "elected" | "promoted" | "standby" | "candidate" | "unlisted" | "unknown";
@@ -50,6 +51,10 @@ export interface OperatorsView {
   /** An election or promotion waiting to take effect. */
   pending: { candidate: string; effectiveAtMs: number; promoted: boolean } | null;
   rows: readonly OperatorRow[];
+  /** The vote contract's open proposals at the same block; null from a node that follows no vote contract, or when they did not pass their check. */
+  proposals: ProposalsView | null;
+  /** Why the open proposals did not pass their check; checked apart from the candidates, so the rows still show. */
+  proposalsProblem: string | null;
 }
 
 export type SortId = "role" | "votes-desc" | "votes-asc" | "bond-desc" | "bond-asc" | "name-asc" | "name-desc";
@@ -147,7 +152,14 @@ export function operatorsView(list: OperatorList): OperatorsView {
       bond: null, release: list.operator_in_effect.release.toLowerCase(), endpoint: null, registration: null,
     });
   }
-  return { block: { number: list.block.number, hash: list.block.hash, timeMs: list.block.time_ms }, rotationEnabled: list.rotation_enabled, totalStaked, inEffect, pending, rows };
+  let proposals: ProposalsView | null = null;
+  let proposalsProblem: string | null = null;
+  try {
+    proposals = list.proposals === undefined ? null : proposalsView(list.proposals);
+  } catch (error) {
+    proposalsProblem = error instanceof Error ? error.message : "The operator list named malformed open proposals.";
+  }
+  return { block: { number: list.block.number, hash: list.block.hash, timeMs: list.block.time_ms }, rotationEnabled: list.rotation_enabled, totalStaked, inEffect, pending, rows, proposals, proposalsProblem };
 }
 
 /** Whether `row` holds `query` (lowercase, trimmed) in its hostname, address, release or endpoint. */

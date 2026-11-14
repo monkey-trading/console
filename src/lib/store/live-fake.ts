@@ -98,7 +98,7 @@ export class FakeClient implements EngineClient {
   async houseState() {
     this.houseStateReads++;
     if (this.houseStateError !== null) throw this.houseStateError;
-    return this.unavailable ? null : { seq: this.houseSeq, params: this.params, checkpoint: this.checkpoint };
+    return this.unavailable ? null : { seq: this.houseSeq, params: this.params, checkpoint: this.checkpoint, governance: null };
   }
   async withdrawalTotals() { if (this.totalsError !== null) throw this.totalsError; return this.totals; }
   /** Whether the account read answers as a credited account; false answers the node's 404. How many times the account and its entitlement were read. */

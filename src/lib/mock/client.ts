@@ -113,7 +113,7 @@ export class MockEngineClient implements EngineClient {
     return [...this.state.markets.values()].map(({ listed, open, halted, reduceOnly, mid, stress }) => ({
       ...listed.spec,
       open: open && !halted,
-      reduce_only: reduceOnly,
+      reduce_only: reduceOnly || this.state.governance.reduceOnlyAt(listed.spec.id, this.state.now),
       mark: fixedToWire(mid),
       stress_level: stress,
     }));
@@ -127,9 +127,9 @@ export class MockEngineClient implements EngineClient {
     return houseFigures(this.state);
   }
 
-  /** The solvency parameters in force, as the mock's launch genesis set them, and the checkpoint its log would hold. */
+  /** The solvency parameters in force, as the mock's launch genesis set them, the checkpoint its log would hold, and the votes it mirrors. */
   async houseState(): Promise<HouseState> {
-    return { seq: this.headSeq, params: this.state.params, checkpoint: mockCheckpoint(this.headSeq ?? 0) };
+    return { seq: this.headSeq, params: this.state.params, checkpoint: mockCheckpoint(this.headSeq ?? 0), governance: this.state.governance.houseGovernance(this.state.now) };
   }
 
   /**

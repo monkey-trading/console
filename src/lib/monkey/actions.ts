@@ -1,6 +1,6 @@
 /**
  * The MONKEY and Staking pages' transactions: staking, starting and completing an unstake, delegating,
- * moving and taking back amounts of stake, and claiming a USDC distribution. Each goes through the connected wallet, shows the wallet prompt while it waits,
+ * moving and taking back amounts of stake, claiming a USDC distribution, and a member's vote. Each goes through the connected wallet, shows the wallet prompt while it waits,
  * says on its panel why nothing was sent or what failed, and reads the wallet and the node again so
  * the figures follow it.
  */
@@ -13,6 +13,7 @@ import { checkpointOf } from "../engine/claim-standing";
 import { claimEmissions, emissionsPosition, WAITING_ON_VAULT } from "../store/emissions";
 import type { NoticeSurface } from "../store/state";
 import type { DelegationReads } from "../staking/delegation-reads";
+import type { MemberVoteReads } from "../staking/member-vote-reads";
 import type { OperatorReads } from "./operators";
 import type { MonkeyPanel } from "./panel";
 
@@ -22,9 +23,11 @@ const CLAIM_ATTEMPTS = 3;
 /**
  * Runs one wallet transaction for the panel on `surface`. `step` returns true when the transaction was
  * sent, or false when it has already said why nothing was. `onLanded` runs the moment a transaction
- * has landed, before the wallet and the node are read again. Resolves true once one landed.
+ * has landed, before the wallet and the node are read again. `movesDelegations` is false for a transaction
+ * that changes no delegation, such as a vote, after which the delegations are not read again. Resolves
+ * true once one landed.
  */
-async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, step: (wallet: Wallet, staking: StakingWallet, progress: Progress) => Promise<boolean>, movesStake = false, onLanded?: () => void): Promise<boolean> {
+async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, step: (wallet: Wallet, staking: StakingWallet, progress: Progress) => Promise<boolean>, movesStake = false, onLanded?: () => void, movesDelegations = true): Promise<boolean> {
   const { store } = panel;
   store.clearNotice(surface);
   const wallet = store.liveWallet;
@@ -69,7 +72,7 @@ async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, s
   }
   // The chain moved, or the node's proof did: read both again on the page that is open now, which
   // may not be the one the transaction started on. Every staking transaction moves the delegations' figures too.
-  const delegations = landed ? store.monkeySession.delegations?.settleAfter() : undefined;
+  const delegations = landed && movesDelegations ? store.monkeySession.delegations?.settleAfter() : undefined;
   const open = store.monkeySession.panel;
   if (open !== null) {
     // The node's total follows the chain a little later than the wallet's read does.
@@ -142,6 +145,30 @@ export async function changeDelegation(panel: MonkeyPanel, operators: OperatorRe
   // The list is the node's, which may be down: the change's outcome waits on the chain's read alone, which `run` makes for the page's own reader.
   void operators.refresh();
   if (panel.store.monkeySession.delegations !== delegations) await delegations.refresh();
+  return landed;
+}
+
+/**
+ * Votes yes on proposal `id` of the vote contract `vote` with the account's weight in the set it
+ * opened under (`ParameterVote.vote`), then reads the account's votes and the node's tally again.
+ * The contract's address is the node's word, so like a claim built from the node's proof it waits on
+ * a verdict that may sign: one the vault's release has bound to the node's config. The vote shows,
+ * and `onLanded` runs, the moment it lands; the node's tally counts it from the next final block it reads.
+ */
+export async function castVote(panel: MonkeyPanel, operators: OperatorReads, votes: MemberVoteReads, vote: string, id: number, onLanded?: () => void): Promise<boolean> {
+  votes.voting(id);
+  const landed = await run(panel, "governance", `vote yes on proposal ${id}`, async (wallet, _staking, progress) => {
+    if (wallet.governance === undefined) {
+      panel.store.notify("governance", "This wallet cannot send transactions.");
+      return false;
+    }
+    if (usableWallet(panel.store, "vote", "governance") === null) return false;
+    await wallet.governance.vote(vote, id, progress);
+    votes.votedLanded(vote, id, wallet.address);
+    return true;
+  }, false, onLanded, false);
+  void operators.refresh();
+  void votes.refresh();
   return landed;
 }
 

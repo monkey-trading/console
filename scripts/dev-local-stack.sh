@@ -16,6 +16,15 @@
 # keys with operator rotation on, a second engine is registered as a candidate and starts once an
 # election has put its release in the vault's hands, and two wallets hold MONKEY to stake.
 #
+# GOVERNANCE=1, with SECOND_ENGINE=1, sets up parameter votes as the engine's V56 has them: the operator
+# schedule and the vote contract, a third candidate, and the first engine's candidate, the second
+# engine's (Anvil account 4) and the third (Anvil account 6) staking 40, 25 and 34 thousand MONKEY, the
+# second delegating 1 thousand of its 25 to the third. The chain's clock moves past the registry's
+# one-day epoch and the set's seven-day notice, so the three are the rotation set in effect, and the
+# node mirrors each passed proposal; `dev-local-stack-ctl.sh propose` and `vote` act as members. The
+# chain's clock then runs eight days ahead of the engine's, so withdrawal authorizations do not pay,
+# and with a schedule closes adopt rotation sets, so `elect` and `handover` do not apply.
+#
 # Needs anvil, forge, cast, cargo, node, npm, curl, jq and python3 (3.11 or later); the engine
 # checkout with its contract dependencies (`forge soldeer install` in its contracts/); the
 # console's node_modules (`npm ci`); and the internet, for the node's Roughtime servers and venues.
@@ -30,6 +39,9 @@
 #   SECOND_API_PORT, SECOND_METRICS_PORT, HANDOVER_PORT, SECOND_HANDOVER_PORT
 #                    with SECOND_ENGINE=1, override 8081, 9465, 9443 and 9444; each must be free
 #   DEV_WALLET2      with SECOND_ENGINE=1, the second staking wallet, instead of Anvil account 3
+#   GOVERNANCE       `1` adds the parameter votes described above (needs SECOND_ENGINE=1; default off)
+#   RESTRICTION_TTL  with GOVERNANCE=1, how long a fast-path restriction lasts (default 3m: a development
+#                    value; the engine takes up to seven days)
 #   STAKING_EPOCH_SECS
 #                    the MONKEY distribution epoch and unstake cooldown, in seconds (default 300)
 #   CONSOLE_BUILD    `dev` (default) runs next dev; `production` runs npm run build, then next start
@@ -49,6 +61,8 @@ metrics_port="${METRICS_PORT:-9464}"
 access_port="${ACCESS_SOURCE_PORT:-18846}"
 console_build="${CONSOLE_BUILD:-dev}"
 second_engine="${SECOND_ENGINE:-0}"
+parameter_votes="${GOVERNANCE:-0}"
+restriction_ttl="${RESTRICTION_TTL:-3m}"
 second_api_port="${SECOND_API_PORT:-8081}"
 second_metrics_port="${SECOND_METRICS_PORT:-9465}"
 handover_port="${HANDOVER_PORT:-9443}"
@@ -75,9 +89,15 @@ staking_cooldown_secs="$staking_epoch_secs"
 staking_floor_usdc=4900000
 if [[ "$second_engine" == 1 ]]; then staking_floor_usdc=$house_usdc; fi
 # The two-engine option's registry, in development values within the bounds given at its deployment: an
-# election epoch of a minute, no minimum term, a one-minute finality margin, a 1 MONKEY self-bond (a
+# election epoch of a minute, a one-minute finality margin, a 1 MONKEY self-bond (a
 # larger one would take a share of every distribution), and the seven-day notice the contract fixes.
 registry_epoch_secs=60
+# A schedule needs an epoch of at least a day (`OperatorRegistry.MIN_SCHEDULED_EPOCH`).
+if [[ "$parameter_votes" == 1 ]]; then registry_epoch_secs=86400; fi
+# The vote contract's windows, development values within its 30-day bound: a day for a normal
+# proposal and an hour for a fast-path one, on the chain's clock.
+vote_normal_window=86400
+vote_fast_window=3600
 candidate_bond_monkey=1
 # Each staking wallet's MONKEY, minted by the vault in place of emission claims; the token's cap,
 # which follows the period budget, bounds the total. The election's thresholds are shares of the
@@ -194,6 +214,9 @@ engine_dir="$(cd "$engine_dir" && pwd)"
 [[ -x "$root/node_modules/.bin/next" ]] || die "the console's dependencies are not installed: run \`npm ci\` in $root"
 [[ "$console_build" == dev || "$console_build" == production ]] || die "CONSOLE_BUILD must be dev or production: $console_build"
 [[ "$second_engine" == 0 || "$second_engine" == 1 ]] || die "SECOND_ENGINE must be 0 or 1: $second_engine"
+[[ "$parameter_votes" == 0 || "$second_engine" == 1 ]] || die "GOVERNANCE=1 needs SECOND_ENGINE=1, whose rotation it votes under"
+[[ "$parameter_votes" == 0 || "$parameter_votes" == 1 ]] || die "GOVERNANCE must be 0 or 1: $parameter_votes"
+[[ "$restriction_ttl" =~ ^[1-9][0-9]*(s|m|h)$ ]] || die "RESTRICTION_TTL must be a whole number of seconds, minutes or hours, such as 3m: $restriction_ttl"
 ports=("$anvil_port" "$api_port" "$console_port" "$metrics_port" "$access_port")
 [[ "$second_engine" == 0 ]] || ports+=("$second_api_port" "$second_metrics_port" "$handover_port" "$second_handover_port")
 for port in "${ports[@]}"; do
@@ -280,13 +303,28 @@ staking="$(cast compute-address "$registry" --nonce 1 | awk '{print $NF}')"
 # The registry lens the node reads GET /v1/operators through: account 8's first transaction.
 lens_key="$(key 8)"
 lens="$(cast compute-address "$(address "$lens_key")" --nonce 0 | awk '{print $NF}')"
+# With GOVERNANCE=1, Anvil account 5 deploys the seed receiver the schedule is built over (no turn is
+# drawn here, so no seed is relayed), the schedule and the vote contract, at its first three nonces,
+# and account 6 is the third candidate.
+seed_receiver=""
+schedule=""
+vote=""
+if [[ "$parameter_votes" == 1 ]]; then
+  vote_deployer_key="$(key 5)"
+  vote_deployer="$(address "$vote_deployer_key")"
+  seed_receiver="$(cast compute-address "$vote_deployer" --nonce 0 | awk '{print $NF}')"
+  schedule="$(cast compute-address "$vote_deployer" --nonce 1 | awk '{print $NF}')"
+  vote="$(cast compute-address "$vote_deployer" --nonce 2 | awk '{print $NF}')"
+  third_candidate_key="$(key 6)"
+  third_candidate="$(address "$third_candidate_key")"
+fi
 
 step "Write the node config"
 step_log="$work/config.log"
 # dev.toml with EVM custody, as config/anvil.toml has it, against Anvil itself: the three
 # providers must have distinct URLs, and Anvil ignores the query that sets them apart.
 STACK_SCRIPTS="$root/scripts" python3 - "$engine_dir/config" "$work" "$rpc" "$api_port" "$metrics_port" "$console_port" "$access_port" \
-  "$relayer" "$deployer" "$registry" "$staking" "$lens" >"$work/config-values" 2>"$step_log" <<'PY' || die "could not write the node config"
+  "$relayer" "$deployer" "$registry" "$staking" "$lens" "$schedule" "$vote" "$restriction_ttl" >"$work/config-values" 2>"$step_log" <<'PY' || die "could not write the node config"
 import json
 import os
 import re
@@ -297,7 +335,7 @@ from pathlib import Path
 sys.path.insert(0, os.environ["STACK_SCRIPTS"])
 from stack_toml import dumps  # noqa: E402
 
-config, work, rpc, api, metrics, console, access, relayer, source, registry, staking, lens = sys.argv[1:]
+config, work, rpc, api, metrics, console, access, relayer, source, registry, staking, lens, schedule, vote, ttl = sys.argv[1:]
 cfg = tomllib.loads(Path(config, "dev.toml").read_text())
 anvil = tomllib.loads(Path(config, "anvil.toml").read_text())
 
@@ -323,6 +361,10 @@ evm["cursor_path"] = f"{work}/custody-cursor.json"
 # The staking contract the operator registry deployed, which the node mirrors into the engine once
 # staking is initialised, with the registry that deployed it.
 evm["staking"] = {"contract": staking, "cursor_path": f"{work}/staking-cursor.json", "registry": {"contract": registry, "lens": lens}}
+# With GOVERNANCE=1, the schedule whose rotation sets vote and the vote contract whose passed
+# proposals the node mirrors, with the fast-path restriction lifetime the log records once.
+if vote:
+    evm["staking"]["registry"].update(schedule=schedule, vote={"contract": vote, "restriction_ttl": ttl})
 # The Staking page's operator table follows the chain within seconds of a block becoming final.
 cfg["api"]["operators_interval"] = "5s"
 # Live crypto venues price BTC-USD and ETH-USD; markets with no venue stay unpriced.
@@ -401,14 +443,16 @@ step "Deploy the operator registry, which deploys the MONKEY staking contract, a
 # in the engine's election scenario, within the bounds given after them.
 initial_operator="($deployer,$(hex_bytes d0 48),$(hex_bytes c0 32))"
 mon=000000000000000000
-parameters="(3600,3600,600,1000,500,2000,10,1000$mon,604800)"
-minimums="(60,0,0,0,0,0,1,0,60)"
-maximums="(2592000,31536000,86400,10000,10000,10000,100,1000000$mon,2592000)"
+# `OperatorRegistry.Parameters`: epoch, finality margin, eligibility and quorum shares, most candidates,
+# least self-bond, liveness timeout.
+parameters="(3600,600,500,2000,10,1000$mon,604800)"
+minimums="(60,0,0,0,1,0,60)"
+maximums="(2592000,86400,10000,10000,100,1000000$mon,2592000)"
 if [[ "$second_engine" == 1 ]]; then
   # The first engine's own operator key and release are the operator in effect, so the vault's
   # release, which follows the registry once rotation is on, names what the first engine runs.
   initial_operator="($operator,$first_digest,$first_config_hash)"
-  parameters="($registry_epoch_secs,0,60,1000,500,2000,10,${candidate_bond_monkey}$mon,604800)"
+  parameters="($registry_epoch_secs,60,500,2000,10,${candidate_bond_monkey}$mon,604800)"
 fi
 deployed_registry="$(create --private-key "$deployer_key" src/OperatorRegistry.sol:OperatorRegistry \
   --constructor-args "$monkey" "$staking_cooldown_secs" "$staking_epoch_secs" "$governance" \
@@ -494,6 +538,19 @@ if [[ "$second_engine" == 1 ]]; then
     cast rpc anvil_setBalance "$dev_wallet2" 0x56bc75e2d63100000 --rpc-url "$rpc" >>"$step_log" 2>&1
   fi
   send "$usdc" 'mint(address,uint256)' "$dev_wallet2" $((dev_usdc * usdc_units)) --private-key "$deployer_key"
+  if [[ "$parameter_votes" == 1 ]]; then
+    # The registry takes a schedule only while rotation is off, and the vote contract is built over it.
+    # The third candidate's release is a stand-in no engine runs: it only ever votes.
+    step_log="$work/votes-setup.log"
+    deployed_receiver="$(create --private-key "$vote_deployer_key" src/SeedReceiver.sol:SeedReceiver --constructor-args "$relayer" 1606824023)"
+    deployed_schedule="$(create --private-key "$vote_deployer_key" src/OperatorSchedule.sol:OperatorSchedule --constructor-args "$registry" "$seed_receiver")"
+    deployed_vote="$(create --private-key "$vote_deployer_key" src/ParameterVote.sol:ParameterVote \
+      --constructor-args "$schedule" "$vote_normal_window" "$vote_fast_window")"
+    [[ "$(lower "$deployed_receiver")" == "$(lower "$seed_receiver")" && "$(lower "$deployed_schedule")" == "$(lower "$schedule")" &&
+      "$(lower "$deployed_vote")" == "$(lower "$vote")" ]] || die "the vote's contracts did not deploy where the node config names them"
+    register_candidate "$third_candidate" "$third_candidate_key" "$(hex_bytes 7c 48)" "$(hex_bytes 7c 32)" localhost:9 localhost:9
+    govern "$registry" "$(cast calldata 'setSchedule(address)' "$schedule")"
+  fi
   govern "$registry" "$(cast calldata 'setRotation(bool)' true)"
   first_release="$(cast keccak "${first_digest}${first_config_hash#0x}")"
   second_release="$(cast keccak "${second_digest}${second_config_hash#0x}")"
@@ -596,6 +653,37 @@ for _attempt in 1 2 3; do
 done
 [[ -n "$staking_applied" ]] || die "the node did not sequence init-staking (see $step_log)"
 
+if [[ "$parameter_votes" == 1 ]]; then
+  step "Make the three candidates the rotation set: stake, delegate, close the registry's epoch, pass the set's notice"
+  step_log="$work/votes-set.log"
+  # Stakes `$2` whole MONKEY for candidate `$1`, then delegates each following candidate and whole amount.
+  member_stake() {
+    local member="$1" amount="$2$mon"
+    shift 2
+    mint_monkey "$member" "$amount"
+    send_as "$member" "$monkey" 'approve(address,uint256)' "$staking" "$amount"
+    send_as "$member" "$staking" 'stake(uint256)' "$amount"
+    while (($# > 0)); do
+      send_as "$member" "$staking" 'delegate(address,uint256)' "$1" "$2$mon"
+      shift 2
+    done
+  }
+  member_stake "$operator" 40000 "$operator" 40000
+  member_stake "$second_candidate" 25000 "$second_candidate" 24000 "$third_candidate" 1000
+  member_stake "$third_candidate" 34000 "$third_candidate" 34000
+  # Moves the chain's clock, not the engine's: the next block is mined at `$1`.
+  mine_at() {
+    cast rpc evm_setNextBlockTimestamp "$1" --rpc-url "$rpc" >>"$step_log" 2>&1
+    cast rpc evm_mine --rpc-url "$rpc" >>"$step_log" 2>&1
+  }
+  mine_at $(($(cast call "$registry" 'openEpochStart()(uint64)' --rpc-url "$rpc" | awk 'NR == 1 {print $1}') + registry_epoch_secs + 1))
+  send "$registry" 'closeEpoch()' --private-key "$payer_key"
+  [[ "$(cast call "$schedule" 'setCount()(uint32)' --rpc-url "$rpc")" == 1 ]] || die "the close adopted no rotation set (see $step_log)"
+  mine_at $(($(cast call "$schedule" 'setOf(uint32)(uint64,uint64,address[],uint256[])' 1 --rpc-url "$rpc" | sed -n 2p | awk '{print $1}') + 1))
+  set_in_effect() { [[ "$(cast call "$schedule" 'currentSetId()(uint32)' --block finalized --rpc-url "$rpc" 2>/dev/null)" == 1 ]]; }
+  poll 60 set_in_effect || die "the rotation set is not in effect at a finalized block"
+fi
+
 # Every market a configured venue quotes, BTC-USD among them.
 venues_priced() {
   alive "$node_pid" || die "the node exited"
@@ -658,6 +746,8 @@ if [[ -n "${STACK_INFO_FILE:-}" ]]; then
     --arg dev2Wallet "${dev_wallet2:-}" --arg dev2WalletKey "${dev_wallet2_key:-}" --arg payerKey "${payer_key:-}" \
     --arg secondRelease "${second_release:-}" --arg firstRelease "${first_release:-}" \
     --arg operator "${operator:-}" --arg secondCandidate "${second_candidate:-}" \
+    --arg vote "$vote" --arg schedule "$schedule" --arg thirdCandidate "${third_candidate:-}" \
+    --arg secondCandidateKey "${second_candidate_key:-}" --arg thirdCandidateKey "${third_candidate_key:-}" \
     '{consoleUrl: $consoleUrl, apiOrigin: $apiOrigin, rpcUrl: $rpcUrl, chainId: 31337, vault: $vault, usdc: $usdc,
       monkey: $monkey, staking: $staking, registry: $registry,
       devWallet: $devWallet, devWalletKey: (if $devWalletKey == "" then null else $devWalletKey end),
@@ -665,7 +755,9 @@ if [[ -n "${STACK_INFO_FILE:-}" ]]; then
       + (if $secondEngine == "1" then {secondApiOrigin: $secondApiOrigin, secondNodeLog: $secondNodeLog,
           secondDevWallet: $dev2Wallet, secondDevWalletKey: (if $dev2WalletKey == "" then null else $dev2WalletKey end),
           payerKey: $payerKey, firstRelease: $firstRelease, secondRelease: $secondRelease,
-          operator: $operator, secondCandidate: $secondCandidate} else {} end)' \
+          operator: $operator, secondCandidate: $secondCandidate} else {} end)
+      + (if $vote != "" then {vote: $vote, schedule: $schedule, thirdCandidate: $thirdCandidate,
+          secondCandidateKey: $secondCandidateKey, thirdCandidateKey: $thirdCandidateKey} else {} end)' \
     >"$STACK_INFO_FILE.tmp"
   mv "$STACK_INFO_FILE.tmp" "$STACK_INFO_FILE"
   info_written=yes
@@ -699,6 +791,21 @@ MONKEY to stake    Both wallets hold $wallet_monkey MONKEY to stake and delegate
 Drive it           ./scripts/dev-local-stack-ctl.sh status | elect | handover | fund-house <USDC>
                    (reads $STACK_INFO_FILE)
 "
+  if [[ "$parameter_votes" == 1 ]]; then
+    two_engines="$two_engines
+Parameter votes    The rotation set in effect is the first engine's candidate $operator (40,000
+                   MONKEY), the second engine's $second_candidate (24,000) and the third
+                   candidate $third_candidate (35,000), on the vote contract $vote.
+Member wallet      To vote on the Staking page's Governance tab, import the second engine's candidate
+                   (Anvil account 4), $second_candidate_key, a public test key. It delegates
+                   to itself and the third candidate.
+Propose and vote   ./scripts/dev-local-stack-ctl.sh propose operator|second|third normal|fast '<admin command JSON>'
+                   ./scripts/dev-local-stack-ctl.sh vote operator|second|third <proposal>
+                   A fast-path restriction lasts $restriction_ttl. The chain's clock is eight days ahead of the
+                   engine's, so withdrawal authorizations do not pay, \`elect\` and \`handover\` do not apply,
+                   and the Governance tab counts a voting window, which runs on the chain's clock, eight days long.
+"
+  fi
 else
   rotation_state="rotation off"
   signer_line="$enclave (the node's published mock key)"
