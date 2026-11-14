@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixedFromInt, parseFixed, type Fixed } from "./fixed";
 import type { MarketView, SpreadTier, Tier } from "./engine/types";
-import { adverseBps, CALM, closing, conversionAt, exceedsSlippage, executionCost, growth, growthOf, priceOrder, slicedBps, tierCost, tieredMargin, USD, type PricingInput } from "./pricing";
+import { adverseBps, CALM, closing, conversionAt, exceedsSlippage, executionCost, growth, growthOf, paramsMissing, priceOrder, slicedBps, stressTermsAt, tierCost, tieredMargin, USD, type PricingInput } from "./pricing";
 
 /** The engine harness's bands from V52: 1bp to $1m, 2bp to $5m and 5bp above, in tenths. */
 const BANDS: SpreadTier[] = [{ up_to: "1000000", tenth_bps: 10 }, { up_to: "5000000", tenth_bps: 20 }, { up_to: null, tenth_bps: 50 }];
@@ -120,5 +120,13 @@ describe("executionCost", () => {
     expect([fee(10, -10, 1_000), fee(10, -13, 1_000), fee(10, -10, 10_000)]).toEqual([units(20), units(20), units(200)]);
     expect(fee(10, 5, 1_000)).toBe(0n);
     expect(executionCost({ held: units(10), delta: units(-4), entry: units(120), price: units(100), index, feeBps: 10_000 })).toBe(0n);
+  });
+});
+
+describe("the stress level's terms", () => {
+  it("come from the node's levels when it lists the market's level, and say why they are missing after a failed or absent read", () => {
+    const levels = [{ size_spread_multiplier_bps: 10_000, min_spread_bps: 0 }, { size_spread_multiplier_bps: 20_000, min_spread_bps: 2 }];
+    expect([stressTermsAt(levels, 1), stressTermsAt(levels, 2), stressTermsAt(undefined, 0)]).toEqual([{ minSpreadBps: 2, sizeMultiplierBps: 20_000 }, undefined, undefined]);
+    expect([paramsMissing("pending"), paramsMissing("read"), paramsMissing("unavailable"), paramsMissing("failed")]).toEqual([null, null, "This node does not serve its parameters.", "The node's parameters could not be read; the console reads them again by itself."]);
   });
 });

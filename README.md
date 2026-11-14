@@ -217,8 +217,12 @@ example built beside it) starts a private dev node on mock custody with EIP-712 
 and trades against it through the console's store and actions: it funds a fixed-key wallet through
 the mock-custody dev endpoint, declares eligibility, fills a market order at the streamed
 executable quote sent as the quoted price with a slippage bound, rests and cancels a limit order,
-closes a position reduce only at the streamed closing price, and is closed out when the operator's
-upsert-market raises the margin tier past its equity. It does not exercise the browser build: how
+and closes a position reduce only at the streamed closing price. It then opens BTC-USD and EUR-USD
+positions and checks that each partial close's preview is a bound its fill meets, reads a listing
+notice from the house state, restarts the node with the mock prices raised, which closes out an
+ETH-USD short past its margin, and once the profit fee's curve has run its fifteen minutes checks
+that each whole close's preview equals its fill: the price, the fee and the cash it moves. It takes
+about twenty minutes. It does not exercise the browser build: how
 the page loads the verifier, and its Content Security Policy, are checked by running `npm run
 dev:live`, or a production build with the same variables, against a node.
 

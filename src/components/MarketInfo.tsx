@@ -34,9 +34,10 @@ function stressTerms(level: StressLevel): string {
 /**
  * `price` is the price a market order on `side` would be sent at, with the worst price `slippageBps`
  * allows; null shows neither. `stress` is the market's level's terms from the node's parameters, and
- * `notice` its pending listing notice; null when the node has given neither.
+ * `notice` its pending listing notice; null when the node has given neither. `paramsNote` says why
+ * the parameters are missing when their read failed or the node does not serve them.
  */
-export function MarketInfo({ market, preview, side, price, slippageBps, stress, notice }: { market: MarketModel; preview: TicketPreview; side: Side; price: Fixed | null; slippageBps: number; stress: StressLevel | null; notice: ListingNotice | null }) {
+export function MarketInfo({ market, preview, side, price, slippageBps, stress, notice, paramsNote }: { market: MarketModel; preview: TicketPreview; side: Side; price: Fixed | null; slippageBps: number; stress: StressLevel | null; notice: ListingNotice | null; paramsNote: string | null }) {
   const worst = price === null ? null : side === "buy" ? price + bpsOf(price, slippageBps) : price - bpsOf(price, slippageBps);
   const useBps = preview.marginUseBps;
   const filled = preview.houseCap > 0n ? Math.min(8, Math.ceil(Number((preview.markNotional * 8n) / preview.houseCap) || 0)) : 0;
@@ -52,7 +53,7 @@ export function MarketInfo({ market, preview, side, price, slippageBps, stress, 
       <div className="space-y-5 px-4 pb-5 text-caption sm:px-5">
         <dl className="space-y-3">
           <div className={ROW}><dt className="text-fg-3">Market hours</dt><dd className={market.open ? "text-glow" : "text-ember"}>{market.open ? "Open" : "Closed"} · {describeSchedule(market.view.schedule)}</dd></div>
-          <div className={ROW}><dt className="text-fg-3">Stress level</dt><dd className={`text-right ${STRESS_TONE[market.stress] ?? ""}`}>{market.stress} · {stressName}{stress !== null && <span className="block text-fg-3">{stressTerms(stress)}</span>}</dd></div>
+          <div className={ROW}><dt className="text-fg-3">Stress level</dt><dd className={`text-right ${STRESS_TONE[market.stress] ?? ""}`}>{market.stress} · {stressName}{stress !== null ? <span className="block text-fg-3">{stressTerms(stress)}</span> : paramsNote !== null && <span className="block text-fg-3">{paramsNote}</span>}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Margin rate</dt><dd>{preview.marginRateBps === null ? "—" : `${formatMovePercent(preview.marginRateBps).replace("+", "")} of the resulting position`}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Required margin</dt><dd>{usd(preview.marginAdded)}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Implied leverage</dt><dd>{preview.impliedLeverage === null ? "—" : `${preview.impliedLeverage}×`}</dd></div>

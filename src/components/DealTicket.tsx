@@ -11,7 +11,7 @@ import { positionFee } from "@/lib/fee-words";
 import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { ORDER_LABELS, ORDER_TYPES, type OrderType } from "@/lib/prefs";
 import { formatMark } from "@/lib/price-format";
-import { stressTermsAt } from "@/lib/pricing";
+import { paramsMissing, stressTermsAt } from "@/lib/pricing";
 import { ticketPrices } from "@/lib/quotes";
 import { describeSchedule } from "@/lib/schedule";
 import { setupGate } from "@/lib/setup-steps";
@@ -181,7 +181,7 @@ export function DealTicket() {
           {!gate && shownProblems.map((p) => <p key={p}>{p}{p === "Fund your account to trade." && <> <FundingLink /></>}</p>)}
         </div>
       </form>
-      <MarketInfo market={market} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={params?.stressLevels[market.stress] ?? null} notice={state.listingNotices[market.id] ?? null} />
+      <MarketInfo market={market} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={params?.stressLevels[market.stress] ?? null} notice={state.listingNotices[market.id] ?? null} paramsNote={params !== null ? null : paramsMissing(state.houseStateStatus)} />
     </>
   );
 }
