@@ -13,6 +13,8 @@ import { useConsole } from "./ConsoleProvider";
 
 const CELL = "px-2 py-2 text-left align-top text-data sm:px-3";
 const DASH = "—";
+/** As long as the step to the next tier usually reads, so the sentence it stands for takes its lines. */
+const PLACEHOLDER_STEP = "Tier 1 needs $000,000 more counted volume, over at least 2 more days at the day cap of $000,000 (2 days in all).";
 
 /**
  * The volume tier card on the Funding page. While a connected wallet's account has not been read it keeps its
@@ -43,11 +45,15 @@ export function VolumeTierCard() {
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-caption sm:grid-cols-3">
         <div><dt className="text-fg-3">Counted volume, last 30 days</dt><dd className="mt-0.5 text-data text-fg">{volume === undefined ? DASH : formatUsd(volume.matured)}</dd></div>
         <div><dt className="text-fg-3">Pending</dt><dd className="mt-0.5 text-data text-fg">{volume === undefined ? DASH : formatUsd(volume.pending)}</dd></div>
-        {toxicity !== undefined && toxicity.tier > 0 && <div className="col-span-2 sm:col-span-1"><dt className="text-fg-3">Toxicity add-on</dt><dd className="mt-0.5 text-data text-fg">+{toxicity.addOnBps} {toxicity.addOnBps === 1 ? "bp" : "bps"} on every price</dd></div>}
+        {(toxicity !== undefined || standing === null) && (
+          <div className="col-span-2 sm:col-span-1"><dt className="text-fg-3">Toxicity add-on</dt><dd className="mt-0.5 text-data text-fg">{toxicity === undefined ? DASH : toxicity.tier > 0 ? `+${toxicity.addOnBps} ${toxicity.addOnBps === 1 ? "bp" : "bps"} on every price` : "None"}</dd></div>
+        )}
       </dl>
       <p className="mt-2 text-label leading-relaxed text-fg-3">Opening volume counts once the position has been held for a minute; a position closed sooner counts nothing. Only counted volume reaches a tier.</p>
       {standing !== null && standing.table === null && <p className="mt-3 text-label text-fg-3">What each tier needs and brings shows once the node's parameters are read.</p>}
       {next !== null && <p className="mt-3 text-caption text-fg-2">{describeNextTier(next)}</p>}
+      {/* The sentence the read brings holds its place, unseen, while the account is read. */}
+      {standing === null && <p aria-hidden="true" className="invisible mt-3 text-caption">{PLACEHOLDER_STEP}</p>}
       {standing?.table != null && next === null && <p className="mt-3 text-caption text-fg-2">This is the highest tier.</p>}
       <div className="mt-3">
         <table className="w-full border-collapse text-caption">

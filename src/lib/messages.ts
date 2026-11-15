@@ -46,6 +46,7 @@ export function describeReject(reject: Reject): string {
     case "slippage":
       return `The price moved ${reject.slippage_bps} bps against the quote you saw (${decimals(reject.quoted, 5)} to ${decimals(reject.live, 5)}), past your bound. Nothing filled.`;
     case "insufficient_margin": return `Not enough equity: you have ${usd(reject.equity)} and the account needs ${usd(reject.required)} of margin.`;
+    case "weekend_margin": return `Not enough equity for the weekend margin: you have ${usd(reject.equity)} and the account needs ${usd(reject.required)} while a market's weekend margin applies.`;
     case "insufficient_funds": return `You can withdraw up to ${usd(reject.available)} now.`;
     case "house_capacity": return "The house cannot take more in this market. Try a smaller size.";
     case "too_many_orders": return `You already rest ${reject.max} orders, the most the node allows. Cancel one to place another.`;

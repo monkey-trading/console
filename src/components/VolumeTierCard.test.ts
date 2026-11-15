@@ -60,6 +60,11 @@ describe("VolumeTierCard", () => {
     expect(html).toContain("+2 bps on every price");
   });
 
+  it("names a toxicity tier of zero as none, and an add-on in bps", () => {
+    expect(render({ ...ACCOUNT, toxicity: { tier: 0, addOnBps: 0 } }, PARAMS, VolumeTierCard)).toMatch(/Toxicity add-on<\/dt><dd[^>]*>None</);
+    expect(render(ACCOUNT, PARAMS, VolumeTierCard)).toContain("+2 bps on every price");
+  });
+
   it("shows the account's figures without terms until the parameters are read", () => {
     const html = render(ACCOUNT, null, VolumeTierCard);
     expect(html).toContain("Tier 0");
@@ -75,6 +80,9 @@ describe("VolumeTierCard", () => {
     expect(pending).toContain("Volume tier");
     expect(pending).toContain("Best-price size");
     expect(pending).not.toContain("Tier 0");
+    // The sentence and the toxicity cell the read brings keep their places, unseen or as dashes.
+    expect(pending).toMatch(/aria-hidden="true" class="invisible[^"]*">Tier 1 needs/);
+    expect(pending).toMatch(/Toxicity add-on<\/dt><dd[^>]*>—</);
     const unsupported = renderWith({ account: { ...ACCOUNT, volume: undefined }, houseParams: PARAMS, pricingCurrent: true, accountRead: true, wallet: { address: "0xabc", label: "w" } });
     expect(unsupported).not.toContain("Volume tier");
   });

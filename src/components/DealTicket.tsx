@@ -139,11 +139,14 @@ export function DealTicket() {
         </div>
         {(limits !== null || (state.wallet !== null && !state.accountRead)) && (
           // Held with dashes while the account is read, so the size field below does not move when the figures arrive.
-          <dl aria-label={limits === null ? `Your volume tier limits in ${market.symbol}` : `Your volume tier ${limits.tier} limits in ${market.symbol}`} className="mt-2 grid grid-cols-3 gap-2 text-label text-fg-3">
-            <div><dt>Best-price size</dt><dd className="mt-0.5 text-fg-2">{limits === null ? "—" : describeBestPrice(limits.bestPriceBound)}</dd></div>
-            <div><dt>Max leverage</dt><dd className="mt-0.5 text-fg-2">{limits === null || limits.leverage === null ? "—" : `${formatLeverage(limits.leverage)}${limits.weekendSets ? " (weekend margin)" : ""}`}</dd></div>
-            <div><dt>Resting orders</dt><dd className="mt-0.5 text-fg-2">{limits === null ? "—" : `${limits.resting}${limits.orderLimit === null ? "" : ` of ${limits.orderLimit}`}`}</dd></div>
-          </dl>
+          <div className="mt-2">
+            <p id={`${id}-limits`} className="text-label text-fg-3">{limits === null ? "Your volume tier limits" : `Volume tier ${limits.tier} limits`} in {market.symbol}</p>
+            <dl aria-labelledby={`${id}-limits`} className="mt-1 grid grid-cols-3 gap-2 text-label text-fg-3">
+              <div><dt>Best-price size</dt><dd className="mt-0.5 text-fg-2">{limits === null ? "—" : describeBestPrice(limits.bestPriceBound)}</dd></div>
+              <div><dt>Max leverage</dt><dd className="mt-0.5 text-fg-2">{limits === null || limits.leverage === null ? "—" : `${formatLeverage(limits.leverage)}${limits.weekendSets ? " (weekend margin)" : ""}`}</dd></div>
+              <div><dt>Resting orders</dt><dd className="mt-0.5 text-fg-2">{limits === null ? "—" : `${limits.resting}${limits.orderLimit === null ? "" : ` of ${limits.orderLimit}`}`}</dd></div>
+            </dl>
+          </div>
         )}
         <div className="mt-4">
           <label htmlFor={`${id}-size`} className="block text-caption text-fg-2">Size (contracts)</label>

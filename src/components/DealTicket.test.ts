@@ -38,7 +38,7 @@ const render = (resting = 3, toxicityBps = 0, patch?: Partial<ConsoleState>) => 
 describe("the deal ticket's tier limits", () => {
   it("shows the account's best-price size, leverage and resting orders in the selected market", () => {
     const html = render(3);
-    expect(html).toContain("Your volume tier 0 limits in BTC-USD");
+    expect(html).toContain("Volume tier 0 limits in BTC-USD");
     expect(html).toContain("Up to $500,000");
     expect(html).toContain("20x");
     expect(html).toContain("3 of 25");

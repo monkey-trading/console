@@ -140,6 +140,7 @@ export function decodeAccount(view: AccountView): AccountModel {
 
 /** `{ key: value }`, or nothing for an absent value, so a model from a node that predates a field has no key for it. */
 function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
+  // A computed key widens to `string`; the object has exactly the one key `K`.
   return value === undefined ? {} : ({ [key]: value } as { [P in K]?: V });
 }
 

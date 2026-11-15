@@ -71,6 +71,14 @@ describe("bestPriceBound", () => {
     expect(bestPriceBound(BTC_SPREAD, 100_000)).toBe(fixedFromInt(10_000_000));
   });
 
+  it("never takes the bound past the larger of the bound and the largest input, as the engine's bands do", () => {
+    const wide: SpreadTier[] = [{ up_to: "500000000", tenth_bps: 20 }, { up_to: null, tenth_bps: 40 }];
+    // 250% of $500M is $1.25B, capped at $1B.
+    expect(bestPriceBound(wide, 25_000)).toBe(fixedFromInt(1_000_000_000));
+    // A bound already above it is the ceiling.
+    expect(bestPriceBound([{ up_to: "2000000000", tenth_bps: 20 }, { up_to: null, tenth_bps: 40 }], 25_000)).toBe(fixedFromInt(2_000_000_000));
+  });
+
   it("has no bound for a market with one band", () => {
     expect(bestPriceBound([{ up_to: null, tenth_bps: 20 }], 2500)).toBeNull();
   });
@@ -124,6 +132,13 @@ describe("nextTier", () => {
     expect(near === null ? null : nextTier(near, table)).toMatchObject({ volumeLeft: fixedFromInt(100_000), daysLeast: 1 });
     const there = decodeVolume(standing({ progress: [{ capped: "0", days: 0 }, { capped: "1000000", days: 1 }, { capped: "0", days: 0 }, { capped: "0", days: 0 }] }));
     expect(there === null ? null : nextTier(there, table)).toMatchObject({ volumeLeft: 0n, daysLeast: 0 });
+  });
+
+  it("counts the unit the engine truncates capped volume by, so a cap its divisor does not divide adds no day", () => {
+    // $1M over 30 days: 29 capped days serve 29e15 / 30 = 966,666.666666666 after truncation, and one more day at the cap reaches the tier.
+    const thirty = decodeTiers([...TABLE.slice(0, 1), { threshold: "1000000", day_divisor: 30, best_price_share_bps: 5000 }]) ?? [];
+    const volume = decodeVolume({ ...standing(), progress: [{ capped: "0", days: 0 }, { capped: "966666.666666666", days: 29 }] });
+    expect(volume === null ? null : nextTier(volume, thirty)).toMatchObject({ daysLeast: 1, daysNeeded: 30 });
   });
 
   it("has no next tier at the top of the table", () => {

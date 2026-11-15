@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AccountView } from "../engine/types";
 import { fixedFromInt } from "../fixed";
-import { DAY_MS, MIN_HOLD_MS } from "./volume";
+import { DAY_MS, MIN_HOLD_MS, recordFill } from "./volume";
 import type { MockNode } from "./index";
 import { funded, ME, order } from "./test-helpers";
 
@@ -88,6 +88,53 @@ describe("counted volume", () => {
     node.client.tick(node.client.state.now + 6_000);
     pin(node, 100_000);
     expect(Number((await volumeOf(node))?.matured)).toBeGreaterThan(before + 99_000);
+  });
+});
+
+describe("a close that takes pending opening volume", () => {
+  const pendingOf = async (node: MockNode) => Number((await volumeOf(node))?.pending);
+
+  it("takes part of the newest lot, and what the lot keeps is its proportion rounded down", async () => {
+    const node = await funded(100_000);
+    pin(node, 100_000);
+    await order(node, "1", "buy");
+    const opened = (await volumeOf(node))?.pending ?? "0";
+    await order(node, "0.4", "sell");
+    // 0.6 of the lot is still pending, and the 0.4 closed counts nothing, now or after the hold.
+    expect(await pendingOf(node)).toBeCloseTo(Number(opened) * 0.6, 3);
+    node.client.tick(node.client.state.now + MIN_HOLD_MS + 1_000);
+    pin(node, 100_000);
+    expect(Number((await volumeOf(node))?.matured)).toBeCloseTo(Number(opened) * 0.6, 3);
+  });
+
+  it("rounds the lot's notional down when its proportion has a fraction of a raw unit", async () => {
+    const node = await funded(100_000);
+    const { state } = node.client;
+    state.account(ME).volume.opening.set(1, [{ maturesAt: state.now + MIN_HOLD_MS, qty: 3n, notional: 10n }]);
+    state.account(ME).positions.set(1, { qty: 3n, entry: 1n, openedAt: state.now });
+    recordFill(state.account(ME).volume, { market: 1, held: 3n, delta: -1n, price: 1n, now: state.now, liquidation: false });
+    // 2 of 3 units keep 10 * 2 / 3 = 6.67 raw units, which the engine keeps as 6.
+    expect(state.account(ME).volume.opening.get(1)?.[0]?.notional).toBe(6n);
+  });
+
+  it("takes the newer lot first across lots, and counts only what is left of the close once the horizon has passed", async () => {
+    const node = await funded(1_000_000);
+    pin(node, 100_000);
+    await order(node, "1", "buy");
+    node.client.tick(node.client.state.now + MIN_HOLD_MS + 1_000);
+    pin(node, 100_000);
+    await order(node, "1", "buy");
+    const counted = Number((await volumeOf(node))?.matured);
+    // 1.5 closes the whole newer lot (pending) and half the older, matured one, which counts after the horizon.
+    await order(node, "1.5", "sell");
+    expect(await pendingOf(node)).toBeGreaterThan(49_000);
+    expect(await pendingOf(node)).toBeLessThan(51_000);
+    node.client.tick(node.client.state.now + 6_000);
+    pin(node, 100_000);
+    const after = await volumeOf(node);
+    expect(Number(after?.pending)).toBe(0);
+    expect(Number(after?.matured) - counted).toBeGreaterThan(49_000);
+    expect(Number(after?.matured) - counted).toBeLessThan(51_000);
   });
 });
 

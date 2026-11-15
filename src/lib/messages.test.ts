@@ -10,6 +10,10 @@ describe("order-limit and rate refusals", () => {
     expect(describeReject({ kind: "too_many_orders", max: 100 })).toBe("You already rest 100 orders, the most the node allows. Cancel one to place another.");
   });
 
+  it("says why a weekend margin refuses a fill", () => {
+    expect(describeReject({ kind: "weekend_margin", equity: "1000", required: "2500.5" })).toBe("Not enough equity for the weekend margin: you have $1,000.00 and the account needs $2,500.50 while a market's weekend margin applies.");
+  });
+
   it("says a 429 for the tier's request rate recorded nothing", () => {
     expect(describeTierRate({ tier: 0, requestsPerSecond: 2 })).toBe("Requests are coming faster than volume tier 0 allows, 2 a second. Nothing was recorded. Wait a moment and try again.");
   });

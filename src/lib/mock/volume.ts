@@ -85,9 +85,9 @@ export function recordFill(book: VolumeBook, fill: { market: MarketId; held: Fix
     if (lot === undefined) break;
     const taken = minFixed(toClose, lot.qty);
     // The units a close takes from a lot count nothing: they were never held long enough.
-    const notional = taken === lot.qty ? lot.notional : (lot.notional * taken) / lot.qty;
+    // What a lot keeps is its proportion rounded down, as the engine's `consume_opening` keeps it, so a partial close never leaves more pending than it should.
     if (taken === lot.qty) lots.pop();
-    else lots[lots.length - 1] = { ...lot, qty: lot.qty - taken, notional: lot.notional - notional };
+    else lots[lots.length - 1] = { ...lot, qty: lot.qty - taken, notional: (lot.notional * (lot.qty - taken)) / lot.qty };
     toClose -= taken;
   }
   if (toClose > ZERO) {

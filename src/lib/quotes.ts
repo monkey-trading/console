@@ -93,8 +93,13 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
   const spreadTenths = ask !== null && bid !== null && input.mark !== null && input.mark > 0n ? tenthBpsOfValue(ask.price - bid.price, input.mark) : null;
   const problem = mine === null ? "The node would not open an order this large. Try a smaller size." : mine.declined === null ? null : declinedProblem(quote, side, mine.declined, input.limits ?? null);
   // The node declining for margin or the house's capacity, or having no step this large, is a matter of the size.
-  const problemIsSize = mine === null || (mine.declined !== null && (mine.declined.kind === "insufficient_margin" || mine.declined.kind === "house_capacity"));
+  const problemIsSize = mine === null || (mine.declined !== null && (isMarginDecline(mine.declined) || mine.declined.kind === "house_capacity"));
   return { bid: bid?.price ?? null, offer: ask?.price ?? null, price: mine?.price ?? null, exactClose: closingPrice(quote, side, preview.qty) !== null, toxicityBps: quote.toxicity_bps ?? 0, spreadTenths, problem, problemIsSize };
+}
+
+/** Whether the node declined a size for equity: against the initial requirement at the tier's floor, or, from V60, with a weekend margin that applies. */
+function isMarginDecline(reject: Reject): boolean {
+  return reject.kind === "insufficient_margin" || reject.kind === "weekend_margin";
 }
 
 /**
@@ -104,7 +109,7 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
  * as the order's; the largest step that still fills is the size the account can open.
  */
 function declinedProblem(quote: MarketQuote, side: Side, declined: Reject, limits: TicketLimits | null): string {
-  if (declined.kind !== "insufficient_margin") return describeReject(declined);
+  if (!isMarginDecline(declined)) return describeReject(declined);
   const steps = side === "buy" ? quote.ask : quote.bid;
   const fitting = [...steps].reverse().find((s) => s.declined === undefined);
   // In contracts, cut to the size field's step so it can be typed as it reads; a smaller size still fits.

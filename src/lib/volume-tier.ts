@@ -46,6 +46,10 @@ export interface VolumeModel {
   requestsPerSecond: number | null;
 }
 
+/** The largest amount the engine takes as input, `Fixed::MAX_INPUT`: a billion. */
+const MAX_INPUT: Fixed = fixedFromInt(1_000_000_000);
+
+// `Number.isSafeInteger` held, so `n` is a number.
 const whole = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0;
 
 /** The table the house parameters name, or null when any tier is malformed (a table is all or nothing). */
@@ -95,7 +99,9 @@ export function decodeVolume(wire: VolumeStandingWire | undefined): VolumeModel 
 export function bestPriceBound(tiers: readonly SpreadTier[], shareBps: number): Fixed | null {
   const [first, second] = tiers;
   if (first === undefined || second === undefined || first.up_to === null) return null;
-  const scaled = (fixedFromWire(first.up_to) * BigInt(shareBps)) / 10_000n;
+  const bound = fixedFromWire(first.up_to);
+  // A share above the whole bound never takes it past the larger of the bound and the largest input (`Fixed::MAX_INPUT`).
+  const scaled = minFixed((bound * BigInt(shareBps)) / 10_000n, bound > MAX_INPUT ? bound : MAX_INPUT);
   return second.up_to === null ? scaled : minFixed(scaled, fixedFromWire(second.up_to));
 }
 
@@ -170,8 +176,10 @@ export function nextTier(volume: VolumeModel, table: readonly TierTerms[]): Next
   if (target === undefined || progress === undefined) return null;
   const volumeLeft = target.threshold > progress.capped ? target.threshold - progress.capped : ZERO;
   const dayCap = target.threshold / BigInt(target.dayDivisor);
-  // A day counts at most threshold / divisor, so the fewest days that cover the gap is ceil(gap * divisor / threshold).
-  const least = target.threshold === ZERO ? 0 : Number((volumeLeft * BigInt(target.dayDivisor) + target.threshold - 1n) / target.threshold);
+  // A day counts at most threshold / divisor, so the fewest days that cover the gap is ceil(gap * divisor / threshold). The engine
+  // serves `capped` truncated to a raw unit, so the true gap is at most that unit smaller: counting it keeps the figure a lower bound.
+  const gap = volumeLeft > 0n ? volumeLeft - 1n : ZERO;
+  const least = target.threshold === ZERO ? 0 : Number((gap * BigInt(target.dayDivisor) + target.threshold - 1n) / target.threshold);
   return { tier: volume.tier + 1, volumeLeft, dayCap, daysNeeded: target.dayDivisor, daysLeast: least };
 }
 

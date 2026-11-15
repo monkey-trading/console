@@ -167,6 +167,8 @@ export type Reject =
   | { kind: "invalid_amount" }
   | { kind: "slippage"; quoted: string; live: string; slippage_bps: number }
   | { kind: "insufficient_margin"; equity: string; required: string }
+  /** From V60, a fill that adds risk while a market's weekend margin applies and would leave equity below the requirement with it. */
+  | { kind: "weekend_margin"; equity: string; required: string }
   | { kind: "insufficient_funds"; available: string }
   | { kind: "house_capacity" }
   /** A limit or stop order from an account already resting `max`, the parameters' cap. */

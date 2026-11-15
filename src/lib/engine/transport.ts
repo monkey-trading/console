@@ -47,6 +47,7 @@ function refusal(status: number, text: string): EngineError {
   if (status === 401) return new EngineError(status, message, { kind: message === "missing signature" ? "missing_signature" : "invalid_signature" });
   const refused = new EngineError(status, message);
   // A credited account over its volume tier's request rate: the signed body names the tier and its rate.
+  // `Number.isSafeInteger` held for both, so they are numbers.
   if (status === 429 && Number.isSafeInteger(tier) && Number.isSafeInteger(perSecond)) refused.tierLimit = { tier: tier as number, requestsPerSecond: perSecond as number };
   return refused;
 }
