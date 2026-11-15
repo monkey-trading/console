@@ -71,7 +71,7 @@ export function StakingRotation() {
         }}
         nameOf={labelOf}
       />
-      <p className={NOTE}>Each set is the members the staking contract&apos;s close adopted, weighted by what was delegated to them then. A member&apos;s expected share of turns is its weight over the set&apos;s, the odds of each day&apos;s draw. The turn changes at 22:30 UTC; the console moves to the new member&apos;s node once it verifies.</p>
+      <p className={NOTE}>Each set is the members the registry&apos;s election close adopted into the operator schedule, weighted by the stake delegated to each then. A member&apos;s expected share of turns is its weight over the set&apos;s, the odds of each day&apos;s draw. The turn changes at 22:30 UTC; the console moves to the new member&apos;s node once it verifies.</p>
     </div>
   );
 }

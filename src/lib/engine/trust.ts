@@ -286,6 +286,7 @@ export class NodeTrust {
       }
       const address = verdict.enclave.address.toLowerCase();
       const { release, config } = verdict.enclave;
+      if (vault.kind === "read") this.naming.vaultSays(address, vault.facts.signer);
       if (vault.kind === "read" && address !== vault.facts.signer) return this.setStatus({ kind: "unverified", reason: NOT_THE_SIGNER });
       const superseded = await this.naming.refusal(address); if (superseded !== null) return this.setStatus({ kind: "unverified", reason: superseded });
       this.trust(address);

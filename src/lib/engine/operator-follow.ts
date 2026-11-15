@@ -14,6 +14,8 @@
 
 import type { AttestationStatus } from "./attestation";
 import type { EngineClient, Unsubscribe } from "./client";
+import type { OperatorRoute } from "./stats-types";
+import { RefusedAnswer } from "./trust-errors";
 import type { Deploy } from "./deploy";
 import type { Scheduler } from "./live-stream";
 import { ROTATION_EVENTS } from "./rotation-events";
@@ -187,11 +189,11 @@ export class OperatorFollower {
     try {
       named = await bounded(this.deps.scheduler, chain.operator());
     } catch (error) {
-      if (this.deps.chain() === chain) this.set({ kind: "failed", origin: this.origin, reason: reason(error) });
+      if (this.deps.chain() === chain) this.failed(reason(error));
       return;
     }
     if (this.deps.chain() !== chain) return;
-    if (vaultFailed !== null) return this.set({ kind: "failed", origin: this.origin, reason: vaultFailed });
+    if (vaultFailed !== null) return this.failed(vaultFailed);
     if (named === null) return this.settled({ kind: "pinned", origin: this.origin });
     this.effectiveAtMs = named.pending?.effectiveAtMs ?? null;
     const target = operatorTarget(this.deps.deploy, named);
@@ -211,8 +213,9 @@ export class OperatorFollower {
     if (this.current === null) return NOTHING_SAID;
     try {
       return nodeSaid(await bounded(this.deps.scheduler, this.current.stats.operator({ limit: 1 })), this.deps.nowMs());
-    } catch {
-      return NOTHING_SAID; // a node that predates the route, or is not trusted, says nothing; the verdict and the chain's reads speak for it
+    } catch (error) {
+      // A node the vault no longer names still says where the registry now runs the operator (the signed route the refusal carries); any other failure says nothing.
+      return error instanceof RefusedAnswer ? nodeSaid(error.answer as OperatorRoute, this.deps.nowMs()) : NOTHING_SAID;
     }
   }
 
@@ -223,6 +226,9 @@ export class OperatorFollower {
     if (target.origin !== null && target.origin !== this.origin) return this.tryNode(target.origin, null, said.rotationEnabled);
     this.settled({ kind: "pinned", origin: this.origin });
   }
+
+  /** A read that failed; a handover under way keeps its pause, as the failed read says nothing of whether the successor verifies. */
+  private failed = (reason: string): void => { if (this.state.kind !== "waiting") this.set({ kind: "failed", origin: this.origin, reason }); };
 
   private settled(state: FollowStatus): void {
     this.trial = null;

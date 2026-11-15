@@ -38,13 +38,19 @@ export function Payouts() {
   // An unsigned approval waits for a log check at a boundary the node names: its payouts are read again just after it, and while the node still names it, so the row never keeps saying a past boundary is next.
   const checkAt = earliestCheck(payouts);
   const nowMs = state.now;
-  const read = state.payoutsRead;
+  // Each attempt, failed or partial ones included, changes the generation, so each arms the next.
+  const attempt = state.payoutsGeneration;
   useEffect(() => {
     if (checkAt === null || !trusted) return;
-    // The node's clock as it is when the timer is set, so a clock that moves on never sets it again; `read` is the last answer, and each read that lands arms the next.
-    const timer = setTimeout(() => void loadPayouts(store), checkReadDelay(checkAt, store.getSnapshot().now));
+    // The node's clock as it is when the timer is set, so a clock that moves on never sets it again.
+    const timer = setTimeout(() => {
+      const load = () => void loadPayouts(store);
+      // A hidden tab reads once it is seen again, as the other paced reads do.
+      if (document.visibilityState === "hidden") document.addEventListener("visibilitychange", load, { once: true });
+      else load();
+    }, checkReadDelay(checkAt, store.getSnapshot().now));
     return () => clearTimeout(timer);
-  }, [store, checkAt, trusted, read]);
+  }, [store, checkAt, trusted, attempt]);
   useEffect(() => {
     // The vault's own record says whether it has paid each payout the page can act on, including by a claim made elsewhere before the read.
     if (unread !== "") void checkPaid(store);
@@ -98,10 +104,10 @@ function PayoutRow({ payout, nowMs, idle, signs, describedBy, problem, act }: { 
           <button type="button" aria-disabled={!idle || !signs} aria-describedby={describedBy} onClick={() => signs && act(() => reissue(store, nonce, status.expiresAt))} className={BUTTON}>Ask for a new authorization</button>
         </>
       )}
-      {status.kind === "waiting" && !payout.read && (
+      {status.kind === "waiting" && !payout.read && status.checkAtMs === undefined && (
         <p className="mt-2 text-fg-3">{signs ? "Checking the vault…" : "The vault's record of this withdrawal could not be read for a read-only account."}</p>
       )}
-      {status.kind === "waiting" && payout.read && <p className="mt-2 text-fg-3">{waitingWords(status.checkAtMs, nowMs)}</p>}
+      {status.kind === "waiting" && (payout.read || status.checkAtMs !== undefined) && <p className="mt-2 text-fg-3">{waitingWords(status.checkAtMs, nowMs)}</p>}
       {problem !== null && (status.kind === "waiting" || status.kind === "expired") && <p className="mt-2 text-fg-3">{problem}</p>}
     </li>
   );

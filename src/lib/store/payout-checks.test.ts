@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromWire } from "../fixed";
-import { AFTER_BOUNDARY_MS, checkReadDelay, earliestCheck, STILL_WAITING_MS } from "./payout-checks";
+import { AFTER_BOUNDARY_MS, checkReadDelay, MAX_DELAY_MS, earliestCheck, STILL_WAITING_MS } from "./payout-checks";
 import type { Payout, PayoutStatus } from "./payouts";
 
 const payout = (nonce: number, status: PayoutStatus): Payout => ({ nonce, amount: fixedFromWire("10"), status, read: true });
@@ -19,6 +19,10 @@ describe("checkReadDelay", () => {
     expect(checkReadDelay(10_000, 4_000)).toBe(6_000 + AFTER_BOUNDARY_MS);
     expect(checkReadDelay(10_000, 10_000)).toBe(STILL_WAITING_MS);
     expect(checkReadDelay(10_000, 90_000)).toBe(STILL_WAITING_MS);
+  });
+
+  it("never waits longer than a day, whatever boundary the node names", () => {
+    expect(checkReadDelay(10_000 * 86_400_000, 1)).toBe(MAX_DELAY_MS);
   });
 
   it("reads at the slow pace on a clock no frame has set yet, which would make any boundary look ahead", () => {

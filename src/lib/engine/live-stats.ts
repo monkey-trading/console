@@ -1,6 +1,7 @@
 /** The dashboard routes over a signed read: the House, MONKEY and Staking pages' positions, series and totals. */
 
 import { EngineError } from "./client";
+import { RefusedAnswer, UntrustedError } from "./trust-errors";
 import type { OperatorClaim } from "./signer-naming";
 import type { DistributionEpochsPage, OperatorList } from "./staking-reads";
 import type { ActivityPage, DistributionProof, MonkeyView, OperatorRoute, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "./stats-types";
@@ -38,7 +39,12 @@ export function liveStats(get: (path: string) => Promise<unknown>, heedOperator:
       const text = query.toString();
       const route = (await get(`/v1/operator${text === "" ? "" : `?${text}`}`)) as OperatorRoute;
       // The signer the node says the vault names is judged before anyone reads the answer.
-      heedOperator(route);
+      try {
+        heedOperator(route);
+      } catch (error) {
+        // The answer stays with the refusal: it still says which node the registry names now, which a visit with no wallet follows.
+        throw error instanceof UntrustedError ? new RefusedAnswer(error.message, route) : error;
+      }
       return route;
     },
     operators: async () => (await get("/v1/operators")) as OperatorList,

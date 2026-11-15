@@ -53,6 +53,9 @@ export function mockRotation(state: MockState, params: { before?: number; limit?
   const holder = state.operators.named(now);
   const holderMember = members.find((member) => member.candidate === holder.candidate) ?? members[0];
   if (holderMember === undefined) throw new Error("The mock rotation set has no members.");
+  // Tomorrow's turn goes to the operator that will hold the role by then: an election that takes effect first names its candidate, else the holder stays, so a boundary never changes who was advertised.
+  const pendingTurn = holder.pending !== null && holder.pending.effectiveAtMs <= boundaryOf(today + 1) ? members.find((member) => member.candidate === holder.pending?.candidate) : undefined;
+  const tomorrowHolder = pendingTurn ?? holderMember;
   const view = (turn: number, member: Member, taken: boolean): TurnView => ({
     turn, position: 0, reason: "draw", set: 3, candidate: member.candidate, admin_key: member.admin_key, applies_at: boundaryOf(turn), taken,
   });
@@ -94,7 +97,7 @@ export function mockRotation(state: MockState, params: { before?: number; limit?
     rotation_set: set(3, 41, now - 8 * DAY_MS, members),
     next_rotation_set: set(4, 42, now + 3 * DAY_MS, members.slice(0, 3).map((member, index) => ({ ...member, weight: (BigInt(member.weight) + BigInt(index) * 10_000n).toString() }))),
     turn: view(today, holderMember, true),
-    next_turn: view(today + 1, drawn(members, today + 1), false),
+    next_turn: view(today + 1, tomorrowHolder, false),
     turns: { records: page, next, truncated: false, retained_from_seq: SEQ_ORIGIN },
   };
 }

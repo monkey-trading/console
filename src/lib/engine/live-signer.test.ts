@@ -20,14 +20,15 @@ function client() {
     if (String(input).endsWith("/v1/markets") && gates.markets !== null) await gates.markets;
     return node.fetch(input, init);
   };
+  const sockets: FakeSocket[] = [];
   const live = new LiveEngineClient({
     origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: vectorResponse("markets").vault, heartbeatMs: 5_000,
     loadVerifier: async () => acceptAll, releases: [], acceptsMock: true, fetch: fetchThrough,
-    openSocket: (url) => new FakeSocket(url), scheduler: new FakeScheduler(), nowMs: () => 1, challenge: () => "ab".repeat(32),
+    openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; }, scheduler: new FakeScheduler(), nowMs: () => 1, challenge: () => "ab".repeat(32),
   });
   const reply = (path: string, body: object) => node.signed(path, () => ({ status: 200, body: JSON.stringify(body), signature: "0x", timeMs: 1, seq: 1 }));
   const operator = (signer: { epoch: number; address: string } | null, enclave: string = ENCLAVE) => reply(OPERATOR_CLAIM, { operator: ENCLAVE, pending_rotation: null, rotation_enabled: true, last_election: null, enclave, ...(signer === null ? {} : { signer }) });
-  return { node, live, reply, operator, gates };
+  return { node, live, reply, operator, gates, sockets };
 }
 
 describe("the first check", () => {
@@ -108,5 +109,20 @@ describe("an answer in flight", () => {
     await expect(live.stats.operator({ limit: 1 })).rejects.toThrow(SIGNER_SUPERSEDED);
     release();
     await expect(inFlight).rejects.toThrow(SIGNER_SUPERSEDED);
+  });
+
+  it("ends an archive scan under a signer the vault stopped naming, on the next frame", async () => {
+    const { live, operator, reply, sockets } = client();
+    operator({ epoch: 5, address: ENCLAVE });
+    reply("/v1/markets", []);
+    await live.verify();
+    const scan = live.scanMarks(0, { maxMessages: 100, maxMs: 60_000, coverMs: 1_000, stepMs: 1_000 }, {}, {});
+    await settle();
+    const socket = sockets.at(-1);
+    if (socket === undefined) throw new Error("the scan opened no socket");
+    operator({ epoch: 6, address: OTHER });
+    await expect(live.stats.operator({ limit: 1 })).rejects.toThrow(SIGNER_SUPERSEDED);
+    socket.onmessage?.call(socket as never, { data: JSON.stringify({ n: 0, msg: "{}" }) } as MessageEvent); // the scan reads only the frame text
+    await expect(scan).rejects.toThrow("The scan was cancelled.");
   });
 });

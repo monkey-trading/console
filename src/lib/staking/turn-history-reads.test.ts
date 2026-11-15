@@ -117,4 +117,20 @@ describe("TurnHistoryReads", () => {
     expect(reads.getSnapshot().older).toEqual(NO_OLDER);
     stop();
   });
+
+  it("drops what it held when another verified enclave now holds the node, while it ran and at a start after one replaced it", async () => {
+    const { reads, store, head, stop } = await started();
+    await reads.loadOlder(head);
+    await flush();
+    expect(reads.getSnapshot().older.records.length).toBeGreaterThan(0);
+    store.patch({ attestation: { kind: "verified", release: "r", config: "c", address: "0x00000000000000000000000000000000000000e1" } });
+    store.patch({ attestation: { kind: "verified", release: "r", config: "c", address: "0x00000000000000000000000000000000000000e2" } });
+    expect(reads.getSnapshot().older).toEqual(NO_OLDER);
+    await reads.loadOlder(head);
+    await flush();
+    stop();
+    store.patch({ attestation: { kind: "verified", release: "r", config: "c", address: "0x00000000000000000000000000000000000000e3" } });
+    expect(reads.start()).toBeTypeOf("function");
+    expect(reads.getSnapshot().older).toEqual(NO_OLDER);
+  });
 });

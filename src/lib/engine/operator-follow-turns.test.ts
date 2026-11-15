@@ -41,13 +41,21 @@ describe("the follower and the node's turns", () => {
     expect(kit.follower.getSnapshot()).toEqual({ kind: "following", origin: B });
   });
 
-  it("reads the node's turn with no wallet to read a chain, and does not wait on a node that stalls before it reads the chain", async () => {
+  it("reads the node for its turn with no wallet to read a chain, reading again just after it begins, and does not wait on a node that stalls before it reads the chain", async () => {
     const withoutWallet = rig({ reads: null });
-    withoutWallet.trial.signedRead = async () => ({ next_turn: { applies_at: 1_000_000 + 90_000 } });
+    let reads = 0;
+    withoutWallet.trial.signedRead = async () => { reads += 1; return { next_turn: { applies_at: 1_000_000 + 90_000 } }; };
     withoutWallet.follower.watch(withoutWallet.trial as unknown as EngineClient);
     withoutWallet.follower.start(() => false);
     await withoutWallet.follower.check();
     expect(withoutWallet.follower.getSnapshot().kind).toBe("pinned");
+    expect(reads).toBe(1);
+    withoutWallet.advance(90_000 + 5_000 - 1);
+    await settle();
+    expect(reads).toBe(1);
+    withoutWallet.advance(1);
+    await settle();
+    expect(reads).toBe(2);
     const stalled = rig({ operator: async () => named({ hostname: null }) });
     stalled.trial.signedRead = () => new Promise(() => undefined);
     stalled.follower.watch(stalled.trial as unknown as EngineClient);

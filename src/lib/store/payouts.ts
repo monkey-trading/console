@@ -22,7 +22,7 @@ const APPROVAL_PAGES = 20;
 const PAYOUTS_LIMIT = 200;
 /** The most pages of payouts read, so a node that keeps answering with more cannot keep the page reading. */
 const PAYOUT_PAGES = 20;
-/** What a row says a failed read will do next: reads happen on triggers, never on a timer. */
+/** What a row says a failed read will do next: reads happen on triggers; the one timer is the read after a named log check (`payout-checks.ts`). */
 const READ_AGAIN = "It is read again when the next withdrawal is approved or the page reloads.";
 /** Paid payouts shown beside the unpaid ones, newest first. */
 const PAID_SHOWN = 5;

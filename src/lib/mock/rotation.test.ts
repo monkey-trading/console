@@ -55,15 +55,9 @@ describe("the simulated rotation", () => {
     expect(seen.length).toBeGreaterThan(15);
   });
 
-  it("draws across the whole set at the scale of MONKEY base units, not always its first member", async () => {
-    const { client } = createMockNode(SIM_EPOCH_MS);
-    const drawn = new Set<string>();
-    for (let day = 0; day < 40; day += 1) {
-      client.tick(client.state.now + DAY_MS);
-      const answer = await client.stats.operator();
-      if (answer.next_turn !== null && answer.next_turn !== undefined) drawn.add(answer.next_turn.candidate);
-    }
-    expect(drawn.size).toBeGreaterThanOrEqual(3);
+  it("draws the history across the whole set at the scale of MONKEY base units, not always its first member", async () => {
+    const { records } = rotationView(await route({ limit: 100 }).route).history;
+    expect(new Set(records.map((record) => record.candidate)).size).toBeGreaterThanOrEqual(3);
   });
 
   it("moves to the next day's turn when the clock passes the boundary", async () => {
@@ -73,5 +67,7 @@ describe("the simulated rotation", () => {
     const after = await client.stats.operator();
     expect((after.turn?.turn ?? 0) - (before.turn?.turn ?? 0)).toBe(1);
     expect(after.turn?.applies_at).toBe(before.next_turn?.applies_at);
+    // The member advertised for tomorrow is the one holding the turn once the boundary has passed.
+    expect(after.turn?.candidate).toBe(before.next_turn?.candidate);
   });
 });

@@ -16,6 +16,14 @@ export class UntrustedError extends Error {
   }
 }
 
+/** A signed answer that verified but that the console refuses to take as the node's word on the vault's signer; `answer` is what it said, which can still say where the operator now runs. */
+export class RefusedAnswer extends UntrustedError {
+  constructor(reason: string, readonly answer: unknown) {
+    super(reason);
+    this.name = "RefusedAnswer";
+  }
+}
+
 /** An answer whose signature does not verify under the trusted address: a forgery, a replay, or a restarted enclave. */
 export class SignatureError extends UntrustedError {
   constructor(reason: string) {

@@ -61,9 +61,15 @@ export class SignerNaming {
     try {
       claim = (await this.operatorClaim?.(address)) ?? {};
     } catch {
-      // A node that cannot answer the route states nothing; the rest of the check stands.
+      // A node that cannot answer the route states nothing (one that predates it, or whose answer does not verify): the vault's own word through a wallet, and the reads after, still judge it.
     }
     return this.judge(address, claim)?.reason ?? (this.refuses(address) ? SIGNER_SUPERSEDED : null);
+  }
+
+  /** The vault itself, read through the wallet, names `signer`: an enclave it does not name is put aside, and the one it does is taken back. */
+  vaultSays(enclave: string, signer: string): void {
+    if (enclave === signer) this.superseded.delete(enclave);
+    else this.superseded.add(enclave);
   }
 
   /** Whether `enclave` has been put aside by a stated signer. */
