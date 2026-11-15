@@ -7,6 +7,7 @@ import type { MarketId, MarketQuote, Reject, Side } from "./engine/types";
 import { fixedFromWire, fixedToWire, type Fixed } from "./fixed";
 import { describeReject } from "./messages";
 import { tenthBpsOfValue } from "./spread-bands";
+import { leverageReason, type TicketLimits } from "./tier-view";
 import { truncateToStep, type TicketPreview } from "./ticket";
 
 /** The most markets one connection may ask quotes for: the node's `api.quote_max_markets` default. */
@@ -53,6 +54,8 @@ export interface TicketPrices {
   price: Fixed | null;
   /** Whether `price` is the node's exact quote for closing the account's whole position, rather than a ladder step that covers the order. */
   exactClose: boolean;
+  /** The spread the account's toxicity adds to every price, in bps, as the node's quote names it; zero when none applies and for the mock, which scores none. */
+  toxicityBps: number;
   /** The offer over the bid, in tenths of a bp of the mark, truncated. */
   spreadTenths: number | null;
   /** Why a market order cannot be sent at a price now; null when it can. */
@@ -67,12 +70,12 @@ export interface TicketPrices {
  * ceiling: an order that closes the whole position takes the exact close quote on its side, and any
  * other the ladder's step. The mock's are the console's own prices, which its fills use.
  */
-export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; quoteError: string | null; preview: TicketPreview; side: Side; mark: Fixed | null }): TicketPrices {
+export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; quoteError: string | null; preview: TicketPreview; side: Side; mark: Fixed | null; limits?: TicketLimits | null }): TicketPrices {
   const { preview, side } = input;
   if (!input.live) {
-    return { bid: preview.bid, offer: preview.offer, price: preview.quote?.price ?? null, exactClose: false, spreadTenths: preview.spreadTenths, problem: null, problemIsSize: false };
+    return { bid: preview.bid, offer: preview.offer, price: preview.quote?.price ?? null, exactClose: false, toxicityBps: 0, spreadTenths: preview.spreadTenths, problem: null, problemIsSize: false };
   }
-  const none = (problem: string): TicketPrices => ({ bid: null, offer: null, price: null, exactClose: false, spreadTenths: null, problem, problemIsSize: false });
+  const none = (problem: string): TicketPrices => ({ bid: null, offer: null, price: null, exactClose: false, toxicityBps: 0, spreadTenths: null, problem, problemIsSize: false });
   const { quote } = input;
   if (quote === null) {
     if (input.quoteError === null) return none("Waiting for the node's executable quote.");
@@ -88,10 +91,10 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
   const bid = exact("sell");
   const mine = side === "buy" ? ask : bid;
   const spreadTenths = ask !== null && bid !== null && input.mark !== null && input.mark > 0n ? tenthBpsOfValue(ask.price - bid.price, input.mark) : null;
-  const problem = mine === null ? "The node would not open an order this large. Try a smaller size." : mine.declined === null ? null : declinedProblem(quote, side, mine.declined);
+  const problem = mine === null ? "The node would not open an order this large. Try a smaller size." : mine.declined === null ? null : declinedProblem(quote, side, mine.declined, input.limits ?? null);
   // The node declining for margin or the house's capacity, or having no step this large, is a matter of the size.
   const problemIsSize = mine === null || (mine.declined !== null && (mine.declined.kind === "insufficient_margin" || mine.declined.kind === "house_capacity"));
-  return { bid: bid?.price ?? null, offer: ask?.price ?? null, price: mine?.price ?? null, exactClose: closingPrice(quote, side, preview.qty) !== null, spreadTenths, problem, problemIsSize };
+  return { bid: bid?.price ?? null, offer: ask?.price ?? null, price: mine?.price ?? null, exactClose: closingPrice(quote, side, preview.qty) !== null, toxicityBps: quote.toxicity_bps ?? 0, spreadTenths, problem, problemIsSize };
 }
 
 /**
@@ -100,13 +103,13 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
  * (the ladder's steps sit at spread-tier tops, monkey-trading/engine#290), so they cannot be shown
  * as the order's; the largest step that still fills is the size the account can open.
  */
-function declinedProblem(quote: MarketQuote, side: Side, declined: Reject): string {
+function declinedProblem(quote: MarketQuote, side: Side, declined: Reject, limits: TicketLimits | null): string {
   if (declined.kind !== "insufficient_margin") return describeReject(declined);
   const steps = side === "buy" ? quote.ask : quote.bid;
   const fitting = [...steps].reverse().find((s) => s.declined === undefined);
   // In contracts, cut to the size field's step so it can be typed as it reads; a smaller size still fits.
   const largest = fitting === undefined ? 0n : truncateToStep(fixedFromWire(fitting.qty));
-  if (largest <= 0n) return "Not enough equity to open a position here.";
+  if (largest <= 0n) return `Not enough equity to open a position here.${leverageReason(limits)}`;
   const text = fixedToWire(largest);
-  return `The largest size your equity opens here is ≈ ${text} ${text === "1" ? "contract" : "contracts"}. Try a smaller size.`;
+  return `The largest size your equity opens here is ≈ ${text} ${text === "1" ? "contract" : "contracts"}. Try a smaller size.${leverageReason(limits)}`;
 }

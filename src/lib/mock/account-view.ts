@@ -3,7 +3,11 @@
 import type { AccountView, Address } from "../engine/types";
 import { fixedToWire } from "../fixed";
 import { feeNow } from "../holding-fee";
-import { equityOf, marginOf } from "./accounts";
+import { bpsOf } from "../fixed";
+import { maxLeverage } from "../volume-tier";
+import { standingOf } from "./volume";
+import { withdrawable } from "./funds";
+import { equityOf, initialMarginOf, marginFloorOf, marginOf, tierTable } from "./accounts";
 import { closeoutsOf } from "./closeout-price";
 import type { MockState } from "./state";
 
@@ -24,14 +28,26 @@ export function accountViewOf(state: MockState, address: Address): AccountView |
   const orders: AccountView["orders"] = {};
   for (const [id, order] of account.orders) orders[id] = order;
   const pending = account.pending.reduce((sum, deposit) => sum + deposit.amount, 0n);
+  const margin = marginOf(state, account);
+  // From V64 the requirement a fill and a withdrawal meet charges each band at least the tier's floor; a close-out reads the market's own bands.
+  const floor = marginFloorOf(state, account);
+  const maxLeverages: Record<string, string> = {};
+  for (const [id, runtime] of state.markets) maxLeverages[String(id)] = fixedToWire(maxLeverage(runtime.listed.spec.margin_tiers, floor));
   return {
     balance: fixedToWire(account.balance),
     ...(pending > 0n ? { unfinalised_deposits: fixedToWire(pending) } : {}),
     equity: fixedToWire(equityOf(state, account)),
-    margin: fixedToWire(marginOf(state, account)),
+    margin: fixedToWire(margin),
+    initial_margin: fixedToWire(initialMarginOf(state, account)),
+    maintenance_margin: fixedToWire(bpsOf(margin, state.params.closeoutLevelBps)),
+    withdrawable: fixedToWire(withdrawable(state, address)),
+    max_leverage: maxLeverages,
     positions,
     orders,
     toxicity_bps: 0,
+    // The mock scores no toxicity: every account is untiered and adds nothing.
+    toxicity: { score: "0", fills: "0", tier: 0, add_on_bps: 0 },
+    volume: standingOf(account.volume, tierTable(state), state.now, new Map([...state.markets].map(([id, runtime]) => [id, runtime.listed.spec]))),
     closeouts: closeoutsOf(state, account),
     close_fees: closeFees,
   };

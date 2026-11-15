@@ -4,6 +4,7 @@ import { EngineError, type ActionResult } from "../engine/client";
 import type { CancelRequest, EligibilityRequest, EngineEvent, OrderRequest, RequestAuth, Reject, RestingOrder } from "../engine/types";
 import { absFixed, fixedFromInt, fixedFromWire, minFixed, parseFixed, type Fixed } from "../fixed";
 import { growthOf, notionalOf } from "../pricing";
+import { tierOfAccount } from "./accounts";
 import { fillEvents, fillOrder, liveQuote } from "./execute";
 import type { AccountState, MockState } from "./state";
 
@@ -107,7 +108,11 @@ export function orderEvents(state: MockState, req: OrderRequest, account: Accoun
   if (growsHere && notionalOf(qty, price) < fixedFromWire(runtime.listed.spec.min_order_notional)) {
     return rejected(req, { kind: "invalid_order", reason: `below the minimum order of ${runtime.listed.spec.min_order_notional} USD at the trigger price` });
   }
-  if (account.orders.size >= MAX_RESTING) return rejected(req, { kind: "invalid_order", reason: `at most ${MAX_RESTING} resting orders` });
+  // From V66 the account's tier names how many orders it rests, in place of the parameters' cap.
+  const { tier, terms } = tierOfAccount(state, account);
+  if (terms?.maxRestingOrders != null) {
+    if (account.orders.size >= terms.maxRestingOrders) return rejected(req, { kind: "tier_order_limit", tier, max: terms.maxRestingOrders });
+  } else if (account.orders.size >= MAX_RESTING) return rejected(req, { kind: "invalid_order", reason: `at most ${MAX_RESTING} resting orders` });
   // A resting order is admitted while its market is closed; it cannot trigger until the market trades.
   account.orders.set(orderId, { order_id: orderId, client_id: req.client_id, market: req.market, side: req.side, qty: req.qty, kind: req.kind, reduce_only: req.reduce_only ?? false });
   // A newly accepted order that is already executable fills at once, as the engine checks it on insertion.

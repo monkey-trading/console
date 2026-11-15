@@ -7,7 +7,7 @@ import { declinedByUser } from "../engine/provider-errors";
 import type { Reject, RequestAuth } from "../engine/types";
 import { NotSentError, UntrustedError } from "../engine/trust-errors";
 import type { Progress, Wallet } from "../engine/wallet";
-import { describeReject } from "../messages";
+import { describeReject, describeTierRate } from "../messages";
 import type { BlockReason, NoticeSurface } from "./state";
 import type { ConsoleStore } from "./store";
 import { offChain } from "./wallet-chain";
@@ -141,7 +141,7 @@ export function mayHaveRun(error: unknown): boolean {
 /** What the console says an unexpected error was, naming the node's refusal when it carried one. */
 export function errorText(error: unknown): string {
   // The node limits how fast new wallets are set up, and answers 429 to the ones over it: nothing was recorded, so trying again later is the whole answer.
-  if (error instanceof EngineError && error.status === 429) return "The node is limiting requests right now. Try again later.";
+  if (error instanceof EngineError && error.status === 429) return error.tierLimit === null ? "The node is limiting requests right now. Try again later." : describeTierRate(error.tierLimit);
   if (error instanceof EngineError) return error.reject ? describeReject(error.reject) : error.message;
   return error instanceof Error ? error.message : "Something went wrong.";
 }

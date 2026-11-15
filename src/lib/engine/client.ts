@@ -17,9 +17,17 @@ import type { MarkPage, MarkResolution } from "./mark-types";
  * An error response from the node: the HTTP status and the `{ "error": … }` message, plus the typed
  * refusal when the engine rejected a sequenced command.
  */
+/** What a 429 for an account over its volume tier's request rate names: the tier and the requests a second it admits. */
+export interface TierRateLimit {
+  tier: number;
+  requestsPerSecond: number;
+}
+
 export class EngineError extends Error {
   readonly status: number;
   readonly reject: Reject | null;
+  /** Set on a 429 that names the account's volume tier; null on every other error. */
+  tierLimit: TierRateLimit | null = null;
 
   constructor(status: number, message: string, reject: Reject | null = null, options?: ErrorOptions) {
     super(message, options);

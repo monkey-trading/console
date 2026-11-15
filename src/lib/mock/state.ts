@@ -12,10 +12,12 @@ import type {
   OrderId,
   RestingOrder,
   StreamMessage,
+  VolumeTierWire,
 } from "../engine/types";
 import { MARKETS, type ListedMarket } from "./markets";
 import { MockMonkey } from "./monkey-state";
 import { MockGovernance } from "./governance";
+import { newBook, type VolumeBook } from "./volume";
 import { MockOperators } from "./operators";
 import { isOpen } from "../schedule";
 
@@ -60,6 +62,8 @@ export interface AccountState {
   /** The last withdrawal approval nonce issued: one counter per account, starting at 1, never reused. */
   approvalNonce: number;
   eligibility: EligibilityClass | null;
+  /** The account's counted volume and the notional waiting to count, which its tier reads. */
+  volume: VolumeBook;
 }
 
 export interface QueueEntry {
@@ -98,6 +102,14 @@ export const FINALITY_MS = 6_000;
 export const CHECKPOINT_EVERY = 50;
 const LOG_LIMIT = 1_000;
 
+/** The volume tiers the mock mirrors from the engine's production genesis (`config/production-genesis.toml`): the counted volume that reaches each, the best-price share, the margin floor, and the resting-order limit and request rate. */
+const LAUNCH_VOLUME_TIERS: VolumeTierWire[] = [
+  { threshold: "0", day_divisor: 1, best_price_share_bps: 2500, margin_floor_bps: 500, max_resting_orders: 25, requests_per_second: 2 },
+  { threshold: "1000000", day_divisor: 2, best_price_share_bps: 5000, margin_floor_bps: 200, max_resting_orders: 50, requests_per_second: 5 },
+  { threshold: "25000000", day_divisor: 5, best_price_share_bps: 10000, max_resting_orders: 100, requests_per_second: 10 },
+  { threshold: "250000000", day_divisor: 10, best_price_share_bps: 25000, max_resting_orders: 250, requests_per_second: 20 },
+];
+
 /** The launch parameters the mock mirrors from the engine's dev genesis (`config/dev.toml`): solvency, its three stress levels and the fee's hold curve. */
 const LAUNCH_PARAMS: HouseParams = {
   profitFeeBps: 1000,
@@ -110,6 +122,7 @@ const LAUNCH_PARAMS: HouseParams = {
     { size_spread_multiplier_bps: 40_000, min_spread_bps: 10 },
   ],
   profitFeeCurve: [...LAUNCH_CURVE],
+  volumeTiers: LAUNCH_VOLUME_TIERS,
   seq: null,
 };
 
@@ -183,7 +196,7 @@ export class MockState {
     const key = address.toLowerCase();
     let state = this.accounts.get(key);
     if (!state) {
-      state = { balance: 0n, pending: [], positions: new Map(), orders: new Map(), nextNonce: 0, approvalNonce: 0, eligibility: null };
+      state = { balance: 0n, pending: [], positions: new Map(), orders: new Map(), nextNonce: 0, approvalNonce: 0, eligibility: null, volume: newBook() };
       this.accounts.set(key, state);
     }
     return state;

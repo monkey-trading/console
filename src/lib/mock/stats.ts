@@ -47,9 +47,11 @@ export function houseScan(state: MockState): HouseScanView {
     }
     let volume = 0;
     for (let h = 0; h < 24; h++) volume += volumeIn(id, state.now - h * HOUR_MS) * 60;
+    // The net is the difference of the two figures as served, so it reconciles with them to the unit whatever the floats round to.
+    const [long, short] = [wire(book.long), wire(book.short)];
     return {
       market: id, symbol: market?.listed.spec.symbol ?? String(id), mark: market === undefined ? null : wire(fixedToNumber(market.mid)),
-      long: wire(book.long), short: wire(book.short), net: wire(book.long - book.short),
+      long, short, net: fixedToWire(fixedFromWire(long) - fixedFromWire(short)),
       long_positions: book.longPositions, short_positions: book.shortPositions, unrealised: wire(-clients), volume: wire(volume),
     };
   });

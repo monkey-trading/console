@@ -17,6 +17,7 @@ import { placeOrder } from "@/lib/store/actions";
 import { closeAll } from "@/lib/store/batch-actions";
 import { previewTicket, unrealisedPnl } from "@/lib/ticket";
 import { currentParams, positionClose, positionFeeNow } from "@/lib/ticket-figures";
+import { accountPricing } from "@/lib/tier-view";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
@@ -67,7 +68,7 @@ export function PositionsView() {
     const feeBps = fee?.feeBps ?? terms?.profitFeeBps ?? null;
     const quoted = signatures === "checked"
       ? (quote === undefined ? null : closingPrice(quote, side, qty))
-      : market === undefined ? null : (previewTicket({ market, side, qty, slippageBps: CLOSE_SLIPPAGE_BPS, account, houseNav: house.nav, stress: stressTermsAt(terms?.stressLevels, market.stress), closeFeeBps: feeBps ?? undefined }).quote?.price ?? null);
+      : market === undefined ? null : (previewTicket({ market, side, qty, slippageBps: CLOSE_SLIPPAGE_BPS, account, houseNav: house.nav, stress: stressTermsAt(terms?.stressLevels, market.stress), closeFeeBps: feeBps ?? undefined, ...accountPricing(account, terms, market.view) }).quote?.price ?? null);
     // The node's whole-close quote is exact, as is the mock's own price, which its fill uses.
     const { close: closeNow, why: withheld } = positionClose(snapshot, market, p, quoted);
     const slippageBps = Math.min(CLOSE_SLIPPAGE_BPS, market?.view.max_slippage_bps ?? CLOSE_SLIPPAGE_BPS);

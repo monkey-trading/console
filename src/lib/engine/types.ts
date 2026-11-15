@@ -9,6 +9,8 @@ export type { EngineEvent } from "./event-types";
 export type { AccountView } from "./account-types";
 import type { HouseScanView } from "./stats-types";
 import type { CurvePoint, SpreadTier, StressLevel } from "./pricing-types";
+import type { VolumeTierWire } from "./volume-types";
+export type { VolumeTierWire } from "./volume-types";
 export type { CloseFee, CurvePoint, ListingNotice, ListingNotices, SpreadTier, StressLevel } from "./pricing-types";
 
 export type Address = string;
@@ -165,6 +167,10 @@ export type Reject =
   | { kind: "insufficient_margin"; equity: string; required: string }
   | { kind: "insufficient_funds"; available: string }
   | { kind: "house_capacity" }
+  /** A limit or stop order from an account already resting `max`, the parameters' cap. */
+  | { kind: "too_many_orders"; max: number }
+  /** From V66, a limit or stop order from an account already resting `max`, the limit of its volume tier `tier`. */
+  | { kind: "tier_order_limit"; tier: number; max: number }
   /** From V40, a reversal whose spread is over its market's close-spread ceiling: a reduce-only close still fills. */
   | { kind: "close_spread_ceiling"; ceiling_bps: number }
   | { kind: "invalid_signature" }
@@ -236,6 +242,8 @@ export interface SetParams {
   stress_levels?: StressLevel[];
   /** From V55, the hold curve the profit fee falls along; absent while empty. */
   profit_fee_curve?: CurvePoint[];
+  /** From V59, the volume tiers; the margin floors, order limits and request rates are from V64 and V66. */
+  volume_tiers?: VolumeTierWire[];
 }
 
 /** One message of the WebSocket stream at `/v1/stream`: a sequenced command with its events. */
@@ -271,30 +279,4 @@ export interface HistoryPage {
 export type { CancelAllRequest, CloseAllRequest, CloseEntry } from "./batch-types";
 export type { PayoutEntry, PayoutsPage, QueuedWithdrawal, SignedWithdrawal, WithdrawalAuthorization, WithdrawalPage } from "./withdrawal-types";
 
-/** One step of an executable quote: the average price of an order of up to `qty`. */
-export interface QuoteStep {
-  qty: string;
-  price: string;
-  /** Why a fill of this size would be declined; absent when it fills. */
-  declined?: Reject;
-}
-
-/** One account's executable quotes in one market, as the signed stream's `quotes` op delivers them. */
-export interface MarketQuote {
-  type: "quote";
-  account: Address;
-  market: MarketId;
-  open: boolean;
-  reduce_only: boolean;
-  stress_level: number;
-  mark: string | null;
-  /** Why the market has no price now; the sides are then empty. */
-  unavailable?: Reject;
-  /** What a buy pays, by size. */
-  ask: QuoteStep[];
-  /** What a sell receives, by size. */
-  bid: QuoteStep[];
-  /** The price of closing the account's whole position, if it holds one. */
-  close: { side: Side; qty: string; price: string } | null;
-}
-
+export type { MarketQuote, QuoteStep } from "./quote-types";

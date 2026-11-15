@@ -14,6 +14,7 @@ import type { MarketModel, PositionModel } from "./models";
 import { CALM, conversionAt, stressTermsAt, USD } from "./pricing";
 import { ticketPrices, type TicketPrices } from "./quotes";
 import type { ConsoleState } from "./store/state";
+import { accountPricing, orderLimitProblem, ticketLimits, type TicketLimits } from "./tier-view";
 import { previewTicket, usdConverter, type TicketPreview } from "./ticket";
 
 /** The order the ticket holds: its side and size, its slippage bound, and for a limit or stop its trigger price. */
@@ -28,6 +29,10 @@ export interface TicketOrder {
 export interface TicketFigures {
   preview: TicketPreview;
   prices: TicketPrices;
+  /** The account's tier limits in this market: best-price size, leverage and resting orders; null from a node that predates volume tiers. */
+  limits: TicketLimits | null;
+  /** Why a resting order is stopped: the account already rests its tier's limit; null for a market order or while there is room. */
+  orderProblem: string | null;
   /** A market order's close of some of the position, or null for one that closes nothing or a resting order. */
   close: ClosePreview | null;
   /** How much of the position a market order closes, whatever its figures; null for one that closes nothing or a resting order. */
@@ -77,11 +82,14 @@ export function ticketFigures(state: ConsoleState, market: MarketModel, order: T
   const fee = position === null ? null : positionFeeNow(state, position);
   const feeBps = fee?.feeBps ?? params?.profitFeeBps ?? null;
   // The margin use after the order comes from the console's own prices, which do not know a live node's toxicity add-on, so it is shown only for the in-browser node.
+  // The account's tier sets the margin floor of its initial requirement and the end of its first spread band; both come from the table the parameters name.
+  const limits = ticketLimits(state.account, market.id);
   const preview = previewTicket({
+    ...accountPricing(state.account, params, market.view),
     market, side: order.side, qty: order.qty, slippageBps: order.slippageBps, resting: order.resting, triggerPrice: order.triggerPrice, account: state.account,
     houseNav: state.house.nav, estimates: !live, stress: stressTermsAt(params?.stressLevels, market.stress), closeFeeBps: feeBps ?? undefined,
   });
-  const prices = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview, side: order.side, mark: market.mark });
+  const prices = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview, side: order.side, mark: market.mark, limits });
   const exactPrice = live ? prices.exactClose : true;
   const stress = stressTermsAt(params?.stressLevels, market.stress) ?? CALM;
   const conversion = market.mark === null ? USD : conversionAt(market.view, market.mark) ?? USD;
@@ -93,7 +101,7 @@ export function ticketFigures(state: ConsoleState, market: MarketModel, order: T
   });
   const closing = order.resting || position === null || preview.qty <= 0n ? null : closeShape(position.qty, order.side, preview.qty);
   const closeWithheld = closing === null || close !== null ? null : houseTermsNote(state) ?? "The close figures show once the node's price and fee rate are read.";
-  return { preview, prices, close, closing, closeWithheld };
+  return { preview, prices, limits, orderProblem: orderLimitProblem(limits, order.resting), close, closing, closeWithheld };
 }
 
 /**

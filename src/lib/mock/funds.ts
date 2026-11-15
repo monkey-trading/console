@@ -4,7 +4,7 @@ import { EngineError, type ActionResult } from "../engine/client";
 import type { EngineEvent, QueuedWithdrawal, WithdrawalPage, WithdrawalRequest } from "../engine/types";
 import type { QueueTotals } from "../house";
 import { fixedToWire, minFixed, parseFixed, type Fixed } from "../fixed";
-import { equityOf, marginOf } from "./accounts";
+import { equityOf, initialMarginOf } from "./accounts";
 import { MAX_DEPOSIT, MIN_DEPOSIT, MIN_WITHDRAWAL, USDC_UNIT, withdrawableNow } from "../vault";
 import { checkAccess, identifySigner } from "./orders";
 import { FINALITY_MS, type MockState } from "./state";
@@ -43,11 +43,11 @@ export function creditFinal(state: MockState): EngineEvent[] {
   return released > 0n ? payQueue(state, released) : [];
 }
 
-/** What an account may withdraw now; see `withdrawableNow`. */
+/** What an account may withdraw now; see `withdrawableNow`. From V64 its equity must stay above the initial requirement at its tier's margin floor. */
 export function withdrawable(state: MockState, address: string): Fixed {
   const account = state.account(address);
   const locked = account.pending.reduce((sum, deposit) => sum + deposit.amount, 0n);
-  return withdrawableNow(account.balance, equityOf(state, account), marginOf(state, account), locked);
+  return withdrawableNow(account.balance, equityOf(state, account), initialMarginOf(state, account), locked);
 }
 
 /**

@@ -1,5 +1,6 @@
 /** Plain-language text for what the engine refused or did. */
 
+import type { TierRateLimit } from "./engine/client";
 import { MAX_SESSION_KEYS_PER_ACCOUNT } from "./engine/session-key-limits";
 import type { EngineEvent, MarketId, Reject } from "./engine/types";
 import { formatHold } from "./fee-words";
@@ -47,6 +48,8 @@ export function describeReject(reject: Reject): string {
     case "insufficient_margin": return `Not enough equity: you have ${usd(reject.equity)} and the account needs ${usd(reject.required)} of margin.`;
     case "insufficient_funds": return `You can withdraw up to ${usd(reject.available)} now.`;
     case "house_capacity": return "The house cannot take more in this market. Try a smaller size.";
+    case "too_many_orders": return `You already rest ${reject.max} orders, the most the node allows. Cancel one to place another.`;
+    case "tier_order_limit": return `You already rest ${reject.max} orders, the most at volume tier ${reject.tier}. Cancel one to place another, or trade up a tier for a higher limit.`;
     case "close_spread_ceiling": return `Reversing this position here would pay a spread over its ${reject.ceiling_bps} bps close ceiling. Close it first, then open the other side.`;
     case "invalid_signature": return "The signature was not accepted.";
     case "missing_signature": return "The request was not signed.";
@@ -62,6 +65,11 @@ export function describeReject(reject: Reject): string {
   }
   // A refusal the engine adds later must get a case above; until then the user still sees that one happened.
   return unnamed(reject);
+}
+
+/** What a 429 that names the account's volume tier says: how fast it may send, and that nothing was recorded. */
+export function describeTierRate(limit: TierRateLimit): string {
+  return `Requests are coming faster than volume tier ${limit.tier} allows, ${limit.requestsPerSecond} a second. Nothing was sent. Wait a moment and try again.`;
 }
 
 /** A short line for the activity log, or null for an event the log does not show. */

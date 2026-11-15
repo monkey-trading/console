@@ -18,7 +18,9 @@ import { openSetup } from "@/lib/store/setup";
 import { formatTenthBps, formatTenthPercent } from "@/lib/spread-bands";
 import { belowMinimum, contractUnit, MARGIN_SHORT, MARKET_CLOSED, NO_SIZE, parseSize, REDUCE_ONLY, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
 import { currentParams, houseTermsNote, ticketFigures } from "@/lib/ticket-figures";
+import { describeBestPrice } from "@/lib/tier-view";
 import { tradingPaused } from "@/lib/trading-paused";
+import { formatLeverage } from "@/lib/volume-tier";
 
 import { CloseSummary } from "./CloseSummary";
 import { useConsole, useNodeFollow, useSession } from "./ConsoleProvider";
@@ -70,12 +72,14 @@ export function DealTicket() {
   const live = state.signatures === "checked";
   // The stress levels' terms and the listing notices show only while the house state is current.
   const terms = currentParams(state);
-  const { preview, prices, close, closing, closeWithheld } = ticketFigures(state, market, { side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice });
+  const { preview, prices, limits, orderProblem, close, closing, closeWithheld } = ticketFigures(state, market, { side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice });
   // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
   // A size the field refuses says why, so the generic prompt would only repeat it.
   const listed = preview.problems.filter((p) => (!live || p !== MARGIN_SHORT) && (parsedSize.kind !== "refused" || p !== NO_SIZE));
   const sizeProblems = listed.filter((p) => p === belowMinimum(market.view.min_order_notional));
   const problems = listed.filter((p) => p !== NO_SIZE && !sizeProblems.includes(p));
+  // A resting order past the tier's limit is stopped here, before anything is signed.
+  if (orderProblem !== null) problems.push(orderProblem);
   if (kind === "market" && prices.problem !== null) (prices.problemIsSize ? sizeProblems : problems).push(prices.problem);
   if (parsedSize.kind === "refused") sizeProblems.push(parsedSize.message);
   if (kind !== "market" && triggerPrice === null) problems.push(price.trim() === "" ? "Enter a trigger price." : "Enter the trigger price in digits, such as 61250.50.");
@@ -130,9 +134,16 @@ export function DealTicket() {
           <div className="px-2 py-3"><p className="text-label text-fg-3">Bid (you sell)</p><p className={`mt-1 text-data ${side === "sell" ? "text-ember" : "text-fg-2"}`}>{show(prices.bid)}</p></div>
           <div className="px-2 py-3"><p className="text-label text-fg-3">Offer (you buy)</p><p className={`mt-1 text-data ${side === "buy" ? "text-glow" : "text-fg-2"}`}>{show(prices.offer)}</p></div>
           <p className="col-span-2 border-t border-line px-2 py-2 text-label text-fg-3">
-            {prices.spreadTenths === null ? "No executable quote for this size yet." : <>{live ? "Your executable spread" : "Spread"} for this size <span className="text-fg-2">{formatTenthPercent(prices.spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(prices.spreadTenths)})</span></>}
+            {prices.spreadTenths === null ? "No executable quote for this size yet." : <>{live ? "Your executable spread" : "Spread"} for this size <span className="text-fg-2">{formatTenthPercent(prices.spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(prices.spreadTenths)})</span>{prices.toxicityBps > 0 && <>, including a <span className="text-fg-2">+{prices.toxicityBps} {prices.toxicityBps === 1 ? "bp" : "bps"}</span> toxicity add-on</>}</>}
           </p>
         </div>
+        {limits !== null && (
+          <dl aria-label={`Your volume tier ${limits.tier} limits in ${market.symbol}`} className="mt-2 grid grid-cols-3 gap-2 text-label text-fg-3">
+            <div><dt>Best-price size</dt><dd className="mt-0.5 text-fg-2">{describeBestPrice(limits.bestPriceBound)}</dd></div>
+            <div><dt>Max leverage</dt><dd className="mt-0.5 text-fg-2">{limits.leverage === null ? "—" : `${formatLeverage(limits.leverage)}`}</dd></div>
+            <div><dt>Resting orders</dt><dd className="mt-0.5 text-fg-2">{limits.resting}{limits.orderLimit === null ? "" : ` of ${limits.orderLimit}`}</dd></div>
+          </dl>
+        )}
         <div className="mt-4">
           <label htmlFor={`${id}-size`} className="block text-caption text-fg-2">Size (contracts)</label>
           <input {...AMOUNT_INPUT} id={`${id}-size`} value={size} inputMode="decimal" maxLength={24} aria-describedby={`${id}-size-note ${id}-size-problems`} onChange={(event) => setTypedSize(event.target.value)} className={INPUT} />

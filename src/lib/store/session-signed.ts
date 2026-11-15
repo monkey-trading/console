@@ -10,6 +10,7 @@ import { EngineError, type ActionResult } from "../engine/client";
 import type { Terms, TypedRequest } from "../engine/eip712";
 import type { RequestAuth } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
+import { describeTierRate } from "../messages";
 import { authorizeBrowser, liveSessionKey } from "./session";
 import { openSetup } from "./setup";
 import { DISCONNECTED, errorText, MAY_HAVE_RUN, mayHaveRun, notBusy, REQUEST_TTL_MS, signed, type OnNonceTaken, type Outcome, usableWallet, wentOut } from "./signing";
@@ -89,7 +90,7 @@ export async function sessionSigned(
       return { ok: false };
     }
     if (error instanceof EngineError && error.status === 429) {
-      store.notify(surface, "The node is limiting requests; try again in a moment.");
+      store.notify(surface, error.tierLimit === null ? "The node is limiting requests; try again in a moment." : describeTierRate(error.tierLimit));
       return { ok: false };
     }
     if (store.noteAccess(error)) return { ok: false };

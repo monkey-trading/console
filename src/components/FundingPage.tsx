@@ -12,6 +12,7 @@ import { ExitPanel } from "./ExitPanel";
 import { InProgress } from "./InProgress";
 import { MoveMoney } from "./MoveMoney";
 import { SigningFor } from "./SigningFor";
+import { VolumeTierCard } from "./VolumeTierCard";
 
 /** Funding screen; the console's layout supplies the provider, the access gate and the shell. */
 export function FundingPage() {
@@ -27,6 +28,7 @@ export function FundingPage() {
         </div>
         {!wallet && <p className="rounded-xl border border-line-2 p-4 text-caption text-fg-2">Connect a wallet from the top bar. It authorizes trading with one signature — the orders then sign in the browser — and it signs each withdrawal and sends each deposit to the vault.</p>}
         <AccountSummary />
+        <VolumeTierCard />
         {urgent && <ExitPanel key="exit" />}
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
           <MoveMoney />
