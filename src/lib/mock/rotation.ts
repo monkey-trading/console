@@ -14,7 +14,7 @@ const DAY_MS = 86_400_000;
 /** A turn's boundary is 22:30 UTC. */
 const BOUNDARY_MS = 22.5 * 3_600_000;
 /** How many earlier turns the history holds. */
-const HISTORY_DAYS = 12;
+const HISTORY_DAYS = 30;
 /** The history's seq origin: records are mirrored in order, ten commands apart. */
 const SEQ_ORIGIN = 1_000;
 

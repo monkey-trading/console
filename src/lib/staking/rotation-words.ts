@@ -23,3 +23,6 @@ export function recordOutcome(record: TurnRecord): string {
   if (record.takenMs !== null) return `Taken at ${formatStampWithYear(record.takenMs)} UTC`;
   return "Assigned; its member has not started it";
 }
+
+/** The longest turn line a row is likely to show, laid out unseen so the line landing moves nothing below it. */
+export const TURN_RESERVE = "alpha.operators.example (0x627261…0000), after a promotion, from 28 Oct 22:30:00 UTC, not started yet";

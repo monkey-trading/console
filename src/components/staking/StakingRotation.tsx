@@ -12,6 +12,7 @@ import { readBlock } from "@/lib/engine/attestation";
 import { needsConsoleUpdate } from "@/lib/staking/hostnames";
 import { shortHex } from "@/lib/format";
 import { turnLine } from "@/lib/staking/rotation";
+import { TURN_RESERVE } from "@/lib/staking/rotation-words";
 import { joinHistory } from "@/lib/staking/turn-history-reads";
 import { withAddress } from "@/lib/staking/operator-cells";
 
@@ -51,28 +52,25 @@ export function StakingRotation() {
       <dl className="grid gap-x-8 gap-y-2 rounded-xl border border-line-2 bg-ink-1 p-4 sm:grid-cols-2">
         <Row label="Rotation">{rotationOn === null ? "—" : rotationOn ? "On" : "Off"}</Row>
         <Row label="Signer the vault names">{signer === null ? "—" : <span title={signer.address}>{shortHex(signer.address)}, epoch {signer.epoch}</span>}</Row>
-        <Row label="Today's turn">{rotation === null ? "—" : turnLine(rotation.turn, nameOf, "No turn is in effect")}</Row>
-        <Row label="Tomorrow's turn">{rotation === null ? "—" : turnLine(rotation.nextTurn, nameOf, "Not drawn yet")}</Row>
+        <Row label="Today's turn" reserve={TURN_RESERVE}>{rotation === null ? "—" : turnLine(rotation.turn, nameOf, "No turn is in effect")}</Row>
+        <Row label="Tomorrow's turn" reserve={TURN_RESERVE}>{rotation === null ? "—" : turnLine(rotation.nextTurn, nameOf, "Not drawn yet")}</Row>
       </dl>
-      <ReadNote read={route} loading="Reading the node's rotation…" />
+      <ReadNote read={route} loading="Reading the node's rotation…" quiet />
       <div className="grid items-start gap-4 xl:grid-cols-2">
         <SetCard id="rotation-set-title" title="Set in effect" set={rotation?.set ?? null} empty={rotation === null ? unread : "No rotation set is in effect."} nowMs={nowMs} nameOf={labelOf} needsUpdate={needsUpdate} />
         <SetCard id="rotation-next-title" title="Next set" set={rotation?.nextSet ?? null} empty={rotation === null ? unread : "No later set has been mirrored."} nowMs={nowMs} nameOf={labelOf} needsUpdate={needsUpdate} />
       </div>
-      {history !== null && (
-        <>
-          <Reassignments records={history.records} nameOf={labelOf} />
-          <TurnHistoryCard
-            records={history.records} more={history.next !== null} truncated={history.truncated} reading={pages.reading} error={pages.error}
-            onMore={() => {
-              if (rotation === null) return;
-              // The last page removes the button that has focus: focus goes to the card's heading, as on the other history cards.
-              void turns.loadOlder(rotation.history).then(() => { if (joinHistory(rotation.history, turns.getSnapshot().older).next === null) focusHeading("rotation-history-title"); });
-            }}
-            nameOf={labelOf}
-          />
-        </>
-      )}
+      {/* Both cards are there from the first paint, each in a viewport of one height, so nothing moves when the first read lands. */}
+      <Reassignments records={history?.records ?? []} empty={rotation === null ? unread : "No turn among those read was skipped, promoted or refused."} nameOf={labelOf} />
+      <TurnHistoryCard
+        records={history?.records ?? []} empty={rotation === null ? unread : "No turn has been assigned yet."} more={history !== null && history.next !== null} truncated={history?.truncated ?? false} reading={pages.reading} error={pages.error}
+        onMore={() => {
+          if (rotation === null) return;
+          // The last page removes the button that has focus: focus goes to the card's heading, as on the other history cards.
+          void turns.loadOlder(rotation.history).then(() => { if (joinHistory(rotation.history, turns.getSnapshot().older).next === null) focusHeading("rotation-history-title"); });
+        }}
+        nameOf={labelOf}
+      />
       <p className={NOTE}>Each set is the members the staking contract&apos;s close adopted, weighted by what was delegated to them then. A member&apos;s expected share of turns is its weight over the set&apos;s, the odds of each day&apos;s draw. The turn changes at 22:30 UTC; the console moves to the new member&apos;s node once it verifies.</p>
     </div>
   );

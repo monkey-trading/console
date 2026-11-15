@@ -30,6 +30,7 @@ import { withAddress } from "@/lib/staking/operator-cells";
 import { withMembership } from "@/lib/staking/operator-membership";
 import { countText, MAX_SEARCH, SORTS, tableView, yoursRows, type SortId } from "@/lib/staking/operator-table";
 import { turnLine } from "@/lib/staking/rotation";
+import { TURN_RESERVE } from "@/lib/staking/rotation-words";
 import { formatStamp } from "@/lib/time";
 
 import { useNodeFollow, useSession } from "../ConsoleProvider";
@@ -118,8 +119,8 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
     <Card id={TITLE_ID} title="Operators">
       <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
         <Row label="Operator in effect">{list === null ? "—" : labelOf(list.inEffect)}</Row>
-        <Row label="Today's turn">{schedule === null ? "—" : turnLine(schedule.turn, nameOf, "No turn is in effect")}</Row>
-        <Row label="Tomorrow's turn">{schedule === null ? "—" : turnLine(schedule.nextTurn, nameOf, "Not drawn yet")}</Row>
+        <Row label="Today's turn" reserve={TURN_RESERVE}>{schedule === null ? "—" : turnLine(schedule.turn, nameOf, "No turn is in effect")}</Row>
+        <Row label="Tomorrow's turn" reserve={TURN_RESERVE}>{schedule === null ? "—" : turnLine(schedule.nextTurn, nameOf, "Not drawn yet")}</Row>
         <Row label="Admin key the node applies">{route.value === null ? "—" : <span title={route.value.operator}>{shortHex(route.value.operator)}</span>}</Row>
         <Row label="Rotation">{rotation === null ? "—" : rotation ? "On" : "Off"}</Row>
         <Row label="This console talks to">{node !== null ? "The simulated node" : follow === null ? "—" : hostOf(follow.origin)}</Row>

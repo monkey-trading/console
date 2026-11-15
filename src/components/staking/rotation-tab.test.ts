@@ -69,8 +69,8 @@ describe("the Rotation tab", () => {
   it("names today's and tomorrow's turns, tomorrow's as not started", () => {
     const html = tab(loaded());
     expect(html).toContain("Today&#x27;s turn");
-    expect(html).toMatch(/alpha\.example[^<]*, from [^<]*UTC<\/dd>/);
-    expect(html).toMatch(/bravo\.example[^<]*, from [^<]*UTC, not started yet/);
+    expect(html).toMatch(/Today&#x27;s turn<\/dt>.*?alpha\.example[^<]*, from [^<]*UTC<\/span>/);
+    expect(html).toMatch(/Tomorrow&#x27;s turn<\/dt>.*?bravo\.example[^<]*, from [^<]*UTC, not started yet<\/span>/);
   });
 
   it("lists the history newest first, with a skip, a promotion and a refusal with the engine's reason, apart under Skips and promotions", () => {
@@ -104,7 +104,9 @@ describe("the Rotation tab", () => {
   it("shows a dash for each figure and a reading line before the first read lands, and hides its figures while the node is not trusted", () => {
     const pending = tab({ route: LOADING, rotation: null, list: LOADING, held: null });
     expect(pending).toContain("Reading the node&#x27;s rotation…");
-    expect(pending).not.toContain("Turn history");
+    // The cards are there from the first paint, so nothing moves when the read lands, and none claims an empty history.
+    expect(pending).toContain("Turn history");
+    expect(pending).not.toContain("No turn has been assigned yet.");
     const untrusted = tab(loaded(), { ...VERIFIED, attestation: { kind: "unverified", reason: "no" } });
     expect(untrusted).toContain('class="mt-4 hidden gap-4"');
   });
@@ -123,10 +125,10 @@ describe("the Rotation tab without a rotation", () => {
 describe("the operators card's turns", () => {
   it("shows today's and tomorrow's turns beside the operator in effect, and dashes before the route is read", () => {
     const html = renderOperators({ state: VERIFIED, operators: loaded(), read: chain() });
-    expect(html).toMatch(/Today&#x27;s turn<\/dt><dd[^>]*>alpha\.example[^<]*, from /);
-    expect(html).toMatch(/Tomorrow&#x27;s turn<\/dt><dd[^>]*>bravo\.example[^<]*, not started yet/);
+    expect(html).toMatch(/Today&#x27;s turn<\/dt>.*?alpha\.example[^<]*, from /);
+    expect(html).toMatch(/Tomorrow&#x27;s turn<\/dt>.*?bravo\.example[^<]*, not started yet/);
     const before = renderOperators({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: chain() });
-    expect(before).toMatch(/Today&#x27;s turn<\/dt><dd[^>]*>—</);
+    expect(before).toMatch(/Today&#x27;s turn<\/dt>.*?justify-self-end">—<\/span>/);
   });
 
   it("marks each member in the operator table and gives its weight and share of turns", () => {

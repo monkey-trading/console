@@ -21,10 +21,11 @@ interface Names {
 }
 
 /** The records' table: one row per assignment, the key a record's seq with its turn and position. */
-function Records({ records, caption, nameOf }: { records: readonly TurnRecord[]; caption: string } & Names) {
+/** `empty` is what the viewport says with no record: it holds one height either way, so nothing below it moves when records land. */
+function Records({ records, caption, empty, nameOf }: { records: readonly TurnRecord[]; caption: string; empty: string } & Names) {
   return (
-    <div role="region" aria-label={caption} tabIndex={0} className="-mx-1 max-h-96 overflow-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
-      <table className="w-full min-w-[40rem] text-label sm:text-caption">
+    <div role="region" aria-label={caption} tabIndex={0} className="-mx-1 h-72 overflow-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
+      {records.length === 0 ? <p className={`${NOTE} px-1`}>{empty}</p> : <table className="w-full min-w-[40rem] text-label sm:text-caption">
         <caption className="sr-only">{caption} Times are UTC.</caption>
         <thead className="sticky top-0 bg-ink-1">
           <tr>
@@ -46,21 +47,17 @@ function Records({ records, caption, nameOf }: { records: readonly TurnRecord[];
             </tr>
           ))}
         </tbody>
-      </table>
+      </table>}
     </div>
   );
 }
 
 /** The skips, promotions and refused assignments among the records read. */
-export function Reassignments({ records, nameOf }: { records: readonly TurnRecord[] } & Names) {
+export function Reassignments({ records, empty, nameOf }: { records: readonly TurnRecord[]; empty: string } & Names) {
   const moved = records.filter(isReassignment);
   return (
     <Card id="rotation-moves-title" title="Skips and promotions">
-      {moved.length === 0 ? (
-        <p className={NOTE}>No turn among those read was skipped, promoted or refused.</p>
-      ) : (
-        <Records records={moved} caption="Turns reassigned by a skip or a promotion, or refused, newest first." nameOf={nameOf} />
-      )}
+      <Records records={moved} caption="Turns reassigned by a skip or a promotion, or refused, newest first." empty={empty} nameOf={nameOf} />
       <p className={NOTE}>A skip names the next member in the turn&apos;s order when the one before it did not take the turn in time. A promotion moves the turn from a failed member by the liveness rule. A refused assignment changes nothing: the key in effect stays.</p>
     </Card>
   );
@@ -68,6 +65,8 @@ export function Reassignments({ records, nameOf }: { records: readonly TurnRecor
 
 interface HistoryProps extends Names {
   records: readonly TurnRecord[];
+  /** What the viewport says with no record. */
+  empty: string;
   /** Whether older turns can be read. */
   more: boolean;
   /** Whether the node dropped older turns for room. */
@@ -78,14 +77,10 @@ interface HistoryProps extends Names {
 }
 
 /** The turn history, newest first. */
-export function TurnHistoryCard({ records, more, truncated, reading, error, onMore, nameOf }: HistoryProps) {
+export function TurnHistoryCard({ records, empty, more, truncated, reading, error, onMore, nameOf }: HistoryProps) {
   return (
     <Card id="rotation-history-title" title="Turn history">
-      {records.length === 0 ? (
-        <p className={NOTE}>No turn has been assigned yet.</p>
-      ) : (
-        <Records records={records} caption="Every turn assigned, newest first: its member, why it was named, when its key signs from and whether its member took it." nameOf={nameOf} />
-      )}
+      <Records records={records} caption="Every turn assigned, newest first: its member, why it was named, when its key signs from and whether its member took it." empty={empty} nameOf={nameOf} />
       {more && (
         <button type="button" aria-disabled={reading} onClick={() => { if (!reading) onMore(); }} className={TOGGLE}>
           {reading ? "Loading" : "Load older"}<span className="sr-only"> turns</span>
