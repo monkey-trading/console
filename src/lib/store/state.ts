@@ -51,6 +51,8 @@ export interface PayoutsRead {
   seq: number;
   /** The nonces of the unpaid approvals the list held. */
   listed: number[];
+  /** For each approval waiting on a log check (monkey-trading/console#280), the time of the boundary it waits for, in milliseconds; absent when none waits. */
+  checks?: Record<number, number>;
 }
 
 /** Where the setup popup stands on this connection (monkey-trading/console#168, #199). */

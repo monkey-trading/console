@@ -4,8 +4,8 @@ import { EngineError } from "./client";
 import type { DistributionEpochsPage, OperatorList } from "./staking-reads";
 import type { ActivityPage, DistributionProof, MonkeyView, OperatorRoute, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "./stats-types";
 
-/** Reads the routes through `get`, which answers only what the attested enclave signed for that request. */
-export function liveStats(get: (path: string) => Promise<unknown>): StatsReads {
+/** Reads the routes through `get`, which answers only what the attested enclave signed for that request; `heedOperator` judges the signer the operator route names. */
+export function liveStats(get: (path: string) => Promise<unknown>, heedOperator: (route: OperatorRoute) => void = () => undefined): StatsReads {
   // The enclave signs each answer, so its shape is the engine's.
   return {
     positions: async (market) => (await get(`/v1/house/positions?${new URLSearchParams({ market: String(market) })}`)) as PositionsView,
@@ -34,7 +34,10 @@ export function liveStats(get: (path: string) => Promise<unknown>): StatsReads {
       const query = new URLSearchParams();
       if (params?.before !== undefined) query.set("before", String(params.before));
       if (params?.limit !== undefined) query.set("limit", String(params.limit));
-      return (await get(`/v1/operator${query.size > 0 ? `?${query}` : ""}`)) as OperatorRoute;
+      const route = (await get(`/v1/operator${query.size > 0 ? `?${query}` : ""}`)) as OperatorRoute;
+      // The signer the node says the vault names is judged before anyone reads the answer.
+      heedOperator(route);
+      return route;
     },
     operators: async () => (await get("/v1/operators")) as OperatorList,
     distributionEpochs: async (params) => {

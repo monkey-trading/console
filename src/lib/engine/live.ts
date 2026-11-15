@@ -68,7 +68,7 @@ export class LiveEngineClient implements EngineClient {
   private readonly totalsWalk: QueueTotalsWalk;
   readonly withdrawalTotals: () => Promise<QueueTotals>;
   /** The dashboard's reads, each over a signed read of its route. */
-  readonly stats = liveStats((path) => this.transport.get(path));
+  readonly stats = liveStats((path) => this.transport.get(path), (route) => this.trust.heedOperator(route));
   readonly emissions: (address: Address) => Promise<EntitlementProof | null>;
 
   constructor(private readonly deps: LiveDeps) {

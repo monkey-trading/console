@@ -27,6 +27,31 @@ describe("the node's payouts", () => {
     expect(store.getSnapshot()).toMatchObject({ paid: [], unpaid: expect.arrayContaining([3, 4, 5]) });
   });
 
+  it("names the boundary an unsigned approval waits for its log check at, and none for a signed one or a bad time (monkey-trading/console#280)", async () => {
+    const { client, store } = await connected();
+    store.patch({ now: NOW_MS, approvals: [approved(5, 90), approved(4, 80), approved(3, 70)] });
+    client.payoutsPage = page([
+      { nonce: 5, check: { turn: 9, boundary_ms: NOW_MS + 3_600_000 } },
+      { nonce: 4, check: { turn: 9, boundary_ms: -1 } },
+      { nonce: 3, withdrawal: signed(3, 2_000_000_000), check: { turn: 9, boundary_ms: NOW_MS + 3_600_000 } },
+    ]);
+    await loadPayouts(store);
+    expect(payoutsOf(store.getSnapshot()).map((p) => [p.nonce, p.status])).toEqual([
+      [5, { kind: "waiting", checkAtMs: NOW_MS + 3_600_000 }], [4, { kind: "waiting" }], [3, expect.objectContaining({ kind: "claimable" })],
+    ]);
+  });
+
+  it("forgets a boundary once the node's next answer names none for the approval", async () => {
+    const { client, store } = await connected();
+    store.patch({ now: NOW_MS, approvals: [approved(5, 90)] });
+    client.payoutsPage = page([{ nonce: 5, check: { turn: 9, boundary_ms: NOW_MS + 1 } }]);
+    await loadPayouts(store);
+    expect(payoutsOf(store.getSnapshot())[0]?.status).toEqual({ kind: "waiting", checkAtMs: NOW_MS + 1 });
+    client.payoutsPage = page([{ nonce: 5 }]);
+    await loadPayouts(store);
+    expect(payoutsOf(store.getSnapshot())[0]?.status).toEqual({ kind: "waiting" });
+  });
+
   it("reads an absent nonce as paid only from a loaded answer, and not for an approval the answer predates", async () => {
     const { client, store } = await connected();
     store.patch({ approvals: [approved(6, 120), approved(2, 60)] });

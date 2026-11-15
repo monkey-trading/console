@@ -22,6 +22,8 @@ export interface PayoutEntry {
   nonce: number;
   amount: string;
   withdrawal: SignedWithdrawal | null;
+  /** From the engine's daily turns (monkey-trading/engine#594): the boundary whose log check the approval's next signature waits for; absent once a check covers it or while its authorization is usable. */
+  check?: { turn: number; boundary_ms: number };
 }
 
 /**

@@ -5,6 +5,7 @@
 import { useEffect, useId, useRef } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
+import { waitingWords } from "@/lib/store/payout-words";
 import { checkPaid, claim, loadApprovals, loadPayouts, payoutsOf, reissue, unreadPayouts, type Payout } from "@/lib/store/payouts";
 import { formatStamp } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
@@ -89,9 +90,7 @@ function PayoutRow({ payout, idle, signs, describedBy, problem, act }: { payout:
       {status.kind === "waiting" && !payout.read && (
         <p className="mt-2 text-fg-3">{signs ? "Checking the vault…" : "The vault's record of this withdrawal could not be read for a read-only account."}</p>
       )}
-      {status.kind === "waiting" && payout.read && (
-        <p className="mt-2 text-fg-3">Waiting for the next checkpoint. The node signs the authorization once a checkpoint covering the approval is confirmed on chain, and it arrives here by itself.</p>
-      )}
+      {status.kind === "waiting" && payout.read && <p className="mt-2 text-fg-3">{waitingWords(status.checkAtMs)}</p>}
       {problem !== null && (status.kind === "waiting" || status.kind === "expired") && <p className="mt-2 text-fg-3">{problem}</p>}
     </li>
   );

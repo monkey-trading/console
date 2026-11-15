@@ -8,6 +8,7 @@
  */
 
 import { readBlock, type AttestationStatus, type FeedStatus } from "../engine/attestation";
+import { ROTATION_EVENTS } from "../engine/rotation-events";
 import type { OperatorRoute } from "../engine/stats-types";
 import { operatorsView, type OperatorsView } from "../staking/operator-table";
 import { rotationView, type RotationView } from "../staking/rotation";
@@ -51,9 +52,6 @@ export function mirroredElection(route: OperatorRoute | null, nowMs: number): { 
   if (election === null || election.cancelled === true || nowMs <= 0 || election.effective_at <= nowMs) return null;
   return { candidate: election.candidate, effectiveAtMs: election.effective_at };
 }
-
-/** The events a change of operator, set or turn shows in: a read of the route follows each. */
-export const ROTATION_EVENTS: ReadonlySet<string> = new Set(["operator_elected", "rotation_switched", "rotation_set_adopted", "turn_assigned", "turn_refused", "turn_taken"]);
 
 export class OperatorReads {
   private state: OperatorsState = IDLE_READS;

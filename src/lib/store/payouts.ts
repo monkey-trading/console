@@ -34,8 +34,8 @@ export type PayoutStatus =
   | { kind: "claimable"; withdrawal: SignedWithdrawal; expiresAt: number }
   /** Its last authorization expired unclaimed, at `expiresAt`; a fresh one can be asked for. */
   | { kind: "expired"; expiresAt: number }
-  /** Not signed yet: a checkpoint covering the approval comes first, and the stream then delivers the authorization. */
-  | { kind: "waiting" };
+  /** Not signed yet: a checkpoint covering the approval comes first, and the stream then delivers the authorization; `checkAtMs` is the boundary of the log check it also waits for, when the node names one. */
+  | { kind: "waiting"; checkAtMs?: number };
 
 export interface Payout {
   nonce: number;
@@ -60,7 +60,10 @@ function statusOf(state: ConsoleState, nonce: number, approvedSeq: number, nowSe
   if (state.paid.includes(nonce) || paidByNode(state, nonce, approvedSeq)) return { kind: "paid" };
   const signed = authorizationFor(state, nonce);
   const held = signed?.authorization?.expires_at ?? 0;
-  if (signed === null || held === 0) return { kind: "waiting" };
+  if (signed === null || held === 0) {
+    const checkAtMs = state.payoutsRead?.checks?.[nonce];
+    return checkAtMs === undefined ? { kind: "waiting" } : { kind: "waiting", checkAtMs };
+  }
   return held > nowSeconds ? { kind: "claimable", withdrawal: signed, expiresAt: held } : { kind: "expired", expiresAt: held };
 }
 
@@ -115,6 +118,15 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
   }
 }
 
+/** The boundary each unsigned approval waits for its log check at: only a well-formed time counts, so a bad answer leaves the row's plain wait. */
+function checksOf(entries: readonly PayoutEntry[]): Record<number, number> {
+  const checks: Record<number, number> = {};
+  for (const { nonce, check, withdrawal } of entries) {
+    if (check !== undefined && withdrawal === null && Number.isSafeInteger(check.boundary_ms) && check.boundary_ms > 0) checks[nonce] = check.boundary_ms;
+  }
+  return checks;
+}
+
 /**
  * Reads the node's unpaid approvals of the connected account, page by page, and takes each
  * authorization from the answer. An answer for a wallet or a read that a later one overtook is
@@ -153,7 +165,7 @@ export async function loadPayouts(store: ConsoleStore): Promise<void> {
     const problem = !loaded ? "The node is still loading its record of your payouts after a restart." : after !== undefined ? "The node's list of your payouts is longer than this page reads." : null;
     store.patch({
       authorizations,
-      payoutsRead: problem === null && seq !== null ? { seq, listed: entries.map((e) => e.nonce) } : state.payoutsRead,
+      payoutsRead: problem === null && seq !== null ? { seq, listed: entries.map((e) => e.nonce), checks: checksOf(entries) } : state.payoutsRead,
       payoutsProblem: problem === null ? null : `${problem} ${READ_AGAIN}`,
     });
   } catch (error) {

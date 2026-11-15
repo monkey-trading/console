@@ -68,6 +68,51 @@ describe("when the follower reads", () => {
     expect(operatorReads.count).toBe(1);
   });
 
+  it("reads right after the node's next daily turn begins, with no election pending, rather than wait for the slow read", async () => {
+    const kit = rig({ operator: async () => named({ hostname: null }) });
+    kit.trial.signedRead = async () => ({ next_turn: { applies_at: 1_000_000 + 90_000 } });
+    kit.follower.watch(kit.trial as unknown as EngineClient); // the follower uses only what TrialClient has
+    kit.follower.start(() => false);
+    await kit.follower.check();
+    kit.operatorReads.count = 0;
+    kit.advance(90_000 + 5_000 - 1);
+    await settle();
+    expect(kit.operatorReads.count).toBe(0);
+    kit.advance(1);
+    await settle();
+    expect(kit.operatorReads.count).toBe(1);
+  });
+
+  it("reads the node's turn with no wallet to read a chain, and does not wait on a node that stalls before it reads the chain", async () => {
+    const withoutWallet = rig({ reads: null });
+    withoutWallet.trial.signedRead = async () => ({ next_turn: { applies_at: 1_000_000 + 90_000 } });
+    withoutWallet.follower.watch(withoutWallet.trial as unknown as EngineClient);
+    withoutWallet.follower.start(() => false);
+    await withoutWallet.follower.check();
+    expect(withoutWallet.follower.getSnapshot().kind).toBe("pinned");
+    const stalled = rig({ operator: async () => named({ hostname: null }) });
+    stalled.trial.signedRead = () => new Promise(() => undefined);
+    stalled.follower.watch(stalled.trial as unknown as EngineClient);
+    stalled.follower.start(() => false);
+    void stalled.follower.check();
+    await settle();
+    expect(stalled.follower.getSnapshot().kind).toBe("following");
+  });
+
+  it("ignores a turn that is already past, a node that cannot answer, and one that names no next turn", async () => {
+    for (const read of [async () => ({ next_turn: { applies_at: 1_000_000 - 1 } }), async () => { throw new Error("down"); }, async () => ({})]) {
+      const kit = rig({ operator: async () => named({ hostname: null }) });
+      kit.trial.signedRead = read;
+      kit.follower.watch(kit.trial as unknown as EngineClient);
+      kit.follower.start(() => false);
+      await kit.follower.check();
+      kit.operatorReads.count = 0;
+      kit.advance(SLOW_READ_MS - 1);
+      await settle();
+      expect(kit.operatorReads.count).toBe(0);
+    }
+  });
+
   it("slows down when an effective time has passed and the chain still answers that election, rather than read every 30 seconds", async () => {
     const pending = { epoch: 1, candidate: "0xb", adminKey: "0xk", effectiveAtMs: 1_000_000, promoted: false };
     const kit = rig({ operator: async () => named({ hostname: null, pending }) });
@@ -166,8 +211,8 @@ describe("what makes the follower read sooner", () => {
     return { ...kit, client, stopWatch };
   }
 
-  it("reads on an election or rotation event in the stream, and not on other events", async () => {
-    for (const type of ["operator_elected", "rotation_switched"]) {
+  it("reads on an election, rotation, set or turn event in the stream, and not on other events", async () => {
+    for (const type of ["operator_elected", "rotation_switched", "rotation_set_adopted", "turn_assigned", "turn_refused", "turn_taken"]) {
       const { client, operatorReads } = await watched();
       for (const subscriber of client.subscribers) subscriber(message(type));
       await settle();
