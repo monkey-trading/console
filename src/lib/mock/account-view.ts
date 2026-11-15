@@ -1,9 +1,8 @@
 /** The mock node's `GET /v1/accounts/{address}`: an account's balance, equity, margin, positions, orders, close-outs and close fees. */
 
 import type { AccountView, Address } from "../engine/types";
-import { fixedToWire } from "../fixed";
+import { bpsOf, fixedToWire } from "../fixed";
 import { feeNow } from "../holding-fee";
-import { bpsOf } from "../fixed";
 import { maxLeverage } from "../volume-tier";
 import { standingOf } from "./volume";
 import { withdrawable } from "./funds";

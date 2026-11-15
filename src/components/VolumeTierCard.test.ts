@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "@/lib/fixed";
 import type { HouseParams } from "@/lib/house";
+import type { MarketView } from "@/lib/engine/types";
 import type { AccountModel } from "@/lib/models";
+import type { ConsoleState } from "@/lib/store/state";
 import { decodeVolume } from "@/lib/volume-tier";
 
 import { AccountSummary } from "./AccountSummary";
@@ -27,14 +29,21 @@ const ACCOUNT: AccountModel = {
   ...(volume === null ? {} : { volume }), toxicity: { tier: 1, addOnBps: 2 },
 };
 
-function Seed({ account, params }: { account: AccountModel | null; params: HouseParams | null }) {
+/** What a test sets on the store, besides the account and parameters, before the card renders; `marketsOverride` replaces the selected market's bands. */
+type Patch = Partial<ConsoleState> & { marketsOverride?: Partial<MarketView> };
+
+function Seed({ patch }: { patch: Patch }) {
   const { store } = useSession();
-  store.patch({ account, houseParams: params, pricingCurrent: params !== null, selected: 1 });
+  const { marketsOverride, ...state } = patch;
+  const markets = marketsOverride === undefined ? undefined : store.getSnapshot().markets.map((m) => (m.id === 1 ? { ...m, view: { ...m.view, ...marketsOverride } } : m));
+  store.patch({ selected: 1, ...state, ...(markets === undefined ? {} : { markets }) });
   return null;
 }
 
+const renderWith = (patch: Patch) => renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Seed, { patch }), createElement(VolumeTierCard)));
+
 const render = (account: AccountModel | null, params: HouseParams | null, ...parts: Parameters<typeof createElement>[0][]) =>
-  renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Seed, { account, params }), ...parts.map((part) => createElement(part))));
+  renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Seed, { patch: { account, houseParams: params, pricingCurrent: params !== null } }), ...parts.map((part) => createElement(part))));
 
 describe("VolumeTierCard", () => {
   it("shows the tier, counted and pending volume, the step to the next tier and what each tier brings in the selected market", () => {
@@ -55,7 +64,27 @@ describe("VolumeTierCard", () => {
     const html = render(ACCOUNT, null, VolumeTierCard);
     expect(html).toContain("Tier 0");
     expect(html).toContain("parameters are read");
-    expect(html).not.toContain("What each tier brings");
+    // The table keeps its rows, with dashes, so the page below does not move when the terms arrive.
+    expect(html).toContain("What each tier brings");
+    expect(html).toContain("Best-price size");
+    expect(html).not.toContain("Up to $500,000");
+  });
+
+  it("holds its frame with dashes while a connected wallet's account is read, and shows nothing once it is read without volume", () => {
+    const pending = renderWith({ account: null, houseParams: PARAMS, pricingCurrent: true, accountRead: false, wallet: { address: "0xabc", label: "w" } });
+    expect(pending).toContain("Volume tier");
+    expect(pending).toContain("Best-price size");
+    expect(pending).not.toContain("Tier 0");
+    const unsupported = renderWith({ account: { ...ACCOUNT, volume: undefined }, houseParams: PARAMS, pricingCurrent: true, accountRead: true, wallet: { address: "0xabc", label: "w" } });
+    expect(unsupported).not.toContain("Volume tier");
+  });
+
+  it("states a leverage held down by a weekend margin that applies now, in the table", () => {
+    const WTI = { margin_tiers: [{ up_to: "2000000", bps: 100 }, { up_to: null, bps: 500 }], weekend_margin: { weekend_margin_bps: 750, from: 0, close: 7_200_000, reopen: 1e13 } };
+    const html = renderWith({ account: ACCOUNT, houseParams: PARAMS, pricingCurrent: true, now: 1_000, marketsOverride: WTI });
+    // Tier 0's 5% floor allows 20x, tier 1's 2% allows 50x; a 7.5% weekend margin holds both to 13x.
+    expect(html.match(/Up to 13x/g)).toHaveLength(2);
+    expect(html).not.toContain("Up to 20x");
   });
 
   it("says so at the top tier, and shows nothing for a node without volume tiers or no account", () => {
@@ -69,7 +98,7 @@ describe("VolumeTierCard", () => {
 describe("AccountSummary", () => {
   it("shows what the node's read says is needed to open and may be withdrawn, from V64", () => {
     const html = render(ACCOUNT, PARAMS, AccountSummary);
-    expect(html).toContain("Needed to open");
+    expect(html).toContain("Initial requirement");
     expect(html).toContain("$2,500.00");
     // Free is equity above that requirement; withdrawable is the node's own figure.
     expect(html).toContain("$7,500.00");
@@ -78,7 +107,7 @@ describe("AccountSummary", () => {
 
   it("keeps its five figures before V64", () => {
     const html = render({ ...ACCOUNT, requirements: undefined }, PARAMS, AccountSummary);
-    expect(html).not.toContain("Needed to open");
+    expect(html).not.toContain("Initial requirement");
     expect(html).toContain("$9,000.00");
   });
 });

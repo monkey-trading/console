@@ -62,6 +62,8 @@ export interface MarketView {
   /** The FX index a market quoted in another currency is valued at; null or absent for USD markets and before its first price. */
   fx_mark?: string | null;
   stress_level: number;
+  /** From V60, for a market with a weekend margin, when it applies: from `from` until `reopen`, with the least rate each margin band charges meanwhile. */
+  weekend_margin?: { weekend_margin_bps: number; from: number; close: number; reopen: number };
 }
 
 /** `GET /v1/house`. */

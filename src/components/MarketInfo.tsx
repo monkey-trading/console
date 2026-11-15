@@ -1,6 +1,6 @@
 /** The ticket's "Market info" section: hours, stress, the spread bands and any pending listing change, margin, price terms and the house's room. */
 
-import type { ListingNotice, Side, StressLevel } from "@/lib/engine/types";
+import type { ListingNotice, Side, SpreadTier, StressLevel } from "@/lib/engine/types";
 import { bpsOf, formatUsd, type Fixed } from "@/lib/fixed";
 import { formatMovePercent } from "@/lib/format";
 import type { MarketModel } from "@/lib/models";
@@ -37,13 +37,13 @@ function stressTerms(level: StressLevel): string {
  * `notice` its pending listing notice; null when the node has given neither or they are not current.
  * `paramsNote` says why they are missing: a read failed, the node serves none, or a change is unread.
  */
-export function MarketInfo({ market, preview, side, price, slippageBps, stress, notice, paramsNote }: { market: MarketModel; preview: TicketPreview; side: Side; price: Fixed | null; slippageBps: number; stress: StressLevel | null; notice: ListingNotice | null; paramsNote: string | null }) {
+export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price, slippageBps, stress, notice, paramsNote }: { market: MarketModel; spreadTiers: readonly SpreadTier[]; ownBands: boolean; preview: TicketPreview; side: Side; price: Fixed | null; slippageBps: number; stress: StressLevel | null; notice: ListingNotice | null; paramsNote: string | null }) {
   const worst = price === null ? null : side === "buy" ? price + bpsOf(price, slippageBps) : price - bpsOf(price, slippageBps);
   const useBps = preview.marginUseBps;
   const filled = preview.houseCap > 0n ? Math.min(8, Math.ceil(Number((preview.markNotional * 8n) / preview.houseCap) || 0)) : 0;
   const capShare = preview.houseCap > 0n ? Number((preview.markNotional * 100n) / preview.houseCap) : 0;
   const stressName = STRESS_NAMES[market.stress] ?? "Normal";
-  const bands = bandRows(market.view.spread_tiers, spreadRate);
+  const bands = bandRows(spreadTiers, spreadRate);
   const changes = notice === null ? [] : describeNotice(notice);
   return (
     <details className="group border-t border-line">
@@ -61,7 +61,7 @@ export function MarketInfo({ market, preview, side, price, slippageBps, stress, 
           {preview.worstPrice !== null && <div className={ROW}><dt className="text-fg-3">Worst price allowed</dt><dd>{worst === null ? "—" : formatMark(worst, market.places)}</dd></div>}
         </dl>
         <div>
-          <p className="text-label text-fg-3">Spread by position size</p>
+          <p className="text-label text-fg-3">Spread by position size{ownBands ? ", for your account" : ""}</p>
           <dl className="mt-2 space-y-1">
             {bands.map((band) => <div key={band.span} className={ROW}><dt className="text-fg-3">{band.span}</dt><dd>{band.rate}</dd></div>)}
           </dl>

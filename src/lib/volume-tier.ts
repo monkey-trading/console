@@ -9,7 +9,6 @@ import type { MarketId, SpreadTier, Tier } from "./engine/types";
 import type { VolumeStandingWire, VolumeTierWire } from "./engine/volume-types";
 import { fixedFromInt, fixedFromWire, fixedToWire, minFixed, parseFixed, ZERO, type Fixed } from "./fixed";
 import { divRounded, mulBpsRounded } from "./fixed-rounding";
-import { tierCost } from "./pricing";
 
 /** One tier of the table: what reaches it and what it brings. A limit or rate the table does not name is null. */
 export interface TierTerms {
@@ -142,6 +141,11 @@ function roundedUpCost(tiers: readonly Tier[], notional: Fixed): Fixed {
   return charged;
 }
 
+/** The least rate each margin band charges in a market now because of its weekend margin: its rate from two hours before the gap until the reopen (`weekend_margin_applies`), else zero. */
+export function weekendFloorBps(window: { weekend_margin_bps: number; from: number; reopen: number } | undefined, now: number): number {
+  return window !== undefined && window.from <= now && now < window.reopen ? window.weekend_margin_bps : 0;
+}
+
 /** A leverage as the page names it: whole times, `20x`, `100x`. */
 export function formatLeverage(leverage: Fixed): string {
   return `${leverage / 1_000_000_000n}x`;
@@ -181,18 +185,17 @@ export interface Benefits {
   requestsPerSecond: number | null;
 }
 
-/** What `terms` brings in a market with these bands: its best-price size and its leverage. */
-export function benefitsOf(terms: TierTerms, market: { spread_tiers: readonly SpreadTier[]; margin_tiers: readonly Tier[] } | undefined): Benefits {
+/** What `terms` brings in a market with these bands: its best-price size and its leverage, with each margin band charged at least `weekendBps` as the engine's `max_leverage` charges it. */
+export function benefitsOf(terms: TierTerms, market: { spread_tiers: readonly SpreadTier[]; margin_tiers: readonly Tier[] } | undefined, weekendBps = 0): Benefits {
   return {
     bestPriceBound: market === undefined ? null : bestPriceBound(market.spread_tiers, terms.bestPriceShareBps),
-    leverage: market === undefined ? null : maxLeverage(market.margin_tiers, terms.marginFloorBps),
+    leverage: market === undefined ? null : maxLeverage(market.margin_tiers, Math.max(terms.marginFloorBps, weekendBps)),
     maxRestingOrders: terms.maxRestingOrders,
     requestsPerSecond: terms.requestsPerSecond,
   };
 }
 
-/** The margin `tiers` require at `notional` with the tier's floor, each band's charge rounded up; the requirement the node's fills and withdrawals meet. */
+/** The margin `tiers` require at `notional` with the tier's floor, each band's charge rounded up as the engine's requirement rounds; the requirement the node's fills and withdrawals meet. */
 export function flooredMargin(margin: readonly Tier[], notional: Fixed, floorBps: number): Fixed {
-  if (floorBps <= 0) return tierCost(margin, ZERO, notional < ZERO ? -notional : notional);
   return roundedUpCost(margin.map((tier) => ({ ...tier, bps: Math.max(tier.bps, floorBps) })), notional < ZERO ? -notional : notional);
 }

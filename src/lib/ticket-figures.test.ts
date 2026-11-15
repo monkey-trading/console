@@ -183,6 +183,25 @@ describe("the account's volume tier at the ticket", () => {
     expect(listed.preview.marginAdded).toBeLessThan(tier0.preview.marginAdded);
   });
 
+  it("names the tier's leverage in the in-browser node's margin refusal, and the weekend margin when it sets it", async () => {
+    const market = await btcAt(100_000);
+    // $10,000 of equity at the 5% floor opens $200,000: 3 BTC is $300,000.
+    const poor = { ...tiered(0), equity: fixedFromInt(10_000), balance: fixedFromInt(10_000) };
+    const refused = ticketFigures(state(market, false, { account: poor, houseParams: params }), market, { ...order("3"), side: "buy" });
+    expect(refused.preview.problems).toContain("Not enough equity for the margin this needs. Volume tier 0 allows up to 20x here.");
+    const weekend = { ...market, view: { ...market.view, weekend_margin: { weekend_margin_bps: 750, from: 0, close: 7_200_000, reopen: 1e13 } } };
+    const held = ticketFigures(state(weekend, false, { account: poor, houseParams: params, now: 1_000 }), weekend, { ...order("3"), side: "buy" });
+    expect(held.preview.problems).toContain("Not enough equity for the margin this needs. The weekend margin applies here, which allows up to 20x.");
+  });
+
+  it("gives the account's own spread bands, its first band ending at its best-price size, and the listed ones before the table is read", async () => {
+    const market = await btcAt(100_000);
+    const own = ticketFigures(state(market, false, { account: tiered(0), houseParams: params }), market, order("1"));
+    expect([own.ownBands, own.spreadTiers[0]]).toEqual([true, expect.objectContaining({ up_to: "500000" })]);
+    const listed = ticketFigures(state(market, false, { account: tiered(0), houseParams: PARAMS }), market, order("1"));
+    expect([listed.ownBands, listed.spreadTiers]).toEqual([false, market.view.spread_tiers]);
+  });
+
   it("has no limits from a node that predates volume tiers", async () => {
     const market = await btcAt(101_000);
     const figures = ticketFigures(state(market, true), market, order("1"));

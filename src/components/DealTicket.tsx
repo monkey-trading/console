@@ -72,7 +72,7 @@ export function DealTicket() {
   const live = state.signatures === "checked";
   // The stress levels' terms and the listing notices show only while the house state is current.
   const terms = currentParams(state);
-  const { preview, prices, limits, orderProblem, close, closing, closeWithheld } = ticketFigures(state, market, { side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice });
+  const { preview, prices, limits, spreadTiers, ownBands, orderProblem, close, closing, closeWithheld } = ticketFigures(state, market, { side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice });
   // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
   // A size the field refuses says why, so the generic prompt would only repeat it.
   const listed = preview.problems.filter((p) => (!live || p !== MARGIN_SHORT) && (parsedSize.kind !== "refused" || p !== NO_SIZE));
@@ -134,14 +134,15 @@ export function DealTicket() {
           <div className="px-2 py-3"><p className="text-label text-fg-3">Bid (you sell)</p><p className={`mt-1 text-data ${side === "sell" ? "text-ember" : "text-fg-2"}`}>{show(prices.bid)}</p></div>
           <div className="px-2 py-3"><p className="text-label text-fg-3">Offer (you buy)</p><p className={`mt-1 text-data ${side === "buy" ? "text-glow" : "text-fg-2"}`}>{show(prices.offer)}</p></div>
           <p className="col-span-2 border-t border-line px-2 py-2 text-label text-fg-3">
-            {prices.spreadTenths === null ? "No executable quote for this size yet." : <>{live ? "Your executable spread" : "Spread"} for this size <span className="text-fg-2">{formatTenthPercent(prices.spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(prices.spreadTenths)})</span>{prices.toxicityBps > 0 && <>, including a <span className="text-fg-2">+{prices.toxicityBps} {prices.toxicityBps === 1 ? "bp" : "bps"}</span> toxicity add-on</>}</>}
+            {prices.spreadTenths === null ? "No executable quote for this size yet." : <>{live ? "Your executable spread" : "Spread"} for this size <span className="text-fg-2">{formatTenthPercent(prices.spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(prices.spreadTenths)})</span>{prices.toxicityBps > 0 && <>, including a <span className="text-fg-2">+{prices.toxicityBps} {prices.toxicityBps === 1 ? "bp" : "bps"}</span> toxicity add-on on each price</>}</>}
           </p>
         </div>
-        {limits !== null && (
-          <dl aria-label={`Your volume tier ${limits.tier} limits in ${market.symbol}`} className="mt-2 grid grid-cols-3 gap-2 text-label text-fg-3">
-            <div><dt>Best-price size</dt><dd className="mt-0.5 text-fg-2">{describeBestPrice(limits.bestPriceBound)}</dd></div>
-            <div><dt>Max leverage</dt><dd className="mt-0.5 text-fg-2">{limits.leverage === null ? "—" : `${formatLeverage(limits.leverage)}`}</dd></div>
-            <div><dt>Resting orders</dt><dd className="mt-0.5 text-fg-2">{limits.resting}{limits.orderLimit === null ? "" : ` of ${limits.orderLimit}`}</dd></div>
+        {(limits !== null || (state.wallet !== null && !state.accountRead)) && (
+          // Held with dashes while the account is read, so the size field below does not move when the figures arrive.
+          <dl aria-label={limits === null ? `Your volume tier limits in ${market.symbol}` : `Your volume tier ${limits.tier} limits in ${market.symbol}`} className="mt-2 grid grid-cols-3 gap-2 text-label text-fg-3">
+            <div><dt>Best-price size</dt><dd className="mt-0.5 text-fg-2">{limits === null ? "—" : describeBestPrice(limits.bestPriceBound)}</dd></div>
+            <div><dt>Max leverage</dt><dd className="mt-0.5 text-fg-2">{limits === null || limits.leverage === null ? "—" : `${formatLeverage(limits.leverage)}${limits.weekendSets ? " (weekend margin)" : ""}`}</dd></div>
+            <div><dt>Resting orders</dt><dd className="mt-0.5 text-fg-2">{limits === null ? "—" : `${limits.resting}${limits.orderLimit === null ? "" : ` of ${limits.orderLimit}`}`}</dd></div>
           </dl>
         )}
         <div className="mt-4">
@@ -180,7 +181,7 @@ export function DealTicket() {
           {!gate && shownProblems.map((p) => <p key={p}>{p}{p === "Fund your account to trade." && <> <FundingLink /></>}</p>)}
         </div>
       </form>
-      <MarketInfo market={market} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={terms?.stressLevels[market.stress] ?? null} notice={terms === null ? null : (state.listingNotices[market.id] ?? null)} paramsNote={houseTermsNote(state)} />
+      <MarketInfo market={market} spreadTiers={spreadTiers} ownBands={ownBands} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={terms?.stressLevels[market.stress] ?? null} notice={terms === null ? null : (state.listingNotices[market.id] ?? null)} paramsNote={houseTermsNote(state)} />
     </>
   );
 }

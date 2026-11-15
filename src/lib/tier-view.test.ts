@@ -9,6 +9,11 @@ import { accountPricing, describeBestPrice, describeLimit, describeNextTier, lev
 import { decodeVolume, nextTier, decodeTiers } from "./volume-tier";
 import { btc, q } from "./ticket-fixtures";
 
+/** A market view to extend, with BTC-USD's bands. */
+function btcShape() {
+  return { spread_tiers: [{ up_to: "2000000", tenth_bps: 20 }, { up_to: "10000000", tenth_bps: 40 }, { up_to: null, tenth_bps: 80 }] };
+}
+
 const TABLE = [
   { threshold: "0", day_divisor: 1, best_price_share_bps: 2500, margin_floor_bps: 500, max_resting_orders: 25, requests_per_second: 2 },
   { threshold: "1000000", day_divisor: 2, best_price_share_bps: 5000, margin_floor_bps: 200, max_resting_orders: 50, requests_per_second: 5 },
@@ -48,22 +53,45 @@ describe("tierBenefits", () => {
   it("states what this tier and the next bring in a market", async () => {
     const market = (await btc()).view;
     const standing = tierStanding(account(), PARAMS);
-    const benefits = standing && tierBenefits(standing, market);
+    const benefits = standing && tierBenefits(standing, market, 0);
     expect(benefits?.now).toMatchObject({ bestPriceBound: fixedFromInt(500_000), leverage: fixedFromInt(20), maxRestingOrders: 25, requestsPerSecond: 2 });
     expect(benefits?.next).toMatchObject({ bestPriceBound: fixedFromInt(1_000_000), leverage: fixedFromInt(50), maxRestingOrders: 50, requestsPerSecond: 5 });
     const top = tierStanding(account(2), PARAMS);
-    expect(top && tierBenefits(top, market)?.next).toBeNull();
+    expect(top && tierBenefits(top, market, 0)?.next).toBeNull();
   });
 
   it("has none while the table is unread", () => {
     const standing = tierStanding(account(), null);
-    expect(standing && tierBenefits(standing, undefined)).toBeNull();
+    expect(standing && tierBenefits(standing, undefined, 0)).toBeNull();
+  });
+});
+
+describe("a weekend margin that applies now", () => {
+  const WTI = { ...btcShape(), margin_tiers: [{ up_to: "2000000", bps: 100 }, { up_to: null, bps: 500 }], weekend_margin: { weekend_margin_bps: 750, from: 1_000, close: 8_200_000, reopen: 90_000_000 } };
+
+  it("holds the leverage of every tier to the weekend rate while it applies, and leaves them alone before and after", () => {
+    const standing = tierStanding(account(), PARAMS);
+    if (standing === null) throw new Error("no standing");
+    const at = (now: number) => tierBenefits(standing, WTI as never, now);
+    expect([at(500)?.now.leverage, at(500)?.next?.leverage]).toEqual([fixedFromInt(20), fixedFromInt(50)]);
+    // 10,000 / 750 is 13.333333333, which the page names as 13x.
+    expect([at(1_000)?.now.leverage, at(1_000)?.next?.leverage]).toEqual([13_333_333_333n, 13_333_333_333n]);
+    expect(at(90_000_000)?.now.leverage).toBe(fixedFromInt(20));
+  });
+
+  it("names the weekend margin, not the tier, as what sets the leverage when it is above the tier's floor", () => {
+    const set = (floorBps: number | null, weekendBps: number) => leverageReason(ticketLimits(account(), 1, { floorBps, weekendBps }));
+    expect(set(500, 750)).toBe(" The weekend margin applies here, which allows up to 20x.");
+    expect(set(500, 300)).toBe(" Volume tier 0 allows up to 20x here.");
+    expect(set(500, 0)).toBe(" Volume tier 0 allows up to 20x here.");
+    // With the tier table unread the floor is unknown, and a weekend margin that applies is what is named.
+    expect(set(null, 750)).toContain("weekend margin applies");
   });
 });
 
 describe("ticketLimits", () => {
   it("reads the market's best-price bound and leverage and the order count against the tier's limit", () => {
-    expect(ticketLimits(account(0, 3), 1)).toEqual({ tier: 0, bestPriceBound: fixedFromInt(500_000), leverage: fixedFromInt(20), orderLimit: 25, resting: 3 });
+    expect(ticketLimits(account(0, 3), 1)).toEqual({ tier: 0, bestPriceBound: fixedFromInt(500_000), leverage: fixedFromInt(20), weekendSets: false, orderLimit: 25, resting: 3 });
     expect(ticketLimits(account(0), 2)).toMatchObject({ bestPriceBound: null, leverage: null });
   });
 

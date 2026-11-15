@@ -118,6 +118,7 @@ function decodeRequirements(view: AccountView): Requirements | undefined {
   return { initialMargin: initial, maintenanceMargin: maintenance, withdrawable, maxLeverage };
 }
 
+/** The V54 toxicity standing the read gave, or undefined when the node predates it or it is malformed. */
 function decodeToxicity(view: AccountView): ToxicityModel | undefined {
   const found = view.toxicity;
   return found !== undefined && Number.isSafeInteger(found.tier) && Number.isSafeInteger(found.add_on_bps) ? { tier: found.tier, addOnBps: found.add_on_bps } : undefined;

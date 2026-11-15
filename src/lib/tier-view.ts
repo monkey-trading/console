@@ -6,10 +6,10 @@
  */
 
 import type { MarketId, MarketView, SpreadTier } from "./engine/types";
-import { formatFixedPlaces, type Fixed } from "./fixed";
+import { formatFixedPlaces, SCALE, type Fixed } from "./fixed";
 import type { HouseParams } from "./house";
 import type { AccountModel } from "./models";
-import { accountSpreadTiers, benefitsOf, decodeTiers, formatLeverage, nextTier, type Benefits, type NextTier, type TierTerms, type VolumeModel } from "./volume-tier";
+import { accountSpreadTiers, benefitsOf, decodeTiers, formatLeverage, nextTier, weekendFloorBps, type Benefits, type NextTier, type TierTerms, type VolumeModel } from "./volume-tier";
 
 /** The account panel's view of the account's tier. */
 export interface TierStanding {
@@ -32,17 +32,24 @@ export function tierStanding(account: AccountModel | null, params: HouseParams |
 }
 
 /** What the account's tier brings in a market, and what the next tier would. */
-export function tierBenefits(standing: TierStanding, market: MarketView | undefined): { now: Benefits; next: Benefits | null } | null {
+export function tierBenefits(standing: TierStanding, market: MarketView | undefined, now: number): { now: Benefits; next: Benefits | null } | null {
   const { table } = standing;
   const current = table?.[standing.tier];
   if (table === null || current === undefined) return null;
   const upcoming = table[standing.tier + 1];
-  return { now: benefitsOf(current, market), next: upcoming === undefined ? null : benefitsOf(upcoming, market) };
+  // While a market's weekend margin applies it is the least rate each band charges, whatever the tier's floor, as the node's own leverage counts it.
+  const weekendBps = weekendFloorBps(market?.weekend_margin, now);
+  return { now: benefitsOf(current, market, weekendBps), next: upcoming === undefined ? null : benefitsOf(upcoming, market, weekendBps) };
 }
 
 /** A USD amount of notional with no cents: `$250,000`. */
 export function usdWhole(value: Fixed): string {
   return `$${formatFixedPlaces(value, 0)}`;
+}
+
+/** A USD amount of notional rounded up to the whole dollar: what is still needed never reads as less than it is. */
+export function usdWholeUp(value: Fixed): string {
+  return usdWhole(value % SCALE === 0n ? value : value - (value % SCALE) + SCALE);
 }
 
 /** What the ticket shows of the account's limits in the selected market. */
@@ -52,17 +59,20 @@ export interface TicketLimits {
   bestPriceBound: Fixed | null;
   /** The most leverage a position here can take; null before V64. */
   leverage: Fixed | null;
+  /** Whether the market's weekend margin, not the tier's floor, sets that leverage now. */
+  weekendSets: boolean;
   /** The resting orders the tier allows and the account rests now; the limit is null where the tier names none. */
   orderLimit: number | null;
   resting: number;
 }
 
 /** The limits the account's read gives for `market`, or null from a node that predates volume tiers. */
-export function ticketLimits(account: AccountModel | null, market: MarketId): TicketLimits | null {
+export function ticketLimits(account: AccountModel | null, market: MarketId, margin: { floorBps: number | null; weekendBps: number } = { floorBps: null, weekendBps: 0 }): TicketLimits | null {
   const volume = account?.volume;
   if (account === null || volume === undefined) return null;
   return {
     tier: volume.tier, bestPriceBound: volume.bestPriceBounds.get(market) ?? null, leverage: account.requirements?.maxLeverage.get(market) ?? null,
+    weekendSets: margin.weekendBps > 0 && margin.weekendBps > (margin.floorBps ?? 0),
     orderLimit: volume.maxRestingOrders, resting: account.orders.length,
   };
 }
@@ -75,7 +85,9 @@ export function orderLimitProblem(limits: TicketLimits | null, resting: boolean)
 
 /** Why the leverage limit applies, for a size the node declines for margin: the tier's limit, named. */
 export function leverageReason(limits: TicketLimits | null): string {
-  return limits === null || limits.leverage === null ? "" : ` Volume tier ${limits.tier} allows up to ${formatLeverage(limits.leverage)} here.`;
+  if (limits === null || limits.leverage === null) return "";
+  const leverage = formatLeverage(limits.leverage);
+  return limits.weekendSets ? ` The weekend margin applies here, which allows up to ${leverage}.` : ` Volume tier ${limits.tier} allows up to ${leverage} here.`;
 }
 
 /**
@@ -93,7 +105,7 @@ export function accountPricing(account: AccountModel | null, params: HouseParams
 export function describeNextTier(next: NextTier): string {
   const days = next.daysLeast === 1 ? "one more day" : `${next.daysLeast} more days`;
   if (next.volumeLeft === 0n) return `Tier ${next.tier} needs trading on at least ${next.daysNeeded} days, each counting up to ${usdWhole(next.dayCap)}.`;
-  return `Tier ${next.tier} needs ${usdWhole(next.volumeLeft)} more counted volume, over at least ${days} at the day cap of ${usdWhole(next.dayCap)} (${next.daysNeeded} days in all).`;
+  return `Tier ${next.tier} needs ${usdWholeUp(next.volumeLeft)} more counted volume, over at least ${days} at the day cap of ${usdWhole(next.dayCap)} (${next.daysNeeded} days in all).`;
 }
 
 /** A best-price bound as the panel states it: the notional a market's first band covers, or that the market has one band. */

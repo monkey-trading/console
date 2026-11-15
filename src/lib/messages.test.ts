@@ -10,8 +10,8 @@ describe("order-limit and rate refusals", () => {
     expect(describeReject({ kind: "too_many_orders", max: 100 })).toBe("You already rest 100 orders, the most the node allows. Cancel one to place another.");
   });
 
-  it("says a 429 for the tier's request rate sent nothing", () => {
-    expect(describeTierRate({ tier: 0, requestsPerSecond: 2 })).toBe("Requests are coming faster than volume tier 0 allows, 2 a second. Nothing was sent. Wait a moment and try again.");
+  it("says a 429 for the tier's request rate recorded nothing", () => {
+    expect(describeTierRate({ tier: 0, requestsPerSecond: 2 })).toBe("Requests are coming faster than volume tier 0 allows, 2 a second. Nothing was recorded. Wait a moment and try again.");
   });
 });
 

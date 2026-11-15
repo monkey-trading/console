@@ -13,16 +13,16 @@ import type { StatsReads } from "./stats-types";
 import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 
-/**
- * An error response from the node: the HTTP status and the `{ "error": … }` message, plus the typed
- * refusal when the engine rejected a sequenced command.
- */
 /** What a 429 for an account over its volume tier's request rate names: the tier and the requests a second it admits. */
 export interface TierRateLimit {
   tier: number;
   requestsPerSecond: number;
 }
 
+/**
+ * An error response from the node: the HTTP status and the `{ "error": … }` message, plus the typed
+ * refusal when the engine rejected a sequenced command.
+ */
 export class EngineError extends Error {
   readonly status: number;
   readonly reject: Reject | null;

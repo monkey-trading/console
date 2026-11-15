@@ -24,6 +24,8 @@ const BTC = 1;
 const FUND = "10000";
 /** The volume that takes tier 1 in this node's table, and what the scenario trades to count it. */
 const TRADED = 60_000;
+/** The counted volume that takes tier 1 in this node's table (`scripts/dev-trading.sh`), and the wallet's funds. */
+const TIER_1 = 50_000;
 
 let rig: Rig;
 const snapshot = () => rig.store.getSnapshot();
@@ -62,7 +64,7 @@ describe("a fresh wallet at tier 0", () => {
     expect(tier.tier).toBe(0);
     // The panel: counted and pending volume as read, and the step to tier 1 from the table.
     expect([tier.volume.matured, tier.volume.pending]).toEqual([fixedFromWire(raw.volume?.matured ?? "x"), fixedFromWire(raw.volume?.pending ?? "x")]);
-    expect(tier.next).toMatchObject({ tier: 1, volumeLeft: fixedFromInt(TRADED - 10_000), daysNeeded: 1 });
+    expect(tier.next).toMatchObject({ tier: 1, volumeLeft: fixedFromInt(TIER_1), daysNeeded: 1 });
     expect(describeNextTier(tier.next ?? (() => { throw new Error("no next tier"); })())).toContain("Tier 1 needs $50,000 more counted volume");
     // The account strip and the withdraw form: the node's requirement and its withdrawable cash, and free cash above the requirement.
     const account = snapshot().account;
@@ -74,7 +76,7 @@ describe("a fresh wallet at tier 0", () => {
     const limits = ticketLimits(account, BTC);
     expect(limits).toMatchObject({ tier: 0, bestPriceBound: fixedFromWire(raw.volume?.best_price_bounds[String(BTC)] ?? "x"), leverage: fixedFromWire(raw.max_leverage?.[String(BTC)] ?? "x"), orderLimit: 3, resting: 0 });
     // Tier 0's 5% floor holds BTC-USD to 20x, and tier 1's 2% to 50x, as the table's benefits state.
-    const benefits = tierBenefits(tier, marketOf(rig.store, BTC).view);
+    const benefits = tierBenefits(tier, marketOf(rig.store, BTC).view, snapshot().now);
     expect([formatLeverage(benefits?.now.leverage ?? 0n), formatLeverage(benefits?.next?.leverage ?? 0n)]).toEqual(["20x", "50x"]);
     expect(benefits?.now.bestPriceBound).toBe(limits?.bestPriceBound);
     expect(describeBestPrice(benefits?.next?.bestPriceBound ?? null)).not.toBe(describeBestPrice(benefits?.now.bestPriceBound ?? null));
@@ -121,7 +123,7 @@ describe("a fresh wallet at tier 0", () => {
       await cancelOrder(rig.store, 999_999);
       text = snapshot().notices.orders?.text.startsWith("Requests are coming faster") ? snapshot().notices.orders?.text : undefined;
     }
-    expect(text, `the 429s the node answered: ${JSON.stringify(rig.limited)}`).toBe("Requests are coming faster than volume tier 0 allows, 3 a second. Nothing was sent. Wait a moment and try again.");
+    expect(text, `the 429s the node answered: ${JSON.stringify(rig.limited)}`).toBe("Requests are coming faster than volume tier 0 allows, 3 a second. Nothing was recorded. Wait a moment and try again.");
     // The tier's own refusal is signed by the enclave, so the client reads the tier and rate from it.
     expect(rig.limited.some((answer) => answer.signed && answer.body.includes('"tier":0'))).toBe(true);
     // The burst refills; the next request is admitted.
@@ -148,7 +150,7 @@ describe("trading up to tier 1", () => {
     // Best price now ends at half of BTC-USD's first bound, leverage is 50x at the 2% floor, and the tier rests 5 orders.
     expect(limits).toMatchObject({ tier: 1, orderLimit: 5, leverage: fixedFromInt(50), bestPriceBound: fixedFromWire(raw.volume?.best_price_bounds[String(BTC)] ?? "x") });
     expect(tier.next).toMatchObject({ tier: 2 });
-    expect(tierBenefits(tier, marketOf(rig.store, BTC).view)?.now.bestPriceBound).toBe(limits?.bestPriceBound);
+    expect(tierBenefits(tier, marketOf(rig.store, BTC).view, snapshot().now)?.now.bestPriceBound).toBe(limits?.bestPriceBound);
   }, 240_000);
 });
 

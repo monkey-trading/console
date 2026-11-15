@@ -35,6 +35,34 @@ async function refusing() {
   return kit;
 }
 
+/** The node's 429 for an account over its volume tier's request rate, as the transport reads it from the signed body. */
+const TIER_LIMITED = (): never => {
+  const error = new EngineError(429, "rate limited");
+  error.tierLimit = { tier: 1, requestsPerSecond: 5 };
+  throw error;
+};
+const TIER_TEXT = "Requests are coming faster than volume tier 1 allows, 5 a second. Nothing was recorded. Wait a moment and try again.";
+
+describe("a 429 that names the account's volume tier", () => {
+  it("shows the tier and its rate at the ticket on the session-signed path, and a plain limit without them", async () => {
+    const kit = await keyed();
+    kit.client.answer = (posted) => (posted.route === "session_key" ? new ActionClient().answer(posted) : TIER_LIMITED());
+    expect(await order(kit.store)).toBe(false);
+    expectOnly(kit.store, "ticket", TIER_TEXT);
+    const plain = await keyed();
+    plain.client.answer = (posted) => (posted.route === "session_key" ? new ActionClient().answer(posted) : (() => { throw new EngineError(429, "rate limited"); })());
+    expect(await order(plain.store)).toBe(false);
+    expectOnly(plain.store, "ticket", "The node is limiting requests; try again in a moment.");
+  });
+
+  it("shows them at the withdraw form on the wallet-signed path", async () => {
+    const kit = await connected({});
+    kit.client.answer = TIER_LIMITED;
+    expect(await withdraw(kit.store, fixedFromInt(50))).toBe(false);
+    expectOnly(kit.store, "withdraw", TIER_TEXT);
+  });
+});
+
 describe("a refused or failed action lands on its own surface", () => {
   it("ticket: a node refusal, and a wallet signature declined on the wallet-signed path", async () => {
     const refused = await refusing();

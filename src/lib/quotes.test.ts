@@ -134,7 +134,7 @@ describe("the toxicity add-on and the tier's leverage in a live quote", () => {
   });
 
   it("explains a margin decline with the leverage the account's tier allows in the market", () => {
-    const limits = { tier: 0, bestPriceBound: null, leverage: f("20"), orderLimit: 25, resting: 0 };
+    const limits = { tier: 0, bestPriceBound: null, leverage: f("20"), weekendSets: false, orderLimit: 25, resting: 0 };
     const margin = { kind: "insufficient_margin" as const, equity: "1", required: "9" };
     const ladder: MarketQuote = { ...QUOTE, ask: [{ qty: "2", price: "100.1" }, { qty: "30", price: "100.5", declined: margin }] };
     const withLimits = ticketPrices({ live: true, quote: ladder, quoteError: null, preview: preview("29"), side: "buy", mark: f("100"), limits });

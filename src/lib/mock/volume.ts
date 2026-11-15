@@ -38,12 +38,14 @@ export interface VolumeBook {
   closing: ClosingLot[];
 }
 
+/** A book with nothing counted and nothing pending. */
 export function newBook(): VolumeBook {
   return { days: new Map(), opening: new Map(), closing: [] };
 }
 
 const dayOf = (ms: number): number => Math.floor(ms / DAY_MS);
 
+/** Adds `notional` to the counted volume of UTC `day`. */
 function count(book: VolumeBook, day: number, notional: Fixed): void {
   book.days.set(day, (book.days.get(day) ?? ZERO) + notional);
 }
@@ -99,7 +101,7 @@ export function recordFill(book: VolumeBook, fill: { market: MarketId; held: Fix
 }
 
 /** The volume counted on each day of the window that ends on `now`'s day, oldest first, every lot whose time has come included. */
-export function window(book: VolumeBook, now: number): Fixed[] {
+export function windowDays(book: VolumeBook, now: number): Fixed[] {
   const first = dayOf(now) - (WINDOW_DAYS - 1);
   const days = Array.from({ length: WINDOW_DAYS }, () => ZERO);
   const add = (day: number, notional: Fixed) => {
@@ -127,14 +129,14 @@ export function tierOf(days: readonly Fixed[], tiers: readonly TierTerms[]): num
 
 /** The account's tier now, 0 when the mock's parameters name no table. */
 export function tierNow(book: VolumeBook, tiers: readonly TierTerms[], now: number): number {
-  return tiers.length === 0 ? 0 : tierOf(window(book, now), tiers);
+  return tiers.length === 0 ? 0 : tierOf(windowDays(book, now), tiers);
 }
 
 /** `GET /v1/accounts/{address}`'s `volume`: tier, counted and pending volume, progress towards each tier and best-price bounds. */
 export function standingOf(
   book: VolumeBook, tiers: readonly TierTerms[], now: number, markets: ReadonlyMap<MarketId, { spread_tiers: Parameters<typeof bestPriceBound>[0] }>,
 ): VolumeStandingWire {
-  const days = window(book, now);
+  const days = windowDays(book, now);
   const tier = tierOf(days, tiers);
   const progress = tiers.map((level) => ({
     capped: fixedToWire(cappedTimesDivisor(days, level) / BigInt(level.dayDivisor)),

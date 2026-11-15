@@ -136,6 +136,19 @@ describe("the stream beside the read", () => {
     await expect(client.houseState()).resolves.toMatchObject({ params: { profitFeeBps: 1500, stressLevels: levels, profitFeeCurve: raised, seq: 106 } });
   });
 
+  it("reads the volume tiers a read gives and a stream set_params carries, and none from a node that predates them", async () => {
+    const { client, reply, stream } = house();
+    const tiers = [{ threshold: "0", day_divisor: 1, best_price_share_bps: 2500, margin_floor_bps: 500, max_resting_orders: 25, requests_per_second: 2 }];
+    reply(200, { seq: 100, params: WIRE_PARAMS, checkpoint: null });
+    expect(await client.houseState()).toMatchObject({ params: expect.not.objectContaining({ volumeTiers: expect.anything() }) });
+    reply(200, { seq: 101, params: { ...WIRE_PARAMS, volume_tiers: tiers }, checkpoint: null });
+    await expect(client.houseState()).resolves.toMatchObject({ params: { volumeTiers: tiers } });
+    const send = await stream();
+    const raised = [{ ...tiers[0], threshold: "0", best_price_share_bps: 2000 }];
+    send({ ...setParams(106, 1500), cmd: { ...setParams(106, 1500).cmd, volume_tiers: raised } });
+    await expect(client.houseState()).resolves.toMatchObject({ params: { volumeTiers: raised, seq: 106 } });
+  });
+
   it("takes parameters a protocol activation changed in place, at the same SetParams seq, from a read at a newer log head", async () => {
     const { client, reply } = house();
     reply(200, { seq: 100, params: { ...WIRE_PARAMS, profit_fee_curve: undefined }, checkpoint: null });

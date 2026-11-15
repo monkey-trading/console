@@ -69,7 +69,7 @@ export function describeReject(reject: Reject): string {
 
 /** What a 429 that names the account's volume tier says: how fast it may send, and that nothing was recorded. */
 export function describeTierRate(limit: TierRateLimit): string {
-  return `Requests are coming faster than volume tier ${limit.tier} allows, ${limit.requestsPerSecond} a second. Nothing was sent. Wait a moment and try again.`;
+  return `Requests are coming faster than volume tier ${limit.tier} allows, ${limit.requestsPerSecond} a second. Nothing was recorded. Wait a moment and try again.`;
 }
 
 /** A short line for the activity log, or null for an event the log does not show. */
