@@ -42,6 +42,8 @@ export function StakingRotation() {
   }, [node, deploy, rows]);
   const history = useMemo(() => (rotation === null ? null : joinHistory(rotation.history, pages.older)), [rotation, pages.older]);
   const signer = rotation?.signer ?? null;
+  // Before a first read lands the cards say they are reading; a node that cannot give the rotation says so instead.
+  const unread = route.status === "loading" ? "Reading the node's rotation…" : "The node's rotation is not read.";
   const rotationOn = list.value?.rotationEnabled ?? route.value?.rotation_enabled ?? null;
   return (
     <div className={`mt-4 ${trusted ? "grid" : "hidden"} gap-4`}>
@@ -53,8 +55,8 @@ export function StakingRotation() {
       </dl>
       <ReadNote read={route} loading="Reading the node's rotation…" />
       <div className="grid items-start gap-4 xl:grid-cols-2">
-        <SetCard id="rotation-set-title" title="Set in effect" set={rotation?.set ?? null} empty={rotation === null ? "Reading the node's rotation…" : "No rotation set is in effect."} nowMs={nowMs} nameOf={labelOf} needsUpdate={needsUpdate} />
-        <SetCard id="rotation-next-title" title="Next set" set={rotation?.nextSet ?? null} empty={rotation === null ? "Reading the node's rotation…" : "No later set has been mirrored."} nowMs={nowMs} nameOf={labelOf} needsUpdate={needsUpdate} />
+        <SetCard id="rotation-set-title" title="Set in effect" set={rotation?.set ?? null} empty={rotation === null ? unread : "No rotation set is in effect."} nowMs={nowMs} nameOf={labelOf} needsUpdate={needsUpdate} />
+        <SetCard id="rotation-next-title" title="Next set" set={rotation?.nextSet ?? null} empty={rotation === null ? unread : "No later set has been mirrored."} nowMs={nowMs} nameOf={labelOf} needsUpdate={needsUpdate} />
       </div>
       {history !== null && (
         <>

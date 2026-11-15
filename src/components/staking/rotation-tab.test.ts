@@ -110,6 +110,16 @@ describe("the Rotation tab", () => {
   });
 });
 
+describe("the Rotation tab without a rotation", () => {
+  it("says the rotation is not read, rather than that it is being read, from a node that does not serve it or whose read failed", () => {
+    for (const route of [{ status: "unavailable" as const, value: null, message: null }, { status: "failed" as const, value: null, message: "the node is busy" }]) {
+      const html = tab({ route, rotation: null, list: LOADING, held: null });
+      expect(html).toContain("The node&#x27;s rotation is not read.");
+      expect(html).not.toContain("Reading the node&#x27;s rotation…");
+    }
+  });
+});
+
 describe("the operators card's turns", () => {
   it("shows today's and tomorrow's turns beside the operator in effect, and dashes before the route is read", () => {
     const html = renderOperators({ state: VERIFIED, operators: loaded(), read: chain() });
