@@ -200,7 +200,7 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   `STACK_INFO_FILE`, by default `monkey-local-stack.json` in the temporary directory, which the control script reads; rotation needs the engine's `[log_heads]`, so the stack also deploys `LogHeads`
   and funds a log-head relayer, Anvil account 10, apart from the checkpoint relayer)
 - Parameter votes on the local stack: `GOVERNANCE=1 SECOND_ENGINE=1 ./scripts/dev-local-stack.sh` (the operator schedule and
-  the vote contract, three candidates adopted as the rotation set with the chain's clock moved past the registry's day and the
+  the vote contract, three candidates, each with a standby key the vault's signer vouches for, adopted as the rotation set with the chain's clock moved past the registry's day and the
   set's seven days, a fast-path restriction lasting `RESTRICTION_TTL`, default 3m), then
   `./scripts/dev-local-stack-ctl.sh propose operator|second|third normal|fast '<admin command JSON>'` and `vote MEMBER ID`;
   importing Anvil account 4, the second candidate, votes on the Governance tab

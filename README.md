@@ -132,7 +132,8 @@ GOVERNANCE=1 SECOND_ENGINE=1 ./scripts/dev-local-stack.sh
 ```
 
 The stack deploys the operator schedule and the vote contract, which the node follows, registers a third
-candidate, and stakes for the three candidates: 40,000 MONKEY for the first engine's, 24,000 for the second
+candidate, registers a standby key for each candidate that the vault's signer vouches for, as the schedule
+requires of every member, and stakes for the three candidates: 40,000 MONKEY for the first engine's, 24,000 for the second
 engine's and 35,000 for the third. It then moves the chain's clock past the registry's one-day epoch, which
 adopts the three as the rotation set, and past the set's seven-day notice, so the set is in effect. Import the
 second engine's candidate (Anvil account 4, whose public test key the script prints) into a dev wallet to vote
