@@ -125,11 +125,12 @@ describe("resting orders that cannot fill", () => {
 });
 
 describe("resting-order limits and cancels", () => {
-  it("refuses an eleventh resting order, and lets a blocked region cancel what it already has", async () => {
+  it("refuses a resting order past the account's tier limit, and lets a blocked region cancel what it already has", async () => {
     const node = await funded(100_000);
-    for (let i = 0; i < 10; i++) await order(node, "0.01", "buy", { kind: { kind: "limit", price: "50000" } });
-    const eleventh = await order(node, "0.01", "buy", { kind: { kind: "limit", price: "50000" } });
-    expect(eleventh.events[0]).toMatchObject({ type: "order_rejected", reason: { kind: "invalid_order", reason: "at most 10 resting orders" } });
+    // Tier 0 rests 25 orders (the production genesis's limit).
+    for (let i = 0; i < 25; i++) await order(node, "0.01", "buy", { kind: { kind: "limit", price: "50000" } });
+    const next = await order(node, "0.01", "buy", { kind: { kind: "limit", price: "50000" } });
+    expect(next.events[0]).toMatchObject({ type: "order_rejected", reason: { kind: "tier_order_limit", tier: 0, max: 25 } });
     node.controls.setRegion("united_states");
     const id = Number(Object.keys((await node.client.account(ME)).orders)[0]);
     const cancelled = await node.client.cancelOrder({ account: ME, order_id: id, auth: auth(node) });

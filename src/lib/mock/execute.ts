@@ -5,10 +5,12 @@ import { metaFor } from "../engine/meta";
 import type { EngineEvent, Fill, MarketId, Reject, Side } from "../engine/types";
 import { mulRounded, roundDiv } from "../fixed-rounding";
 import { feeAt, lastHold, openedAfter, profitFee } from "../holding-fee";
-import { equityOf, houseNav, houseNetNotional, marginOf } from "./accounts";
+import { equityOf, feeBaseOf, houseNav, houseNetNotional, initialMarginOf, marginFloorOf, tierOfAccount } from "./accounts";
 import { recordEmissionResult } from "./emissions";
-import { adverseBps, executionCost, exceedsSlippage, notionalOf, priceOrder, tieredMargin, USD, type Priced } from "../pricing";
-import type { Holding, MockState } from "./state";
+import { adverseBps, executionCost, exceedsSlippage, notionalOf, priceOrder, USD, type Priced } from "../pricing";
+import { accountSpreadTiers, flooredMargin } from "../volume-tier";
+import type { AccountState, Holding, MockState } from "./state";
+import { recordFill } from "./volume";
 
 export interface FillRequest {
   address: string;
@@ -30,25 +32,28 @@ const signed = (side: Side, qty: Fixed): Fixed => (side === "buy" ? qty : -qty);
 
 /**
  * The price `qty` of `market` on `side` pays for the account's current holding, as the engine prices it
- * from V52 (`pricing.ts`): the market's stress level from the mock's parameters, no toxicity add-on (the
- * mock scores none), and its close-spread ceiling. Null for a market the mock does not list.
+ * from V52 (`pricing.ts`): the account's tier's best-price bound, the market's stress level from the mock's
+ * parameters, no toxicity add-on (the mock scores none), and its close-spread ceiling. Null for a market the mock does not list.
  */
 export function liveQuote(state: MockState, address: string, market: MarketId, side: Side, qty: Fixed): Priced | null {
   const runtime = state.markets.get(market);
   if (!runtime) return null;
   const level = state.params.stressLevels[runtime.stress] ?? state.params.stressLevels[0];
   if (level === undefined) throw new Error("the mock's parameters list no stress level");
+  const account = state.account(address);
+  // From V59 the account's first band ends at its tier's share of the market's, so a higher tier trades more size at the best price.
+  const share = tierOfAccount(state, account).terms?.bestPriceShareBps;
   return priceOrder({
-    mid: runtime.mid, side, held: state.account(address).positions.get(market)?.qty ?? 0n, qty, tiers: runtime.listed.spec.spread_tiers,
+    mid: runtime.mid, side, held: account.positions.get(market)?.qty ?? 0n, qty, tiers: share === undefined ? runtime.listed.spec.spread_tiers : accountSpreadTiers(runtime.listed.spec.spread_tiers, share),
     stress: { minSpreadBps: level.min_spread_bps, sizeMultiplierBps: level.size_spread_multiplier_bps }, toxicityBps: 0,
     ceilingBps: metaFor(runtime.listed.spec.symbol).closeCeilingBps, conversion: USD,
   });
 }
 
-/** The profit fee rate a close of `holding` pays at `now`, as the engine's `close_fee_terms` reads it; the base with nothing held. */
-export function closeFeeBps(state: MockState, holding: Holding | undefined, now: number): number {
-  const { profitFeeBps, profitFeeCurve } = state.params;
-  return holding === undefined ? profitFeeBps : feeAt(profitFeeBps, profitFeeCurve, now - holding.openedAt);
+/** The profit fee rate a close of `holding` pays `account` at `now`, as the engine's `close_fee_terms` reads it: the base less the account's tier's fee discount, and the curve past it; that base with nothing held. */
+export function closeFeeBps(state: MockState, account: AccountState, holding: Holding | undefined, now: number): number {
+  const base = feeBaseOf(state, account);
+  return holding === undefined ? base : feeAt(base, state.params.profitFeeCurve, now - holding.openedAt);
 }
 
 /**
@@ -91,7 +96,7 @@ export function fillOrder(state: MockState, order: FillRequest): FillOutcome {
   const before = account.positions.get(req.market);
   const held = before?.qty ?? 0n;
   const delta = signed(req.side, req.qty);
-  const feeBps = closeFeeBps(state, before, state.now);
+  const feeBps = closeFeeBps(state, account, before, state.now);
   if (req.slippage) {
     const cap = Math.min(req.slippage.maxBps, runtime.listed.spec.max_slippage_bps);
     const bps = adverseBps(req.side, req.slippage.quoted, priced.price);
@@ -108,6 +113,7 @@ export function fillOrder(state: MockState, order: FillRequest): FillOutcome {
   }
   const holding = before ?? { qty: 0n, entry: 0n, openedAt: state.now };
   const pnl = applyToHolding(holding, delta, priced.price);
+  recordFill(account.volume, { market: req.market, held, delta, price: priced.price, now: state.now, liquidation: req.liquidation ?? false });
   const openedAt = openedAfter(held, before?.openedAt ?? null, holding.qty, state.now, lastHold(state.params.profitFeeCurve));
   if (openedAt === null) account.positions.delete(req.market);
   else account.positions.set(req.market, { ...holding, openedAt });
@@ -150,8 +156,10 @@ function riskRefusal(state: MockState, req: FillRequest, reduceOnly: boolean, de
   if (notionalOf(req.qty, runtime.mid) < fixedFromWire(spec.min_order_notional)) {
     return { kind: "invalid_order", reason: `below the minimum order of ${spec.min_order_notional} USD` };
   }
-  const current = tieredMargin(spec.margin_tiers, mulFixed(held, runtime.mid));
-  const after = marginOf(state, account) - current + tieredMargin(spec.margin_tiers, mulFixed(held + delta, runtime.mid));
+  // From V64 each band charges at least the account's tier's floor in the requirement a fill must meet.
+  const floor = marginFloorOf(state, account);
+  const current = flooredMargin(spec.margin_tiers, mulFixed(held, runtime.mid), floor);
+  const after = initialMarginOf(state, account) - current + flooredMargin(spec.margin_tiers, mulFixed(held + delta, runtime.mid), floor);
   // The check runs on the account as the fill leaves it: the spread just paid comes off equity first.
   const equity = equityOf(state, account) - spreadLoss;
   if (equity < after) return { kind: "insufficient_margin", equity: fixedToWire(equity), required: fixedToWire(after) };

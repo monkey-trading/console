@@ -7,6 +7,7 @@ import { useId } from "react";
 import { formatMonkey } from "@/lib/format";
 import type { Pending, PendingEmission } from "@/lib/monkey/pending";
 import { emissionsPosition } from "@/lib/store/emissions";
+import { describeBoost } from "@/lib/tier-view";
 
 import { useConsole } from "./ConsoleProvider";
 import { focusHeading } from "./monkey/Card";
@@ -40,6 +41,9 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
     void claim().then(() => focusHeading("monkey-title"));
   };
   const idle = !state.busy;
+  // From V68 the account's tier adds a share to its emission weight: undefined while the account is read, null from a node that does not serve it.
+  const volume = state.account?.volume;
+  const boost = volume === undefined ? (state.accountRead ? null : undefined) : volume.emissionsBoostBps === null ? null : { bps: volume.emissionsBoostBps, tier: volume.tier };
   const accrued = formatMonkey(position.accrued);
   // Not read yet: no wallet the page load may still connect, a connected one whose account, or whose closed periods, have not been read. The card then holds its claimable layout with a dash, as it does while the vault's record that decides the claim is read.
   const reading = state.wallet === null ? !state.walletDecided : !state.accountRead || (proof === null && pending.kind === "reading");
@@ -54,6 +58,9 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
         <BudgetCountdown />
       </div>
       {readOnly.note}
+      {(state.wallet !== null || !state.walletDecided) && boost !== null && (
+        <p className="mt-3 flex justify-between gap-2 text-caption"><span className="text-fg">Emissions boost</span><span className="text-fg-2">{boost === undefined ? "—" : `${describeBoost(boost.bps)} your weight, volume tier ${boost.tier}`}</span></p>
+      )}
       {reading ? (
         <div className="mt-3 text-caption">
           <p className="flex justify-between gap-2"><span className="text-fg">Accrued</span><span className="text-fg-2">—</span></p>

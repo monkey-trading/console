@@ -37,7 +37,7 @@ function refusal(status: number, text: string): EngineError {
   } catch {
     body = null;
   }
-  const { error, reason, expected } = typeof body === "object" && body !== null ? (body as { error?: unknown; reason?: unknown; expected?: unknown }) : {};
+  const { error, reason, expected, tier, requests_per_second: perSecond } = typeof body === "object" && body !== null ? (body as { error?: unknown; reason?: unknown; expected?: unknown; tier?: unknown; requests_per_second?: unknown }) : {};
   const message = typeof error === "string" ? error : `The node answered HTTP ${status}.`;
   // The node names the region refusal in `reason`; the console's reject types mirror the engine's.
   if (status === 403 && typeof reason === "string") return new EngineError(status, message, { kind: "access", reason } as EngineError["reject"]);
@@ -45,7 +45,11 @@ function refusal(status: number, text: string): EngineError {
   // `Number.isSafeInteger` held, so `expected` is a number.
   if (status === 409 && Number.isSafeInteger(expected)) return new EngineError(status, message, { kind: "invalid_nonce", expected: expected as number });
   if (status === 401) return new EngineError(status, message, { kind: message === "missing signature" ? "missing_signature" : "invalid_signature" });
-  return new EngineError(status, message);
+  const refused = new EngineError(status, message);
+  // A credited account over its volume tier's request rate: the signed body names the tier and its rate.
+  // `Number.isSafeInteger` held for both, so they are numbers.
+  if (status === 429 && Number.isSafeInteger(tier) && Number.isSafeInteger(perSecond)) refused.tierLimit = { tier: tier as number, requestsPerSecond: perSecond as number };
+  return refused;
 }
 
 /** A verified answer: its parsed JSON, the node's signed time, and the log head it was answered at. */

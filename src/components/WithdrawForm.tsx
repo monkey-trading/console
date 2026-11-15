@@ -4,9 +4,10 @@
 
 import { useId, useState } from "react";
 
+import { withdrawableOf, withdrawCause } from "@/lib/account-figures";
 import { formatFixedPlaces } from "@/lib/fixed";
 import { parseAmount, withdraw } from "@/lib/store/actions";
-import { MIN_WITHDRAWAL, withdrawableNow, withdrawLimitCause } from "@/lib/vault";
+import { MIN_WITHDRAWAL } from "@/lib/vault";
 
 import { AMOUNT_INPUT } from "./amount-input";
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -23,8 +24,8 @@ export function WithdrawForm() {
   const [amount, setAmount] = useState("");
   const id = useId();
   const gate = useSignGate(`${id}-gate`);
-  const max = account ? withdrawableNow(account.balance, account.equity, account.margin, account.unfinalised) : 0n;
-  const cause = account ? withdrawLimitCause(account.balance, account.equity, account.margin, account.unfinalised) : null;
+  const max = account ? withdrawableOf(account) : 0n;
+  const cause = account ? withdrawCause(account) : null;
   const value = parseAmount(amount);
   const valid = value !== null && value >= MIN_WITHDRAWAL && value <= max;
   return (

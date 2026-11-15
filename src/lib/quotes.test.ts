@@ -53,13 +53,13 @@ describe("closingPrice", () => {
 
 describe("ticketPrices", () => {
   it("shows a live node's bid and offer for the size, sends the price on the order's side, and spreads them over the mark", () => {
-    expect(live("3", "buy")).toEqual({ bid: f("99.7"), offer: f("100.3"), price: f("100.3"), exactClose: false, spreadTenths: 600, problem: null, problemIsSize: false });
+    expect(live("3", "buy")).toEqual({ bid: f("99.7"), offer: f("100.3"), price: f("100.3"), exactClose: false, toxicityBps: 0, spreadTenths: 600, problem: null, problemIsSize: false });
     expect(live("3", "sell")).toMatchObject({ price: f("99.7"), problem: null });
   });
 
   it("prices an order that closes exactly the whole position at the node's close quote, on its side only, and spreads to the tenth of a bp", () => {
     // The step covering 2 would sell at 99.7; the close quote is the exact 99.8.
-    expect(live("2", "sell")).toEqual({ bid: f("99.8"), offer: f("100.3"), price: f("99.8"), exactClose: true, spreadTenths: 500, problem: null, problemIsSize: false });
+    expect(live("2", "sell")).toEqual({ bid: f("99.8"), offer: f("100.3"), price: f("99.8"), exactClose: true, toxicityBps: 0, spreadTenths: 500, problem: null, problemIsSize: false });
     expect(live("2", "buy")).toMatchObject({ bid: f("99.8"), price: f("100.3"), exactClose: false });
     expect(live("1.5", "sell")).toMatchObject({ price: f("99.7"), exactClose: false });
     // 0.08 apart on a mark of 100.01 is 7.99 bps, truncated to 79 tenths.
@@ -67,7 +67,7 @@ describe("ticketPrices", () => {
   });
 
   it("says why a live order has no price: no quote yet, an account not yet credited, no market price, too large, or declined", () => {
-    expect(live("1", "buy", null)).toEqual({ bid: null, offer: null, price: null, exactClose: false, spreadTenths: null, problem: "Waiting for the node's executable quote.", problemIsSize: false });
+    expect(live("1", "buy", null)).toEqual({ bid: null, offer: null, price: null, exactClose: false, toxicityBps: 0, spreadTenths: null, problem: "Waiting for the node's executable quote.", problemIsSize: false });
     expect(live("1", "buy", null, UNCREDITED).problem).toBe("The node quotes an account once it has credited it: deposit first.");
     expect(live("1", "buy", null, "unknown market 9").problem).toBe("The node will not quote this market: unknown market 9.");
     expect(live("1", "buy", { ...QUOTE, unavailable: { kind: "market_closed" }, ask: [], bid: [] })).toMatchObject({ price: null, problem: "The market is closed.", problemIsSize: false });
@@ -76,7 +76,7 @@ describe("ticketPrices", () => {
   });
 
   it("shows the mock's own estimate, which needs no quote", () => {
-    expect(ticketPrices({ live: false, quote: null, quoteError: null, preview: preview("1"), side: "buy", mark: f("100") })).toEqual({ bid: f("99"), offer: f("101"), price: f("101"), exactClose: false, spreadTenths: 2_000, problem: null, problemIsSize: false });
+    expect(ticketPrices({ live: false, quote: null, quoteError: null, preview: preview("1"), side: "buy", mark: f("100") })).toEqual({ bid: f("99"), offer: f("101"), price: f("101"), exactClose: false, toxicityBps: 0, spreadTenths: 2_000, problem: null, problemIsSize: false });
   });
 });
 
@@ -122,5 +122,33 @@ describe("a covering step the node's ladder declines", () => {
     expect(live("6", "buy", capped).problemIsSize).toBe(true);
     const nothingFits: MarketQuote = { ...QUOTE, ask: [{ qty: "1", price: "100.1", declined: { kind: "insufficient_margin", equity: "0", required: "40" } }] };
     expect(live("0.5", "buy", nothingFits).problem).toBe("Not enough equity to open a position here.");
+  });
+});
+
+describe("the toxicity add-on and the tier's leverage in a live quote", () => {
+  it("names the add-on the signed quote carries, so it follows each quote, and none from a quote with none", () => {
+    expect(live("3", "buy", { ...QUOTE, toxicity_bps: 2 }).toxicityBps).toBe(2);
+    expect(live("3", "buy", { ...QUOTE, toxicity_bps: 0 }).toxicityBps).toBe(0);
+    expect(live("3", "buy").toxicityBps).toBe(0);
+    expect(live("1", "buy", null).toxicityBps).toBe(0);
+  });
+
+  it("treats a weekend-margin decline as a size problem like a margin one, naming what sets the leverage", () => {
+    const limits = { tier: 0, bestPriceBound: null, leverage: f("13.333333333"), weekendSets: true, orderLimit: 25, resting: 0 };
+    const weekend = { kind: "weekend_margin" as const, equity: "1", required: "9" };
+    const ladder: MarketQuote = { ...QUOTE, ask: [{ qty: "2", price: "100.1" }, { qty: "30", price: "100.5", declined: weekend }] };
+    const result = ticketPrices({ live: true, quote: ladder, quoteError: null, preview: preview("29"), side: "buy", mark: f("100"), limits });
+    expect(result.problemIsSize).toBe(true);
+    expect(result.problem).toBe("The largest size your equity opens here is ≈ 2 contracts. Try a smaller size. The weekend margin applies here, which allows up to 13x.");
+  });
+
+  it("explains a margin decline with the leverage the account's tier allows in the market", () => {
+    const limits = { tier: 0, bestPriceBound: null, leverage: f("20"), weekendSets: false, orderLimit: 25, resting: 0 };
+    const margin = { kind: "insufficient_margin" as const, equity: "1", required: "9" };
+    const ladder: MarketQuote = { ...QUOTE, ask: [{ qty: "2", price: "100.1" }, { qty: "30", price: "100.5", declined: margin }] };
+    const withLimits = ticketPrices({ live: true, quote: ladder, quoteError: null, preview: preview("29"), side: "buy", mark: f("100"), limits });
+    expect(withLimits.problem).toBe("The largest size your equity opens here is ≈ 2 contracts. Try a smaller size. Volume tier 0 allows up to 20x here.");
+    const none: MarketQuote = { ...QUOTE, ask: [{ qty: "1", price: "100.1", declined: margin }] };
+    expect(ticketPrices({ live: true, quote: none, quoteError: null, preview: preview("1"), side: "buy", mark: f("100"), limits }).problem).toBe("Not enough equity to open a position here. Volume tier 0 allows up to 20x here.");
   });
 });

@@ -39,6 +39,7 @@ export function houseParamsOf(entry: Omit<SetParams, "house_total_cap_floor"> & 
     totalCapFloor: fixedFromWire(entry.house_total_cap_floor ?? "0"),
     stressLevels: entry.stress_levels ?? [],
     profitFeeCurve: entry.profit_fee_curve ?? [],
+    ...(entry.volume_tiers === undefined ? {} : { volumeTiers: entry.volume_tiers }),
     seq,
   };
 }

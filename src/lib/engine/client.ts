@@ -13,6 +13,12 @@ import type { StatsReads } from "./stats-types";
 import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 
+/** What a 429 for an account over its volume tier's request rate names: the tier and the requests a second it admits. */
+export interface TierRateLimit {
+  tier: number;
+  requestsPerSecond: number;
+}
+
 /**
  * An error response from the node: the HTTP status and the `{ "error": … }` message, plus the typed
  * refusal when the engine rejected a sequenced command.
@@ -20,6 +26,8 @@ import type { MarkPage, MarkResolution } from "./mark-types";
 export class EngineError extends Error {
   readonly status: number;
   readonly reject: Reject | null;
+  /** Set on a 429 that names the account's volume tier; null on every other error. */
+  tierLimit: TierRateLimit | null = null;
 
   constructor(status: number, message: string, reject: Reject | null = null, options?: ErrorOptions) {
     super(message, options);

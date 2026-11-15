@@ -2,7 +2,10 @@
 
 import { mulFixed, type Fixed } from "../fixed";
 import { tieredMargin } from "../pricing";
+import { discountedBase } from "../holding-fee";
+import { decodeTiers, flooredMargin, type TierTerms } from "../volume-tier";
 import type { AccountState, MockState } from "./state";
+import { tierNow } from "./volume";
 
 /** Unrealised profit and loss of the account's positions at the index. */
 export function unrealised(state: MockState, account: AccountState): Fixed {
@@ -20,6 +23,39 @@ export function marginOf(state: MockState, account: AccountState): Fixed {
   for (const [id, held] of account.positions) {
     const market = state.markets.get(id);
     if (market) total += tieredMargin(market.listed.spec.margin_tiers, mulFixed(held.qty, market.mid));
+  }
+  return total;
+}
+
+/** The volume tier table in the mock's parameters; empty when they name none. */
+export function tierTable(state: MockState): TierTerms[] {
+  return decodeTiers(state.params.volumeTiers ?? []) ?? [];
+}
+
+/** The account's volume tier now and its terms; tier 0 with no terms when the parameters name no table. */
+export function tierOfAccount(state: MockState, account: AccountState, at: number = state.now): { tier: number; terms: TierTerms | null } {
+  const table = tierTable(state);
+  const tier = tierNow(account.volume, table, at);
+  return { tier, terms: table[tier] ?? null };
+}
+
+/** The base profit fee the account pays past the curve: the parameters' base less its tier's fee discount (V68, `discounted_base_bps`). */
+export function feeBaseOf(state: MockState, account: AccountState): number {
+  return discountedBase(state.params.profitFeeBps, tierOfAccount(state, account).terms?.feeDiscountBps ?? 0);
+}
+
+/** The margin floor of the account's tier, in bps: each margin band charges at least this in the initial requirement. */
+export function marginFloorOf(state: MockState, account: AccountState): number {
+  return tierOfAccount(state, account).terms?.marginFloorBps ?? 0;
+}
+
+/** The account's initial requirement: its margin with each band charged at least its tier's floor, which fills that add risk and withdrawals must leave equity above. */
+export function initialMarginOf(state: MockState, account: AccountState): Fixed {
+  const floor = marginFloorOf(state, account);
+  let total = 0n;
+  for (const [id, held] of account.positions) {
+    const market = state.markets.get(id);
+    if (market) total += flooredMargin(market.listed.spec.margin_tiers, mulFixed(held.qty, market.mid), floor);
   }
   return total;
 }

@@ -2,11 +2,13 @@
 
 import { absFixed, bpsOf, divFixed, divFixedDown, fixedFromWire, fixedToWire, mulFixed, mulFixedDown, parseFixed, SCALE, type Fixed } from "./fixed";
 import { capFor } from "./house";
-import type { MarketView, Side } from "./engine/types";
+import type { MarketView, Side, SpreadTier } from "./engine/types";
 import { describeReject } from "./messages";
 import type { AccountModel, MarketModel } from "./models";
-import { CALM, conversionAt, executionCost, growthOf, priceOrder, slicedBps, tieredMargin, type StressTerms } from "./pricing";
+import { CALM, conversionAt, executionCost, growthOf, priceOrder, slicedBps, type StressTerms } from "./pricing";
 import { tenthBpsOfValue } from "./spread-bands";
+import { requirementOf } from "./account-figures";
+import { flooredMargin } from "./volume-tier";
 
 /** The decimal places of a size: a millionth of a unit is the smallest step. */
 const QTY_PLACES = 6;
@@ -53,6 +55,10 @@ export interface TicketInput {
   stress?: StressTerms;
   /** The profit fee rate a close of the held position pays now, which a reversal's realised gain pays; the full fee without it, the most a close can pay. */
   closeFeeBps?: number;
+  /** The least rate each margin band charges in the account's initial requirement at its volume tier (V64), in bps; zero charges the market's own. */
+  marginFloorBps?: number;
+  /** The market's spread bands as the account pays them, its first band ending at its tier's best-price bound (V59); the market's listed bands without them. */
+  spreadTiers?: readonly SpreadTier[];
 }
 
 /** The price an order fills at. */
@@ -236,16 +242,18 @@ export function previewTicket(input: TicketInput): TicketPreview {
   // `usdConverter` at the mark is null only for want of an FX mark, which `conversionAt` reads the same way.
   if (conversion === null) throw new Error(`no conversion at the mark for market ${market.id}, though a USD converter exists`);
   // An empty size prices the smallest order, so the ticket still shows a bid and an offer.
-  const priced = (s: Side) => priceOrder({ mid: mark, side: s, held: current, qty: qty > 0n ? qty : QTY_STEP, tiers: spec.spread_tiers, stress: input.stress ?? CALM, toxicityBps: 0, ceilingBps: market.ceilingBps, conversion });
+  const priced = (s: Side) => priceOrder({ mid: mark, side: s, held: current, qty: qty > 0n ? qty : QTY_STEP, tiers: input.spreadTiers ?? spec.spread_tiers, stress: input.stress ?? CALM, toxicityBps: 0, ceilingBps: market.ceilingBps, conversion });
   const [offer, bid] = [priced("buy"), priced("sell")];
   const mine = side === "buy" ? offer : bid;
   const priceOf = (p: typeof mine) => (p.kind === "priced" ? p.price : null);
   const quote: Quote | null = mine.kind === "priced" ? { price: mine.price } : null;
   const delta = side === "buy" ? qty : -qty;
   const grows = growthOf(current, delta).grows;
-  const before = tieredMargin(spec.margin_tiers, usdAtMark(current));
-  const after = tieredMargin(spec.margin_tiers, usdAtMark(current + delta));
-  const marginAfter = (account?.margin ?? 0n) - before + after;
+  const floor = input.marginFloorBps ?? 0;
+  const before = flooredMargin(spec.margin_tiers, usdAtMark(current), floor);
+  const after = flooredMargin(spec.margin_tiers, usdAtMark(current + delta), floor);
+  // From V64 the account's own initial requirement already charges every position at the tier's floor.
+  const marginAfter = (account === null ? 0n : requirementOf(account)) - before + after;
   // The rate the whole resulting position pays, the basis the required margin and the implied leverage use.
   const resulting = absFixed(usdAtMark(current + delta));
   const positionRate = resulting > 0n ? Number((after * 10_000n) / resulting) : markNotional > 0n ? rate : null;

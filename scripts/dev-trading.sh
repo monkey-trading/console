@@ -12,6 +12,12 @@
 # a quote fresh for 10 s on BTC-USD, ETH-USD and EUR-USD, so the index holds between a quote and its
 # fill, and keeps EUR-USD open every day.
 #
+# TRADING_SCENARIO=tiers runs the volume tier scenario instead, on a node whose genesis names a tier table
+# a fresh wallet climbs in a few minutes (scripts/live/dev-volume-tier.live.test.ts): a fresh wallet at tier 0
+# sees its leverage, best-price size and order limit at the ticket, is stopped past each, trades to tier 1
+# and withdraws, its fee discount, financing discount and emissions boost are read, and each figure the panel, the ticket and the
+# withdraw form show equals the account read.
+#
 # Needs Node, curl, python3 (3.11 or later), and either ENGINE_BIN (a built `engine` binary with
 # the access_source example built beside it) with ENGINE_DIR (the engine checkout holding
 # config/dev.toml), or just ENGINE_DIR to build and run them with Cargo; set CARGO_CMD to prefix
@@ -32,6 +38,12 @@ else
   engine_bin="$target_dir/debug/engine"
 fi
 access_source="$(dirname "$engine_bin")/examples/access_source"
+scenario="${TRADING_SCENARIO:-trading}"
+case "$scenario" in
+  trading) test_file=scripts/live/dev-trading.live.test.ts ;;
+  tiers) test_file=scripts/live/dev-volume-tier.live.test.ts ;;
+  *) echo "FAIL: TRADING_SCENARIO is trading or tiers, not $scenario" >&2; exit 1 ;;
+esac
 api_port="${TRADING_API_PORT:-18080}"
 access_port="${TRADING_ACCESS_PORT:-28846}"
 metrics_port="${TRADING_METRICS_PORT:-19464}"
@@ -60,14 +72,14 @@ api="https://127.0.0.1:$api_port"
 # and EIP-712 client auth, so the node verifies every signed request the console sends it. The
 # access source is the synthetic loopback fixture that clears every screening, as the local stack
 # runs it.
-python3 - "$engine_dir/config/dev.toml" "$work/node.toml" "$api_port" "$access_port" "$metrics_port" <<'PY' || { echo "FAIL: could not write the node config" >&2; exit 1; }
+python3 - "$engine_dir/config/dev.toml" "$work/node.toml" "$api_port" "$access_port" "$metrics_port" "$scenario" <<'PY' || { echo "FAIL: could not write the node config" >&2; exit 1; }
 import json
 import re
 import sys
 import tomllib
 from pathlib import Path
 
-src, out, api, access, metrics = sys.argv[1:]
+src, out, api, access, metrics, scenario = sys.argv[1:]
 cfg = tomllib.loads(Path(src).read_text())
 cfg["node"]["listen"] = f"127.0.0.1:{api}"
 cfg["node"]["auth"] = "eip712"
@@ -79,6 +91,18 @@ for market in cfg["genesis"]["markets"]:
     # EUR-USD trades every day here, so the scenario runs on a weekend too.
     if market["id"] == 10:
         market["schedule"] = {"kind": "always_open"}
+if scenario == "tiers":
+    # The production genesis's shares, margin floors (5%, 2%, none) and the shape of its limits, with thresholds a fresh
+    # wallet reaches in minutes: $50,000 of counted volume in a day takes tier 1, $5,000,000 tier 2. The orders a tier
+    # rests and the requests a second it sends are small, so a few orders reach the limit and a short burst reaches the rate.
+    # From V68 tiers 1 and 2 take 10% and 20% off the profit fee, 5% and 10% off the financing markup, and weigh emissions 1.1 and 1.25 times.
+    cfg["genesis"]["params"]["volume_tiers"] = [
+        {"threshold": "0", "day_divisor": 1, "best_price_share_bps": 2500, "margin_floor_bps": 500, "max_resting_orders": 3, "requests_per_second": 3},
+        {"threshold": "50000", "day_divisor": 1, "best_price_share_bps": 5000, "margin_floor_bps": 200, "max_resting_orders": 5, "requests_per_second": 6,
+         "fee_discount_bps": 1000, "financing_discount_bps": 500, "emissions_boost_bps": 1000},
+        {"threshold": "5000000", "day_divisor": 1, "best_price_share_bps": 10000, "max_resting_orders": 10, "requests_per_second": 12,
+         "fee_discount_bps": 2000, "financing_discount_bps": 1000, "emissions_boost_bps": 2500},
+    ]
 cfg["metrics"]["listen"] = f"127.0.0.1:{metrics}"
 # Anvil account 0, the published access-source test authority the fixture signs with.
 cfg["access"] = {"source": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "endpoint": f"http://127.0.0.1:{access}",
@@ -144,12 +168,16 @@ done
 cd "$root"
 # The dev node's certificate is self-signed; the scenario's proxy forwards to it without checking.
 if ! ENGINE_NODE_URL="$api" ENGINE_BIN="$engine_bin" NODE_CONFIG="$node_config" SCENARIO_WORK="$work" \
-  nice -n 10 npx vitest run --config vitest.live.config.ts scripts/live/dev-trading.live.test.ts; then
+  nice -n 10 npx vitest run --config vitest.live.config.ts "$test_file"; then
   # The work directory is removed on exit, so a failed run prints the logs that explain it.
   echo "--- the last lines of $work/node.log ---" >&2
   tail -n 40 "$work/node.log" >&2
   echo "--- the last lines of $work/access-source.log ---" >&2
   tail -n 20 "$work/access-source.log" >&2
   exit 1
+fi
+if [[ "$scenario" == tiers ]]; then
+  echo "PASS: a fresh wallet's tier 0 limits at the ticket, stopped past its leverage and order limit and over its request rate, traded to tier 1 and withdrew, every figure equal to the account read"
+  exit 0
 fi
 echo "PASS: funded, declared, filled at the streamed quote with the slippage bound, rested and cancelled, closed reduce only, priced partial closes as bounds and whole closes exactly in BTC-USD and EUR-USD, and traded through a close-out"

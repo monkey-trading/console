@@ -4,6 +4,7 @@ import { metaFor } from "./engine/meta";
 import type { AccountView, CloseFee, EligibilityClass, HouseView, MarketId, MarketView, PriceRules, RestingOrder } from "./engine/types";
 import { fixedFromWire, parseFixed, type Fixed } from "./fixed";
 import { decodeHouseScan, type HouseScan } from "./house-scan";
+import { decodeVolume, type VolumeModel } from "./volume-tier";
 
 export interface MarketModel {
   view: MarketView;
@@ -80,6 +81,47 @@ export interface AccountModel {
   margin: Fixed;
   positions: PositionModel[];
   orders: RestingOrder[];
+  /** From V64, what fills and withdrawals must leave equity above, and what the account may withdraw; absent from a node that predates it, and from the mock before its first read. */
+  requirements?: Requirements;
+  /** From V59, the volume tier and its progress; absent from a node that predates it. */
+  volume?: VolumeModel;
+  /** From V54, the toxicity tier that applies and the spread it adds, in bps; absent from a node that predates it. */
+  toxicity?: ToxicityModel;
+}
+
+/** The margin standing of the account read: the initial requirement (at the tier's margin floor), the maintenance requirement a close-out reads, the withdrawable cash and each market's maximum leverage. */
+export interface Requirements {
+  initialMargin: Fixed;
+  maintenanceMargin: Fixed;
+  withdrawable: Fixed;
+  maxLeverage: ReadonlyMap<MarketId, Fixed>;
+}
+
+/** An account's toxicity as its read gives it: the tier that applies (counted from 1, 0 for none) and the spread it adds to every price, in bps. */
+export interface ToxicityModel {
+  tier: number;
+  addOnBps: number;
+}
+
+/** The V64 margin standing the read gave, or undefined when the node predates it or a figure is malformed. */
+function decodeRequirements(view: AccountView): Requirements | undefined {
+  const initial = parseFixed(view.initial_margin ?? "");
+  const maintenance = parseFixed(view.maintenance_margin ?? "");
+  const withdrawable = parseFixed(view.withdrawable ?? "");
+  if (initial === null || maintenance === null || withdrawable === null) return undefined;
+  const maxLeverage = new Map<MarketId, Fixed>();
+  for (const [market, value] of Object.entries(view.max_leverage ?? {})) {
+    const leverage = parseFixed(value);
+    if (leverage === null || !Number.isSafeInteger(Number(market))) return undefined;
+    maxLeverage.set(Number(market), leverage);
+  }
+  return { initialMargin: initial, maintenanceMargin: maintenance, withdrawable, maxLeverage };
+}
+
+/** The V54 toxicity standing the read gave, or undefined when the node predates it or it is malformed. */
+function decodeToxicity(view: AccountView): ToxicityModel | undefined {
+  const found = view.toxicity;
+  return found !== undefined && Number.isSafeInteger(found.tier) && Number.isSafeInteger(found.add_on_bps) ? { tier: found.tier, addOnBps: found.add_on_bps } : undefined;
 }
 
 export function decodeAccount(view: AccountView): AccountModel {
@@ -90,7 +132,16 @@ export function decodeAccount(view: AccountView): AccountModel {
     margin: fixedFromWire(view.margin),
     positions: Object.entries(view.positions).map(([id, p]) => ({ market: Number(id), qty: fixedFromWire(p.qty), entry: fixedFromWire(p.entry), closeout: decodeCloseout(view, Number(id)), closeFee: decodeCloseFee(view, Number(id)) })),
     orders: Object.values(view.orders),
+    ...optional("requirements", decodeRequirements(view)),
+    ...optional("volume", decodeVolume(view.volume) ?? undefined),
+    ...optional("toxicity", decodeToxicity(view)),
   };
+}
+
+/** `{ key: value }`, or nothing for an absent value, so a model from a node that predates a field has no key for it. */
+function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
+  // A computed key widens to `string`; the object has exactly the one key `K`.
+  return value === undefined ? {} : ({ [key]: value } as { [P in K]?: V });
 }
 
 export interface HouseModel {

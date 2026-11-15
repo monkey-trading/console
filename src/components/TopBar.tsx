@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { freeCash } from "@/lib/account-figures";
 import { formatFixedPlaces, type Fixed } from "@/lib/fixed";
 import { currentMark, PAGES } from "@/lib/nav";
 import { formatClock } from "@/lib/time";
@@ -25,12 +26,11 @@ export function TopBar() {
   const { account, now, paused } = useConsole();
   const { store, node } = useSession();
   const pathname = usePathname();
-  const free = account ? account.equity - account.margin : 0n;
   const stats: [string, string, string][] = [
     ["Equity", account ? usd(account.equity) : "—", ""],
     ["Balance", account ? usd(account.balance) : "—", "hidden md:block"],
     ["Margin", account ? usd(account.margin) : "—", "hidden sm:block"],
-    ["Free", account ? usd(free < 0n ? 0n : free) : "—", "hidden lg:block"],
+    ["Free", account ? usd(freeCash(account)) : "—", "hidden lg:block"],
   ];
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-4 py-2 sm:px-6">

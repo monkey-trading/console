@@ -10,6 +10,7 @@
 import type { EngineEvent } from "../engine/types";
 import { fixedToWire, type Fixed } from "../fixed";
 import { MONKEY_UNIT } from "../format";
+import { tierOfAccount } from "./accounts";
 import { noteLossClose, notePeriodClose } from "./monkey";
 import { PERIOD_MS } from "./monkey-state";
 import type { MockState } from "./state";
@@ -41,6 +42,13 @@ function weightOf(result: { losses: Fixed; writtenOff: Fixed }): Fixed {
   return weight > 0n ? weight : 0n;
 }
 
+/** The weight grown by the account's tier's emissions boost, rounded down, with the tier read at the period's end `at`, however late the tick that closes it (V68: 2,500 bps weighs 1.25 times). */
+function boosted(state: MockState, address: string, weight: Fixed, at: number): Fixed {
+  const account = state.accounts.get(address.toLowerCase());
+  const boost = account === undefined ? 0 : tierOfAccount(state, account, at).terms?.emissionsBoostBps ?? 0;
+  return weight + (weight * BigInt(boost)) / 10_000n;
+}
+
 /**
  * Closes every period the clock has fully passed and returns the events: each account with weight
  * is allocated its share of the budget, truncated toward zero; an account with negative cash
@@ -54,7 +62,7 @@ export function closeEmissionPeriods(state: MockState): EngineEvent[] {
   while (state.emission.period < nowPeriod) {
     const { period, results } = state.emission;
     const weights = [...results.values()]
-      .map((result) => ({ address: result.address, weight: weightOf(result) }))
+      .map((result) => ({ address: result.address, weight: boosted(state, result.address, weightOf(result), state.monkey.startMs + (period + 1) * EMISSION_PERIOD_MS) }))
       .filter((entry) => entry.weight > 0n && (state.accounts.get(entry.address.toLowerCase())?.balance ?? 0n) >= 0n);
     const total = weights.reduce((sum, entry) => sum + entry.weight, 0n);
     let allocated = 0n;

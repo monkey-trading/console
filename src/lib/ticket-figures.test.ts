@@ -125,6 +125,29 @@ describe("positionClose", () => {
   });
 });
 
+describe("the account's fee discount at a close, from V68", () => {
+  /** A holding whose curve has run, so a close pays the base: the parameters' 10% less the tier's discount. */
+  const discounted = (feeDiscountBps: number | null): AccountModel => ({
+    ...HOLDING,
+    volume: { tier: 2, matured: 0n, pending: 0n, progress: [], bestPriceBounds: new Map(), maxRestingOrders: null, requestsPerSecond: null, feeDiscountBps, financingDiscountBps: null, emissionsBoostBps: null },
+  });
+
+  it("runs the rate from the discounted base under the same curve, so a hold the curve prices higher still pays the curve", async () => {
+    const market = await btcAt(101_000);
+    const at = (now: number, d: number | null) => positionFeeNow(state(market, true, { now, account: discounted(d) }), HOLDING.positions[0] ?? (() => { throw new Error("no position"); })())?.feeBps;
+    expect([at(OPENED + 900_000, 2_000), at(OPENED + 900_000, 1_000), at(OPENED + 900_000, null)]).toEqual([800, 900, 1_000]);
+    expect(at(OPENED + 60_000, 2_000)).toBe(6_421);
+  });
+
+  it("gives a whole close's preview the discounted rate, and the same one for close-all's figures", async () => {
+    const market = await btcAt(101_000);
+    const base = state(market, true, { now: OPENED + 900_000, account: discounted(2_000) });
+    const { close } = ticketFigures(base, market, order("2"));
+    expect(close).toMatchObject({ feeBps: 800 });
+    expect(positionClose(base, market, HOLDING.positions[0] ?? (() => { throw new Error("no position"); })(), q("100979.8")).close).toMatchObject({ feeBps: 800 });
+  });
+});
+
 describe("positionFeeNow", () => {
   it("runs the rate on the curve while the house state is current, and takes the account read's otherwise", async () => {
     const market = await btcAt(101_000);
@@ -145,5 +168,66 @@ describe("the house state's terms on the trading surfaces", () => {
     expect(at({ houseParams: null, pricingCurrent: false, houseStateStatus: "unavailable" })).toEqual([null, "This node does not serve its parameters."]);
     expect(at({ pricingCurrent: false, houseStateStatus: "read" })).toEqual([null, "Reading the node's parameters again after a change."]);
     expect(at({ pricingCurrent: false, houseStateStatus: "failed" })).toEqual([null, "The node's parameters changed and could not be read again; the console reads them again by itself."]);
+  });
+});
+
+describe("the account's volume tier at the ticket", () => {
+  const TABLE = [
+    { threshold: "0", day_divisor: 1, best_price_share_bps: 2500, margin_floor_bps: 500, max_resting_orders: 25, requests_per_second: 2 },
+    { threshold: "1000000", day_divisor: 2, best_price_share_bps: 5000, margin_floor_bps: 200, max_resting_orders: 50, requests_per_second: 5 },
+  ];
+  const tiered = (resting: number): AccountModel => ({
+    ...HOLDING, positions: [], margin: 0n,
+    orders: Array.from({ length: resting }, (_, i) => ({ order_id: i + 1, client_id: i, market: 1, side: "buy", qty: "1", kind: { kind: "limit", price: "1" }, reduce_only: false })),
+    requirements: { initialMargin: 0n, maintenanceMargin: 0n, withdrawable: fixedFromInt(50_000), maxLeverage: new Map([[1, fixedFromInt(20)]]) },
+    volume: { tier: 0, matured: 0n, pending: 0n, progress: [{ capped: 0n, days: 0 }, { capped: 0n, days: 0 }], bestPriceBounds: new Map([[1, fixedFromInt(500_000)]]), maxRestingOrders: 25, requestsPerSecond: 2, feeDiscountBps: null, financingDiscountBps: null, emissionsBoostBps: null },
+  });
+  const params = { ...PARAMS, volumeTiers: TABLE };
+
+  it("gives the tier's limits in the market and stops a resting order at the limit, never a market order", async () => {
+    const market = await btcAt(101_000);
+    const resting = { ...order("1"), side: "buy" as const, resting: true, triggerPrice: q("100000") };
+    const full = ticketFigures(state(market, true, { account: tiered(25), houseParams: params }), market, resting);
+    expect(full.limits).toMatchObject({ tier: 0, bestPriceBound: fixedFromInt(500_000), leverage: fixedFromInt(20), orderLimit: 25, resting: 25 });
+    expect(full.orderProblem).toContain("the most at volume tier 0");
+    expect(ticketFigures(state(market, true, { account: tiered(24), houseParams: params }), market, resting).orderProblem).toBeNull();
+    expect(ticketFigures(state(market, true, { account: tiered(25), houseParams: params }), market, { ...order("1"), side: "buy" }).orderProblem).toBeNull();
+  });
+
+  it("prices the mock's order at the account's first band and holds it to the tier's margin floor", async () => {
+    const market = await btcAt(100_000);
+    // 10 BTC is $1M: past the $500k a tier-0 account pays the first band for, so it costs more than at the listed band.
+    const at = (extra: Partial<ConsoleState>) => ticketFigures(state(market, false, { account: tiered(0), ...extra }), market, { ...order("10"), side: "buy" });
+    const tier0 = at({ houseParams: params });
+    const listed = at({ houseParams: PARAMS });
+    expect(tier0.prices.price).toBeGreaterThan(listed.prices.price ?? 0n);
+    // $1M at the 5% floor needs $50k; at BTC's own 2% to $100k and 5% beyond it needs far less.
+    expect(tier0.preview.marginAdded).toBe(fixedFromInt(50_000));
+    expect(listed.preview.marginAdded).toBeLessThan(tier0.preview.marginAdded);
+  });
+
+  it("names the tier's leverage in the in-browser node's margin refusal, and the weekend margin when it sets it", async () => {
+    const market = await btcAt(100_000);
+    // $10,000 of equity at the 5% floor opens $200,000: 3 BTC is $300,000.
+    const poor = { ...tiered(0), equity: fixedFromInt(10_000), balance: fixedFromInt(10_000) };
+    const refused = ticketFigures(state(market, false, { account: poor, houseParams: params }), market, { ...order("3"), side: "buy" });
+    expect(refused.preview.problems).toContain("Not enough equity for the margin this needs. Volume tier 0 allows up to 20x here.");
+    const weekend = { ...market, view: { ...market.view, weekend_margin: { weekend_margin_bps: 750, from: 0, close: 7_200_000, reopen: 1e13 } } };
+    const held = ticketFigures(state(weekend, false, { account: poor, houseParams: params, now: 1_000 }), weekend, { ...order("3"), side: "buy" });
+    expect(held.preview.problems).toContain("Not enough equity for the margin this needs. The weekend margin applies here, which allows up to 20x.");
+  });
+
+  it("gives the account's own spread bands, its first band ending at its best-price size, and the listed ones before the table is read", async () => {
+    const market = await btcAt(100_000);
+    const own = ticketFigures(state(market, false, { account: tiered(0), houseParams: params }), market, order("1"));
+    expect([own.ownBands, own.spreadTiers[0]]).toEqual([true, expect.objectContaining({ up_to: "500000" })]);
+    const listed = ticketFigures(state(market, false, { account: tiered(0), houseParams: PARAMS }), market, order("1"));
+    expect([listed.ownBands, listed.spreadTiers]).toEqual([false, market.view.spread_tiers]);
+  });
+
+  it("has no limits from a node that predates volume tiers", async () => {
+    const market = await btcAt(101_000);
+    const figures = ticketFigures(state(market, true), market, order("1"));
+    expect([figures.limits, figures.orderProblem]).toEqual([null, null]);
   });
 });

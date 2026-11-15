@@ -46,6 +46,12 @@ describe("setParamsOf", () => {
     expect(setParamsOf(cmd, [])).toEqual({ ...PARAMS_FIELDS, stress_levels, profit_fee_curve });
   });
 
+  it("carries the volume tiers the command names, which the account panel and the ticket read their terms from", () => {
+    const volume_tiers = [{ threshold: "0", day_divisor: 1, best_price_share_bps: 2500, margin_floor_bps: 500, max_resting_orders: 25, requests_per_second: 2 }];
+    const cmd = { type: "signed_admin", command: { ...SET_PARAMS, volume_tiers } } as unknown as EngineCommand;
+    expect(setParamsOf(cmd, [])).toMatchObject({ volume_tiers });
+  });
+
   it("answers null for other commands", () => {
     const upsert = { type: "admin", action: "upsert_market", id: 1 } as unknown as EngineCommand;
     const tick = { type: "tick" } as EngineCommand;

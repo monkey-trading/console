@@ -16,7 +16,8 @@ import { closingPrice } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
 import { closeAll } from "@/lib/store/batch-actions";
 import { previewTicket, unrealisedPnl } from "@/lib/ticket";
-import { currentParams, positionClose, positionFeeNow } from "@/lib/ticket-figures";
+import { accountFeeTerms, currentParams, positionClose, positionFeeNow } from "@/lib/ticket-figures";
+import { accountPricing } from "@/lib/tier-view";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
@@ -46,6 +47,8 @@ export function PositionsView() {
   const { account, markets, busy, signatures, quotes, house, quoted: asked, notices, now } = snapshot;
   // The house state's terms, only while current: a change to the fee may otherwise be unread.
   const terms = currentParams(snapshot);
+  // What a close pays: the base less the account's tier's fee discount (V68), under the same curve.
+  const feeTerms = accountFeeTerms(snapshot);
   const { store } = useSession();
   const id = useId();
   const readOnly = useReadOnlyNote(id, "Close");
@@ -64,10 +67,10 @@ export function PositionsView() {
     const quote = quotes[p.market];
     // The rate a close pays now runs on the node's clock; before V55 a close pays the base.
     const fee = positionFeeNow(snapshot, p);
-    const feeBps = fee?.feeBps ?? terms?.profitFeeBps ?? null;
+    const feeBps = fee?.feeBps ?? feeTerms?.profitFeeBps ?? null;
     const quoted = signatures === "checked"
       ? (quote === undefined ? null : closingPrice(quote, side, qty))
-      : market === undefined ? null : (previewTicket({ market, side, qty, slippageBps: CLOSE_SLIPPAGE_BPS, account, houseNav: house.nav, stress: stressTermsAt(terms?.stressLevels, market.stress), closeFeeBps: feeBps ?? undefined }).quote?.price ?? null);
+      : market === undefined ? null : (previewTicket({ market, side, qty, slippageBps: CLOSE_SLIPPAGE_BPS, account, houseNav: house.nav, stress: stressTermsAt(terms?.stressLevels, market.stress), closeFeeBps: feeBps ?? undefined, ...accountPricing(account, terms, market.view) }).quote?.price ?? null);
     // The node's whole-close quote is exact, as is the mock's own price, which its fill uses.
     const { close: closeNow, why: withheld } = positionClose(snapshot, market, p, quoted);
     const slippageBps = Math.min(CLOSE_SLIPPAGE_BPS, market?.view.max_slippage_bps ?? CLOSE_SLIPPAGE_BPS);
@@ -87,7 +90,7 @@ export function PositionsView() {
       closeout: formatCloseout(p.closeout, places),
       hold: fee === null ? "—" : formatHold(fee.holdMs),
       fee: feeBps === null ? "—" : formatRate(feeBps),
-      falls: fee === null ? null : describeNextFall(fee, terms?.profitFeeBps ?? null, now),
+      falls: fee === null ? null : describeNextFall(fee, feeTerms?.profitFeeBps ?? null, now),
       // A bound's figure rounds down, the way "at least" reads.
       withheld,
       proceeds: closeNow === null ? "—" : closeNow.exact ? formatUsd(closeNow.net) : `≥ ${formatUsd(roundToPlaces(closeNow.net, 2, "down"))}`,
@@ -123,7 +126,7 @@ export function PositionsView() {
   // A held Enter repeats its click: only a separate press may confirm.
   const holdsDown = (event: { repeat: boolean; preventDefault: () => void }) => { if (event.repeat) event.preventDefault(); };
   const noteId = `${id}-left-out`;
-  const feeTip = `The profit fee a close of this position pays on a gain now. ${terms === null ? "It falls as the hold lengthens to the curve's end." : describeSchedule(terms)}`;
+  const feeTip = `The profit fee a close of this position pays on a gain now. ${feeTerms === null ? "It falls as the hold lengthens to the curve's end." : describeSchedule(feeTerms)}`;
   const describedBy = readOnly.describedBy ?? (leftOutNote === null ? undefined : noteId);
   return (
     <>
