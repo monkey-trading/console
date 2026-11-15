@@ -153,6 +153,18 @@ describe("nextTier", () => {
     expect(volume === null ? null : nextTier(volume, thirty)).toMatchObject({ daysLeast: 1, daysNeeded: 30 });
   });
 
+  it("is at least one day for any positive gap, and counts a daily cap plus a raw unit as two", () => {
+    const left = (capped: string) => {
+      const volume = decodeVolume(standing({ progress: [{ capped: "0", days: 0 }, { capped, days: 1 }, { capped: "0", days: 0 }, { capped: "0", days: 0 }] }));
+      return volume === null ? null : nextTier(volume, table);
+    };
+    // A gap of one raw unit still needs a day: never "0 more days".
+    expect(left("999999.999999999")).toMatchObject({ volumeLeft: 1n, daysLeast: 1 });
+    // $500k (one daily cap) and a raw unit left: one capped day cannot reach it.
+    expect(left("499999.999999999")).toMatchObject({ volumeLeft: fixedFromInt(500_000) + 1n, daysLeast: 2 });
+    expect(left("500000")).toMatchObject({ volumeLeft: fixedFromInt(500_000), daysLeast: 1 });
+  });
+
   it("has no next tier at the top of the table", () => {
     const top = decodeVolume(standing({ tier: 3 }));
     expect(top === null ? null : nextTier(top, table)).toBeNull();

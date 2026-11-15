@@ -190,10 +190,9 @@ export function nextTier(volume: VolumeModel, table: readonly TierTerms[]): Next
   if (target === undefined || progress === undefined) return null;
   const volumeLeft = target.threshold > progress.capped ? target.threshold - progress.capped : ZERO;
   const dayCap = target.threshold / BigInt(target.dayDivisor);
-  // A day counts at most threshold / divisor, so the fewest days that cover the gap is ceil(gap * divisor / threshold). The engine
-  // serves `capped` truncated to a raw unit, so the true gap is at most that unit smaller: counting it keeps the figure a lower bound.
-  const gap = volumeLeft > 0n ? volumeLeft - 1n : ZERO;
-  const least = target.threshold === ZERO ? 0 : Number((gap * BigInt(target.dayDivisor) + target.threshold - 1n) / target.threshold);
+  // A day counts at most threshold / divisor. The engine serves `capped` truncated to a raw unit, so the true gap g lies in
+  // (volumeLeft - 1, volumeLeft] and the days it needs, ceil(g * divisor / threshold), are at least floor((volumeLeft - 1) * divisor / threshold) + 1.
+  const least = volumeLeft > 0n && target.threshold !== ZERO ? Number(((volumeLeft - 1n) * BigInt(target.dayDivisor)) / target.threshold) + 1 : 0;
   return { tier: volume.tier + 1, volumeLeft, dayCap, daysNeeded: target.dayDivisor, daysLeast: least };
 }
 
