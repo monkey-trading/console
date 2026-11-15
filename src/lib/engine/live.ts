@@ -68,8 +68,8 @@ export class LiveEngineClient implements EngineClient {
   /** The public withdrawal queue's size, walked within a page cap and cached for its TTL. */
   private readonly totalsWalk: QueueTotalsWalk;
   readonly withdrawalTotals: () => Promise<QueueTotals>;
-  /** The dashboard's reads, each over a signed read of its route. */
-  readonly stats = liveStats((path) => this.transport.get(path), (route) => this.trust.heedOperator(route));
+  private readonly lastRoute: { route: OperatorRoute | null } = { route: null }; // stays with a refusal
+  readonly stats = liveStats((path) => this.transport.get(path), (route) => this.trust.heedOperator(route), this.lastRoute);
   readonly emissions: (address: Address) => Promise<EntitlementProof | null>;
 
   constructor(private readonly deps: LiveDeps) {
@@ -87,7 +87,7 @@ export class LiveEngineClient implements EngineClient {
         this.emit({ type: "attestation", status });
       },
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
-      operatorClaim: async (address) => claimOf((await this.transport.getUnder("/v1/operator?limit=1", address)) as OperatorRoute),
+      operatorClaim: async (address) => claimOf(this.lastRoute, (await this.transport.getUnder("/v1/operator?limit=1", address)) as OperatorRoute),
     });
     this.transport = new SignedTransport({ ...deps, verifier: () => this.verifiers.loaded(), trust: this.trust, challenge, signal: this.signal });
     this.totalsWalk = new QueueTotalsWalk(this.transport, deps.nowMs);
@@ -246,7 +246,7 @@ export class LiveEngineClient implements EngineClient {
   }
 
   async scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>, dead?: () => boolean): Promise<ScannedMark[]> {
-    const signer = await this.trust.signer(); // the backfill reads the signed log only; a signer the vault stops naming ends the scan
+    const signer = await this.trust.signer();
     return scanForMarks(this.scanDeps(signer), fromSeq, budget, rules, sessions, () => dead?.() === true || this.trust.refuses(signer));
   }
 

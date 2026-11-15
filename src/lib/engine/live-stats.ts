@@ -6,8 +6,8 @@ import type { OperatorClaim } from "./signer-naming";
 import type { DistributionEpochsPage, OperatorList } from "./staking-reads";
 import type { ActivityPage, DistributionProof, MonkeyView, OperatorRoute, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "./stats-types";
 
-/** Reads the routes through `get`, which answers only what the attested enclave signed for that request; `heedOperator` judges the signer the operator route names. */
-export function liveStats(get: (path: string) => Promise<unknown>, heedOperator: (route: OperatorRoute) => void = () => undefined): StatsReads {
+/** Reads the routes through `get` (`seen` keeps the last operator route read), which answers only what the attested enclave signed for that request; `heedOperator` judges the signer the operator route names. */
+export function liveStats(get: (path: string) => Promise<unknown>, heedOperator: (route: OperatorRoute) => void = () => undefined, seen: { route: OperatorRoute | null } = { route: null }): StatsReads {
   // The enclave signs each answer, so its shape is the engine's.
   return {
     positions: async (market) => (await get(`/v1/house/positions?${new URLSearchParams({ market: String(market) })}`)) as PositionsView,
@@ -37,12 +37,17 @@ export function liveStats(get: (path: string) => Promise<unknown>, heedOperator:
       if (params?.before !== undefined) query.set("before", String(params.before));
       if (params?.limit !== undefined) query.set("limit", String(params.limit));
       const text = query.toString();
-      const route = (await get(`/v1/operator${text === "" ? "" : `?${text}`}`)) as OperatorRoute;
-      // The signer the node says the vault names is judged before anyone reads the answer.
+      let route: OperatorRoute;
+      try {
+        route = (await get(`/v1/operator${text === "" ? "" : `?${text}`}`)) as OperatorRoute;
+      } catch (error) {
+        // A node refused at its check cannot be asked again, but what it last said stays with the refusal: it still says which node the registry names now.
+        throw error instanceof UntrustedError && !(error instanceof RefusedAnswer) && seen.route !== null ? new RefusedAnswer(error.message, seen.route) : error;
+      }
+      seen.route = route;
       try {
         heedOperator(route);
       } catch (error) {
-        // The answer stays with the refusal: it still says which node the registry names now, which a visit with no wallet follows.
         throw error instanceof UntrustedError ? new RefusedAnswer(error.message, route) : error;
       }
       return route;
@@ -70,4 +75,7 @@ export const NO_STATS: StatsReads = {
 };
 
 /** What a node's operator route says of its own enclave and the signer the vault names. */
-export const claimOf = (route: OperatorRoute): OperatorClaim => ({ ...(route.enclave === undefined ? {} : { enclave: route.enclave }), ...(route.signer === undefined ? {} : { signer: route.signer }) });
+export function claimOf(seen: { route: OperatorRoute | null }, route: OperatorRoute): OperatorClaim {
+  seen.route = route;
+  return { ...(route.enclave === undefined ? {} : { enclave: route.enclave }), ...(route.signer === undefined ? {} : { signer: route.signer }) };
+}

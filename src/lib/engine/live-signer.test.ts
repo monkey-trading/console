@@ -6,6 +6,7 @@ import { LiveEngineClient } from "./live";
 import { SIGNER_SUPERSEDED } from "./signer-naming";
 import { acceptAll, FakeNode, FakeScheduler, FakeSocket, OPERATOR_CLAIM, settle } from "./test-kit";
 import { UntrustedError } from "./trust";
+import { RefusedAnswer } from "./trust-errors";
 import { vectorResponse } from "./test-vectors";
 
 /** The enclave `acceptAll` reads out of a mock attestation. */
@@ -124,5 +125,17 @@ describe("an answer in flight", () => {
     await expect(live.stats.operator({ limit: 1 })).rejects.toThrow(SIGNER_SUPERSEDED);
     socket.onmessage?.call(socket as never, { data: JSON.stringify({ n: 0, msg: "{}" }) } as MessageEvent); // the scan reads only the frame text
     await expect(scan).rejects.toThrow("The scan was cancelled.");
+  });
+
+  it("keeps what a refused node last said, at the first check and at every read after, so the follower can still learn the operator now named", async () => {
+    const { live, node, reply } = client();
+    node.signed(OPERATOR_CLAIM, () => ({ status: 200, body: JSON.stringify({ operator: ENCLAVE, pending_rotation: null, rotation_enabled: true, last_election: null, enclave: ENCLAVE, signer: { epoch: 6, address: OTHER }, api_hostname: { hostname: "b.example", block: 1, block_hash: "0x" } }), signature: "0x", timeMs: 1, seq: 1 }));
+    reply("/v1/markets", []);
+    await live.verify();
+    for (let reads = 0; reads < 2; reads += 1) {
+      const refused = await live.stats.operator({ limit: 1 }).catch((error: unknown) => error);
+      expect(refused).toBeInstanceOf(RefusedAnswer);
+      expect((refused as RefusedAnswer).answer).toMatchObject({ api_hostname: { hostname: "b.example" } });
+    }
   });
 });
