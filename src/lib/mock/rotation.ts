@@ -2,7 +2,7 @@
  * The simulated daily rotation as `GET /v1/operator` carries it (monkey-trading/console#280): a
  * rotation set of the four leading candidates weighted by their votes, today's turn held by the
  * operator in effect and tomorrow's by the one in effect at its boundary, a next set that takes effect
- * three days into the simulation, and a history of the last days' turns, drawn from the set in effect
+ * three days after the node's clock starts, and a history of the last days' turns, drawn from the set in effect
  * at each, with one skip, one promotion and one refused assignment. The turn changes at 22:30 UTC as
  * the engine's does; the draw is seeded, so the same day gives the same member.
  */
@@ -57,8 +57,8 @@ export function mockRotation(state: MockState, params: { before?: number; limit?
   // Tomorrow's turn goes to the operator that will hold the role by then: an election that takes effect first names its candidate, else the holder stays, so a boundary never changes who was advertised.
   const pendingTurn = holder.pending !== null && holder.pending.effectiveAtMs <= boundaryOf(today + 1) ? members.find((member) => member.candidate === holder.pending?.candidate) : undefined;
   const tomorrowHolder = pendingTurn ?? holderMember;
-  // The sets' times hold from where the simulation's clock started: the next set takes effect three days in, and draws from then on.
-  const nextSetAt = state.startMs + 3 * DAY_MS;
+  // The sets' times hold from the node's clock start: the next set takes effect three days in, and draws from then on.
+  const nextSetAt = state.rotationFromMs + 3 * DAY_MS;
   const nextMembers = members.slice(0, 3).map((member, index) => ({ ...member, weight: (BigInt(member.weight) + BigInt(index) * 10_000n).toString() }));
   const setAt = (ms: number) => (ms >= nextSetAt ? { id: 4, members: nextMembers } : { id: 3, members });
   const drawnAt = (turn: number) => drawn(setAt(boundaryOf(turn)).members, turn);
@@ -100,7 +100,7 @@ export function mockRotation(state: MockState, params: { before?: number; limit?
   const page = older.slice(0, limit);
   const next = older.length > limit ? (page.at(-1)?.assigned_seq ?? null) : null;
   const set = (id: number, epoch: number, effectiveAt: number, list: readonly Member[]) => ({ set: id, epoch, effective_at: effectiveAt, logged_at: effectiveAt - 7 * DAY_MS, members: [...list] });
-  const third = set(3, 41, state.startMs - 8 * DAY_MS, members);
+  const third = set(3, 41, state.rotationFromMs - 8 * DAY_MS, members);
   const fourth = set(4, 42, nextSetAt, nextMembers);
   return {
     rotation_set: now >= nextSetAt ? fourth : third,

@@ -90,6 +90,12 @@ describe("the simulated rotation", () => {
     for (const record of drawnSince) expect(members.has(record.candidate), `turn ${record.turn}`).toBe(true);
   });
 
+  it("times the sets from the demo node's clock start, not its backstory's, so the demo opens with a set to come", async () => {
+    const { client } = createMockNode(SIM_EPOCH_MS, true);
+    const answer = await client.stats.operator();
+    expect([answer.rotation_set?.set, answer.next_rotation_set?.set, answer.next_rotation_set?.effective_at]).toEqual([3, 4, SIM_EPOCH_MS + 3 * DAY_MS]);
+  });
+
   it("moves to the next day's turn when the clock passes the boundary", async () => {
     const { client } = createMockNode(SIM_EPOCH_MS);
     const before = await client.stats.operator();
