@@ -11,7 +11,7 @@ import { formatLeverage } from "@/lib/volume-tier";
 
 import { useConsole } from "./ConsoleProvider";
 
-const CELL = "px-3 py-2 text-left text-data";
+const CELL = "px-2 py-2 text-left align-top text-data sm:px-3";
 
 /** The volume tier card on the Funding page; absent from a node that predates volume tiers. */
 export function VolumeTierCard() {
@@ -38,8 +38,8 @@ export function VolumeTierCard() {
       {next !== null && <p className="mt-3 text-caption text-fg-2">{describeNextTier(next)}</p>}
       {standing.table !== null && next === null && <p className="mt-3 text-caption text-fg-2">This is the highest tier.</p>}
       {benefits !== null && (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[20rem] border-collapse text-caption">
+        <div className="mt-3">
+          <table className="w-full border-collapse text-caption">
             <caption className="pb-1 text-left text-label text-fg-3">What each tier brings{market === undefined ? "" : ` in ${market.symbol}`}</caption>
             <thead>
               <tr className="border-b border-line text-fg-3">

@@ -13,6 +13,7 @@ import { ProviderWallet } from "../../src/lib/engine/provider-wallet";
 import { realVerifier } from "../../src/lib/engine/test-vectors";
 import type { EngineEvent, MarketId, OrderRequest, Side } from "../../src/lib/engine/types";
 import { ACCOUNT, StubProvider } from "../../src/lib/engine/wallet-kit";
+import { SIGNATURE_HEADER } from "../../src/lib/engine/wire";
 import { divFixed, fixedFromInt, fixedToWire, type Fixed } from "../../src/lib/fixed";
 import type { MarketModel } from "../../src/lib/models";
 import type { TicketPrices } from "../../src/lib/quotes";
@@ -37,6 +38,8 @@ export interface Rig {
   proxy: Proxy;
   posted: { body: OrderRequest }[];
   answers: EngineEvent[][];
+  /** Every 429 the node answered, with whether the enclave signed it: the tier's own is signed, a client's rate limit is not. */
+  limited: { path: string; signed: boolean; body: string }[];
   stop: () => void;
 }
 
@@ -46,10 +49,12 @@ export async function startRig(): Promise<Rig> {
   const [verifier, proxy] = await Promise.all([realVerifier(true), startProxy(NODE)]);
   const posted: { body: OrderRequest }[] = [];
   const answers: EngineEvent[][] = [];
+  const limited: Rig["limited"] = [];
   const recordingFetch: typeof fetch = async (input, init) => {
     const order = init?.method === "POST" && new URL(String(input)).pathname === "/v1/orders" && typeof init.body === "string";
     if (order && typeof init.body === "string") posted.push({ body: JSON.parse(init.body) as OrderRequest });
     const response = await fetch(input, init);
+    if (response.status === 429) limited.push({ path: new URL(String(input)).pathname, signed: response.headers.has(SIGNATURE_HEADER), body: await response.clone().text() });
     // The node answers an order with the events its command produced; the client verifies the signed answer itself.
     if (order && response.ok) answers.push((await response.clone().json()) as EngineEvent[]);
     return response;
@@ -81,7 +86,7 @@ export async function startRig(): Promise<Rig> {
   await loadAccount(store, true);
   // Signing waits for a live stream, so readiness waits for one too.
   await until(store, () => { const s = store.getSnapshot(); return s.attestation.kind === "mock" && s.markets.length > 0 && s.stream === "live"; }, 60_000, "the node's attestation, markets and stream");
-  return { store, proxy, posted, answers, stop: () => { stopQuoteSync(); stopFeeds(); stopLive(); } };
+  return { store, proxy, posted, answers, limited, stop: () => { stopQuoteSync(); stopFeeds(); stopLive(); } };
 }
 
 /** Waits until `done` holds, or fails after `ms` with the state that stuck. */

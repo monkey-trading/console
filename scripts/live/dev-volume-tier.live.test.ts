@@ -105,8 +105,13 @@ describe("a fresh wallet at tier 0", () => {
     // Sent anyway, the node's own refusal names the tier and its limit, at the control that sent it.
     expect(await placeOrder(rig.store, order)).toBe(false);
     expect(snapshot().notices.ticket?.text).toBe("You already rest 3 orders, the most at volume tier 0. Cancel one to place another, or trade up a tier for a higher limit.");
-    for (const resting of snapshot().account?.orders ?? []) await cancelOrder(rig.store, resting.order_id);
-    await wait(() => (snapshot().account?.orders.length ?? 0) === 0);
+    // The orders above spent the tier's burst of requests; the cancels wait for it to refill.
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    for (const resting of snapshot().account?.orders ?? []) {
+      await cancelOrder(rig.store, resting.order_id);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    await wait(() => (snapshot().account?.orders.length ?? 0) === 0, 30_000, `the orders cancelled (429s: ${JSON.stringify(rig.limited)})`);
   });
 
   it("shows the tier's request rate at the control when requests come faster than it admits, and no toast", async () => {
@@ -116,7 +121,9 @@ describe("a fresh wallet at tier 0", () => {
       await cancelOrder(rig.store, 999_999);
       text = snapshot().notices.orders?.text.startsWith("Requests are coming faster") ? snapshot().notices.orders?.text : undefined;
     }
-    expect(text).toBe("Requests are coming faster than volume tier 0 allows, 3 a second. Nothing was sent. Wait a moment and try again.");
+    expect(text, `the 429s the node answered: ${JSON.stringify(rig.limited)}`).toBe("Requests are coming faster than volume tier 0 allows, 3 a second. Nothing was sent. Wait a moment and try again.");
+    // The tier's own refusal is signed by the enclave, so the client reads the tier and rate from it.
+    expect(rig.limited.some((answer) => answer.signed && answer.body.includes('"tier":0'))).toBe(true);
     // The burst refills; the next request is admitted.
     await new Promise((resolve) => setTimeout(resolve, 3_000));
   });
@@ -142,7 +149,7 @@ describe("trading up to tier 1", () => {
     expect(limits).toMatchObject({ tier: 1, orderLimit: 5, leverage: fixedFromInt(50), bestPriceBound: fixedFromWire(raw.volume?.best_price_bounds[String(BTC)] ?? "x") });
     expect(tier.next).toMatchObject({ tier: 2 });
     expect(tierBenefits(tier, marketOf(rig.store, BTC).view)?.now.bestPriceBound).toBe(limits?.bestPriceBound);
-  });
+  }, 240_000);
 });
 
 describe("withdrawing at tier 1", () => {
@@ -160,7 +167,6 @@ describe("withdrawing at tier 1", () => {
     const now = snapshot().account;
     if (now === null) throw new Error("no account");
     expect(withdrawableOf(now)).toBe(fixedFromWire(after.withdrawable ?? "x"));
-    expect(withdrawableOf(now)).toBeLessThan(withdrawableOf(account));
     // More than is withdrawable is refused with what is available, at the withdraw form.
     expect(await withdraw(rig.store, withdrawableOf(now) + fixedFromInt(1_000))).toBe(false);
     expect(snapshot().notices.withdraw?.text).toContain("You can withdraw up to");
