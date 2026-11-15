@@ -25,7 +25,9 @@ export class TrialClient {
   heeded: VaultFacts[] = [];
   heedVault = async (facts: VaultFacts, _chain: DeploymentReads) => { void _chain; this.heeded.push(facts); };
   verify = async () => { this.verifies += 1; return this.verdict; };
-  stats = { operator: () => this.signedRead() };
+  /** The node's signed `/v1/operators`, of which the follower reads each candidate's registered hostname. */
+  operatorList: () => Promise<unknown> = async () => ({ candidates: [] });
+  stats = { operator: () => this.signedRead(), operators: () => this.operatorList() };
   watch(listener: (event: ClientEvent) => void) { this.watchers.add(listener); return () => { this.watchers.delete(listener); }; }
   subscribe(onMessage: (message: StreamMessage) => void) { this.subscribers.add(onMessage); return () => { this.subscribers.delete(onMessage); }; }
 }

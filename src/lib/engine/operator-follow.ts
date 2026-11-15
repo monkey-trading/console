@@ -14,12 +14,11 @@
 
 import type { AttestationStatus } from "./attestation";
 import type { EngineClient, Unsubscribe } from "./client";
-import type { OperatorRoute } from "./stats-types";
-import { RefusedAnswer } from "./trust-errors";
 import type { Deploy } from "./deploy";
 import type { Scheduler } from "./live-stream";
 import { ROTATION_EVENTS } from "./rotation-events";
-import { bounded, nodeSaid, NOTHING_SAID, operatorTarget, signedAnswer, soonest, type FollowStatus, type NodeSaid } from "./operator-follow-status";
+import { NodeWord } from "./operator-follow-node";
+import { bounded, operatorTarget, signedAnswer, soonest, type FollowStatus, type NodeSaid } from "./operator-follow-status";
 import type { DeploymentReads, NamedOperator } from "./registry";
 
 export { operatorTarget, type FollowStatus } from "./operator-follow-status";
@@ -70,8 +69,11 @@ export class OperatorFollower {
   private refused = false;
   /** Whether a timed read was skipped in a hidden tab, and is owed when the tab is seen. */
   private skipped = false;
+  /** What the node in use says of where the operator runs. */
+  private readonly word: NodeWord;
 
   constructor(private readonly deps: FollowerDeps) {
+    this.word = new NodeWord(deps.scheduler, deps.nowMs);
     this.origin = deps.origin;
     this.state = { kind: "pinned", origin: deps.origin };
   }
@@ -161,7 +163,7 @@ export class OperatorFollower {
   /** Reads the chain, and beside it the node's word on its next turn, so a node that stalls holds nothing from the chain. */
   private async run(): Promise<void> {
     this.disarm();
-    const node = this.readNode();
+    const node = this.word.read(this.current);
     try {
       await this.readChain(node);
     } finally {
@@ -206,23 +208,14 @@ export class OperatorFollower {
   }
 
   /**
-   * What the node in use says in its signed operator route: when its next daily turn begins and who the registry names (`nodeSaid`); nothing
-   * when it cannot be read. The read is a signed one, so it also lets the client judge the signer the vault names.
+   * With no wallet to read a chain, the node's own word chooses among the origins the build lists, as the chain's would: the member its
+   * schedule names for the turn under way, or the operator the registry names. A node that cannot be read says nothing against either.
    */
-  private async readNode(): Promise<NodeSaid> {
-    if (this.current === null) return NOTHING_SAID;
-    try {
-      return nodeSaid(await bounded(this.deps.scheduler, this.current.stats.operator({ limit: 1 })), this.deps.nowMs());
-    } catch (error) {
-      // A node the vault no longer names still says where the registry now runs the operator (the signed route the refusal carries); any other failure says nothing.
-      return error instanceof RefusedAnswer ? nodeSaid(error.answer as OperatorRoute, this.deps.nowMs()) : NOTHING_SAID;
-    }
-  }
-
-  /** With no wallet to read a chain, the node's own word on who the registry names chooses among the origins the build lists, as the chain's would; a node that cannot be read says nothing against a successor it named, which is tried again. */
-  private followNode(said: NodeSaid): Promise<void> | void {
+  private async followNode(said: NodeSaid): Promise<void> {
+    if (said.read) await this.word.learn(this.current);
     if (!said.read && this.state.kind === "waiting") return this.tryNode(this.state.target, null, true);
-    const target = said.hostname === null ? { origin: this.origin } : operatorTarget(this.deps.deploy, { hostname: said.hostname, rotationEnabled: said.rotationEnabled });
+    const hostname = this.word.hostname(said, this.deps.nowMs());
+    const target = hostname === null ? { origin: this.origin } : operatorTarget(this.deps.deploy, { hostname, rotationEnabled: said.rotationEnabled });
     if ("unlisted" in target) return this.settled({ kind: "unlisted", origin: this.origin, hostname: target.unlisted });
     if (target.origin !== null && target.origin !== this.origin) return this.tryNode(target.origin, null, said.rotationEnabled);
     this.settled({ kind: "pinned", origin: this.origin });

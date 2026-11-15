@@ -7,10 +7,13 @@ import { SLOW_READ_MS } from "./operator-follow";
 import { B, named, rig } from "./operator-follow-kit";
 import { settle } from "./test-kit";
 
+/** The next turn's member, as the node's route names it. */
+const NEXT = "0x00000000000000000000000000000000000000b2";
+
 describe("the follower and the node's turns", () => {
   it("reads right after the node's next daily turn begins, with no election pending, rather than wait for the slow read", async () => {
     const kit = rig({ operator: async () => named({ hostname: null }) });
-    kit.trial.signedRead = async () => ({ next_turn: { applies_at: 1_000_000 + 90_000 } });
+    kit.trial.signedRead = async () => ({ next_turn: { candidate: NEXT, applies_at: 1_000_000 + 90_000 } });
     kit.follower.watch(kit.trial as unknown as EngineClient); // the follower uses only what TrialClient has
     kit.follower.start(() => false);
     await kit.follower.check();
@@ -25,7 +28,7 @@ describe("the follower and the node's turns", () => {
 
   it("moves to the next member's node when the turn begins: the read just after it finds the chain naming another hostname, which verifies", async () => {
     const kit = rig({ operator: async () => named({ hostname: null }) });
-    kit.trial.signedRead = async () => ({ next_turn: { applies_at: 1_000_000 + 90_000 } });
+    kit.trial.signedRead = async () => ({ next_turn: { candidate: NEXT, applies_at: 1_000_000 + 90_000 } });
     kit.follower.watch(kit.trial as unknown as EngineClient); // the follower uses only what TrialClient has
     kit.follower.start(() => false);
     await kit.follower.check();
@@ -44,7 +47,7 @@ describe("the follower and the node's turns", () => {
   it("reads the node for its turn with no wallet to read a chain, reading again just after it begins, and does not wait on a node that stalls before it reads the chain", async () => {
     const withoutWallet = rig({ reads: null });
     let reads = 0;
-    withoutWallet.trial.signedRead = async () => { reads += 1; return { next_turn: { applies_at: 1_000_000 + 90_000 } }; };
+    withoutWallet.trial.signedRead = async () => { reads += 1; return { next_turn: { candidate: NEXT, applies_at: 1_000_000 + 90_000 } }; };
     withoutWallet.follower.watch(withoutWallet.trial as unknown as EngineClient);
     withoutWallet.follower.start(() => false);
     await withoutWallet.follower.check();
@@ -66,7 +69,7 @@ describe("the follower and the node's turns", () => {
   });
 
   it("ignores a turn that is already past, a node that cannot answer, and one that names no next turn", async () => {
-    for (const read of [async () => ({ next_turn: { applies_at: 1_000_000 - 1 } }), async () => { throw new Error("down"); }, async () => ({})]) {
+    for (const read of [async () => ({ next_turn: { candidate: NEXT, applies_at: 1_000_000 - 1 } }), async () => { throw new Error("down"); }, async () => ({})]) {
       const kit = rig({ operator: async () => named({ hostname: null }) });
       kit.trial.signedRead = read;
       kit.follower.watch(kit.trial as unknown as EngineClient);

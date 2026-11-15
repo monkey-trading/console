@@ -82,6 +82,50 @@ describe("a visit with no wallet to read a chain (monkey-trading/console#280)", 
   });
 });
 
+describe("a daily turn with no wallet to read a chain (monkey-trading/console#280)", () => {
+  const A = "0x00000000000000000000000000000000000000a1";
+  const NEXT = "0x00000000000000000000000000000000000000b2";
+  /** A follower on the build's node, whose route names its own turn and the next one, `ahead` ms away, and still the build's host as the registry's. */
+  function turnAhead(ahead: number) {
+    const kit = rig({ reads: null });
+    const current = new TrialClient();
+    const at = 1_000_000 + ahead;
+    current.signedRead = async () => ({ api_hostname: { hostname: "build.example", block: 1, block_hash: "0x" }, rotation_enabled: true, turn: { candidate: A, applies_at: 0 }, next_turn: { candidate: NEXT, applies_at: at } });
+    current.operatorList = async () => ({ candidates: [{ address: A, api_hostname: "build.example" }, { address: NEXT, api_hostname: "b.example" }] });
+    kit.follower.watch(current as unknown as EngineClient); // the follower uses only what TrialClient has
+    return { ...kit, current };
+  }
+
+  it("follows the next turn's member from its boundary, though the node handing over has stopped before its route named it", async () => {
+    const { follower, adopted, current, advance } = turnAhead(60_000);
+    await follower.check();
+    expect(follower.getSnapshot()).toEqual({ kind: "pinned", origin: BUILD });
+    advance(61_000);
+    current.signedRead = async () => { throw new EngineError(0, "The node did not answer."); };
+    await follower.check();
+    expect(adopted).toEqual([B]);
+  });
+
+  it("follows the turn's member while the node in use still names itself from the registry's finalized read, and not before the boundary", async () => {
+    const { follower, adopted, advance } = turnAhead(60_000);
+    await follower.check();
+    expect(adopted).toEqual([]);
+    advance(61_000);
+    await follower.check();
+    expect(adopted).toEqual([B]);
+  });
+
+  it("goes by the route's own hostname when the node's operator list cannot be read", async () => {
+    const { follower, adopted, current, advance } = turnAhead(60_000);
+    current.operatorList = async () => { throw new EngineError(0, "The node did not answer."); };
+    await follower.check();
+    advance(61_000);
+    await follower.check();
+    expect(adopted).toEqual([]);
+    expect(follower.getSnapshot()).toEqual({ kind: "pinned", origin: BUILD });
+  });
+});
+
 describe("a handover under way when the chain cannot be read", () => {
   it("keeps its pause, and does not report the failed read over it", async () => {
     const { follower, trial, setOperator, held } = rig();

@@ -27,15 +27,18 @@ interface Node {
   answers: boolean;
   vault: VaultFacts | null;
   collateral: string | null;
+  /** What the node's collateral answer waits on, and what learns that it was asked for. */
+  held: Promise<void>;
+  asked: () => void;
   verifies: boolean;
 }
 
 /** A hardware node trusted under OLD, whose vault, collateral and quote each test then changes. */
 async function trustedHardware() {
-  const node: Node = { answers: true, vault: { release: releaseName(DIGEST, CONFIG), signer: OLD }, collateral: "{}", verifies: true };
+  const node: Node = { answers: true, vault: { release: releaseName(DIGEST, CONFIG), signer: OLD }, collateral: "{}", held: Promise.resolve(), asked: () => {}, verifies: true };
   const verifier: Verifier = { ...dev, verifyAttestation: () => (node.verifies ? { ok: true, enclave: { address: OLD, release: "test-release-v1", config: "attested" } } : { ok: false, reason: "the quote does not verify" }) };
   const trust = new NodeTrust({
-    attestation: async () => { if (!node.answers) throw new Error("The node did not answer."); return HARDWARE; }, collateral: async () => node.collateral, verifier: async () => verifier, releases: [RELEASE], devDigests: [], acceptsMock: false, nowMs: () => 0,
+    attestation: async () => { if (!node.answers) throw new Error("The node did not answer."); return HARDWARE; }, collateral: async () => { node.asked(); await node.held; return node.collateral; }, verifier: async () => verifier, releases: [RELEASE], devDigests: [], acceptsMock: false, nowMs: () => 0,
     vaultFacts: () => (node.vault === null ? null : Promise.resolve(node.vault)), onStatus: () => {}, onEnclaveChanged: () => {},
   });
   await trust.verify();
@@ -81,6 +84,24 @@ describe("the vault naming another signer than the enclave trusted last", () => 
     await trust.verify();
     expect(trust.status).toEqual({ kind: "unverified", reason: "The node did not answer." });
     await trust.heedVault(NEW);
+    expect(trust.refuses(OLD)).toBe(true);
+  });
+
+  it("keeps that enclave aside when a check that read the vault before the wallet's newer read ends after it", async () => {
+    const { node, trust } = await trustedHardware();
+    let release = () => {};
+    node.held = new Promise<void>((resolve) => { release = resolve; });
+    const asked = new Promise<void>((resolve) => { node.asked = resolve; });
+    const checking = trust.verify(); // reads the vault, which still names OLD, then waits on the node's collateral
+    await asked;
+    node.vault = { release: releaseName(DIGEST, CONFIG), signer: NEW };
+    const heeding = trust.heedVault(NEW);
+    expect(trust.refuses(OLD)).toBe(true);
+    release();
+    await checking;
+    expect(trust.refuses(OLD)).toBe(true);
+    expect(trust.status.kind).toBe("unverified");
+    await heeding;
     expect(trust.refuses(OLD)).toBe(true);
   });
 

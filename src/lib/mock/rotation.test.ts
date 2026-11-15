@@ -55,6 +55,16 @@ describe("the simulated rotation", () => {
     expect(seen.length).toBeGreaterThan(15);
   });
 
+  it("signs each assignment from no earlier than it was made, and has its member take it no earlier than that", async () => {
+    const records = (await route({ limit: 100 }).route).turns?.records ?? [];
+    expect(records.some((record) => record.reason !== "draw" && record.taken_ms !== null)).toBe(true);
+    for (const record of records) {
+      const at = `turn ${record.turn} position ${record.position}`;
+      if (record.applies_at !== null) expect(record.applies_at, at).toBeGreaterThanOrEqual(record.assigned_ms);
+      if (record.taken_ms !== null) expect(record.taken_ms, at).toBeGreaterThanOrEqual(record.applies_at ?? Number.POSITIVE_INFINITY);
+    }
+  });
+
   it("draws the history across the whole set at the scale of MONKEY base units, not always its first member", async () => {
     const { records } = rotationView(await route({ limit: 100 }).route).history;
     expect(new Set(records.map((record) => record.candidate)).size).toBeGreaterThanOrEqual(3);

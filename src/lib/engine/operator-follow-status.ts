@@ -48,7 +48,7 @@ export async function signedAnswer(client: EngineClient): Promise<void> {
 }
 
 /** How long the wallet may take over one chain read before the check gives up on it, in milliseconds; a wallet asleep must not hold the follower from the next wallet. */
-export const CHAIN_READ_MS = 30_000;
+const CHAIN_READ_MS = 30_000;
 
 /** `read`, or a rejection once the wallet has had its time. */
 export function bounded<T>(scheduler: Scheduler, read: Promise<T>): Promise<T> {
@@ -61,21 +61,30 @@ export function bounded<T>(scheduler: Scheduler, read: Promise<T>): Promise<T> {
   });
 }
 
+/** A daily turn the node's own schedule names: its member and when its key signs from. */
+export interface SaidTurn {
+  candidate: string;
+  atMs: number;
+}
+
 /**
  * What a node says in its signed operator route that decides where the console connects: when its next daily turn begins (null once past
- * or unnamed), and the hostname the registry names for the operator in effect; `read` is false when the route could not be read.
+ * or unnamed), the hostname the registry names for the operator in effect, and today's and the next turn; `read` is false when the route
+ * could not be read.
  */
 export interface NodeSaid {
   turnAtMs: number | null;
   hostname: string | null;
   rotationEnabled: boolean;
   read: boolean;
+  turns: readonly SaidTurn[];
 }
 
-export const NOTHING_SAID: NodeSaid = { turnAtMs: null, hostname: null, rotationEnabled: true, read: false };
+export const NOTHING_SAID: NodeSaid = { turnAtMs: null, hostname: null, rotationEnabled: true, read: false, turns: [] };
 
 /** What `route` says, at the device clock `nowMs`. */
 export function nodeSaid(route: OperatorRoute, nowMs: number): NodeSaid {
   const at = route.next_turn?.applies_at;
-  return { turnAtMs: at !== undefined && at > nowMs ? at : null, hostname: route.api_hostname?.hostname ?? null, rotationEnabled: route.rotation_enabled, read: true };
+  const turns = [route.turn, route.next_turn].flatMap((turn) => (turn ? [{ candidate: turn.candidate.toLowerCase(), atMs: turn.applies_at }] : []));
+  return { turnAtMs: at !== undefined && at > nowMs ? at : null, hostname: route.api_hostname?.hostname ?? null, rotationEnabled: route.rotation_enabled, read: true, turns };
 }

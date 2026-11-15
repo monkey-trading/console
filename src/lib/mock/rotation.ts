@@ -77,13 +77,14 @@ export function mockRotation(state: MockState, params: { before?: number; limit?
     const at = boundaryOf(turn);
     const base: Omit<TurnRecordView, "assigned_seq"> = { turn, position: 0, reason: "draw", candidate: member.candidate, admin_key: member.admin_key, assigned_ms: at - 36 * 3_600_000, applies_at: at, refused: null, taken_seq: null, taken_ms: null, release: null };
     const taken = turn <= today;
-    const stamp = (record: Omit<TurnRecordView, "assigned_seq">): Omit<TurnRecordView, "assigned_seq"> => (taken ? { ...record, taken_seq: seq + 5, taken_ms: at + 4_000, release: `0x${"ab".repeat(32)}` } : record);
+    // A member takes its turn just after its key signs from: the boundary, or a reassignment's own time when that is later.
+    const stamp = (record: Omit<TurnRecordView, "assigned_seq">): Omit<TurnRecordView, "assigned_seq"> => (taken ? { ...record, taken_seq: seq + 5, taken_ms: (record.applies_at ?? at) + 4_000, release: `0x${"ab".repeat(32)}` } : record);
     if (turn === today - 9) {
       // The liveness rule moved this turn from a failed member to the next in its order.
       const failed = drawnAt(turn);
       push({ ...base, candidate: failed.candidate, admin_key: failed.admin_key });
       const next = setAt(at).members.find((candidate) => candidate.candidate !== failed.candidate) ?? failed;
-      push(stamp({ ...base, position: 1, reason: "promotion", candidate: next.candidate, admin_key: next.admin_key, assigned_ms: at + 3_600_000 }));
+      push(stamp({ ...base, position: 1, reason: "promotion", candidate: next.candidate, admin_key: next.admin_key, assigned_ms: at + 3_600_000, applies_at: at + 3_600_000 }));
     } else if (turn === today - 5) {
       push(stamp({ ...base, position: 0, assigned_ms: at - 36 * 3_600_000 }));
       push({ ...base, position: 1, reason: "skip", refused: "no set mirrored seven days earlier names its key", applies_at: null, assigned_ms: at + 600_000 });
@@ -91,7 +92,7 @@ export function mockRotation(state: MockState, params: { before?: number; limit?
       const first = drawnAt(turn);
       const second = setAt(at).members.find((candidate) => candidate.candidate !== first.candidate) ?? first;
       push({ ...base, candidate: first.candidate, admin_key: first.admin_key });
-      push(stamp({ ...base, position: 1, reason: "skip", candidate: second.candidate, admin_key: second.admin_key, assigned_ms: at + 1_800_000 }));
+      push(stamp({ ...base, position: 1, reason: "skip", candidate: second.candidate, admin_key: second.admin_key, assigned_ms: at + 1_800_000, applies_at: at + 1_800_000 }));
     } else push(stamp(base));
   }
   const newestFirst = [...records].reverse();
