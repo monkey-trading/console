@@ -147,3 +147,45 @@ describe("the house state's terms on the trading surfaces", () => {
     expect(at({ pricingCurrent: false, houseStateStatus: "failed" })).toEqual([null, "The node's parameters changed and could not be read again; the console reads them again by itself."]);
   });
 });
+
+describe("the account's volume tier at the ticket", () => {
+  const TABLE = [
+    { threshold: "0", day_divisor: 1, best_price_share_bps: 2500, margin_floor_bps: 500, max_resting_orders: 25, requests_per_second: 2 },
+    { threshold: "1000000", day_divisor: 2, best_price_share_bps: 5000, margin_floor_bps: 200, max_resting_orders: 50, requests_per_second: 5 },
+  ];
+  const tiered = (resting: number): AccountModel => ({
+    ...HOLDING, positions: [], margin: 0n,
+    orders: Array.from({ length: resting }, (_, i) => ({ order_id: i + 1, client_id: i, market: 1, side: "buy", qty: "1", kind: { kind: "limit", price: "1" }, reduce_only: false })),
+    requirements: { initialMargin: 0n, maintenanceMargin: 0n, withdrawable: fixedFromInt(50_000), maxLeverage: new Map([[1, fixedFromInt(20)]]) },
+    volume: { tier: 0, matured: 0n, pending: 0n, progress: [{ capped: 0n, days: 0 }, { capped: 0n, days: 0 }], bestPriceBounds: new Map([[1, fixedFromInt(500_000)]]), maxRestingOrders: 25, requestsPerSecond: 2 },
+  });
+  const params = { ...PARAMS, volumeTiers: TABLE };
+
+  it("gives the tier's limits in the market and stops a resting order at the limit, never a market order", async () => {
+    const market = await btcAt(101_000);
+    const resting = { ...order("1"), side: "buy" as const, resting: true, triggerPrice: q("100000") };
+    const full = ticketFigures(state(market, true, { account: tiered(25), houseParams: params }), market, resting);
+    expect(full.limits).toMatchObject({ tier: 0, bestPriceBound: fixedFromInt(500_000), leverage: fixedFromInt(20), orderLimit: 25, resting: 25 });
+    expect(full.orderProblem).toContain("the most at volume tier 0");
+    expect(ticketFigures(state(market, true, { account: tiered(24), houseParams: params }), market, resting).orderProblem).toBeNull();
+    expect(ticketFigures(state(market, true, { account: tiered(25), houseParams: params }), market, { ...order("1"), side: "buy" }).orderProblem).toBeNull();
+  });
+
+  it("prices the mock's order at the account's first band and holds it to the tier's margin floor", async () => {
+    const market = await btcAt(100_000);
+    // 10 BTC is $1M: past the $500k a tier-0 account pays the first band for, so it costs more than at the listed band.
+    const at = (extra: Partial<ConsoleState>) => ticketFigures(state(market, false, { account: tiered(0), ...extra }), market, { ...order("10"), side: "buy" });
+    const tier0 = at({ houseParams: params });
+    const listed = at({ houseParams: PARAMS });
+    expect(tier0.prices.price).toBeGreaterThan(listed.prices.price ?? 0n);
+    // $1M at the 5% floor needs $50k; at BTC's own 2% to $100k and 5% beyond it needs far less.
+    expect(tier0.preview.marginAdded).toBe(fixedFromInt(50_000));
+    expect(listed.preview.marginAdded).toBeLessThan(tier0.preview.marginAdded);
+  });
+
+  it("has no limits from a node that predates volume tiers", async () => {
+    const market = await btcAt(101_000);
+    const figures = ticketFigures(state(market, true), market, order("1"));
+    expect([figures.limits, figures.orderProblem]).toEqual([null, null]);
+  });
+});

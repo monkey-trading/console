@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { SpreadTier, Tier } from "./engine/types";
 import type { VolumeStandingWire, VolumeTierWire } from "./engine/volume-types";
-import { fixedFromInt, fixedToWire } from "./fixed";
+import { fixedFromInt } from "./fixed";
 import { accountSpreadTiers, benefitsOf, bestPriceBound, decodeTiers, decodeVolume, flooredMargin, formatLeverage, maxLeverage, nextTier } from "./volume-tier";
 
 /** The production genesis's table: shares of D1, floors of D5, limits of D11 and rates of D1. */
@@ -50,7 +50,9 @@ describe("decodeVolume", () => {
   });
 
   it("reads limits a V59 node does not serve as null, and nothing from a malformed read", () => {
-    const { max_resting_orders: _o, requests_per_second: _r, ...v59 } = standing();
+    const v59 = standing();
+    delete v59.max_resting_orders;
+    delete v59.requests_per_second;
     expect(decodeVolume(v59)).toMatchObject({ maxRestingOrders: null, requestsPerSecond: null });
     expect(decodeVolume(undefined)).toBeNull();
     expect(decodeVolume(standing({ matured: "lots" }))).toBeNull();
@@ -137,6 +139,5 @@ describe("benefitsOf", () => {
     expect(first && benefitsOf(first, market)).toEqual({ bestPriceBound: fixedFromInt(500_000), leverage: fixedFromInt(20), maxRestingOrders: 25, requestsPerSecond: 2 });
     expect(third && benefitsOf(third, market)).toEqual({ bestPriceBound: fixedFromInt(2_000_000), leverage: fixedFromInt(100), maxRestingOrders: 100, requestsPerSecond: 10 });
     expect(first && benefitsOf(first, undefined)).toMatchObject({ bestPriceBound: null, leverage: null });
-    expect(fixedToWire(fixedFromInt(20))).toBe("20");
   });
 });

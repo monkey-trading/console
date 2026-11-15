@@ -95,3 +95,28 @@ describe("decodeAccount", () => {
     expect(decodeAccount(view).positions.map((p) => p.closeout)).toEqual([null, null, null, null, null, null]);
   });
 });
+
+describe("decodeAccount's tier standing", () => {
+  const view = { balance: "10000", equity: "10000", margin: "1000", toxicity_bps: 0, orders: {}, positions: {} };
+  const standing = {
+    initial_margin: "2500", maintenance_margin: "500", withdrawable: "7500", max_leverage: { "1": "20", "2": "20" },
+    toxicity: { score: "5.5", fills: "40", tier: 1, add_on_bps: 2 },
+    volume: { tier: 1, matured: "1000000", pending: "10", progress: [{ capped: "0", days: 0 }], best_price_bounds: { "1": "1000000" }, max_resting_orders: 50, requests_per_second: 5 },
+  };
+
+  it("reads the requirement, withdrawable cash, each market's leverage, the toxicity tier and the volume", () => {
+    const account = decodeAccount({ ...view, ...standing });
+    expect(account.requirements).toEqual({ initialMargin: fixedFromInt(2_500), maintenanceMargin: fixedFromInt(500), withdrawable: fixedFromInt(7_500), maxLeverage: new Map([[1, fixedFromInt(20)], [2, fixedFromInt(20)]]) });
+    expect(account.toxicity).toEqual({ tier: 1, addOnBps: 2 });
+    expect(account.volume).toMatchObject({ tier: 1, matured: fixedFromInt(1_000_000), maxRestingOrders: 50 });
+  });
+
+  it("has no key for what a node that predates it does not send, and none for a figure that is malformed", () => {
+    expect(Object.keys(decodeAccount(view))).not.toEqual(expect.arrayContaining(["requirements"]));
+    const bare = decodeAccount(view);
+    expect([bare.requirements, bare.volume, bare.toxicity]).toEqual([undefined, undefined, undefined]);
+    expect(decodeAccount({ ...view, ...standing, initial_margin: "lots" }).requirements).toBeUndefined();
+    expect(decodeAccount({ ...view, ...standing, max_leverage: { one: "20" } }).requirements).toBeUndefined();
+    expect(decodeAccount({ ...view, ...standing, toxicity: { ...standing.toxicity, tier: 1.5 } }).toxicity).toBeUndefined();
+  });
+});

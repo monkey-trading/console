@@ -225,7 +225,10 @@ positions and checks that each partial close's preview is a bound its fill meets
 notice from the house state, restarts the node with the mock prices raised, which closes out an
 ETH-USD short past its margin, and once the profit fee's curve has run its fifteen minutes checks
 that each whole close's preview equals its fill: the price, the fee and the cash it moves. It takes
-about twenty minutes. It does not exercise the browser build: how
+about twenty minutes. With `TRADING_SCENARIO=tiers` it runs the volume tier scenario instead, on a node
+whose genesis names a tier table a fresh wallet climbs in a few minutes: it checks the wallet's limits at tier 0
+against the account read, is stopped past its leverage and its order limit, sees the tier's request rate, trades
+to tier 1 and withdraws. It does not exercise the browser build: how
 the page loads the verifier, and its Content Security Policy, are checked by running `npm run
 dev:live`, or a production build with the same variables, against a node.
 

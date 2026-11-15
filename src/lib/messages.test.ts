@@ -2,7 +2,18 @@
 
 import { describe, expect, it } from "vitest";
 
-import { describeEvent, describeMockAttestation, describeReject, describeReverifying } from "./messages";
+import { describeEvent, describeMockAttestation, describeReject, describeReverifying, describeTierRate } from "./messages";
+
+describe("order-limit and rate refusals", () => {
+  it("names the tier and the most orders it rests", () => {
+    expect(describeReject({ kind: "tier_order_limit", tier: 1, max: 50 })).toBe("You already rest 50 orders, the most at volume tier 1. Cancel one to place another, or trade up a tier for a higher limit.");
+    expect(describeReject({ kind: "too_many_orders", max: 100 })).toBe("You already rest 100 orders, the most the node allows. Cancel one to place another.");
+  });
+
+  it("says a 429 for the tier's request rate sent nothing", () => {
+    expect(describeTierRate({ tier: 0, requestsPerSecond: 2 })).toBe("Requests are coming faster than volume tier 0 allows, 2 a second. Nothing was sent. Wait a moment and try again.");
+  });
+});
 
 describe("describeReject", () => {
   it("tells the live-key cap from the budget of new keys, which a revocation does not refill", () => {

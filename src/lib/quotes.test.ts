@@ -124,3 +124,22 @@ describe("a covering step the node's ladder declines", () => {
     expect(live("0.5", "buy", nothingFits).problem).toBe("Not enough equity to open a position here.");
   });
 });
+
+describe("the toxicity add-on and the tier's leverage in a live quote", () => {
+  it("names the add-on the signed quote carries, so it follows each quote, and none from a quote with none", () => {
+    expect(live("3", "buy", { ...QUOTE, toxicity_bps: 2 }).toxicityBps).toBe(2);
+    expect(live("3", "buy", { ...QUOTE, toxicity_bps: 0 }).toxicityBps).toBe(0);
+    expect(live("3", "buy").toxicityBps).toBe(0);
+    expect(live("1", "buy", null).toxicityBps).toBe(0);
+  });
+
+  it("explains a margin decline with the leverage the account's tier allows in the market", () => {
+    const limits = { tier: 0, bestPriceBound: null, leverage: f("20"), orderLimit: 25, resting: 0 };
+    const margin = { kind: "insufficient_margin" as const, equity: "1", required: "9" };
+    const ladder: MarketQuote = { ...QUOTE, ask: [{ qty: "2", price: "100.1" }, { qty: "30", price: "100.5", declined: margin }] };
+    const withLimits = ticketPrices({ live: true, quote: ladder, quoteError: null, preview: preview("29"), side: "buy", mark: f("100"), limits });
+    expect(withLimits.problem).toBe("The largest size your equity opens here is ≈ 2 contracts. Try a smaller size. Volume tier 0 allows up to 20x here.");
+    const none: MarketQuote = { ...QUOTE, ask: [{ qty: "1", price: "100.1", declined: margin }] };
+    expect(ticketPrices({ live: true, quote: none, quoteError: null, preview: preview("1"), side: "buy", mark: f("100"), limits }).problem).toBe("Not enough equity to open a position here. Volume tier 0 allows up to 20x here.");
+  });
+});

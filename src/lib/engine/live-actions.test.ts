@@ -76,6 +76,16 @@ describe("signed actions", () => {
     await expect(client.attestEligibility({} as never)).rejects.toMatchObject({ status: 403, reject: null, message: "a never-credited account declares only once a deposit for it is pending" });
   });
 
+  it("reads a signed 429 that names the account's volume tier and its rate, and one that names neither as a plain limit", async () => {
+    const { client, reply } = accepting();
+    reply("/v1/orders", 429, { error: "rate limited", tier: 1, requests_per_second: 5 });
+    await expect(client.placeOrder({} as OrderRequest)).rejects.toMatchObject({ status: 429, reject: null, tierLimit: { tier: 1, requestsPerSecond: 5 } });
+    reply("/v1/orders", 429, { error: "rate limited" });
+    await expect(client.placeOrder({} as OrderRequest)).rejects.toMatchObject({ status: 429, tierLimit: null });
+    reply("/v1/orders", 429, { error: "rate limited", tier: "one", requests_per_second: 5 });
+    await expect(client.placeOrder({} as OrderRequest)).rejects.toMatchObject({ status: 429, tierLimit: null });
+  });
+
   it("reads a signed 404 from a node without the batch routes as an engine error with no refusal kind", async () => {
     const { node, client } = accepting();
     // An older node's router answers an unknown route with an empty signed 404.
