@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { BUDGET, frame, prices, rejectFrames, RULES, scanWith, scanning, sessionRulesFor, SESSIONS } from "./live-marks-kit";
-import { acceptAll, FakeSocket } from "./test-kit";
+import { acceptAll, type FakeScheduler, FakeSocket } from "./test-kit";
 import type { PriceRules } from "./types";
 import type { Verifier } from "./verifier";
 
@@ -198,6 +198,30 @@ describe("scanning the log for marks", () => {
     socket.receive(frame(1, prices(41, 11_000, "101"))); // the next message finds the scan cancelled
     await expect(found).rejects.toThrow("cancelled");
     expect(socket.closed).toBe(true);
+  });
+
+  it("answers nothing once the caller gave up on it, marks kept or not, however the read then ends", async () => {
+    const endings: [string, (socket: FakeSocket, scheduler: FakeScheduler) => void][] = [
+      ["the next frame", (socket) => socket.receive(frame(2, prices(42, 12_002, "102")))],
+      ["a heartbeat at the head", (socket) => socket.receive(frame(2, { type: "heartbeat", head: "41:0" }))],
+      ["the connection closing", (socket) => socket.drop("close")],
+      ["the connection failing", (socket) => socket.drop("error")],
+      ["the time budget", (_, scheduler) => scheduler.advance(BUDGET.maxMs)],
+    ];
+    for (const [ending, end] of endings) {
+      const sockets: FakeSocket[] = [];
+      let dead = false;
+      const { found, scheduler } = scanWith(sockets, RULES, SESSIONS, () => dead);
+      await Promise.resolve();
+      const socket = sockets[0];
+      if (!socket) throw new Error("no socket");
+      socket.receive(frame(0, prices(40, 10_000, "100"))); // warms up
+      socket.receive(frame(1, prices(41, 11_001, "101"))); // verified: a mark
+      dead = true;
+      end(socket, scheduler);
+      await expect(found, ending).rejects.toThrow("The scan was cancelled.");
+      expect(socket.closed, ending).toBe(true);
+    }
   });
 
   it("advances a market on another market's prices command, as the engine recomputes every mark each command", async () => {

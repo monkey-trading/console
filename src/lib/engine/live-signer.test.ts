@@ -3,17 +3,18 @@
 import { describe, expect, it } from "vitest";
 
 import { LiveEngineClient } from "./live";
-import { SIGNER_SUPERSEDED } from "./signer-naming";
+import { SIGNER_SUPERSEDED, SIGNER_UNREAD } from "./signer-naming";
 import { acceptAll, FakeNode, FakeScheduler, FakeSocket, OPERATOR_CLAIM, settle } from "./test-kit";
 import { UntrustedError } from "./trust";
 import { RefusedAnswer } from "./trust-errors";
 import { vectorResponse } from "./test-vectors";
+import type { Verifier } from "./verifier";
 
 /** The enclave `acceptAll` reads out of a mock attestation. */
 const ENCLAVE = "0x0000000000000000000000000000000000000001";
 const OTHER = "0x00000000000000000000000000000000000000bb";
 
-function client() {
+function client(verifier: Verifier = acceptAll) {
   const node = new FakeNode();
   node.attestation(() => ENCLAVE);
   const gates: { markets: Promise<void> | null } = { markets: null };
@@ -24,7 +25,7 @@ function client() {
   const sockets: FakeSocket[] = [];
   const live = new LiveEngineClient({
     origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: vectorResponse("markets").vault, heartbeatMs: 5_000,
-    loadVerifier: async () => acceptAll, releases: [], acceptsMock: true, fetch: fetchThrough,
+    loadVerifier: async () => verifier, releases: [], acceptsMock: true, fetch: fetchThrough,
     openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; }, scheduler: new FakeScheduler(), nowMs: () => 1, challenge: () => "ab".repeat(32),
   });
   const reply = (path: string, body: object) => node.signed(path, () => ({ status: 200, body: JSON.stringify(body), signature: "0x", timeMs: 1, seq: 1 }));
@@ -67,6 +68,35 @@ describe("the first check", () => {
     const { live, operator } = client();
     operator(null);
     await expect(live.verify()).resolves.toMatchObject({ kind: "mock" });
+  });
+});
+
+describe("a first check that cannot read the node's word on the signer", () => {
+  it("refuses the node however the read fails, reads nothing else, and trusts it once a later check reads the word", async () => {
+    const gate = { refuse: true };
+    const refusingClaim: Verifier = { ...acceptAll, verifyResponse: (input) => (gate.refuse && input.pathAndQuery === OPERATOR_CLAIM ? { ok: false, reason: "wrong_signer" } : acceptAll.verifyResponse(input)) };
+    const unread = { kind: "unverified", reason: expect.stringContaining(SIGNER_UNREAD) };
+    const failures: { failure: string; fail: (node: FakeNode) => void; verifier?: Verifier; verdict: object }[] = [
+      { failure: "no answer", fail: (node) => node.routes.set(OPERATOR_CLAIM, () => { throw new TypeError("Failed to fetch"); }), verdict: unread },
+      { failure: "an unsigned answer", fail: (node) => node.routes.set(OPERATOR_CLAIM, () => new Response("{}")), verdict: unread },
+      { failure: "an unsigned 404", fail: (node) => node.routes.set(OPERATOR_CLAIM, () => new Response('{"error":"not found"}', { status: 404 })), verdict: unread },
+      { failure: "a signed 503", fail: (node) => node.madeUp(OPERATOR_CLAIM, 503, '{"error":"not ready"}'), verdict: unread },
+      { failure: "an answer that does not verify", fail: () => undefined, verifier: refusingClaim, verdict: unread },
+      { failure: "a signed answer off the device clock", fail: (node) => node.signed(OPERATOR_CLAIM, () => ({ status: 200, body: "{}", signature: "0x", timeMs: 60_001, seq: 1 })), verdict: { kind: "clock", skewMs: 60_000 } },
+    ];
+    for (const { failure, fail, verifier, verdict } of failures) {
+      const { node, live, reply } = client(verifier);
+      fail(node);
+      reply("/v1/markets", []);
+      await expect(live.verify(), failure).resolves.toEqual(verdict);
+      await expect(live.markets(), failure).rejects.toBeInstanceOf(UntrustedError);
+      expect(node.requests.some((request) => request.path === "/v1/markets"), failure).toBe(false);
+      // The node's word is read: here it predates the route, as its signed 404 says.
+      gate.refuse = false;
+      node.madeUp(OPERATOR_CLAIM, 404, '{"error":"not found"}');
+      await expect(live.markets(), failure).resolves.toEqual([]);
+      gate.refuse = true;
+    }
   });
 });
 

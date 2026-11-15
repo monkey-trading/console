@@ -42,14 +42,17 @@ export function Payouts() {
   const attempt = state.payoutsGeneration;
   useEffect(() => {
     if (checkAt === null || !trusted) return;
+    const load = () => void loadPayouts(store);
     // The node's clock as it is when the timer is set, so a clock that moves on never sets it again.
     const timer = setTimeout(() => {
-      const load = () => void loadPayouts(store);
       // A hidden tab reads once it is seen again, as the other paced reads do.
       if (document.visibilityState === "hidden") document.addEventListener("visibilitychange", load, { once: true });
       else load();
     }, checkReadDelay(checkAt, store.getSnapshot().now));
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", load);
+    };
   }, [store, checkAt, trusted, attempt]);
   useEffect(() => {
     // The vault's own record says whether it has paid each payout the page can act on, including by a claim made elsewhere before the read.

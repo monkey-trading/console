@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { LiveEngineClient } from "./live";
-import { dev, markets, replyOf, setup, production } from "./live-setup";
+import { dev, markets, replyOf, setup, production, vectorSigning } from "./live-setup";
 import { acceptAll, FakeNode, FakeScheduler, FakeSocket, mockAttestation, settle } from "./test-kit";
 import { VECTORS, vectorResponse } from "./test-vectors";
 import { SignatureError, UntrustedError } from "./trust";
@@ -47,7 +47,9 @@ describe("signed reads", () => {
 
   it("rejects an answer signed for another chain than the build pins", async () => {
     const { client } = setup({ chainId: 1 });
-    await expect(client.markets()).rejects.toBeInstanceOf(SignatureError);
+    // The first check's read of the node's own word on the vault's signer is the first answer refused.
+    await expect(client.verify()).resolves.toMatchObject({ kind: "unverified", reason: expect.stringContaining("did not verify") });
+    await expect(client.markets()).rejects.toThrow("did not verify");
   });
 
   it("rejects an answer with no signature, whatever its status", async () => {
@@ -70,7 +72,8 @@ describe("signed reads", () => {
     await expect(client.markets()).rejects.toThrow("device clock");
     now = markets.time_ms + 30_000;
     await expect(client.markets()).resolves.toHaveLength(1);
-    expect(events.flatMap((e) => (e.type === "attestation" ? [e.status.kind] : []))).toEqual(["checking", "mock", "clock", "mock"]);
+    // The first check's own read meets the wrong clock, and the check after the correction trusts the node.
+    expect(events.flatMap((e) => (e.type === "attestation" ? [e.status.kind] : []))).toEqual(["checking", "clock", "checking", "mock"]);
   });
 });
 
@@ -104,13 +107,13 @@ describe("what the build trusts", () => {
   });
 
   it("does not trust a node whose verifier cannot be loaded, and tries again on the next check", async () => {
-    const node = new FakeNode();
+    const node = new FakeNode(vectorSigning());
     node.attestation(() => VECTORS.signer);
     let attempts = 0;
     const client = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: markets.vault, heartbeatMs: 5_000,
       loadVerifier: async () => { if (++attempts === 1) throw new Error("The verifier's WebAssembly does not match the build's pin."); return dev; },
-      releases: [], acceptsMock: true, fetch: node.fetch, openSocket: () => { throw new Error("unused"); }, scheduler: new FakeScheduler(), nowMs: () => 0,
+      releases: [], acceptsMock: true, fetch: node.fetch, openSocket: () => { throw new Error("unused"); }, scheduler: new FakeScheduler(), nowMs: () => markets.time_ms,
     });
     await expect(client.verify()).resolves.toMatchObject({ kind: "unverified", reason: expect.stringContaining("pin") });
     await expect(client.verify()).resolves.toEqual({ kind: "mock" });
@@ -175,7 +178,7 @@ describe("the marks history route", () => {
 
 describe("a stream replaced while the node is being verified", () => {
   it("leaves exactly one live socket when a subscriber leaves and another arrives", async () => {
-    const node = new FakeNode();
+    const node = new FakeNode(vectorSigning());
     node.attestation(() => VECTORS.signer);
     const sockets: FakeSocket[] = [];
     const client = new LiveEngineClient({

@@ -16,6 +16,8 @@ export interface OperatorClaim {
 
 /** What the console says when the vault names a signer other than the enclave the node answers with. */
 export const SIGNER_SUPERSEDED = "The vault names another signer than this node's enclave, so the node's answers are refused.";
+/** What the console says when the node's own word on the signer the vault names could not be read, before the read's failure. */
+export const SIGNER_UNREAD = "The node's word on the signer the vault names could not be read, so its answers are not taken yet.";
 /** What the console says when a node's answer names an enclave other than the one that signed it. */
 const WRONG_ENCLAVE = "The node named an enclave other than the one that signed its answer, so the answer was discarded.";
 
@@ -54,14 +56,15 @@ export class SignerNaming {
    * Why a node that attested `address` is refused for the signer the vault names, or null: its own signed word on it is read before any
    * other answer is taken, so a node the vault no longer names is refused at the first check, not at the first operator read; an enclave
    * put aside earlier stays refused unless that word names it again at a later epoch. A node that states none (one that predates the
-   * route, or whose liveness rule does not run) is judged by what other reads have said.
+   * route, which `operatorClaim` reads as nothing stated, or whose liveness rule does not run) is judged by what other reads have said.
+   * A word that cannot be read refuses the node: the next answer it is asked for checks it again.
    */
   async refusal(address: string): Promise<string | null> {
-    let claim: OperatorClaim = {};
+    let claim: OperatorClaim;
     try {
       claim = (await this.operatorClaim?.(address)) ?? {};
-    } catch {
-      // A node that cannot answer the route states nothing (one that predates it, or whose answer does not verify): the vault's own word through a wallet, and the reads after, still judge it.
+    } catch (error) {
+      return `${SIGNER_UNREAD} ${error instanceof Error ? error.message : "The read failed."}`;
     }
     return this.judge(address, claim)?.reason ?? (this.refuses(address) ? SIGNER_SUPERSEDED : null);
   }

@@ -46,6 +46,7 @@ function Tab({ state, operators }: { state: Partial<ConsoleState>; operators: Op
   const { store } = useSession();
   store.patch({ now: NOW, ...state });
   const reads = operatorsLike(operators);
+  // The tab reads only `operators` and `turns`; the rest fills the shape with inert values.
   const stub = {
     operators: reads, turns: new TurnHistoryReads(store), delegations: delegationsLike(chain()), operatorsSettled: true, delegateEditing: NO_EDITING, setDelegateEditing: () => undefined,
     table: NO_TABLE_VIEW, setTable: () => undefined, typedSlot: false, setTypedSlot: () => undefined,

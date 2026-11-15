@@ -1,9 +1,10 @@
 /**
  * The simulated daily rotation as `GET /v1/operator` carries it (monkey-trading/console#280): a
  * rotation set of the four leading candidates weighted by their votes, today's turn held by the
- * operator in effect, tomorrow's drawn from the set, a next set on its way, and a history of the
- * last days' turns with one skip, one promotion and one refused assignment. The turn changes at
- * 22:30 UTC as the engine's does; the draw is seeded, so the same day gives the same member.
+ * operator in effect and tomorrow's by the one in effect at its boundary, a next set on its way, and a
+ * history of the last days' turns, drawn from the set, with one skip, one promotion and one refused
+ * assignment. The turn changes at 22:30 UTC as the engine's does; the draw is seeded, so the same day
+ * gives the same member.
  */
 
 import type { OperatorRoute, TurnRecordView, TurnView } from "../engine/stats-types";
@@ -66,7 +67,8 @@ export function mockRotation(state: MockState, params: { before?: number; limit?
     seq += 10;
   };
   for (let turn = today - HISTORY_DAYS; turn <= today + 1; turn += 1) {
-    const member = turn === today ? holderMember : drawn(members, turn);
+    // Today's and tomorrow's records name the members `turn` and `next_turn` name.
+    const member = turn === today ? holderMember : turn === today + 1 ? tomorrowHolder : drawn(members, turn);
     const at = boundaryOf(turn);
     const base: Omit<TurnRecordView, "assigned_seq"> = { turn, position: 0, reason: "draw", candidate: member.candidate, admin_key: member.admin_key, assigned_ms: at - 36 * 3_600_000, applies_at: at, refused: null, taken_seq: null, taken_ms: null, release: null };
     const taken = turn <= today;

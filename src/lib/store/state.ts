@@ -51,8 +51,16 @@ export interface PayoutsRead {
   seq: number;
   /** The nonces of the unpaid approvals the list held. */
   listed: number[];
-  /** For each approval waiting on a log check (monkey-trading/console#280), the time of the boundary it waits for, in milliseconds; absent when none waits. */
-  checks?: Record<number, number>;
+  /** For each approval waiting on a log check (monkey-trading/console#280), the check; absent when none waits. */
+  checks?: Record<number, PayoutCheck>;
+}
+
+/** A log check an approval's next signature waits for (monkey-trading/console#280). */
+export interface PayoutCheck {
+  /** The time of the boundary it waits for, in milliseconds. */
+  atMs: number;
+  /** The signer epoch and expiry of the authorization held when the node named the check, which the node says is not usable; null when none was held. */
+  held: { epoch: number; expiresAt: number } | null;
 }
 
 /** Where the setup popup stands on this connection (monkey-trading/console#168, #199). */

@@ -10,7 +10,7 @@ import { decodeHouseState, HouseFold, type HouseState, type HouseStateWire } fro
 import { QueueTotalsWalk } from "./live-queue";
 import { historyPath, readEmissionSchedule } from "./live-ledger";
 import type { EmissionSchedule } from "./emission-schedule";
-import { claimOf, liveStats } from "./live-stats";
+import { liveStats, readClaim } from "./live-stats";
 import type { OperatorRoute } from "./stats-types";
 import { collateral, plainText, READ_TIMEOUT_MS } from "./live-plain";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
@@ -87,7 +87,7 @@ export class LiveEngineClient implements EngineClient {
         this.emit({ type: "attestation", status });
       },
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
-      operatorClaim: async (address) => claimOf(this.lastRoute, (await this.transport.getUnder("/v1/operator?limit=1", address)) as OperatorRoute),
+      operatorClaim: (address) => readClaim(() => this.transport.getUnder("/v1/operator?limit=1", address), this.lastRoute),
     });
     this.transport = new SignedTransport({ ...deps, verifier: () => this.verifiers.loaded(), trust: this.trust, challenge, signal: this.signal });
     this.totalsWalk = new QueueTotalsWalk(this.transport, deps.nowMs);
@@ -122,7 +122,7 @@ export class LiveEngineClient implements EngineClient {
   async heedVault(facts: VaultFacts, chain: DeploymentReads): Promise<void> {
     if (!this.vault.uses(chain)) return;
     this.vault.note(facts);
-    if (this.trust.outdatedBy(facts.signer)) await this.trust.verifyAfresh();
+    await this.trust.heedVault(facts.signer);
   }
 
   private readonly signal = (): AbortSignal => this.deps.signal?.() ?? AbortSignal.timeout(READ_TIMEOUT_MS);

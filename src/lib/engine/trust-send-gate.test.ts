@@ -132,9 +132,11 @@ describe("a signed action a live client's gate stops", () => {
 
   it("never reaches the node once a signed answer has shown the clock wrong", async () => {
     const { node, client } = setup({ nowMs: markets.time_ms + 60_000 });
-    await expect(client.markets()).rejects.toBeInstanceOf(UntrustedError);
+    // The first check's own read of the node's word on the vault's signer is the answer that shows it.
+    await expect(client.markets()).rejects.toThrow(CLOCK);
     await expect(client.placeOrder(order)).rejects.toThrow(`Nothing was sent. ${CLOCK}`);
     await expect(client.revokeSessionKey(revocation)).rejects.toThrow(`Nothing was sent. ${CLOCK}`);
-    expect(node.requests.map((request) => request.path).filter((path) => path !== "/v1/attestation" && path !== OPERATOR_CLAIM)).toEqual(["/v1/markets"]);
+    expect(node.posts).toEqual([]);
+    expect(node.requests.map((request) => request.path).filter((path) => path !== "/v1/attestation" && path !== OPERATOR_CLAIM)).toEqual([]);
   });
 });

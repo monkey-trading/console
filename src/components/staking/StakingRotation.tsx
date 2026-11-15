@@ -63,7 +63,7 @@ export function StakingRotation() {
       {/* Both cards are there from the first paint, each in a viewport of one height, so nothing moves when the first read lands. */}
       <Reassignments records={history?.records ?? []} empty={rotation === null ? unread : "No turn among those read was skipped, promoted or refused."} nameOf={labelOf} />
       <TurnHistoryCard
-        records={history?.records ?? []} empty={rotation === null ? unread : "No turn has been assigned yet."} more={history !== null && history.next !== null} truncated={history?.truncated ?? false} reading={pages.reading} error={pages.error}
+        records={history?.records ?? []} empty={rotation === null ? unread : "No turn has been assigned yet."} more={history === null ? null : history.next !== null} truncated={history?.truncated ?? false} reading={pages.reading} error={pages.error}
         onMore={() => {
           if (rotation === null) return;
           // The last page removes the button that has focus: focus goes to the card's heading, as on the other history cards.

@@ -20,8 +20,10 @@ interface Names {
   nameOf: (address: string) => string;
 }
 
-/** The records' table: one row per assignment, the key a record's seq with its turn and position. */
-/** `empty` is what the viewport says with no record: it holds one height either way, so nothing below it moves when records land. */
+/**
+ * The records' table: one row per assignment, the key a record's seq with its turn and position. `empty` is what the viewport says
+ * with no record: it holds one height either way, so nothing below it moves when records land.
+ */
 function Records({ records, caption, empty, nameOf }: { records: readonly TurnRecord[]; caption: string; empty: string } & Names) {
   return (
     <div role="region" aria-label={caption} tabIndex={0} className="-mx-1 h-72 overflow-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
@@ -67,8 +69,8 @@ interface HistoryProps extends Names {
   records: readonly TurnRecord[];
   /** What the viewport says with no record. */
   empty: string;
-  /** Whether older turns can be read. */
-  more: boolean;
+  /** Whether older turns can be read; null before the first read, which keeps the button's place so the first answer moves nothing. */
+  more: boolean | null;
   /** Whether the node dropped older turns for room. */
   truncated: boolean;
   reading: boolean;
@@ -81,7 +83,7 @@ export function TurnHistoryCard({ records, empty, more, truncated, reading, erro
   return (
     <Card id="rotation-history-title" title="Turn history">
       <Records records={records} caption="Every turn assigned, newest first: its member, why it was named, when its key signs from and whether its member took it." empty={empty} nameOf={nameOf} />
-      {more && (
+      {more === null ? <span aria-hidden="true" className={`${TOGGLE} inline-block invisible`}>Load older</span> : more && (
         <button type="button" aria-disabled={reading} onClick={() => { if (!reading) onMore(); }} className={TOGGLE}>
           {reading ? "Loading" : "Load older"}<span className="sr-only"> turns</span>
         </button>

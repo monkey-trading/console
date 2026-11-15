@@ -74,8 +74,21 @@ export const NO_STATS: StatsReads = {
   distributionEpochs: () => Promise.reject(new EngineError(404, "not found")),
 };
 
-/** What a node's operator route says of its own enclave and the signer the vault names. */
-export function claimOf(seen: { route: OperatorRoute | null }, route: OperatorRoute): OperatorClaim {
+/**
+ * What a node's operator route, read by `read`, says of its own enclave and the signer the vault names; `seen` keeps the route. A node
+ * that predates the route says so in a signed 404 and states nothing.
+ * Error cases:
+ * - any other failure, the read's own error: an answer that never came, is unsigned or does not verify says nothing of the signer
+ */
+export async function readClaim(read: () => Promise<unknown>, seen: { route: OperatorRoute | null }): Promise<OperatorClaim> {
+  let route: OperatorRoute;
+  try {
+    route = (await read()) as OperatorRoute;
+  } catch (error) {
+    // The transport raises an `EngineError` with an HTTP status only for an answer the enclave signed.
+    if (error instanceof EngineError && error.status === 404) return {};
+    throw error;
+  }
   seen.route = route;
   return { ...(route.enclave === undefined ? {} : { enclave: route.enclave }), ...(route.signer === undefined ? {} : { signer: route.signer }) };
 }

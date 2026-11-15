@@ -6,12 +6,12 @@
 
 import { EngineError } from "../engine/client";
 import { reissueTypedData } from "../engine/eip712";
-import type { HistoryEvent, PayoutEntry, SignedWithdrawal } from "../engine/types";
+import type { HistoryEvent, PayoutEntry, SignedWithdrawal, WithdrawalAuthorization } from "../engine/types";
 import { fixedFromWire, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
 import { abandoned, awaitsTrust, domainOf, errorText, notBusy, prompting, usableWallet } from "./signing";
 import { authorizationFor, keepLatest } from "./funds";
-import type { ConsoleState } from "./state";
+import type { ConsoleState, PayoutCheck } from "./state";
 import type { ConsoleStore } from "./store";
 
 /** The most approvals one read of the account's history returns: the node's page limit. */
@@ -23,7 +23,7 @@ const PAYOUTS_LIMIT = 200;
 /** The most pages of payouts read, so a node that keeps answering with more cannot keep the page reading. */
 const PAYOUT_PAGES = 20;
 /** What a row says a failed read will do next: reads happen on triggers; the one timer is the read after a named log check (`payout-checks.ts`). */
-const READ_AGAIN = "It is read again when the next withdrawal is approved or the page reloads.";
+const READ_AGAIN = "It is read again by itself while a log check is named, and otherwise when the next withdrawal is approved or the page reloads.";
 /** Paid payouts shown beside the unpaid ones, newest first. */
 const PAID_SHOWN = 5;
 
@@ -60,10 +60,17 @@ function statusOf(state: ConsoleState, nonce: number, approvedSeq: number, nowSe
   if (state.paid.includes(nonce) || paidByNode(state, nonce, approvedSeq)) return { kind: "paid" };
   const signed = authorizationFor(state, nonce);
   const held = signed?.authorization?.expires_at ?? 0;
-  const checkAtMs = state.payoutsRead?.checks?.[nonce];
-  // The node names a check only while no usable authorization exists, so an expired one it still names a check for is waiting on that check for its replacement.
-  if (signed === null || held === 0 || (checkAtMs !== undefined && held <= nowSeconds)) return checkAtMs === undefined ? { kind: "waiting" } : { kind: "waiting", checkAtMs };
+  const check = state.payoutsRead?.checks?.[nonce];
+  // The node names a check only while no usable authorization exists: the one held when it named it (an expired one, or one of an earlier signer epoch) waits on the check for its replacement, and only a later, unexpired one decides.
+  if (check !== undefined && !(held > nowSeconds && laterThan(signed?.authorization, check.held))) return { kind: "waiting", checkAtMs: check.atMs };
+  if (signed === null || held === 0) return { kind: "waiting" };
   return held > nowSeconds ? { kind: "claimable", withdrawal: signed, expiresAt: held } : { kind: "expired", expiresAt: held };
+}
+
+/** Whether `authorization` comes after `than` in `keepLatest`'s order: a later signer epoch, or the same epoch and a later expiry. */
+function laterThan(authorization: WithdrawalAuthorization | undefined, than: PayoutCheck["held"]): boolean {
+  if (authorization === undefined) return false;
+  return than === null || authorization.signer_epoch > than.epoch || (authorization.signer_epoch === than.epoch && authorization.expires_at > than.expiresAt);
 }
 
 /** The approvals the page lists, newest first: the recent history has the newest even when the separate read of them failed or lags. */
@@ -117,11 +124,16 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
   }
 }
 
-/** The boundary each approval the node names a log check for waits at: only a well-formed time counts, so a bad answer leaves the row's plain wait. A usable authorization overrides it where the status is worked out. */
-function checksOf(entries: readonly PayoutEntry[]): Record<number, number> {
-  const checks: Record<number, number> = {};
+/**
+ * The check each approval the node names a log check for waits on, with the authorization `held` once the answer is taken: only a
+ * well-formed time counts, so a bad answer leaves the row's plain wait. A later authorization overrides it where the status is worked out.
+ */
+function checksOf(entries: readonly PayoutEntry[], held: readonly SignedWithdrawal[]): Record<number, PayoutCheck> {
+  const checks: Record<number, PayoutCheck> = {};
   for (const { nonce, check } of entries) {
-    if (check !== undefined && Number.isSafeInteger(check.boundary_ms) && check.boundary_ms > 0) checks[nonce] = check.boundary_ms;
+    if (check === undefined || !Number.isSafeInteger(check.boundary_ms) || check.boundary_ms <= 0) continue;
+    const authorization = held.find((w) => w.nonce === nonce)?.authorization;
+    checks[nonce] = { atMs: check.boundary_ms, held: authorization === undefined ? null : { epoch: authorization.signer_epoch, expiresAt: authorization.expires_at } };
   }
   return checks;
 }
@@ -164,7 +176,7 @@ export async function loadPayouts(store: ConsoleStore): Promise<void> {
     const problem = !loaded ? "The node is still loading its record of your payouts after a restart." : after !== undefined ? "The node's list of your payouts is longer than this page reads." : null;
     store.patch({
       authorizations,
-      payoutsRead: problem === null && seq !== null ? { seq, listed: entries.map((e) => e.nonce), checks: checksOf(entries) } : state.payoutsRead,
+      payoutsRead: problem === null && seq !== null ? { seq, listed: entries.map((e) => e.nonce), checks: checksOf(entries, authorizations) } : state.payoutsRead,
       payoutsProblem: problem === null ? null : `${problem} ${READ_AGAIN}`,
     });
   } catch (error) {

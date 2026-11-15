@@ -60,6 +60,19 @@ describe("the simulated rotation", () => {
     expect(new Set(records.map((record) => record.candidate)).size).toBeGreaterThanOrEqual(3);
   });
 
+  it("names, in its history, the member it names for today's and tomorrow's turns, each day of a fortnight", async () => {
+    const { client } = createMockNode(SIM_EPOCH_MS);
+    for (let day = 0; day < 14; day += 1) {
+      const answer = await client.stats.operator({ limit: 100 });
+      for (const turn of [answer.turn, answer.next_turn]) {
+        if (turn === null || turn === undefined) throw new Error("the mock names both turns");
+        const record = answer.turns?.records.find((candidate) => candidate.turn === turn.turn);
+        expect(record && [record.candidate, record.admin_key, record.position, record.reason, record.applies_at], `day ${day}, turn ${turn.turn}`).toEqual([turn.candidate, turn.admin_key, turn.position, turn.reason, turn.applies_at]);
+      }
+      client.tick(client.state.now + DAY_MS);
+    }
+  });
+
   it("moves to the next day's turn when the clock passes the boundary", async () => {
     const { client } = createMockNode(SIM_EPOCH_MS);
     const before = await client.stats.operator();

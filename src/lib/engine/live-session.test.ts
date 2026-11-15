@@ -6,13 +6,14 @@ import { parseDeploy, type RawDeploy } from "./deploy";
 import { loadVerifier } from "./load-verifier";
 import type { Verifier } from "./verifier";
 import { createLiveClient, WASM_PATH, type Browser } from "./live-session";
-import { FakeNode, FakeScheduler, FakeSocket, settle } from "./test-kit";
+import { enclaveSigning, FakeNode, FakeScheduler, FakeSocket, settle } from "./test-kit";
 import { loadGlue, readWasm, VECTORS } from "./test-vectors";
 
 const raw: RawDeploy = { mode: "live-dev", origin: "https://127.0.0.1:8080", chainId: "31337", vault: "0x" + "0".repeat(40), devOrigins: "https://127.0.0.1:8080" };
 
 async function browserFor() {
-  const node = new FakeNode();
+  // The dev node signs for the build's deployment at the browser's clock.
+  const node = new FakeNode(enclaveSigning({ chainId: Number(raw.chainId), vault: String(raw.vault) }, () => 0));
   node.attestation(() => VECTORS.signer);
   const wasm = await readWasm();
   const browser: Browser = {

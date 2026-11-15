@@ -3,8 +3,8 @@
 import { describe, expect, it } from "vitest";
 
 import { LiveEngineClient } from "./live";
-import { dev, markets, OTHER, replyOf, setup } from "./live-setup";
-import { acceptAll, FakeNode, FakeScheduler, settle } from "./test-kit";
+import { dev, markets, OTHER, replyOf, setup, vectorSigning } from "./live-setup";
+import { acceptAll, FakeNode, FakeScheduler, OPERATOR_CLAIM, settle } from "./test-kit";
 import { VECTORS } from "./test-vectors";
 import { SignatureError, UntrustedError } from "./trust";
 import type { Verifier } from "./verifier";
@@ -92,7 +92,7 @@ describe("a node whose attestation cannot be judged", () => {
 
 describe("a verifier that never loads", () => {
   it("is given up on after the deadline, shown as unverified, and tried again on the next check", async () => {
-    const node = new FakeNode();
+    const node = new FakeNode(vectorSigning());
     node.attestation(() => VECTORS.signer);
     const scheduler = new FakeScheduler();
     let loads = 0;
@@ -112,11 +112,12 @@ describe("a verifier that never loads", () => {
 
 describe("a stalled node", () => {
   it("aborts a read when the deadline passes, and says the node did not answer", async () => {
-    const node = new FakeNode();
+    const node = new FakeNode(vectorSigning());
     node.attestation(() => VECTORS.signer);
     const deadline = new AbortController();
+    // The node answers its check, its own word on the vault's signer included, and stalls on every read after.
     const hanging: typeof fetch = (input, init) =>
-      String(input).endsWith("/v1/attestation")
+      String(input).endsWith("/v1/attestation") || String(input).endsWith(OPERATOR_CLAIM)
         ? node.fetch(input, init)
         : new Promise((_, reject) => {
             const signal = init?.signal;

@@ -98,6 +98,11 @@ function count(value: unknown, what: string): number {
   return value;
 }
 
+/**
+ * The reason a turn was assigned, as the node names it.
+ * Error cases:
+ * - a reason this console does not know
+ */
 function reason(value: unknown): TurnReason {
   const found = REASONS.find((known) => known === value);
   if (found === undefined) throw new Error("The node's rotation named a reason for a turn that this console does not know.");

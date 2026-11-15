@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 
 import { signBlock } from "../engine/attestation";
 import { LiveEngineClient } from "../engine/live";
-import { acceptAll, FakeNode, FakeScheduler, FakeSocket, mockAttestation, settle } from "../engine/test-kit";
+import { SIGNER_UNREAD } from "../engine/signer-naming";
+import { acceptAll, FakeNode, FakeScheduler, FakeSocket, mockAttestation, OPERATOR_CLAIM, settle } from "../engine/test-kit";
 import { realVerifier, VECTORS, vectorResponse } from "../engine/test-vectors";
 import type { StreamMessage } from "../engine/types";
 import { WatchConnector } from "../engine/watch-wallet";
@@ -215,9 +216,12 @@ describe("a live client that keeps failing its signature checks", () => {
     const store = new ConsoleStore({ client: live, wallets: new WatchConnector(() => ""), history: () => [], initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
     store.start(0);
     for (let i = 0; i < 20; i++) await settle();
-    expect(node.requests.filter((r) => r.path === "/v1/markets")).toHaveLength(1);
+    // The first check's read of the node's word on the vault's signer is the one signed read, and it fails: nothing else is asked for.
+    expect(node.requests.map((r) => r.path)).toEqual(["/v1/attestation", OPERATOR_CLAIM]);
     expect(store.getSnapshot().markets).toEqual([]);
-    expect(store.getSnapshot().notices).toEqual({});
+    // The check failed, so the stream says why once, as it does for any node that fails its check.
+    expect(Object.keys(store.getSnapshot().notices)).toEqual(["feed"]);
+    expect(store.getSnapshot().notices.feed?.text).toContain(SIGNER_UNREAD);
   });
 });
 

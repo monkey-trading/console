@@ -10,7 +10,7 @@ import { digestNamed, isConfigHash, manifestText } from "./release-check";
 import type { Verifier } from "./verifier";
 
 export { NotSentError, SignatureError, UntrustedError } from "./trust-errors";
-import { NotSentError, UntrustedError } from "./trust-errors";
+import { NotSentError, sendRefusal, UntrustedError } from "./trust-errors";
 
 export { SIGNER_SUPERSEDED } from "./signer-naming";
 
@@ -46,30 +46,8 @@ export interface TrustDeps {
   onStatus(status: AttestationStatus): void;
   /** The verified enclave address changed from an earlier one. */
   onEnclaveChanged(): void;
-  /** The node's own signed word on its enclave and the signer the vault names (`GET /v1/operator`), read under `address`, just verified and not yet trusted (monkey-trading/console#280); rejects when it cannot. */
+  /** The node's own signed word on its enclave and the signer the vault names (`GET /v1/operator`), read under `address`, just verified and not yet trusted (monkey-trading/console#280): nothing stated from a node that predates the route; rejects when it cannot be read. */
   operatorClaim?(address: string): Promise<OperatorClaim>;
-}
-
-/** Why a signed request may not leave under `status`, as a sentence, or null when it may: only a verdict that read the vault, or a dev build's mock, signs. */
-function sendRefusal(status: AttestationStatus): string | null {
-  switch (status.kind) {
-    case "verified":
-    case "mock":
-      return null;
-    case "attested":
-      return status.why;
-    case "unverified":
-      return status.reason;
-    case "clock":
-      return `Your device clock differs from the node's signed time by ${Math.round(Math.abs(status.skewMs) / 1000)} s. Correct the clock and reload.`;
-    case "checking":
-    case "reverifying":
-      return "The node is not verified.";
-    default: {
-      const unhandled: never = status;
-      throw new Error(`Unknown attestation status: ${String(unhandled)}`);
-    }
-  }
 }
 
 /**
@@ -104,7 +82,7 @@ export class NodeTrust {
    */
   async signer(): Promise<string> {
     if (this.signerAddress === null || this.verifying !== null) await this.verify();
-    if (this.signerAddress === null) throw new UntrustedError(this.current.kind === "unverified" ? this.current.reason : "The node is not verified.");
+    if (this.signerAddress === null) throw new UntrustedError(sendRefusal(this.current) ?? "The node is not verified.");
     return this.signerAddress;
   }
 
@@ -132,9 +110,9 @@ export class NodeTrust {
   /** Verifies the node's attestation now, or joins the check already running. */
   verify(): Promise<void> {
     if (this.verifying === null) {
-      // A node that failed its check stays shown as failed while the next attempt runs.
+      // A node that failed its check, on the device clock included, stays shown as failed while the next attempt runs.
       if (this.verifiedStatus !== null) this.setStatus({ kind: "reverifying" });
-      else if (this.current.kind !== "unverified") this.setStatus({ kind: "checking" });
+      else if (this.current.kind !== "unverified" && this.current.kind !== "clock") this.setStatus({ kind: "checking" });
       this.verifying = this.run().finally(() => {
         this.verifying = null;
       });
@@ -185,8 +163,15 @@ export class NodeTrust {
     return this.current.kind !== "mock" || this.deps.devDigests.length > 0;
   }
 
+  /** The vault, read through the wallet elsewhere, names `signer`: the enclave trusted last is put aside at once if it is not that key, and a verdict the read outdates is reached again. */
+  async heedVault(signer: string): Promise<void> {
+    if (!this.outdatedBy(signer)) return;
+    this.vaultNames(signer);
+    await this.verifyAfresh();
+  }
+
   /** Whether the vault's `signer` calls for a new verdict: it is not the enclave trusted now, or the verdict was reached with no read of the vault. */
-  outdatedBy(signer: string): boolean {
+  private outdatedBy(signer: string): boolean {
     if (!this.judgedByVault) return false;
     // A check running now may have read the vault before these facts.
     return this.verifying !== null || this.current.kind === "attested" || (this.signerAddress !== null && this.signerAddress !== signer);
@@ -217,10 +202,20 @@ export class NodeTrust {
     this.deps.onStatus(status);
   }
 
+  /** Ends a check on `reason`, unless its read of the node's own word found the device clock wrong: that verdict says more, and stays. */
+  private refused(reason: string): void {
+    if (this.current.kind !== "clock") this.setStatus({ kind: "unverified", reason });
+  }
+
   private trust(address: string): void {
     const changed = this.lastSigner !== null && this.lastSigner !== address;
     this.signerAddress = this.lastSigner = address;
     if (changed) this.deps.onEnclaveChanged();
+  }
+
+  /** The vault names `signer`: the enclave trusted last is put aside when it is not that key, before any check that follows can fail, so an answer still in flight under it is refused. */
+  private vaultNames(signer: string): void {
+    if (this.lastSigner !== null && this.lastSigner !== signer) this.naming.vaultSays(this.lastSigner, signer);
   }
 
   /** Whether a signer's answers are refused: another signer was named since it was verified. */
@@ -246,8 +241,10 @@ export class NodeTrust {
     const vault = await this.readVault();
     if (vault.kind === "none") return null;
     if (vault.kind === "failed") return `Your wallet could not read the vault's current release: ${vault.reason}`;
+    this.vaultNames(vault.facts.signer);
     const digests = this.deps.devDigests.map((digest) => ({ launchDigest: digest as Hex })); // deploy.ts checked each is 0x hex
     if (!isConfigHash(configHash) || digestNamed(digests, vault.facts.release, configHash) === null) return NOT_NAMED;
+    this.naming.vaultSays(address, vault.facts.signer);
     return address === vault.facts.signer ? null : NOT_THE_SIGNER;
   }
 
@@ -267,13 +264,14 @@ export class NodeTrust {
         const address = mock.enclave.address.toLowerCase();
         const refused = await this.mockRefusal(configHash, address);
         if (refused !== null) return this.setStatus({ kind: "unverified", reason: refused });
-        const superseded = await this.naming.refusal(address); if (superseded !== null) return this.setStatus({ kind: "unverified", reason: superseded });
+        const superseded = await this.naming.refusal(address); if (superseded !== null) return this.refused(superseded);
         this.trust(address);
         return this.setStatus({ kind: "mock" });
       }
       // The node's own text until the verifier binds it to the quote: checked first, so it cannot add a line to a manifest.
       if (!isConfigHash(configHash)) return this.setStatus({ kind: "unverified", reason: "The node's attestation names no configuration hash, so it cannot be verified." });
       const vault = await this.readVault();
+      if (vault.kind === "read") this.vaultNames(vault.facts.signer);
       const pinned = vault.kind === "read" ? digestNamed(this.deps.releases, vault.facts.release, configHash) : null;
       if (vault.kind === "read" && pinned === null) return this.setStatus({ kind: "unverified", reason: NOT_NAMED });
       const manifests = (pinned === null ? this.deps.releases : [pinned]).map((release) => manifestText(release, configHash));
@@ -288,7 +286,7 @@ export class NodeTrust {
       const { release, config } = verdict.enclave;
       if (vault.kind === "read") this.naming.vaultSays(address, vault.facts.signer);
       if (vault.kind === "read" && address !== vault.facts.signer) return this.setStatus({ kind: "unverified", reason: NOT_THE_SIGNER });
-      const superseded = await this.naming.refusal(address); if (superseded !== null) return this.setStatus({ kind: "unverified", reason: superseded });
+      const superseded = await this.naming.refusal(address); if (superseded !== null) return this.refused(superseded);
       this.trust(address);
       if (vault.kind === "read") this.setStatus({ kind: "verified", release: release ?? "", config: config ?? "", address });
       else this.setStatus({ kind: "attested", release: release ?? "", address, why: vault.kind === "none" ? CONNECT_TO_CHECK : `Your wallet could not read the vault's current release: ${vault.reason}` });
