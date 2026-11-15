@@ -22,9 +22,9 @@ import { curl, marketOf, sizeFor, startRig, ticketFor, until, type Rig } from ".
 
 const BTC = 1;
 const FUND = "10000";
-/** The volume that takes tier 1 in this node's table, and what the scenario trades to count it. */
+/** What the scenario trades to pass tier 1's threshold. */
 const TRADED = 60_000;
-/** The counted volume that takes tier 1 in this node's table (`scripts/dev-trading.sh`), and the wallet's funds. */
+/** The counted volume that takes tier 1 in this node's table (`scripts/dev-trading.sh`). */
 const TIER_1 = 50_000;
 
 let rig: Rig;

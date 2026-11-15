@@ -105,7 +105,7 @@ export function accountPricing(account: AccountModel | null, params: HouseParams
 export function describeNextTier(next: NextTier): string {
   const days = next.daysLeast === 1 ? "one more day" : `${next.daysLeast} more days`;
   if (next.volumeLeft === 0n) return `Tier ${next.tier} needs trading on at least ${next.daysNeeded} days, each counting up to ${usdWhole(next.dayCap)}.`;
-  return `Tier ${next.tier} needs ${usdWholeUp(next.volumeLeft)} more counted volume, over at least ${days} at the day cap of ${usdWhole(next.dayCap)} (${next.daysNeeded} days in all).`;
+  return `Tier ${next.tier} needs ${usdWholeUp(next.volumeLeft)} more counted volume, over at least ${days} at the day cap of ${usdWhole(next.dayCap)} (the tier takes at least ${next.daysNeeded} ${next.daysNeeded === 1 ? "day" : "days"} of trading).`;
 }
 
 /** A share of a charge a tier takes off, in bps of it, as the panel states it: `10%`, or `None`. */

@@ -138,7 +138,7 @@ describe("words", () => {
     const table = decodeTiers(TABLE) ?? [];
     const volume = decodeVolume({ ...wire(0), progress: [{ capped: "0", days: 0 }, { capped: "300000", days: 0 }, { capped: "0", days: 0 }] });
     const next = volume && nextTier(volume, table);
-    expect(next && describeNextTier(next)).toBe("Tier 1 needs $700,000 more counted volume, over at least 2 more days at the day cap of $500,000 (2 days in all).");
+    expect(next && describeNextTier(next)).toBe("Tier 1 needs $700,000 more counted volume, over at least 2 more days at the day cap of $500,000 (the tier takes at least 2 days of trading).");
     expect(describeNextTier({ tier: 1, volumeLeft: 0n, dayCap: fixedFromInt(500_000), daysNeeded: 2, daysLeast: 0 })).toBe("Tier 1 needs trading on at least 2 days, each counting up to $500,000.");
     expect(describeNextTier({ tier: 1, volumeLeft: 1n, dayCap: fixedFromInt(500_000), daysNeeded: 2, daysLeast: 1 })).toContain("over at least one more day");
   });

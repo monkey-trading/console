@@ -126,7 +126,7 @@ export function PositionsView() {
   // A held Enter repeats its click: only a separate press may confirm.
   const holdsDown = (event: { repeat: boolean; preventDefault: () => void }) => { if (event.repeat) event.preventDefault(); };
   const noteId = `${id}-left-out`;
-  const feeTip = `The profit fee a close of this position pays on a gain now. ${terms === null ? "It falls as the hold lengthens to the curve's end." : describeSchedule(terms)}`;
+  const feeTip = `The profit fee a close of this position pays on a gain now. ${feeTerms === null ? "It falls as the hold lengthens to the curve's end." : describeSchedule(feeTerms)}`;
   const describedBy = readOnly.describedBy ?? (leftOutNote === null ? undefined : noteId);
   return (
     <>

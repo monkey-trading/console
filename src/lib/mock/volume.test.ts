@@ -235,6 +235,25 @@ describe("the V68 benefits", () => {
     expect(await gain(high)).toMatchObject({ profit_fee_bps: 900 });
   });
 
+  it("reads the tier at the period's end, not at the tick that closes it", async () => {
+    const node = await funded(100_000);
+    const { state } = node.client;
+    pin(node, 100_000);
+    await order(node, "1", "buy");
+    node.controls.shock(1, -300);
+    node.client.tick(state.now + 5_000);
+    await order(node, "1", "sell");
+    const losses = state.emission.results.get(ME)?.losses ?? 0n;
+    const end = state.monkey.startMs + (state.emission.period + 1) * 600_000;
+    // Four past days at tier 2's cap, and a fifth day's lot that matures 100 ms after the period ends: tier 1 then, tier 2 at the tick.
+    const day = Math.floor((end + 100) / DAY_MS);
+    for (let i = 1; i <= 4; i++) state.account(ME).volume.days.set(day - i, fixedFromInt(5_000_000));
+    state.account(ME).volume.opening.set(2, [{ maturesAt: end + 100, qty: 1n, notional: fixedFromInt(5_000_000) }]);
+    node.client.tick(end + 250);
+    const allocated = state.log.flatMap((m) => m.events.flatMap((e) => (e.type === "emission_allocated" ? [e] : [])));
+    expect(allocated[0]?.weight).toBe(fixedToWire(losses + (losses * 1_000n) / 10_000n));
+  });
+
   it("grows an account's emission weight by its tier's boost, rounded down, with the tier read at the period's end", async () => {
     const node = await funded(100_000);
     seedDays(node, 5_000_000, 5);

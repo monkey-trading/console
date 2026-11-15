@@ -137,7 +137,7 @@ export function DealTicket() {
             {prices.spreadTenths === null ? "No executable quote for this size yet." : <>{live ? "Your executable spread" : "Spread"} for this size <span className="text-fg-2">{formatTenthPercent(prices.spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(prices.spreadTenths)})</span>{prices.toxicityBps > 0 && <>, including a <span className="text-fg-2">+{prices.toxicityBps} {prices.toxicityBps === 1 ? "bp" : "bps"}</span> toxicity add-on on each price</>}</>}
           </p>
         </div>
-        {(limits !== null || (state.wallet !== null && !state.accountRead)) && (
+        {(limits !== null || (!state.accountRead && (state.wallet !== null || !state.walletDecided))) && (
           // Held with dashes while the account is read, so the size field below does not move when the figures arrive.
           <div className="mt-2">
             <p id={`${id}-limits`} className="text-label text-fg-3">{limits === null ? "Your volume tier limits" : `Volume tier ${limits.tier} limits`} in {market.symbol}</p>

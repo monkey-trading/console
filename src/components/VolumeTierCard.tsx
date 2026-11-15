@@ -14,7 +14,7 @@ import { useConsole } from "./ConsoleProvider";
 const CELL = "px-2 py-2 text-left align-top text-data sm:px-3";
 const DASH = "—";
 /** As long as the step to the next tier usually reads, so the sentence it stands for takes its lines. */
-const PLACEHOLDER_STEP = "Tier 1 needs $000,000 more counted volume, over at least 2 more days at the day cap of $000,000 (2 days in all).";
+const PLACEHOLDER_STEP = "Tier 1 needs $000,000 more counted volume, over at least 2 more days at the day cap of $000,000 (the tier takes at least 2 days of trading).";
 
 /**
  * The volume tier card on the Funding page. While a connected wallet's account has not been read it keeps its
@@ -25,7 +25,8 @@ export function VolumeTierCard() {
   const state = useConsole();
   const heading = useId();
   const standing = tierStanding(state.account, currentParams(state));
-  const pending = standing === null && state.wallet !== null && !state.accountRead;
+  // A wallet the page load is still connecting counts as connected, so the card is in place before it arrives.
+  const pending = standing === null && !state.accountRead && (state.wallet !== null || !state.walletDecided);
   if (standing === null && !pending) return null;
   const market = state.markets.find((m) => m.id === state.selected);
   const benefits = standing === null ? null : tierBenefits(standing, market?.view, state.now);

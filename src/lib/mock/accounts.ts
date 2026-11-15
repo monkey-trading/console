@@ -33,9 +33,9 @@ export function tierTable(state: MockState): TierTerms[] {
 }
 
 /** The account's volume tier now and its terms; tier 0 with no terms when the parameters name no table. */
-export function tierOfAccount(state: MockState, account: AccountState): { tier: number; terms: TierTerms | null } {
+export function tierOfAccount(state: MockState, account: AccountState, at: number = state.now): { tier: number; terms: TierTerms | null } {
   const table = tierTable(state);
-  const tier = tierNow(account.volume, table, state.now);
+  const tier = tierNow(account.volume, table, at);
   return { tier, terms: table[tier] ?? null };
 }
 

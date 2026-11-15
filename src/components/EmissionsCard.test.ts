@@ -39,6 +39,8 @@ describe("EmissionsCard's boost", () => {
   it("holds the line with a dash while the account is read, and shows none from a node that does not serve it or with no wallet", () => {
     expect(render({ wallet: WALLET, accountRead: false, account: null })).toMatch(/Emissions boost<\/span><span[^>]*>—</);
     expect(render({ wallet: WALLET, accountRead: true, account: account(volume({})) })).not.toContain("Emissions boost");
-    expect(render({ wallet: null, account: null })).not.toContain("Emissions boost");
+    // While the page load's wallet connects the line holds its place; once it has settled with none, there is no line.
+    expect(render({ wallet: null, walletDecided: false, accountRead: false, account: null })).toMatch(/Emissions boost<\/span><span[^>]*>—</);
+    expect(render({ wallet: null, walletDecided: true, account: null })).not.toContain("Emissions boost");
   });
 });

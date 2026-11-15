@@ -42,10 +42,10 @@ function weightOf(result: { losses: Fixed; writtenOff: Fixed }): Fixed {
   return weight > 0n ? weight : 0n;
 }
 
-/** The weight grown by the account's tier's emissions boost, rounded down, with the tier read now, at the period's end (V68: 2,500 bps weighs 1.25 times). */
-function boosted(state: MockState, address: string, weight: Fixed): Fixed {
+/** The weight grown by the account's tier's emissions boost, rounded down, with the tier read at the period's end `at`, however late the tick that closes it (V68: 2,500 bps weighs 1.25 times). */
+function boosted(state: MockState, address: string, weight: Fixed, at: number): Fixed {
   const account = state.accounts.get(address.toLowerCase());
-  const boost = account === undefined ? 0 : tierOfAccount(state, account).terms?.emissionsBoostBps ?? 0;
+  const boost = account === undefined ? 0 : tierOfAccount(state, account, at).terms?.emissionsBoostBps ?? 0;
   return weight + (weight * BigInt(boost)) / 10_000n;
 }
 
@@ -62,7 +62,7 @@ export function closeEmissionPeriods(state: MockState): EngineEvent[] {
   while (state.emission.period < nowPeriod) {
     const { period, results } = state.emission;
     const weights = [...results.values()]
-      .map((result) => ({ address: result.address, weight: boosted(state, result.address, weightOf(result)) }))
+      .map((result) => ({ address: result.address, weight: boosted(state, result.address, weightOf(result), state.monkey.startMs + (period + 1) * EMISSION_PERIOD_MS) }))
       .filter((entry) => entry.weight > 0n && (state.accounts.get(entry.address.toLowerCase())?.balance ?? 0n) >= 0n);
     const total = weights.reduce((sum, entry) => sum + entry.weight, 0n);
     let allocated = 0n;

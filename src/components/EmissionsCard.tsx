@@ -7,12 +7,12 @@ import { useId } from "react";
 import { formatMonkey } from "@/lib/format";
 import type { Pending, PendingEmission } from "@/lib/monkey/pending";
 import { emissionsPosition } from "@/lib/store/emissions";
+import { describeBoost } from "@/lib/tier-view";
 
 import { useConsole } from "./ConsoleProvider";
 import { focusHeading } from "./monkey/Card";
 import { BudgetCountdown } from "./monkey/Countdown";
 import { usePanelState } from "./monkey/use-monkey";
-import { describeBoost } from "@/lib/tier-view";
 import { Notice } from "./Notice";
 import { useReadOnlyNote, useSignGate } from "./SignGate";
 
@@ -58,7 +58,7 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
         <BudgetCountdown />
       </div>
       {readOnly.note}
-      {state.wallet !== null && boost !== null && (
+      {(state.wallet !== null || !state.walletDecided) && boost !== null && (
         <p className="mt-3 flex justify-between gap-2 text-caption"><span className="text-fg">Emissions boost</span><span className="text-fg-2">{boost === undefined ? "—" : `${describeBoost(boost.bps)} your weight, volume tier ${boost.tier}`}</span></p>
       )}
       {reading ? (

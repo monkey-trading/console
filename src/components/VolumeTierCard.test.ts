@@ -85,6 +85,14 @@ describe("VolumeTierCard", () => {
     expect(html).not.toContain("Up to $500,000");
   });
 
+  it("holds its frame while the page load's wallet is still connecting, before any wallet is known", () => {
+    const connecting = renderWith({ account: null, houseParams: PARAMS, pricingCurrent: true, accountRead: false, wallet: null, walletDecided: false });
+    expect(connecting).toContain("Volume tier");
+    expect(connecting).toContain("Best-price size");
+    // Once the load has settled with no wallet there is nothing to hold a place for.
+    expect(renderWith({ account: null, houseParams: PARAMS, pricingCurrent: true, accountRead: false, wallet: null, walletDecided: true })).not.toContain("Volume tier");
+  });
+
   it("holds its frame with dashes while a connected wallet's account is read, and shows nothing once it is read without volume", () => {
     const pending = renderWith({ account: null, houseParams: PARAMS, pricingCurrent: true, accountRead: false, wallet: { address: "0xabc", label: "w" } });
     expect(pending).toContain("Volume tier");

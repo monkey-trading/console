@@ -51,6 +51,9 @@ describe("the ticket's space for the tier limits", () => {
     const reading = render(0, 0, { account: null, accountRead: false, wallet });
     expect(reading).toContain("Your volume tier limits in BTC-USD");
     expect(reading).toMatch(/Best-price size<\/dt><dd[^>]*>—</);
+    // The same while the page load's wallet is still connecting, and none once the load has settled with no wallet.
+    expect(render(0, 0, { account: null, accountRead: false, wallet: null, walletDecided: false })).toContain("Your volume tier limits in BTC-USD");
+    expect(render(0, 0, { account: null, accountRead: false, wallet: null, walletDecided: true })).not.toContain("volume tier limits");
     const unsupported = render(0, 0, { account: { ...account(0), volume: undefined }, accountRead: true, wallet });
     expect(unsupported).not.toContain("volume tier");
   });
