@@ -30,7 +30,12 @@ export function liveStats(get: (path: string) => Promise<unknown>): StatsReads {
         throw error;
       }
     },
-    operator: async () => (await get("/v1/operator")) as OperatorRoute,
+    operator: async (params) => {
+      const query = new URLSearchParams();
+      if (params?.before !== undefined) query.set("before", String(params.before));
+      if (params?.limit !== undefined) query.set("limit", String(params.limit));
+      return (await get(`/v1/operator${query.size > 0 ? `?${query}` : ""}`)) as OperatorRoute;
+    },
     operators: async () => (await get("/v1/operators")) as OperatorList,
     distributionEpochs: async (params) => {
       const query = new URLSearchParams();

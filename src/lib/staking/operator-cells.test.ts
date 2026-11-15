@@ -9,13 +9,14 @@ import type { OperatorRow } from "./operator-table";
 const ROW: OperatorRow = {
   address: "0x00000000000000000000000000000000000000a1", hostname: "alpha.example", registeredHostname: "alpha.example", role: "standby", listed: true, eligible: true, registration: 0,
   votes: 620_000n * MONKEY_UNIT, shareBps: 3_712, bond: 50_000n * MONKEY_UNIT, release: `0x${"ab".repeat(32)}`, endpoint: "https://alpha.example:9443/handover",
+  membership: null,
 };
 
 describe("operatorCells", () => {
   it("says a listed candidate's name, role, eligibility, stake with its share, bond, release and endpoint", () => {
     expect(operatorCells(ROW)).toEqual({
       name: "alpha.example", label: "alpha.example", address: "0x000000…00a1", role: "Standby", eligibility: "Eligible",
-      delegated: "620,000 MONKEY (37.12%)", bond: "50,000 MONKEY", release: "0xababab…abab", endpoint: "https://alpha.example:9443/handover",
+      delegated: "620,000 MONKEY (37.12%)", bond: "50,000 MONKEY", membership: "—", setWeight: "—", turnShare: "—", release: "0xababab…abab", endpoint: "https://alpha.example:9443/handover",
     });
   });
 

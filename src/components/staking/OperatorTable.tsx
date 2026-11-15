@@ -2,7 +2,7 @@
 
 /**
  * One page of the operator table (monkey-trading/console#279, #309): a card per operator below
- * 1024 px and a table from there, each with its role, delegated stake, self-bond, release and
+ * 1024 px and a table from there, each with its role, delegated stake, self-bond, rotation set membership, release and
  * handover endpoint, and what the account delegates to it. Delegate, Move and Take back are actions
  * on each row; each opens its editor under the row — one editor at a time — saying what its amount
  * would change before the wallet is asked. Every string from the list renders as text.
@@ -142,6 +142,9 @@ export function OperatorTable(props: Props) {
               <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-fg-2">
                 <div><dt className="text-label text-fg-3">Delegated stake</dt><dd>{cells.delegated}</dd></div>
                 <div><dt className="text-label text-fg-3">Self-bond</dt><dd>{cells.bond}</dd></div>
+                <div><dt className="text-label text-fg-3">Rotation set</dt><dd>{cells.membership}</dd></div>
+                <div><dt className="text-label text-fg-3">Set weight</dt><dd>{cells.setWeight}</dd></div>
+                <div><dt className="text-label text-fg-3">Share of turns</dt><dd>{cells.turnShare}</dd></div>
                 <div><dt className="text-label text-fg-3">Release</dt><dd title={row.release}>{cells.release}</dd></div>
                 <div className="col-span-2"><dt className="text-label text-fg-3">Handover endpoint</dt><dd className="[overflow-wrap:anywhere]">{cells.endpoint}</dd></div>
                 <div><dt className="text-label text-fg-3">Yours</dt><dd className={mine > 0n ? "text-glow" : ""}>{mine > 0n ? formatMonkey(mine) : "—"}</dd></div>
@@ -153,14 +156,17 @@ export function OperatorTable(props: Props) {
         })}
       </ul>
       <div role="region" aria-label="Operators table" tabIndex={0} className="hidden overflow-x-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow lg:block">
-        <table className="w-full min-w-[62rem] text-caption">
-          <caption className="sr-only">Operators the registry lists, with each one&apos;s role, delegated stake and share of all stake, self-bond, release and handover endpoint, and what you delegate to it. Amounts are in MONKEY.</caption>
+        <table className="w-full min-w-[80rem] text-caption">
+          <caption className="sr-only">Operators the registry lists, with each one&apos;s role, delegated stake and share of all stake, self-bond, whether it is in the rotation set with its weight there and the share of turns the weight draws, release and handover endpoint, and what you delegate to it. Amounts are in MONKEY.</caption>
           <thead>
             <tr className="border-b border-line">
               <th scope="col" aria-sort={ariaSort("name", sort)} className={TH}>Operator</th>
               <th scope="col" aria-sort={ariaSort("role", sort)} className={TH}>Role</th>
               <th scope="col" aria-sort={ariaSort("votes", sort)} className={TH}>Delegated stake</th>
               <th scope="col" aria-sort={ariaSort("bond", sort)} className={TH}>Self-bond</th>
+              <th scope="col" className={TH}>Rotation set</th>
+              <th scope="col" className={TH}>Set weight</th>
+              <th scope="col" aria-sort={ariaSort("turns", sort)} className={TH}>Share of turns</th>
               <th scope="col" className={TH}>Release</th>
               <th scope="col" className={TH}>Handover endpoint</th>
               <th scope="col" className={TH}>Yours</th>
@@ -180,6 +186,9 @@ export function OperatorTable(props: Props) {
                     <td className={TD}><Role row={row} /></td>
                     <td className={`${TD} whitespace-nowrap text-fg`}>{cells.delegated}</td>
                     <td className={`${TD} whitespace-nowrap text-fg-2`}>{cells.bond}</td>
+                    <td className={`${TD} whitespace-nowrap ${row.membership?.inSet === true ? "text-fg" : "text-fg-3"}`}>{cells.membership}</td>
+                    <td className={`${TD} whitespace-nowrap text-fg-2`}>{cells.setWeight}</td>
+                    <td className={`${TD} whitespace-nowrap text-fg-2`}>{cells.turnShare}</td>
                     <td className={`${TD} whitespace-nowrap text-fg-2`} title={row.release}>{cells.release}</td>
                     <td className={`${TD} text-fg-2 [overflow-wrap:anywhere]`}>{cells.endpoint}</td>
                     <td className={`${TD} whitespace-nowrap ${mine > 0n ? "text-glow" : "text-fg-2"}`}>{mine > 0n ? formatMonkey(mine) : "—"}</td>
@@ -187,7 +196,7 @@ export function OperatorTable(props: Props) {
                   </tr>
                   {editor !== null && (
                     <tr className="border-b border-line last:border-b-0">
-                      <td colSpan={8} className="px-3 pb-3">{editor}</td>
+                      <td colSpan={11} className="px-3 pb-3">{editor}</td>
                     </tr>
                   )}
                 </Fragment>

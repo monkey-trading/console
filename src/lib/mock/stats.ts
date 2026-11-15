@@ -214,7 +214,7 @@ export function mockStats(state: MockState): StatsReads {
         throw error;
       }
     },
-    operator: async () => operatorRoute(state),
+    operator: async (params) => operatorRoute(state, params),
     operators: async () => operatorList(state),
     distributionEpochs: async (params) => distributionEpochsPage(state, params),
     contracts: mockContracts(),

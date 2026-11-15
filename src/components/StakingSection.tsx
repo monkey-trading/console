@@ -2,7 +2,7 @@
 
 /**
  * The Staking screen (monkey-trading/console#271) as a section: its heading, the Delegate, Rewards,
- * Epochs and Governance tab bar, and one provider for the reads its tabs share (monkey-trading/console#308).
+ * Epochs, Governance and Rotation tab bar, and one provider for the reads its tabs share (monkey-trading/console#308).
  * The reads are created once per visit to the section, so what they hold — a typed amount, a loaded
  * page of history, the operator list — survives a tab switch, and the Delegate tab's editing
  * context (its open editor, the Move form's destination, the addresses typed) is kept here too
@@ -23,6 +23,7 @@ import { EpochReads } from "@/lib/staking/epoch-reads";
 import { GovernanceReads } from "@/lib/staking/governance-reads";
 import { DistributionHistoryReads } from "@/lib/staking/history-reads";
 import { MemberVoteReads } from "@/lib/staking/member-vote-reads";
+import { TurnHistoryReads } from "@/lib/staking/turn-history-reads";
 import { NO_TABLE_VIEW, type TableViewState } from "@/lib/staking/operator-table";
 
 import { useSession } from "./ConsoleProvider";
@@ -41,6 +42,8 @@ export interface StakingReads {
   /** The Governance tab's reads: the node's house state for the votes the log holds, and how the account and the members it delegates to voted. */
   governance: GovernanceReads;
   memberVotes: MemberVoteReads;
+  /** The Rotation tab's older turns, which "Load older" reads and a tab switch keeps. */
+  turns: TurnHistoryReads;
   /** Whether the operators card shows: from the node's first verdict, kept through a re-verification. */
   operatorsSettled: boolean;
   /**
@@ -80,6 +83,7 @@ export function StakingSection({ children }: { children: ReactNode }) {
   const [delegations] = useState(() => new DelegationReads(store));
   const [governance] = useState(() => new GovernanceReads(store));
   const [memberVotes] = useState(() => new MemberVoteReads(store, operators, governance, delegations));
+  const [turns] = useState(() => new TurnHistoryReads(store));
   const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
   const [shownOnce, setShownOnce] = useState(false);
   const operatorsSettled = useConsoleSelect((state) => operatorsShown(state.attestation, state.stream, shownOnce));
@@ -107,6 +111,7 @@ export function StakingSection({ children }: { children: ReactNode }) {
   const historyWanted = trusted && wanted.includes("history");
   const governanceWanted = wanted.includes("governance");
   const votesWanted = wanted.includes("votes");
+  const turnsWanted = wanted.includes("turns");
   // Declared before the panel's start: it reads nothing while the panel is closed, and the start reads the wallet itself, so a mount or a tab switch reads it once and a change of wallet reads it again.
   useEffect(() => {
     void panel.refreshWallet();
@@ -118,6 +123,7 @@ export function StakingSection({ children }: { children: ReactNode }) {
   useEffect(() => (historyWanted ? history.start(hidden) : undefined), [history, historyWanted]);
   useEffect(() => (governanceWanted ? governance.start(hidden) : undefined), [governance, governanceWanted]);
   useEffect(() => (votesWanted ? memberVotes.start(hidden) : undefined), [memberVotes, votesWanted]);
+  useEffect(() => (turnsWanted ? turns.start() : undefined), [turns, turnsWanted]);
   // The history's registration on the session lives for the section's whole mount, not for its
   // reads' run, so the mock's account reset reaches the retained rows from any tab.
   useEffect(() => {
@@ -132,7 +138,7 @@ export function StakingSection({ children }: { children: ReactNode }) {
   const setDelegateEditing = (next: EditingUpdate) => setEditingState((held) => keptFor(account, next, held, store.getSnapshot().wallet?.address ?? null));
   const [table, setTable] = useState<TableViewState>(NO_TABLE_VIEW);
   const [typedSlot, setTypedSlot] = useState(false);
-  const reads: StakingReads = { panel, operators, epochs, delegations, history, governance, memberVotes, operatorsSettled, delegateEditing, setDelegateEditing, table, setTable, typedSlot, setTypedSlot };
+  const reads: StakingReads = { panel, operators, epochs, delegations, history, governance, memberVotes, turns, operatorsSettled, delegateEditing, setDelegateEditing, table, setTable, typedSlot, setTypedSlot };
   return (
     <StakingContext.Provider value={reads}>
       <MonkeyPanelProvider value={panel}>

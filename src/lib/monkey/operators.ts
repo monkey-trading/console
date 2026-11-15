@@ -10,6 +10,7 @@
 import { readBlock, type AttestationStatus, type FeedStatus } from "../engine/attestation";
 import type { OperatorRoute } from "../engine/stats-types";
 import { operatorsView, type OperatorsView } from "../staking/operator-table";
+import { rotationView, type RotationView } from "../staking/rotation";
 import { EnclaveBinding } from "../store/enclave-binding";
 import type { ConsoleStore } from "../store/store";
 import { failed, LOADING, ready, type Read } from "./figures";
@@ -18,6 +19,8 @@ import { NODE_READ_MS } from "./panel";
 export interface OperatorsState {
   /** What the node's log mirrors. */
   route: Read<OperatorRoute>;
+  /** The rotation `route` carries, checked as it is read (monkey-trading/console#280); null until a route has passed its check. */
+  rotation: RotationView | null;
   /** The registry's candidates at the final block the node last read; unavailable from a node with no registry lens. */
   list: Read<OperatorsView>;
   /**
@@ -28,7 +31,7 @@ export interface OperatorsState {
   held: { view: OperatorsView; verifiedAtMs: number } | null;
 }
 
-const IDLE_READS: OperatorsState = { route: LOADING, list: LOADING, held: null };
+const IDLE_READS: OperatorsState = { route: LOADING, rotation: null, list: LOADING, held: null };
 
 /**
  * Whether the Staking page shows its operators card: with the rest of the figures once the node is
@@ -48,6 +51,9 @@ export function mirroredElection(route: OperatorRoute | null, nowMs: number): { 
   if (election === null || election.cancelled === true || nowMs <= 0 || election.effective_at <= nowMs) return null;
   return { candidate: election.candidate, effectiveAtMs: election.effective_at };
 }
+
+/** The events a change of operator, set or turn shows in: a read of the route follows each. */
+export const ROTATION_EVENTS: ReadonlySet<string> = new Set(["operator_elected", "rotation_switched", "rotation_set_adopted", "turn_assigned", "turn_refused", "turn_taken"]);
 
 export class OperatorReads {
   private state: OperatorsState = IDLE_READS;
@@ -106,7 +112,7 @@ export class OperatorReads {
       if (!isHidden()) void this.refresh();
     }, NODE_READ_MS);
     const unsubscribe = this.store.deps.client.subscribe((message) => {
-      if (message.events.some((event) => event.type === "operator_elected" || event.type === "rotation_switched")) void this.refresh();
+      if (message.events.some((event) => ROTATION_EVENTS.has(event.type))) void this.refresh();
     });
     return () => {
       this.open = false;
@@ -122,7 +128,7 @@ export class OperatorReads {
   private drop(): void {
     this.routeRead += 1;
     this.listRead += 1;
-    this.set({ route: LOADING, list: LOADING });
+    this.set({ route: LOADING, rotation: null, list: LOADING });
   }
 
   /** Reads both routes, while the node's answers may be read; a route the node does not serve is not asked again. */
@@ -139,7 +145,9 @@ export class OperatorReads {
     const cycle = this.cycle;
     try {
       const route = await this.store.deps.client.stats.operator();
-      if (ticket === this.routeRead && cycle === this.cycle) this.set({ route: ready(route) });
+      // Checked as it is read: a malformed rotation is a failed read, and the last good one stays.
+      const rotation = rotationView(route);
+      if (ticket === this.routeRead && cycle === this.cycle) this.set({ route: ready(route), rotation });
     } catch (error) {
       if (ticket === this.routeRead && cycle === this.cycle) this.set({ route: failed(error, this.state.route.value) });
     }

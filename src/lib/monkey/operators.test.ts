@@ -8,7 +8,7 @@ import type { OperatorList } from "../engine/staking-reads";
 import type { OperatorRoute } from "../engine/stats-types";
 import { DelegationReads } from "../staking/delegation-reads";
 import { changeDelegation } from "./actions";
-import { hostnameListed, shownHostname } from "../staking/hostnames";
+import { hostnameListed, needsConsoleUpdate, shownHostname } from "../staking/hostnames";
 import { operatorsView } from "../staking/operator-table";
 import { mirroredElection, OperatorReads, operatorsShown } from "./operators";
 import { NODE_READ_MS } from "./panel";
@@ -31,6 +31,16 @@ describe("hostnameListed", () => {
     expect(hostnameListed(DEPLOY, "build.example")).toBe(true);
     expect(hostnameListed(DEPLOY, "evil.example")).toBe(false);
     expect(hostnameListed(DEPLOY, "not a host")).toBe(false);
+  });
+});
+
+describe("needsConsoleUpdate", () => {
+  it("is true for a listed candidate whose hostname the build does not list, false for one it lists, and false for an address the list does not name or a row that is not a candidacy", () => {
+    expect(needsConsoleUpdate(DEPLOY, { listed: true, registeredHostname: "evil.example" })).toBe(true);
+    expect(needsConsoleUpdate(DEPLOY, { listed: true, registeredHostname: "b.example" })).toBe(false);
+    expect(needsConsoleUpdate(DEPLOY, { listed: true, registeredHostname: "not a host" })).toBe(true);
+    expect(needsConsoleUpdate(DEPLOY, undefined)).toBe(false);
+    expect(needsConsoleUpdate(DEPLOY, { listed: false, registeredHostname: "" })).toBe(false);
   });
 });
 

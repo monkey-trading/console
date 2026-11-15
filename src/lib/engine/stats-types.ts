@@ -7,6 +7,9 @@
 import type { ClaimStanding } from "./emissions";
 import type { Address, MarketId } from "./types";
 import type { DistributionEpochsPage, OperatorList } from "./staking-reads";
+import type { RotationSetView, TurnsPageView, TurnView } from "./rotation-types";
+
+export type { RotationSetView, SetMemberView, TurnReason, TurnRecordView, TurnsPageView, TurnView } from "./rotation-types";
 
 /** `/v1/house`'s added figures. A scan figure is null until the node's first scan; a node that predates the routes omits them. */
 export interface HouseScanView {
@@ -227,12 +230,22 @@ export interface ElectionView {
   cancelled?: boolean;
 }
 
-/** `GET /v1/operator`: the key in effect, its pending rotation, and the registry as the log mirrors it. */
+/** `GET /v1/operator`: the key in effect, its pending rotation, the registry and the daily turns as the log mirrors them, and the signer the vault names. */
 export interface OperatorRoute {
   operator: Address;
   pending_rotation: { address: Address; effective_at: number } | null;
   rotation_enabled: boolean;
   last_election: ElectionView | null;
+  /** From the engine's V51; absent from a node that predates it. */
+  rotation_set?: RotationSetView | null;
+  next_rotation_set?: RotationSetView | null;
+  turn?: TurnView | null;
+  next_turn?: TurnView | null;
+  turns?: TurnsPageView;
+  /** The enclave address that signs this node's answers. */
+  enclave?: Address;
+  /** The vault's signer epoch and the key it names, at the latest block the node's liveness rule read; absent where the rule does not run. */
+  signer?: { epoch: number; address: Address };
 }
 
 /** The dashboard's reads, kept apart from the rest of the client so a node without the routes answers 404 to them alone. */
@@ -245,7 +258,7 @@ export interface StatsReads {
   /** The account's distribution proof, or null when the node holds none for it. */
   distributions(address: Address): Promise<DistributionProof | null>;
   /** `GET /v1/operator`; rejects with a 404 `EngineError` from a node that predates it. */
-  operator(): Promise<OperatorRoute>;
+  operator(params?: { before?: number; limit?: number }): Promise<OperatorRoute>;
   /** `GET /v1/operators`; rejects with a 404 `EngineError` from a node with no registry lens, and a 503 before its first read or once that read is stale. */
   operators(): Promise<OperatorList>;
   /** `GET /v1/monkey/distributions`: closed epochs older than `before`, newest first; a 404 from a node that predates it. */

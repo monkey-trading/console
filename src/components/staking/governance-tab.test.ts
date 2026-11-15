@@ -13,6 +13,7 @@ import { EpochReads } from "@/lib/staking/epoch-reads";
 import { GovernanceReads } from "@/lib/staking/governance-reads";
 import { DistributionHistoryReads } from "@/lib/staking/history-reads";
 import { MemberVoteReads } from "@/lib/staking/member-vote-reads";
+import { TurnHistoryReads } from "@/lib/staking/turn-history-reads";
 import { NO_TABLE_VIEW } from "@/lib/staking/operator-table";
 
 import { ConsoleProvider, useSession } from "../ConsoleProvider";
@@ -32,7 +33,7 @@ function Section({ busy = false, children }: { busy?: boolean; children?: ReactN
   const delegations = new DelegationReads(store);
   const reads: StakingReads = {
     panel: new MonkeyPanel(store, "staking"), operators, epochs: new EpochReads(store), delegations, history: new DistributionHistoryReads(store),
-    governance, memberVotes: new MemberVoteReads(store, operators, governance, delegations), operatorsSettled: true, delegateEditing: NO_EDITING,
+    governance, memberVotes: new MemberVoteReads(store, operators, governance, delegations), turns: new TurnHistoryReads(store), operatorsSettled: true, delegateEditing: NO_EDITING,
     setDelegateEditing: () => undefined, table: NO_TABLE_VIEW, setTable: () => undefined, typedSlot: false, setTypedSlot: () => undefined,
   };
   return createElement(StakingContext.Provider, { value: reads }, children);

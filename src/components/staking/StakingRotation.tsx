@@ -1,0 +1,71 @@
+"use client";
+
+/**
+ * The Staking section's Rotation tab (monkey-trading/console#280): the rotation set in effect and the
+ * next one, today's and tomorrow's turns, the skips and promotions, and the turn history, from the
+ * node's signed `GET /v1/operator`. The tab starts only the operator reads and the older-turn reads.
+ */
+
+import { useCallback, useMemo, useSyncExternalStore } from "react";
+
+import { readBlock } from "@/lib/engine/attestation";
+import { needsConsoleUpdate } from "@/lib/staking/hostnames";
+import { shortHex } from "@/lib/format";
+import { turnLine } from "@/lib/staking/rotation";
+import { joinHistory } from "@/lib/staking/turn-history-reads";
+import { withAddress } from "@/lib/staking/operator-cells";
+
+import { useSession } from "../ConsoleProvider";
+import { Row } from "../monkey/Row";
+import { ReadNote } from "../monkey/ReadNote";
+import { NOTE } from "../monkey/styles";
+import { useConsoleSelect } from "../monkey/use-monkey";
+import { useStaking } from "../StakingSection";
+import { SetCard } from "./RotationSets";
+import { Reassignments, TurnHistoryCard } from "./TurnRecords";
+import { useOperatorLabel } from "./use-operator-label";
+
+/** The Rotation tab. Its figures are hidden, not unmounted, while the node is not trusted, as on the other tabs. */
+export function StakingRotation() {
+  const { operators, turns } = useStaking();
+  const { deploy, node } = useSession();
+  const trusted = useConsoleSelect((state) => readBlock(state.attestation, state.stream) === null);
+  const nowMs = useConsoleSelect((state) => Math.floor(state.now / 60_000) * 60_000);
+  const { route, rotation, list } = useSyncExternalStore(operators.subscribe, operators.getSnapshot, operators.getSnapshot);
+  const pages = useSyncExternalStore(turns.subscribe, turns.getSnapshot, turns.getSnapshot);
+  const labelOf = useOperatorLabel(operators);
+  const nameOf = useCallback((address: string) => withAddress(labelOf(address), address), [labelOf]);
+  const rows = list.value?.rows;
+  // A member whose registered hostname this build does not list could not be followed to: the console needs updating.
+  const needsUpdate = useCallback((address: string) => {
+    return node === null && needsConsoleUpdate(deploy, rows?.find((candidate) => candidate.address === address));
+  }, [node, deploy, rows]);
+  const history = useMemo(() => (rotation === null ? null : joinHistory(rotation.history, pages.older)), [rotation, pages.older]);
+  const signer = rotation?.signer ?? null;
+  const rotationOn = list.value?.rotationEnabled ?? route.value?.rotation_enabled ?? null;
+  return (
+    <div className={`mt-4 ${trusted ? "grid" : "hidden"} gap-4`}>
+      <dl className="grid gap-x-8 gap-y-2 rounded-xl border border-line-2 bg-ink-1 p-4 sm:grid-cols-2">
+        <Row label="Rotation">{rotationOn === null ? "—" : rotationOn ? "On" : "Off"}</Row>
+        <Row label="Signer the vault names">{signer === null ? "—" : <span title={signer.address}>{shortHex(signer.address)}, epoch {signer.epoch}</span>}</Row>
+        <Row label="Today's turn">{rotation === null ? "—" : turnLine(rotation.turn, nameOf, "No turn is in effect")}</Row>
+        <Row label="Tomorrow's turn">{rotation === null ? "—" : turnLine(rotation.nextTurn, nameOf, "Not drawn yet")}</Row>
+      </dl>
+      <ReadNote read={route} loading="Reading the node's rotation…" />
+      <div className="grid items-start gap-4 xl:grid-cols-2">
+        <SetCard id="rotation-set-title" title="Set in effect" set={rotation?.set ?? null} empty={rotation === null ? "Reading the node's rotation…" : "No rotation set is in effect."} nowMs={nowMs} nameOf={labelOf} needsUpdate={needsUpdate} />
+        <SetCard id="rotation-next-title" title="Next set" set={rotation?.nextSet ?? null} empty={rotation === null ? "Reading the node's rotation…" : "No later set has been mirrored."} nowMs={nowMs} nameOf={labelOf} needsUpdate={needsUpdate} />
+      </div>
+      {history !== null && (
+        <>
+          <Reassignments records={history.records} nameOf={labelOf} />
+          <TurnHistoryCard
+            records={history.records} more={history.next !== null} truncated={history.truncated} reading={pages.reading} error={pages.error}
+            onMore={() => { if (rotation !== null) void turns.loadOlder(rotation.history); }} nameOf={labelOf}
+          />
+        </>
+      )}
+      <p className={NOTE}>Each set is the members the staking contract&apos;s close adopted, weighted by what was delegated to them then. A member&apos;s expected share of turns is its weight over the set&apos;s, the odds of each day&apos;s draw. The turn changes at 22:30 UTC; the console moves to the new member&apos;s node once it verifies.</p>
+    </div>
+  );
+}

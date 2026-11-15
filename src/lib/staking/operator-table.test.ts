@@ -58,7 +58,7 @@ describe("operatorsView", () => {
   it("adds an operator in effect the registry does not list, with no votes, no registration and no Delegate", () => {
     const { rows, inEffect } = operatorsView(list([candidate(2)], DEPLOYER.toUpperCase().replace("0X", "0x")));
     expect(inEffect).toBe(DEPLOYER);
-    expect(rows.at(-1)).toEqual({ address: DEPLOYER, hostname: null, registeredHostname: "", role: "active", listed: false, eligible: false, votes: null, shareBps: 0, bond: null, release: RELEASE, endpoint: null, registration: null });
+    expect(rows.at(-1)).toEqual({ address: DEPLOYER, hostname: null, registeredHostname: "", role: "active", listed: false, eligible: false, votes: null, shareBps: 0, bond: null, release: RELEASE, endpoint: null, registration: null, membership: null });
     expect(rows[0]).toMatchObject({ role: "standby", listed: true, votes: 20n, shareBps: 200, bond: 6n, endpoint: "https://op-2.example/handover", registration: 2 });
   });
 
@@ -114,7 +114,7 @@ describe("operatorsView", () => {
 function many(count: number): OperatorRow[] {
   return Array.from({ length: count }, (_, i) => {
     const n = i + 1;
-    return { address: candidate(n).address, hostname: `op-${n}.example`, registeredHostname: `op-${n}.example`, role: n === 1 ? "active" : "candidate", listed: true, eligible: true, votes: BigInt(n) * 10n, shareBps: 0, bond: BigInt(n) * 3n, release: RELEASE, endpoint: `https://op-${n}.example/handover`, registration: n };
+    return { address: candidate(n).address, hostname: `op-${n}.example`, registeredHostname: `op-${n}.example`, role: n === 1 ? "active" : "candidate", listed: true, eligible: true, votes: BigInt(n) * 10n, shareBps: 0, bond: BigInt(n) * 3n, release: RELEASE, endpoint: `https://op-${n}.example/handover`, registration: n, membership: null };
   });
 }
 
@@ -180,7 +180,7 @@ describe("tableView sorting", () => {
   });
 
   it("offers every sort it knows, each once", () => {
-    const ids: SortId[] = ["role", "votes-desc", "votes-asc", "bond-desc", "bond-asc", "name-asc", "name-desc"];
+    const ids: SortId[] = ["role", "votes-desc", "votes-asc", "bond-desc", "bond-asc", "turns-desc", "turns-asc", "name-asc", "name-desc"];
     expect(SORTS.map((sort) => sort.value)).toEqual(ids);
     for (const id of ids) expect(tableView(rows, "", id, 0).rows).toHaveLength(rows.length);
   });

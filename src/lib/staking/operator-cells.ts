@@ -1,6 +1,7 @@
 /** The words of the operator table's cells, the same in its card and table layouts. */
 
 import { formatMonkey, formatRate, shortHex } from "../format";
+import { membershipWord } from "./operator-membership";
 import type { OperatorRole, OperatorRow } from "./operator-table";
 
 export const ROLE_LABELS: Record<OperatorRole, string> = { active: "Active", elected: "Elected", promoted: "Promoted", standby: "Standby", candidate: "Candidate", unlisted: "Unlisted", unknown: "—" };
@@ -16,6 +17,10 @@ export interface OperatorCells {
   eligibility: string;
   delegated: string;
   bond: string;
+  /** Whether it is in the rotation set in effect, its weight there, and the share of turns the weight draws. */
+  membership: string;
+  setWeight: string;
+  turnShare: string;
   release: string;
   endpoint: string;
 }
@@ -34,6 +39,9 @@ export function operatorCells(row: OperatorRow): OperatorCells {
     eligibility: (row.role === "unlisted" || row.role === "unknown") ? "—" : !row.listed ? "Not listed" : row.eligible ? "Eligible" : "Not eligible",
     delegated: row.votes === null ? "—" : `${formatMonkey(row.votes)} (${formatRate(row.shareBps)})`,
     bond: row.bond === null ? "—" : formatMonkey(row.bond),
+    membership: membershipWord(row.membership),
+    setWeight: row.membership === null || !row.membership.inSet ? "—" : formatMonkey(row.membership.weight),
+    turnShare: row.membership === null || !row.membership.inSet ? "—" : formatRate(row.membership.turnShareBps),
     release: row.release === "" ? "—" : shortHex(row.release),
     endpoint: row.endpoint === null || row.endpoint === "" ? "—" : row.endpoint,
   };
