@@ -17,7 +17,7 @@ import type { EngineClient, Unsubscribe } from "./client";
 import type { Deploy } from "./deploy";
 import type { Scheduler } from "./live-stream";
 import { ROTATION_EVENTS } from "./rotation-events";
-import { operatorTarget, signedAnswer, soonest, type FollowStatus } from "./operator-follow-status";
+import { bounded, nodeSaid, NOTHING_SAID, operatorTarget, signedAnswer, soonest, type FollowStatus, type NodeSaid } from "./operator-follow-status";
 import type { DeploymentReads, NamedOperator } from "./registry";
 
 export { operatorTarget, type FollowStatus } from "./operator-follow-status";
@@ -28,8 +28,6 @@ export const SLOW_READ_MS = 5 * 60_000;
 export const RETRY_MS = 30_000;
 /** How long after a pending election's effective time it is read again, so the chain has passed it, in milliseconds. */
 const AFTER_EFFECT_MS = 5_000;
-/** How long the wallet may take over one chain read before the check gives up on it, in milliseconds; a wallet asleep must not hold the follower from the next wallet. */
-const CHAIN_READ_MS = 30_000;
 
 export interface FollowerDeps {
   deploy: Pick<Deploy, "origin" | "candidateOrigins">;
@@ -161,25 +159,25 @@ export class OperatorFollower {
   /** Reads the chain, and beside it the node's word on its next turn, so a node that stalls holds nothing from the chain. */
   private async run(): Promise<void> {
     this.disarm();
-    const turn = this.nextTurnAt();
+    const node = this.readNode();
     try {
-      await this.readChain();
+      await this.readChain(node);
     } finally {
-      this.turnAtMs = await turn;
+      this.turnAtMs = (await node).turnAtMs;
     }
   }
 
-  private async readChain(): Promise<void> {
+  private async readChain(node: Promise<NodeSaid>): Promise<void> {
     this.lastCheckAt = this.deps.nowMs();
     const chain = this.deps.chain();
-    if (chain === null) return this.settled({ kind: "pinned", origin: this.origin });
+    if (chain === null) return this.followNode(await node);
     const reason = (error: unknown) => (error instanceof Error ? error.message : "the read failed");
     // First, whatever the registry goes on to answer: a retirement or a promotion's `setSigner` ends
     // the verdict on the node in use whatever comes of the operator's node. A move of the release alone
     // does not: the incumbent holds the vault's signer key and keeps sequencing until its successor has taken it.
     let vaultFailed: string | null = null;
     try {
-      const facts = await this.bounded(chain.vault());
+      const facts = await bounded(this.deps.scheduler, chain.vault());
       if (this.deps.chain() !== chain) return; // another wallet came while this ran; `check` runs again for it
       await this.current?.heedVault(facts, chain);
     } catch (error) {
@@ -187,7 +185,7 @@ export class OperatorFollower {
     }
     let named: NamedOperator | null;
     try {
-      named = await this.bounded(chain.operator());
+      named = await bounded(this.deps.scheduler, chain.operator());
     } catch (error) {
       if (this.deps.chain() === chain) this.set({ kind: "failed", origin: this.origin, reason: reason(error) });
       return;
@@ -206,30 +204,24 @@ export class OperatorFollower {
   }
 
   /**
-   * When the node in use says its next daily turn begins, if it is ahead; null when it says none or cannot be read. The read is a signed
-   * one, so it also lets the client judge the signer the vault names: an answer that refuses the node ends its verdict, whatever follows.
+   * What the node in use says in its signed operator route: when its next daily turn begins and who the registry names (`nodeSaid`); nothing
+   * when it cannot be read. The read is a signed one, so it also lets the client judge the signer the vault names.
    */
-  private async nextTurnAt(): Promise<number | null> {
-    if (this.current === null) return null;
+  private async readNode(): Promise<NodeSaid> {
+    if (this.current === null) return NOTHING_SAID;
     try {
-      const route = await this.bounded(this.current.stats.operator({ limit: 1 }));
-      const at = route.next_turn?.applies_at;
-      return at !== undefined && at > this.deps.nowMs() ? at : null;
+      return nodeSaid(await bounded(this.deps.scheduler, this.current.stats.operator({ limit: 1 })), this.deps.nowMs());
     } catch {
-      // A node that predates the route, or that is not trusted, says nothing here; the verdict and the chain's reads speak for it.
-      return null;
+      return NOTHING_SAID; // a node that predates the route, or is not trusted, says nothing; the verdict and the chain's reads speak for it
     }
   }
 
-  /** `read`, or a rejection once the wallet has had its time. */
-  private bounded<T>(read: Promise<T>): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const timer = this.deps.scheduler.setTimeout(() => reject(new Error("your wallet did not answer in time")), CHAIN_READ_MS);
-      read.then(
-        (value) => { this.deps.scheduler.clearTimeout(timer); resolve(value); },
-        (error: unknown) => { this.deps.scheduler.clearTimeout(timer); reject(error); },
-      );
-    });
+  /** With no wallet to read a chain, the node's own word on who the registry names chooses among the origins the build lists, as the chain's would. */
+  private followNode(said: NodeSaid): Promise<void> | void {
+    const target = said.hostname === null ? { origin: this.origin } : operatorTarget(this.deps.deploy, { hostname: said.hostname, rotationEnabled: said.rotationEnabled });
+    if ("unlisted" in target) return this.settled({ kind: "unlisted", origin: this.origin, hostname: target.unlisted });
+    if (target.origin !== null && target.origin !== this.origin) return this.tryNode(target.origin, null, said.rotationEnabled);
+    this.settled({ kind: "pinned", origin: this.origin });
   }
 
   private settled(state: FollowStatus): void {
@@ -242,8 +234,10 @@ export class OperatorFollower {
    * it does the node in use stays; with rotation off that is no change of operator on its way, as
    * governance may have installed a fallback on the deployment's own node, so it is not told as one.
    */
-  private async tryNode(target: string, chain: DeploymentReads, rotationEnabled: boolean): Promise<void> {
+  private async tryNode(target: string, chain: DeploymentReads | null, rotationEnabled: boolean): Promise<void> {
     const waiting = (reason: string) => (rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, reason }) : this.settled({ kind: "following", origin: this.origin }));
+    const before = this.state; // trading pauses the moment the chain names another node, as its verification takes the time (monkey-trading/console#280)
+    if (rotationEnabled && !(this.state.kind === "waiting" && this.state.target === target)) waiting("The new operator's node is being verified.");
     let client: EngineClient;
     let status: AttestationStatus;
     try {
@@ -252,12 +246,14 @@ export class OperatorFollower {
       await client.readChainThrough(chain);
       status = await client.verify();
       if (status.kind === "unverified") return waiting(status.reason);
-      if (status.kind === "attested") return waiting(status.why);
+      // With no wallet no verdict reads the vault, so an attested node is the best a visit without one can have; it reads, and never signs.
+      if (status.kind === "attested" && chain !== null) return waiting(status.why);
       await signedAnswer(client);
     } catch (error) {
       return waiting(error instanceof Error ? error.message : "The node did not answer.");
     }
-    if (this.deps.chain() !== chain) return; // another wallet came while this ran; `check` runs again for it
+    // Another wallet came while this ran; `check` runs again for it, and the pause this began was for the old one.
+    if (this.deps.chain() !== chain) return this.set(before);
     if (this.deps.busy()) return waiting("A wallet request is in progress; the console moves once it has finished.");
     this.deps.adopt(client, target);
     this.origin = target;

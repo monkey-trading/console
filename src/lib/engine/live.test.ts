@@ -23,8 +23,9 @@ describe("signed reads", () => {
     await client.markets();
     // The attestation's plain read carries no custom header, so it is no preflight and keeps its own mode.
     const signed = node.inits.filter((init) => new Headers(init?.headers).has("X-Engine-Challenge"));
-    expect(signed).toHaveLength(1);
-    expect(signed[0]).not.toHaveProperty("cache");
+    // The first check's read of the node's own word on the vault's signer, then the markets.
+    expect(signed).toHaveLength(2);
+    for (const init of signed) expect(init).not.toHaveProperty("cache");
   });
 
   it("rejects a read whose body was altered in transit, and shows nothing", async () => {

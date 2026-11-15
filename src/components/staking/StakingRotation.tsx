@@ -16,6 +16,7 @@ import { joinHistory } from "@/lib/staking/turn-history-reads";
 import { withAddress } from "@/lib/staking/operator-cells";
 
 import { useSession } from "../ConsoleProvider";
+import { focusHeading } from "../monkey/Card";
 import { Row } from "../monkey/Row";
 import { ReadNote } from "../monkey/ReadNote";
 import { NOTE } from "../monkey/styles";
@@ -63,7 +64,12 @@ export function StakingRotation() {
           <Reassignments records={history.records} nameOf={labelOf} />
           <TurnHistoryCard
             records={history.records} more={history.next !== null} truncated={history.truncated} reading={pages.reading} error={pages.error}
-            onMore={() => { if (rotation !== null) void turns.loadOlder(rotation.history); }} nameOf={labelOf}
+            onMore={() => {
+              if (rotation === null) return;
+              // The last page removes the button that has focus: focus goes to the card's heading, as on the other history cards.
+              void turns.loadOlder(rotation.history).then(() => { if (joinHistory(rotation.history, turns.getSnapshot().older).next === null) focusHeading("rotation-history-title"); });
+            }}
+            nameOf={labelOf}
           />
         </>
       )}

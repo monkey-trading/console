@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { EngineError } from "./client";
 import { LiveEngineClient } from "./live";
 import { setup } from "./live-setup";
-import { acceptAll, FakeNode, FakeScheduler, FakeSocket, settle } from "./test-kit";
+import { acceptAll, FakeNode, FakeScheduler, FakeSocket, OPERATOR_CLAIM, settle } from "./test-kit";
 import { VECTORS, vectorResponse } from "./test-vectors";
 import type { OrderRequest, SignedWithdrawal } from "./types";
 import { SignatureError } from "./trust";
@@ -204,7 +204,7 @@ describe("reading an account's payouts", () => {
     reply(`/v1/accounts/${ACCOUNT}/payouts?limit=50&after=3`, 200, { seq: 7, loaded: true, payouts: [], next: null });
     await expect(client.payouts(ACCOUNT, { limit: 200 })).resolves.toEqual(page);
     await expect(client.payouts(ACCOUNT, { limit: 50, after: 3 })).resolves.toEqual({ seq: 7, loaded: true, payouts: [], next: null });
-    expect(node.requests.map((r) => r.path).filter((path) => path !== "/v1/attestation")).toEqual([`/v1/accounts/${ACCOUNT}/payouts?limit=200`, `/v1/accounts/${ACCOUNT}/payouts?limit=50&after=3`]);
+    expect(node.requests.map((r) => r.path).filter((path) => path !== "/v1/attestation" && path !== OPERATOR_CLAIM)).toEqual([`/v1/accounts/${ACCOUNT}/payouts?limit=200`, `/v1/accounts/${ACCOUNT}/payouts?limit=50&after=3`]);
   });
 
   it("rejects with the node's 404 when it predates the route", async () => {

@@ -5,7 +5,7 @@ import type { Hex } from "viem";
 import { MOCK_REFUSED, type AttestationStatus } from "./attestation";
 import type { PinnedRelease } from "./manifests";
 import type { VaultFacts } from "./registry";
-import { SignerNaming, SIGNER_SUPERSEDED, type OperatorClaim } from "./signer-naming";
+import { SignerNaming, type OperatorClaim } from "./signer-naming";
 import { digestNamed, isConfigHash, manifestText } from "./release-check";
 import type { Verifier } from "./verifier";
 
@@ -46,6 +46,8 @@ export interface TrustDeps {
   onStatus(status: AttestationStatus): void;
   /** The verified enclave address changed from an earlier one. */
   onEnclaveChanged(): void;
+  /** The node's own signed word on its enclave and the signer the vault names (`GET /v1/operator`), read under `address`, just verified and not yet trusted (monkey-trading/console#280); rejects when it cannot. */
+  operatorClaim?(address: string): Promise<OperatorClaim>;
 }
 
 /** Why a signed request may not leave under `status`, as a sentence, or null when it may: only a verdict that read the vault, or a dev build's mock, signs. */
@@ -87,9 +89,9 @@ export class NodeTrust {
   /** The address whose last failed answer a re-verification did not explain, and when: it is not re-verified again for a while. */
   private suspect: { signer: string; at: number } | null = null;
   /** The signer the node says the vault names (monkey-trading/console#280). */
-  private readonly naming = new SignerNaming();
+  private readonly naming: SignerNaming;
 
-  constructor(private readonly deps: TrustDeps) {}
+  constructor(private readonly deps: TrustDeps) { this.naming = new SignerNaming(deps.operatorClaim); }
 
   get status(): AttestationStatus {
     return this.current;
@@ -162,11 +164,10 @@ export class NodeTrust {
   }
 
   /**
-   * The node's `GET /v1/operator` stated the signer the vault names and its own enclave: see `SignerNaming.judge`. A node that
-   * contradicts what is verified or the highest signer seen is refused: its verdict ends, an open stream stops, and its enclave stays
-   * refused until the vault names it again at a later epoch.
+   * The node's `GET /v1/operator` stated the signer the vault names and its own enclave (`SignerNaming.judge`). An answer that contradicts
+   * what is verified, or the highest signer seen, ends the verdict, stops an open stream and refuses the enclave until the vault names it again.
    * Error cases:
-   * - the answer contradicts the verified enclave or the highest signer seen: `UntrustedError`, and the verdict becomes unverified
+   * - the answer is refused: `UntrustedError`
    */
   heedOperator(answer: OperatorClaim): void {
     const trusted = this.signerAddress;
@@ -222,6 +223,8 @@ export class NodeTrust {
     if (changed) this.deps.onEnclaveChanged();
   }
 
+  /** Whether a signer's answers are refused: another signer was named since it was verified. */
+  refuses = (signer: string): boolean => this.naming.refuses(signer);
   /** The vault's facts through the connected wallet; a failed read says why, and never counts as the vault's word. */
   private async readVault(): Promise<VaultRead> {
     const read = this.deps.vaultFacts();
@@ -264,7 +267,7 @@ export class NodeTrust {
         const address = mock.enclave.address.toLowerCase();
         const refused = await this.mockRefusal(configHash, address);
         if (refused !== null) return this.setStatus({ kind: "unverified", reason: refused });
-        if (this.naming.refuses(address)) return this.setStatus({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+        const superseded = await this.naming.refusal(address); if (superseded !== null) return this.setStatus({ kind: "unverified", reason: superseded });
         this.trust(address);
         return this.setStatus({ kind: "mock" });
       }
@@ -284,7 +287,7 @@ export class NodeTrust {
       const address = verdict.enclave.address.toLowerCase();
       const { release, config } = verdict.enclave;
       if (vault.kind === "read" && address !== vault.facts.signer) return this.setStatus({ kind: "unverified", reason: NOT_THE_SIGNER });
-      if (this.naming.refuses(address)) return this.setStatus({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+      const superseded = await this.naming.refusal(address); if (superseded !== null) return this.setStatus({ kind: "unverified", reason: superseded });
       this.trust(address);
       if (vault.kind === "read") this.setStatus({ kind: "verified", release: release ?? "", config: config ?? "", address });
       else this.setStatus({ kind: "attested", release: release ?? "", address, why: vault.kind === "none" ? CONNECT_TO_CHECK : `Your wallet could not read the vault's current release: ${vault.reason}` });

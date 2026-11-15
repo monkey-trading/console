@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { EngineError } from "./client";
 import { LiveEngineClient } from "./live";
-import { acceptAll, FakeNode, FakeScheduler, FakeSocket } from "./test-kit";
+import { acceptAll, FakeNode, FakeScheduler, FakeSocket, OPERATOR_CLAIM } from "./test-kit";
 import type { Verifier } from "./verifier";
 import { VECTORS, vectorResponse } from "./test-vectors";
 
@@ -39,7 +39,7 @@ describe("the live client's dashboard reads", () => {
     reply("/v1/monkey", 200, { seq: 1 });
     await expect(live.stats.positions(3)).resolves.toMatchObject({ market: 3 });
     await expect(live.stats.monkey()).resolves.toMatchObject({ seq: 1 });
-    expect(node.requests.map((r) => r.path).filter((path) => !path.includes("attestation"))).toEqual(["/v1/house/positions?market=3", "/v1/monkey"]);
+    expect(node.requests.map((r) => r.path).filter((path) => !path.includes("attestation") && path !== OPERATOR_CLAIM)).toEqual(["/v1/house/positions?market=3", "/v1/monkey"]);
   });
 
   it("derives the ledger's emission schedule from the one /v1/monkey read, and reads null from a node without the route", async () => {

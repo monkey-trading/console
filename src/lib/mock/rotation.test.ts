@@ -55,6 +55,17 @@ describe("the simulated rotation", () => {
     expect(seen.length).toBeGreaterThan(15);
   });
 
+  it("draws across the whole set at the scale of MONKEY base units, not always its first member", async () => {
+    const { client } = createMockNode(SIM_EPOCH_MS);
+    const drawn = new Set<string>();
+    for (let day = 0; day < 40; day += 1) {
+      client.tick(client.state.now + DAY_MS);
+      const answer = await client.stats.operator();
+      if (answer.next_turn !== null && answer.next_turn !== undefined) drawn.add(answer.next_turn.candidate);
+    }
+    expect(drawn.size).toBeGreaterThanOrEqual(3);
+  });
+
   it("moves to the next day's turn when the clock passes the boundary", async () => {
     const { client } = createMockNode(SIM_EPOCH_MS);
     const before = await client.stats.operator();

@@ -2,12 +2,14 @@
  * The Rotation tab's older turns (monkey-trading/console#280): the newest page rides on the node's
  * `GET /v1/operator`, which the operator reads repeat on their own, and "Load older" reads the pages
  * before it from the same route with its `before` mark. Older pages are kept apart from the newest
- * page, so a newest page that moves on never loses them: they join it only while it still reaches
- * back to where the first older page began, and are dropped when it has moved past, since turns
- * between might then be missing. They are also dropped when the node stops being trusted.
+ * page and join it only while it still reaches back to where the first older page began; once a new
+ * assignment has moved it past, they are left out, since turns between might be missing, and read
+ * again by the next "Load older". They are also dropped when the node stops being trusted, or another
+ * verified enclave holds it.
  */
 
 import { readBlock } from "../engine/attestation";
+import { EnclaveBinding } from "../store/enclave-binding";
 import type { ConsoleStore } from "../store/store";
 import { turnHistory, type TurnHistory, type TurnRecord } from "./rotation";
 
@@ -60,7 +62,11 @@ export class TurnHistoryReads {
   /** Counts reads: only the latest may land. */
   private ticket = 0;
 
-  constructor(private readonly store: ConsoleStore) {}
+  private readonly enclave: EnclaveBinding;
+
+  constructor(private readonly store: ConsoleStore) {
+    this.enclave = new EnclaveBinding(store);
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -79,12 +85,14 @@ export class TurnHistoryReads {
   /** Starts watching the node's trust, and returns what stops it: older pages signed by a node trust has left are dropped. */
   start(): () => void {
     let readable = readBlock(this.store.getSnapshot().attestation, "live") === null;
-    if (!readable) this.drop();
+    // A node trust left, or another verified enclave now holding it, while the tab was closed: what was kept was signed by one the console stopped trusting.
+    if (!readable || this.enclave.replaced()) this.drop();
     const stop = this.store.subscribe(() => {
       const now = readBlock(this.store.getSnapshot().attestation, "live") === null;
-      if (now === readable) return;
+      const replaced = now && this.enclave.replaced();
+      if (now === readable && !replaced) return;
       readable = now;
-      if (!now) this.drop();
+      if (!now || replaced) this.drop();
     });
     return stop;
   }

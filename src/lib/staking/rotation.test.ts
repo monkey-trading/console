@@ -110,7 +110,7 @@ describe("the operator table's membership columns", () => {
 
   it("marks each row a member with its weight and share, and a row outside the set a non-member with none", () => {
     const decorated = withMembership(rows, set);
-    expect(decorated.map((entry) => operatorCells(entry).membership)).toEqual(["Member", "Member", "Member", "Not a member"]);
+    expect(decorated.map((entry) => operatorCells(entry).membership)).toEqual(["Member", "Member", "Member", "Outside the set"]);
     expect(operatorCells(at(decorated, 0))).toMatchObject({ setWeight: "500 MONKEY", turnShare: "50.00%" });
     expect(operatorCells(at(decorated, 3))).toMatchObject({ setWeight: "—", turnShare: "—" });
   });
@@ -128,9 +128,14 @@ describe("the operator table's membership columns", () => {
     expect(tableView(withMembership(rows, null), "", "turns-desc", 0).rows.map((entry) => entry.hostname)).toEqual(["d.example", "a.example", "b.example", "c.example"]);
   });
 
-  it("searches by membership", () => {
+  it("searches by membership, and by the weight and share of turns the columns show", () => {
     const decorated = withMembership(rows, set);
-    expect(tableView(decorated, "not a member", "role", 0).rows.map((entry) => entry.hostname)).toEqual(["d.example"]);
-    expect(tableView(decorated, "member", "role", 0).matched).toBe(4);
+    expect(tableView(decorated, "outside the set", "role", 0).rows.map((entry) => entry.hostname)).toEqual(["d.example"]);
+    // "member" finds the members only: the non-member's word does not contain it.
+    expect(tableView(decorated, "member", "role", 0).rows.map((entry) => entry.hostname)).toEqual(["a.example", "b.example", "c.example"]);
+    expect(tableView(decorated, "500 MONKEY", "role", 0).rows.map((entry) => entry.hostname)).toEqual(["a.example"]);
+    expect(tableView(decorated, "30.00%", "role", 0).rows.map((entry) => entry.hostname)).toEqual(["b.example"]);
+    // With no set known there is nothing of the rotation to find.
+    expect(tableView(withMembership(rows, null), "member", "role", 0).matched).toBe(0);
   });
 });

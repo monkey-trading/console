@@ -3,9 +3,9 @@
 import type { OperatorRow, RowMembership } from "./operator-table";
 import type { RotationSet } from "./rotation";
 
-/** What the table's membership cell says: "Member", "Not a member", or a dash while no set is known. */
+/** What the table's membership cell says: "Member", "Outside the set", or a dash while no set is known. */
 export function membershipWord(membership: RowMembership | null): string {
-  return membership === null ? "—" : membership.inSet ? "Member" : "Not a member";
+  return membership === null ? "—" : membership.inSet ? "Member" : "Outside the set";
 }
 
 /** `rows` with each one's place in `set`; with no set, every row's membership is unknown. */

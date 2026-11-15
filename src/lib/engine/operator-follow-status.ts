@@ -2,6 +2,8 @@
 
 import { EngineError, type EngineClient } from "./client";
 import { hostnameOrigin, listedOrigins, type Deploy } from "./deploy";
+import type { Scheduler } from "./live-stream";
+import type { OperatorRoute } from "./stats-types";
 import type { NamedOperator } from "./registry";
 
 /** What the console knows of the node it should talk to; `origin` is the node it talks to now. */
@@ -23,7 +25,7 @@ export type FollowStatus =
  * the settled operator named, so it says nothing about the host. With rotation on, a hostname the
  * build does not list is a console that needs updating; with it off the operator may be the deployment's own.
  */
-export function operatorTarget(deploy: Pick<Deploy, "origin" | "candidateOrigins">, named: NamedOperator): { origin: string | null } | { unlisted: string | null } {
+export function operatorTarget(deploy: Pick<Deploy, "origin" | "candidateOrigins">, named: Pick<NamedOperator, "hostname" | "rotationEnabled">): { origin: string | null } | { unlisted: string | null } {
   if (named.hostname === null) return { origin: deploy.origin };
   const origin = hostnameOrigin(named.hostname);
   if (origin !== null && listedOrigins(deploy).includes(origin)) return { origin };
@@ -43,4 +45,33 @@ export async function signedAnswer(client: EngineClient): Promise<void> {
   } catch (error) {
     if (!(error instanceof EngineError && error.status === 404)) throw error;
   }
+}
+
+/** How long the wallet may take over one chain read before the check gives up on it, in milliseconds; a wallet asleep must not hold the follower from the next wallet. */
+export const CHAIN_READ_MS = 30_000;
+
+/** `read`, or a rejection once the wallet has had its time. */
+export function bounded<T>(scheduler: Scheduler, read: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = scheduler.setTimeout(() => reject(new Error("your wallet did not answer in time")), CHAIN_READ_MS);
+    read.then(
+      (value) => { scheduler.clearTimeout(timer); resolve(value); },
+      (error: unknown) => { scheduler.clearTimeout(timer); reject(error); },
+    );
+  });
+}
+
+/** What a node says in its signed operator route that decides where the console connects: when its next daily turn begins (null once past or unnamed), and the hostname the registry names for the operator in effect. */
+export interface NodeSaid {
+  turnAtMs: number | null;
+  hostname: string | null;
+  rotationEnabled: boolean;
+}
+
+export const NOTHING_SAID: NodeSaid = { turnAtMs: null, hostname: null, rotationEnabled: true };
+
+/** What `route` says, at the device clock `nowMs`. */
+export function nodeSaid(route: OperatorRoute, nowMs: number): NodeSaid {
+  const at = route.next_turn?.applies_at;
+  return { turnAtMs: at !== undefined && at > nowMs ? at : null, hostname: route.api_hostname?.hostname ?? null, rotationEnabled: route.rotation_enabled };
 }

@@ -242,6 +242,8 @@ export interface OperatorRoute {
   turn?: TurnView | null;
   next_turn?: TurnView | null;
   turns?: TurnsPageView;
+  /** The API hostname the registry records for the operator in effect, with the finalized block it was read at; absent when the node cannot read it. */
+  api_hostname?: { hostname: string; block: number; block_hash: string };
   /** The enclave address that signs this node's answers. */
   enclave?: Address;
   /** The vault's signer epoch and the key it names, at the latest block the node's liveness rule read; absent where the rule does not run. */

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { EngineError, type EngineClient } from "./client";
 import { operatorTarget } from "./operator-follow";
-import { B, BUILD, DEPLOY, named, rig } from "./operator-follow-kit";
+import { B, BUILD, DEPLOY, named, rig, TrialClient } from "./operator-follow-kit";
 import { settle } from "./test-kit";
 
 describe("operatorTarget", () => {
@@ -90,6 +90,34 @@ describe("OperatorFollower.check", () => {
     await follower.check();
     expect(adopted).toEqual([]);
     expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, reason: "not the vault's release" });
+  });
+
+  it("pauses the moment the chain names another node, while its verification is still running, and leaves the pause by moving once it verifies", async () => {
+    const { follower, trial, adopted } = rig();
+    const states: string[] = [];
+    follower.subscribe(() => states.push(follower.getSnapshot().kind));
+    let verified: (status: typeof trial.verdict) => void = () => undefined;
+    trial.verify = () => new Promise((resolve) => { verified = resolve as typeof verified; });
+    const checking = follower.check();
+    await settle();
+    expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, reason: "The new operator's node is being verified." });
+    expect(adopted).toEqual([]);
+    verified(trial.verdict);
+    await checking;
+    expect(adopted).toEqual([B]);
+    expect(follower.getSnapshot()).toEqual({ kind: "following", origin: B });
+    // Once into waiting and once out of it: one pause for the change.
+    expect(states.filter((kind) => kind === "waiting")).toHaveLength(1);
+  });
+
+  it("does not pause for a node with rotation off, which the chain may name for the deployment's own", async () => {
+    const { follower, trial } = rig({ operator: async () => named({ rotationEnabled: false }) });
+    const states: string[] = [];
+    follower.subscribe(() => states.push(follower.getSnapshot().kind));
+    trial.verify = () => new Promise(() => undefined);
+    void follower.check();
+    await settle();
+    expect(states).not.toContain("waiting");
   });
 
   it("does not move on a verdict the vault has not judged", async () => {
@@ -210,5 +238,57 @@ describe("OperatorFollower.check", () => {
     await second;
     await settle();
     expect(operatorReads.count).toBe(2);
+  });
+});
+
+describe("a visit with no wallet to read a chain (monkey-trading/console#280)", () => {
+  /** A follower with no chain whose node in use says the registry names `hostname`. */
+  function withoutWallet(hostname: string | null, rotationEnabled = true) {
+    const kit = rig({ reads: null });
+    const current = new TrialClient();
+    current.signedRead = async () => ({ ...(hostname === null ? {} : { api_hostname: { hostname, block: 1, block_hash: "0x" } }), rotation_enabled: rotationEnabled });
+    kit.follower.watch(current as unknown as EngineClient); // the follower uses only what TrialClient has
+    return kit;
+  }
+
+  it("moves to the node the registry names, from the node in use's own word, when the build lists it and it verifies", async () => {
+    const { follower, adopted } = withoutWallet("b.example");
+    await follower.check();
+    expect(adopted).toEqual([B]);
+    expect(follower.getSnapshot()).toEqual({ kind: "following", origin: B });
+  });
+
+  it("takes a node that is attested but not judged by the vault, which a visit with no wallet can never have, and pauses while it verifies", async () => {
+    const { follower, adopted, trial } = withoutWallet("b.example");
+    trial.verdict = { kind: "attested", release: "r", address: "0xk", why: "connect a wallet to check" };
+    const states: string[] = [];
+    follower.subscribe(() => states.push(follower.getSnapshot().kind));
+    await follower.check();
+    expect(adopted).toEqual([B]);
+    expect(states).toEqual(["waiting", "following"]);
+  });
+
+  it("stays on the node in use when it names its own host, a hostname that is none, or says nothing", async () => {
+    for (const hostname of ["build.example", null]) {
+      const { follower, adopted } = withoutWallet(hostname);
+      await follower.check();
+      expect(adopted, String(hostname)).toEqual([]);
+      expect(follower.getSnapshot()).toEqual({ kind: "pinned", origin: BUILD });
+    }
+  });
+
+  it("says the console needs updating for a host the build does not list, and stays", async () => {
+    const { follower, adopted } = withoutWallet("evil.example");
+    await follower.check();
+    expect(adopted).toEqual([]);
+    expect(follower.getSnapshot()).toEqual({ kind: "unlisted", origin: BUILD, hostname: "evil.example" });
+  });
+
+  it("does not move for a node that fails its check, and keeps the pause until it verifies", async () => {
+    const { follower, adopted, trial } = withoutWallet("b.example");
+    trial.verdict = { kind: "unverified", reason: "the quote did not verify" };
+    await follower.check();
+    expect(adopted).toEqual([]);
+    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B, reason: "the quote did not verify" });
   });
 });

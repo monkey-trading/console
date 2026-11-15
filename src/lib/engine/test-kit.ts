@@ -139,6 +139,9 @@ export const settle = async (): Promise<void> => {
   for (let i = 0; i < 50; i++) await Promise.resolve();
 };
 
+/** The read a first check makes of the node's own word on the vault's signer, which a test that counts the node's requests leaves out. */
+export const OPERATOR_CLAIM = "/v1/operator?limit=1";
+
 /** A verifier that accepts every answer, for tests of what the client does with an answer once it verifies. */
 export const acceptAll: Verifier = {
   verifyAttestation: () => ({ ok: false, reason: "unused" }),

@@ -40,7 +40,7 @@ function NodeLine() {
     case "failed":
       return <div role="status" className={WARN}><strong className="font-medium">The console could not read who the operator is.</strong> It stays on {new URL(follow.origin).host} and tries again: {follow.reason}<CheckAgain /></div>;
     case "unlisted":
-      return <div role="alert" className={BAD}><strong className="font-medium">This console needs updating.</strong> The operator now named{follow.hostname === null ? " registered no plain hostname" : `'s host, ${follow.hostname}, is not one this build lists`}, so the console does not connect to it.</div>;
+      return <div role="alert" className={BAD}><strong className="font-medium">This console needs updating.</strong> {follow.hostname === null ? "The operator now named registered no plain hostname" : `The host of the operator now named, ${follow.hostname}, is not one this build lists`}, so the console does not connect to it.</div>;
     case "waiting":
       return <div role="status" className={WARN}><strong className="font-medium">The operator is changing.</strong> The console stays on {new URL(follow.origin).host} until {new URL(follow.target).host} verifies: {follow.reason}</div>;
     default:

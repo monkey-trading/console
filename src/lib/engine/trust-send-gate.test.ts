@@ -6,7 +6,7 @@ import { dev, markets, setup } from "./live-setup";
 import type { PinnedRelease } from "./manifests";
 import type { VaultFacts } from "./registry";
 import { releaseName } from "./release-check";
-import { mockAttestation } from "./test-kit";
+import { mockAttestation, OPERATOR_CLAIM } from "./test-kit";
 import { CONNECT_TO_CHECK, NodeTrust, NOT_THE_SIGNER, NotSentError, UntrustedError } from "./trust";
 import type { Verifier } from "./verifier";
 
@@ -135,6 +135,6 @@ describe("a signed action a live client's gate stops", () => {
     await expect(client.markets()).rejects.toBeInstanceOf(UntrustedError);
     await expect(client.placeOrder(order)).rejects.toThrow(`Nothing was sent. ${CLOCK}`);
     await expect(client.revokeSessionKey(revocation)).rejects.toThrow(`Nothing was sent. ${CLOCK}`);
-    expect(node.requests.map((request) => request.path).filter((path) => path !== "/v1/attestation")).toEqual(["/v1/markets"]);
+    expect(node.requests.map((request) => request.path).filter((path) => path !== "/v1/attestation" && path !== OPERATOR_CLAIM)).toEqual(["/v1/markets"]);
   });
 });

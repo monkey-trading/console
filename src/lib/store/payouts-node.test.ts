@@ -41,6 +41,18 @@ describe("the node's payouts", () => {
     ]);
   });
 
+  it("waits on the named check, not on an expired authorization it still holds, while the node names a check for its replacement", async () => {
+    const { client, store } = await connected();
+    store.patch({ now: NOW_MS, approvals: [approved(5, 90)] });
+    client.payoutsPage = page([{ nonce: 5, withdrawal: signed(5, 1_700_000_000), check: { turn: 9, boundary_ms: NOW_MS + 60_000 } }]);
+    await loadPayouts(store);
+    expect(payoutsOf(store.getSnapshot())[0]?.status).toEqual({ kind: "waiting", checkAtMs: NOW_MS + 60_000 });
+    // With no check named it is the expired authorization a fresh one can be asked for.
+    client.payoutsPage = page([{ nonce: 5, withdrawal: signed(5, 1_700_000_000) }]);
+    await loadPayouts(store);
+    expect(payoutsOf(store.getSnapshot())[0]?.status).toMatchObject({ kind: "expired" });
+  });
+
   it("forgets a boundary once the node's next answer names none for the approval", async () => {
     const { client, store } = await connected();
     store.patch({ now: NOW_MS, approvals: [approved(5, 90)] });

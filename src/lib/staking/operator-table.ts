@@ -14,7 +14,7 @@ import { shareBps } from "../monkey/figures";
 import { shownHostname } from "./hostnames";
 import { ADDRESS } from "./candidate-choice";
 import { proposalsView, type ProposalsView } from "./governance";
-import { membershipWord } from "./operator-membership";
+import { operatorCells } from "./operator-cells";
 
 /** `elected` and `promoted` wait on `pendingElection`; `standby` is the one `promote()` would pick now; `unlisted` is a Yours row omitted by a verified list; `unknown` has no list to compare. */
 export type OperatorRole = "active" | "elected" | "promoted" | "standby" | "candidate" | "unlisted" | "unknown";
@@ -176,9 +176,12 @@ export function operatorsView(list: OperatorList): OperatorsView {
   return { block: { number: list.block.number, hash: list.block.hash, timeMs: list.block.time_ms }, rotationEnabled: list.rotation_enabled, totalStaked, inEffect, pending, rows, proposals, proposalsProblem };
 }
 
-/** Whether `row` holds `query` (lowercase, trimmed) in its hostname, address, release or endpoint. */
+/** Whether `row` holds `query` (lowercase, trimmed) in its hostname, address, release or endpoint, or in what its rotation set columns say. */
 function matches(row: OperatorRow, query: string): boolean {
-  return [row.hostname, row.address, row.release, row.endpoint, row.membership === null ? null : membershipWord(row.membership)].some((field) => field !== null && field.toLowerCase().includes(query));
+  // Each rotation figure as its cell shows it, so what a staker reads in the weight and share columns is what a search finds.
+  const cells = operatorCells(row);
+  const rotation = row.membership === null ? [] : [cells.membership, cells.setWeight, cells.turnShare];
+  return [row.hostname, row.address, row.release, row.endpoint, ...rotation].some((field) => field !== null && field.toLowerCase().includes(query));
 }
 
 /** Orders two bigints that may be absent, an absent one after every value. */

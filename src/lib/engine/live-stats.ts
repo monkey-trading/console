@@ -1,6 +1,7 @@
 /** The dashboard routes over a signed read: the House, MONKEY and Staking pages' positions, series and totals. */
 
 import { EngineError } from "./client";
+import type { OperatorClaim } from "./signer-naming";
 import type { DistributionEpochsPage, OperatorList } from "./staking-reads";
 import type { ActivityPage, DistributionProof, MonkeyView, OperatorRoute, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "./stats-types";
 
@@ -34,7 +35,8 @@ export function liveStats(get: (path: string) => Promise<unknown>, heedOperator:
       const query = new URLSearchParams();
       if (params?.before !== undefined) query.set("before", String(params.before));
       if (params?.limit !== undefined) query.set("limit", String(params.limit));
-      const route = (await get(`/v1/operator${query.size > 0 ? `?${query}` : ""}`)) as OperatorRoute;
+      const text = query.toString();
+      const route = (await get(`/v1/operator${text === "" ? "" : `?${text}`}`)) as OperatorRoute;
       // The signer the node says the vault names is judged before anyone reads the answer.
       heedOperator(route);
       return route;
@@ -60,3 +62,6 @@ export const NO_STATS: StatsReads = {
   operators: () => Promise.reject(new EngineError(404, "not found")),
   distributionEpochs: () => Promise.reject(new EngineError(404, "not found")),
 };
+
+/** What a node's operator route says of its own enclave and the signer the vault names. */
+export const claimOf = (route: OperatorRoute): OperatorClaim => ({ ...(route.enclave === undefined ? {} : { enclave: route.enclave }), ...(route.signer === undefined ? {} : { signer: route.signer }) });

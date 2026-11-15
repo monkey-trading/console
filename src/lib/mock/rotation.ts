@@ -32,7 +32,8 @@ interface Member {
 /** The member the seeded draw names for `turn`, as the weights make it likely. */
 function drawn(members: readonly Member[], turn: number): Member {
   const total = members.reduce((sum, member) => sum + BigInt(member.weight), 0n);
-  const point = BigInt(Math.floor(mulberry32(SEED + turn)() * Number.MAX_SAFE_INTEGER)) % (total === 0n ? 1n : total);
+  // A point over the whole of the weights, whatever their scale: 52 random bits spread across the total.
+  const point = (BigInt(Math.floor(mulberry32(SEED + turn)() * 2 ** 52)) * total) >> 52n;
   let acc = 0n;
   for (const member of members) {
     acc += BigInt(member.weight);

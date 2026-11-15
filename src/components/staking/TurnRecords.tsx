@@ -91,7 +91,9 @@ export function TurnHistoryCard({ records, more, truncated, reading, error, onMo
           {reading ? "Loading" : "Load older"}<span className="sr-only"> turns</span>
         </button>
       )}
-      {error !== null && <p role="status" className="text-caption leading-relaxed text-amber">Could not read older turns: {error.replace(/\.+$/, "")}.</p>}
+      {/* Both lines stay mounted, so a change of their text is announced: the failure of an older read, and how many turns are shown once one lands. */}
+      <p role="status" className="text-caption leading-relaxed text-amber empty:hidden">{error === null ? null : `Could not read older turns: ${error.replace(/\.+$/, "")}.`}</p>
+      <p role="status" className="sr-only">{records.length > 0 ? `${records.length} ${records.length === 1 ? "turn" : "turns"} shown.` : ""}</p>
       {!more && truncated && records.length > 0 && <p className={NOTE}>The node keeps only its newest turns; older ones are not held.</p>}
     </Card>
   );

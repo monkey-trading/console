@@ -10,7 +10,8 @@ import { decodeHouseState, HouseFold, type HouseState, type HouseStateWire } fro
 import { QueueTotalsWalk } from "./live-queue";
 import { historyPath, readEmissionSchedule } from "./live-ledger";
 import type { EmissionSchedule } from "./emission-schedule";
-import { liveStats } from "./live-stats";
+import { claimOf, liveStats } from "./live-stats";
+import type { OperatorRoute } from "./stats-types";
 import { collateral, plainText, READ_TIMEOUT_MS } from "./live-plain";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
@@ -86,6 +87,7 @@ export class LiveEngineClient implements EngineClient {
         this.emit({ type: "attestation", status });
       },
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
+      operatorClaim: async (address) => claimOf((await this.transport.getUnder("/v1/operator?limit=1", address)) as OperatorRoute),
     });
     this.transport = new SignedTransport({ ...deps, verifier: () => this.verifiers.loaded(), trust: this.trust, challenge, signal: this.signal });
     this.totalsWalk = new QueueTotalsWalk(this.transport, deps.nowMs);
@@ -244,8 +246,8 @@ export class LiveEngineClient implements EngineClient {
   }
 
   async scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>, dead?: () => boolean): Promise<ScannedMark[]> {
-    // The backfill reads the signed log only: every mark the console plots derives from an enclave-signed frame.
-    return scanForMarks(this.scanDeps(await this.trust.signer()), fromSeq, budget, rules, sessions, dead);
+    const signer = await this.trust.signer(); // the backfill reads the signed log only; a signer the vault stops naming ends the scan
+    return scanForMarks(this.scanDeps(signer), fromSeq, budget, rules, sessions, () => dead?.() === true || this.trust.refuses(signer));
   }
 
   /** The deps a signed log scan takes: the stream origin, a verified signer, and a fresh challenge. */

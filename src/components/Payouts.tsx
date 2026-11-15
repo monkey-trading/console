@@ -5,6 +5,7 @@
 import { useEffect, useId, useRef } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
+import { checkReadDelay, earliestCheck } from "@/lib/store/payout-checks";
 import { waitingWords } from "@/lib/store/payout-words";
 import { checkPaid, claim, loadApprovals, loadPayouts, payoutsOf, reissue, unreadPayouts, type Payout } from "@/lib/store/payouts";
 import { formatStamp } from "@/lib/time";
@@ -34,6 +35,16 @@ export function Payouts() {
     void loadApprovals(store);
     void loadPayouts(store);
   }, [store, address, latest, trusted]);
+  // An unsigned approval waits for a log check at a boundary the node names: its payouts are read again just after it, and while the node still names it, so the row never keeps saying a past boundary is next.
+  const checkAt = earliestCheck(payouts);
+  const nowMs = state.now;
+  const read = state.payoutsRead;
+  useEffect(() => {
+    if (checkAt === null || !trusted) return;
+    // The node's clock as it is when the timer is set, so a clock that moves on never sets it again; `read` is the last answer, and each read that lands arms the next.
+    const timer = setTimeout(() => void loadPayouts(store), checkReadDelay(checkAt, store.getSnapshot().now));
+    return () => clearTimeout(timer);
+  }, [store, checkAt, trusted, read]);
   useEffect(() => {
     // The vault's own record says whether it has paid each payout the page can act on, including by a claim made elsewhere before the read.
     if (unread !== "") void checkPaid(store);
@@ -54,7 +65,7 @@ export function Payouts() {
         <p className="mt-3 text-caption text-fg-3">{state.wallet ? "No approved withdrawals yet." : "Connect a wallet to see your withdrawals."}</p>
       ) : (
         <ul className="mt-3 space-y-2">
-          {payouts.map((payout) => <PayoutRow key={payout.nonce} payout={payout} idle={idle} signs={!readOnly.readOnly} describedBy={readOnly.describedBy} problem={state.payoutsProblem} act={act} />)}
+          {payouts.map((payout) => <PayoutRow key={payout.nonce} payout={payout} nowMs={nowMs} idle={idle} signs={!readOnly.readOnly} describedBy={readOnly.describedBy} problem={state.payoutsProblem} act={act} />)}
         </ul>
       )}
       <Notice surface="payouts" />
@@ -66,7 +77,7 @@ export function Payouts() {
 }
 
 /** One approved withdrawal and the actions its status allows; `act` runs one unless another is in flight. */
-function PayoutRow({ payout, idle, signs, describedBy, problem, act }: { payout: Payout; idle: boolean; /** False for a read-only account, which cannot claim or ask for a signature. */ signs: boolean; describedBy: string | undefined; /** Why the node's payouts could not be read, if they could not. */ problem: string | null; act: (run: () => Promise<void>) => void }) {
+function PayoutRow({ payout, nowMs, idle, signs, describedBy, problem, act }: { payout: Payout; /** The node's clock, which says whether a named boundary has passed. */ nowMs: number; idle: boolean; /** False for a read-only account, which cannot claim or ask for a signature. */ signs: boolean; describedBy: string | undefined; /** Why the node's payouts could not be read, if they could not. */ problem: string | null; act: (run: () => Promise<void>) => void }) {
   const { store } = useSession();
   const amount = formatUsdc(payout.amount);
   const { status, nonce } = payout;
@@ -90,7 +101,7 @@ function PayoutRow({ payout, idle, signs, describedBy, problem, act }: { payout:
       {status.kind === "waiting" && !payout.read && (
         <p className="mt-2 text-fg-3">{signs ? "Checking the vault…" : "The vault's record of this withdrawal could not be read for a read-only account."}</p>
       )}
-      {status.kind === "waiting" && payout.read && <p className="mt-2 text-fg-3">{waitingWords(status.checkAtMs)}</p>}
+      {status.kind === "waiting" && payout.read && <p className="mt-2 text-fg-3">{waitingWords(status.checkAtMs, nowMs)}</p>}
       {problem !== null && (status.kind === "waiting" || status.kind === "expired") && <p className="mt-2 text-fg-3">{problem}</p>}
     </li>
   );

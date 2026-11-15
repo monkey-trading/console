@@ -60,10 +60,9 @@ function statusOf(state: ConsoleState, nonce: number, approvedSeq: number, nowSe
   if (state.paid.includes(nonce) || paidByNode(state, nonce, approvedSeq)) return { kind: "paid" };
   const signed = authorizationFor(state, nonce);
   const held = signed?.authorization?.expires_at ?? 0;
-  if (signed === null || held === 0) {
-    const checkAtMs = state.payoutsRead?.checks?.[nonce];
-    return checkAtMs === undefined ? { kind: "waiting" } : { kind: "waiting", checkAtMs };
-  }
+  const checkAtMs = state.payoutsRead?.checks?.[nonce];
+  // The node names a check only while no usable authorization exists, so an expired one it still names a check for is waiting on that check for its replacement.
+  if (signed === null || held === 0 || (checkAtMs !== undefined && held <= nowSeconds)) return checkAtMs === undefined ? { kind: "waiting" } : { kind: "waiting", checkAtMs };
   return held > nowSeconds ? { kind: "claimable", withdrawal: signed, expiresAt: held } : { kind: "expired", expiresAt: held };
 }
 
@@ -118,11 +117,11 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
   }
 }
 
-/** The boundary each unsigned approval waits for its log check at: only a well-formed time counts, so a bad answer leaves the row's plain wait. */
+/** The boundary each approval the node names a log check for waits at: only a well-formed time counts, so a bad answer leaves the row's plain wait. A usable authorization overrides it where the status is worked out. */
 function checksOf(entries: readonly PayoutEntry[]): Record<number, number> {
   const checks: Record<number, number> = {};
-  for (const { nonce, check, withdrawal } of entries) {
-    if (check !== undefined && withdrawal === null && Number.isSafeInteger(check.boundary_ms) && check.boundary_ms > 0) checks[nonce] = check.boundary_ms;
+  for (const { nonce, check } of entries) {
+    if (check !== undefined && Number.isSafeInteger(check.boundary_ms) && check.boundary_ms > 0) checks[nonce] = check.boundary_ms;
   }
   return checks;
 }
