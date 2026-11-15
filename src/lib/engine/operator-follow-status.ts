@@ -1,4 +1,4 @@
-/** What the operator follower concludes of the node to use, and the pure reads behind it. */
+/** What the operator follower concludes of the node to use, and the helpers its checks share. */
 
 import { EngineError, type EngineClient } from "./client";
 import { hostnameOrigin, listedOrigins, type Deploy } from "./deploy";
@@ -61,17 +61,21 @@ export function bounded<T>(scheduler: Scheduler, read: Promise<T>): Promise<T> {
   });
 }
 
-/** What a node says in its signed operator route that decides where the console connects: when its next daily turn begins (null once past or unnamed), and the hostname the registry names for the operator in effect. */
+/**
+ * What a node says in its signed operator route that decides where the console connects: when its next daily turn begins (null once past
+ * or unnamed), and the hostname the registry names for the operator in effect; `read` is false when the route could not be read.
+ */
 export interface NodeSaid {
   turnAtMs: number | null;
   hostname: string | null;
   rotationEnabled: boolean;
+  read: boolean;
 }
 
-export const NOTHING_SAID: NodeSaid = { turnAtMs: null, hostname: null, rotationEnabled: true };
+export const NOTHING_SAID: NodeSaid = { turnAtMs: null, hostname: null, rotationEnabled: true, read: false };
 
 /** What `route` says, at the device clock `nowMs`. */
 export function nodeSaid(route: OperatorRoute, nowMs: number): NodeSaid {
   const at = route.next_turn?.applies_at;
-  return { turnAtMs: at !== undefined && at > nowMs ? at : null, hostname: route.api_hostname?.hostname ?? null, rotationEnabled: route.rotation_enabled };
+  return { turnAtMs: at !== undefined && at > nowMs ? at : null, hostname: route.api_hostname?.hostname ?? null, rotationEnabled: route.rotation_enabled, read: true };
 }

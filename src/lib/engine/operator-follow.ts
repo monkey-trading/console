@@ -219,8 +219,9 @@ export class OperatorFollower {
     }
   }
 
-  /** With no wallet to read a chain, the node's own word on who the registry names chooses among the origins the build lists, as the chain's would. */
+  /** With no wallet to read a chain, the node's own word on who the registry names chooses among the origins the build lists, as the chain's would; a node that cannot be read says nothing against a successor it named, which is tried again. */
   private followNode(said: NodeSaid): Promise<void> | void {
+    if (!said.read && this.state.kind === "waiting") return this.tryNode(this.state.target, null, true);
     const target = said.hostname === null ? { origin: this.origin } : operatorTarget(this.deps.deploy, { hostname: said.hostname, rotationEnabled: said.rotationEnabled });
     if ("unlisted" in target) return this.settled({ kind: "unlisted", origin: this.origin, hostname: target.unlisted });
     if (target.origin !== null && target.origin !== this.origin) return this.tryNode(target.origin, null, said.rotationEnabled);

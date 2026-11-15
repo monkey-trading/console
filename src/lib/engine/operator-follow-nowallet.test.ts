@@ -2,8 +2,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { EngineClient } from "./client";
-import { B, BUILD, rig, TrialClient } from "./operator-follow-kit";
+import { EngineError, type EngineClient } from "./client";
+import { B, BUILD, rig, TrialClient, VERIFIED } from "./operator-follow-kit";
 import { RefusedAnswer } from "./trust-errors";
 
 describe("a visit with no wallet to read a chain (monkey-trading/console#280)", () => {
@@ -13,7 +13,7 @@ describe("a visit with no wallet to read a chain (monkey-trading/console#280)", 
     const current = new TrialClient();
     current.signedRead = async () => ({ ...(hostname === null ? {} : { api_hostname: { hostname, block: 1, block_hash: "0x" } }), rotation_enabled: rotationEnabled });
     kit.follower.watch(current as unknown as EngineClient); // the follower uses only what TrialClient has
-    return kit;
+    return { ...kit, current };
   }
 
   it("moves to the node the registry names, from the node in use's own word, when the build lists it and it verifies", async () => {
@@ -55,6 +55,21 @@ describe("a visit with no wallet to read a chain (monkey-trading/console#280)", 
     await follower.check();
     expect(adopted).toEqual([]);
     expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B, reason: "the quote did not verify" });
+  });
+
+  it("keeps trying the node the node in use named once that node stops answering, and moves when it verifies", async () => {
+    const { follower, adopted, trial, current } = withoutWallet("b.example");
+    trial.verdict = { kind: "unverified", reason: "the new operator is still taking the keys" };
+    await follower.check();
+    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B });
+    // The outgoing node has handed over and stopped.
+    current.signedRead = async () => { throw new EngineError(0, "The node did not answer."); };
+    await follower.check();
+    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B });
+    trial.verdict = VERIFIED;
+    await follower.check();
+    expect(adopted).toEqual([B]);
+    expect(follower.getSnapshot()).toEqual({ kind: "following", origin: B });
   });
 
   it("moves to the node a refused node says the registry names, after a promotion: the refusal carries the route", async () => {

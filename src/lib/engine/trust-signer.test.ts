@@ -102,6 +102,16 @@ describe("a node the vault no longer names", () => {
     expect(() => trust.heedOperator({ enclave: NEW, signer: { epoch: 5, address: NEW } })).not.toThrow();
   });
 
+  it("judges an operator answer against the enclave that signed it while a check runs, and refuses that enclave", async () => {
+    const { trust } = await verified({ address: OLD });
+    trust.heedOperator({ enclave: OLD, signer: { epoch: 4, address: OLD } });
+    const checking = trust.verify(); // a check starts, so no enclave is trusted until it ends
+    expect(() => trust.heedOperator({ enclave: OLD, signer: { epoch: 5, address: NEW } })).toThrow(SIGNER_SUPERSEDED);
+    expect(trust.refuses(OLD)).toBe(true);
+    await checking;
+    expect(trust.status).toEqual({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+  });
+
   it("refuses an answer naming another enclave than the verified one, and leaves the verdict standing", async () => {
     const { trust } = await verified({ address: OLD });
     expect(() => trust.heedOperator({ enclave: NEW })).toThrow("The node named an enclave other than the one that signed its answer");

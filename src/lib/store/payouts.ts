@@ -125,8 +125,8 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
 }
 
 /**
- * The check each approval the node names a log check for waits on, with the authorization `held` once the answer is taken: only a
- * well-formed time counts, so a bad answer leaves the row's plain wait. A later authorization overrides it where the status is worked out.
+ * The check each approval the node names a log check for waits on, with the authorization `held` when it named it: only a well-formed time
+ * counts, so a bad answer leaves the row's plain wait. A later authorization overrides it where the status is worked out.
  */
 function checksOf(entries: readonly PayoutEntry[], held: readonly SignedWithdrawal[]): Record<number, PayoutCheck> {
   const checks: Record<number, PayoutCheck> = {};
@@ -152,6 +152,8 @@ export async function loadPayouts(store: ConsoleStore): Promise<void> {
   const generation = store.getSnapshot().payoutsGeneration + 1;
   store.patch({ payoutsGeneration: generation });
   const current = () => store.getSnapshot().wallet?.address === address && store.getSnapshot().payoutsGeneration === generation;
+  // A check the node names is against what was held as the read began and what it lists; an authorization the stream brings meanwhile is later.
+  const heldBefore = store.getSnapshot().authorizations;
   try {
     const entries: PayoutEntry[] = [];
     let seq: number | null = null;
@@ -169,14 +171,15 @@ export async function loadPayouts(store: ConsoleStore): Promise<void> {
     if (!current()) return;
     const state = store.getSnapshot();
     const mine = address.toLowerCase();
-    const authorizations = entries.reduce((held, { nonce, withdrawal }) => {
+    const withListed = (from: readonly SignedWithdrawal[]) => entries.reduce((held, { nonce, withdrawal }) => {
       const signed = withdrawal !== null && withdrawal.nonce === nonce && withdrawal.authorization !== undefined && withdrawal.account.toLowerCase() === mine;
       return signed ? keepLatest(held, withdrawal) : held;
-    }, state.authorizations);
+    }, [...from]);
+    const authorizations = withListed(state.authorizations);
     const problem = !loaded ? "The node is still loading its record of your payouts after a restart." : after !== undefined ? "The node's list of your payouts is longer than this page reads." : null;
     store.patch({
       authorizations,
-      payoutsRead: problem === null && seq !== null ? { seq, listed: entries.map((e) => e.nonce), checks: checksOf(entries, authorizations) } : state.payoutsRead,
+      payoutsRead: problem === null && seq !== null ? { seq, listed: entries.map((e) => e.nonce), checks: checksOf(entries, withListed(heldBefore)) } : state.payoutsRead,
       payoutsProblem: problem === null ? null : `${problem} ${READ_AGAIN}`,
     });
   } catch (error) {

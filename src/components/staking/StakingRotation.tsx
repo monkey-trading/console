@@ -23,8 +23,9 @@ import { ReadNote } from "../monkey/ReadNote";
 import { NOTE } from "../monkey/styles";
 import { useConsoleSelect } from "../monkey/use-monkey";
 import { useStaking } from "../StakingSection";
-import { SetCard } from "./RotationSets";
-import { Reassignments, TurnHistoryCard } from "./TurnRecords";
+import { Reassignments } from "./Reassignments";
+import { SetCard } from "./SetCard";
+import { TurnHistoryCard } from "./TurnHistoryCard";
 import { useOperatorLabel } from "./use-operator-label";
 
 /** The Rotation tab. Its figures are hidden, not unmounted, while the node is not trusted, as on the other tabs. */

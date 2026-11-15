@@ -1,10 +1,10 @@
 /**
  * The simulated daily rotation as `GET /v1/operator` carries it (monkey-trading/console#280): a
  * rotation set of the four leading candidates weighted by their votes, today's turn held by the
- * operator in effect and tomorrow's by the one in effect at its boundary, a next set on its way, and a
- * history of the last days' turns, drawn from the set, with one skip, one promotion and one refused
- * assignment. The turn changes at 22:30 UTC as the engine's does; the draw is seeded, so the same day
- * gives the same member.
+ * operator in effect and tomorrow's by the one in effect at its boundary, a next set that takes effect
+ * three days into the simulation, and a history of the last days' turns, drawn from the set in effect
+ * at each, with one skip, one promotion and one refused assignment. The turn changes at 22:30 UTC as
+ * the engine's does; the draw is seeded, so the same day gives the same member.
  */
 
 import type { OperatorRoute, TurnRecordView, TurnView } from "../engine/stats-types";
@@ -57,8 +57,13 @@ export function mockRotation(state: MockState, params: { before?: number; limit?
   // Tomorrow's turn goes to the operator that will hold the role by then: an election that takes effect first names its candidate, else the holder stays, so a boundary never changes who was advertised.
   const pendingTurn = holder.pending !== null && holder.pending.effectiveAtMs <= boundaryOf(today + 1) ? members.find((member) => member.candidate === holder.pending?.candidate) : undefined;
   const tomorrowHolder = pendingTurn ?? holderMember;
+  // The sets' times hold from where the simulation's clock started: the next set takes effect three days in, and draws from then on.
+  const nextSetAt = state.startMs + 3 * DAY_MS;
+  const nextMembers = members.slice(0, 3).map((member, index) => ({ ...member, weight: (BigInt(member.weight) + BigInt(index) * 10_000n).toString() }));
+  const setAt = (ms: number) => (ms >= nextSetAt ? { id: 4, members: nextMembers } : { id: 3, members });
+  const drawnAt = (turn: number) => drawn(setAt(boundaryOf(turn)).members, turn);
   const view = (turn: number, member: Member, taken: boolean): TurnView => ({
-    turn, position: 0, reason: "draw", set: 3, candidate: member.candidate, admin_key: member.admin_key, applies_at: boundaryOf(turn), taken,
+    turn, position: 0, reason: "draw", set: setAt(boundaryOf(turn)).id, candidate: member.candidate, admin_key: member.admin_key, applies_at: boundaryOf(turn), taken,
   });
   const records: TurnRecordView[] = [];
   let seq = SEQ_ORIGIN;
@@ -68,23 +73,23 @@ export function mockRotation(state: MockState, params: { before?: number; limit?
   };
   for (let turn = today - HISTORY_DAYS; turn <= today + 1; turn += 1) {
     // Today's and tomorrow's records name the members `turn` and `next_turn` name.
-    const member = turn === today ? holderMember : turn === today + 1 ? tomorrowHolder : drawn(members, turn);
+    const member = turn === today ? holderMember : turn === today + 1 ? tomorrowHolder : drawnAt(turn);
     const at = boundaryOf(turn);
     const base: Omit<TurnRecordView, "assigned_seq"> = { turn, position: 0, reason: "draw", candidate: member.candidate, admin_key: member.admin_key, assigned_ms: at - 36 * 3_600_000, applies_at: at, refused: null, taken_seq: null, taken_ms: null, release: null };
     const taken = turn <= today;
     const stamp = (record: Omit<TurnRecordView, "assigned_seq">): Omit<TurnRecordView, "assigned_seq"> => (taken ? { ...record, taken_seq: seq + 5, taken_ms: at + 4_000, release: `0x${"ab".repeat(32)}` } : record);
     if (turn === today - 9) {
       // The liveness rule moved this turn from a failed member to the next in its order.
-      const failed = drawn(members, turn);
+      const failed = drawnAt(turn);
       push({ ...base, candidate: failed.candidate, admin_key: failed.admin_key });
-      const next = members.find((candidate) => candidate.candidate !== failed.candidate) ?? failed;
+      const next = setAt(at).members.find((candidate) => candidate.candidate !== failed.candidate) ?? failed;
       push(stamp({ ...base, position: 1, reason: "promotion", candidate: next.candidate, admin_key: next.admin_key, assigned_ms: at + 3_600_000 }));
     } else if (turn === today - 5) {
       push(stamp({ ...base, position: 0, assigned_ms: at - 36 * 3_600_000 }));
       push({ ...base, position: 1, reason: "skip", refused: "no set mirrored seven days earlier names its key", applies_at: null, assigned_ms: at + 600_000 });
     } else if (turn === today - 3) {
-      const first = drawn(members, turn);
-      const second = members.find((candidate) => candidate.candidate !== first.candidate) ?? first;
+      const first = drawnAt(turn);
+      const second = setAt(at).members.find((candidate) => candidate.candidate !== first.candidate) ?? first;
       push({ ...base, candidate: first.candidate, admin_key: first.admin_key });
       push(stamp({ ...base, position: 1, reason: "skip", candidate: second.candidate, admin_key: second.admin_key, assigned_ms: at + 1_800_000 }));
     } else push(stamp(base));
@@ -95,9 +100,11 @@ export function mockRotation(state: MockState, params: { before?: number; limit?
   const page = older.slice(0, limit);
   const next = older.length > limit ? (page.at(-1)?.assigned_seq ?? null) : null;
   const set = (id: number, epoch: number, effectiveAt: number, list: readonly Member[]) => ({ set: id, epoch, effective_at: effectiveAt, logged_at: effectiveAt - 7 * DAY_MS, members: [...list] });
+  const third = set(3, 41, state.startMs - 8 * DAY_MS, members);
+  const fourth = set(4, 42, nextSetAt, nextMembers);
   return {
-    rotation_set: set(3, 41, now - 8 * DAY_MS, members),
-    next_rotation_set: set(4, 42, now + 3 * DAY_MS, members.slice(0, 3).map((member, index) => ({ ...member, weight: (BigInt(member.weight) + BigInt(index) * 10_000n).toString() }))),
+    rotation_set: now >= nextSetAt ? fourth : third,
+    next_rotation_set: now >= nextSetAt ? null : fourth,
     turn: view(today, holderMember, true),
     next_turn: view(today + 1, tomorrowHolder, false),
     turns: { records: page, next, truncated: false, retained_from_seq: SEQ_ORIGIN },

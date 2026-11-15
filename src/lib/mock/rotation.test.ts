@@ -73,6 +73,23 @@ describe("the simulated rotation", () => {
     }
   });
 
+  it("holds each set's times across reads, and takes the next set into effect at its time, drawing from it after", async () => {
+    const { client } = createMockNode(SIM_EPOCH_MS);
+    const first = await client.stats.operator();
+    const nextAt = first.next_rotation_set?.effective_at ?? 0;
+    expect(first.rotation_set?.set).toBe(3);
+    client.tick(client.state.now + DAY_MS);
+    const later = await client.stats.operator();
+    expect([later.rotation_set?.effective_at, later.next_rotation_set?.effective_at]).toEqual([first.rotation_set?.effective_at, nextAt]);
+    client.tick(nextAt + 1);
+    const after = await client.stats.operator({ limit: 100 });
+    expect([after.rotation_set?.set, after.rotation_set?.effective_at, after.next_rotation_set]).toEqual([4, nextAt, null]);
+    const members = new Set(after.rotation_set?.members.map((member) => member.candidate));
+    const drawnSince = (after.turns?.records ?? []).filter((record) => (record.applies_at ?? 0) >= nextAt && record.position === 0);
+    expect(drawnSince.length).toBeGreaterThan(0);
+    for (const record of drawnSince) expect(members.has(record.candidate), `turn ${record.turn}`).toBe(true);
+  });
+
   it("moves to the next day's turn when the clock passes the boundary", async () => {
     const { client } = createMockNode(SIM_EPOCH_MS);
     const before = await client.stats.operator();

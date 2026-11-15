@@ -50,16 +50,25 @@ describe("the node's payouts", () => {
       return { ...base, authorization: { ...base.authorization, signer_epoch: epoch } };
     };
     const CHECK = { kind: "waiting", checkAtMs: NOW_MS + 60_000 };
-    const cases: { held?: SignedWithdrawal; listed?: SignedWithdrawal; streamed?: SignedWithdrawal; kind: string }[] = [
+    // `during` arrives through the stream while the read is on its way, after the node named the check.
+    const cases: { held?: SignedWithdrawal; listed?: SignedWithdrawal; during?: SignedWithdrawal; streamed?: SignedWithdrawal; kind: string }[] = [
       { listed: at(1, 2_000_000_000), kind: "waiting" },
       { listed: at(1, 2_000_000_000), streamed: at(2, 2_000_000_000), kind: "claimable" },
       { listed: at(2, 1_900_000_000), streamed: at(2, 2_000_000_000), kind: "claimable" },
       { listed: at(1, 2_000_000_000), streamed: at(2, 1_700_000_000), kind: "waiting" },
       { listed: at(2, 2_000_000_000), streamed: at(1, 2_100_000_000), kind: "waiting" },
       { held: at(1, 2_000_000_000), kind: "waiting" },
+      { listed: at(1, 2_000_000_000), during: at(2, 2_000_000_000), kind: "claimable" },
+      { held: at(1, 2_000_000_000), during: at(2, 2_000_000_000), kind: "claimable" },
     ];
-    for (const { held, listed, streamed, kind } of cases) {
+    for (const { held, listed, during, streamed, kind } of cases) {
       const { client, store } = await connected();
+      const read = client.payouts.bind(client);
+      client.payouts = async (account, page) => {
+        const answer = await read(account, page);
+        if (during !== undefined) store.patch(applyFeedEvent(store.getSnapshot(), { type: "withdrawal", withdrawal: during }) ?? {});
+        return answer;
+      };
       store.patch({ now: NOW_MS, approvals: [approved(5, 90)], authorizations: held === undefined ? [] : [held] });
       client.payoutsPage = page([{ nonce: 5, ...(listed === undefined ? {} : { withdrawal: listed }), check: { turn: 9, boundary_ms: NOW_MS + 60_000 } }]);
       await loadPayouts(store);

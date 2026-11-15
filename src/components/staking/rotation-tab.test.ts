@@ -86,11 +86,14 @@ describe("the Rotation tab", () => {
     expect(history).toContain("Load older");
   });
 
-  it("offers no Load older at the history's end, and says what a truncated history holds", () => {
+  it("offers no Load older at the history's end, says what a truncated history holds, and holds both lines' places either way", () => {
     const end = { ...ROUTE, turns: { records: ROUTE.turns?.records ?? [], next: null, truncated: true, retained_from_seq: 10 } };
     const html = tab(loaded(end));
-    expect(html).not.toContain("Load older");
-    expect(html).toContain("The node keeps only its newest turns");
+    expect(html).not.toMatch(/<button[^>]*>(Load older|Loading)/);
+    expect(html).toMatch(/<span aria-hidden="true" class="[^"]*\binvisible\b[^"]*">Load older<\/span>/);
+    expect(html).toMatch(/<p class="(?![^"]*\binvisible\b)[^"]*">The node keeps only its newest turns/);
+    const whole = tab(loaded({ ...end, turns: { ...end.turns, truncated: false } }));
+    expect(whole).toMatch(/<p aria-hidden="true" class="[^"]*\binvisible\b[^"]*">The node keeps only its newest turns/);
   });
 
   it("says no set is in effect, and no later one, from a node that mirrors none", () => {

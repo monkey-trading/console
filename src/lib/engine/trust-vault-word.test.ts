@@ -23,6 +23,8 @@ const HARDWARE = JSON.stringify({ provider: "sev_snp", config_sha256: CONFIG });
 
 /** What the next check meets: the vault's facts, the collateral the node serves, and whether its quote verifies. */
 interface Node {
+  /** Whether the node serves its attestation. */
+  answers: boolean;
   vault: VaultFacts | null;
   collateral: string | null;
   verifies: boolean;
@@ -30,10 +32,10 @@ interface Node {
 
 /** A hardware node trusted under OLD, whose vault, collateral and quote each test then changes. */
 async function trustedHardware() {
-  const node: Node = { vault: { release: releaseName(DIGEST, CONFIG), signer: OLD }, collateral: "{}", verifies: true };
+  const node: Node = { answers: true, vault: { release: releaseName(DIGEST, CONFIG), signer: OLD }, collateral: "{}", verifies: true };
   const verifier: Verifier = { ...dev, verifyAttestation: () => (node.verifies ? { ok: true, enclave: { address: OLD, release: "test-release-v1", config: "attested" } } : { ok: false, reason: "the quote does not verify" }) };
   const trust = new NodeTrust({
-    attestation: async () => HARDWARE, collateral: async () => node.collateral, verifier: async () => verifier, releases: [RELEASE], devDigests: [], acceptsMock: false, nowMs: () => 0,
+    attestation: async () => { if (!node.answers) throw new Error("The node did not answer."); return HARDWARE; }, collateral: async () => node.collateral, verifier: async () => verifier, releases: [RELEASE], devDigests: [], acceptsMock: false, nowMs: () => 0,
     vaultFacts: () => (node.vault === null ? null : Promise.resolve(node.vault)), onStatus: () => {}, onEnclaveChanged: () => {},
   });
   await trust.verify();
@@ -71,6 +73,15 @@ describe("the vault naming another signer than the enclave trusted last", () => 
       await judging;
       expect(trust.refuses(OLD), failure).toBe(true);
     }
+  });
+
+  it("puts that enclave aside when the wallet's read comes after a check that failed, which leaves no verdict to outdate", async () => {
+    const { node, trust } = await trustedHardware();
+    node.answers = false;
+    await trust.verify();
+    expect(trust.status).toEqual({ kind: "unverified", reason: "The node did not answer." });
+    await trust.heedVault(NEW);
+    expect(trust.refuses(OLD)).toBe(true);
   });
 
   it("leaves the enclave it names alone when a check of it fails, and puts nothing aside at a first check", async () => {
@@ -112,5 +123,16 @@ describe("a dev build's mock node under the vault's word", () => {
     await trust.verify();
     expect(trust.status).toEqual({ kind: "unverified", reason: NOT_THE_SIGNER });
     expect(trust.refuses(OLD)).toBe(true);
+  });
+
+  it("puts nothing aside for a mock node the vault does not judge, as a dev build with no stand-in digests runs", async () => {
+    const trust = new NodeTrust({
+      attestation: async () => mockAttestation(OLD), collateral: async () => null, verifier: async () => dev, releases: [], devDigests: [], acceptsMock: true, nowMs: () => 0,
+      vaultFacts: () => Promise.resolve({ release: releaseName(DIGEST, MOCK_CONFIG), signer: NEW }), onStatus: () => {}, onEnclaveChanged: () => {},
+    });
+    await trust.verify();
+    expect(trust.status.kind).toBe("mock");
+    await trust.heedVault(NEW);
+    expect([trust.status.kind, trust.refuses(OLD)]).toEqual(["mock", false]);
   });
 });

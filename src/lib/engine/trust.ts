@@ -64,6 +64,8 @@ export class NodeTrust {
   private verifiedStatus: AttestationStatus | null = null;
   /** The last address that was trusted, which a re-verification compares the next one with. */
   private lastSigner: string | null = null;
+  /** Whether the vault judges the enclave trusted last: a dev build's mock node with no stand-in digests it does not. */
+  private lastJudged = false;
   /** The address whose last failed answer a re-verification did not explain, and when: it is not re-verified again for a while. */
   private suspect: { signer: string; at: number } | null = null;
   /** The signer the node says the vault names (monkey-trading/console#280). */
@@ -142,16 +144,16 @@ export class NodeTrust {
   }
 
   /**
-   * The node's `GET /v1/operator` stated the signer the vault names and its own enclave (`SignerNaming.judge`). An answer that contradicts
-   * what is verified, or the highest signer seen, ends the verdict, stops an open stream and refuses the enclave until the vault names it again.
+   * The node's `GET /v1/operator` stated the signer the vault names and its own enclave (`SignerNaming.judge`), in an answer the enclave
+   * trusted last signed, a check running since or not. An answer that contradicts that enclave, or the highest signer seen, refuses the
+   * enclave until the vault names it again, and ends the verdict and stops an open stream while it is trusted.
    * Error cases:
    * - the answer is refused: `UntrustedError`
    */
   heedOperator(answer: OperatorClaim): void {
-    const trusted = this.signerAddress;
-    const refusal = this.naming.judge(trusted, answer);
+    const refusal = this.naming.judge(this.signerAddress ?? this.lastSigner, answer);
     if (refusal === null) return;
-    if (refusal.supersede && trusted !== null) {
+    if (refusal.supersede && this.signerAddress !== null) {
       this.signerAddress = null;
       this.setStatus({ kind: "unverified", reason: refusal.reason });
     }
@@ -163,11 +165,10 @@ export class NodeTrust {
     return this.current.kind !== "mock" || this.deps.devDigests.length > 0;
   }
 
-  /** The vault, read through the wallet elsewhere, names `signer`: the enclave trusted last is put aside at once if it is not that key, and a verdict the read outdates is reached again. */
+  /** The vault, read through the wallet elsewhere, names `signer`: the enclave trusted last is put aside at once if it is not that key, whatever the verdict now, and a verdict the read outdates is reached again. */
   async heedVault(signer: string): Promise<void> {
-    if (!this.outdatedBy(signer)) return;
     this.vaultNames(signer);
-    await this.verifyAfresh();
+    if (this.outdatedBy(signer)) await this.verifyAfresh();
   }
 
   /** Whether the vault's `signer` calls for a new verdict: it is not the enclave trusted now, or the verdict was reached with no read of the vault. */
@@ -207,15 +208,16 @@ export class NodeTrust {
     if (this.current.kind !== "clock") this.setStatus({ kind: "unverified", reason });
   }
 
-  private trust(address: string): void {
+  private trust(address: string, judged: boolean): void {
     const changed = this.lastSigner !== null && this.lastSigner !== address;
     this.signerAddress = this.lastSigner = address;
+    this.lastJudged = judged;
     if (changed) this.deps.onEnclaveChanged();
   }
 
-  /** The vault names `signer`: the enclave trusted last is put aside when it is not that key, before any check that follows can fail, so an answer still in flight under it is refused. */
+  /** The vault names `signer`: the enclave trusted last, if the vault judges it, is put aside when it is not that key, before any check that follows can fail, so an answer still in flight under it is refused. */
   private vaultNames(signer: string): void {
-    if (this.lastSigner !== null && this.lastSigner !== signer) this.naming.vaultSays(this.lastSigner, signer);
+    if (this.lastSigner !== null && this.lastJudged && this.lastSigner !== signer) this.naming.vaultSays(this.lastSigner, signer);
   }
 
   /** Whether a signer's answers are refused: another signer was named since it was verified. */
@@ -265,7 +267,7 @@ export class NodeTrust {
         const refused = await this.mockRefusal(configHash, address);
         if (refused !== null) return this.setStatus({ kind: "unverified", reason: refused });
         const superseded = await this.naming.refusal(address); if (superseded !== null) return this.refused(superseded);
-        this.trust(address);
+        this.trust(address, this.deps.devDigests.length > 0);
         return this.setStatus({ kind: "mock" });
       }
       // The node's own text until the verifier binds it to the quote: checked first, so it cannot add a line to a manifest.
@@ -287,7 +289,7 @@ export class NodeTrust {
       if (vault.kind === "read") this.naming.vaultSays(address, vault.facts.signer);
       if (vault.kind === "read" && address !== vault.facts.signer) return this.setStatus({ kind: "unverified", reason: NOT_THE_SIGNER });
       const superseded = await this.naming.refusal(address); if (superseded !== null) return this.refused(superseded);
-      this.trust(address);
+      this.trust(address, true);
       if (vault.kind === "read") this.setStatus({ kind: "verified", release: release ?? "", config: config ?? "", address });
       else this.setStatus({ kind: "attested", release: release ?? "", address, why: vault.kind === "none" ? CONNECT_TO_CHECK : `Your wallet could not read the vault's current release: ${vault.reason}` });
     } catch (error) {
