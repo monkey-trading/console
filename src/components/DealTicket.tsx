@@ -133,8 +133,10 @@ export function DealTicket() {
         <div className="mt-4 grid grid-cols-2 divide-x divide-line rounded border border-edge text-center">
           <div className="px-2 py-3"><p className="text-label text-fg-3">Bid (you sell)</p><p className={`mt-1 text-data ${side === "sell" ? "text-ember" : "text-fg-2"}`}>{show(prices.bid)}</p></div>
           <div className="px-2 py-3"><p className="text-label text-fg-3">Offer (you buy)</p><p className={`mt-1 text-data ${side === "buy" ? "text-glow" : "text-fg-2"}`}>{show(prices.offer)}</p></div>
-          <p className="col-span-2 border-t border-line px-2 py-2 text-label text-fg-3">
-            {prices.spreadTenths === null ? "No executable quote for this size yet." : <>{live ? "Your executable spread" : "Spread"} for this size <span className="text-fg-2">{formatTenthPercent(prices.spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(prices.spreadTenths)})</span>{prices.toxicityBps > 0 && <>, including a <span className="text-fg-2">+{prices.toxicityBps} {prices.toxicityBps === 1 ? "bp" : "bps"}</span> toxicity add-on on each price</>}</>}
+          {/* The add-on comes and goes with the account's toxicity tier, so an unseen copy that carries it holds the line's wrapped height. */}
+          <p className="col-span-2 grid border-t border-line px-2 py-2 text-label text-fg-3">
+            <span className="col-start-1 row-start-1">{spreadLine(prices.spreadTenths, live, prices.toxicityBps)}</span>
+            <span aria-hidden="true" className="invisible col-start-1 row-start-1">{spreadLine(prices.spreadTenths ?? 0, live, Math.max(prices.toxicityBps, 99))}</span>
           </p>
         </div>
         {(limits !== null || (!state.accountRead && (state.wallet !== null || !state.walletDecided))) && (
@@ -187,4 +189,10 @@ export function DealTicket() {
       <MarketInfo market={market} spreadTiers={spreadTiers} ownBands={ownBands} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={terms?.stressLevels[market.stress] ?? null} notice={terms === null ? null : (state.listingNotices[market.id] ?? null)} paramsNote={houseTermsNote(state)} />
     </>
   );
+}
+
+/** The spread line under the prices: the executable spread for the size, and the toxicity add-on on each price when there is one. */
+function spreadLine(spreadTenths: number | null, live: boolean, toxicityBps: number) {
+  if (spreadTenths === null) return "No executable quote for this size yet.";
+  return <>{live ? "Your executable spread" : "Spread"} for this size <span className="text-fg-2">{formatTenthPercent(spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(spreadTenths)})</span>{toxicityBps > 0 && <>, including a <span className="text-fg-2">+{toxicityBps} {toxicityBps === 1 ? "bp" : "bps"}</span> toxicity add-on on each price</>}</>;
 }

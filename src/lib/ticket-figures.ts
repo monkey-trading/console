@@ -98,10 +98,13 @@ export function ticketFigures(state: ConsoleState, market: MarketModel, order: T
   const feeBps = fee?.feeBps ?? accountFeeTerms(state)?.profitFeeBps ?? null;
   // The account's tier sets the margin floor of its initial requirement and the end of its first spread band; both come from the table the parameters name.
   const pricing = accountPricing(state.account, params, market.view);
-  const limits = ticketLimits(state.account, market.id, { floorBps: pricing.marginFloorBps ?? null, weekendBps: weekendFloorBps(market.view.weekend_margin, state.now) });
+  const weekendBps = weekendFloorBps(market.view.weekend_margin, state.now);
+  const limits = ticketLimits(state.account, market.id, { floorBps: pricing.marginFloorBps ?? null, weekendBps });
+  // The margin figures charge each band at the larger of the tier's floor and an applying weekend margin, as Max leverage does.
+  const marginFloorBps = weekendBps > 0 ? Math.max(pricing.marginFloorBps ?? 0, weekendBps) : pricing.marginFloorBps;
   // The margin use after the order comes from the console's own prices, which do not know a live node's toxicity add-on, so it is shown only for the in-browser node.
   const shown = previewTicket({
-    ...pricing,
+    ...pricing, marginFloorBps,
     market, side: order.side, qty: order.qty, slippageBps: order.slippageBps, resting: order.resting, triggerPrice: order.triggerPrice, account: state.account,
     houseNav: state.house.nav, estimates: !live, stress: stressTermsAt(params?.stressLevels, market.stress), closeFeeBps: feeBps ?? undefined,
   });

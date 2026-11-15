@@ -206,6 +206,21 @@ describe("the account's volume tier at the ticket", () => {
     expect(listed.preview.marginAdded).toBeLessThan(tier0.preview.marginAdded);
   });
 
+  it("charges the margin figures at the weekend margin while it applies, as Max leverage does", async () => {
+    const market = await btcAt(100_000);
+    const weekend = (from: number, reopen: number) => ({ ...market, view: { ...market.view, weekend_margin: { weekend_margin_bps: 750, from, close: 7_200_000, reopen } } });
+    const at = (m: MarketModel) => ticketFigures(state(m, false, { account: tiered(0), houseParams: params, now: 1_000 }), m, { ...order("10"), side: "buy" });
+    // $1M at the tier's 5% floor needs $50k; inside the window the 7.5% weekend rate sets it.
+    expect(at(market).preview.marginAdded).toBe(fixedFromInt(50_000));
+    const inside = at(weekend(0, 1e13));
+    expect(inside.preview.marginAdded).toBe(fixedFromInt(75_000));
+    expect(inside.preview.marginRateBps).toBe(750);
+    expect(inside.limits?.weekendSets).toBe(true);
+    // Before the window opens, or after the reopen, the tier's floor stands.
+    expect(at(weekend(2_000, 1e13)).preview.marginAdded).toBe(fixedFromInt(50_000));
+    expect(at(weekend(0, 1_000)).preview.marginAdded).toBe(fixedFromInt(50_000));
+  });
+
   it("names the tier's leverage in the in-browser node's margin refusal, and the weekend margin when it sets it", async () => {
     const market = await btcAt(100_000);
     // $10,000 of equity at the 5% floor opens $200,000: 3 BTC is $300,000.

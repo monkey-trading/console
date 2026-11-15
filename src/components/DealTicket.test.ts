@@ -76,6 +76,15 @@ describe("the toxicity add-on", () => {
   it("names the add-on the signed quote carries beside the executable spread, and none when it is zero", () => {
     // Market info's own words name the add-on in general; the label is the figure beside the spread.
     expect(render(0, 2)).toMatch(/including a <span[^>]*>\+2 bps<\/span> toxicity add-on on each price/);
-    expect(render(0, 0)).not.toContain("including a");
+  });
+
+  it("reserves the add-on's wrapped height, an unseen copy carrying it, so the footprint is the same with and without one", () => {
+    const line = (html: string) => html.match(/<p class="col-span-2 grid[^>]*>(.*?)<\/p>/)?.[1] ?? "";
+    const without = line(render(0, 0));
+    const withAddOn = line(render(0, 2));
+    // The hidden copy states the add-on in both, and is not read out.
+    expect(without).toMatch(/<span aria-hidden="true" class="invisible[^"]*">.*toxicity add-on on each price/);
+    expect(withAddOn).toMatch(/<span aria-hidden="true" class="invisible[^"]*">.*toxicity add-on on each price/);
+    expect(without.replace(/<span aria-hidden.*$/, "")).not.toContain("toxicity add-on");
   });
 });

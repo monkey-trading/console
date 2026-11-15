@@ -76,8 +76,8 @@ export function VolumeTierCard() {
             {/* From V68 the node names what a tier takes off the profit fee and the financing markup, and adds to the emission weight. */}
             {benefitsServed && (
               <>
-                <Row label="Profit fee discount" now={cell((b) => describeDiscount(b.feeDiscountBps), "now")} next={nextColumn ? cell((b) => describeDiscount(b.feeDiscountBps), "next") : null} />
-                <Row label="Financing discount" now={cell((b) => describeDiscount(b.financingDiscountBps), "now")} next={nextColumn ? cell((b) => describeDiscount(b.financingDiscountBps), "next") : null} />
+                <Row label="Base profit fee discount" now={cell((b) => describeDiscount(b.feeDiscountBps), "now")} next={nextColumn ? cell((b) => describeDiscount(b.feeDiscountBps), "next") : null} />
+                <Row label="Financing markup discount" now={cell((b) => describeDiscount(b.financingDiscountBps), "now")} next={nextColumn ? cell((b) => describeDiscount(b.financingDiscountBps), "next") : null} />
                 <Row label="Emissions boost" now={cell((b) => describeBoost(b.emissionsBoostBps), "now")} next={nextColumn ? cell((b) => describeBoost(b.emissionsBoostBps), "next") : null} />
               </>
             )}
