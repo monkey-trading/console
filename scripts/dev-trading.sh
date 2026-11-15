@@ -15,7 +15,8 @@
 # TRADING_SCENARIO=tiers runs the volume tier scenario instead, on a node whose genesis names a tier table
 # a fresh wallet climbs in a few minutes (scripts/live/dev-volume-tier.live.test.ts): a fresh wallet at tier 0
 # sees its leverage, best-price size and order limit at the ticket, is stopped past each, trades to tier 1
-# and withdraws, and each figure the panel, the ticket and the withdraw form show equals the account read.
+# and withdraws, its fee discount, financing discount and emissions boost are read, and each figure the panel, the ticket and the
+# withdraw form show equals the account read.
 #
 # Needs Node, curl, python3 (3.11 or later), and either ENGINE_BIN (a built `engine` binary with
 # the access_source example built beside it) with ENGINE_DIR (the engine checkout holding
@@ -94,10 +95,13 @@ if scenario == "tiers":
     # The production genesis's shares, margin floors (5%, 2%, none) and the shape of its limits, with thresholds a fresh
     # wallet reaches in minutes: $50,000 of counted volume in a day takes tier 1, $5,000,000 tier 2. The orders a tier
     # rests and the requests a second it sends are small, so a few orders reach the limit and a short burst reaches the rate.
+    # From V68 tiers 1 and 2 take 10% and 20% off the profit fee, 5% and 10% off the financing markup, and weigh emissions 1.1 and 1.25 times.
     cfg["genesis"]["params"]["volume_tiers"] = [
         {"threshold": "0", "day_divisor": 1, "best_price_share_bps": 2500, "margin_floor_bps": 500, "max_resting_orders": 3, "requests_per_second": 3},
-        {"threshold": "50000", "day_divisor": 1, "best_price_share_bps": 5000, "margin_floor_bps": 200, "max_resting_orders": 5, "requests_per_second": 6},
-        {"threshold": "5000000", "day_divisor": 1, "best_price_share_bps": 10000, "max_resting_orders": 10, "requests_per_second": 12},
+        {"threshold": "50000", "day_divisor": 1, "best_price_share_bps": 5000, "margin_floor_bps": 200, "max_resting_orders": 5, "requests_per_second": 6,
+         "fee_discount_bps": 1000, "financing_discount_bps": 500, "emissions_boost_bps": 1000},
+        {"threshold": "5000000", "day_divisor": 1, "best_price_share_bps": 10000, "max_resting_orders": 10, "requests_per_second": 12,
+         "fee_discount_bps": 2000, "financing_discount_bps": 1000, "emissions_boost_bps": 2500},
     ]
 cfg["metrics"]["listen"] = f"127.0.0.1:{metrics}"
 # Anvil account 0, the published access-source test authority the fixture signs with.

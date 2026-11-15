@@ -2,6 +2,7 @@
 
 import { mulFixed, type Fixed } from "../fixed";
 import { tieredMargin } from "../pricing";
+import { discountedBase } from "../holding-fee";
 import { decodeTiers, flooredMargin, type TierTerms } from "../volume-tier";
 import type { AccountState, MockState } from "./state";
 import { tierNow } from "./volume";
@@ -36,6 +37,11 @@ export function tierOfAccount(state: MockState, account: AccountState): { tier: 
   const table = tierTable(state);
   const tier = tierNow(account.volume, table, state.now);
   return { tier, terms: table[tier] ?? null };
+}
+
+/** The base profit fee the account pays past the curve: the parameters' base less its tier's fee discount (V68, `discounted_base_bps`). */
+export function feeBaseOf(state: MockState, account: AccountState): number {
+  return discountedBase(state.params.profitFeeBps, tierOfAccount(state, account).terms?.feeDiscountBps ?? 0);
 }
 
 /** The margin floor of the account's tier, in bps: each margin band charges at least this in the initial requirement. */

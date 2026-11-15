@@ -6,9 +6,9 @@
 
 import { closeShape, ladderSlack, ticketClose, type CloseShape, type ClosePreview } from "./close-preview";
 import type { Side, SpreadTier } from "./engine/types";
-import { positionFee } from "./fee-words";
+import { positionFee, type FeeTerms } from "./fee-words";
 import { absFixed, type Fixed } from "./fixed";
-import type { FeeNow } from "./holding-fee";
+import { discountedBase, type FeeNow } from "./holding-fee";
 import type { HouseParams } from "./house";
 import type { MarketModel, PositionModel } from "./models";
 import { CALM, conversionAt, stressTermsAt, USD } from "./pricing";
@@ -70,7 +70,17 @@ export function houseTermsNote(state: ConsoleState): string | null {
  * the house state held is current, else as the account read gave it (`positionFee`). Null before V55.
  */
 export function positionFeeNow(state: ConsoleState, position: PositionModel): FeeNow | null {
-  return positionFee(position.closeFee, currentParams(state), state.now);
+  return positionFee(position.closeFee, accountFeeTerms(state), state.now);
+}
+
+/**
+ * The fee terms a close pays: the parameters' curve and their base less the account's tier's fee discount
+ * (V68, read now; `max(base x (1 - d), C(hold))`). Null while the parameters are not current.
+ */
+export function accountFeeTerms(state: ConsoleState): FeeTerms | null {
+  const params = currentParams(state);
+  if (params === null) return null;
+  return { profitFeeBps: discountedBase(params.profitFeeBps, state.account?.volume?.feeDiscountBps ?? 0), profitFeeCurve: params.profitFeeCurve };
 }
 
 /**
@@ -85,7 +95,7 @@ export function ticketFigures(state: ConsoleState, market: MarketModel, order: T
   const position = state.account?.positions.find((p) => p.market === market.id) ?? null;
   // Before V55 a close pays the base, which the parameters name.
   const fee = position === null ? null : positionFeeNow(state, position);
-  const feeBps = fee?.feeBps ?? params?.profitFeeBps ?? null;
+  const feeBps = fee?.feeBps ?? accountFeeTerms(state)?.profitFeeBps ?? null;
   // The account's tier sets the margin floor of its initial requirement and the end of its first spread band; both come from the table the parameters name.
   const pricing = accountPricing(state.account, params, market.view);
   const limits = ticketLimits(state.account, market.id, { floorBps: pricing.marginFloorBps ?? null, weekendBps: weekendFloorBps(market.view.weekend_margin, state.now) });
@@ -121,7 +131,7 @@ export function positionClose(state: ConsoleState, market: MarketModel | undefin
   if (market === undefined || !market.open || market.mark === null) return { close: null, why: null };
   if (!state.pricingCurrent) return { close: null, why: houseTermsNote(state) };
   const fee = positionFeeNow(state, position);
-  const feeBps = fee?.feeBps ?? currentParams(state)?.profitFeeBps ?? null;
+  const feeBps = fee?.feeBps ?? accountFeeTerms(state)?.profitFeeBps ?? null;
   const side = position.qty > 0n ? "sell" : "buy";
   const close = ticketClose({
     position, side, qty: absFixed(position.qty), price: quoted, exactPrice: true, feeBps, fallsAt: fee?.fallsAt ?? null, now: state.now, toUsdDown: usdConverter(market.view, market.mark, "down"),

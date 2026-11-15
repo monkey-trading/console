@@ -108,6 +108,16 @@ export function describeNextTier(next: NextTier): string {
   return `Tier ${next.tier} needs ${usdWholeUp(next.volumeLeft)} more counted volume, over at least ${days} at the day cap of ${usdWhole(next.dayCap)} (${next.daysNeeded} days in all).`;
 }
 
+/** A share of a charge a tier takes off, in bps of it, as the panel states it: `10%`, or `None`. */
+export function describeDiscount(bps: number): string {
+  return bps === 0 ? "None" : `${bps / 100}%`;
+}
+
+/** A tier's emissions boost, the share it adds to an account's emission weight in bps, as the multiple it weighs: 2,500 is `1.25x`. */
+export function describeBoost(bps: number): string {
+  return `${(10_000 + bps) / 10_000}x`;
+}
+
 /** A best-price bound as the panel states it: the notional a market's first band covers, or that the market has one band. */
 export function describeBestPrice(bound: Fixed | null): string {
   return bound === null ? "Whole size" : `Up to ${usdWhole(bound)}`;

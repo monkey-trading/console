@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "@/lib/fixed";
 import type { HouseParams } from "@/lib/house";
-import type { MarketView } from "@/lib/engine/types";
+import type { MarketView, VolumeTierWire } from "@/lib/engine/types";
 import type { AccountModel } from "@/lib/models";
 import type { ConsoleState } from "@/lib/store/state";
 import { decodeVolume } from "@/lib/volume-tier";
@@ -63,6 +63,16 @@ describe("VolumeTierCard", () => {
   it("names a toxicity tier of zero as none, and an add-on in bps", () => {
     expect(render({ ...ACCOUNT, toxicity: { tier: 0, addOnBps: 0 } }, PARAMS, VolumeTierCard)).toMatch(/Toxicity add-on<\/dt><dd[^>]*>None</);
     expect(render(ACCOUNT, PARAMS, VolumeTierCard)).toContain("+2 bps on every price");
+  });
+
+  it("shows what each tier takes off the profit fee and financing and adds to emissions from V68, and no rows from a node that predates it", () => {
+    const benefits: VolumeTierWire[] = TABLE.map((tier, at) => (at === 1 ? { ...tier, fee_discount_bps: 1_000, financing_discount_bps: 500, emissions_boost_bps: 2_500 } : tier));
+    const served = decodeVolume({ tier: 0, matured: "0", pending: "0", progress: [{ capped: "0", days: 0 }, { capped: "0", days: 0 }], best_price_bounds: {}, fee_discount_bps: 0, financing_discount_bps: 0, emissions_boost_bps: 0 });
+    const html = render({ ...ACCOUNT, ...(served === null ? {} : { volume: served }) }, { ...PARAMS, volumeTiers: benefits }, VolumeTierCard);
+    expect(html).toMatch(/Profit fee discount<\/th><td[^>]*>None<\/td><td[^>]*>10%</);
+    expect(html).toMatch(/Financing discount<\/th><td[^>]*>None<\/td><td[^>]*>5%</);
+    expect(html).toMatch(/Emissions boost<\/th><td[^>]*>1x<\/td><td[^>]*>1.25x</);
+    expect(render(ACCOUNT, PARAMS, VolumeTierCard)).not.toContain("Profit fee discount");
   });
 
   it("shows the account's figures without terms until the parameters are read", () => {

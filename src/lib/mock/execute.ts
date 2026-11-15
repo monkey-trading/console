@@ -5,11 +5,11 @@ import { metaFor } from "../engine/meta";
 import type { EngineEvent, Fill, MarketId, Reject, Side } from "../engine/types";
 import { mulRounded, roundDiv } from "../fixed-rounding";
 import { feeAt, lastHold, openedAfter, profitFee } from "../holding-fee";
-import { equityOf, houseNav, houseNetNotional, initialMarginOf, marginFloorOf, tierOfAccount } from "./accounts";
+import { equityOf, feeBaseOf, houseNav, houseNetNotional, initialMarginOf, marginFloorOf, tierOfAccount } from "./accounts";
 import { recordEmissionResult } from "./emissions";
 import { adverseBps, executionCost, exceedsSlippage, notionalOf, priceOrder, USD, type Priced } from "../pricing";
 import { accountSpreadTiers, flooredMargin } from "../volume-tier";
-import type { Holding, MockState } from "./state";
+import type { AccountState, Holding, MockState } from "./state";
 import { recordFill } from "./volume";
 
 export interface FillRequest {
@@ -50,10 +50,10 @@ export function liveQuote(state: MockState, address: string, market: MarketId, s
   });
 }
 
-/** The profit fee rate a close of `holding` pays at `now`, as the engine's `close_fee_terms` reads it; the base with nothing held. */
-export function closeFeeBps(state: MockState, holding: Holding | undefined, now: number): number {
-  const { profitFeeBps, profitFeeCurve } = state.params;
-  return holding === undefined ? profitFeeBps : feeAt(profitFeeBps, profitFeeCurve, now - holding.openedAt);
+/** The profit fee rate a close of `holding` pays `account` at `now`, as the engine's `close_fee_terms` reads it: the base less the account's tier's fee discount, and the curve past it; that base with nothing held. */
+export function closeFeeBps(state: MockState, account: AccountState, holding: Holding | undefined, now: number): number {
+  const base = feeBaseOf(state, account);
+  return holding === undefined ? base : feeAt(base, state.params.profitFeeCurve, now - holding.openedAt);
 }
 
 /**
@@ -96,7 +96,7 @@ export function fillOrder(state: MockState, order: FillRequest): FillOutcome {
   const before = account.positions.get(req.market);
   const held = before?.qty ?? 0n;
   const delta = signed(req.side, req.qty);
-  const feeBps = closeFeeBps(state, before, state.now);
+  const feeBps = closeFeeBps(state, account, before, state.now);
   if (req.slippage) {
     const cap = Math.min(req.slippage.maxBps, runtime.listed.spec.max_slippage_bps);
     const bps = adverseBps(req.side, req.slippage.quoted, priced.price);

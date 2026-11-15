@@ -6,7 +6,7 @@ import { feeNow } from "../holding-fee";
 import { maxLeverage } from "../volume-tier";
 import { standingOf } from "./volume";
 import { withdrawable } from "./funds";
-import { equityOf, initialMarginOf, marginFloorOf, marginOf, tierTable } from "./accounts";
+import { equityOf, feeBaseOf, initialMarginOf, marginFloorOf, marginOf, tierTable } from "./accounts";
 import { closeoutsOf } from "./closeout-price";
 import type { MockState } from "./state";
 
@@ -17,7 +17,8 @@ export function accountViewOf(state: MockState, address: Address): AccountView |
   if (!account || !state.credited.has(address.toLowerCase())) return null;
   const positions: AccountView["positions"] = {};
   const closeFees: NonNullable<AccountView["close_fees"]> = {};
-  const { profitFeeBps, profitFeeCurve } = state.params;
+  const { profitFeeCurve } = state.params;
+  const profitFeeBps = feeBaseOf(state, account);
   for (const [id, held] of account.positions) {
     positions[id] = { qty: fixedToWire(held.qty), entry: fixedToWire(held.entry) };
     // What a close pays at the mock's clock, as the node's `close_fees` gives it.

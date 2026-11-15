@@ -158,5 +158,7 @@ export function standingOf(
     tier, matured: fixedToWire(days.reduce((sum, volume) => sum + volume, ZERO)), pending: fixedToWire(pending), progress, best_price_bounds: bounds,
     ...(terms?.maxRestingOrders == null ? {} : { max_resting_orders: terms.maxRestingOrders }),
     ...(terms?.requestsPerSecond == null ? {} : { requests_per_second: terms.requestsPerSecond }),
+    // The mock runs V68: the tier's benefits as the table names them, zero included.
+    ...(terms === undefined ? {} : { fee_discount_bps: terms.feeDiscountBps, financing_discount_bps: terms.financingDiscountBps, emissions_boost_bps: terms.emissionsBoostBps }),
   };
 }

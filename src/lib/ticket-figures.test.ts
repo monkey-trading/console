@@ -125,6 +125,29 @@ describe("positionClose", () => {
   });
 });
 
+describe("the account's fee discount at a close, from V68", () => {
+  /** A holding whose curve has run, so a close pays the base: the parameters' 10% less the tier's discount. */
+  const discounted = (feeDiscountBps: number | null): AccountModel => ({
+    ...HOLDING,
+    volume: { tier: 2, matured: 0n, pending: 0n, progress: [], bestPriceBounds: new Map(), maxRestingOrders: null, requestsPerSecond: null, feeDiscountBps, financingDiscountBps: null, emissionsBoostBps: null },
+  });
+
+  it("runs the rate from the discounted base under the same curve, so a hold the curve prices higher still pays the curve", async () => {
+    const market = await btcAt(101_000);
+    const at = (now: number, d: number | null) => positionFeeNow(state(market, true, { now, account: discounted(d) }), HOLDING.positions[0] ?? (() => { throw new Error("no position"); })())?.feeBps;
+    expect([at(OPENED + 900_000, 2_000), at(OPENED + 900_000, 1_000), at(OPENED + 900_000, null)]).toEqual([800, 900, 1_000]);
+    expect(at(OPENED + 60_000, 2_000)).toBe(6_421);
+  });
+
+  it("gives a whole close's preview the discounted rate, and the same one for close-all's figures", async () => {
+    const market = await btcAt(101_000);
+    const base = state(market, true, { now: OPENED + 900_000, account: discounted(2_000) });
+    const { close } = ticketFigures(base, market, order("2"));
+    expect(close).toMatchObject({ feeBps: 800 });
+    expect(positionClose(base, market, HOLDING.positions[0] ?? (() => { throw new Error("no position"); })(), q("100979.8")).close).toMatchObject({ feeBps: 800 });
+  });
+});
+
 describe("positionFeeNow", () => {
   it("runs the rate on the curve while the house state is current, and takes the account read's otherwise", async () => {
     const market = await btcAt(101_000);
@@ -157,7 +180,7 @@ describe("the account's volume tier at the ticket", () => {
     ...HOLDING, positions: [], margin: 0n,
     orders: Array.from({ length: resting }, (_, i) => ({ order_id: i + 1, client_id: i, market: 1, side: "buy", qty: "1", kind: { kind: "limit", price: "1" }, reduce_only: false })),
     requirements: { initialMargin: 0n, maintenanceMargin: 0n, withdrawable: fixedFromInt(50_000), maxLeverage: new Map([[1, fixedFromInt(20)]]) },
-    volume: { tier: 0, matured: 0n, pending: 0n, progress: [{ capped: 0n, days: 0 }, { capped: 0n, days: 0 }], bestPriceBounds: new Map([[1, fixedFromInt(500_000)]]), maxRestingOrders: 25, requestsPerSecond: 2 },
+    volume: { tier: 0, matured: 0n, pending: 0n, progress: [{ capped: 0n, days: 0 }, { capped: 0n, days: 0 }], bestPriceBounds: new Map([[1, fixedFromInt(500_000)]]), maxRestingOrders: 25, requestsPerSecond: 2, feeDiscountBps: null, financingDiscountBps: null, emissionsBoostBps: null },
   });
   const params = { ...PARAMS, volumeTiers: TABLE };
 

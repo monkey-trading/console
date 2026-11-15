@@ -18,6 +18,10 @@ export interface VolumeTierWire {
   max_resting_orders?: number;
   /** The signed requests a second the node admits from an account at this tier. */
   requests_per_second?: number;
+  /** From V68, the share of the base profit fee the tier takes off, of the markup it takes off financing, and the share it adds to the account's emission weight, each in bps. */
+  fee_discount_bps?: number;
+  financing_discount_bps?: number;
+  emissions_boost_bps?: number;
 }
 
 /** How far an account is towards one tier. */
@@ -39,6 +43,10 @@ export interface VolumeStandingWire {
   best_price_bounds: Record<string, string>;
   max_resting_orders?: number;
   requests_per_second?: number;
+  /** From V68, this tier's benefits as the table names them: left out by a node that predates V68. */
+  fee_discount_bps?: number;
+  financing_discount_bps?: number;
+  emissions_boost_bps?: number;
 }
 
 /** An account's toxicity score as the account read gives it (V54): the tier that applies, counted from 1 (0 for none), and the spread it adds in bps. */

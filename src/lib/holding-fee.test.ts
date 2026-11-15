@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { CurvePoint } from "./engine/types";
 import { fixedFromInt, parseFixed } from "./fixed";
-import { baseFrom, curveFeeBps, feeAt, feeNow, LAUNCH_CURVE, lastHold, nextFall, openedAfter, profitFee } from "./holding-fee";
+import { baseFrom, curveFeeBps, discountedBase, feeAt, feeNow, LAUNCH_CURVE, lastHold, nextFall, openedAfter, profitFee } from "./holding-fee";
 import { mulberry32 } from "./prng";
 
 const CURVE = LAUNCH_CURVE;
@@ -23,6 +23,26 @@ function curves(seed: number, count: number): CurvePoint[][] {
     });
   });
 }
+
+describe("discountedBase, from V68", () => {
+  it("takes the tier's discount off the base rounded up to the bp, as the engine's `discounted_base_bps` does", () => {
+    // The launch base of 10% at tiers 2 and 3's discounts of 10% and 20%: 9% and 8%.
+    expect([0, 0, 1_000, 2_000].map((d) => discountedBase(1_000, d))).toEqual([1_000, 1_000, 900, 800]);
+    // A base the discount cannot cut exactly rounds up: 15 bps less 10% is 13.5, charged as 14.
+    expect(discountedBase(15, 1_000)).toBe(14);
+    expect(discountedBase(0, 2_000)).toBe(0);
+    expect(discountedBase(1_000, 10_000)).toBe(0);
+  });
+
+  it("leaves a hold the curve prices above the discounted base at the curve, and pays the discounted base once it has run", () => {
+    const discounted = discountedBase(1_000, 2_000);
+    expect(feeAt(discounted, CURVE, 60_000)).toBe(6_421);
+    expect(feeAt(discounted, CURVE, 900_000)).toBe(800);
+    // The curve reaches the discounted base sooner than the full one, so the rate stops falling sooner.
+    expect(nextFall(discounted, CURVE, 899_999)).not.toBeNull();
+    expect(nextFall(discounted, CURVE, 900_000)).toBeNull();
+  });
+});
 
 describe("feeAt", () => {
   it("holds the full fee to ten seconds, falls along the curve rounded up to the bp, and reaches the base at fifteen minutes", () => {

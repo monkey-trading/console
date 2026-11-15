@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { fixedFromInt } from "./fixed";
 import type { HouseParams } from "./house";
 import type { AccountModel } from "./models";
-import { accountPricing, describeBestPrice, describeLimit, describeNextTier, leverageReason, orderLimitProblem, ticketLimits, tierBenefits, tierStanding, usdWhole } from "./tier-view";
+import { accountPricing, describeBestPrice, describeBoost, describeDiscount, describeLimit, describeNextTier, leverageReason, orderLimitProblem, ticketLimits, tierBenefits, tierStanding, usdWhole } from "./tier-view";
 import { decodeVolume, nextTier, decodeTiers } from "./volume-tier";
 import { btc, q } from "./ticket-fixtures";
 
@@ -141,6 +141,11 @@ describe("words", () => {
     expect(next && describeNextTier(next)).toBe("Tier 1 needs $700,000 more counted volume, over at least 2 more days at the day cap of $500,000 (2 days in all).");
     expect(describeNextTier({ tier: 1, volumeLeft: 0n, dayCap: fixedFromInt(500_000), daysNeeded: 2, daysLeast: 0 })).toBe("Tier 1 needs trading on at least 2 days, each counting up to $500,000.");
     expect(describeNextTier({ tier: 1, volumeLeft: 1n, dayCap: fixedFromInt(500_000), daysNeeded: 2, daysLeast: 1 })).toContain("over at least one more day");
+  });
+
+  it("states a discount as a share and a boost as the multiple it weighs", () => {
+    expect([0, 1_000, 2_000].map(describeDiscount)).toEqual(["None", "10%", "20%"]);
+    expect([0, 1_000, 2_500, 5_000].map(describeBoost)).toEqual(["1x", "1.1x", "1.25x", "1.5x"]);
   });
 
   it("states a bound, a limit and a whole-dollar amount", () => {

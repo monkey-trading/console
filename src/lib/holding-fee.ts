@@ -60,6 +60,14 @@ export function curveFeeBps(curve: readonly CurvePoint[], holdMs: number): numbe
   return to.fee_bps + ceilDiv((from.fee_bps - to.fee_bps) * (to.hold_ms - holdMs), to.hold_ms - from.hold_ms);
 }
 
+/**
+ * The base profit fee an account pays past the curve: `baseBps` less `discountBps` of it, rounded up to the bp so a
+ * discount never takes more than it names (`discounted_base_bps`, V68). The tier's fee discount, in bps of the base.
+ */
+export function discountedBase(baseBps: number, discountBps: number): number {
+  return ceilDiv(baseBps * (10_000 - discountBps), 10_000);
+}
+
 /** The fee rate on a gain held `holdMs`: the larger of `baseBps` and `curve`'s fee there (`fee_at`). */
 export function feeAt(baseBps: number, curve: readonly CurvePoint[], holdMs: number): number {
   return Math.max(baseBps, curveFeeBps(curve, holdMs));

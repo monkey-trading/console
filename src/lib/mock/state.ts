@@ -102,12 +102,12 @@ export const FINALITY_MS = 6_000;
 export const CHECKPOINT_EVERY = 50;
 const LOG_LIMIT = 1_000;
 
-/** The volume tiers the mock mirrors from the engine's production genesis (`config/production-genesis.toml`): the counted volume that reaches each, the best-price share, the margin floor, and the resting-order limit and request rate. */
+/** The volume tiers the mock mirrors from the engine's production genesis (`config/production-genesis.toml`): the counted volume that reaches each, the best-price share, the margin floor, and the resting-order limit and request rate, and from V68 the fee and financing discounts and the emissions boost. */
 const LAUNCH_VOLUME_TIERS: VolumeTierWire[] = [
   { threshold: "0", day_divisor: 1, best_price_share_bps: 2500, margin_floor_bps: 500, max_resting_orders: 25, requests_per_second: 2 },
-  { threshold: "1000000", day_divisor: 2, best_price_share_bps: 5000, margin_floor_bps: 200, max_resting_orders: 50, requests_per_second: 5 },
-  { threshold: "25000000", day_divisor: 5, best_price_share_bps: 10000, max_resting_orders: 100, requests_per_second: 10 },
-  { threshold: "250000000", day_divisor: 10, best_price_share_bps: 25000, max_resting_orders: 250, requests_per_second: 20 },
+  { threshold: "1000000", day_divisor: 2, best_price_share_bps: 5000, margin_floor_bps: 200, max_resting_orders: 50, requests_per_second: 5, emissions_boost_bps: 1000 },
+  { threshold: "25000000", day_divisor: 5, best_price_share_bps: 10000, max_resting_orders: 100, requests_per_second: 10, fee_discount_bps: 1000, financing_discount_bps: 1000, emissions_boost_bps: 2500 },
+  { threshold: "250000000", day_divisor: 10, best_price_share_bps: 25000, max_resting_orders: 250, requests_per_second: 20, fee_discount_bps: 2000, financing_discount_bps: 2000, emissions_boost_bps: 5000 },
 ];
 
 /** The launch parameters the mock mirrors from the engine's dev genesis (`config/dev.toml`): solvency, its three stress levels and the fee's hold curve. */

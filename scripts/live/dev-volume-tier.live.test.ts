@@ -14,8 +14,8 @@ import { freeCash, requirementOf, withdrawableOf } from "../../src/lib/account-f
 import type { AccountView } from "../../src/lib/engine/types";
 import { ACCOUNT } from "../../src/lib/engine/wallet-kit";
 import { fixedFromInt, fixedFromWire, parseFixed } from "../../src/lib/fixed";
-import { describeBestPrice, describeNextTier, orderLimitProblem, ticketLimits, tierBenefits, tierStanding } from "../../src/lib/tier-view";
-import { currentParams } from "../../src/lib/ticket-figures";
+import { describeBestPrice, describeBoost, describeDiscount, describeNextTier, orderLimitProblem, ticketLimits, tierBenefits, tierStanding } from "../../src/lib/tier-view";
+import { accountFeeTerms, currentParams, positionFeeNow } from "../../src/lib/ticket-figures";
 import { cancelOrder, attestEligibility, authorizeBrowser, placeOrder, withdraw } from "../../src/lib/store/actions";
 import { formatLeverage } from "../../src/lib/volume-tier";
 import { curl, marketOf, sizeFor, startRig, ticketFor, until, type Rig } from "./trading-kit";
@@ -152,6 +152,30 @@ describe("trading up to tier 1", () => {
     expect(tier.next).toMatchObject({ tier: 2 });
     expect(tierBenefits(tier, marketOf(rig.store, BTC).view, snapshot().now)?.now.bestPriceBound).toBe(limits?.bestPriceBound);
   }, 240_000);
+});
+
+describe("the V68 benefits at tier 1", () => {
+  it("states the tier's fee discount, financing discount and emissions boost as the account read gives them, and the next tier's from the table", async () => {
+    const raw = await read();
+    expect([raw.volume?.fee_discount_bps, raw.volume?.financing_discount_bps, raw.volume?.emissions_boost_bps]).toEqual([1_000, 500, 1_000]);
+    const tier = standing();
+    expect([tier.volume.feeDiscountBps, tier.volume.financingDiscountBps, tier.volume.emissionsBoostBps]).toEqual([1_000, 500, 1_000]);
+    const benefits = tierBenefits(tier, marketOf(rig.store, BTC).view, snapshot().now);
+    expect([describeDiscount(benefits?.now.feeDiscountBps ?? -1), describeDiscount(benefits?.next?.feeDiscountBps ?? -1)]).toEqual(["10%", "20%"]);
+    expect([describeBoost(benefits?.now.emissionsBoostBps ?? -1), describeBoost(benefits?.next?.emissionsBoostBps ?? -1)]).toEqual(["1.1x", "1.25x"]);
+  });
+
+  it("prices a close at the rate the account read gives, from the base less the tier's discount under the curve", async () => {
+    const raw = await read();
+    const position = snapshot().account?.positions.find((p) => p.market === BTC);
+    if (position === undefined) throw new Error("no BTC-USD position");
+    const params = currentParams(snapshot());
+    const base = params === null ? 0 : params.profitFeeBps;
+    // The discounted base the console's fee terms run from is the engine's: the base less 10%, rounded up to the bp.
+    expect(accountFeeTerms(snapshot())?.profitFeeBps).toBe(Math.ceil((base * 9_000) / 10_000));
+    // A few minutes in, the curve is above the base, so the node's served rate and the console's own run agree.
+    expect(positionFeeNow(snapshot(), position)?.feeBps).toBe(raw.close_fees?.[String(BTC)]?.fee_bps);
+  });
 });
 
 describe("withdrawing at tier 1", () => {

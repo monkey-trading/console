@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AccountView } from "../engine/types";
-import { fixedFromInt } from "../fixed";
+import { fixedFromInt, fixedToWire } from "../fixed";
 import { DAY_MS, MIN_HOLD_MS, recordFill } from "./volume";
 import type { MockNode } from "./index";
 import { funded, ME, order } from "./test-helpers";
@@ -197,5 +197,58 @@ describe("the account read", () => {
     expect(read.toxicity).toEqual({ score: "0", fills: "0", tier: 0, add_on_bps: 0 });
     expect(Object.keys(read.max_leverage ?? {})).toHaveLength(5);
     expect(read.maintenance_margin).toBe("0");
+  });
+});
+
+describe("the V68 benefits", () => {
+  it("serves the tier's fee discount, financing discount and emissions boost in the account read, zero named", async () => {
+    const zero = await volumeOf(await funded(10_000));
+    expect(zero).toMatchObject({ fee_discount_bps: 0, financing_discount_bps: 0, emissions_boost_bps: 0 });
+    const node = await funded(10_000);
+    seedDays(node, 5_000_000, 5);
+    expect(await volumeOf(node)).toMatchObject({ tier: 2, fee_discount_bps: 1_000, financing_discount_bps: 1_000, emissions_boost_bps: 2_500 });
+    const one = await funded(10_000);
+    seedDays(one, 500_000, 2);
+    expect(await volumeOf(one)).toMatchObject({ tier: 1, fee_discount_bps: 0, emissions_boost_bps: 1_000 });
+  });
+
+  it("charges a close past the curve the base less the tier's discount, in the read and in the fill", async () => {
+    const [low, high] = [await funded(100_000), await funded(100_000)];
+    seedDays(high, 5_000_000, 5);
+    for (const node of [low, high]) {
+      pin(node, 100_000);
+      await order(node, "1", "buy");
+      // Held past the fee's fifteen-minute curve, so a close pays the base.
+      const held = node.client.state.account(ME).positions.get(1);
+      if (held === undefined) throw new Error("no position");
+      held.openedAt -= 20 * 60_000;
+    }
+    const fees = async (node: MockNode) => Object.values((await view(node)).close_fees ?? {}).map((f) => f.fee_bps);
+    expect([await fees(low), await fees(high)]).toEqual([[1_000], [900]]);
+    // A gain at a close pays that rate of it.
+    for (const node of [low, high]) pin(node, 101_000);
+    const gain = async (node: MockNode) => {
+      const closed = await order(node, "1", "sell");
+      return closed.events.find((e) => e.type === "fill");
+    };
+    expect(await gain(low)).toMatchObject({ profit_fee_bps: 1_000 });
+    expect(await gain(high)).toMatchObject({ profit_fee_bps: 900 });
+  });
+
+  it("grows an account's emission weight by its tier's boost, rounded down, with the tier read at the period's end", async () => {
+    const node = await funded(100_000);
+    seedDays(node, 5_000_000, 5);
+    const allocated = () => node.client.state.log.flatMap((m) => m.events.flatMap((e) => (e.type === "emission_allocated" ? [e] : [])));
+    pin(node, 100_000);
+    await order(node, "1", "buy");
+    node.controls.shock(1, -300);
+    node.client.tick(node.client.state.now + 5_000);
+    await order(node, "1", "sell");
+    const losses = node.client.state.emission.results.get(ME)?.losses ?? 0n;
+    expect(losses).toBeGreaterThan(0n);
+    node.client.tick(node.client.state.now + 11 * 60_000);
+    const [event] = allocated();
+    // Tier 2's 2,500 bps weighs the losses 1.25 times.
+    expect(event?.weight).toBe(fixedToWire(losses + (losses * 2_500n) / 10_000n));
   });
 });

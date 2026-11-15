@@ -22,6 +22,10 @@ export interface TierTerms {
   marginFloorBps: number;
   maxRestingOrders: number | null;
   requestsPerSecond: number | null;
+  /** From V68, the share of the base profit fee the tier takes off, of the financing markup, and the share it adds to the emission weight, in bps; zero where the table names none. */
+  feeDiscountBps: number;
+  financingDiscountBps: number;
+  emissionsBoostBps: number;
 }
 
 /** How far an account is towards one tier. */
@@ -44,6 +48,10 @@ export interface VolumeModel {
   bestPriceBounds: ReadonlyMap<MarketId, Fixed>;
   maxRestingOrders: number | null;
   requestsPerSecond: number | null;
+  /** From V68, the account's tier's fee discount, financing discount and emissions boost, in bps; null from a node that predates V68. */
+  feeDiscountBps: number | null;
+  financingDiscountBps: number | null;
+  emissionsBoostBps: number | null;
 }
 
 /** The largest amount the engine takes as input, `Fixed::MAX_INPUT`: a billion. */
@@ -62,6 +70,9 @@ export function decodeTiers(wire: readonly VolumeTierWire[]): TierTerms[] | null
       threshold, dayDivisor: tier.day_divisor, bestPriceShareBps: tier.best_price_share_bps, marginFloorBps: whole(tier.margin_floor_bps) ? tier.margin_floor_bps : 0,
       maxRestingOrders: whole(tier.max_resting_orders) && tier.max_resting_orders > 0 ? tier.max_resting_orders : null,
       requestsPerSecond: whole(tier.requests_per_second) && tier.requests_per_second > 0 ? tier.requests_per_second : null,
+      feeDiscountBps: whole(tier.fee_discount_bps) ? tier.fee_discount_bps : 0,
+      financingDiscountBps: whole(tier.financing_discount_bps) ? tier.financing_discount_bps : 0,
+      emissionsBoostBps: whole(tier.emissions_boost_bps) ? tier.emissions_boost_bps : 0,
     });
   }
   return tiers.length === 0 ? null : tiers;
@@ -88,6 +99,9 @@ export function decodeVolume(wire: VolumeStandingWire | undefined): VolumeModel 
   return {
     tier: wire.tier, matured, pending, progress, bestPriceBounds: bounds,
     maxRestingOrders: whole(wire.max_resting_orders) ? wire.max_resting_orders : null, requestsPerSecond: whole(wire.requests_per_second) ? wire.requests_per_second : null,
+    feeDiscountBps: whole(wire.fee_discount_bps) ? wire.fee_discount_bps : null,
+    financingDiscountBps: whole(wire.financing_discount_bps) ? wire.financing_discount_bps : null,
+    emissionsBoostBps: whole(wire.emissions_boost_bps) ? wire.emissions_boost_bps : null,
   };
 }
 
@@ -191,6 +205,10 @@ export interface Benefits {
   leverage: Fixed | null;
   maxRestingOrders: number | null;
   requestsPerSecond: number | null;
+  /** From V68, the tier's fee discount, financing discount and emissions boost in bps. */
+  feeDiscountBps: number;
+  financingDiscountBps: number;
+  emissionsBoostBps: number;
 }
 
 /** What `terms` brings in a market with these bands: its best-price size and its leverage, with each margin band charged at least `weekendBps` as the engine's `max_leverage` charges it. */
@@ -200,6 +218,9 @@ export function benefitsOf(terms: TierTerms, market: { spread_tiers: readonly Sp
     leverage: market === undefined ? null : maxLeverage(market.margin_tiers, Math.max(terms.marginFloorBps, weekendBps)),
     maxRestingOrders: terms.maxRestingOrders,
     requestsPerSecond: terms.requestsPerSecond,
+    feeDiscountBps: terms.feeDiscountBps,
+    financingDiscountBps: terms.financingDiscountBps,
+    emissionsBoostBps: terms.emissionsBoostBps,
   };
 }
 

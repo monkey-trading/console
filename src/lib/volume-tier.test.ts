@@ -34,6 +34,11 @@ describe("decodeTiers", () => {
     expect(unnamed?.[0]).toMatchObject({ marginFloorBps: 0, maxRestingOrders: null, requestsPerSecond: null });
   });
 
+  it("reads the V68 benefits a tier names, and none as zero", () => {
+    const table = decodeTiers([{ threshold: "0", day_divisor: 1, best_price_share_bps: 2500 }, { threshold: "25000000", day_divisor: 5, best_price_share_bps: 10000, fee_discount_bps: 1000, financing_discount_bps: 1000, emissions_boost_bps: 2500 }]);
+    expect(table?.map((t) => [t.feeDiscountBps, t.financingDiscountBps, t.emissionsBoostBps])).toEqual([[0, 0, 0], [1000, 1000, 2500]]);
+  });
+
   it("reads no table from an empty list or a malformed tier, as a table is all or nothing", () => {
     expect(decodeTiers([])).toBeNull();
     expect(decodeTiers([...TABLE, { threshold: "x", day_divisor: 1, best_price_share_bps: 1 }])).toBeNull();
@@ -47,6 +52,13 @@ describe("decodeVolume", () => {
     expect(volume).toMatchObject({ tier: 0, matured: fixedFromInt(400_000), pending: fixedFromInt(1_000), maxRestingOrders: 25, requestsPerSecond: 2 });
     expect(volume?.progress).toHaveLength(4);
     expect(volume?.bestPriceBounds.get(1)).toBe(fixedFromInt(500_000));
+  });
+
+  it("reads the tier's V68 benefits from the account read, and null from a node that predates them", () => {
+    expect(decodeVolume(standing({ fee_discount_bps: 1000, financing_discount_bps: 1000, emissions_boost_bps: 2500 }))).toMatchObject({ feeDiscountBps: 1000, financingDiscountBps: 1000, emissionsBoostBps: 2500 });
+    expect(decodeVolume(standing())).toMatchObject({ feeDiscountBps: null, financingDiscountBps: null, emissionsBoostBps: null });
+    // Zero is named, not absent: a tier with no discount still has one to show.
+    expect(decodeVolume(standing({ fee_discount_bps: 0 }))?.feeDiscountBps).toBe(0);
   });
 
   it("reads limits a V59 node does not serve as null, and nothing from a malformed read", () => {
@@ -151,8 +163,8 @@ describe("benefitsOf", () => {
   it("states a tier's best-price size and leverage in a market, and the limits its terms name", () => {
     const [first, third] = [decodeTiers(TABLE)?.[0], decodeTiers(TABLE)?.[2]];
     const market = { spread_tiers: BTC_SPREAD, margin_tiers: BTC_MARGIN };
-    expect(first && benefitsOf(first, market)).toEqual({ bestPriceBound: fixedFromInt(500_000), leverage: fixedFromInt(20), maxRestingOrders: 25, requestsPerSecond: 2 });
-    expect(third && benefitsOf(third, market)).toEqual({ bestPriceBound: fixedFromInt(2_000_000), leverage: fixedFromInt(100), maxRestingOrders: 100, requestsPerSecond: 10 });
+    expect(first && benefitsOf(first, market)).toEqual({ bestPriceBound: fixedFromInt(500_000), leverage: fixedFromInt(20), maxRestingOrders: 25, requestsPerSecond: 2, feeDiscountBps: 0, financingDiscountBps: 0, emissionsBoostBps: 0 });
+    expect(third && benefitsOf(third, market)).toEqual({ bestPriceBound: fixedFromInt(2_000_000), leverage: fixedFromInt(100), maxRestingOrders: 100, requestsPerSecond: 10, feeDiscountBps: 0, financingDiscountBps: 0, emissionsBoostBps: 0 });
     expect(first && benefitsOf(first, undefined)).toMatchObject({ bestPriceBound: null, leverage: null });
   });
 });

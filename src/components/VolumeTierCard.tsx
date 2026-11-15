@@ -6,7 +6,7 @@ import { useId } from "react";
 
 import { formatUsd } from "@/lib/fixed";
 import { currentParams } from "@/lib/ticket-figures";
-import { describeBestPrice, describeLimit, describeNextTier, tierBenefits, tierStanding } from "@/lib/tier-view";
+import { describeBestPrice, describeBoost, describeDiscount, describeLimit, describeNextTier, tierBenefits, tierStanding } from "@/lib/tier-view";
 import { formatLeverage } from "@/lib/volume-tier";
 
 import { useConsole } from "./ConsoleProvider";
@@ -34,6 +34,8 @@ export function VolumeTierCard() {
   const toxicity = state.account?.toxicity;
   const nextTier = standing?.table?.[standing.tier + 1] === undefined ? null : standing.tier + 1;
   const nextColumn = standing === null || nextTier !== null;
+  // Whether the node serves the V68 benefits; while the account is read the rows are held, since a node serving volume serves them.
+  const benefitsServed = volume === undefined || volume.feeDiscountBps !== null;
   const cell = (pick: (b: NonNullable<typeof benefits>["now"]) => string, which: "now" | "next") => {
     const found = benefits?.[which];
     return found === null || found === undefined ? DASH : pick(found);
@@ -70,6 +72,14 @@ export function VolumeTierCard() {
             <Row label="Leverage" now={cell((b) => (b.leverage === null ? DASH : `Up to ${formatLeverage(b.leverage)}`), "now")} next={nextColumn ? cell((b) => (b.leverage === null ? DASH : `Up to ${formatLeverage(b.leverage)}`), "next") : null} />
             <Row label="Resting orders" now={cell((b) => describeLimit(b.maxRestingOrders), "now")} next={nextColumn ? cell((b) => describeLimit(b.maxRestingOrders), "next") : null} />
             <Row label="Requests a second" now={cell((b) => describeLimit(b.requestsPerSecond), "now")} next={nextColumn ? cell((b) => describeLimit(b.requestsPerSecond), "next") : null} />
+            {/* From V68 the node names what a tier takes off the profit fee and the financing markup, and adds to the emission weight. */}
+            {benefitsServed && (
+              <>
+                <Row label="Profit fee discount" now={cell((b) => describeDiscount(b.feeDiscountBps), "now")} next={nextColumn ? cell((b) => describeDiscount(b.feeDiscountBps), "next") : null} />
+                <Row label="Financing discount" now={cell((b) => describeDiscount(b.financingDiscountBps), "now")} next={nextColumn ? cell((b) => describeDiscount(b.financingDiscountBps), "next") : null} />
+                <Row label="Emissions boost" now={cell((b) => describeBoost(b.emissionsBoostBps), "now")} next={nextColumn ? cell((b) => describeBoost(b.emissionsBoostBps), "next") : null} />
+              </>
+            )}
           </tbody>
         </table>
       </div>
