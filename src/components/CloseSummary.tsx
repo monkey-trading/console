@@ -26,23 +26,23 @@ function Steady({ shown, longest }: { shown: ReactNode; longest: ReactNode }) {
 export function CloseSummary({ shape, close, why, side, places, converts }: { shape: CloseShape; close: ClosePreview | null; why: string | null; side: Side; places: number; converts: boolean }) {
   const bound = close === null || !close.exact;
   // A market quoted in another currency books its result in USD at the FX index the fill meets.
-  const holds = converts ? "the price and the FX rate hold" : "the price holds";
+  const holds = converts ? "the price and exchange rate hold" : "the price holds";
   // A sell closes a long at this price or better, a buy a short at this price or better.
   const priceWord = bound ? (side === "sell" ? "at least " : "at most ") : "";
   // A bound shows its figures rounded the way its claim reads: an "at most" price up, an "at least" amount down.
   const price = close === null ? 0n : bound ? roundToPlaces(close.price, places, side === "sell" ? "down" : "up") : close.price;
   const least = (amount: bigint) => formatUsd(bound ? roundToPlaces(amount, 2, "down") : amount);
-  const boundNote = `A bound while ${holds}: the fill's price is no worse than this and its fee rate, which falls as the hold lengthens, no higher, so it keeps at least this. A move against you fills as far as the worst price your slippage bound allows.`;
-  const exactNote = `Exact while ${converts ? "the price, the FX rate" : "the price"} and the fee rate hold. A move against you fills as far as the worst price your slippage bound allows.`;
-  const boundFee = close === null ? "" : `${formatRate(close.feeBps)} of any gain, ${formatUsd(close.fee)} at this price`;
-  const fee = close === null ? "" : bound ? boundFee : close.realised > 0n ? `${formatRate(close.feeBps)} of the gain, ${formatUsd(close.fee)}` : "none on a loss";
+  const boundNote = `These are limits, not exact figures. If ${holds}, you close at this price or better and keep at least this much, since the fee rate only falls. If the price moves against you, the order can still fill at a worse price, within your max slippage.`;
+  const exactNote = `These figures are exact if ${converts ? "the price, exchange rate" : "the price"} and fee rate don't change. If the price moves against you, the order can still fill at a worse price, within your max slippage.`;
+  const boundFee = close === null ? "" : `${formatRate(close.feeBps)} of any profit, ${formatUsd(close.fee)} at this price`;
+  const fee = close === null ? "" : bound ? boundFee : close.realised > 0n ? `${formatRate(close.feeBps)} of the profit, ${formatUsd(close.fee)}` : "none without a profit";
   return (
     <div className="mt-4 rounded border border-line-2 px-3 py-3 text-caption">
       <p className="text-label tracking-caps text-fg-3 uppercase">{shape.whole ? "Closes the whole position" : shape.reverses ? "Closes the whole position and opens the other side" : `Closes ${formatFixedPlaces(shape.closed, 6)} of the position`}</p>
       {/* Withheld figures are laid out but hidden, so they take no more room than shown ones. */}
       <dl className={`mt-2 space-y-1 ${close === null ? "invisible" : ""}`}>
         <div className={ROW}><dt className="text-fg-3">Price</dt><dd>{close === null ? "—" : <>{priceWord}{formatMark(price, places)}</>}</dd></div>
-        <div className={ROW}><dt className="text-fg-3">Realised</dt><dd>{close === null ? "—" : <>{bound ? "at least " : ""}{least(close.realised)}</>}</dd></div>
+        <div className={ROW}><dt className="text-fg-3">Profit or loss</dt><dd>{close === null ? "—" : <>{bound ? "at least " : ""}{least(close.realised)}</>}</dd></div>
         {/* A bound's fill can do better, and a better price can turn a loss into a gain that pays the fee. */}
         <div className={ROW}><dt className="text-fg-3">Profit fee</dt><dd><Steady shown={close === null ? "—" : fee} longest={boundFee} /></dd></div>
         <div className={ROW}><dt className="text-fg-2">You keep</dt><dd className={close !== null && close.net < 0n ? "text-ember" : "text-glow"}>{close === null ? "—" : <>{bound ? "at least " : ""}{least(close.net)}</>}</dd></div>

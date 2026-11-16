@@ -63,11 +63,24 @@ export function describeNextFallShort(fee: FeeNow, baseBps: number | null, now: 
   return `Base in ${formatHold(fee.baseAt - now)}`;
 }
 
-/** The schedule as a sentence: the full fee's hold, the hold at which the base takes over, and the base. */
+/** A rate in bps as a person says it, with no trailing zeros: `10000` is `100%`, `950` is `9.5%`. */
+function spokenRate(bps: number): string {
+  const part = bps % 100;
+  return `${Math.trunc(bps / 100)}${part === 0 ? "" : `.${String(part).padStart(2, "0").replace(/0+$/, "")}`}%`;
+}
+
+/** A hold as a person says it, rounded up to the whole second so a hold "or more" stays true: `15 minutes`, `11 minutes 59 seconds`. */
+function spokenHold(ms: number): string {
+  const total = Math.ceil(Math.max(ms, 0) / 1000);
+  const units: [number, string][] = [[Math.floor(total / 3600), "hour"], [Math.floor(total / 60) % 60, "minute"], [total % 60, "second"]];
+  return units.filter(([n]) => n > 0).map(([n, unit]) => `${n} ${unit}${n === 1 ? "" : "s"}`).join(" ");
+}
+
+/** The schedule as a sentence: the fee on a newly opened position, the lowest fee, and the hold from which it applies; one rate when the fee never falls. */
 export function describeSchedule(terms: FeeTerms): string {
   const curve = terms.profitFeeCurve;
   const first = curve[0];
-  if (first === undefined) return `A realised gain pays ${formatRate(terms.profitFeeBps)}, however long the position was held.`;
   const base = baseFrom(terms.profitFeeBps, curve);
-  return `A realised gain pays ${formatRate(first.fee_bps)} on a close within ${formatCurveHold(first.hold_ms)} of the position's open, falling with the hold to ${formatRate(terms.profitFeeBps)} from ${formatCurveHold(base)} on.`;
+  if (first === undefined || base === 0) return `The fee is ${spokenRate(terms.profitFeeBps)} of the profit, however long you hold the position.`;
+  return `The fee decays over time, starting at ${spokenRate(first.fee_bps)} on a newly opened position and falling to ${spokenRate(terms.profitFeeBps)} for positions held for ${spokenHold(base)} or more.`;
 }

@@ -55,7 +55,7 @@ describe("the session-key login", () => {
     client.answer = () => ({ seq: 1, events: [{ type: "session_key_rejected", account: ACCOUNT, session_key: "0x0000000000000000000000000000000000000abc", reason: { kind: "session_key_unsupported" } }] });
     expect(await loginSession(store, "wallet")).toBe(false);
     expect(liveSessionKey(store)).toBeNull(); // the candidate stays for the connection's next attempt; nothing is authorized
-    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "error", text: "This node does not support session keys yet." });
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "error", text: "This server doesn't support session keys yet." });
   });
 
   it("says why a node refuses a registration before the log, and keeps no key", async () => {

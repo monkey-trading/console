@@ -46,6 +46,9 @@ export interface TicketFigures {
   closeWithheld: string | null;
 }
 
+/** Why closing figures are withheld when no other reason applies: the price or the fee rate has not arrived. */
+export const CLOSE_WAITS = "Close figures appear once the price and fee rate have loaded.";
+
 /** The house state's parameters while they are current: read since every change to them the stream carried; null otherwise. */
 export function currentParams(state: ConsoleState): HouseParams | null {
   return state.pricingCurrent ? state.houseParams : null;
@@ -58,11 +61,11 @@ export function currentParams(state: ConsoleState): HouseParams | null {
 export function houseTermsNote(state: ConsoleState): string | null {
   const status = state.houseStateStatus;
   if (state.houseParams === null) {
-    if (status === "failed") return "The node's parameters could not be read; the console reads them again by itself.";
-    return status === "unavailable" ? "This node does not serve its parameters." : null;
+    if (status === "failed") return "The trading terms couldn't be loaded. The page will try again by itself.";
+    return status === "unavailable" ? "This server doesn't publish its trading terms." : null;
   }
   if (state.pricingCurrent) return null;
-  return status === "failed" ? "The node's parameters changed and could not be read again; the console reads them again by itself." : "Reading the node's parameters again after a change.";
+  return status === "failed" ? "The trading terms changed and couldn't be reloaded. The page will try again by itself." : "The trading terms changed. Loading the new ones.";
 }
 
 /**
@@ -121,7 +124,7 @@ export function ticketFigures(state: ConsoleState, market: MarketModel, order: T
     fallsAt: fee?.fallsAt ?? null, now: state.now, toUsdDown: market.mark === null ? null : usdConverter(market.view, market.mark, "down"),
   });
   const closing = order.resting || position === null || preview.qty <= 0n ? null : closeShape(position.qty, order.side, preview.qty);
-  const closeWithheld = closing === null || close !== null ? null : houseTermsNote(state) ?? "The close figures show once the node's price and fee rate are read.";
+  const closeWithheld = closing === null || close !== null ? null : houseTermsNote(state) ?? CLOSE_WAITS;
   return { preview, prices, limits, spreadTiers: pricing.spreadTiers ?? market.view.spread_tiers, ownBands: pricing.spreadTiers !== undefined, orderProblem: orderLimitProblem(limits, order.resting), close, closing, closeWithheld };
 }
 

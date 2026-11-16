@@ -30,7 +30,7 @@ export function markersFor(state: ConsoleState, market: MarketModel, lines = tru
     if (liq !== null) out.push({ price: fixedToNumber(liq), tone: "fg-3", style: "dashed", title: "Close-out" });
   }
   for (const order of lines ? (state.account?.orders ?? []) : []) {
-    if (order.market === market.id && order.kind.kind !== "market") out.push({ price: Number(order.kind.price), tone: order.side === "buy" ? "glow" : "ember", style: "dotted", title: `${order.kind.kind} ${order.side}` });
+    if (order.market === market.id && order.kind.kind !== "market") out.push({ price: Number(order.kind.price), tone: order.side === "buy" ? "glow" : "ember", style: "dotted", title: `${order.kind.kind === "limit" ? "Limit" : "Stop"} ${order.side}` });
   }
   return out;
 }

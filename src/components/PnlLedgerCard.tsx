@@ -20,7 +20,7 @@ export const PnlLedgerCard = memo(function PnlLedgerCard({ item, symbol, places,
   return (
     <li className="border-b border-line px-4 py-3 text-caption last:border-b-0">
       <div className="flex items-center justify-between gap-3">
-        <p><span className="text-fg">{symbol}</span> <span className="text-fg-2">{r.closed}</span>{r.liquidation && <span className="text-ember"> Liquidated</span>}</p>
+        <p><span className="text-fg">{symbol}</span> <span className="text-fg-2">{r.closed}</span>{r.liquidation && <span className="text-ember"> Closed out</span>}</p>
         <p className={r.loss ? "text-ember" : "text-glow"}><span className="sr-only">Realised profit and loss </span>{r.pnl}</p>
       </div>
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-fg-2">

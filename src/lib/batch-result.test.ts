@@ -69,12 +69,12 @@ describe("the close-all message", () => {
   });
 
   it("says how many closed and names the market that moved past its bound", () => {
-    expect(summary([1, 2, 3], [fill(1), rejected(1, slippage), fill(3)])).toBe("Closed 2 of 3 positions; ETH-USD moved past its slippage bound.");
+    expect(summary([1, 2, 3], [fill(1), rejected(1, slippage), fill(3)])).toBe("Closed 2 of 3 positions; ETH-USD moved more than your max slippage.");
   });
 
   it("names every market that did not close, each with its reason", () => {
     expect(summary([1, 2, 3], [fill(1), rejected(1, { kind: "market_closed" }), rejected(2, { kind: "house_capacity" })]))
-      .toBe("Closed 1 of 3 positions; ETH-USD's market is closed; EUR-USD: The house cannot take more in this market. Try a smaller size.");
+      .toBe("Closed 1 of 3 positions; ETH-USD is closed; EUR-USD: This market is at its limit. Try a smaller size.");
   });
 
   it("says a position that was already flat had none left to close", () => {
@@ -86,16 +86,16 @@ describe("the close-all message", () => {
   });
 
   it("says an entry it heard nothing for could not be confirmed closed", () => {
-    expect(summary([1, 2], [fill(1)])).toBe("Closed 1 of 2 positions; ETH-USD could not be confirmed closed.");
+    expect(summary([1, 2], [fill(1)])).toBe("Closed 1 of 2 positions; ETH-USD isn't confirmed closed yet.");
   });
 
   it("says none closed when none did", () => {
-    expect(summary([1, 2], [rejected(0, slippage), rejected(1, slippage)])).toBe("No position was closed: BTC-USD moved past its slippage bound; ETH-USD moved past its slippage bound.");
+    expect(summary([1, 2], [rejected(0, slippage), rejected(1, slippage)])).toBe("No position was closed: BTC-USD moved more than your max slippage; ETH-USD moved more than your max slippage.");
   });
 
   it("says nothing closed for a refusal of the whole request, with the node's reason", () => {
     const text = summary([1, 2], [rejected(0, { kind: "batch_unsupported" })]);
-    expect(text).toMatch(/^Nothing was closed\. This node cannot cancel or close everything in one request yet/);
+    expect(text).toBe("Nothing was closed. This server can't cancel or close everything in one go yet.");
   });
 });
 

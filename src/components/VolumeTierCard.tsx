@@ -14,7 +14,7 @@ import { useConsole } from "./ConsoleProvider";
 const CELL = "px-2 py-2 text-left align-top text-data sm:px-3";
 const DASH = "—";
 /** As long as the step to the next tier usually reads, so the sentence it stands for takes its lines. */
-const PLACEHOLDER_STEP = "Tier 1 needs $000,000 more counted volume, over at least 2 more days at the day cap of $000,000 (the tier takes at least 2 days of trading).";
+const PLACEHOLDER_STEP = "Tier 1 needs $000,000 more counted volume. Each day counts up to $000,000, so that takes at least 2 more days of trading.";
 
 /**
  * The volume tier card on the Funding page. While a connected wallet's account has not been read it keeps its
@@ -49,18 +49,18 @@ export function VolumeTierCard() {
         <div><dt className="text-fg-3">Counted volume, last 30 days</dt><dd className="mt-0.5 text-data text-fg">{volume === undefined ? DASH : formatUsd(volume.matured)}</dd></div>
         <div><dt className="text-fg-3">Pending</dt><dd className="mt-0.5 text-data text-fg">{volume === undefined ? DASH : formatUsd(volume.pending)}</dd></div>
         {(toxicity !== undefined || standing === null) && (
-          <div className="col-span-2 sm:col-span-1"><dt className="text-fg-3">Toxicity add-on</dt><dd className="mt-0.5 text-data text-fg">{toxicity === undefined ? DASH : toxicity.tier > 0 ? `+${toxicity.addOnBps} ${toxicity.addOnBps === 1 ? "bp" : "bps"} on every price` : "None"}</dd></div>
+          <div className="col-span-2 sm:col-span-1"><dt className="text-fg-3">Extra spread</dt><dd className="mt-0.5 text-data text-fg">{toxicity === undefined ? DASH : toxicity.tier > 0 ? `+${toxicity.addOnBps} ${toxicity.addOnBps === 1 ? "bp" : "bps"} on every price` : "None"}</dd></div>
         )}
       </dl>
-      <p className="mt-2 text-label leading-relaxed text-fg-3">Opening volume counts once the position has been held for a minute; a position closed sooner counts nothing. Only counted volume reaches a tier.</p>
-      {standing !== null && standing.table === null && <p className="mt-3 text-label text-fg-3">What each tier needs and brings shows once the node's parameters are read.</p>}
+      <p className="mt-2 text-label leading-relaxed text-fg-3">A trade counts towards your volume once the position has been open for a minute. A position closed sooner counts nothing. Only counted volume moves you up a tier.</p>
+      {standing !== null && standing.table === null && <p className="mt-3 text-label text-fg-3">Tier details will show once the trading terms load.</p>}
       {next !== null && <p className="mt-3 text-caption text-fg-2">{describeNextTier(next)}</p>}
       {/* The sentence the read brings holds its place, unseen, while the account is read. */}
       {standing === null && <p aria-hidden="true" className="invisible mt-3 text-caption">{PLACEHOLDER_STEP}</p>}
-      {standing?.table != null && next === null && <p className="mt-3 text-caption text-fg-2">This is the highest tier.</p>}
+      {standing?.table != null && next === null && <p className="mt-3 text-caption text-fg-2">You're at the highest tier.</p>}
       <div className="mt-3">
         <table className="w-full border-collapse text-caption">
-          <caption className="pb-1 text-left text-label text-fg-3">What each tier brings{market === undefined ? "" : ` in ${market.symbol}`}</caption>
+          <caption className="pb-1 text-left text-label text-fg-3">Tier benefits{market === undefined ? "" : ` in ${market.symbol}`}</caption>
           <thead>
             <tr className="border-b border-line text-fg-3">
               <th scope="col" className={`${CELL} font-normal`}><span className="sr-only">Benefit</span></th>
@@ -71,14 +71,14 @@ export function VolumeTierCard() {
           <tbody className="divide-y divide-line">
             <Row label="Best-price size" now={cell((b) => describeBestPrice(b.bestPriceBound), "now")} next={nextColumn ? cell((b) => describeBestPrice(b.bestPriceBound), "next") : null} />
             <Row label="Leverage" now={cell((b) => (b.leverage === null ? DASH : `Up to ${formatLeverage(b.leverage)}`), "now")} next={nextColumn ? cell((b) => (b.leverage === null ? DASH : `Up to ${formatLeverage(b.leverage)}`), "next") : null} />
-            <Row label="Resting orders" now={cell((b) => describeLimit(b.maxRestingOrders), "now")} next={nextColumn ? cell((b) => describeLimit(b.maxRestingOrders), "next") : null} />
-            <Row label="Requests a second" now={cell((b) => describeLimit(b.requestsPerSecond), "now")} next={nextColumn ? cell((b) => describeLimit(b.requestsPerSecond), "next") : null} />
+            <Row label="Open orders" now={cell((b) => describeLimit(b.maxRestingOrders), "now")} next={nextColumn ? cell((b) => describeLimit(b.maxRestingOrders), "next") : null} />
+            <Row label="Requests per second" now={cell((b) => describeLimit(b.requestsPerSecond), "now")} next={nextColumn ? cell((b) => describeLimit(b.requestsPerSecond), "next") : null} />
             {/* From V68 the node names what a tier takes off the profit fee and the financing markup, and adds to the emission weight. */}
             {benefitsServed && (
               <>
-                <Row label="Base profit fee discount" now={cell((b) => describeDiscount(b.feeDiscountBps), "now")} next={nextColumn ? cell((b) => describeDiscount(b.feeDiscountBps), "next") : null} />
+                <Row label="Discount on the lowest profit fee" now={cell((b) => describeDiscount(b.feeDiscountBps), "now")} next={nextColumn ? cell((b) => describeDiscount(b.feeDiscountBps), "next") : null} />
                 <Row label="Financing markup discount" now={cell((b) => describeDiscount(b.financingDiscountBps), "now")} next={nextColumn ? cell((b) => describeDiscount(b.financingDiscountBps), "next") : null} />
-                <Row label="Emissions boost" now={cell((b) => describeBoost(b.emissionsBoostBps), "now")} next={nextColumn ? cell((b) => describeBoost(b.emissionsBoostBps), "next") : null} />
+                <Row label="MONKEY rewards boost" now={cell((b) => describeBoost(b.emissionsBoostBps), "now")} next={nextColumn ? cell((b) => describeBoost(b.emissionsBoostBps), "next") : null} />
               </>
             )}
           </tbody>

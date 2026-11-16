@@ -31,19 +31,19 @@ export function tradingPaused(input: {
   reduceOnly: boolean;
 }): PausedState | null {
   if (input.handover) {
-    return { cause: "handover", why: "the operator is handing over; trading resumes when the new node verifies", closesAllowed: true };
+    return { cause: "handover", why: "a new operator is taking over, and trading resumes once their server is verified", closesAllowed: true };
   }
   if (input.unlisted) {
-    return { cause: "unlisted", why: "the operator now runs on a node this console does not list, so the console needs an update", closesAllowed: true };
+    return { cause: "unlisted", why: "the new operator's server isn't supported by this version of the console, so it needs an update", closesAllowed: true };
   }
   if (!input.open) {
     return { cause: "closed", why: input.scheduleWords === null ? "the market is closed" : `the market is closed (${input.scheduleWords})`, closesAllowed: true };
   }
   if (!input.priced) {
-    return { cause: "price", why: "there is no usable price; waiting for the venues", closesAllowed: true };
+    return { cause: "price", why: "there's no live price for this market right now", closesAllowed: true };
   }
   if (input.reduceOnly) {
-    return { cause: "reduce_only", why: "the market is reduce-only; closing a position still works", closesAllowed: true };
+    return { cause: "reduce_only", why: "this market only accepts orders that reduce a position, so you can still close", closesAllowed: true };
   }
   return null;
 }

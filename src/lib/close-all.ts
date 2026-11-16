@@ -24,7 +24,7 @@ export interface CloseTarget {
 /** A position Close all leaves out: its market is closed, no closing price has reached the console for it, or none comes until the market is selected. */
 export interface LeftOut {
   symbol: string;
-  why: "market closed" | "no closing price yet" | "select it for its closing price";
+  why: "market closed" | "no closing price yet" | "select it to get a price";
 }
 
 /** The positions to send, in the order the rows list them, and those left out, which the page names. */
@@ -33,7 +33,7 @@ export function planCloseAll(rows: readonly CloseRow[]): { targets: CloseTarget[
   const leftOut: LeftOut[] = [];
   for (const row of rows) {
     if (!row.open) leftOut.push({ symbol: row.symbol, why: "market closed" });
-    else if (row.quoted === null) leftOut.push({ symbol: row.symbol, why: row.select === true ? "select it for its closing price" : "no closing price yet" });
+    else if (row.quoted === null) leftOut.push({ symbol: row.symbol, why: row.select === true ? "select it to get a price" : "no closing price yet" });
     else targets.push({ market: row.market, quoted: row.quoted });
   }
   return { targets, leftOut };
@@ -42,7 +42,7 @@ export function planCloseAll(rows: readonly CloseRow[]): { targets: CloseTarget[
 /** The sentence under the button that names what a Close all leaves out, or null when it leaves nothing. */
 export function describeLeftOut(leftOut: readonly LeftOut[]): string | null {
   if (leftOut.length === 0) return null;
-  return `Close all leaves out ${leftOut.map((l) => `${l.symbol} (${l.why})`).join(", ")}.`;
+  return `Close all skips ${leftOut.map((l) => `${l.symbol} (${l.why})`).join(", ")}.`;
 }
 
 /** The markets Close all would send, in order: the window it opened closes when this changes, so a press confirms the list it was armed for. */

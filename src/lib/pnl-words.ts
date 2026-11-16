@@ -6,8 +6,8 @@
  * `atMark` as the only figure there is.
  */
 export function describePnl(atMark: string | null, reason: string | null): string {
-  if (reason !== null) return atMark === null ? reason : `${reason} At the mark it is ${atMark}.`;
-  return atMark === null ? "At the node's closing price for this size." : `At the node's closing price for this size. At the mark it is ${atMark}, before the exit spread.`;
+  if (reason !== null) return atMark === null ? reason : `${reason} At the mark price it's ${atMark}.`;
+  return atMark === null ? "This uses the price you'd close the whole position at." : `This uses the price you'd close the whole position at. At the mark price it's ${atMark}, before the spread.`;
 }
 
 /** What stands between a position and a closing price, in the order a close needs them. */
@@ -29,23 +29,23 @@ export interface CloseGaps {
 
 /** Why a position has no closing price, or null when it has one. */
 export function describeNoPrice(g: CloseGaps): string | null {
-  if (!g.open) return "The market is closed, so it has no closing price.";
-  if (!g.marked) return "The market has no price yet.";
-  if (!g.converts) return "The market's FX price has not been read yet, so it cannot be converted to USD.";
+  if (!g.open) return "The market is closed, so there's no closing price.";
+  if (!g.marked) return "This market has no price yet.";
+  if (!g.converts) return "The exchange rate for this market isn't available yet, so it can't be shown in USD.";
   if (g.quoted) return null;
-  return g.asked ? "No closing price has reached the console yet." : `Select ${g.symbol} to get its closing price.`;
+  return g.asked ? "Waiting for a closing price." : `Select ${g.symbol} to see its closing price.`;
 }
 
 /** Why the profit fee and what a close keeps are withheld, or null when they are shown: no closing price, else the house state's reason, else the unread rate. */
 export function describeNoClose(g: CloseGaps): string | null {
   const price = describeNoPrice(g);
   if (price !== null) return price;
-  if (!g.termsCurrent) return g.houseNote ?? "The node's parameters have not been read yet.";
-  return g.rateRead ? null : "The profit fee rate has not been read yet.";
+  if (!g.termsCurrent) return g.houseNote ?? "The trading terms haven't loaded yet.";
+  return g.rateRead ? null : "The profit fee rate hasn't loaded yet.";
 }
 
 /** A row's details in one explanation: the P&L's basis, and what the fee and the close keep come to. */
 export function describeDetails(parts: { pnl: string; noClose: string | null; noFee: boolean }): string {
-  const close = parts.noClose !== null ? `The profit fee and what a close keeps are withheld: ${parts.noClose}` : parts.noFee ? "No profit fee on this close: it realises a loss or nothing." : null;
+  const close = parts.noClose !== null ? `The fee and close figures aren't shown yet. ${parts.noClose}` : parts.noFee ? "There's no profit fee, because closing now doesn't make a profit." : null;
   return [parts.pnl, close].filter((x) => x !== null).join(" ");
 }

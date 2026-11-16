@@ -16,7 +16,7 @@ import { AMOUNT_INPUT } from "./amount-input";
 import { SessionRefusalNote } from "./SessionRefusalNote";
 import { openSetup } from "@/lib/store/setup";
 import { formatTenthBps, formatTenthPercent } from "@/lib/spread-bands";
-import { belowMinimum, contractUnit, MARGIN_SHORT, MARKET_CLOSED, NO_SIZE, parseSize, REDUCE_ONLY, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
+import { belowMinimum, contractUnit, MARGIN_SHORT, MARKET_CLOSED, NO_FUNDS, NO_SIZE, parseSize, REDUCE_ONLY, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
 import { currentParams, houseTermsNote, ticketFigures } from "@/lib/ticket-figures";
 import { describeBestPrice } from "@/lib/tier-view";
 import { tradingPaused } from "@/lib/trading-paused";
@@ -35,7 +35,7 @@ const INPUT = "mt-1 min-h-11 w-full rounded border border-edge bg-ink px-2 py-2 
 
 /** Links to the Funding page. */
 function FundingLink() {
-  return <Link href="/funding" className="-my-3.5 inline-flex min-h-11 items-center text-glow underline focus-visible:outline-2 focus-visible:outline-glow lg:my-0 lg:min-h-0">Open funding</Link>;
+  return <Link href="/funding" className="-my-3.5 inline-flex min-h-11 items-center text-glow underline focus-visible:outline-2 focus-visible:outline-glow lg:my-0 lg:min-h-0">Go to Funding</Link>;
 }
 
 /** The deal ticket for the selected market; `OrderTicket` remounts it per market so no typed value carries over. */
@@ -89,7 +89,7 @@ export function DealTicket() {
   const readOnlyWhy = signBlock(state.attestation, state.stream, state.wallet?.readOnly === true);
   // Trading never registers a key: until the declaration is signed, this button reopens setup. A declared wallet is asked for its key when an order needs it.
   const setup = setupGate(state);
-  const setupNote = setup === null ? null : setup === "reading" ? "Reading your account…" : "Sign the declaration and authorize this browser to trade.";
+  const setupNote = setup === null ? null : setup === "reading" ? "Loading your account…" : "Sign the declaration and authorize this browser to trade.";
   // Why the console cannot sign comes first: a node it does not trust may never answer the read that setup waits on.
   // The paused state then names the one market-level reason, folding the ticket's own line for it.
   const gate = !state.wallet ? "Connect a wallet to trade." : blockSentence(readOnlyWhy) ?? setupNote ?? blockSentence(paused?.why ?? null);
@@ -143,11 +143,11 @@ export function DealTicket() {
         {(limits !== null || (!state.accountRead && (state.wallet !== null || !state.walletDecided))) && (
           // Held with dashes while the account is read, so the size field below does not move when the figures arrive.
           <div className="mt-2">
-            <p id={`${id}-limits`} className="text-label text-fg-3">{limits === null ? "Your volume tier limits" : `Volume tier ${limits.tier} limits`} in {market.symbol}</p>
+            <p id={`${id}-limits`} className="text-label text-fg-3">{limits === null ? "Your volume tier limits" : `Your volume tier ${limits.tier} limits`} in {market.symbol}</p>
             <dl aria-labelledby={`${id}-limits`} className="mt-1 grid grid-cols-3 gap-2 text-label text-fg-3">
               <div><dt>Best-price size</dt><dd className="mt-0.5 text-fg-2">{limits === null ? "—" : describeBestPrice(limits.bestPriceBound)}</dd></div>
               <div><dt>Max leverage</dt><dd className="mt-0.5 text-fg-2">{limits === null || limits.leverage === null ? "—" : `${formatLeverage(limits.leverage)}${limits.weekendSets ? " (weekend margin)" : ""}`}</dd></div>
-              <div><dt>Resting orders</dt><dd className="mt-0.5 text-fg-2">{limits === null ? "—" : `${limits.resting}${limits.orderLimit === null ? "" : ` of ${limits.orderLimit}`}`}</dd></div>
+              <div><dt>Open orders</dt><dd className="mt-0.5 text-fg-2">{limits === null ? "—" : `${limits.resting}${limits.orderLimit === null ? "" : ` of ${limits.orderLimit}`}`}</dd></div>
             </dl>
           </div>
         )}
@@ -155,7 +155,7 @@ export function DealTicket() {
           <label htmlFor={`${id}-size`} className="block text-caption text-fg-2">Size (contracts)</label>
           <input {...AMOUNT_INPUT} id={`${id}-size`} value={size} inputMode="decimal" maxLength={24} aria-describedby={`${id}-size-note ${id}-size-problems`} onChange={(event) => setTypedSize(event.target.value)} className={INPUT} />
           <p id={`${id}-size-note`} className="mt-1 text-label text-fg-3">
-            1 contract = 1 {contractUnit(market)} · {preview.notional === null || qty === 0n ? "Notional —" : `Notional ≈ $${formatFixedPlaces(preview.notional, 2)}`}{preview.notional !== null && qty > 0n && kind !== "market" && triggerPrice !== null && triggerPrice > 0n ? " at the trigger price" : ""}
+            1 contract = 1 {contractUnit(market)} · {preview.notional === null || qty === 0n ? "Value —" : `Value ≈ $${formatFixedPlaces(preview.notional, 2)}`}{preview.notional !== null && qty > 0n && kind !== "market" && triggerPrice !== null && triggerPrice > 0n ? " at the trigger price" : ""}
           </p>
           <div id={`${id}-size-problems`} aria-live="polite" className="space-y-1 text-label leading-relaxed text-ember">
             {sizeMissing && <p className="mt-1 text-fg-3">{NO_SIZE}</p>}
@@ -166,14 +166,14 @@ export function DealTicket() {
         <details className="mt-4 rounded border border-line-2">
           <summary className="px-3 py-3.5 text-caption lg:py-2 text-fg-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-glow">Advanced</summary>
           <fieldset className="px-3 pb-3">
-            <legend className="sr-only">Slippage bound</legend>
-            <p className="text-caption text-fg-2">Slippage bound</p>
+            <legend className="sr-only">Max slippage</legend>
+            <p className="text-caption text-fg-2">Max slippage</p>
             <div className="mt-2 grid grid-cols-4 gap-2">
               {SLIPPAGE_CHOICES.filter((bps) => bps <= market.view.max_slippage_bps).map((bps) => (
                 <button key={bps} type="button" aria-pressed={slippage === bps} onClick={() => setSlippage(bps)} className={`min-h-11 rounded border py-2 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow ${slippage === bps ? "border-glow bg-glow/10 text-glow" : "border-line-2 text-fg-2"}`}>{bps} bps</button>
               ))}
             </div>
-            <p className="mt-2 text-label leading-relaxed text-fg-3">{kind === "market" ? "The node declines the order if the live price is more than this worse than the quote shown." : "Resting orders fill at the live price when triggered."}</p>
+            <p className="mt-2 text-label leading-relaxed text-fg-3">{kind === "market" ? "Your order won't fill if the price moves against you by more than this before it reaches the market." : "Limit and stop orders fill at the market price when triggered."}</p>
           </fieldset>
         </details>
         <button type="submit" aria-disabled={!canPlace && setup !== "needed"} className={`mt-4 min-h-12 w-full rounded border py-3 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 ${side === "buy" ? "border-glow bg-glow/10 text-glow hover:bg-glow/20" : "border-ember bg-ember/10 text-ember hover:bg-ember/20"}`}>
@@ -184,7 +184,7 @@ export function DealTicket() {
         <div aria-live="polite" className="mt-3 space-y-1 text-label leading-relaxed text-ember">
           {gate && <p className="text-fg-2">{gate}</p>}
           {!gate && <SessionRefusalNote />}
-          {!gate && shownProblems.map((p) => <p key={p}>{p}{p === "Fund your account to trade." && <> <FundingLink /></>}</p>)}
+          {!gate && shownProblems.map((p) => <p key={p}>{p}{p === NO_FUNDS && <> <FundingLink /></>}</p>)}
         </div>
       </form>
       <MarketInfo market={market} spreadTiers={spreadTiers} ownBands={ownBands} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={terms?.stressLevels[market.stress] ?? null} notice={terms === null ? null : (state.listingNotices[market.id] ?? null)} paramsNote={houseTermsNote(state)} />
@@ -192,8 +192,8 @@ export function DealTicket() {
   );
 }
 
-/** The spread line under the prices: the executable spread for the size, and the toxicity add-on on each price when there is one. */
+/** The spread line under the prices: the executable spread for the size, and the toxicity add-on on each price, named extra spread, when there is one. */
 function spreadLine(spreadTenths: number | null, live: boolean, toxicityBps: number) {
-  if (spreadTenths === null) return "No executable quote for this size yet.";
-  return <>{live ? "Your executable spread" : "Spread"} for this size <span className="text-fg-2">{formatTenthPercent(spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(spreadTenths)})</span>{toxicityBps > 0 && <>, including a <span className="text-fg-2">+{toxicityBps} {toxicityBps === 1 ? "bp" : "bps"}</span> toxicity add-on on each price</>}</>;
+  if (spreadTenths === null) return "No price for this size yet.";
+  return <>{live ? "Your spread" : "Spread"} for this size <span className="text-fg-2">{formatTenthPercent(spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(spreadTenths)})</span>{toxicityBps > 0 && <>, including <span className="text-fg-2">+{toxicityBps} {toxicityBps === 1 ? "bp" : "bps"}</span> of extra spread on each price</>}</>;
 }

@@ -36,12 +36,12 @@ describe("the Positions table's profit fee", () => {
   it("shows a tier 2 account's discounted base in the cell and in the help beside it, never the house's", () => {
     const html = render(1_000);
     expect(html).toContain("9.00%");
-    expect(html).toContain("falling with the hold to 9.00% from");
-    expect(html).not.toContain("falling with the hold to 10.00%");
+    expect(html).toContain("falling to 9% for positions held for 15 minutes or more");
+    expect(html).not.toContain("falling to 10%");
   });
 
   it("states the house's base for an account with no discount", () => {
     const html = render(0);
-    expect(html).toContain("falling with the hold to 10.00% from");
+    expect(html).toContain("falling to 10% for positions held for 15 minutes or more");
   });
 });

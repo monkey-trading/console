@@ -25,10 +25,10 @@ function UseBar({ bps }: { bps: number }) {
   );
 }
 
-/** What the market's stress level adds now: the size spread's multiplier and a minimum on every fill. */
+/** What the market's stress level adds now: the size spread's multiplier and the spread it adds to every fill. */
 function stressTerms(level: StressLevel): string {
-  const minimum = level.min_spread_bps > 0 ? `, and ${level.min_spread_bps} ${level.min_spread_bps === 1 ? "bp" : "bps"} on every fill` : "";
-  return `Size spread ×${formatMultiplier(level.size_spread_multiplier_bps)}${minimum}`;
+  const minimum = level.min_spread_bps > 0 ? `, plus ${level.min_spread_bps} ${level.min_spread_bps === 1 ? "bp" : "bps"} on every trade` : "";
+  return `Spreads ×${formatMultiplier(level.size_spread_multiplier_bps)}${minimum}`;
 }
 
 /**
@@ -54,9 +54,9 @@ export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price
         <dl className="space-y-3">
           <div className={ROW}><dt className="text-fg-3">Market hours</dt><dd className={market.open ? "text-glow" : "text-ember"}>{market.open ? "Open" : "Closed"} · {describeSchedule(market.view.schedule)}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Stress level</dt><dd className={`text-right ${STRESS_TONE[market.stress] ?? ""}`}>{market.stress} · {stressName}{stress !== null ? <span className="block text-fg-3">{stressTerms(stress)}</span> : paramsNote !== null && <span className="block text-fg-3">{paramsNote}</span>}</dd></div>
-          <div className={ROW}><dt className="text-fg-3">Margin rate</dt><dd>{preview.marginRateBps === null ? "—" : `${formatMovePercent(preview.marginRateBps).replace("+", "")} of the resulting position`}</dd></div>
+          <div className={ROW}><dt className="text-fg-3">Margin rate</dt><dd>{preview.marginRateBps === null ? "—" : `${formatMovePercent(preview.marginRateBps).replace("+", "")} of the position after this order`}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Required margin</dt><dd>{usd(preview.marginAdded)}</dd></div>
-          <div className={ROW}><dt className="text-fg-3">Implied leverage</dt><dd>{preview.impliedLeverage === null ? "—" : `${preview.impliedLeverage}×`}</dd></div>
+          <div className={ROW}><dt className="text-fg-3">Leverage</dt><dd>{preview.impliedLeverage === null ? "—" : `${preview.impliedLeverage}×`}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Quoted price</dt><dd>{price === null ? "—" : formatMark(price, market.places)}</dd></div>
           {preview.worstPrice !== null && <div className={ROW}><dt className="text-fg-3">Worst price allowed</dt><dd>{worst === null ? "—" : formatMark(worst, market.places)}</dd></div>}
         </dl>
@@ -65,7 +65,7 @@ export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price
           <dl className="mt-2 space-y-1">
             {bands.map((band) => <div key={band.span} className={ROW}><dt className="text-fg-3">{band.span}</dt><dd>{band.rate}</dd></div>)}
           </dl>
-          <p className="mt-2 text-label leading-relaxed text-fg-3">Each fill pays these on the part of your position it opens or closes{stress !== null && stress.size_spread_multiplier_bps !== 10_000 ? `, ×${formatMultiplier(stress.size_spread_multiplier_bps)} at this stress level` : ""}.</p>
+          <p className="mt-2 text-label leading-relaxed text-fg-3">Each trade pays these rates on the part of your position it opens or closes{stress !== null && stress.size_spread_multiplier_bps !== 10_000 ? `, ×${formatMultiplier(stress.size_spread_multiplier_bps)} at this stress level` : ""}.</p>
           {changes.map((line) => <p key={line} className="mt-2 text-label leading-relaxed text-amber">{line}</p>)}
         </div>
         <div>
@@ -73,16 +73,16 @@ export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price
           <UseBar bps={useBps ?? 0} />
         </div>
         <div>
-          <p className="flex justify-between text-label"><span className="text-fg-3">Size against the house's cap</span><span className="text-fg-2">{capShare}%</span></p>
+          <p className="flex justify-between text-label"><span className="text-fg-3">Order size against the market limit</span><span className="text-fg-2">{capShare}%</span></p>
           <div aria-hidden="true" className="mt-2 flex h-1.5 gap-1">
             {Array.from({ length: 8 }, (_, segment) => <span key={segment} className={`flex-1 rounded-sm ${segment < filled ? "bg-glow/70" : "bg-line-2"}`} />)}
           </div>
-          <p className="mt-2 text-label leading-relaxed text-fg-3">The house takes at most {usd(preview.houseCap)} net in {market.symbol}. The node checks the house's net exposure after your order, which this does not know.</p>
+          <p className="mt-2 text-label leading-relaxed text-fg-3">This market's limit is {usd(preview.houseCap)}, net across all traders' positions in {market.symbol}. If your order would take the market past its limit, it's refused.</p>
         </div>
         <dl className="space-y-3 border-t border-line pt-4 text-label leading-relaxed text-fg-3">
-          <div><dt className="text-fg-2">Reference</dt><dd>The multi-venue median of the node's price feeds.</dd></div>
-          <div><dt className="text-fg-2">Execution</dt><dd>Fills at the reference price moved by the spread: the size bands on the part of your position the order opens or closes, any stress minimum, and any toxicity add-on your account carries.</dd></div>
-          <div><dt className="text-fg-2">Risk</dt><dd>Stress widens the spread. Your account is closed out when equity falls below {CLOSE_OUT_BPS / 100}% of its margin.</dd></div>
+          <div><dt className="text-fg-2">Reference</dt><dd>The median of prices from several exchanges and data providers.</dd></div>
+          <div><dt className="text-fg-2">Execution</dt><dd>You trade at the reference price plus or minus the spread. The spread depends on your position size, market stress and any extra spread on your account.</dd></div>
+          <div><dt className="text-fg-2">Risk</dt><dd>Spreads widen when the market is under stress. Your positions are closed out when your equity falls below {CLOSE_OUT_BPS / 100}% of your margin.</dd></div>
         </dl>
       </div>
     </details>

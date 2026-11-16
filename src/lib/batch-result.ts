@@ -58,12 +58,12 @@ const positions = (n: number) => `${n} ${n === 1 ? "position" : "positions"}`;
  * - the entry closed, which has no reason; the caller passes only the others
  */
 function whyNot(symbol: string, outcome: EntryOutcome): string {
-  if (outcome.result === "unconfirmed") return `${symbol} could not be confirmed closed`;
+  if (outcome.result === "unconfirmed") return `${symbol} isn't confirmed closed yet`;
   if (outcome.result === "closed") throw new Error("a closed entry has no reason");
   const { reason } = outcome;
   switch (reason.kind) {
-    case "slippage": return `${symbol} moved past its slippage bound`;
-    case "market_closed": return `${symbol}'s market is closed`;
+    case "slippage": return `${symbol} moved more than your max slippage`;
+    case "market_closed": return `${symbol} is closed`;
     case "no_price": return `${symbol} has no price right now`;
     // A position closed elsewhere since the list was built: the engine refuses the empty reduce-only order.
     case "reduce_only": return `${symbol} had no position left to close`;
