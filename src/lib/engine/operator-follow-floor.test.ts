@@ -114,6 +114,17 @@ describe("the signer floor a visit holds each node to (monkey-trading/console#37
     expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B, reason: expect.stringContaining("newer signer") });
   });
 
+  it("takes a node whose route states no signer when the wallet's read of the vault judged it, and only then", async () => {
+    for (const verdict of [{ kind: "verified", release: "r", config: "c", address: KB }, { kind: "mock" }] as const) {
+      const kit = walletVisit();
+      kit.current.signedRead = async () => route(null, { epoch: 8, address: KA });
+      kit.nodeB.verdict = verdict;
+      kit.nodeB.signedRead = async () => ({ ...ROUTE });
+      await kit.follower.check();
+      expect(kit.adopted, verdict.kind).toEqual(verdict.kind === "verified" ? [B] : []);
+    }
+  });
+
   it("counts what another of the page's reads of the node in use named before it stopped answering", async () => {
     const kit = visit("c.example:8443");
     kit.nodeC.verdict = { kind: "unverified", reason: "still taking the keys" };

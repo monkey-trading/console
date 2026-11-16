@@ -61,12 +61,15 @@ export function raised(floor: SignerFloor | null, named: Readonly<NamedSigner> |
   return named.epoch === floor.epoch && floor.address !== null && address !== floor.address ? { epoch: floor.epoch, address: null } : floor;
 }
 
-/** Why a node whose route is `route` is not taken under `floor`: its own word on the signer is older than that, names another key at that epoch or one two keys were named at, or is absent. */
-export function lagging(floor: SignerFloor | null, route: OperatorRoute | null): string | null {
+/**
+ * Why a node whose route is `route` is not taken under `floor`: its own word on the signer is older than that, names another key at that
+ * epoch or one two keys were named at, or is absent while no read of the vault (`vaultRead`) judged the node, as it does one that states none.
+ */
+export function lagging(floor: SignerFloor | null, route: OperatorRoute | null, vaultRead: boolean): string | null {
   if (floor === null) return null;
   const named = route?.signer;
-  if (named !== undefined && (named.epoch > floor.epoch || (named.epoch === floor.epoch && named.address.toLowerCase() === floor.address))) return null;
-  return "A node named a newer signer than this node states, so this node's answers are not taken yet.";
+  if (named === undefined ? vaultRead : named.epoch > floor.epoch || (named.epoch === floor.epoch && named.address.toLowerCase() === floor.address)) return null;
+  return "A node named a newer signer than this node states, or another key at its epoch, so this node's answers are not taken yet.";
 }
 
 /** How long the wallet may take over one chain read before the check gives up on it, in milliseconds; a wallet asleep must not hold the follower from the next wallet. */

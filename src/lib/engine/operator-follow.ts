@@ -253,7 +253,7 @@ export class OperatorFollower {
       const said = await heard(signedAnswer(client));
       // Each client judges the signer from its own first check, so the floor, the node in use's own word included, is held here, with a wallet or not.
       this.hear(this.current);
-      const behind = lagging(this.floor, said);
+      const behind = lagging(this.floor, said, chain !== null && status.kind === "verified");
       if (behind !== null) return waiting(behind);
     } catch (error) {
       return failed(error instanceof Error ? error.message : "The node did not answer.", error);
