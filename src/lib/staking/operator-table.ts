@@ -62,6 +62,8 @@ export interface OperatorsView {
   inEffect: string;
   /** An election or promotion waiting to take effect. */
   pending: { candidate: string; effectiveAtMs: number; promoted: boolean } | null;
+  /** When the registry's open election epoch ends, from which a close chooses the next rotation set; null if the list's figures are not whole numbers. */
+  nextElectionMs: number | null;
   rows: readonly OperatorRow[];
   /** The vote contract's open proposals at the same block; null from a node that follows no vote contract, or when they did not pass their check. */
   proposals: ProposalsView | null;
@@ -173,7 +175,9 @@ export function operatorsView(list: OperatorList): OperatorsView {
   } catch (error) {
     proposalsProblem = error instanceof Error ? error.message : "The server sent invalid open proposals.";
   }
-  return { block: { number: list.block.number, hash: list.block.hash, timeMs: list.block.time_ms }, rotationEnabled: list.rotation_enabled, totalStaked, inEffect, pending, rows, proposals, proposalsProblem };
+  const electionAt = list.open_epoch_start_ms + list.parameters.epoch_length_secs * 1000;
+  const nextElectionMs = Number.isSafeInteger(electionAt) && electionAt >= 0 ? electionAt : null;
+  return { block: { number: list.block.number, hash: list.block.hash, timeMs: list.block.time_ms }, rotationEnabled: list.rotation_enabled, totalStaked, inEffect, pending, nextElectionMs, rows, proposals, proposalsProblem };
 }
 
 /** Whether `row` holds `query` (lowercase, trimmed) in its hostname, address, release or endpoint, or in what its rotation set columns say. */

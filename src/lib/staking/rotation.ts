@@ -1,8 +1,8 @@
 /**
- * The Staking page's daily rotation (monkey-trading/console#280): the rotation set in effect and the
- * next one, today's and tomorrow's turns, and the turn history, from the node's signed
+ * The Staking page's operator rotation (monkey-trading/console#280): the rotation set in effect and the
+ * next one, the current and next turns, and the turn history, from the node's signed
  * `GET /v1/operator` as the log mirrors them (monkey-trading/engine#587). Each member's expected share
- * of turns is its weight over the set's, the odds of the day's draw; a skip or a promotion reassigns a
+ * of turns is its weight over the set's, the odds of each turn's draw; a skip or a promotion reassigns a
  * turn already drawn, so it is a record of its own in the history.
  */
 
@@ -67,7 +67,7 @@ export interface RotationView {
   /** The set turns are drawn from now, and the next one to take effect. */
   set: RotationSet | null;
   nextSet: RotationSet | null;
-  /** Today's turn and tomorrow's, once drawn and mirrored. */
+  /** The turn in effect and the next, once drawn and mirrored. */
   turn: Turn | null;
   nextTurn: Turn | null;
   history: TurnHistory;
@@ -189,12 +189,33 @@ export function isReassignment(record: TurnRecord): boolean {
 
 /** What a turn's reason says in words. */
 export const REASON_WORDS: Record<TurnReason, string> = {
-  draw: "Draw: chosen in the day's draw",
-  skip: "Skip: the previously assigned operator did not start the turn in time",
-  promotion: "Promotion: took over from an operator that had stopped responding",
+  draw: "Chosen at random for the turn, with a chance in proportion to its weight.",
+  skip: "Assigned the turn because the operator assigned before it did not start in time.",
+  promotion: "Took over because the operator running the trading server stopped responding.",
 };
 /** The reason's one word, for a table's cell. */
 export const REASON_CELL: Record<TurnReason, string> = { draw: "Draw", skip: "Skip", promotion: "Promotion" };
+
+/** The engine's turn lengths: a day, or five minutes in its development build with short turns (monkey-trading/engine#854). */
+const TURN_LENGTHS_MS = [86_400_000, 300_000] as const;
+/** Turns begin at 22:30 UTC, modulo their length. */
+const BOUNDARY_MS = 81_000_000;
+
+/**
+ * When a record's operator starts: when its key signs from, or, for a refused assignment, when its turn was due to begin. A record
+ * does not carry the turn length, so that is the boundary, under either of the engine's lengths, nearest the time the record was
+ * logged: the two lengths differ by a factor of 288, so the other lands decades away.
+ */
+export function turnStartMs(record: TurnRecord): number {
+  if (record.appliesAtMs !== null) return record.appliesAtMs;
+  const off = (at: number) => Math.abs(at - record.assignedMs);
+  return TURN_LENGTHS_MS.map((length) => record.turn * length + (BOUNDARY_MS % length)).reduce((best, at) => (off(at) < off(best) ? at : best));
+}
+
+/** The records by when their operators start, newest first, and those starting together newest logged first. */
+export function byStart(records: readonly TurnRecord[]): TurnRecord[] {
+  return [...records].sort((a, b) => turnStartMs(b) - turnStartMs(a) || b.assignedSeq - a.assignedSeq);
+}
 
 /** The first words of a record's outcome: refused, taken, or assigned and waiting for its member. */
 export function recordState(record: TurnRecord): "refused" | "taken" | "assigned" {

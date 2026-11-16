@@ -119,10 +119,10 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
     <Card id={TITLE_ID} title="Operators">
       <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
         <Row label="Current operator">{list === null ? "—" : labelOf(list.inEffect)}</Row>
-        <Row label="Today's turn" reserve={TURN_RESERVE}>{schedule === null ? "—" : turnLine(schedule.turn, nameOf, "No one has today's turn")}</Row>
-        <Row label="Tomorrow's turn" reserve={TURN_RESERVE}>{schedule === null ? "—" : turnLine(schedule.nextTurn, nameOf, "Not drawn yet")}</Row>
+        <Row label="Current turn" reserve={TURN_RESERVE}>{schedule === null ? "—" : turnLine(schedule.turn, nameOf, "No turn in progress")}</Row>
+        <Row label="Next turn" reserve={TURN_RESERVE}>{schedule === null ? "—" : turnLine(schedule.nextTurn, nameOf, "Not yet drawn")}</Row>
         <Row label="Operator key in use">{route.value === null ? "—" : <span title={route.value.operator}>{shortHex(route.value.operator)}</span>}</Row>
-        <Row label="Daily rotation">{rotation === null ? "—" : rotation ? "On" : "Off"}</Row>
+        <Row label="Operator rotation">{rotation === null ? "—" : rotation ? "On" : "Off"}</Row>
         <Row label="Connected server">{node !== null ? "Demo server in your browser" : follow === null ? "—" : hostOf(follow.origin)}</Row>
       </dl>
       {pending !== null && (

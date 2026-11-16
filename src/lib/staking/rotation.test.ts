@@ -5,7 +5,7 @@ import type { OperatorRoute, RotationSetView, TurnRecordView, TurnView } from ".
 import { operatorCells } from "./operator-cells";
 import { withMembership } from "./operator-membership";
 import { tableView, type OperatorRow } from "./operator-table";
-import { isReassignment, recordState, rotationSet, rotationView, turnHistory, turnOf, TURNS_PAGE_LIMIT } from "./rotation";
+import { byStart, isReassignment, recordState, rotationSet, rotationView, turnHistory, turnOf, TURNS_PAGE_LIMIT, turnStartMs, type TurnRecord } from "./rotation";
 
 const A = "0x00000000000000000000000000000000000000a1";
 const B = "0x00000000000000000000000000000000000000b2";
@@ -97,6 +97,28 @@ describe("turnHistory", () => {
   it("carries the page's next and truncated marks, and refuses a page longer than the node's limit", () => {
     expect(turnHistory({ records: [RECORD], next: 40, truncated: true })).toMatchObject({ next: 40, truncated: true });
     expect(() => turnHistory({ records: Array.from({ length: TURNS_PAGE_LIMIT + 1 }, () => RECORD), next: null, truncated: false })).toThrow("more turns than expected");
+  });
+});
+
+describe("turnStartMs and byStart", () => {
+  const refused = (turn: number, assignedMs: number): TurnRecord => ({ ...at(turnHistory({ records: [RECORD], next: null, truncated: false }).records, 0), turn, appliesAtMs: null, refused: "late", assignedMs, takenMs: null });
+  const DAILY = Date.UTC(2026, 10, 17, 22, 30);
+  const SHORT = Date.UTC(2026, 10, 16, 21, 50);
+
+  it("starts an accepted record when its key signs from, and a refused one at its turn's boundary under the day's or the short turns' length", () => {
+    expect(turnStartMs({ ...refused(7, 0), appliesAtMs: 5_000 })).toBe(5_000);
+    // Turn 20774 of a day each, logged a day ahead; turn 5982886 of five minutes, logged four minutes ahead and three hours late.
+    expect(turnStartMs(refused(20_774, DAILY - 86_400_000))).toBe(DAILY);
+    expect(turnStartMs(refused(5_982_886, SHORT - 240_000))).toBe(SHORT);
+    expect(turnStartMs(refused(5_982_886, SHORT + 3 * 3_600_000))).toBe(SHORT);
+  });
+
+  it("orders records by start time, newest first, and those starting together by the order they were logged, newest first", () => {
+    const draw = { ...refused(5_982_886, SHORT - 240_000), assignedSeq: 10, appliesAtMs: SHORT, refused: null };
+    const skip = { ...draw, assignedSeq: 30, appliesAtMs: SHORT + 60_000 };
+    const next = { ...draw, turn: 5_982_887, assignedSeq: 20, appliesAtMs: SHORT + 300_000 };
+    const late = { ...refused(5_982_886, SHORT + 30_000), assignedSeq: 25 };
+    expect(byStart([skip, late, next, draw]).map((record) => record.assignedSeq)).toEqual([20, 30, 25, 10]);
   });
 });
 
