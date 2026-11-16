@@ -733,16 +733,16 @@ if [[ "$second_engine" == 1 ]]; then
     # The receiver numbers turns by the build's turn length, which a node checks the schedule against.
     deployed_receiver="$(create --private-key "$vote_deployer_key" src/SeedReceiver.sol:SeedReceiver --constructor-args "$relayer" 1606824023 "$turn_secs")"
     # The schedule reads the rotating nodes' LogHeads for its heartbeat rule, which takes the engine's scenario values: 60 s slots,
-    # 30 s tolerance, nine misses and 200 blocks, within bounds of (30, 5, 2, 10) and (120, 60, 9, 256), and a take window of
-    # 8 slots within (8, 24): its minimum must exceed the switch budget plus one interval plus a head's inclusion, which the
-    # tolerance bounds, at the rule's shortest interval and longest tolerance. The switch budget is 20 s and Arbitrum's block
+    # 30 s tolerance, five misses and 200 blocks, within bounds of (30, 5, 2, 10) and (120, 60, 9, 256), and a take window of
+    # 4 slots within (4, 8): its minimum must exceed the switch budget plus one interval plus a head's inclusion, which the
+    # tolerance bounds, at the rule's shortest interval and longest tolerance. The switch budget is 5 s and Arbitrum's block
     # time 250 ms. The misses must exceed the take window's slots, and by enough that (misses - slots) intervals outlast the
     # switch budget plus the longer of the tolerance and a 15 s stop margin, so a skip's member has a take before the
     # untaken-turn promotion (the schedule's `_skipsFirst`, engine#848). Without ROTATION=1 no node runs a liveness caller, and
     # no turn is drawn, so neither the promotion nor the skip fires.
-    liveness_rule="(60,30,9,200)"
-    take_window="(8,8,24)"
-    switch_budget=20
+    liveness_rule="(60,30,5,200)"
+    take_window="(4,4,8)"
+    switch_budget=5
     if [[ "$rotation" == 1 ]]; then
       # With ROTATION=1, the engine's short-turns scenario's: 30 s slots, 20 s tolerance, five misses and 10 blocks, and a take
       # window of 4 slots within (4, 8) under a 5 s switch budget, since its maximum must also fit in a turn (8 x 30 s within
