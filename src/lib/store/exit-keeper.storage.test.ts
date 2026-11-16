@@ -18,7 +18,7 @@ describe("ExitKeeper, and what a browser keeps", () => {
       await kit.connect();
       const { record, storageProblem } = kit.store.getSnapshot().exit;
       expect(record?.proof.seq).toBe(100);
-      expect(storageProblem).toBe("this browser's storage wouldn't save it: the quota is exceeded");
+      expect(storageProblem).toBe("this browser's storage would not save it: the quota is exceeded");
     });
 
     it("clears the warning once a later proof is kept", async () => {
@@ -34,7 +34,7 @@ describe("ExitKeeper, and what a browser keeps", () => {
     it("says so when the saved value cannot be read, and clears that once it reads the node for a good one", async () => {
       kit.storage.held.set(exitStorageKey(SCOPE), "{corrupt");
       await kit.attach({ attestation: { kind: "checking" }, stream: "connecting" });
-      expect(kit.store.getSnapshot().exit.storageProblem).toMatch(/couldn't be read: it isn't JSON/);
+      expect(kit.store.getSnapshot().exit.storageProblem).toMatch(/could not be read: it is not a JSON file/);
       kit.store.patch({ attestation: { kind: "mock" }, stream: "live", accountRead: true, account: { balance: 1_000n, unfinalised: 0n, equity: 1_000n, margin: 0n, positions: [], orders: [] } });
       await settle();
       expect(kit.store.getSnapshot().exit.record?.proof.seq).toBe(100);
@@ -67,7 +67,7 @@ describe("ExitKeeper, and what a browser keeps", () => {
 
     it("says a stored proof was removed when the node cannot replace it", async () => {
       writeStoredExit(() => kit.storage, { ...SCOPE, proof: parsed(100), checkpointAt: 900, accountClaim: 1n, distributionOwed: 0n, paidApprovals: [] });
-      kit.exit.verdict = () => ({ ok: false, reason: "the vault's snapshot doesn't confirm its exit terms" });
+      kit.exit.verdict = () => ({ ok: false, reason: "the vault's snapshot does not confirm its exit terms" });
       await kit.attach({ attestation: { kind: "unverified", reason: "gone" }, stream: "stale" });
       expect(kit.store.getSnapshot().exit.record).toBeNull();
       expect(kit.storage.held.size).toBe(0);
@@ -111,7 +111,7 @@ describe("ExitKeeper, and what a browser keeps", () => {
       await kit.attach({ attestation: { kind: "unverified", reason: "gone" }, stream: "stale" });
       const { record, attempt } = kit.store.getSnapshot().exit;
       expect(record).toBeNull();
-      expect(attempt).toEqual({ kind: "saved-refused", reason: "it says snapshot 9000 but matches snapshot 100" });
+      expect(attempt).toEqual({ kind: "saved-refused", reason: "it is labelled as snapshot 9000, but its contents match snapshot 100" });
       expect(kit.exit.checks).toEqual([]);
     });
 
@@ -137,7 +137,7 @@ describe("ExitKeeper, and what a browser keeps", () => {
     it("works with no storage at all", async () => {
       kit.denyStorage();
       await kit.connect();
-      expect(kit.store.getSnapshot().exit.storageProblem).toBe("this browser's storage isn't available: denied");
+      expect(kit.store.getSnapshot().exit.storageProblem).toBe("this browser's storage is not available: denied");
       expect(kit.store.getSnapshot().exit.record?.proof.seq).toBe(100);
     });
   });

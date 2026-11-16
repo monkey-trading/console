@@ -22,7 +22,7 @@ import type { NoticeSurface } from "./state";
 import type { ConsoleStore } from "./store";
 
 /** What the login asks the wallet to sign, shown in the prompt and passed to the wallet. */
-const authorizeSummary = (expiresAt: number) => `let this browser trade for you until ${formatStamp(expiresAt)} UTC`;
+const authorizeSummary = (expiresAt: number) => `authorize this browser to trade on your account until ${formatStamp(expiresAt)} UTC`;
 
 /** The live session key, or null when none is registered or the node's clock has passed its registration. */
 export function liveSessionKey(store: ConsoleStore): SessionKeySigner | null {
@@ -65,7 +65,7 @@ export async function loginSession(store: ConsoleStore, surface: NoticeSurface):
       // The connection may have ended while the nonce read waited: its wallet is not asked.
       if (store.liveWallet !== wallet) throw DISCONNECTED;
       const typed = registerSessionKeyTypedData(domainOf(store), wallet.address, key.address, sessionExpiresAt, { ...terms, nonce });
-      const signature = await prompting(store, wallet, surface, `Confirm in your wallet: ${summary}. This covers trading only. Deposits and withdrawals still ask your wallet each time.`, () => wallet.sign({ summary, typed }));
+      const signature = await prompting(store, wallet, surface, `Confirm the request in your wallet to ${summary}. The authorization covers trading only, so your wallet will still ask you to approve each deposit and withdrawal.`, () => wallet.sign({ summary, typed }));
       // Or while the wallet asked: nothing registers for a connection that ended.
       if (store.liveWallet !== wallet) throw DISCONNECTED;
       return store.deps.client.registerSessionKey({ account: wallet.address, session_key: key.address, expires_at: sessionExpiresAt, auth: { nonce, expires_at: terms.expiresAt, signature } });
@@ -87,7 +87,7 @@ export async function loginSession(store: ConsoleStore, surface: NoticeSurface):
       if (surface !== "setup") store.notify(surface, describeReject(refused.reason));
       return false;
     }
-    if (!result.events.some((e) => e.type === "session_key_registered")) throw new Error("The server didn't set up trading for this browser.");
+    if (!result.events.some((e) => e.type === "session_key_registered")) throw new Error("The server did not authorize this browser to trade.");
     installKey(store, key, sessionExpiresAt);
     if (store.deps.persistence !== undefined) saveSessionKey(store.deps.persistence, keyScope(store, wallet), key, sessionExpiresAt);
     return true;
@@ -133,15 +133,15 @@ export async function authorizeBrowser(store: ConsoleStore, surface: NoticeSurfa
 export async function revokeSession(store: ConsoleStore, wallet: Wallet, key: SessionKeySigner): Promise<void> {
   try {
     const blocked = signBlock(store.getSnapshot().attestation, store.getSnapshot().stream, false);
-    if (blocked !== null) throw new Error(`you can't sign right now because ${blocked}`);
+    if (blocked !== null) throw new Error(`you cannot sign at the moment because ${blocked}`);
     const { next_nonce, time_ms } = await store.deps.client.nonce(wallet.address);
     const expiresAt = (time_ms ?? store.getSnapshot().now) + REQUEST_TTL_MS;
     const typed = revokeSessionKeyTypedData(domainOf(store), wallet.address, key.address, { nonce: next_nonce, expiresAt });
     const summary = "end this browser's trading session";
-    const signature = await prompting(store, null, "wallet", `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
+    const signature = await prompting(store, null, "wallet", `Confirm the request in your wallet to ${summary}.`, () => wallet.sign({ summary, typed }));
     await store.deps.client.revokeSessionKey({ account: wallet.address, session_key: key.address, auth: { nonce: next_nonce, expires_at: expiresAt, signature } });
   } catch {
     // Best effort, as the issue settles it: an unrevoked key dies at its expiry either way.
-    store.notify("wallet", "The trading session wasn't revoked. It will expire by itself.", "info");
+    store.notify("wallet", "The trading session for this browser was not revoked, but it will expire automatically.", "info");
   }
 }

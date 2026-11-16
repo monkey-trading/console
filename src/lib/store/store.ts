@@ -217,7 +217,7 @@ export class ConsoleStore {
     try {
       this.patch({ attestation: await this.deps.client.verify() });
     } catch (error) {
-      this.patch({ attestation: { kind: "unverified", reason: error instanceof Error ? error.message : "This server's verification data couldn't be read." } });
+      this.patch({ attestation: { kind: "unverified", reason: error instanceof Error ? error.message : "The server's verification data could not be read." } });
     }
     // A node whose markets have not loaded yet is read once it is trusted.
     if (this.snapshot.markets.length === 0 && readBlock(this.snapshot.attestation, "live") === null) await this.refresh(true);
@@ -235,8 +235,8 @@ export class ConsoleStore {
     // A close-out, or a resting order the node cancels later on a tick, leaves the user with less than they placed and no control to say why.
     const closedOut = message.events.some((event) => event.type === "close_out" && isMine(event, viewer));
     const cancelled = message.events.flatMap((event) => (event.type === "order_cancelled" && event.reason !== "client" && isMine(event, viewer) ? [event.order_id] : []));
-    if (closedOut) this.notify("account", "Your positions were closed out because your equity fell below half your margin. They closed at the market price. See History for details.");
-    else if (cancelled.length > 0) this.notify("account", `${cancelled.length === 1 ? `Order ${cancelled[0]}` : `Orders ${cancelled.join(", ")}`} couldn't be filled, so ${cancelled.length === 1 ? "it was" : "they were"} cancelled.`);
+    if (closedOut) this.notify("account", `Your positions were closed out because your equity fell below the close-out level${this.snapshot.houseParams === null ? "" : ` of ${this.snapshot.houseParams.closeoutLevelBps / 100}% of your margin requirement`}. They were closed at the market price, and the details are shown in History.`);
+    else if (cancelled.length > 0) this.notify("account", `${cancelled.length === 1 ? `Order ${cancelled[0]}` : `Orders ${cancelled.join(", ")}`} could not be filled, so ${cancelled.length === 1 ? "it has" : "they have"} been cancelled.`);
     this.pacing?.observe(message);
     if (message.events.some((event) => event.type === "admin_applied")) stalePricing(this); // parameters, listings or notices may have changed
     this.ledger.ingest(message);

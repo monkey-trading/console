@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { formatClock, formatSpan, formatStamp } from "./time";
+import { formatClock, formatSpan, formatSpanWords, formatStamp } from "./time";
 
 describe("time", () => {
   it("formats the clock and the date in UTC", () => {
@@ -23,5 +23,19 @@ describe("time", () => {
     expect(formatSpan(3 * 60 * MIN + 12 * MIN)).toBe("3 h 12 min");
     expect(formatSpan(24 * 60 * MIN)).toBe("1 d");
     expect(formatSpan((2 * 24 + 4) * 60 * MIN + 59 * MIN)).toBe("2 d 4 h");
+  });
+
+  it("says a span in words for a sentence, singular or plural, truncated as the compact form", () => {
+    const MIN = 60_000;
+    expect(formatSpanWords(59_999)).toBe("less than a minute");
+    expect(formatSpanWords(-5 * MIN)).toBe("less than a minute");
+    expect(formatSpanWords(MIN)).toBe("1 minute");
+    expect(formatSpanWords(59 * MIN + 59_000)).toBe("59 minutes");
+    expect(formatSpanWords(60 * MIN)).toBe("1 hour");
+    expect(formatSpanWords(61 * MIN)).toBe("1 hour and 1 minute");
+    expect(formatSpanWords(3 * 60 * MIN + 12 * MIN)).toBe("3 hours and 12 minutes");
+    expect(formatSpanWords(24 * 60 * MIN)).toBe("1 day");
+    expect(formatSpanWords(25 * 60 * MIN)).toBe("1 day and 1 hour");
+    expect(formatSpanWords((2 * 24 + 4) * 60 * MIN + 59 * MIN)).toBe("2 days and 4 hours");
   });
 });

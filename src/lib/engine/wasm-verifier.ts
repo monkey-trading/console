@@ -12,7 +12,7 @@ function judge<T extends object>(check: () => T): Verdict<T> {
     return { ok: true, ...check() };
   } catch (error) {
     // The verifier throws a string; anything else is a defect worth showing as it is.
-    return { ok: false, reason: typeof error === "string" ? error : error instanceof Error ? error.message : "The server check failed." };
+    return { ok: false, reason: typeof error === "string" ? error : error instanceof Error ? error.message : "The server verification failed." };
   }
 }
 

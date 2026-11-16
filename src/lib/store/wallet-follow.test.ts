@@ -26,7 +26,7 @@ const OTHER = "0x00000000000000000000000000000000000000bb";
 const USDC = "0x00000000000000000000000000000000000000cc";
 const keyName = (account: string) => sessionKeyName({ account, chainId: vectors.chain_id, vault: VAULT });
 const signatures = (provider: EventfulProvider) => provider.calls.filter((call) => call.method === "eth_signTypedData_v4").length;
-const AWAY = "Your wallet is on Ethereum, not Anvil. Switch it back to Anvil to continue.";
+const AWAY = "Your wallet is connected to Ethereum, not Anvil. Switch it back to Anvil to continue.";
 
 /** A tab whose browser wallet sends its events, connected as the user connects it: a declared account, so the connect asks for this browser's key. */
 async function injectedTab(options: StubOptions = {}) {

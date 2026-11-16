@@ -54,7 +54,7 @@ describe("claimEmissions on the node's word", () => {
     client.entitlement = accepted(5n * MONKEY_UNIT);
     await claimEmissions(store);
     expect(provider.sent).toHaveLength(1);
-    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "error", text: expect.stringContaining("has not recorded the checkpoint this proof was built against") });
+    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "error", text: expect.stringContaining("has not yet recorded the snapshot on which your proof is based") });
     expect(store.getSnapshot().notices.emissions?.text).not.toContain("0x");
     expect(store.getSnapshot().busy).toBe(false);
   });

@@ -71,7 +71,7 @@ export function Payouts() {
       <Notice surface="payoutReads" />
       <Notice surface="payoutVault" />
       {payouts.length === 0 ? (
-        <p className="mt-3 text-caption text-fg-3">{state.wallet ? "No approved withdrawals yet." : "Connect a wallet to see your withdrawals."}</p>
+        <p className="mt-3 text-caption text-fg-3">{state.wallet ? "You have no approved withdrawals yet." : "Connect a wallet to see your withdrawals."}</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {payouts.map((payout) => <PayoutRow key={payout.nonce} payout={payout} nowMs={nowMs} idle={idle} signs={!readOnly.readOnly} describedBy={readOnly.describedBy} problem={state.payoutsProblem} act={act} />)}
@@ -93,22 +93,22 @@ function PayoutRow({ payout, nowMs, idle, signs, describedBy, problem, act }: { 
   return (
     <li className="rounded border border-line-2 px-3 py-3 text-caption">
       <p className="flex justify-between gap-2"><span className="text-fg">Withdrawal {nonce}</span><span className="text-fg-2">{amount}</span></p>
-      {status.kind === "paid" && <p className="mt-2 text-glow">Paid to your wallet.</p>}
-      {status.kind !== "paid" && status.kind !== "waiting" && !payout.read && <p className="mt-2 text-fg-3">Waiting to check whether the vault has paid this.</p>}
+      {status.kind === "paid" && <p className="mt-2 text-glow">The withdrawal has been paid to your wallet.</p>}
+      {status.kind !== "paid" && status.kind !== "waiting" && !payout.read && <p className="mt-2 text-fg-3">The app has not yet checked whether the vault has paid the withdrawal.</p>}
       {status.kind === "claimable" && (
         <>
-          <p className="mt-2 text-fg-3">Ready to claim until {formatStamp(status.expiresAt * 1000)} UTC.</p>
+          <p className="mt-2 text-fg-3">The withdrawal can be claimed until {formatStamp(status.expiresAt * 1000)} UTC.</p>
           <button type="button" aria-disabled={!idle || !signs} aria-describedby={describedBy} onClick={() => signs && act(() => claim(store, nonce))} className={BUTTON}>Claim {amount} from the vault</button>
         </>
       )}
       {status.kind === "expired" && (
         <>
-          <p className="mt-2 text-fg-3">It could be claimed until {formatStamp(status.expiresAt * 1000)} UTC{payout.read ? ", but it wasn't" : ""}.</p>
+          <p className="mt-2 text-fg-3">The approval for this withdrawal expired at {formatStamp(status.expiresAt * 1000)} UTC{payout.read ? " before it was claimed" : ""}. Select Renew the claim to request a new approval from the server.</p>
           <button type="button" aria-disabled={!idle || !signs} aria-describedby={describedBy} onClick={() => signs && act(() => reissue(store, nonce, status.expiresAt))} className={BUTTON}>Renew the claim</button>
         </>
       )}
       {status.kind === "waiting" && !payout.read && status.checkAtMs === undefined && (
-        <p className="mt-2 text-fg-3">{signs ? "Checking the vault…" : "The vault can't be checked for this withdrawal while you're viewing read-only."}</p>
+        <p className="mt-2 text-fg-3">{signs ? "Checking the vault…" : "The vault cannot be checked for the withdrawal while you are viewing this account in read-only mode."}</p>
       )}
       {status.kind === "waiting" && (payout.read || status.checkAtMs !== undefined) && <p className="mt-2 text-fg-3">{waitingWords(status.checkAtMs, nowMs)}</p>}
       {problem !== null && (status.kind === "waiting" || status.kind === "expired") && <p className="mt-2 text-fg-3">{problem}</p>}

@@ -51,7 +51,7 @@ export async function sessionSigned(
     if (store.getSnapshot().sessionRefusal !== null) return signed(store, surface, summary, build, send, onNonceTaken);
     // An undeclared wallet starts with the popup. A declared one is asked for the signature itself, and presses again.
     if (store.getSnapshot().eligibility === null) openSetup(store);
-    else if (await authorizeBrowser(store, surface)) store.notify(surface, "This browser is now set up to trade. Try again.", "info");
+    else if (await authorizeBrowser(store, surface)) store.notify(surface, "This browser is now authorized to trade. Please submit your request again.", "info");
     return { ok: false };
   }
   store.patch({ busy: true });
@@ -78,7 +78,7 @@ export async function sessionSigned(
       if (!(error instanceof EngineError) || error.reject?.kind !== "invalid_nonce") throw error;
       // As `signed`: a cancel is re-signed with the nonce the node names; an order is reported, since a copy may have run.
       if (onNonceTaken === "sign-again") return { ok: true, result: await attempt(error.reject.expected) };
-      throw new EngineError(error.status, "Another request from this account was handled first, so this one wasn't accepted. If you sent it twice, it may have gone through: check your positions, orders, withdrawals and history before trying again.");
+      throw new EngineError(error.status, "Another request from your account was processed first, so this request was not accepted. If you sent the same request twice, it may already have been executed, so check your positions, orders, withdrawals and history before you try again.");
     }
   } catch (error) {
     const left = wentOut(sent, error);
@@ -86,11 +86,11 @@ export async function sessionSigned(
     if (keyDied(error)) {
       // Only the key that signed has died. The connection may have ended, or another tab's newer key been adopted, while the answer came.
       if (store.liveWallet === wallet && store.sessionKey?.address === key.address) sessionEnded(store, KEY_REFUSED);
-      else if (store.liveWallet === wallet) store.notify(surface, "This browser's trading session changed while your request was being sent, so it wasn't accepted. Try again.");
+      else if (store.liveWallet === wallet) store.notify(surface, "This browser's trading session changed while your request was being sent, so the request was not accepted. Please try again.");
       return { ok: false };
     }
     if (error instanceof EngineError && error.status === 429) {
-      store.notify(surface, error.tierLimit === null ? "Too many requests right now. Try again in a moment." : describeTierRate(error.tierLimit));
+      store.notify(surface, error.tierLimit === null ? "Too many requests have been sent from your account in a short time. Please try again in a moment." : describeTierRate(error.tierLimit));
       return { ok: false };
     }
     if (store.noteAccess(error)) return { ok: false };

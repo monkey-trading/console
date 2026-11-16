@@ -128,7 +128,7 @@ describe("a chosen file", () => {
     expect(second.reads.count).toBe(0);
     first.finish("{nope");
     await pending;
-    expect(notice()).toMatch(/isn't JSON/);
+    expect(notice()).toMatch(/is not a JSON file/);
     expect(readingProof(exit())).toBe(false);
   });
   it("clears the last result when it is chosen", async () => {
@@ -141,7 +141,7 @@ describe("a chosen file", () => {
   });
   it("gives the controls back when a read fails", async () => {
     await importChosenFile(kit.store, { size: 2, text: () => Promise.reject(new Error("gone")) });
-    expect(notice()).toBe("Couldn't read the file.");
+    expect(notice()).toBe("The file could not be read.");
     expect(readingProof(exit())).toBe(false);
   });
   it("gives them back when a read never ends", async () => {
@@ -150,7 +150,7 @@ describe("a chosen file", () => {
     expect(readingProof(exit())).toBe(true);
     await vi.advanceTimersByTimeAsync(120_000);
     await pending;
-    expect(notice()).toBe("Couldn't read the file.");
+    expect(notice()).toBe("The file could not be read.");
     expect(readingProof(exit())).toBe(false);
   });
   it("holds nothing for a file refused for its length", async () => {

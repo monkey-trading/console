@@ -94,6 +94,6 @@ describe("ProviderGovernance", () => {
     const governance = new ProviderGovernance(31337, rig().provider, async () => {
       throw walletError(Object.assign(new Error("execution reverted"), { code: 3, data }), "vote yes on proposal 7");
     });
-    await expect(governance.vote(VOTE, 7)).rejects.toThrow("The vote contract already holds this account's vote on this proposal, so nothing was sent.");
+    await expect(governance.vote(VOTE, 7)).rejects.toThrow("Your vote was not sent, because this account has already voted on this proposal.");
   });
 });

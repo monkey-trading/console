@@ -54,7 +54,7 @@ export class ExitAdopter {
       const vault = await this.factsFor(wallet, exit, record.proof, held);
       if (this.store.liveWallet !== wallet) return "unknown";
       if (record.proof.root !== vault.latestRoot) return "unknown"; // the vault has moved on: the next settle judges that
-      if (record.proof.seq !== vault.latestSeq) return refuse(`it says snapshot ${record.proof.seq} but matches snapshot ${vault.latestSeq}`);
+      if (record.proof.seq !== vault.latestSeq) return refuse(`it is labelled as snapshot ${record.proof.seq}, but its contents match snapshot ${vault.latestSeq}`);
       const verdict = await this.work(wallet, () => exit.check(record.proof, vault.latestRoot));
       if (this.store.liveWallet !== wallet) return "unknown";
       if (!verdict.ok) return refuse(verdict.reason);
@@ -77,12 +77,12 @@ export class ExitAdopter {
    */
   async adopt(wallet: Wallet, scope: ExitScope, proof: ExitProof): Promise<AdoptOutcome> {
     const exit = wallet.exit;
-    if (exit === undefined) throw new Error("This wallet can't read the chain.");
+    if (exit === undefined) throw new Error("This wallet cannot read the chain.");
     const named = exitProofAccount(proof);
-    if (named !== null && named !== scope.account) return { kind: "refused", reason: `it's for account ${named}` };
+    if (named !== null && named !== scope.account) return { kind: "refused", reason: `it is for account ${named}` };
     const vault = await this.factsFor(wallet, exit, proof);
     if (proof.root !== vault.latestRoot) return { kind: "other-root", proofSeq: proof.seq, vaultSeq: vault.latestSeq };
-    if (proof.seq !== vault.latestSeq) return { kind: "refused", reason: `it says snapshot ${proof.seq} but matches snapshot ${vault.latestSeq}` };
+    if (proof.seq !== vault.latestSeq) return { kind: "refused", reason: `it is labelled as snapshot ${proof.seq}, but its contents match snapshot ${vault.latestSeq}` };
     const { latestRoot, lastCheckpointAt } = vault;
     const verdict = await this.work(wallet, () => exit.check(proof, latestRoot));
     if (!verdict.ok) return { kind: "refused", reason: verdict.reason };

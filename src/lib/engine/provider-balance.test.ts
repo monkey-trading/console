@@ -49,7 +49,7 @@ describe("a read that the wallet never answers", () => {
     const provider = serialized({ request: (args) => (hang && args.method === "eth_chainId" ? new Promise(() => {}) : stub.request(args)) });
     const read = usdcBalanceRead(ACCOUNT, CHAIN, provider);
     const sign = provider.request({ method: "eth_signTypedData_v4", params: [] }).then(() => "signed", () => "refused");
-    const rejected = expect(read).rejects.toThrow("didn't respond in time");
+    const rejected = expect(read).rejects.toThrow("did not respond in time");
     await vi.advanceTimersByTimeAsync(BALANCE_CALL_MS);
     await rejected;
     hang = false;
@@ -62,7 +62,7 @@ describe("a read that the wallet never answers", () => {
     vi.useFakeTimers();
     const provider: Eip1193Provider = { request: () => new Promise(() => {}) };
     const read = usdcBalanceRead(ACCOUNT, CHAIN, provider);
-    const rejected = expect(read).rejects.toThrow("didn't respond in time");
+    const rejected = expect(read).rejects.toThrow("did not respond in time");
     await vi.advanceTimersByTimeAsync(BALANCE_CALL_MS);
     await rejected;
   });

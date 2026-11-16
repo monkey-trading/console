@@ -42,11 +42,11 @@ describe("a live client's trust and feed", () => {
     const { client, store } = setup();
     store.start(0);
     await settle();
-    expect(signBlock(store.getSnapshot().attestation, store.getSnapshot().stream)).toBe("live prices haven't started yet");
+    expect(signBlock(store.getSnapshot().attestation, store.getSnapshot().stream)).toBe("live prices are not yet available");
     client.listener?.({ type: "feed", status: "live" });
     expect(signBlock(store.getSnapshot().attestation, store.getSnapshot().stream)).toBeNull();
     client.listener?.({ type: "feed", status: "stale" });
-    expect(signBlock(store.getSnapshot().attestation, store.getSnapshot().stream)).toBe("prices aren't updating");
+    expect(signBlock(store.getSnapshot().attestation, store.getSnapshot().stream)).toBe("live prices are not currently updating");
     client.listener?.({ type: "feed", status: "live" });
     expect(signBlock(store.getSnapshot().attestation, store.getSnapshot().stream)).toBeNull();
   });
@@ -141,7 +141,7 @@ describe("a live client's trust and feed", () => {
     const { client, store } = setup();
     store.start(0);
     await settle();
-    client.markets = async () => { throw new Error("The server's reply failed its check: x."); };
+    client.markets = async () => { throw new Error("The server's response failed verification: x."); };
     for (let i = 0; i < 3; i++) await store.refresh(false);
     expect(store.getSnapshot().notices).toEqual({});
   });
@@ -169,7 +169,7 @@ describe("a live client's trust and feed", () => {
 
   it("shows an untrusted answer as no data, never as data", async () => {
     const { client, store } = setup();
-    client.markets = async () => { throw new Error("The server's reply failed its check: wrong_signer."); };
+    client.markets = async () => { throw new Error("The server's response failed verification: wrong_signer."); };
     store.start(0);
     await settle();
     expect(store.getSnapshot().markets).toEqual([]);
@@ -185,7 +185,7 @@ describe("a live client's trust and feed", () => {
     store.patch({ wallet: { address: ACCOUNT, label: "Test wallet" } });
     client.listener?.({ type: "feed", status: "stale" });
     await cancelOrder(store, 1);
-    expect(store.getSnapshot().notices.orders?.text).toBe("You can't sign right now because prices aren't updating.");
+    expect(store.getSnapshot().notices.orders?.text).toBe("You cannot sign at the moment because live prices are not currently updating.");
   });
 
   it("says why it will not send a deposit while the feed is stale", async () => {
@@ -197,7 +197,7 @@ describe("a live client's trust and feed", () => {
     store.patch({ wallet: { address: ACCOUNT, label: "Test wallet" } });
     client.listener?.({ type: "feed", status: "stale" });
     await deposit(store, 10n);
-    expect(store.getSnapshot().notices.deposit?.text).toBe("You can't deposit right now because prices aren't updating.");
+    expect(store.getSnapshot().notices.deposit?.text).toBe("You cannot deposit at the moment because live prices are not currently updating.");
   });
 });
 

@@ -132,7 +132,7 @@ describe("the stored connection choice's reconnect", () => {
   });
 
   it("forgets a WalletConnect choice when the pairing the fallback opens fails or is closed", async () => {
-    const { asked, persistence, store } = rig(WC_CHOICE, async () => { throw new Error("You closed the WalletConnect pairing, so no wallet was connected."); });
+    const { asked, persistence, store } = rig(WC_CHOICE, async () => { throw new Error("You closed the WalletConnect pairing, so no wallet has been connected."); });
     await reconnectWallet(store, connectorOf(null), () => false);
     expect(asked).toEqual(["walletconnect"]);
     expect(loadChoice(persistence)).toBeNull();

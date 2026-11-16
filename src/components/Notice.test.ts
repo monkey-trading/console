@@ -26,9 +26,9 @@ describe("NoticeView", () => {
   });
 
   it("shows the wallet's pending request in the status region, above the last result", () => {
-    const html = render({ id: 2, tone: "error", text: "Declined." }, "Confirm in your wallet: withdraw 100 USDC.");
-    expect(html.indexOf("Confirm in your wallet: withdraw 100 USDC.")).toBeGreaterThan(html.indexOf('role="status"'));
-    expect(html.indexOf("Confirm in your wallet: withdraw 100 USDC.")).toBeLessThan(html.indexOf('role="alert"'));
+    const html = render({ id: 2, tone: "error", text: "Declined." }, "Confirm the request in your wallet to withdraw 100 USDC.");
+    expect(html.indexOf("Confirm the request in your wallet to withdraw 100 USDC.")).toBeGreaterThan(html.indexOf('role="status"'));
+    expect(html.indexOf("Confirm the request in your wallet to withdraw 100 USDC.")).toBeLessThan(html.indexOf('role="alert"'));
     expect(html).toContain("Declined.");
   });
 

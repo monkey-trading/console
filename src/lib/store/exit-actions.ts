@@ -51,33 +51,33 @@ export async function importExitFile(store: ConsoleStore, text: string): Promise
   const finish = (result: ExitResult) => {
     if (store.liveWallet === wallet) store.exit.note(result, false);
   };
-  const refuse = (why: string) => finish({ ok: false, text: `The file wasn't imported: ${clause(why)}.` });
+  const refuse = (why: string) => finish({ ok: false, text: `The file was not imported because ${clause(why)}.` });
   store.exit.note(null, true);
   try {
     const file = parseExitFile(text);
-    if ((file.chainId !== null && file.chainId !== scope.chainId) || (file.vault !== null && file.vault !== scope.vault)) return refuse(`it's for a different vault (chain ${file.chainId ?? "unnamed"}, vault ${shortHex(file.vault ?? "unnamed")})`);
-    if (file.account !== null && file.account !== scope.account) return refuse(`it's for account ${shortHex(file.account)}. Connect that wallet to import it`);
+    if ((file.chainId !== null && file.chainId !== scope.chainId) || (file.vault !== null && file.vault !== scope.vault)) return refuse(`it is for a different vault (chain ${file.chainId ?? "unnamed"}, vault ${shortHex(file.vault ?? "unnamed")})`);
+    if (file.account !== null && file.account !== scope.account) return refuse(`it is for account ${shortHex(file.account)}. Connect that account's wallet to import it`);
     const offChain = await onChain(wallet);
-    if (offChain !== null) return refuse(`your wallet couldn't check it: ${offChain}`);
+    if (offChain !== null) return refuse(`your wallet could not check it: ${offChain}`);
     const before = store.getSnapshot().exit.record;
     const outcome = await store.exit.keeper.adopter.adopt(wallet, scope, file.proof);
     switch (outcome.kind) {
       case "saved": // the panel's saved line says it, and its storage line when the browser would not keep it, but neither moves for a file at the checkpoint already saved
-        if (before?.proof.root === file.proof.root) return finish({ ok: true, text: "This file is for the snapshot already saved, and the vault accepts it." });
-        if (store.liveWallet === wallet) store.exit.announce(`Imported the proof for snapshot ${file.proof.seq}.`);
+        if (before?.proof.root === file.proof.root) return finish({ ok: true, text: "The file is for the snapshot that is already saved, and the vault accepts it." });
+        if (store.liveWallet === wallet) store.exit.announce(`The proof for snapshot ${file.proof.seq} has been imported.`);
         return finish(null);
       case "empty": {
         const now = store.getSnapshot().exit.vault;
-        return now !== null && exitPhase(now) === "due" ? finish({ ok: true, text: "It shows nothing for this account, but the vault accepts it, so it can be used to start the exit." }) : refuse("it shows nothing for this account");
+        return now !== null && exitPhase(now) === "due" ? finish({ ok: true, text: "The file shows no holdings for this account, but the vault accepts it, so it can be used to start the exit." }) : refuse("it shows nothing for this account");
       }
       case "holds-less": return refuse("it covers less than the proof already saved for that snapshot");
-      case "other-root": return refuse(`it's for snapshot ${outcome.proofSeq}, but the vault's latest is snapshot ${outcome.vaultSeq}, so the vault would refuse a claim based on it`);
-      case "refused": return refuse(`the vault's check refused it: ${outcome.reason}`);
+      case "other-root": return refuse(`it is for snapshot ${outcome.proofSeq}, but the vault's latest snapshot is ${outcome.vaultSeq}, so the vault would reject a claim based on it`);
+      case "refused": return refuse(`the vault's check rejected it: ${outcome.reason}`);
       default: return outcome satisfies never;
     }
   } catch (error) {
     if (error instanceof ExitProofError) return refuse(error.message);
-    return refuse(`your wallet couldn't check it: ${errorText(error)}`);
+    return refuse(`your wallet could not check it: ${errorText(error)}`);
   }
 }
 
@@ -89,13 +89,13 @@ export async function importExitFile(store: ConsoleStore, text: string): Promise
 export async function importChosenFile(store: ConsoleStore, file: Pick<File, "size" | "text">): Promise<void> {
   const owner = store.liveWallet;
   if (exitWallet(store) === null || store.getSnapshot().exit.importing) return;
-  if (file.size > MAX_EXIT_FILE_BYTES) return store.exit.note({ ok: false, text: "The file wasn't imported: it's too large to be an exit proof." });
+  if (file.size > MAX_EXIT_FILE_BYTES) return store.exit.note({ ok: false, text: "The file was not imported because it is too large to be an exit proof." });
   store.exit.note(null, true);
   let text: string;
   try {
     text = await withTimeout(file.text(), FILE_READ_MS);
   } catch {
-    if (store.liveWallet === owner) store.exit.note({ ok: false, text: "Couldn't read the file." }, false);
+    if (store.liveWallet === owner) store.exit.note({ ok: false, text: "The file could not be read." }, false);
     return;
   }
   if (store.liveWallet === owner) await importExitFile(store, text);
@@ -113,7 +113,7 @@ async function holding(store: ConsoleStore, wallet: Wallet, action: () => Promis
     await store.exit.refresh();
     if (ended === null || !("did" in ended) || !current()) return;
     const { vaultProblem, claimsProblem } = store.getSnapshot().exit;
-    if (vaultProblem !== null || claimsProblem !== null) store.exit.note({ ok: true, text: `${ended.did} The vault is checked again automatically.` });
+    if (vaultProblem !== null || claimsProblem !== null) store.exit.note({ ok: true, text: `${ended.did} The app will check the vault again automatically.` });
     else store.exit.announce(ended.did);
   } finally {
     notBusy(store, wallet);
@@ -143,12 +143,12 @@ export async function startVaultExit(store: ConsoleStore): Promise<void> {
   if (held === null) return;
   const { wallet, exit } = held;
   await holding(store, wallet, async () => {
-    if (!(await store.exit.readFresh())) return { failed: "Couldn't reach the vault, so nothing was sent." };
+    if (!(await store.exit.readFresh())) return { failed: "The vault could not be reached, so nothing was sent." };
     const { vault, terms: accepted } = store.getSnapshot().exit;
-    if (vault === null || exitPhase(vault) !== "due") return { failed: "The vault's exit can't start yet, so nothing was sent." };
+    if (vault === null || exitPhase(vault) !== "due") return { failed: "The vault's exit cannot be started yet, so nothing was sent." };
     const terms = !vault.hasCheckpoint ? NO_TERMS : accepted?.root === vault.latestRoot ? accepted : null;
-    if (terms === null) return { failed: "Starting the exit needs a proof the vault accepts for its latest snapshot, so nothing was sent." };
-    return (await sendSteps(store, wallet, exit, [{ kind: "start", terms }], () => "Confirm in your wallet: start the vault's exit.")).ended("The vault's exit has started.");
+    if (terms === null) return { failed: "Starting the exit requires a proof that the vault accepts for its latest snapshot, so nothing was sent." };
+    return (await sendSteps(store, wallet, exit, [{ kind: "start", terms }], () => "Confirm the request in your wallet to start the vault's exit.")).ended("The vault's exit has started.");
   });
 }
 
@@ -158,15 +158,15 @@ export async function registerExitClaims(store: ConsoleStore): Promise<void> {
   if (held === null) return;
   const { wallet, exit } = held;
   await holding(store, wallet, async () => {
-    if (!(await store.exit.readFresh()) || !(await store.exit.readClaims())) return { failed: "Couldn't check the vault's record, so nothing was sent." };
+    if (!(await store.exit.readFresh()) || !(await store.exit.readClaims())) return { failed: "The vault's record could not be checked, so nothing was sent." };
     const state = store.getSnapshot().exit;
     const { vault, claims } = state;
     const record = acceptedRecord(state);
-    if (vault === null || exitPhase(vault) !== "open") return { failed: "The claim window isn't open, so nothing was sent." };
-    if (record === null || claims === null) return { failed: "The vault hasn't accepted a proof for its latest snapshot, so nothing was sent." };
+    if (vault === null || exitPhase(vault) !== "open") return { failed: "The claim window is not open, so nothing was sent." };
+    if (record === null || claims === null) return { failed: "The vault has not accepted a proof for its latest snapshot, so nothing was sent." };
     const steps = registerSteps(record, claims);
-    if (steps.length === 0) return { did: "Everything this proof covers is registered." }; // that read has taken the rows off the panel
-    return (await sendSteps(store, wallet, exit, steps, (step) => `Confirm in your wallet: register step ${steps.indexOf(step) + 1} of ${steps.length} of your claim.`)).ended("Your claim is registered. The vault pays it once the claim window closes.");
+    if (steps.length === 0) return { did: "Everything covered by the proof has been registered." }; // that read has taken the rows off the panel
+    return (await sendSteps(store, wallet, exit, steps, (step) => `Confirm the request in your wallet to register step ${steps.indexOf(step) + 1} of ${steps.length} of your claim.`)).ended("Your claim is registered, and the vault will pay it once the claim window closes.");
   });
 }
 
@@ -182,14 +182,14 @@ export async function refundExitDeposit(store: ConsoleStore, step: RefundStep): 
   const { wallet, exit } = held;
   const id = depositId(step);
   await holding(store, wallet, async () => {
-    if (!(await store.exit.readClaims())) return { failed: "Couldn't check the vault's record, so nothing was sent." };
+    if (!(await store.exit.readClaims())) return { failed: "The vault's record could not be checked, so nothing was sent." };
     const state = store.getSnapshot().exit;
     const { claims } = state;
     const record = acceptedRecord(state);
-    if (step.kind === "refund" && (record === null || claims === null)) return { failed: "The vault hasn't accepted a proof for its latest snapshot, so nothing was sent." };
-    if (step.kind === "refund" && claims?.mismatched.includes(id) === true) return { failed: `The vault's record of deposit ${id} doesn't match this proof, so nothing was sent.` };
-    if (claims === null || !refundSteps(record, claims).some((left) => depositId(left) === id)) return { did: `Deposit ${id} has been refunded already.` }; // that read has taken its row off the panel
-    return (await sendSteps(store, wallet, exit, [step], () => `Confirm in your wallet: refund deposit ${id} to the address that paid it.`)).ended(`Deposit ${id} was refunded to the address that paid it.`);
+    if (step.kind === "refund" && (record === null || claims === null)) return { failed: "The vault has not accepted a proof for its latest snapshot, so nothing was sent." };
+    if (step.kind === "refund" && claims?.mismatched.includes(id) === true) return { failed: `The vault's record of deposit ${id} does not match the proof, so nothing was sent.` };
+    if (claims === null || !refundSteps(record, claims).some((left) => depositId(left) === id)) return { did: `Deposit ${id} has already been refunded.` }; // that read has taken its row off the panel
+    return (await sendSteps(store, wallet, exit, [step], () => `Confirm the request in your wallet to refund deposit ${id} to the address that paid it.`)).ended(`Deposit ${id} has been refunded to the address that paid it.`);
   });
 }
 
@@ -199,12 +199,12 @@ export async function claimVaultExit(store: ConsoleStore): Promise<void> {
   if (held === null) return;
   const { wallet, exit } = held;
   await holding(store, wallet, async () => {
-    if (!(await store.exit.readFresh()) || !(await store.exit.readClaims())) return { failed: "Couldn't check the vault's record, so nothing was sent." };
+    if (!(await store.exit.readFresh()) || !(await store.exit.readClaims())) return { failed: "The vault's record could not be checked, so nothing was sent." };
     const { vault, claims } = store.getSnapshot().exit;
-    if (vault === null || exitPhase(vault) !== "closed") return { failed: "The vault's claim window hasn't closed, so nothing was sent." };
-    if (claims === null || registeredTotal(claims) === 0n) return { failed: "Nothing is registered for this account, or the vault has already paid it, so nothing was sent." };
-    const { ended, done, paid } = await sendSteps(store, wallet, exit, [{ kind: "claim" }], () => "Confirm in your wallet: claim your funds from the vault.");
+    if (vault === null || exitPhase(vault) !== "closed") return { failed: "The vault's claim window has not closed, so nothing was sent." };
+    if (claims === null || registeredTotal(claims) === 0n) return { failed: "No claim is registered for this account, or the vault has already paid it, so nothing was sent." };
+    const { ended, done, paid } = await sendSteps(store, wallet, exit, [{ kind: "claim" }], () => "Confirm the request in your wallet to claim your funds from the vault.");
     if (done && store.liveWallet === wallet) store.exit.notePaid(paid);
-    return ended(paid === null ? "The vault paid your claim." : `The vault paid ${formatUsdc(paid * USDC_UNIT)} to your wallet.`);
+    return ended(paid === null ? "The vault has paid your claim." : `The vault has paid ${formatUsdc(paid * USDC_UNIT)} to your wallet.`);
   });
 }

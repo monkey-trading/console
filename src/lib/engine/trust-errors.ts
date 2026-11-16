@@ -1,12 +1,13 @@
 /** What a node that cannot be trusted raises, apart from the check itself, so a screen can tell the refusals apart without loading the verifier. */
 
+import { asSentence } from "../format";
 import type { AttestationStatus } from "./attestation";
 import type { OperatorRoute } from "./stats-types";
 
 /** A signed request stopped before it left the page, because the node may not be signed for: unlike a request that went out, it cannot have run. */
 export class NotSentError extends Error {
   constructor(reason: string, options?: ErrorOptions) {
-    super(`Nothing was sent. ${reason}`, options);
+    super(`Your request was not sent. ${reason}`, options);
     this.name = "NotSentError";
   }
 }
@@ -44,7 +45,10 @@ export class SignatureError extends UntrustedError {
 }
 
 /** Why a quote that verified is not trusted to sign for: no wallet has read the vault. */
-export const CONNECT_TO_CHECK = "Connect a wallet to finish checking this server against the vault. You can trade and move funds once the check passes.";
+export const CONNECT_TO_CHECK = "Connect a wallet to complete verification. Your wallet will check the server against the on-chain vault that holds deposits, and you can trade and move funds once that check succeeds.";
+
+/** Why a wallet's read of the vault could not judge the server, with `reason` as a sentence of its own. */
+export const vaultUnchecked = (reason: string): string => `Your wallet could not check the server against the vault. ${asSentence(reason)}`;
 
 /** Why a signed request may not leave under `status`, as a sentence, or null when it may: only a verdict that read the vault, or a dev build's mock, signs. */
 export function sendRefusal(status: AttestationStatus): string | null {
@@ -57,10 +61,10 @@ export function sendRefusal(status: AttestationStatus): string | null {
     case "unverified":
       return status.reason;
     case "clock":
-      return `Your device clock is ${Math.round(Math.abs(status.skewMs) / 1000)} seconds off the server's time. Correct it and reload the page.`;
+      return `Your device clock differs from the server's time by ${Math.round(Math.abs(status.skewMs) / 1000)} seconds. Correct the clock and reload the page.`;
     case "checking":
     case "reverifying":
-      return "The server hasn't been verified yet.";
+      return "The server has not yet been verified.";
     default: {
       const unhandled: never = status;
       throw new Error(`Unknown attestation status: ${String(unhandled)}`);

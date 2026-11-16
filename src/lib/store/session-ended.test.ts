@@ -112,7 +112,7 @@ describe("a key that dies while connected", () => {
     expect(store.liveWallet).toBeNull();
     expect(loadChoice(storage)).toBeNull();
     expect(storage.held.has(NAME)).toBe(false);
-    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: "Your trading session in this browser expired, so your wallet was disconnected. Connect again to start a new one." });
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: "Your trading session in this browser has expired, so your wallet has been disconnected. Connect your wallet again to start a new session." });
     expect(signatures(provider)).toHaveLength(prompts);
     expect(client.posted.some((p) => p.route === "session_key_revoke")).toBe(false);
   });
@@ -131,7 +131,7 @@ describe("a key that dies while connected", () => {
     expect(store.getSnapshot()).toMatchObject({ busy: false });
     expect(loadChoice(storage)).toBeNull();
     expect(storage.held.has(NAME)).toBe(false);
-    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: "The server no longer accepts this browser's trading session, so your wallet was disconnected. Connect again to start a new one." });
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: "The server no longer accepts this browser's trading session, so your wallet has been disconnected. Connect your wallet again to start a new session." });
     expect(signatures(provider)).toHaveLength(prompts);
     await connectWallet(store, "injected");
     await settle();
@@ -166,7 +166,7 @@ describe("a key that dies while connected", () => {
     expect(store.getSnapshot().wallet).toBeNull();
     expect(loadChoice(storage)).toBeNull();
     expect(storage.held.has(NAME)).toBe(false);
-    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: expect.stringContaining("was revoked") });
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: expect.stringContaining("has been revoked") });
     expect(signatures(provider)).toHaveLength(prompts);
   });
 });

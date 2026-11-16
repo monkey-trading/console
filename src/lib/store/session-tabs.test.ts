@@ -44,7 +44,7 @@ describe("one tab's removal of the shared key", () => {
     storedKeyChanged(b.store, NAME); // the storage event, as the browser fires it in the other tab
     await settle();
     expect(b.store.getSnapshot().wallet).toBeNull();
-    expect(b.store.getSnapshot().notices.wallet?.text).toBe("Your trading session ended in another tab, so your wallet was disconnected here too. Connect again to start a new one.");
+    expect(b.store.getSnapshot().notices.wallet?.text).toBe("Your trading session was ended in another tab, so your wallet has also been disconnected in this tab. Connect your wallet again to start a new session.");
     expect(signatures(b.provider)).toEqual([]);
     expect(b.client.posted).toEqual([]);
   });
@@ -191,7 +191,7 @@ describe("a refusal of a key another tab has since replaced", () => {
     expect(a.store.getSnapshot().wallet?.address).toBe(ACCOUNT);
     expect(liveSessionKey(a.store)?.address).toBe(newer.address);
     expect(JSON.parse(storage.held.get(NAME) ?? "{}")).toMatchObject({ address: newer.address });
-    expect(a.store.getSnapshot().notices.ticket?.text).toContain("Try again.");
+    expect(a.store.getSnapshot().notices.ticket?.text).toContain("Please try again.");
   });
 });
 
@@ -226,7 +226,7 @@ describe("the race for the shared key's nonce", () => {
     b.client.answer = () => { throw new EngineError(409, "invalid nonce", { kind: "invalid_nonce", expected: 5 }); };
     expect(await placeOrder(b.store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false })).toBe(false);
     expect(b.client.posted.filter((p) => p.route === "order")).toHaveLength(1);
-    expect(b.store.getSnapshot().notices.ticket?.text).toContain("Another request from this account was handled first, so this one wasn't accepted.");
+    expect(b.store.getSnapshot().notices.ticket?.text).toContain("Another request from your account was processed first, so this request was not accepted.");
     expect(b.store.getSnapshot().wallet?.address).toBe(ACCOUNT);
     expect(liveSessionKey(b.store)).not.toBeNull();
   });

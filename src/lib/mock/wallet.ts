@@ -34,7 +34,7 @@ export class MockWalletConnector implements WalletConnector {
         return `0x${mockHex(`tx-${amount}-${address}`, 32)}`;
       },
       async claim() {
-        throw new Error("In the demo, withdrawals are paid automatically, so there's nothing to claim.");
+        throw new Error("In the demo, withdrawals are paid automatically, so there is nothing to claim.");
       },
       async claimEmissions(proof: EntitlementProof) {
         controls.claimEmissions(address, BigInt(proof.entitled));

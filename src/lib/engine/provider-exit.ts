@@ -23,7 +23,7 @@ const DEPOSIT_SCAN = 1_024;
 
 type SendVault = (data: Hex, action: string, progress: Progress) => Promise<string>;
 
-/** What a step asks the wallet to do, finishing "Confirm in your wallet: …". */
+/** What a step asks the wallet to do, finishing "Confirm the request in your wallet to …". */
 function stepAction(step: ExitStep): string {
   switch (step.kind) {
     case "start": return "start the vault's exit";
@@ -69,7 +69,7 @@ export class ProviderExit implements ExitWallet {
   /** A background read: the wallet is not asked to switch chains, and the read is refused on another one. */
   private async onChain(): Promise<void> {
     const current = Number(await withinMs(this.provider, { method: "eth_chainId" }, WALLET_READ_MS));
-    if (current !== this.chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chain.chainId}`);
+    if (current !== this.chain.chainId) throw new Error(`your wallet is connected to chain ${current}, not chain ${this.chain.chainId}`);
   }
 
   private async call(to: string, data: Hex, block: "latest" | "finalized" = "latest"): Promise<Hex> {
@@ -148,7 +148,7 @@ export class ProviderExit implements ExitWallet {
     const account = hexOf(this.address);
     const bytes = hexOf(root);
     const proves = (data: Hex) => this.bool(verifier, data);
-    const refused = (what: string): ExitCheck => ({ ok: false, reason: `the vault's snapshot doesn't confirm its ${what}` });
+    const refused = (what: string): ExitCheck => ({ ok: false, reason: `the vault's snapshot does not confirm its ${what}` });
     if (!(await proves(encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "provesTerms", args: [bytes, ...termsArgs(proof.terms)] })))) return refused("exit terms");
     let accountClaim = 0n;
     if (proof.account !== null) {

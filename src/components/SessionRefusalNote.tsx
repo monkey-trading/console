@@ -15,8 +15,8 @@ export function SessionRefusalNote({ onNavigate }: { onNavigate?: () => void }) 
   if (sessionRefusal === null) return null;
   return (
     <p className="mt-3 text-label leading-relaxed text-ember">
-      {describeReject(sessionRefusal)} Until this is fixed, each order asks your wallet.
-      {revokeClears(sessionRefusal) && <> <Link href="/settings" onClick={onNavigate} className="text-glow underline focus-visible:outline-2 focus-visible:outline-glow">Revoke one in Settings</Link>.</>}
+      {describeReject(sessionRefusal)} Until the problem is resolved, your wallet will ask you to approve each order.
+      {revokeClears(sessionRefusal) && <> <Link href="/settings" onClick={onNavigate} className="text-glow underline focus-visible:outline-2 focus-visible:outline-glow">Revoke a session in Settings</Link>.</>}
     </p>
   );
 }

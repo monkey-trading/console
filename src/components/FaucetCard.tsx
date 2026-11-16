@@ -19,7 +19,7 @@ export function FaucetCard() {
     <section aria-labelledby="faucet-title" className="p-4">
       <h4 id="faucet-title" className="text-label tracking-caps text-fg-3 uppercase">Test faucet</h4>
       <p className="mt-3 text-caption text-fg-2">
-        Add 10,000 test USDC to the connected wallet and top its gas up to 1 ETH, straight from the local test chain. This is only in test versions, and your wallet doesn&apos;t sign anything.
+        The test faucet adds 10,000 test USDC to the connected wallet and tops up its gas balance to 1 ETH, directly from the local test chain. Your wallet is not asked to sign anything, and the faucet is available only in test versions of the app.
       </p>
       <button
         type="button"
@@ -30,8 +30,8 @@ export function FaucetCard() {
         Get test funds
       </button>
       <Notice surface="faucet" />
-      {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet first.</p>}
-      {readOnly && <p className="mt-2 text-label text-fg-3">You&apos;re viewing this account read-only, so the faucet can&apos;t fund it.</p>}
+      {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet to use the faucet.</p>}
+      {readOnly && <p className="mt-2 text-label text-fg-3">You are viewing this account in read-only mode, so the faucet cannot fund it.</p>}
     </section>
   );
 }

@@ -87,7 +87,7 @@ describe("the store's house panel state", () => {
     // The account failure cannot stale the figures the markets and house reads just refreshed.
     expect(store.getSnapshot().houseFresh).toBe(true);
     const first = store.getSnapshot().notices.accountRead;
-    expect(first).toMatchObject({ tone: "error", text: "Couldn't load your account: account unavailable. Trying again automatically." });
+    expect(first).toMatchObject({ tone: "error", text: "Your account could not be loaded. Account unavailable. The app will try again automatically." });
     // The same failure on the next refresh is the same notice, not a new one.
     await store.refresh(false);
     await settle();
@@ -96,7 +96,7 @@ describe("the store's house panel state", () => {
     client.accountError = new Error("account still unavailable");
     await store.refresh(false);
     await settle();
-    expect(store.getSnapshot().notices.accountRead?.text).toContain("account still unavailable");
+    expect(store.getSnapshot().notices.accountRead?.text).toContain("Account still unavailable");
     // A new wallet starts clean.
     store.setWallet({ address: "0x00000000000000000000000000000000000000bb", label: "Other" });
     expect(store.getSnapshot().notices.accountRead).toBeUndefined();

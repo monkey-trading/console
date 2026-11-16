@@ -12,15 +12,15 @@ export function SigningFor() {
   const { store } = useSession();
   const { chainId, vault } = store.deps.client.deployment;
   const node = attestation.kind === "verified"
-    ? `Your wallet is only asked to sign for the verified server running release ${attestation.release}.`
+    ? `Your wallet is asked to sign only for the verified server running release ${attestation.release}.`
     : attestation.kind === "mock"
-      ? "Your wallet is only asked to sign for a test server that can't be verified."
+      ? "Your wallet is asked to sign only for the connected test server, which cannot be verified."
       : attestation.kind === "attested"
-        ? "Your wallet won't be asked to sign anything until this server has been checked against the vault."
-        : "Your wallet won't be asked to sign anything until the server is verified.";
+        ? "Your wallet will not be asked to sign anything until the server has been checked against the vault."
+        : "Your wallet will not be asked to sign anything until the server has been verified.";
   return (
     <p className="text-label leading-relaxed text-fg-3">
-      Every signature, from your wallet or this browser&rsquo;s session key, is for chain {chainId} and vault <span title={vault} className="text-fg-2">{shortHex(vault)}</span> only. {node}
+      Every signature, whether from your wallet or from this browser&rsquo;s session key, is valid only for chain {chainId} and vault <span title={vault} className="text-fg-2">{shortHex(vault)}</span>. {node}
     </p>
   );
 }

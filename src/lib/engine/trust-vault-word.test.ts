@@ -38,7 +38,7 @@ async function trustedHardware() {
   const node: Node = { answers: true, vault: { release: releaseName(DIGEST, CONFIG), signer: OLD }, collateral: "{}", held: Promise.resolve(), asked: () => {}, verifies: true };
   const verifier: Verifier = { ...dev, verifyAttestation: () => (node.verifies ? { ok: true, enclave: { address: OLD, release: "test-release-v1", config: "attested" } } : { ok: false, reason: "the quote does not verify" }) };
   const trust = new NodeTrust({
-    attestation: async () => { if (!node.answers) throw new Error("The server didn't respond."); return HARDWARE; }, collateral: async () => { node.asked(); await node.held; return node.collateral; }, verifier: async () => verifier, releases: [RELEASE], devDigests: [], acceptsMock: false, nowMs: () => 0,
+    attestation: async () => { if (!node.answers) throw new Error("The server did not respond."); return HARDWARE; }, collateral: async () => { node.asked(); await node.held; return node.collateral; }, verifier: async () => verifier, releases: [RELEASE], devDigests: [], acceptsMock: false, nowMs: () => 0,
     vaultFacts: () => (node.vault === null ? null : Promise.resolve(node.vault)), onStatus: () => {}, onEnclaveChanged: () => {},
   });
   await trust.verify();
@@ -82,7 +82,7 @@ describe("the vault naming another signer than the enclave trusted last", () => 
     const { node, trust } = await trustedHardware();
     node.answers = false;
     await trust.verify();
-    expect(trust.status).toEqual({ kind: "unverified", reason: "The server didn't respond." });
+    expect(trust.status).toEqual({ kind: "unverified", reason: "The server did not respond." });
     await trust.heedVault(NEW);
     expect(trust.refuses(OLD)).toBe(true);
   });

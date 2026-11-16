@@ -31,18 +31,18 @@ export type SignerWord = { enclave?: string; signer?: Readonly<SignerFloor> };
 export type SignerRefusal = { reason: string; vaultLifts: boolean };
 
 /** What the console says when the vault names a signer other than the enclave the node answers with. */
-export const SIGNER_SUPERSEDED = "The on-chain vault that holds deposits now uses a different signing key from this server, so this server isn't trusted. Waiting won't fix this unless the server switches to the vault's key.";
+export const SIGNER_SUPERSEDED = "The on-chain vault that holds deposits now uses a different signing key from this server, so the server cannot be trusted. The problem will not resolve until the server changes to the vault's signing key.";
 /** What the console says when two keys were named as the vault's signer at the highest epoch seen: every key at it is refused, waiting helps only once a later epoch names one (monkey-trading/console#387). */
-export const SIGNER_CONFLICT = "Two signing keys are listed as current, so this server isn't trusted for now. This clears by itself once the next key change names just one.";
+export const SIGNER_CONFLICT = "Two signing keys are currently listed for the vault, so the server cannot be trusted for the time being. The problem will clear automatically once the vault's change of signing key has completed.";
 /** What the console says when a node that states no signer has no read of the vault naming its enclave yet: a read of the vault lifts it (monkey-trading/console#387). */
-export const SIGNER_AWAITING_VAULT = "This server doesn't say which signing key it uses, and it hasn't been checked against the on-chain vault that holds deposits yet. Connect a wallet to run that check.";
+export const SIGNER_AWAITING_VAULT = "The server does not state which signing key it uses, and it has not yet been checked against the on-chain vault that holds deposits. Connect a wallet so that the check can be completed.";
 /** What the console says when the node's own word on the signer the vault names could not be read, before the read's failure. */
-export const SIGNER_UNREAD = "Couldn't read which signing key this server uses, so it isn't trusted yet.";
-/** The refusal reasons above as the clause a control names ("You can't sign right now because ..."), keyed by the reason (monkey-trading/console#387). */
+export const SIGNER_UNREAD = "The server's signing key could not be read, so the server is not yet trusted.";
+/** The refusal reasons above as the clause a control names ("You cannot sign at the moment because ..."), keyed by the reason (monkey-trading/console#387). */
 const SIGNER_CLAUSES = new Map<string, string>([
   [SIGNER_SUPERSEDED, "the vault now uses a different signing key from this server"],
-  [SIGNER_CONFLICT, "two signing keys are listed as current until the next key change names one"],
-  [SIGNER_AWAITING_VAULT, "this server's signing key hasn't been checked against the vault yet"],
+  [SIGNER_CONFLICT, "two signing keys are listed for the vault until its change of signing key has completed"],
+  [SIGNER_AWAITING_VAULT, "the server's signing key has not yet been checked against the vault"],
 ]);
 
 /** The clause a control names for a refusal `reason`, or null when the reason is not one of these. */
@@ -51,7 +51,7 @@ export function signerClause(reason: string): string | null {
 }
 
 /** What the console says when a node's answer names an enclave other than the one that signed it. */
-const WRONG_ENCLAVE = "The server's reply named a different signing key from the one that signed it, so the reply was ignored.";
+const WRONG_ENCLAVE = "The server's response named a different signing key from the one that signed it, so the response was rejected.";
 
 /** `floor` raised by `named`: to it at a later epoch, to no key at the same epoch naming another, whichever was read first; `floor` itself otherwise. */
 export function raised(floor: SignerFloor | null, named: Readonly<SignerFloor>): SignerFloor {

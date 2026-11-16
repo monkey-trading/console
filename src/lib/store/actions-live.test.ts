@@ -90,7 +90,7 @@ describe("signed actions with a fixed-key wallet", () => {
       // The login spent one wallet signature; only the withdrawal asks for another.
       expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(route === "withdraw" ? 2 : 1);
       expect(client.marketReads).toBeGreaterThan(reads);
-      expect(store.getSnapshot().notices[route === "withdraw" ? "withdraw" : "ticket"]?.text).toBe("Another request from this account was handled first, so this one wasn't accepted. If you sent it twice, it may have gone through: check your positions, orders, withdrawals and history before trying again.");
+      expect(store.getSnapshot().notices[route === "withdraw" ? "withdraw" : "ticket"]?.text).toBe("Another request from your account was processed first, so this request was not accepted. If you sent the same request twice, it may already have been executed, so check your positions, orders, withdrawals and history before you try again.");
     }
   });
 
@@ -98,27 +98,27 @@ describe("signed actions with a fixed-key wallet", () => {
     const { client, store } = await connected();
     await loginSession(store, "setup"); // the connect-time login, so the failure below is the cancel's own
     client.answer = (posted) => {
-      if (posted.route === "cancel") throw new EngineError(0, "The server didn't respond.");
+      if (posted.route === "cancel") throw new EngineError(0, "The server did not respond.");
       return new ActionClient().answer(posted);
     };
     const reads = client.marketReads;
     await cancelOrder(store, 42);
     expect(client.marketReads).toBeGreaterThan(reads);
-    expect(store.getSnapshot().notices.orders?.text).toBe("The server didn't respond. It may have gone through. Check your positions, orders, withdrawals and history before trying again.");
+    expect(store.getSnapshot().notices.orders?.text).toBe("The server did not respond. The request may still have been executed, so check your positions, orders, withdrawals and history before you try again.");
   });
 
   it("reads the account and says a sent request may have run when its answer does not verify, but not for a failure before sending", async () => {
     const { client, store } = await connected();
-    client.answer = () => { throw new UntrustedError("The server's reply (HTTP 200) wasn't signed by the verified server, so it was ignored."); };
+    client.answer = () => { throw new UntrustedError("The server's response (HTTP 200) was not signed by the verified server, so it was rejected."); };
     const reads = client.marketReads;
     await withdraw(store, fixedFromInt(10));
     expect(client.marketReads).toBeGreaterThan(reads);
-    expect(store.getSnapshot().notices.withdraw?.text).toBe("The server's reply (HTTP 200) wasn't signed by the verified server, so it was ignored. It may have gone through. Check your positions, orders, withdrawals and history before trying again.");
+    expect(store.getSnapshot().notices.withdraw?.text).toBe("The server's response (HTTP 200) was not signed by the verified server, so it was rejected. The request may still have been executed, so check your positions, orders, withdrawals and history before you try again.");
     const before = client.marketReads;
-    client.nonce = async () => { throw new UntrustedError("The server hasn't been verified yet."); };
+    client.nonce = async () => { throw new UntrustedError("The server has not yet been verified."); };
     await withdraw(store, fixedFromInt(10));
     expect(client.marketReads).toBe(before);
-    expect(store.getSnapshot().notices.withdraw?.text).toBe("The server hasn't been verified yet.");
+    expect(store.getSnapshot().notices.withdraw?.text).toBe("The server has not yet been verified.");
   });
 
   it("never registers a key at the point of trading: with none, setup reopens and nothing is signed or sent", async () => {
@@ -146,7 +146,7 @@ describe("signed actions with a fixed-key wallet", () => {
     await deposit(store, fixedFromInt(10));
     expect(client.nonceReads).toBe(0);
     expect(provider.calls).toEqual([]);
-    expect(store.getSnapshot().notices.deposit?.text).toBe("You can't deposit right now because the server couldn't be verified.");
+    expect(store.getSnapshot().notices.deposit?.text).toBe("You cannot deposit at the moment because the server could not be verified.");
   });
 
   it("tells the user when they decline in the wallet, and posts nothing", async () => {
@@ -182,7 +182,7 @@ describe("a wallet change", () => {
     wallet.disconnect = async () => { throw new Error("offline"); };
     disconnectWallet(store);
     await settle();
-    expect(store.getSnapshot().notices.wallet?.text).toBe("Your wallet's session didn't close: offline");
+    expect(store.getSnapshot().notices.wallet?.text).toBe("Your wallet's session could not be closed. Offline.");
   });
 
   it("offers to add the deployment's USDC once connected, and says nothing whether the wallet adds it or declines", async () => {

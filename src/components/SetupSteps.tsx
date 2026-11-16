@@ -46,7 +46,7 @@ function FundStep() {
   const able = !busy;
   return (
     <>
-      <p className={NOTE}>Add {formatUsdc(FAUCET_USDC)} of test USDC to this wallet and top its gas up to 1 ETH, straight from the local test chain. Your wallet doesn&apos;t sign anything. This step is only in test versions.</p>
+      <p className={NOTE}>The test faucet adds {formatUsdc(FAUCET_USDC)} of test USDC to this wallet and tops up its gas balance to 1 ETH, directly from the local test chain. Your wallet is not asked to sign anything, and the faucet is available only in test versions of the app.</p>
       <div className="mt-4 flex flex-wrap gap-2">
         <button type="button" aria-disabled={!able} onClick={() => { if (able) void fundWithAnvil(store, deploy, "setup").then((funded) => { if (funded) settleFund(store, "minted"); }); }} className={PRIMARY}>{busy ? "Adding funds…" : "Get test funds"}</button>
         <button type="button" onClick={() => settleFund(store, "skipped")} className={SECONDARY}>Skip</button>
@@ -65,7 +65,7 @@ function DeclareStep() {
   const able = !busy && !gate.blocked;
   return (
     <form onSubmit={(event) => { event.preventDefault(); if (able) void attestEligibility(store, choice); }}>
-      <p className={NOTE}>Sign with your wallet to confirm which kind of client you are. This is recorded publicly against your account.</p>
+      <p className={NOTE}>Sign a declaration with your wallet to confirm which category of client you are. The declaration is recorded publicly against your account.</p>
       <fieldset className="mt-4 space-y-2">
         <legend className="sr-only">Client class</legend>
         {CLASSES.map((cls) => (
@@ -87,7 +87,7 @@ function AuthorizeStep() {
   const able = !busy && !gate.blocked;
   return (
     <>
-      <p className={NOTE}>One wallet signature lets this browser place and cancel orders for 24 hours with no more prompts. It can&apos;t move funds. Deposits, withdrawals and claims still ask your wallet.</p>
+      <p className={NOTE}>A single wallet signature authorizes this browser to place and cancel orders for 24 hours without further wallet prompts. The authorization cannot move funds, so your wallet will still ask you to approve each deposit, withdrawal and claim.</p>
       <button type="button" aria-disabled={!able} aria-describedby={gate.describedBy} onClick={() => { if (able) void authorizeBrowser(store, "setup"); }} className={`mt-4 ${PRIMARY}`}>{busy ? "Waiting for your wallet…" : "Authorize this browser"}</button>
       {gate.note}
       <Notice surface="setup" />
@@ -100,5 +100,5 @@ function AuthorizeStep() {
 function DepositStep() {
   const { setup } = useConsole();
   if (setup.deposit === null) return <DepositForm embedded />;
-  return <p role="status" className={NOTE}>Your deposit is on its way. It&apos;s credited to your account a few blocks after the transaction confirms. You can close this now: the deposit still goes through, and Funding shows its progress.</p>;
+  return <p role="status" className={NOTE}>Your deposit is on its way. It will be credited to your account a few blocks after the transaction is confirmed on chain. You can close this window now: the deposit will still be processed, and the Funding page shows its progress.</p>;
 }

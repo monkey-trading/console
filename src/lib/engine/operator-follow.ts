@@ -223,7 +223,7 @@ export class OperatorFollower {
     const before = this.state; // trading pauses the moment the chain names another node, as its verification takes the time (monkey-trading/console#280)
     // A trial another wallet came during says nothing for it, failed or not: the pause it began goes, and `check` runs again for the new one.
     const waiting = (reason: string) => (this.deps.chain() !== chain ? this.set(before) : rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, reason }) : this.settled({ kind: "following", origin: this.origin }));
-    if (rotationEnabled && !(this.state.kind === "waiting" && this.state.target === target)) waiting("The check is under way.");
+    if (rotationEnabled && !(this.state.kind === "waiting" && this.state.target === target)) waiting("The verification is in progress.");
     let client: EngineClient | null = null;
     // With no wallet, a node refused for the signer the vault names still says in its signed route where the operator now runs: the next node, among the listed origins, bounded; its client and turns are never taken.
     const failed = async (reason: string, error?: unknown): Promise<void> => {
@@ -248,10 +248,10 @@ export class OperatorFollower {
       const behind = this.floor.lags(said, chain !== null && status.kind === "verified");
       if (behind !== null) return waiting(behind);
     } catch (error) {
-      return failed(error instanceof Error ? error.message : "The server didn't respond.", error);
+      return failed(error instanceof Error ? error.message : "The server did not respond.", error);
     }
     if (this.deps.chain() !== chain) return this.set(before);
-    if (this.deps.busy()) return waiting("A wallet request is in progress. You'll switch once it finishes.");
+    if (this.deps.busy()) return waiting("A request is waiting for your wallet. You will be moved to the new server once that request is complete.");
     this.deps.adopt(client, target);
     // In use from now, before the provider watches it: a check the floor's refusal of the old node starts reads this one.
     this.current = client;

@@ -41,7 +41,7 @@ describe("the notice, while the claim window is open", () => {
     expect(notice({ ...NO_EXIT, vault: OPEN, ...change })).toMatch(/^The vault's exit has started\. Register your claim by/);
   });
   it("still says a registered claim is paid later, a refund or not", () => {
-    expect(notice({ ...onlyPending, claims: { ...NO_CLAIMS, exitClaim: 7n } })).toMatch(/^Your claim is registered\./);
+    expect(notice({ ...onlyPending, claims: { ...NO_CLAIMS, exitClaim: 7n } })).toMatch(/^Your claim is registered, and/);
   });
 });
 
@@ -50,8 +50,8 @@ describe("an account known to hold nothing, when the vault lists a refund", () =
   const nothing = { ...NO_EXIT, vault: OPEN, nothing: true, claims: { ...NO_CLAIMS, unheld } };
 
   it("does not say it holds nothing", () => {
-    expect(text(nothing)).toMatch(/Nothing to save: this account's only holding in the vault is the deposit below, which needs no proof\./);
-    expect(text(nothing)).not.toMatch(/has nothing in the vault/);
+    expect(text(nothing)).toMatch(/There is no proof to save, because this account's only holding in the vault is the deposit below, which needs no proof\./);
+    expect(text(nothing)).not.toMatch(/holds nothing in the vault/);
     expect(text({ ...nothing, claims: { ...NO_CLAIMS, unheld: [...unheld, { id: 8, amount: 1n }] } })).toMatch(/the deposits below, which need no proof\./);
   });
   it("tells every page, in the window and after it", () => {
@@ -63,7 +63,7 @@ describe("an account known to hold nothing, when the vault lists a refund", () =
   });
   it("is left alone with no refund listed", () => {
     const quiet = { ...nothing, claims: NO_CLAIMS };
-    expect(text(quiet)).toMatch(/Nothing to save: this account has nothing in the vault\./);
+    expect(text(quiet)).toMatch(/There is no proof to save, because this account holds nothing in the vault\./);
     expect(notice(quiet)).toBeNull();
     expect(notice({ ...quiet, vault: CLOSED })).toBeNull();
   });
@@ -80,7 +80,7 @@ describe("the notice, once the claim window has closed", () => {
 });
 
 describe("a distribution, in the exit", () => {
-  const SENTENCE = "Staking distributions are only paid from what's left after client claims.";
+  const SENTENCE = "Staking distributions are paid only from the funds that remain after traders' claims have been paid.";
   it.each<[string, Partial<ExitState>]>([
     ["a proof that holds one owed", { ...acceptedState(recordOf({ distribution: true })), claims: NO_CLAIMS }],
     ["a record that holds one registered, with no proof", { claims: { ...NO_CLAIMS, exitDistributionClaim: 1n } }],
@@ -101,7 +101,7 @@ describe("a distribution, in the exit", () => {
 });
 
 describe("a browser that will not keep a proof", () => {
-  const denied = "this browser's storage isn't available";
+  const denied = "this browser's storage is not available";
   it("tells nobody who holds nothing and has no proof", () => {
     const view = exitView({ ...NO_EXIT, vault: factsAt(100), nothing: true, storageProblem: denied }, WALLET);
     expect(view.notice).toBeNull();
@@ -109,10 +109,10 @@ describe("a browser that will not keep a proof", () => {
   });
   it("still tells an account with a proof in the page, though it now holds nothing", () => {
     const view = exitView({ ...NO_EXIT, vault: factsAt(100), nothing: true, record: recordAt(50), storageProblem: denied }, WALLET);
-    expect(view.notice?.text).toBe("This browser didn't save your exit proof.");
+    expect(view.notice?.text).toBe("This browser did not save your exit proof.");
   });
   it("still tells an account not known to hold nothing, before the vault has answered too", () => {
-    expect(notice({ ...NO_EXIT, vault: factsAt(100), storageProblem: denied })).toBe("This browser didn't save your exit proof.");
-    expect(notice({ ...NO_EXIT, storageProblem: denied })).toBe("This browser didn't save your exit proof.");
+    expect(notice({ ...NO_EXIT, vault: factsAt(100), storageProblem: denied })).toBe("This browser did not save your exit proof.");
+    expect(notice({ ...NO_EXIT, storageProblem: denied })).toBe("This browser did not save your exit proof.");
   });
 });

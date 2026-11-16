@@ -55,18 +55,18 @@ export function PreferencesCard() {
   return (
     <section aria-labelledby="preferences-title" className="rounded-xl border border-line-2 bg-ink-1 p-4 sm:p-5">
       <h3 id="preferences-title" className="text-label tracking-caps text-fg-3 uppercase">Trading preferences</h3>
-      <p className="mt-2 text-caption leading-relaxed text-fg-3">Saved in this browser only. They set how the deal ticket starts. Anything you&apos;ve already chosen or typed on the ticket stays as it is.</p>
-      <p role="status" className="mt-2 text-caption text-amber">{saved ? "" : "This browser won't save them, so they only last until you close or reload the page."}</p>
+      <p className="mt-2 text-caption leading-relaxed text-fg-3">These preferences are stored in this browser only and set the defaults of the deal ticket. Changing them does not alter an order you are already preparing.</p>
+      <p role="status" className="mt-2 text-caption text-amber">{saved ? "" : "This browser does not allow the preferences to be stored, so your changes apply only until you close or reload the page."}</p>
       <Choice legend="Default order type" columns="grid-cols-3" value={prefs.orderType} onPick={(value) => store.set("orderType", value)} options={ORDER_TYPES.map((value) => ({ value, label: ORDER_LABELS[value] }))}
-        note="The ticket opens on this type for each market." />
+        note="The order type selected when the deal ticket opens in any market. You can still choose a different order type on the ticket before you place an order." />
       <Choice legend="Default max slippage" columns="grid-cols-2 sm:grid-cols-4" value={prefs.slippageBps} onPick={(value) => store.set("slippageBps", value)} options={SLIPPAGE_CHOICES.map((bps) => ({ value: bps, label: `${bps} bps` }))}
-        note="A market order won't fill if the price is worse than the one you saw by more than this. If a market's own limit is lower, that limit applies." />
+        note="In a fast-moving market, the execution price of a market order may be worse than the price quoted on screen. Restricting the maximum slippage means orders that would fill at an adverse price are rejected." />
       <Choice legend="Default size" columns="grid-cols-1 min-[400px]:grid-cols-2" value={prefs.size} onPick={(value) => store.set("size", value)} options={SIZE_CHOICES}
-        note="The size the ticket starts with. Your last size is remembered for each market, and raised to the market's minimum if that has gone up." />
+        note="The order size the deal ticket opens with. The ticket remembers the last size you traded in each market, and raises it to the market's minimum order size if that minimum has since increased." />
       <Switch label="Ask before Cancel all and Close all" on={prefs.confirmBatch} onChange={(on) => store.set("confirmBatch", on)}
-        note={`When on, you press the button again within ${CONFIRM_MS / 1000} seconds to confirm. When off, one press sends it.`} />
+        note={`When enabled, Cancel all and Close all must be pressed a second time within ${CONFIRM_MS / 1000} seconds before the instruction is sent. When disabled, a single press sends it immediately.`} />
       <Switch label="Show entry and order lines on the chart" on={prefs.chartLines} onChange={(on) => store.set("chartLines", on)}
-        note="Shows your entry price and open orders on the chart. The close-out price always shows." />
+        note="Displays your entry price and the levels of your working orders on the chart. The close-out level is always displayed." />
     </section>
   );
 }

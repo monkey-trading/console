@@ -4,6 +4,7 @@
  * no telemetry, and loads only when the user picks WalletConnect or a stored choice reconnects (#82).
  */
 
+import { asSentence } from "../format";
 import { WALLETCONNECT_RELAY } from "./deploy";
 import { ProviderWallet, type Eip1193Provider, type ProviderWalletDeps, type WalletChain } from "./provider-wallet";
 import type { Wallet, WalletConnector } from "./wallet";
@@ -25,8 +26,8 @@ const SIGN = "eth_signTypedData_v4";
 /** What `ProviderWallet` asks of a wallet: signatures, the vault's transactions, and the chain reads around them. */
 const WALLET_METHODS: readonly string[] = [SIGN, "eth_sendTransaction", "eth_call", "eth_getTransactionReceipt"];
 const EVENTS = ["accountsChanged", "chainChanged"];
-const CLOSED = "You closed the WalletConnect pairing, so no wallet was connected.";
-const ENDED = "Your wallet ended the WalletConnect session. Connect it again to continue.";
+const CLOSED = "You closed the WalletConnect pairing, so no wallet has been connected.";
+const ENDED = "Your wallet ended the WalletConnect session. Connect your wallet again to continue.";
 
 /** A wallet app paired over WalletConnect, as the "WalletConnect" option, with its pairing state for the dialog. */
 export class WalletConnectConnector implements WalletConnector {
@@ -107,14 +108,14 @@ export class WalletConnectConnector implements WalletConnector {
     const closing = this.closing;
     this.closing = Promise.resolve(null);
     const failure = await closing;
-    if (failure !== null) throw new Error("WalletConnect couldn't close the last pairing. Try again.", { cause: failure });
+    if (failure !== null) throw new Error("WalletConnect could not close the previous pairing. Please try again.", { cause: failure });
     const provider = await this.provider();
     attempt.check();
     if (provider.session !== undefined) {
       // A session this connector left, because the user disconnected in the console or closed a pairing as the wallet approved it.
       this.live = null;
       await provider.disconnect().catch((cause: unknown) => {
-        throw new Error(`WalletConnect couldn't end the last session: ${detail(cause)}`, { cause });
+        throw new Error(`WalletConnect could not end the previous session. ${asSentence(detail(cause))}`, { cause });
       });
       attempt.check();
     }
@@ -126,7 +127,7 @@ export class WalletConnectConnector implements WalletConnector {
         return;
       }
       if (typeof uri === "string" && uri.startsWith("wc:")) this.publish({ status: "ready", uri });
-      else attempt.cancel(new Error("WalletConnect made a pairing link this app doesn't recognise."));
+      else attempt.cancel(new Error("WalletConnect produced a pairing link that this app does not recognise."));
     };
     provider.on("display_uri", onUri);
     let session: WcSession | undefined;
@@ -135,7 +136,7 @@ export class WalletConnectConnector implements WalletConnector {
     } catch (cause) {
       // A declined or expired pairing leaves nothing to keep the relay socket open for; a cancelled one closed it already.
       if (this.attempt === attempt) await this.close(provider);
-      throw new Error(`Your wallet didn't connect over WalletConnect: ${detail(cause)}`, { cause });
+      throw new Error(`Your wallet did not connect through WalletConnect. ${asSentence(detail(cause))}`, { cause });
     } finally {
       provider.off("display_uri", onUri);
     }
@@ -150,9 +151,9 @@ export class WalletConnectConnector implements WalletConnector {
     if (session === undefined) throw new Error("WalletConnect returned no session.");
     const { address, methods } = sessionScope(session, this.chain.chainId);
     if (address === null || !methods.has(SIGN)) {
-      const refused = `Your wallet didn't approve signing on chain ${this.chain.chainId} over WalletConnect, so it was disconnected.`;
+      const refused = `Your wallet did not approve signing on chain ${this.chain.chainId} through WalletConnect, so it has been disconnected.`;
       await provider.disconnect().catch((cause: unknown) => {
-        throw new Error(`${refused} WalletConnect couldn't end the session.`, { cause });
+        throw new Error(`${refused} WalletConnect could not end the session.`, { cause });
       });
       await provider.client.core.relayer.transportClose();
       throw new Error(refused);
@@ -195,7 +196,7 @@ export class WalletConnectConnector implements WalletConnector {
   private provider(): Promise<WcProvider> {
     this.starting ??= this.start().catch((cause: unknown) => {
       this.starting = null;
-      throw new Error("WalletConnect didn't start. Check your connection and try again.", { cause });
+      throw new Error("WalletConnect did not start. Check your internet connection and try again.", { cause });
     });
     return this.starting;
   }
@@ -266,10 +267,10 @@ export class WalletConnectConnector implements WalletConnector {
         const session = provider.session;
         if (this.live !== topic || session === undefined || session.topic !== topic) throw new Error(ENDED);
         const scope = sessionScope(session, this.chain.chainId);
-        if (scope.address === null) throw new Error(`Your wallet's WalletConnect session no longer covers chain ${this.chain.chainId}. Connect it again to continue.`);
+        if (scope.address === null) throw new Error(`Your wallet's WalletConnect session no longer covers chain ${this.chain.chainId}. Connect your wallet again to continue.`);
         if (method === "eth_chainId") return `0x${this.chain.chainId.toString(16)}`;
-        if (!WALLET_METHODS.includes(method)) throw new Error(`This app doesn't send ${method} over WalletConnect.`);
-        if (!scope.methods.has(method)) throw new Error(`Your wallet doesn't allow ${method} over WalletConnect, and this app only reads the chain through your wallet.`);
+        if (!WALLET_METHODS.includes(method)) throw new Error(`This app does not send ${method} through WalletConnect.`);
+        if (!scope.methods.has(method)) throw new Error(`Your wallet does not allow ${method} through WalletConnect, and this app reads the chain only through your wallet.`);
         // One request at a time: the SDK's Verify step keeps one abort timer, so a request that overlaps
         // another is never released while Verify's frame does not answer.
         const sent = this.requests.then(() => provider.request({ method, params }, chain));

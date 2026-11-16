@@ -34,7 +34,7 @@ describe("createLiveClient", () => {
     const loaded: Verifier[] = [];
     const spy: typeof loadVerifier = async (deps) => { const verifier = await loadVerifier(deps); loaded.push(verifier); return verifier; };
     const client = createLiveClient(parseDeploy({ ...raw, mode: "live" }), await browserFor(), spy);
-    await expect(client.verify()).resolves.toMatchObject({ kind: "unverified", reason: expect.stringContaining("won't use it") });
+    await expect(client.verify()).resolves.toMatchObject({ kind: "unverified", reason: expect.stringContaining("does not connect to it") });
     expect(loaded).toHaveLength(1);
     expect(loaded[0]?.verifyMockAttestation).toBeUndefined();
   });
@@ -98,7 +98,7 @@ describe("the origin a live client takes", () => {
 
   it("refuses an origin the build does not list, or none at all, reaching nothing", async () => {
     const { seen, fetched, sockets } = await recording();
-    expect(() => createLiveClient(listed, seen, undefined, "https://evil.example")).toThrow("This version of the app doesn't know the server at https://evil.example.");
+    expect(() => createLiveClient(listed, seen, undefined, "https://evil.example")).toThrow("This version of the app does not recognise the server at https://evil.example.");
     expect(() => createLiveClient(listed, seen, undefined, null)).toThrow("missing its server, chain or vault settings");
     expect([[...fetched], sockets]).toEqual([[], []]);
   });
@@ -108,7 +108,7 @@ describe("the origin a live client takes", () => {
     const allowed: boolean[] = [];
     const spy: typeof loadVerifier = async (deps) => { allowed.push(deps.allowMock); return loadVerifier(deps); };
     await expect(createLiveClient(own, await browserFor(), spy).verify()).resolves.toEqual({ kind: "mock" });
-    await expect(createLiveClient(own, await browserFor(), spy, CANDIDATE).verify()).resolves.toMatchObject({ kind: "unverified", reason: expect.stringContaining("won't use it") });
+    await expect(createLiveClient(own, await browserFor(), spy, CANDIDATE).verify()).resolves.toMatchObject({ kind: "unverified", reason: expect.stringContaining("does not connect to it") });
     await expect(createLiveClient(listed, await browserFor(), spy, CANDIDATE).verify()).resolves.toEqual({ kind: "mock" });
     expect(allowed).toEqual([true, false, true]);
   });

@@ -163,7 +163,7 @@ describe("castVote", () => {
     const attestation = store.getSnapshot().attestation;
     store.patch({ attestation: { kind: "unverified", reason: "the quote did not verify" } });
     await expect(castVote(panel, operators, votes, vote, 7)).resolves.toBe(false);
-    expect(store.getSnapshot().notices.governance?.text).toMatch(/^You can't vote right now because /);
+    expect(store.getSnapshot().notices.governance?.text).toMatch(/^You cannot vote at the moment because /);
     store.patch({ attestation });
     let landedAt = "";
     await expect(castVote(panel, operators, votes, vote, 7, () => { landedAt = standing(votes.getSnapshot().facts, { id: 7, setId: 1 }, ME); })).resolves.toBe(true);

@@ -9,9 +9,9 @@ const selector = (signature: string) => toFunctionSelector(`function ${signature
 
 describe("claimFailure", () => {
   it.each([
-    ["UnknownCheckpoint()", "has not recorded the checkpoint"],
-    ["InvalidSignerEpoch()", "signer has changed"],
-    ["NoSigner()", "has no signer"],
+    ["UnknownCheckpoint()", "has not yet recorded the snapshot"],
+    ["InvalidSignerEpoch()", "signing key has changed"],
+    ["NoSigner()", "has no signing key"],
     ["NothingToClaim(uint256,uint256)", "already paid everything"],
   ])("names %s in plain words, whether the wallet gives its selector or its name", (signature, words) => {
     const bySelector = claimFailure(revert(`execution reverted: custom error ${selector(signature)}`));
@@ -25,12 +25,12 @@ describe("claimFailure", () => {
 
   it("finds a selector a wallet buries under data", () => {
     const error = claimFailure(revert("Internal JSON-RPC error.", { data: { originalError: { data: selector("NoSigner()") } } }));
-    expect((error as Error).message).toContain("has no signer");
+    expect((error as Error).message).toContain("has no signing key");
   });
 
   it("says the vault refused, without raw data, for a revert it has no name for", () => {
     const error = claimFailure(revert("execution reverted: custom error 0xdeadbeef"));
-    expect((error as Error).message).toBe("The vault refused the claim and nothing was sent: its record does not match the node's proof. Try again shortly.");
+    expect((error as Error).message).toBe("Your claim was not sent, because the vault's records do not match the proof provided by the server. Please try again shortly.");
   });
 
   it("leaves a declined request and a failure that is not a revert as they were", () => {
@@ -45,12 +45,12 @@ describe("withdrawalFailure", () => {
   const withdrawal = (message: string) => walletError(Object.assign(new Error(message), { code: 3 }), "claim the withdrawal");
 
   it.each([
-    ["InvalidWithdrawalTime()", "24-hour authorization has passed", "ask for a new one"],
-    ["UnknownCheckpoint()", "has not recorded the checkpoint", "Try again shortly"],
-    ["InvalidSignerEpoch()", "signer has changed", "ask for one"],
-    ["WithdrawalAlreadyPaid()", "already paid this withdrawal", "nothing was sent"],
-    ["WithdrawalsPaused()", "paused at the vault", "pause ends"],
-    ["ExitActive()", "in its exit", "nothing was sent"],
+    ["InvalidWithdrawalTime()", "24-hour approval for this withdrawal has expired", "select Renew the claim"],
+    ["UnknownCheckpoint()", "has not yet recorded the snapshot", "try again shortly"],
+    ["InvalidSignerEpoch()", "signing key has changed", "select Renew the claim"],
+    ["WithdrawalAlreadyPaid()", "already paid this withdrawal", "was not sent"],
+    ["WithdrawalsPaused()", "paused at the vault", "pause has ended"],
+    ["ExitActive()", "exit has started", "Funding page"],
   ])("names %s in plain words with what to do next, by selector or by name", (signature, words, next) => {
     const bySelector = withdrawalFailure(withdrawal(`Execution reverted with reason: custom error ${selector(signature)}. Request Arguments: from: 0xabc data: 0x52be0833`));
     const byName = withdrawalFailure(withdrawal(`execution reverted: ${signature.slice(0, signature.indexOf("("))}`));
@@ -63,7 +63,7 @@ describe("withdrawalFailure", () => {
 
   it("says the vault did not accept the authorization, without raw data, for an error it has no name for", () => {
     const error = withdrawalFailure(withdrawal("Execution reverted with reason: custom error 0xdeadbeef. Request Arguments: data: 0x52be08330000"));
-    expect((error as Error).message).toBe("The vault refused the claim and nothing was sent: it did not accept this authorization. Try again shortly, or ask for a new authorization if the withdrawal offers one.");
+    expect((error as Error).message).toBe("Your claim was not sent, because the vault did not accept this withdrawal's approval. Please try again shortly, or select Renew the claim if it is offered.");
   });
 
   it("leaves a declined request and a failure that is not a revert as they were", () => {

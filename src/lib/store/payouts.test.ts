@@ -29,12 +29,12 @@ describe("approvals and paid payouts", () => {
 
   it("says on the claims that the approvals could not be read, until a read lands, and says nothing while the node is not yet trusted", async () => {
     const { client, store } = await connected();
-    vi.spyOn(client, "history").mockRejectedValueOnce(new UntrustedError("The server hasn't been verified yet."));
+    vi.spyOn(client, "history").mockRejectedValueOnce(new UntrustedError("The server has not yet been verified."));
     await loadApprovals(store);
     expect(store.getSnapshot().notices).toEqual({});
     vi.spyOn(client, "history").mockRejectedValueOnce(new EngineError(500, "boom"));
     await loadApprovals(store);
-    expect(store.getSnapshot().notices.payoutReads).toMatchObject({ tone: "error", text: "Couldn't load your approved withdrawals: boom" });
+    expect(store.getSnapshot().notices.payoutReads).toMatchObject({ tone: "error", text: "Your approved withdrawals could not be loaded. Boom." });
     await loadApprovals(store);
     expect(store.getSnapshot().notices.payoutReads).toBeUndefined();
   });
@@ -74,7 +74,7 @@ describe("approvals and paid payouts", () => {
     await checkPaid(elsewhere.store);
     expect(elsewhere.store.getSnapshot()).toMatchObject({ paid: [], unpaid: [] });
     expect(payoutsOf(elsewhere.store.getSnapshot())[0]?.read).toBe(false);
-    expect(elsewhere.store.getSnapshot().notices.payoutVault).toMatchObject({ tone: "error", text: "Couldn't check the vault's payouts: your wallet is on chain 1, not chain 31337" });
+    expect(elsewhere.store.getSnapshot().notices.payoutVault).toMatchObject({ tone: "error", text: "The vault's payment records could not be checked. Your wallet is connected to chain 1, not chain 31337." });
   });
 
   it("reads each payout once in one run at a time, however often the page asks again, including one that arrives during the run", async () => {
@@ -169,7 +169,7 @@ describe("payouts after a reload, with no authorization held", () => {
 });
 
 describe("claims", () => {
-  it("claims with the authorization and marks it paid, even while prices aren't updating", async () => {
+  it("claims with the authorization and marks it paid, even while live prices are not currently updating", async () => {
     const { provider, store } = await connected();
     store.patch({ approvals: [approved(1, 40)], authorizations: [signed(1, 2_000_000_000)], stream: "stale" });
     await claim(store, 1);
@@ -209,7 +209,7 @@ describe("authorizations", () => {
     const body = posted?.body as { replaces_expires_at: number; signature: string };
     expect(body.replaces_expires_at).toBe(1_700_000_000);
     expect(await signerOf(reissueTypedData(requestDomain(vectors.chain_id, VAULT), ACCOUNT, 3, 1_700_000_000), body.signature)).toBe(ACCOUNT);
-    expect(store.getSnapshot().notices.payouts).toMatchObject({ tone: "info", text: "Requested. You can claim again here once the server approves it." });
+    expect(store.getSnapshot().notices.payouts).toMatchObject({ tone: "info", text: "Your request has been sent. You can claim the withdrawal here again once the server approves it." });
     expect(client.payoutsReads).toHaveLength(1);
     expect(store.getSnapshot().authorizations).toEqual([signed(3, 2_000_000_000)]);
   });
@@ -219,7 +219,7 @@ describe("authorizations", () => {
     store.patch({ authorizations: [signed(3, 1_700_000_000)], unpaid: [3] });
     client.answer = () => { throw new EngineError(404, "not found"); };
     await reissue(store, 3, 1_700_000_000);
-    expect(store.getSnapshot().notices.payouts).toMatchObject({ tone: "error", text: "Withdrawal 3 isn't waiting to be paid. The vault may have paid it already, or the server is still loading it after a restart." });
+    expect(store.getSnapshot().notices.payouts).toMatchObject({ tone: "error", text: "Withdrawal 3 is not waiting to be paid. The vault may already have paid it, or the server may still be loading it after a restart." });
     // The vault's record of it is read again.
     expect(unreadPayouts(store.getSnapshot())).toEqual([3]);
     expect(client.payoutsReads).toEqual([]);

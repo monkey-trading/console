@@ -36,7 +36,7 @@ describe("ExitKeeper", () => {
     });
     it("warns when the read failed too", async () => {
       heard(OLDEST);
-      kit.client.exitError = new EngineError(0, "The server didn't respond.");
+      kit.client.exitError = new EngineError(0, "The server did not respond.");
       await kit.connect();
       expect(notice()).toBe(WARNED);
     });
@@ -55,7 +55,7 @@ describe("ExitKeeper", () => {
     });
     it("does not date it from the history of an account that shows no funds", async () => {
       heard(OLDEST);
-      await kit.attach({ attestation: { kind: "unverified", reason: "The server didn't respond." }, stream: "stale", accountRead: true, accountHistory: "read", account: null });
+      await kit.attach({ attestation: { kind: "unverified", reason: "The server did not respond." }, stream: "stale", accountRead: true, accountHistory: "read", account: null });
       expect(kit.store.getSnapshot().exit.attempt?.kind).toBe("node-away");
       expect(kit.store.getSnapshot().exit.missingSince).toBe(NOW);
     });

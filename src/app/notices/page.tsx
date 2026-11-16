@@ -21,73 +21,78 @@ export default function Page() {
       <section aria-labelledby="privacy" className="space-y-3">
         <h2 id="privacy" className={H2}>Privacy</h2>
         <p className={P}>
-          This app sets no cookies and runs no analytics. Its fonts and scripts come from its own
-          address. When you connect a wallet, the app saves that choice in your browser&apos;s storage so a
-          later page load can reconnect you: the kind of wallet, and the WalletConnect session&apos;s topic if
-          you connected that way. It holds no keys, addresses or session secrets. It&apos;s removed when you
-          disconnect in the app, when your wallet app ends the WalletConnect session while a page of this app
-          is open, or when a reconnect doesn&apos;t complete.
+          This app sets no cookies and runs no analytics, and its fonts and scripts are served from its own
+          address. When you connect a wallet, the app saves that choice in your browser&apos;s storage so that a
+          later page load can reconnect you: the type of wallet and, if you connected through WalletConnect, the
+          WalletConnect session&apos;s topic. The saved choice contains no keys, addresses or session secrets. It
+          is removed when you disconnect in the app, when your wallet app ends the WalletConnect session while a
+          page of this app is open, or when a reconnection does not complete.
         </p>
         <p className={P}>
-          When you authorize this browser with one wallet signature, the app also saves a session key there:
-          a key in this browser that places orders without a wallet prompt. It saves the key&apos;s private key
-          and address, your account&apos;s address, the chain, the vault and the key&apos;s expiry, so a reload or
-          a new tab can trade without asking again. Anyone who can read this browser&apos;s storage can use that
-          key to place and cancel orders on your account until it expires, within a day. It can never move
-          funds, so deposits, withdrawals and claims still ask your wallet each time. It&apos;s removed when you
-          disconnect, when it expires or is revoked, when your wallet app ends the WalletConnect session, or
-          when the server stops accepting it, and your wallet is then disconnected in every tab. Disconnecting
-          in the app also asks your wallet to revoke the key; a key left unrevoked expires on its own. A key for
-          an account that no open tab is using stays until a wallet next connects in this browser and finds it
-          expired. The app never stores your wallet&apos;s own keys.
+          When you authorize this browser with a single wallet signature, the app also saves a session key there:
+          a key held in this browser that places orders without a wallet prompt. The app saves the session
+          key&apos;s private key and address, your account&apos;s address, the chain, the vault and the key&apos;s
+          expiry, so that a reload or a new tab can trade without asking again. Anyone who can read this
+          browser&apos;s storage can use the session key to place and cancel orders on your account until it
+          expires, which is within a day. The session key can never move funds, so your wallet still asks you to
+          approve each deposit, withdrawal and claim. The session key is removed when you disconnect, when it
+          expires or is revoked, when your wallet app ends the WalletConnect session, or when the server stops
+          accepting it, and your wallet is then disconnected in every tab. Disconnecting in the app also asks your
+          wallet to revoke the session key, and a key that is not revoked expires on its own. A key for an account
+          that no open tab is using remains stored until a wallet next connects in this browser and finds that the
+          key has expired. The app never stores your wallet&apos;s own keys.
         </p>
         <p className={P}>
           The app also saves your trading preferences in your browser&apos;s storage: your default order type,
-          max slippage and size choice, whether Cancel all and Close all ask first, whether the chart shows
-          entry and order lines, and the last size you placed in each market, saved each time you place an
-          order. They never leave your browser. Unlike the wallet choice and the session key, they stay after
-          you disconnect, until you clear this site&apos;s data. The Settings page lists your active sessions
-          from the server&apos;s public record of session keys. That record holds each key&apos;s address, start
-          and expiry, and nothing about the browser or the network it signed in from.
+          maximum slippage and order size setting, whether Cancel all and Close all require confirmation, whether
+          the chart displays entry and order lines, and the last size you placed in each market, which is saved
+          each time you place an order. The preferences never leave your browser. Unlike the wallet choice and the
+          session key, they remain after you disconnect, until you clear this site&apos;s data. The Settings page
+          lists your active sessions from the server&apos;s public record of session keys. That record holds each
+          key&apos;s address, start time and expiry, and nothing about the browser or the network the key was
+          authorized from.
         </p>
         <p className={P}>
-          While your account holds something in the vault, or the vault&apos;s latest snapshot leaves out a
-          deposit that may be yours, the app keeps a copy of your latest exit proof in your browser&apos;s
-          storage, one per account, chain and vault. It&apos;s the proof of your balance, positions,
-          withdrawals, staking distribution and pending deposits at the vault&apos;s latest snapshot, with when
-          that snapshot was posted. The app gets it from the server, and a proof for the vault&apos;s last
-          snapshot lets you claim from the vault if the server is gone. To check it, the app sends it through
-          your wallet to your wallet&apos;s chain provider, as a read of the vault&apos;s verifier, and a claim you
-          register publishes it on chain. It goes nowhere else unless you export it to a file. It stays after
-          you disconnect, until a later proof replaces it, the server shows your account holds nothing, the
-          vault refuses it, or you clear this site&apos;s data. Anyone who can read this browser&apos;s storage or
-          that file can see those figures, but they can&apos;t move your funds with them.
+          While your account holds anything in the vault, or the vault&apos;s latest snapshot omits a deposit that
+          may be yours, the app keeps a copy of your latest exit proof in your browser&apos;s storage, one for
+          each account, chain and vault. The exit proof records your balance, positions, withdrawals, staking
+          distribution and pending deposits at the vault&apos;s latest snapshot, together with the time the vault
+          recorded that snapshot. The app obtains the proof from the server, and a proof for the vault&apos;s last
+          snapshot allows you to claim from the vault if the server is no longer available. To check the proof,
+          the app sends it through your wallet to your wallet&apos;s chain provider, as a query of the
+          vault&apos;s verifier, and a claim that you register publishes it on chain. The proof is sent nowhere
+          else unless you export it to a file. It remains after you disconnect, until a later proof replaces it,
+          the server shows that your account holds nothing, the vault rejects it, or you clear this site&apos;s
+          data. Anyone who can read this browser&apos;s storage or the exported file can see the figures in the
+          proof, but cannot use them to move your funds.
         </p>
         <p className={P}>
-          What you do in the app leaves your browser only for the party that needs it. Your account&apos;s
-          address, your signed orders, cancels, withdrawals and eligibility declaration, the session key&apos;s
-          address with its signed registration and revocation, and the reads of your account go to the server
-          this app is built for. Once your wallet&apos;s chain reads name another operator, they go to that
-          operator&apos;s server instead, which this version of the app must list. Deposits, delegation, claims
-          and the chain reads around them, including reads of the operator registry and the vault, and the
-          read of the USDC your wallet holds, go to the chain through your own wallet.
+          Your activity in the app leaves your browser only for the party that needs it. Your account&apos;s
+          address, your signed orders, cancellations, withdrawals and eligibility declaration, the session
+          key&apos;s address with its signed registration and revocation, and the requests that load your account
+          are sent to the server this app is built for. When the operator registry on chain names a new operator,
+          those requests are sent to the new operator&apos;s server instead, provided that this version of the app
+          recognises it. Deposits, delegations and claims, together with the chain queries needed to prepare them
+          (including queries of the operator registry, the vault and your wallet&apos;s USDC balance), go to the
+          chain through your own wallet.
         </p>
         <p className={P}>
           A test version of the app, built for a local server, may show a test faucet that tops up your
-          wallet&apos;s gas and creates test USDC for it. Those requests go from the page straight to the local
-          chain address that version is built for, and nothing else does.
+          wallet&apos;s gas and creates test USDC for it. Those requests go from the page directly to the local
+          chain address that version is built for, and no other requests do.
         </p>
         <p className={P}>
           If you connect a wallet app with WalletConnect, the pairing and every request between this page and your
-          wallet pass through WalletConnect&apos;s relay, run by Reown. The messages are encrypted between the page
-          and your wallet, so the relay can&apos;t read them, but it sees your IP address, this page&apos;s address, your
-          browser and operating system family, and an identifier for the session. Each pairing and request also loads
-          a hidden page from WalletConnect&apos;s Verify service (<code>verify.walletconnect.org</code>), run by Reown,
-          which tells your wallet that it comes from this page&apos;s domain. It sees your IP address, this page&apos;s
-          address, your browser, and an identifier for the request. A browser wallet uses neither. A remembered
-          WalletConnect connection also reconnects on your next page load: no WalletConnect session survives a
-          reload, so that load fetches the WalletConnect SDK, contacts the relay and asks the wallet to pair again,
-          until you disconnect.
+          wallet pass through WalletConnect&apos;s relay, which is run by Reown. The messages are encrypted
+          between the page and your wallet, so the relay cannot read them, but it sees your IP address, this
+          page&apos;s address, your browser and operating system family, and an identifier for the session. Each
+          pairing and request also loads a hidden page from WalletConnect&apos;s Verify service
+          (<code>verify.walletconnect.org</code>), also run by Reown, which confirms to your wallet that the
+          request comes from this page&apos;s domain. The Verify service sees your IP address, this page&apos;s
+          address, your browser, and an identifier for the request. A browser wallet uses neither service. A
+          remembered WalletConnect connection also reconnects on your next page load: because no WalletConnect
+          session survives a reload, that page load fetches the WalletConnect SDK, contacts the relay and asks the
+          wallet to pair again, until you disconnect.
         </p>
       </section>
       <section aria-labelledby="software" className="space-y-3">
@@ -104,7 +109,7 @@ export default function Page() {
           copyright © TradingView, Inc., under the Apache License, Version 2.0.
         </p>
         <p className={P}>
-          The console itself is licensed under the Apache License, Version 2.0.
+          The app itself is licensed under the Apache License, Version 2.0.
         </p>
       </section>
     </main>

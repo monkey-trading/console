@@ -7,8 +7,8 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useConsole } from "./ConsoleProvider";
 
 const REASON = {
-  united_states: "Monkey Trading isn't available to people in the United States.",
-  sanctioned_jurisdiction: "Monkey Trading isn't available in sanctioned jurisdictions.",
+  united_states: "Monkey Trading is not available to people in the United States.",
+  sanctioned_jurisdiction: "Monkey Trading is not available in sanctioned jurisdictions.",
 } as const;
 
 export function AccessGate({ children }: { children: ReactNode }) {
@@ -25,10 +25,10 @@ export function AccessGate({ children }: { children: ReactNode }) {
   return (
     <section aria-labelledby="blocked-title" className="mx-auto max-w-xl rounded-xl border border-ember/50 bg-ink-1 p-8 text-center">
       <p className="text-label tracking-caps text-ember uppercase">Not available</p>
-      <h2 id="blocked-title" ref={title} tabIndex={-1} className="mt-3 text-lg tracking-tight outline-none">This service isn&apos;t available where you are</h2>
+      <h2 id="blocked-title" ref={title} tabIndex={-1} className="mt-3 text-lg tracking-tight outline-none">This service is not available in your location</h2>
       <p className="mt-4 text-data leading-relaxed text-fg-2">{REASON[blocked]}</p>
       <p className="mt-4 text-caption leading-relaxed text-fg-3">
-        This is based on where you&apos;re connecting from. Orders, withdrawals and declarations from here are refused, and deposits sent directly to the vault are checked against the sending address. This app can&apos;t change it.
+        Availability is based on the location you are connecting from. Orders, withdrawals and eligibility declarations sent from your location are rejected, and deposits sent directly to the vault are checked against the sending address. The app cannot override the restriction.
       </p>
     </section>
   );

@@ -33,7 +33,7 @@ export interface Browser {
  */
 export function createLiveClient(deploy: Deploy, browser: Browser, load: typeof loadVerifier = loadVerifier, origin: string | null = deploy.origin): LiveEngineClient {
   if (origin === null || deploy.chainId === null || deploy.vault === null) throw new Error("This version of the app is missing its server, chain or vault settings.");
-  if (!listedOrigins(deploy).includes(origin)) throw new Error(`This version of the app doesn't know the server at ${origin}.`);
+  if (!listedOrigins(deploy).includes(origin)) throw new Error(`This version of the app does not recognise the server at ${origin}.`);
   const allowMock = acceptsMockAttestation(deploy, origin);
   return new LiveEngineClient({
     origin, streamOrigin: streamOrigin(origin), chainId: deploy.chainId, vault: deploy.vault, heartbeatMs: deploy.heartbeatMs,

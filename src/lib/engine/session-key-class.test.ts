@@ -6,7 +6,7 @@ describe("the session key signer's loader", () => {
   it("refuses a reader that runs before the signer is loaded, rather than reading it as a bad key, and serves it once loaded", async () => {
     vi.resetModules();
     const fresh = await import("./session-key-class");
-    expect(() => fresh.sessionKeySigner()).toThrow("The session key isn't ready yet.");
+    expect(() => fresh.sessionKeySigner()).toThrow("The session key is not ready yet.");
     await fresh.loadSessionKeySigner();
     const signer = fresh.sessionKeySigner().generate();
     expect(signer.address).toMatch(/^0x[0-9a-f]{40}$/i);

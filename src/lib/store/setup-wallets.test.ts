@@ -37,7 +37,7 @@ describe("as the wallet changes around it", () => {
     wallet.sign = () => new Promise<string>((resolve) => { proceed = resolve; });
     const authorizing = authorizeBrowser(store, "setup");
     await settle();
-    expect(store.getSnapshot()).toMatchObject({ busy: true, prompt: expect.stringContaining("let this browser trade for you") });
+    expect(store.getSnapshot()).toMatchObject({ busy: true, prompt: expect.stringContaining("authorize this browser to trade on your account") });
     client.declared = null;
     await connectWallet(store, "other", false, OTHER);
     // The first wallet may never answer: its request holds nothing up for the wallet that replaced it.
@@ -56,6 +56,7 @@ describe("as the wallet changes around it", () => {
     wallet.sign = () => new Promise<string>((resolve) => { proceed = resolve; });
     const declaring = attestEligibility(store, "professional");
     await settle();
+    expect(store.getSnapshot().prompt).toBe('Confirm the request in your wallet to sign the declaration "I attest that I am a professional client".');
     const notices = store.getSnapshot().notices;
     disconnectWallet(store);
     expect(setupVisible(store.getSnapshot())).toBe(false);
@@ -119,7 +120,7 @@ describe("as the wallet changes around it", () => {
     await connectWallet(store, "other", false, OTHER);
     finish(walletError({ code: -32000, message: "the transaction reverted" }, "deposit"));
     await failing;
-    expect(store.getSnapshot().notices.deposit?.text).toBe("Your wallet couldn't deposit: the transaction reverted");
+    expect(store.getSnapshot().notices.deposit?.text).toBe("Your wallet could not deposit. The transaction reverted.");
   });
 
   it("reports nothing when the old wallet declines after its connection ended, and leaves the next wallet's request alone", async () => {

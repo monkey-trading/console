@@ -4,6 +4,7 @@
 
 import { useId, useRef, useState } from "react";
 
+import type { AttestationStatus } from "@/lib/engine/attestation";
 import { fixedFromInt } from "@/lib/fixed";
 import type { MockNode } from "@/lib/mock";
 import { MAX_STRESS, type Region } from "@/lib/mock/state";
@@ -19,8 +20,13 @@ const REGIONS = [
 ] as const;
 const ATTESTATIONS = [
   { value: "mock", label: "Test server (accepted)" },
-  { value: "unverifiable", label: "Secure hardware (can't verify)" },
+  { value: "unverifiable", label: "Secure hardware (cannot be verified)" },
 ] as const;
+/** What each verification state is called on the panel. */
+const STATUS_WORDS: Record<AttestationStatus["kind"], string> = {
+  checking: "verifying the server", reverifying: "verifying the server again", mock: "test server accepted", verified: "server verified",
+  attested: "server software verified", clock: "device clock incorrect", unverified: "server not verified",
+};
 const BUTTON = "min-h-11 min-w-11 rounded border border-line-2 px-2 py-1.5 lg:min-h-0 lg:min-w-0 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
 
 /** The controls for the in-browser node; a live node has none. */
@@ -65,11 +71,11 @@ function MockPanel({ node }: { node: MockNode }) {
       {open && (
         <div id={id} className="fixed inset-x-4 bottom-4 z-50 max-h-[calc(100dvh-2rem)] space-y-4 overflow-y-auto sm:absolute sm:inset-x-auto sm:right-0 sm:bottom-auto sm:mt-2 sm:max-h-[calc(100dvh-7rem)] sm:w-80 rounded border border-line-2 bg-ink-2 p-4 text-caption shadow-platform">
           <button type="button" onClick={() => { setOpen(false); toggle.current?.focus(); }} className={`${BUTTON} w-full sm:hidden`}>Close demo controls</button>
-          <p className="text-label leading-relaxed text-fg-3">Demo only. These change the simulated server in your browser to show how the screens behave.{paused && <span className="text-amber"> The simulation is paused, so price shocks and stress changes apply when you press Play.</span>}</p>
+          <p className="text-label leading-relaxed text-fg-3">These controls are available only in the demo. They change the simulated server in your browser to show how the screens behave.{paused && <span className="text-amber"> The simulation is paused, so price shocks and stress changes take effect when you press Play.</span>}</p>
           <Select label="Where the server sees you" value={region} options={REGIONS} onChange={changeRegion} />
           <div>
             <Select label="Server verification" value={controls.attestationMode} options={ATTESTATIONS} onChange={(mode) => { controls.setAttestationMode(mode); void store.checkNode(); }} />
-            <p className="mt-1 text-label text-fg-3">Now: {attestation.kind}</p>
+            <p className="mt-1 text-label text-fg-3">Current status: {STATUS_WORDS[attestation.kind]}</p>
           </div>
           {market && (
             <fieldset className="space-y-2">
@@ -99,7 +105,7 @@ function MockPanel({ node }: { node: MockNode }) {
           </fieldset>
           <div>
             <button type="button" className={BUTTON} onClick={() => resetDemoAccount()}>Reset to an empty account</button>
-            <p className="mt-1 text-label leading-relaxed text-fg-3">Clears the demo account's balance, positions, orders and history so the empty states show. Reload the page to restore it.</p>
+            <p className="mt-1 text-label leading-relaxed text-fg-3">Clears the demo account&apos;s balance, positions, orders and history so that the empty states are displayed. Reload the page to restore the account.</p>
           </div>
         </div>
       )}

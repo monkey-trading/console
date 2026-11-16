@@ -19,12 +19,12 @@ describe("parseExitFile", () => {
   });
 
   it.each<[string, string, RegExp]>([
-    ["text that is not JSON", "not json", /it isn't JSON/],
-    ["JSON that is not an object", "5", /it isn't an exit proof/],
-    ["an object that is neither shape", JSON.stringify({ hello: "world" }), /it isn't an exit proof/],
+    ["text that is not JSON", "not json", /it is not a JSON file/],
+    ["JSON that is not an object", "5", /it is not an exit proof/],
+    ["an object that is neither shape", JSON.stringify({ hello: "world" }), /it is not an exit proof/],
     ["a later format", JSON.stringify({ kind: "monkeytrading.exit-proof", version: 2 }), /format version 2/],
     ["a malformed proof inside", JSON.stringify({ kind: "monkeytrading.exit-proof", version: 1, account: ACCOUNT, proof: { seq: "x" } }), /seq is not a whole number/],
-    ["an account the proof does not name", JSON.stringify({ kind: "monkeytrading.exit-proof", version: 1, account: OTHER, proof: fullProof(100) }), /the account it names doesn't match its proof/],
+    ["an account the proof does not name", JSON.stringify({ kind: "monkeytrading.exit-proof", version: 1, account: OTHER, proof: fullProof(100) }), /the account it names does not match its proof/],
     ["the offline builder's output for the house", JSON.stringify({ seq: 100, root: "0x00", account: null, house_pending_deposits: [], calls: [] }), /the house's exit file/],
   ])("refuses %s", (_name, text, message) => {
     expect(() => parseExitFile(text)).toThrow(ExitProofError);
@@ -65,7 +65,7 @@ describe("what a browser keeps", () => {
     const storage = exitStorage();
     writeStoredExit(() => storage, recordAt(100));
     storage.refuseWrites = true;
-    expect(writeStoredExit(() => storage, recordAt(200))).toBe("this browser's storage wouldn't save it: the quota is exceeded");
+    expect(writeStoredExit(() => storage, recordAt(200))).toBe("this browser's storage would not save it: the quota is exceeded");
     expect(readStoredExit(() => storage, SCOPE).record?.proof.seq).toBe(100);
   });
 
@@ -83,7 +83,7 @@ describe("what a browser keeps", () => {
     storage.held.set(exitStorageKey(SCOPE), "{corrupt");
     const read = readStoredExit(() => storage, SCOPE);
     expect(read.record).toBeNull();
-    expect(read.problem).toMatch(/couldn't be read: it isn't JSON/);
+    expect(read.problem).toMatch(/could not be read: it is not a JSON file/);
   });
 
   it("does not take a record another account's key holds", () => {
@@ -110,9 +110,9 @@ describe("what a browser keeps", () => {
     const storage = exitStorage();
     const saved = JSON.parse(exitFileText(recordAt(100))) as Record<string, unknown>;
     storage.held.set(exitStorageKey(SCOPE), JSON.stringify({ ...saved, paid_approvals: ["one"] }));
-    expect(readStoredExit(() => storage, SCOPE).problem).toMatch(/saved figures can't be read/);
+    expect(readStoredExit(() => storage, SCOPE).problem).toMatch(/saved figures cannot be read/);
     storage.held.set(exitStorageKey(SCOPE), JSON.stringify({ ...saved, account_claim: "lots" }));
-    expect(readStoredExit(() => storage, SCOPE).problem).toMatch(/saved figures can't be read/);
+    expect(readStoredExit(() => storage, SCOPE).problem).toMatch(/saved figures cannot be read/);
   });
 
   it("keeps a record's figures exact past a float's range", () => {

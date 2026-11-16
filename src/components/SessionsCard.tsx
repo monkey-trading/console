@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import { asSentence } from "@/lib/format";
 import { SessionList, type SessionListStatus } from "@/lib/store/session-list";
 
 import { useConsoleValue, useSession } from "./ConsoleProvider";
@@ -13,10 +14,10 @@ import { SessionRow } from "./SessionRow";
 /** The sentence a status that shows no list gives, or null when the list shows. */
 function noticeFor(status: SessionListStatus): string | null {
   switch (status.kind) {
-    case "no-wallet": return "Connect a wallet to see which browsers can trade for your account.";
-    case "waiting": return `Sessions can't load yet because ${status.why}.`;
+    case "no-wallet": return "Connect a wallet to see which browsers are authorized to trade on your account.";
+    case "waiting": return `Your sessions cannot be loaded at the moment because ${status.why}.`;
     case "loading": return "Loading sessions…";
-    case "failed": return `Couldn't load your sessions: ${status.message}`;
+    case "failed": return `Your sessions could not be loaded. ${asSentence(status.message)} The app will try again automatically.`;
     case "ready": return null;
     default: return status satisfies never;
   }
@@ -51,13 +52,13 @@ export function SessionsCard() {
         <h3 id="sessions-title" ref={heading} tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">Active sessions{status.kind === "ready" ? ` (${keys.length})` : ""}</h3>
       </div>
       <p className="px-4 pt-2 text-caption leading-relaxed text-fg-3 sm:px-5">
-        Each sign-in creates a session key: a key in that browser that places orders without a wallet prompt. Each key lasts up to 24 hours. A key not marked &quot;This browser&quot; is from another browser or an earlier sign-in here, and expires by itself. Revoke any you don&apos;t recognise.
+        Each time you authorize a browser to trade, a session key is created: a key held in that browser that places orders without a wallet prompt. A session key remains valid for at most 24 hours. A key that is not marked &quot;This browser&quot; belongs to another browser or to an earlier authorization in this one, and it expires automatically. If you do not recognise a session, you should revoke it.
       </p>
       <div aria-live="polite" className="px-4 sm:px-5">
         {notice !== null && <p className="mt-3 text-caption leading-relaxed text-fg-2">{notice}</p>}
-        {status.kind === "ready" && keys.length === 0 && <p className="mt-3 text-caption text-fg-3">No active sessions.</p>}
-        {!complete && <p className="mt-3 text-caption leading-relaxed text-amber">There were too many sign-ins in the last day to list them all, so some sessions may be missing.</p>}
-        {watchOnly && keys.length > 0 && <p className="mt-3 text-caption text-fg-3">You&apos;re viewing this account read-only, so only its own wallet can revoke a session.</p>}
+        {status.kind === "ready" && keys.length === 0 && <p className="mt-3 text-caption text-fg-3">There are no active sessions on your account.</p>}
+        {!complete && <p className="mt-3 text-caption leading-relaxed text-amber">More browsers were authorized on your account in the last day than can be listed, so some active sessions may not appear here.</p>}
+        {watchOnly && keys.length > 0 && <p className="mt-3 text-caption text-fg-3">You are viewing this account in read-only mode, so its sessions can be revoked only from the account&apos;s own wallet.</p>}
       </div>
       <div className="px-4 sm:px-5"><Notice surface="settings" /></div>
       {keys.length > 0 && status.kind !== "no-wallet" && (

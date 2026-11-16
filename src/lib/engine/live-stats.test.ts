@@ -106,7 +106,7 @@ describe("the live client's dashboard reads", () => {
     const { live, reply } = client({ ...acceptAll, verifyResponse: () => ({ ok: false, reason: "the signature does not recover to the attested signer" }) });
     reply("/v1/operators", 200, { candidates: [] });
     reply("/v1/monkey/distributions?limit=20", 200, { epochs: [] });
-    const said = "The server's reply failed its check: the signature does not recover to the attested signer.";
+    const said = "The server's response failed verification: the signature does not recover to the attested signer.";
     await expect(live.stats.operators()).rejects.toThrow(said);
     await expect(live.stats.distributionEpochs({ limit: 20 })).rejects.toThrow(said);
   });

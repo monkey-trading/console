@@ -106,7 +106,7 @@ describe("the exit's reads", () => {
       await pressed;
       expect(kit.exit.factsReads).toBeGreaterThan(lastAt);
       expect(kit.exit.sent).toEqual([]);
-      expect(kit.store.getSnapshot().notices.exit?.text).toBe("The vault's exit can't start yet, so nothing was sent.");
+      expect(kit.store.getSnapshot().notices.exit?.text).toBe("The vault's exit cannot be started yet, so nothing was sent.");
     });
     it("says the vault could not be read when its own read fails, though the one before it answered", async () => {
       const { running, release } = await readUnderWay();

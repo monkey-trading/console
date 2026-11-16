@@ -25,24 +25,24 @@ describe("what the panel says of an exit action", () => {
     kit.exit.vault = factsAt(100, { exitStartedAt: 5_000, chainNow: 6_000 });
     await kit.store.exit.refresh();
     await registerExitClaims(kit.store);
-    expect(exit().announced).toMatch(/^Your claim is registered\./);
+    expect(exit().announced).toMatch(/^Your claim is registered, and/);
     kit.exit.claimsHeld = { ...NO_CLAIMS, unheld: [{ id: 7, amount: 9n }] };
     await refundExitDeposit(kit.store, { kind: "refund-unheld", id: 7, amount: 9n });
-    expect(exit().announced).toBe("Deposit 7 was refunded to the address that paid it.");
+    expect(exit().announced).toBe("Deposit 7 has been refunded to the address that paid it.");
     kit.exit.vault = factsAt(100, { exitStartedAt: 5_000, chainNow: CLOSED });
     kit.exit.claimsHeld = { ...NO_CLAIMS, exitClaim: 5_000_000_000n };
     await kit.store.exit.refresh();
     await claimVaultExit(kit.store);
-    expect(exit().announced).toBe("The vault paid 4,800 USDC to your wallet.");
+    expect(exit().announced).toBe("The vault has paid 4,800 USDC to your wallet.");
     expect(notice()).toBeUndefined();
   });
 
   it("tells a screen reader of an import, and of a refusal", async () => {
     await kit.connect(0n);
     await importExitFile(kit.store, "{nope");
-    expect(notice()).toMatchObject({ tone: "error", text: expect.stringMatching(/^The file wasn't imported/) });
+    expect(notice()).toMatchObject({ tone: "error", text: expect.stringMatching(/^The file was not imported/) });
     await importExitFile(kit.store, JSON.stringify({ seq: 100, root: fullProof(100).root, account: fullProof(100), house_pending_deposits: [], calls: [] }));
-    expect(exit().announced).toBe("Imported the proof for snapshot 100.");
+    expect(exit().announced).toBe("The proof for snapshot 100 has been imported.");
   });
 
   it("says so when a file is for the checkpoint already saved, which moves nothing on the panel, and stays quiet when it moves the saved line", async () => {
@@ -50,10 +50,10 @@ describe("what the panel says of an exit action", () => {
     const file = JSON.stringify({ seq: 100, root: fullProof(100).root, account: fullProof(100), house_pending_deposits: [], calls: [] });
     await importExitFile(kit.store, file);
     expect(notice()).toBeUndefined();
-    expect(exit().announced).toBe("Imported the proof for snapshot 100.");
+    expect(exit().announced).toBe("The proof for snapshot 100 has been imported.");
     await importExitFile(kit.store, file);
-    expect(notice()).toMatchObject({ tone: "info", text: "This file is for the snapshot already saved, and the vault accepts it." });
-    expect(exit().announced).toBe("Imported the proof for snapshot 100.");
+    expect(notice()).toMatchObject({ tone: "info", text: "The file is for the snapshot that is already saved, and the vault accepts it." });
+    expect(exit().announced).toBe("The proof for snapshot 100 has been imported.");
   });
 
   it("says what went through when the read after it fails, which would otherwise not show it", async () => {
@@ -63,7 +63,7 @@ describe("what the panel says of an exit action", () => {
     kit.exit.onSend = () => { kit.exit.claimsError = new Error("the wallet's RPC failed"); };
     await registerExitClaims(kit.store);
     expect(exit().claimsProblem).toMatch(/RPC failed/);
-    expect(notice()).toMatchObject({ tone: "info", text: "Your claim is registered. The vault pays it once the claim window closes. The vault is checked again automatically." });
+    expect(notice()).toMatchObject({ tone: "info", text: "Your claim is registered, and the vault will pay it once the claim window closes. The app will check the vault again automatically." });
   });
 
   it("announces a result the same as the last again, or it would go unread", async () => {
@@ -97,9 +97,9 @@ describe("what the panel says of an exit action", () => {
     kit.exit.claimsHeld = { ...NO_CLAIMS, accountRegistered: true, approvalsUsed: [1], queuedRegistered: [95], distributionRegistered: true };
     await kit.store.exit.refresh();
     await registerExitClaims(kit.store);
-    expect(exit().announced).toBe("Everything this proof covers is registered.");
+    expect(exit().announced).toBe("Everything covered by the proof has been registered.");
     await refundExitDeposit(kit.store, { kind: "refund-unheld", id: 7, amount: 9n });
-    expect(exit().announced).toBe("Deposit 7 has been refunded already.");
+    expect(exit().announced).toBe("Deposit 7 has already been refunded.");
     expect(kit.exit.sent).toEqual([]);
   });
 
@@ -122,7 +122,7 @@ describe("what the panel says of an exit action", () => {
       await importChosenFile(kit.store, file(async () => "{}", 17 * 1024 * 1024));
       expect(notice()?.text).toMatch(/too large to be an exit proof/);
       await importChosenFile(kit.store, file(async () => { throw new Error("gone"); }));
-      expect(notice()?.text).toBe("Couldn't read the file.");
+      expect(notice()?.text).toBe("The file could not be read.");
     });
     it("counts for no wallet connected since it was chosen", async () => {
       await kit.connect();

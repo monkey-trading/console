@@ -75,20 +75,20 @@ describe("movePastNonce", () => {
 
   it("calls nothing of Anvil's on an RPC that is not Anvil or does not say what it is, and says why", async () => {
     const geth = stub({ web3_clientVersion: { result: "Geth/v1.14.11-stable/linux-amd64/go1.23.2" } });
-    await expect(movePastNonce(RPC, geth.post, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain isn't a local test chain (it's Geth/v1.14.11-stable/linux-amd64/go1.23.2)" });
+    await expect(movePastNonce(RPC, geth.post, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain is not a local test chain (it identifies itself as Geth/v1.14.11-stable/linux-amd64/go1.23.2)" });
     expect(geth.calls.map(([method]) => method)).toEqual(["web3_clientVersion"]);
     const silent = stub({ web3_clientVersion: { error: { code: -32601, message: "Method not found" } } });
-    await expect(movePastNonce(RPC, silent.post, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain doesn't say what it is" });
+    await expect(movePastNonce(RPC, silent.post, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain does not identify itself" });
     expect(silent.calls).toHaveLength(1);
   });
 
   it("stops at the first refusal, and says why", async () => {
     const lacking = stub({ web3_clientVersion: { result: "anvil/v1.4.3" }, anvil_dropTransaction: { error: { code: -32601, message: "Method not found" } } });
-    await expect(movePastNonce(RPC, lacking.post, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain isn't a local test chain" });
+    await expect(movePastNonce(RPC, lacking.post, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain is not a local test chain" });
     expect(lacking.calls.map(([method]) => method)).toEqual(["web3_clientVersion", "anvil_dropTransaction"]);
     const refusing = stub({ web3_clientVersion: { result: "anvil/v1.4.3" }, anvil_dropTransaction: { result: HASH }, anvil_setNonce: { error: { code: -32603, message: "nonce too low." } } });
-    await expect(movePastNonce(RPC, refusing.post, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain refused to skip past them: nonce too low" });
-    await expect(movePastNonce(RPC, async () => { throw new Error("the chain's RPC answered HTTP 502"); }, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain didn't respond: the chain's RPC answered HTTP 502" });
+    await expect(movePastNonce(RPC, refusing.post, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain rejected the request to skip past them (nonce too low)" });
+    await expect(movePastNonce(RPC, async () => { throw new Error("the chain's RPC answered HTTP 502"); }, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain did not respond (the chain's RPC answered HTTP 502)" });
   });
 });
 

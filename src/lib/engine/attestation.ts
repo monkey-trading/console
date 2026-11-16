@@ -22,7 +22,7 @@ export type AttestationStatus =
 export type FeedStatus = "connecting" | "live" | "stale";
 
 /** What the console says when a build that refuses mock attestations meets one. */
-export const MOCK_REFUSED = "This server is a test server that can't be verified, so this version of the app won't use it.";
+export const MOCK_REFUSED = "The server is a test server that cannot be verified, so this version of the app does not connect to it.";
 const MOCK_QUOTE_PREFIX = "MOCK-ATTESTATION-NOT-A-TEE:";
 
 function hexToText(hex: string): string | null {
@@ -42,11 +42,11 @@ export function checkAttestation(attestation: Attestation, acceptsMock: boolean)
   const quote = hexToText(attestation.quote);
   const isMockQuote = quote !== null && quote.startsWith(MOCK_QUOTE_PREFIX);
   if (attestation.provider === "mock") {
-    if (!isMockQuote) return { kind: "unverified", reason: "This server says it is a test server, but its verification data doesn't match one." };
+    if (!isMockQuote) return { kind: "unverified", reason: "The server identifies itself as a test server, but its verification data does not match a test server's." };
     if (!acceptsMock) return { kind: "unverified", reason: MOCK_REFUSED };
     return { kind: "mock" };
   }
-  if (isMockQuote) return { kind: "unverified", reason: "This server says it runs on secure hardware, but its verification data is a test server's." };
+  if (isMockQuote) return { kind: "unverified", reason: "The server states that it runs on secure hardware, but its verification data is that of a test server." };
   return null;
 }
 
@@ -62,18 +62,18 @@ export function enclaveOf(status: AttestationStatus): string | null {
 
 /** Why the console may not sign now, as a clause, or null when it may: the account can sign, the node is attested and its feed is arriving. */
 export function signBlock(status: AttestationStatus, feed: FeedStatus, readOnly = false): string | null {
-  if (readOnly) return "this account is read-only, so it can't sign anything";
-  if (status.kind === "clock") return "your device clock is wrong";
-  if (status.kind === "attested") return "this server hasn't been checked against the vault yet";
+  if (readOnly) return "you are viewing this account in read-only mode";
+  if (status.kind === "clock") return "your device clock is incorrect";
+  if (status.kind === "attested") return "the server has not yet been checked against the vault";
   return readBlock(status, feed);
 }
 
 /** Why the node's answers may not be read now, as a clause, or null when they may: a verified attestation of the pinned code is enough to read, and only the vault's release to sign. */
 export function readBlock(status: AttestationStatus, feed: FeedStatus): string | null {
-  if (status.kind === "clock") return "your device clock is wrong";
+  if (status.kind === "clock") return "your device clock is incorrect";
   if (status.kind === "reverifying") return "the server is being verified again";
-  if (status.kind === "unverified") return signerClause(status.reason) ?? "the server couldn't be verified";
-  if (status.kind !== "mock" && status.kind !== "verified" && status.kind !== "attested") return "the server hasn't been verified yet";
-  if (feed === "stale") return "prices aren't updating";
-  return feed === "connecting" ? "live prices haven't started yet" : null;
+  if (status.kind === "unverified") return signerClause(status.reason) ?? "the server could not be verified";
+  if (status.kind !== "mock" && status.kind !== "verified" && status.kind !== "attested") return "the server has not yet been verified";
+  if (feed === "stale") return "live prices are not currently updating";
+  return feed === "connecting" ? "live prices are not yet available" : null;
 }

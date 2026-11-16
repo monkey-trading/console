@@ -35,7 +35,7 @@ export function SessionRow({ session, mine, idle, watchOnly, revoking, onRevoke 
         <Field label="Active for"><NodeTime format={(now) => activeFor(now, session.startedAt)} /></Field>
         <Field label="Expires"><NodeTime format={(now) => expiresIn(now, session.expiresAt)} /> <span className="text-fg-3">({formatStamp(session.expiresAt)} UTC)</span></Field>
       </dl>
-      {mine && <p className="mt-3 text-label leading-relaxed text-fg-3">Revoking this browser&apos;s session disconnects your wallet here.</p>}
+      {mine && <p className="mt-3 text-label leading-relaxed text-fg-3">Revoking the session key held in this browser also disconnects your wallet from the app.</p>}
     </li>
   );
 }

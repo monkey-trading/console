@@ -33,8 +33,8 @@ export async function staleNonce(rpcUrl: string, post: JsonRpcPost, hash: string
 /** Whether the pinned RPC says it is Anvil: its `web3_clientVersion` is `anvil/…`; null when it is, else why not. */
 async function notAnvil(rpcUrl: string, post: JsonRpcPost): Promise<string | null> {
   const version = await rpcAllow(post, rpcUrl, rpcBody("web3_clientVersion", []));
-  if (version.error !== null) return "the chain doesn't say what it is";
-  return typeof version.result === "string" && /^anvil\//i.test(version.result) ? null : `the chain isn't a local test chain (it's ${String(version.result)})`;
+  if (version.error !== null) return "the chain does not identify itself";
+  return typeof version.result === "string" && /^anvil\//i.test(version.result) ? null : `the chain is not a local test chain (it identifies itself as ${String(version.result)})`;
 }
 
 /**
@@ -51,7 +51,7 @@ export async function movePastNonce(rpcUrl: string, post: JsonRpcPost, hash: str
     if (why !== null) return { moved: false, why };
     const refused = (step: string, error: { code: number; message: string }) => ({
       moved: false as const,
-      why: error.code === METHOD_NOT_FOUND ? "the chain isn't a local test chain" : `the chain refused to ${step}: ${error.message.replace(/\.+$/, "")}`,
+      why: error.code === METHOD_NOT_FOUND ? "the chain is not a local test chain" : `the chain rejected the request to ${step} (${error.message.replace(/\.+$/, "")})`,
     });
     const dropped = await rpcAllow(post, rpcUrl, rpcBody("anvil_dropTransaction", [hash]));
     if (dropped.error !== null) return refused("drop them", dropped.error);
@@ -59,7 +59,7 @@ export async function movePastNonce(rpcUrl: string, post: JsonRpcPost, hash: str
     if (set.error !== null) return refused("skip past them", set.error);
     return { moved: true };
   } catch (error) {
-    return { moved: false, why: `the chain didn't respond: ${error instanceof Error ? error.message.replace(/\.+$/, "") : String(error)}` };
+    return { moved: false, why: `the chain did not respond (${error instanceof Error ? error.message.replace(/\.+$/, "") : String(error)})` };
   }
 }
 

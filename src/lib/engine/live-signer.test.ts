@@ -109,7 +109,7 @@ describe("a clock verdict from an earlier check", () => {
     node.signed(OPERATOR_CLAIM, () => ({ status: 200, body: "{}", signature: "0x", timeMs: 60_001, seq: 1 }));
     await expect(live.verify()).resolves.toEqual({ kind: "clock", skewMs: 60_000 });
     node.routes.set(OPERATOR_CLAIM, () => { throw new TypeError("Failed to fetch"); });
-    await expect(live.verify()).resolves.toEqual({ kind: "unverified", reason: expect.stringContaining("The server didn't respond.") });
+    await expect(live.verify()).resolves.toEqual({ kind: "unverified", reason: expect.stringContaining("The server did not respond.") });
   });
 });
 

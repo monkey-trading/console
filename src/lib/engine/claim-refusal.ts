@@ -6,12 +6,12 @@ import { declinedByUser, isRevert } from "./provider-errors";
 
 /** The vault's custom errors a claim can end in, each with what it means for the trader. */
 const REFUSALS = [
-  ["UnknownCheckpoint()", "The vault has not recorded the checkpoint this proof was built against, so it refused the claim and nothing was sent. The node's next proof will name one it has; try again shortly."],
-  ["InvalidSignerEpoch()", "The vault's signer has changed since the checkpoint this proof was built against, so it refused the claim and nothing was sent. The new signer's first checkpoint brings a fresh proof; try again once it posts."],
-  ["NoSigner()", "The vault has no signer right now, so it accepts no claims and nothing was sent. Try again once governance has installed one."],
-  ["NothingToClaim(uint256,uint256)", "The vault has already paid everything this proof covers, so nothing was sent."],
-  ["InvalidEntitlementProof()", "The vault did not accept the node's proof, so nothing was sent. Try again shortly."],
-  ["ExitActive()", "The vault is in its exit, which ends claims, so nothing was sent."],
+  ["UnknownCheckpoint()", "Your claim was not sent, because the vault has not yet recorded the snapshot on which your proof is based. Please try again shortly."],
+  ["InvalidSignerEpoch()", "Your claim was not sent, because the vault's signing key has changed since the snapshot on which your proof is based. A new proof will be available once the vault has recorded the first snapshot under the new signing key, so please try again then."],
+  ["NoSigner()", "Your claim was not sent, because the vault currently has no signing key and accepts no claims. Please try again once a new signing key has been installed."],
+  ["NothingToClaim(uint256,uint256)", "Your claim was not sent, because the vault has already paid everything your proof covers."],
+  ["InvalidEntitlementProof()", "Your claim was not sent, because the vault did not accept the proof provided by the server. Please try again shortly."],
+  ["ExitActive()", "Your claim was not sent, because the vault's exit has started and normal claims have ended. A staking distribution can still be registered through the vault's exit on the Funding page."],
 ] as const;
 
 /** What a refusal table holds once each error has its selector. */
@@ -21,37 +21,37 @@ const SELECTORS = tableOf(REFUSALS);
 
 /**
  * The vault's custom errors a withdrawal's claim can end in. What the withdrawal flow offers next is
- * its "Ask for a new authorization" button, which appears once the authorization's expiry has passed
- * on the console's clock, and the node's own reissue after a change of signer.
+ * its "Renew the claim" button, which appears once the authorization's expiry has passed on the
+ * console's clock, and the node's own reissue after a change of signer.
  */
 const WITHDRAWAL_REFUSALS = [
-  ["InvalidWithdrawalTime()", "This withdrawal's 24-hour authorization has passed on the vault's clock, so it refused the claim and nothing was sent. When the withdrawal shows its authorization as expired, ask for a new one."],
-  ["UnknownCheckpoint()", "The vault has not recorded the checkpoint this authorization names, so it refused the claim and nothing was sent. Try again shortly."],
-  ["InvalidSignerEpoch()", "The vault's signer has changed since this authorization was signed, so it refused the claim and nothing was sent. The node signs a new authorization under the new signer, which arrives here by itself; you can also ask for one."],
-  ["WithdrawalAlreadyPaid()", "The vault has already paid this withdrawal, so nothing was sent."],
-  ["WithdrawalsPaused()", "Withdrawals are paused at the vault, so nothing was sent. Try again once the pause ends."],
-  ["NoSigner()", "The vault has no signer right now, so it accepts no claims and nothing was sent. Try again once governance has installed one."],
-  ["ExitActive()", "The vault is in its exit, which ends claims, so nothing was sent."],
+  ["InvalidWithdrawalTime()", "Your claim was not sent, because the 24-hour approval for this withdrawal has expired. Once the withdrawal shows that it can no longer be claimed, select Renew the claim to request a new approval."],
+  ["UnknownCheckpoint()", "Your claim was not sent, because the vault has not yet recorded the snapshot that approved this withdrawal. Please try again shortly."],
+  ["InvalidSignerEpoch()", "Your claim was not sent, because the vault's signing key has changed since this withdrawal was approved. The server will issue a new approval under the new signing key, which will appear here automatically, or you can select Renew the claim to request one now."],
+  ["WithdrawalAlreadyPaid()", "Your claim was not sent, because the vault has already paid this withdrawal."],
+  ["WithdrawalsPaused()", "Your claim was not sent, because withdrawals are currently paused at the vault. Please try again once the pause has ended."],
+  ["NoSigner()", "Your claim was not sent, because the vault currently has no signing key and accepts no claims. Please try again once a new signing key has been installed."],
+  ["ExitActive()", "Your claim was not sent, because the vault's exit has started and normal claims have ended. Register the withdrawal through the vault's exit on the Funding page instead."],
 ] as const;
 const WITHDRAWAL_SELECTORS = tableOf(WITHDRAWAL_REFUSALS);
 
 /** The vote contract's custom errors a vote can end in (`ParameterVote.vote`). */
 const VOTE_REFUSALS = [
-  ["AlreadyVoted(uint256,address)", "The vote contract already holds this account's vote on this proposal, so nothing was sent."],
-  ["AlreadyPassed(uint256)", "This proposal has already passed, so the vote contract takes no more votes on it and nothing was sent."],
-  ["VotingClosed(uint256,uint64)", "This proposal's voting window has closed, so the vote contract refused the vote and nothing was sent."],
-  ["NotAMember(address)", "This account is not a member of the set this proposal opened under, so the vote contract refused the vote and nothing was sent."],
-  ["RotationOff()", "Operator rotation is off, which closes voting, so nothing was sent."],
-  ["UnknownProposal(uint256)", "The vote contract holds no proposal by this number, so nothing was sent."],
+  ["AlreadyVoted(uint256,address)", "Your vote was not sent, because this account has already voted on this proposal."],
+  ["AlreadyPassed(uint256)", "Your vote was not sent, because this proposal has already passed and accepts no further votes."],
+  ["VotingClosed(uint256,uint64)", "Your vote was not sent, because voting on this proposal has closed."],
+  ["NotAMember(address)", "Your vote was not sent, because this account was not a member of the operator rotation when the proposal was opened."],
+  ["RotationOff()", "Your vote was not sent, because voting is closed while operator rotation is inactive."],
+  ["UnknownProposal(uint256)", "Your vote was not sent, because no proposal with this number exists."],
 ] as const;
 const VOTE_SELECTORS = tableOf(VOTE_REFUSALS);
-const VOTE_GENERIC = "The vote contract refused the vote and nothing was sent. Try again shortly.";
+const VOTE_GENERIC = "Your vote was rejected and has not been recorded. Please try again shortly.";
 
 /** The vault's refusal of a withdrawal's claim for any revert whose error is not named above. */
-const WITHDRAWAL_GENERIC = "The vault refused the claim and nothing was sent: it did not accept this authorization. Try again shortly, or ask for a new authorization if the withdrawal offers one.";
+const WITHDRAWAL_GENERIC = "Your claim was not sent, because the vault did not accept this withdrawal's approval. Please try again shortly, or select Renew the claim if it is offered.";
 
 /** The vault's refusal for any revert whose error is not named above. */
-const GENERIC = "The vault refused the claim and nothing was sent: its record does not match the node's proof. Try again shortly.";
+const GENERIC = "Your claim was not sent, because the vault's records do not match the proof provided by the server. Please try again shortly.";
 
 /** Every string a wallet's error carries, at the top and under `data`, `originalError` or `cause`. */
 function texts(error: unknown, depth = 0): string[] {

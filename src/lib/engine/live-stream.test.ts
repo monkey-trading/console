@@ -72,7 +72,7 @@ describe("a signed stream", () => {
     send(t.sockets[0], 0, 2);
     expect(t.messages).toEqual([]);
     expect(t.sockets[0]?.closed).toBe(true);
-    expect(t.problems[0]).toContain("expected 1, got 2");
+    expect(t.problems[0]).toContain("missed, repeated or received out of order");
     expect(t.feeds.at(-1)).toBe("stale");
   });
 
@@ -89,14 +89,14 @@ describe("a signed stream", () => {
     send(t.sockets[0], 0);
     t.sockets[0]?.receive(JSON.stringify(altered));
     expect(t.messages).toEqual([]);
-    expect(t.problems[0]).toContain("failed its check");
+    expect(t.problems[0]).toContain("failed verification");
     expect(t.feeds.at(-1)).toBe("stale");
   });
 
   it("drops the connection on a frame that is not a signed envelope", async () => {
     const t = await started();
     t.sockets[0]?.receive('{"type":"command"}');
-    expect(t.problems[0]).toContain("unsigned update");
+    expect(t.problems[0]).toContain("update that was not signed");
     t.sockets[0]?.receive("");
     expect(t.messages).toEqual([]);
   });
@@ -167,7 +167,7 @@ describe("a stale feed", () => {
     }
     expect(t.sockets.length).toBeGreaterThan(3);
     expect(t.feeds).toEqual(["live", "stale"]);
-    expect(t.problems).toEqual(["The connection to the server closed."]);
+    expect(t.problems).toEqual(["The connection to the server was closed."]);
     t.scheduler.advance(15_000);
     await settle();
     send(t.sockets.at(-1), 0);
@@ -236,7 +236,7 @@ describe("a changed enclave", () => {
     const t = await started({ address: () => OTHER });
     send(t.sockets[0], 0);
     expect(t.messages).toEqual([]);
-    expect(t.problems[0]).toContain("failed its check");
+    expect(t.problems[0]).toContain("failed verification");
   });
 
   it("verifies the node again after a failed frame and carries on under the new address", async () => {

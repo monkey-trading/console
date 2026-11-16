@@ -29,7 +29,7 @@ describe("a declared wallet with no key", () => {
     expect(liveSessionKey(store)).not.toBeNull();
     expect(store.getSnapshot().setup.open).toBe(false);
     expect(client.posted.map((p) => p.route)).toEqual(["session_key"]); // the order itself was not sent
-    expect(store.getSnapshot().notices.ticket).toMatchObject({ tone: "info", text: "This browser is now set up to trade. Try again." });
+    expect(store.getSnapshot().notices.ticket).toMatchObject({ tone: "info", text: "This browser is now authorized to trade. Please submit your request again." });
     expect(store.getSnapshot().busy).toBe(false);
   });
 

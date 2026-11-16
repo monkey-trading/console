@@ -80,7 +80,7 @@ describe("readChainThrough", () => {
     scheduler.advance(1);
     await judged;
     expect(settled).toBe(true);
-    expect(statuses.at(-1)).toEqual({ kind: "unverified", reason: "Your wallet couldn't check this server against the vault: your wallet didn't respond in time" });
+    expect(statuses.at(-1)).toEqual({ kind: "unverified", reason: "Your wallet could not check the server against the vault. Your wallet did not respond in time." });
   });
 
   it("keeps a good answer for thirty seconds, so a node that keeps failing its check does not cost a read per retry", async () => {

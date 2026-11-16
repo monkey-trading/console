@@ -41,7 +41,7 @@ describe("a read a wallet never answers", () => {
     const stuck = read(provider);
     const exitRead = withinMs(provider, { method: "eth_chainId" }, WALLET_READ_MS);
     expect(await settledWithin(stuck, WALLET_READ_MS)).toBe(true);
-    await expect(stuck).rejects.toThrow("didn't respond");
+    await expect(stuck).rejects.toThrow("did not respond");
     expect(await settledWithin(exitRead, 0)).toBe(true);
     await expect(exitRead).resolves.toBeDefined();
   });
@@ -67,7 +67,7 @@ describe("a read a wallet never answers", () => {
       const moving = wallet(provider).ensureChain();
       moving.catch(() => undefined);
       expect(await settledWithin(moving, WALLET_READ_MS)).toBe(true);
-      await expect(moving).rejects.toThrow("didn't respond");
+      await expect(moving).rejects.toThrow("did not respond");
       await expect(withinMs(provider, { method: "eth_chainId" }, WALLET_READ_MS)).resolves.toBe(`0x${CHAIN.chainId.toString(16)}`);
     });
     it("leaves the switch itself unbounded, as it waits on the trader", async () => {
