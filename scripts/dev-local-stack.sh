@@ -1244,18 +1244,18 @@ console_up() {
 poll 300 console_up || die "the console did not answer on $console_url"
 
 if [[ -n "${STACK_INFO_FILE:-}" ]]; then
-  jq -n --arg consoleUrl "$console_url" --arg apiOrigin "$api" --arg rpcUrl "$rpc" --arg vault "$vault" \
+  jq -n --arg consoleUrl "$console_url" --arg apiOrigin "$console_api" --arg rpcUrl "$rpc" --arg vault "$vault" \
     --arg usdc "$usdc" --arg monkey "$monkey" --arg staking "$staking" --arg registry "$registry" \
     --arg devWallet "$dev_wallet" --arg devWalletKey "$dev_wallet_key" --arg houseKey "$house_key" \
     --arg deployerKey "$deployer_key" --arg workDir "$work" --arg nodeLog "$work/node.log" --arg metricsUrl "$metrics_url" \
     --arg genesisFile "$genesis_file" --arg genesisSummary "$genesis_summary" --argjson houseUsdc "$house_usdc" \
-    --arg secondEngine "$second_engine" --arg secondApiOrigin "$second_api" --arg secondNodeLog "$work/second.log" \
+    --arg secondEngine "$second_engine" --arg secondApiOrigin "$console_second_api" --arg secondNodeLog "$work/second.log" \
     --arg dev2Wallet "${dev_wallet2:-}" --arg dev2WalletKey "${dev_wallet2_key:-}" --arg payerKey "${payer_key:-}" \
     --arg secondRelease "${second_release:-}" --arg firstRelease "${first_release:-}" \
     --arg operator "${operator:-}" --arg secondCandidate "${second_candidate:-}" \
     --arg vote "$vote" --arg schedule "$schedule" --arg thirdCandidate "${third_candidate:-}" \
     --arg secondCandidateKey "${second_candidate_key:-}" --arg thirdCandidateKey "${third_candidate_key:-}" \
-    --arg rotation "$rotation" --arg thirdApiOrigin "$third_api" --arg thirdNodeLog "$work/third.log" \
+    --arg rotation "$rotation" --arg thirdApiOrigin "$console_third_api" --arg thirdNodeLog "$work/third.log" \
     --arg secondMetricsUrl "http://127.0.0.1:$second_metrics_port/metrics" --arg thirdMetricsUrl "http://127.0.0.1:$third_metrics_port/metrics" \
     '{consoleUrl: $consoleUrl, apiOrigin: $apiOrigin, rpcUrl: $rpcUrl, chainId: 31337, vault: $vault, usdc: $usdc,
       monkey: $monkey, staking: $staking, registry: $registry,
@@ -1277,8 +1277,9 @@ fi
 if [[ "$trusted" == 1 ]]; then
   api_lines="$console_api, under a certificate mkcert's root issued, so a browser that trusts the root accepts it
                    with nothing to click (the engine's own listener, $api, stays self-signed)."
-  rotation_cert_note=" The console moves between engines through
-                   certificates the browser trusts, so no engine's certificate needs accepting."
+  rotation_cert_note="
+                   The console moves between engines through certificates the browser trusts, so no
+                   engine's certificate needs accepting."
   election_cert_note=""
   second_cert_hint=""
   if [[ "$(uname)" == Darwin ]] && ! security verify-cert -c "$mkcert_root/rootCA.pem" -p ssl >/dev/null 2>&1; then
