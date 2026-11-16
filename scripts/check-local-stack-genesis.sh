@@ -120,7 +120,11 @@ assert set(served) == set(wanted), f"markets differ: only served {sorted(set(ser
 for i, want in sorted(wanted.items()):
     # Every field the file lists for the market: the node leaves out one that is zero or empty.
     for field, value in want.items():
-        assert same(served[i].get(field), value), f"{want['symbol']} ({i}): {field} is {served[i].get(field)}, the file lists {value}"
+        got = served[i].get(field)
+        if field == "quote_currency" and got is None:
+            # The node leaves out a market's quote currency when it is USD, its default.
+            got = {"currency": "usd"}
+        assert same(got, value), f"{want['symbol']} ({i}): {field} is {got}, the file lists {value}"
 # The house state serves the protocol parameters as set. It leaves out the four below when they are zero or empty, so a
 # file's value for one is always compared; any other the file lists is compared when the node serves it (the order limit
 # is served per volume tier instead).
