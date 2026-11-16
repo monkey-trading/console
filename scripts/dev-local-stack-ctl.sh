@@ -321,9 +321,10 @@ stop_operator() {
     die "the turn passes to another engine in $((next - now)) s, before a promotion could: run stop-operator again after $(stamp "$next")"
   fi
   touch "$work_dir/stop-${member_names[$i]}"
-  # However this command ends, the stack then starts the stopped engine again.
-  # shellcheck disable=SC2064 # The engine to start again is fixed here.
-  trap "touch '$work_dir/start-${member_names[$i]}'" EXIT
+  # However this command ends, the stack then starts the stopped engine again. The trap reads the path from a
+  # global, which outlives the function, so whatever characters the work directory's path holds, it stays one word.
+  start_file="$work_dir/start-${member_names[$i]}"
+  trap 'touch "$start_file"' EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
   echo "Stopping the ${member_names[$i]} engine, the operator in effect. The other members record each heartbeat it misses, and"
