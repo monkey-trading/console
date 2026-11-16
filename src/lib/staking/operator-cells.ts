@@ -32,7 +32,7 @@ export interface OperatorCells {
 export function operatorCells(row: OperatorRow): OperatorCells {
   return {
     // Chain-only rows are named by their address, never the deployment's initial-operator words.
-    name: row.hostname ?? ((row.role === "unlisted" || row.role === "unknown") ? shortHex(row.address) : row.bond === null ? "The deployment's initial operator" : "Not a plain hostname"),
+    name: row.hostname ?? ((row.role === "unlisted" || row.role === "unknown") ? shortHex(row.address) : row.bond === null ? "The launch operator" : "No valid name"),
     label: row.hostname ?? shortHex(row.address),
     address: shortHex(row.address),
     role: ROLE_LABELS[row.role],

@@ -61,15 +61,15 @@ describe("the distribution cards' words", () => {
   it("says what a close awaiting its proof paid stakers, and estimates the share from that, not from the whole allocation", () => {
     const Claim = () => createElement(DistributionClaim, { epochs: closes([two]) });
     const html = render(Claim, pending);
-    expect(html).toContain("Epoch 2 closed and paid 80 USDC to stakers.");
+    expect(html).toContain("Staking period 2 ended and paid 80 USDC to stakers.");
     expect(html).toContain("your share is about 20 USDC");
     // Until the closed epochs are read, no amount and no estimate.
     const unread = render(() => createElement(DistributionClaim, { epochs: closes([]) }), pending);
-    expect(unread).toContain("Epoch 2 closed and paid stakers.");
+    expect(unread).toContain("Staking period 2 ended and paid stakers.");
     expect(unread).not.toContain("your share is about");
   });
 
   it("states the split once: a fifth to the operator in effect while rotation is on, the rest between stakers", () => {
-    expect(render(DistributionPanel)).toContain("are distributed: while operator rotation is on, a fifth to the operator in effect, and the rest between stakers in proportion to their stake.");
+    expect(render(DistributionPanel)).toContain("While rotation is on, a fifth goes to the operator. The rest is shared between stakers in proportion to their stake.");
   });
 });

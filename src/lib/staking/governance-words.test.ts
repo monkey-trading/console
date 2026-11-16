@@ -13,33 +13,33 @@ const NOTHING: InForce = { params: null, market: () => null };
 
 describe("commandTitle", () => {
   it("names what each governed and fast-path command does, with the market by its symbol or its id", () => {
-    expect(commandTitle({ action: "set_params" }, IN_FORCE)).toBe("New protocol parameters");
-    expect(commandTitle({ action: "upsert_market", id: 1 }, IN_FORCE)).toBe("New listing terms for BTC-USD");
-    expect(commandTitle({ action: "upsert_market", id: 9 }, IN_FORCE)).toBe("New listing terms for market 9");
-    expect(commandTitle({ action: "set_toxicity_notional" }, IN_FORCE)).toBe("Toxicity weighting by notional");
-    expect(commandTitle({ action: "adopt_close_spread_ceiling", market: 1, max_close_spread_bps: 12 }, IN_FORCE)).toBe("A close-spread ceiling of 12 bps for BTC-USD");
-    expect(commandTitle({ action: "set_access_policy" }, IN_FORCE)).toBe("A new access policy");
-    expect(commandTitle({ action: "activate_protocol", version: "V57" }, IN_FORCE)).toBe("Activate protocol V57");
-    expect(commandTitle({ action: "set_stress_floor", market: null, level: 2 }, IN_FORCE)).toBe("A stress floor at level 2 in every market");
-    expect(commandTitle({ action: "set_reduce_only", market: 1, reduce_only: true }, IN_FORCE)).toBe("Reduce-only in BTC-USD");
-    expect(commandTitle({ action: "set_reduce_only", market: null, reduce_only: false }, IN_FORCE)).toBe("Lift reduce-only in every market");
-    expect(commandTitle({ action: "rotate_operator" }, IN_FORCE)).toBe("The admin command rotate_operator");
+    expect(commandTitle({ action: "set_params" }, IN_FORCE)).toBe("New trading terms");
+    expect(commandTitle({ action: "upsert_market", id: 1 }, IN_FORCE)).toBe("New terms for BTC-USD");
+    expect(commandTitle({ action: "upsert_market", id: 9 }, IN_FORCE)).toBe("New terms for market 9");
+    expect(commandTitle({ action: "set_toxicity_notional" }, IN_FORCE)).toBe("How trade size counts toward the extra spread");
+    expect(commandTitle({ action: "adopt_close_spread_ceiling", market: 1, max_close_spread_bps: 12 }, IN_FORCE)).toBe("A maximum closing spread of 12 bps for BTC-USD");
+    expect(commandTitle({ action: "set_access_policy" }, IN_FORCE)).toBe("New access rules");
+    expect(commandTitle({ action: "activate_protocol", version: "V57" }, IN_FORCE)).toBe("Turn on engine upgrade V57");
+    expect(commandTitle({ action: "set_stress_floor", market: null, level: 2 }, IN_FORCE)).toBe("Keep every market at stress level 2 or higher");
+    expect(commandTitle({ action: "set_reduce_only", market: 1, reduce_only: true }, IN_FORCE)).toBe("Only accept orders that reduce positions in BTC-USD");
+    expect(commandTitle({ action: "set_reduce_only", market: null, reduce_only: false }, IN_FORCE)).toBe("Accept all orders in every market again");
+    expect(commandTitle({ action: "rotate_operator" }, IN_FORCE)).toBe("A change this page can't describe (rotate_operator)");
   });
 
   it("says bytes that are no command are refused if they pass", () => {
-    expect(commandTitle(null, IN_FORCE)).toBe("Bytes that are no admin command, which the engine refuses if the proposal passes");
+    expect(commandTitle(null, IN_FORCE)).toBe("A proposal that isn't a valid change. It will be rejected if it passes");
   });
 });
 
 describe("commandDetails", () => {
   it("lists the parameters a set_params changes beside those in force, and none it leaves alone", () => {
     const command = { action: "set_params", profit_fee_bps: 1000, closeout_level_bps: 5500, house_total_cap_bps: 2500, house_total_cap_floor: "40000000" };
-    expect(commandDetails(command, IN_FORCE)).toEqual(["Close-out level 55.00% (now 50.00%)", "House cap 25.00% (now 30.00%)", "House cap floor $40,000,000.00 (now $50,000,000.00)"]);
+    expect(commandDetails(command, IN_FORCE)).toEqual(["Close-out level 55.00% (now 50.00%)", "Total limit 25.00% (now 30.00%)", "Total limit minimum $40,000,000.00 (now $50,000,000.00)"]);
   });
 
   it("states the values alone when the parameters in force are not held, and a left-out floor as zero", () => {
     expect(commandDetails({ action: "set_params", profit_fee_bps: 1000, closeout_level_bps: 5000, house_total_cap_bps: 3000 }, NOTHING)).toEqual([
-      "Profit fee 10.00%", "Close-out level 50.00%", "House cap 30.00%", "House cap floor $0.00",
+      "Profit fee 10.00%", "Close-out level 50.00%", "Total limit 30.00%", "Total limit minimum $0.00",
     ]);
   });
 
@@ -73,20 +73,20 @@ describe("restrictions", () => {
   it("titles each kind of restriction", () => {
     expect(limitTitle({ kind: "params", closeout_level_bps: 5500 }, IN_FORCE)).toBe("Tighter house limits");
     expect(limitTitle({ kind: "market", market: 1 }, IN_FORCE)).toBe("Tighter terms for BTC-USD");
-    expect(limitTitle({ kind: "stress_floor", market: 1, level: 3 }, IN_FORCE)).toBe("A stress floor at level 3 in BTC-USD");
-    expect(limitTitle({ kind: "reduce_only", market: null }, IN_FORCE)).toBe("Reduce-only in every market");
-    expect(limitTitle({ kind: "unknown", name: "spread_floor" }, IN_FORCE)).toBe("A restriction of a kind this console does not describe (spread_floor)");
+    expect(limitTitle({ kind: "stress_floor", market: 1, level: 3 }, IN_FORCE)).toBe("Keep BTC-USD at stress level 3 or higher");
+    expect(limitTitle({ kind: "reduce_only", market: null }, IN_FORCE)).toBe("Only accept orders that reduce positions in every market");
+    expect(limitTitle({ kind: "unknown", name: "spread_floor" }, IN_FORCE)).toBe("A limit this page can't describe (spread_floor)");
     expect(limitDetails({ kind: "unknown", name: "spread_floor" }, {})).toEqual([]);
   });
 
   it("states each bound beside the baseline it holds the value from, and only the bounds it carries", () => {
     expect(limitDetails({ kind: "params", closeout_level_bps: 5500, house_total_cap_floor: "40000000" }, baselines)).toEqual([
-      "Close-out level at least 55.00% (baseline 50.00%)", "House cap floor at most $40,000,000.00 (baseline $50,000,000.00)",
+      "Close-out level at least 55.00% (normally 50.00%)", "Total limit minimum at most $40,000,000.00 (normally $50,000,000.00)",
     ]);
     expect(limitDetails({ kind: "market", market: 1, margin_tiers: [{ up_to: null, bps: 300 }], house_cap_bps: 2000 }, baselines)).toEqual([
-      "Margin at least 3.00% (baseline 1.00%)", "House cap at most 20.00% (baseline 30.00%)",
+      "Margin at least 3.00% (normally 1.00%)", "Market limit at most 20.00% (normally 30.00%)",
     ]);
-    expect(limitDetails({ kind: "market", market: 2, house_cap_bps: 2000 }, baselines)).toEqual(["House cap at most 20.00%"]);
+    expect(limitDetails({ kind: "market", market: 2, house_cap_bps: 2000 }, baselines)).toEqual(["Market limit at most 20.00%"]);
     expect(limitDetails({ kind: "stress_floor", market: null, level: 1 }, baselines)).toEqual([]);
   });
 });
@@ -96,8 +96,8 @@ describe("standingText", () => {
     expect(standingText("yes", true)).toBe("voted yes");
     expect(standingText("no", true)).toBe("has not voted yet");
     expect(standingText("no", false)).toBe("did not vote");
-    expect(standingText("outside", false)).toBe("is not in this proposal's set");
-    expect(standingText("unknown", true)).toBe("reading…");
+    expect(standingText("outside", false)).toBe("can't vote on this proposal");
+    expect(standingText("unknown", true)).toBe("loading…");
   });
 });
 
@@ -105,13 +105,13 @@ describe("tallyText", () => {
   const units = (whole: bigint) => whole * MONKEY_UNIT;
 
   it("rounds the weight an open proposal still needs up to what the page shows, so it never reads short", () => {
-    expect(tallyText({ yes: units(400_000n), total: units(1_000_000n) }, true)).toBe("Yes 400,000 MONKEY of 1,000,000 MONKEY (40.00%): 266,666.67 MONKEY more passes it.");
-    expect(tallyText({ yes: units(600n), total: units(900n) }, true)).toBe("Yes 600 MONKEY of 900 MONKEY (66.66%): 0.01 MONKEY more passes it.");
+    expect(tallyText({ yes: units(400_000n), total: units(1_000_000n) }, true)).toBe("Yes 400,000 MONKEY of 1,000,000 MONKEY (40.00%): 266,666.67 MONKEY more would pass it.");
+    expect(tallyText({ yes: units(600n), total: units(900n) }, true)).toBe("Yes 600 MONKEY of 900 MONKEY (66.66%): 0.01 MONKEY more would pass it.");
   });
 
   it("says a passed proposal passed, and one that closed below two thirds fell short", () => {
     expect(tallyText({ yes: units(700n), total: units(900n) }, false)).toBe("Yes 700 MONKEY of 900 MONKEY (77.77%): more than two thirds, so it passed.");
-    expect(tallyText({ yes: units(600n), total: units(900n) }, false)).toBe("Yes 600 MONKEY of 900 MONKEY (66.66%): short of two thirds.");
+    expect(tallyText({ yes: units(600n), total: units(900n) }, false)).toBe("Yes 600 MONKEY of 900 MONKEY (66.66%): less than two thirds.");
   });
 });
 
@@ -139,14 +139,14 @@ describe("listingsKey", () => {
 
 describe("walletLine and failureLine", () => {
   it("says why the members' votes are not shown by the kind of wallet, and nothing when they are", () => {
-    expect(walletLine(null, false)).toBe("Connect a wallet to see how the members you delegate to voted, and to vote as a member.");
-    expect(walletLine({ readOnly: true }, false)).toBe("A watched account is not read through a wallet, so how the members it delegates to voted is not shown.");
-    expect(walletLine({}, false)).toBe("This wallet does not read the chain here, so how the members you delegate to voted is not shown.");
+    expect(walletLine(null, false)).toBe("Connect a wallet to see how the operators you delegate to voted, or to vote if you're one of them.");
+    expect(walletLine({ readOnly: true }, false)).toBe("How the operators you delegate to voted isn't shown for a read-only account.");
+    expect(walletLine({}, false)).toBe("This wallet can't read the chain here, so how the operators you delegate to voted isn't shown.");
     expect(walletLine({}, true)).toBeNull();
   });
 
   it("gives a failed read in one sentence, trimming the wallet's own full stop", () => {
-    expect(failureLine("the votes", "Your wallet did not answer in time.")).toBe("Could not read the votes through your wallet: Your wallet did not answer in time. They are read again shortly.");
-    expect(failureLine("your delegations", null)).toBe("Could not read your delegations through your wallet: the read failed. They are read again shortly.");
+    expect(failureLine("the votes", "Your wallet did not answer in time.")).toBe("Couldn't load the votes from your wallet: Your wallet did not answer in time. Trying again shortly.");
+    expect(failureLine("your delegations", null)).toBe("Couldn't load your delegations from your wallet: unknown error. Trying again shortly.");
   });
 });

@@ -38,7 +38,7 @@ async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, s
   }
   const staking = wallet.staking;
   if (wallet.readOnly === true || staking === undefined) {
-    store.notify(surface, "This wallet cannot send transactions.");
+    store.notify(surface, "This wallet can't send transactions.");
     return false;
   }
   if (store.getSnapshot().busy) return false;
@@ -47,7 +47,7 @@ async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, s
   // only once it starts, so a wallet that is slow to answer a read does not lock the console.
   const ran = await panel.exclusive(async () => {
     if (store.liveWallet !== wallet) {
-      store.notify(surface, "The wallet changed while this was waiting, so nothing was sent.", "info");
+      store.notify(surface, "Your wallet changed, so nothing was sent.", "info");
       return;
     }
     // Another page's request may have started while this one waited: sending beside it would overwrite its prompt.
@@ -68,7 +68,7 @@ async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, s
     }
   }, onQueued);
   if (ran === null) {
-    store.notify(surface, "Your earlier request is still with your wallet.", "info");
+    store.notify(surface, "Your wallet is still waiting on an earlier request.", "info");
     return false;
   }
   // The chain moved, or the node's proof did: read both again on the page that is open now, which
@@ -162,7 +162,7 @@ export async function castVote(panel: MonkeyPanel, operators: OperatorReads, vot
   let queued = false;
   const landed = await run(panel, "governance", `vote yes on proposal ${id}`, async (wallet, _staking, progress) => {
     if (wallet.governance === undefined) {
-      panel.store.notify("governance", "This wallet cannot send transactions.");
+      panel.store.notify("governance", "This wallet can't send transactions.");
       return false;
     }
     if (usableWallet(panel.store, "vote", "governance") === null) return false;
@@ -198,11 +198,11 @@ export function claimDistribution(panel: MonkeyPanel): Promise<boolean> {
       const proof = await store.deps.client.stats.distributions(address);
       // Another wallet may have been connected while the reads ran: this one's claim is not sent.
       if (store.liveWallet !== wallet) {
-        store.notify("distribution", "The wallet changed while the claim was prepared, so nothing was sent.", "info");
+        store.notify("distribution", "Your wallet changed, so nothing was sent.", "info");
         return false;
       }
       if (proof === null) {
-        store.notify("distribution", "The node holds no distribution proof for this account right now.", "info");
+        store.notify("distribution", "There's no distribution to claim for this account right now.", "info");
         return false;
       }
       if (checkpointOf(proof, position.latestSeq) === "posted") {
@@ -236,12 +236,12 @@ export async function claimMonkeyEmissions(panel: MonkeyPanel): Promise<void> {
   const wallet = store.liveWallet;
   store.clearNotice("emissions");
   const ran = await panel.exclusive(async () => {
-    if (store.liveWallet !== wallet) store.notify("emissions", "The wallet changed while this was waiting, so nothing was sent.", "info");
+    if (store.liveWallet !== wallet) store.notify("emissions", "Your wallet changed, so nothing was sent.", "info");
     else if (store.getSnapshot().busy) store.notify("emissions", "Another request is in progress, so nothing was sent.", "info");
     else {
       await claimEmissions(store);
     }
   });
-  if (ran === null) store.notify("emissions", "Your earlier request is still with your wallet.", "info");
+  if (ran === null) store.notify("emissions", "Your wallet is still waiting on an earlier request.", "info");
   await store.monkeySession.panel?.refreshWallet(true);
 }

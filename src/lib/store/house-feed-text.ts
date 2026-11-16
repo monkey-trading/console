@@ -8,9 +8,9 @@ import type { FeedState } from "./house-stats";
  * answered before and then failed or stopped being served keeps its figures and says they are old.
  */
 export function feedProblem(feed: FeedState<unknown>, what: string): string | null {
-  if (feed.status === "failed") return `The node did not answer for ${what}${feed.error === null ? "" : ` (${feed.error})`}, so there is nothing to show yet. The page keeps asking.`;
+  if (feed.status === "failed") return `Couldn't load ${what}${feed.error === null ? "" : `: ${feed.error.replace(/\.+$/, "")}`}. Trying again automatically.`;
   if (!feed.stale) return null;
-  if (feed.error !== null) return `The last read of ${what} failed, so this may be behind.`;
-  if (feed.status === "waiting") return `The node is rescanning, so this is the last it answered for ${what}.`;
-  return `The node has stopped serving ${what}, so this is the last it answered.`;
+  if (feed.error !== null) return `Couldn't refresh ${what}, so this may be out of date.`;
+  if (feed.status === "waiting") return `The server is updating ${what}, so this may be out of date.`;
+  return `The server has stopped sending ${what}, so this may be out of date.`;
 }

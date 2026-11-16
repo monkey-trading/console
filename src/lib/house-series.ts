@@ -106,12 +106,12 @@ export function beginsOf(data: SeriesData): Begins | null {
 /** The sentence under a chart that says where its data begins; `stamp` formats a time. */
 export function beginsText(data: SeriesData | null, stamp: (ms: number) => string): string {
   const begins = data === null ? null : beginsOf(data);
-  if (begins === null) return "The node has recorded nothing for this chart yet.";
+  if (begins === null) return "There's no data for this chart yet.";
   return `Data begins ${stamp(begins.ms)} UTC, ${BEGINS_WHY[begins.reason]}.`;
 }
 
 /** Why a chart's data begins where it does, by reason. */
-const BEGINS_WHY = { genesis: "from the log's first command", recovery: "since the node last recovered from a snapshot, so earlier history is not in its answer", retention: "the oldest this node keeps at this resolution" } as const satisfies Record<Begins["reason"], string>;
+const BEGINS_WHY = { genesis: "when the server started", recovery: "when the server last restarted from a backup, so earlier history isn't available", retention: "the oldest the server keeps at this level of detail" } as const satisfies Record<Begins["reason"], string>;
 
 /**
  * The sentence a chart whose data has not landed holds its place with, unseen: the one a node whose

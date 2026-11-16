@@ -84,11 +84,11 @@ export const settledRangeBps = (held: number | null, needed: number): number => 
 /** Why the map shows no band within `rangeBps`, and where the positions are instead; null when it shows a band or has no mark. */
 export function emptyMapNote(view: PositionsView, rangeBps: number): string | null {
   if (view.mark === null || bandsWithin(closeoutBands(view), fixedToNumber(fixedFromWire(view.mark)), rangeBps).length > 0) return null;
-  const head = `No positions close out within ±${rangeBps / 100}% of the mark.`;
+  const head = `No positions close out within ±${rangeBps / 100}% of the current price.`;
   const reach = farthestBandBps(view);
-  if (reach !== null) return `${head} The nearest bands lie further out: choose a wider range.`;
+  if (reach !== null) return `${head} Choose a wider range to see the nearest ones.`;
   const beyond = usdOf(view.beyond_range);
-  return beyond > 0 ? `${head} ${formatCompactUsd(beyond)} closes out beyond the node's ±${view.closeout_range_bps / 100}% range.` : head;
+  return beyond > 0 ? `${head} ${formatCompactUsd(beyond)} closes out further than ±${view.closeout_range_bps / 100}% from the price.` : head;
 }
 
 /** A band's colour weight from 0 to 1: the square root of its share of the heaviest, so small bands still show. */

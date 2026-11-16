@@ -26,8 +26,8 @@ describe("checkedPage", () => {
       { operator_shares: [{ account: "0x12", amount: "20" }] }, { operator_shares: [{ account: "0x00000000000000000000000000000000000000a1", amount: "2e3" }] },
       { epoch: 1.5 }, { close_ms: -1 }, { skipped: { first: 1, last: Number.NaN } },
     ];
-    for (const over of bad) expect(() => checkedPage({ ...good, epochs: [close(3, over)] })).toThrow("malformed figure for epoch");
-    expect(() => checkedPage({ ...good, next: -2 })).toThrow("cursor that is not an epoch");
+    for (const over of bad) expect(() => checkedPage({ ...good, epochs: [close(3, over)] })).toThrow("invalid figure for staking period");
+    expect(() => checkedPage({ ...good, next: -2 })).toThrow("invalid page of staking periods");
   });
 });
 
@@ -167,10 +167,10 @@ describe("EpochReads", () => {
       return { ...answer, epochs: answer.epochs.map((c) => ({ ...c, stakers_usdc_units: "0x10" })) };
     };
     await epochs.loadMore();
-    expect(epochs.getSnapshot().moreError).toContain("malformed figure");
+    expect(epochs.getSnapshot().moreError).toContain("invalid figure");
     expect(epochs.getSnapshot().epochs).toHaveLength(EPOCH_PAGE);
     await vi.advanceTimersByTimeAsync(NODE_READ_MS);
-    expect(epochs.getSnapshot().error).toContain("malformed figure");
+    expect(epochs.getSnapshot().error).toContain("invalid figure");
     expect(epochs.getSnapshot().epochs.every((c) => c.stakers_usdc_units !== "0x10")).toBe(true);
     stop();
   });

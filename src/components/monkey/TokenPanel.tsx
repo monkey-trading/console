@@ -23,15 +23,15 @@ export function TokenPanel() {
   return (
     <Card id="token-title" title="MONKEY">
       <dl className="space-y-2">
-        <Row label="Total allocated">{monkeyText(emissions?.allocated)}</Row>
+        <Row label="Total earned">{monkeyText(emissions?.allocated)}</Row>
         <Row label="Maximum supply">{monkeyText(emissions?.max_supply)}</Row>
-        <Row label="Staked supply">{monkeyText(staking?.total_staked)}</Row>
-        <Row label="Stake ratio">{ratio === null ? "—" : formatRate(ratio)}</Row>
+        <Row label="Total staked">{monkeyText(staking?.total_staked)}</Row>
+        <Row label="Share staked">{ratio === null ? "—" : formatRate(ratio)}</Row>
         <AddressRow label="Token" address={deploy.monkey ?? contracts?.token ?? null} />
         <AddressRow label="Staking contract" address={deploy.staking ?? contracts?.staking ?? null} />
       </dl>
       <ReadNote read={overview} quiet />
-      <p className={NOTE}>The stake ratio is the staked supply as a share of everything allocated so far.</p>
+      <p className={NOTE}>Share staked is the MONKEY staked as a share of all MONKEY earned so far.</p>
     </Card>
   );
 }

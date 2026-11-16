@@ -15,20 +15,20 @@ import { useConsoleSelect, useMonkeyPanel, usePanelState } from "../monkey/use-m
 
 const PER_LOSS_LINES: readonly LineSpec[] = [{ metric: "monkey_per_loss", label: "MONKEY per $1 of loss", tone: "glow" }];
 const SUPPLY_LINES: readonly LineSpec[] = [
-  { metric: "total_allocated", label: "Allocated", tone: "amber" },
+  { metric: "total_allocated", label: "Earned", tone: "amber" },
   { metric: "total_staked", label: "Staked", tone: "glow" },
 ];
 
 const FOOTER = "mt-1 text-caption leading-relaxed text-fg-3";
 
 /** The budget line's wording, which the placeholder held while the overview is read shares, so it wraps as the loaded line will. */
-const budgetLine = (budget: string, haltAt: string | null) => `The budget is ${budget} per period${haltAt === null ? "" : `, and halves at ${haltAt} UTC`}. Halvings that have passed are marked.`;
+const budgetLine = (budget: string, haltAt: string | null) => `Each reward period shares out ${budget}${haltAt === null ? "" : `, until it halves at ${haltAt} UTC`}. Past halvings are marked.`;
 
 /** The two MONKEY charts; the page's range drives their window. */
 export function MonkeyCharts({ range }: { range: DashboardRangeId }) {
   const panel = useMonkeyPanel();
   const { overview } = usePanelState();
-  const problem = overviewProblem(overview, "the emission budget and halving schedule");
+  const problem = overviewProblem(overview, "the reward schedule");
   const emissions = overview.value?.emissions ?? null;
   const minute = useConsoleSelect((state) => Math.floor(state.now / 60_000));
   const begins = overview.value?.begins_ms ?? 0;
@@ -42,15 +42,15 @@ export function MonkeyCharts({ range }: { range: DashboardRangeId }) {
   return (
     <>
       <ChartCard
-        id="dash-per-loss" title="MONKEY per $1 of realised loss" feed={panel.feed("perLoss")} kind="steps" lines={PER_LOSS_LINES} format={perUsdFigure} marks={marks} timeframe={range}
-        caption="By emission period: each ten-minute budget is shared between that period's realised losses, less write-offs, so the rate is set by how much was lost in the period and a small loss in a quiet period reads high."
+        id="dash-per-loss" title="MONKEY per $1 of loss" feed={panel.feed("perLoss")} kind="steps" lines={PER_LOSS_LINES} format={perUsdFigure} marks={marks} timeframe={range}
+        caption="Shown by reward period. Each period's MONKEY is shared between traders in proportion to their losses, so the rate is high when little was lost."
         footer={<>
           {problem !== null && <p className={FOOTER}>{problem}</p>}
           {emissions !== null && <p className={FOOTER}>{budgetLine(monkeyText(emissions.current_budget), emissions.next_halving_ms === null ? null : formatStamp(emissions.next_halving_ms))}</p>}
           {overview.status === "loading" && overview.value === null && <p aria-hidden="true" className={`${FOOTER} invisible`}>{budgetLine("1,000 MONKEY", formatStamp(0))}</p>}
         </>}
       />
-      <ChartCard id="dash-supply" title="MONKEY allocated and staked" feed={panel.feed("supply")} kind="lines" lines={SUPPLY_LINES} format={compactNumber} timeframe={range} heldFigure="000,000,000 MONKEY" />
+      <ChartCard id="dash-supply" title="MONKEY earned and staked" feed={panel.feed("supply")} kind="lines" lines={SUPPLY_LINES} format={compactNumber} timeframe={range} heldFigure="000,000,000 MONKEY" />
     </>
   );
 }

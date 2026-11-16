@@ -22,7 +22,7 @@ describe("withMembership", () => {
 });
 
 describe("membershipWord", () => {
-  it("says Member, Outside the set, or a dash while no set is known", () => {
-    expect([membershipWord({ inSet: true, weight: 1n, turnShareBps: 1 }), membershipWord({ inSet: false, weight: 0n, turnShareBps: 0 }), membershipWord(null)]).toEqual(["Member", "Outside the set", "—"]);
+  it("says Yes, No, or a dash while no set is known", () => {
+    expect([membershipWord({ inSet: true, weight: 1n, turnShareBps: 1 }), membershipWord({ inSet: false, weight: 0n, turnShareBps: 0 }), membershipWord(null)]).toEqual(["Yes", "No", "—"]);
   });
 });

@@ -210,7 +210,7 @@ export class MonkeyPanel {
     const waiting = setTimeout(() => {
       const { position, record } = this.state.wallet;
       if (started || !this.open || cycle !== this.cycle || this.store.liveWallet !== wallet || (this.page === "staking" ? position : record).status === "failed") return;
-      const stalled = new Error("Your wallet has not answered an earlier request.");
+      const stalled = new Error("Your wallet hasn't answered an earlier request.");
       this.set({ wallet: { ...this.state.wallet, address: wallet.address, ...(this.page === "staking" ? { position: failed(stalled, position.value) } : { record: failed(stalled, record.value) }) } });
     }, WALLET_READ_MS);
     const chain = this.store.monkeySession.walletWork.read(wallet, fresh, cycle, () => {

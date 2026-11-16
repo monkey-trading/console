@@ -46,25 +46,25 @@ export function StakingRotation() {
   const history = useMemo(() => (rotation === null ? null : joinHistory(rotation.history, pages.older)), [rotation, pages.older]);
   const signer = rotation?.signer ?? null;
   // Before a first read lands the cards say they are reading; a node that cannot give the rotation says so instead.
-  const unread = route.status === "loading" ? "Reading the node's rotation…" : "The node's rotation is not read.";
+  const unread = route.status === "loading" ? "Loading the rotation…" : "The rotation couldn't be loaded.";
   const rotationOn = list.value?.rotationEnabled ?? route.value?.rotation_enabled ?? null;
   return (
     <div className={`mt-4 ${trusted ? "grid" : "hidden"} gap-4`}>
       <dl className="grid gap-x-8 gap-y-2 rounded-xl border border-line-2 bg-ink-1 p-4 sm:grid-cols-2">
-        <Row label="Rotation">{rotationOn === null ? "—" : rotationOn ? "On" : "Off"}</Row>
-        <Row label="Signer the vault names">{signer === null ? "—" : <span title={signer.address}>{shortHex(signer.address)}, epoch {signer.epoch}</span>}</Row>
-        <Row label="Today's turn" reserve={TURN_RESERVE}>{rotation === null ? "—" : turnLine(rotation.turn, nameOf, "No turn is in effect")}</Row>
+        <Row label="Daily rotation">{rotationOn === null ? "—" : rotationOn ? "On" : "Off"}</Row>
+        <Row label="Vault's signing key">{signer === null ? "—" : <span title={signer.address}>{shortHex(signer.address)} (key version {signer.epoch})</span>}</Row>
+        <Row label="Today's turn" reserve={TURN_RESERVE}>{rotation === null ? "—" : turnLine(rotation.turn, nameOf, "No one has today's turn")}</Row>
         <Row label="Tomorrow's turn" reserve={TURN_RESERVE}>{rotation === null ? "—" : turnLine(rotation.nextTurn, nameOf, "Not drawn yet")}</Row>
       </dl>
-      <ReadNote read={route} loading="Reading the node's rotation…" quiet />
+      <ReadNote read={route} loading="Loading the rotation…" quiet />
       <div className="grid items-start gap-4 xl:grid-cols-2">
-        <SetCard id="rotation-set-title" title="Set in effect" set={rotation?.set ?? null} empty={rotation === null ? unread : "No rotation set is in effect."} nowMs={nowMs} nameOf={labelOf} needsUpdate={needsUpdate} />
-        <SetCard id="rotation-next-title" title="Next set" set={rotation?.nextSet ?? null} empty={rotation === null ? unread : "No later set has been mirrored."} nowMs={nowMs} nameOf={labelOf} needsUpdate={needsUpdate} />
+        <SetCard id="rotation-set-title" title="Current rotation" set={rotation?.set ?? null} empty={rotation === null ? unread : "No rotation is running."} nowMs={nowMs} nameOf={labelOf} needsUpdate={needsUpdate} />
+        <SetCard id="rotation-next-title" title="Next rotation" set={rotation?.nextSet ?? null} empty={rotation === null ? unread : "No next rotation has been chosen yet."} nowMs={nowMs} nameOf={labelOf} needsUpdate={needsUpdate} />
       </div>
       {/* Both cards are there from the first paint, each in a viewport of one height, so nothing moves when the first read lands. */}
-      <Reassignments records={history?.records ?? []} empty={rotation === null ? unread : "No turn among those read was skipped, promoted or refused."} nameOf={labelOf} />
+      <Reassignments records={history?.records ?? []} empty={rotation === null ? unread : "None of the turns shown was skipped, promoted or refused."} nameOf={labelOf} />
       <TurnHistoryCard
-        records={history?.records ?? []} empty={rotation === null ? unread : "No turn has been assigned yet."} more={history === null ? null : history.next !== null} truncated={history?.truncated ?? false} reading={pages.reading} error={pages.error}
+        records={history?.records ?? []} empty={rotation === null ? unread : "No turns yet."} more={history === null ? null : history.next !== null} truncated={history?.truncated ?? false} reading={pages.reading} error={pages.error}
         onMore={() => {
           if (rotation === null) return;
           // The last page removes the button that has focus: focus goes to the card's heading, as on the other history cards.
@@ -72,7 +72,7 @@ export function StakingRotation() {
         }}
         nameOf={labelOf}
       />
-      <p className={NOTE}>Each set is the members the registry&apos;s election close adopted into the operator schedule, weighted by the stake delegated to each then. A member&apos;s expected share of turns is its weight over the set&apos;s, the odds of each day&apos;s draw. The turn changes at 22:30 UTC; the console moves to the new member&apos;s node once it verifies.</p>
+      <p className={NOTE}>Each rotation is a group of operators chosen at an election, each weighted by the stake delegated to it then. Each day one is drawn at random, by weight, to run the server, so an operator&apos;s expected share of turns is its share of the weight. Turns change at 22:30 UTC, and this app connects to the new operator&apos;s server once it&apos;s verified.</p>
     </div>
   );
 }

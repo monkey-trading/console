@@ -228,7 +228,7 @@ export function stake(state: MockState, address: string, amount: bigint): void {
 export function startUnstake(state: MockState, address: string, amount: bigint): void {
   const key = address.toLowerCase();
   const staked = state.monkey.staked.get(key) ?? 0n;
-  if (amount <= 0n || amount > staked) throw new Error("You have not staked that much MONKEY.");
+  if (amount <= 0n || amount > staked) throw new Error("You haven't staked that much MONKEY.");
   state.monkey.staked.set(key, staked - amount);
   const pending = state.monkey.unstaking.get(key);
   state.monkey.unstaking.set(key, { amount: (pending?.amount ?? 0n) + amount, claimableAt: state.now + COOLDOWN_MS });
@@ -239,7 +239,7 @@ export function completeUnstake(state: MockState, address: string): void {
   const key = address.toLowerCase();
   const pending = state.monkey.unstaking.get(key);
   if (pending === undefined) throw new Error("There is no unstake to complete.");
-  if (state.now < pending.claimableAt) throw new Error("The cooldown has not passed yet.");
+  if (state.now < pending.claimableAt) throw new Error("The waiting period isn't over yet.");
   state.monkey.unstaking.delete(key);
   state.monkey.stakeSteps.push({ ts: state.now, delta: -pending.amount, account: key });
   state.monkey.record(state.now, "unstake", key, pending.amount);
@@ -249,7 +249,7 @@ export function completeUnstake(state: MockState, address: string): void {
 export function claimDistribution(state: MockState, address: string, entitled: bigint): void {
   const key = address.toLowerCase();
   const claimed = state.monkey.distClaimed.get(key) ?? 0n;
-  if (entitled <= claimed) throw new Error("The simulated vault has already paid at least that much to this account.");
+  if (entitled <= claimed) throw new Error("The demo vault has already paid this account at least that much.");
   state.monkey.distClaimed.set(key, entitled);
 }
 

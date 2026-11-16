@@ -33,12 +33,12 @@ const queue = (props: Parameters<typeof QueueChart>[0]) => () => createElement(Q
 describe("the House charts under a driven range", () => {
   it("shows no timeframe control while a range is supplied, and its own control without one", () => {
     const floor = { value: null, note: null };
-    expect(render(nav({ range: "7d", floor }))).not.toContain("NAV timeframe");
+    expect(render(nav({ range: "7d", floor }))).not.toContain("House value timeframe");
     expect(render(() => createElement(ExposureChart, { range: "7d" }))).not.toContain("House exposure timeframe");
-    expect(render(queue({ range: "7d", walked: false }))).not.toContain("Queue total timeframe");
-    expect(render(nav({ floor }))).toContain("NAV timeframe");
+    expect(render(queue({ range: "7d", walked: false }))).not.toContain("Withdrawal queue timeframe");
+    expect(render(nav({ floor }))).toContain("House value timeframe");
     expect(render(() => createElement(ExposureChart))).toContain("House exposure timeframe");
-    expect(render(queue({}))).toContain("Queue total timeframe");
+    expect(render(queue({}))).toContain("Withdrawal queue timeframe");
   });
 
   it("says the note the page supplies for the NAV floor", () => {
@@ -61,9 +61,9 @@ const heldFootnote = (html: string) => html.match(/<span aria-hidden="true" clas
 describe("the House charts while their page waits for the first answers (monkey-trading/console#319)", () => {
   it("holds the loaded footnote's sentences unseen under the reading line, the All window's and the scan's included", () => {
     const html = render(() => createElement(ExposureChart, { range: "all", pending: true }));
-    expect(heldFootnote(html)).toBe("Data begins 1 Jan 00:00:00 UTC, from the log&#x27;s first command. All covers the most recent 1,998 days, the most one read holds at daily buckets. These figures are the node&#x27;s periodic scan of every account, so a position opened and closed between two scans does not show.");
-    expect(html).toContain("Reading the node&#x27;s signed history…");
-    expect(heldFootnote(render(nav({ range: "7d", pending: true, floor: { value: null, note: null } })))).toBe("Data begins 1 Jan 00:00:00 UTC, from the log&#x27;s first command.");
+    expect(heldFootnote(html)).toBe("Data begins 1 Jan 00:00:00 UTC, when the server started. &quot;All&quot; shows up to the last 1,998 days. These figures come from regular snapshots of all accounts, so a position opened and closed between two snapshots doesn&#x27;t show.");
+    expect(html).toContain("Loading history…");
+    expect(heldFootnote(render(nav({ range: "7d", pending: true, floor: { value: null, note: null } })))).toBe("Data begins 1 Jan 00:00:00 UTC, when the server started.");
   });
 
   it("shows no figure while pending, even where the store holds a queue total", () => {

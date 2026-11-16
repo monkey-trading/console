@@ -18,7 +18,7 @@ import { useEffect, useId, useMemo, useSyncExternalStore } from "react";
 import { readBlock } from "@/lib/engine/attestation";
 import { groupThousands, shortHex } from "@/lib/format";
 import { changeDelegation, type DelegationChange } from "@/lib/monkey/actions";
-import { formatDuration } from "@/lib/monkey/figures";
+import { spokenLongCountdown } from "@/lib/monkey/countdown";
 import { mirroredElection, type OperatorReads } from "@/lib/monkey/operators";
 import { candidateSource, nodeBlocked, offersTyped, type NoList } from "@/lib/staking/candidate-choice";
 import type { DelegationReads } from "@/lib/staking/delegation-reads";
@@ -50,7 +50,7 @@ const TITLE_ID = "operators-title";
 const FIELD = "min-h-11 w-full rounded border border-edge bg-ink px-2 py-2 text-data text-fg placeholder:text-fg-3 hover:border-glow focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0";
 
 /** Why the list in hand is not the node's current one, as the held list's note ends. */
-const WHY: Record<NoList, string> = { unverified: "the node is not verified now", clock: "your device clock differs from the node's signed time", unread: "the node's operator list cannot be read now" };
+const WHY: Record<NoList, string> = { unverified: "the server isn't verified right now", clock: "your device clock is wrong", unread: "the operator list can't be loaded right now" };
 
 /** The host of an `https://` origin. */
 const hostOf = (origin: string) => new URL(origin).host;
@@ -118,34 +118,34 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
   return (
     <Card id={TITLE_ID} title="Operators">
       <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
-        <Row label="Operator in effect">{list === null ? "—" : labelOf(list.inEffect)}</Row>
-        <Row label="Today's turn" reserve={TURN_RESERVE}>{schedule === null ? "—" : turnLine(schedule.turn, nameOf, "No turn is in effect")}</Row>
+        <Row label="Current operator">{list === null ? "—" : labelOf(list.inEffect)}</Row>
+        <Row label="Today's turn" reserve={TURN_RESERVE}>{schedule === null ? "—" : turnLine(schedule.turn, nameOf, "No one has today's turn")}</Row>
         <Row label="Tomorrow's turn" reserve={TURN_RESERVE}>{schedule === null ? "—" : turnLine(schedule.nextTurn, nameOf, "Not drawn yet")}</Row>
-        <Row label="Admin key the node applies">{route.value === null ? "—" : <span title={route.value.operator}>{shortHex(route.value.operator)}</span>}</Row>
-        <Row label="Rotation">{rotation === null ? "—" : rotation ? "On" : "Off"}</Row>
-        <Row label="This console talks to">{node !== null ? "The simulated node" : follow === null ? "—" : hostOf(follow.origin)}</Row>
+        <Row label="Operator key in use">{route.value === null ? "—" : <span title={route.value.operator}>{shortHex(route.value.operator)}</span>}</Row>
+        <Row label="Daily rotation">{rotation === null ? "—" : rotation ? "On" : "Off"}</Row>
+        <Row label="Connected server">{node !== null ? "Demo server in your browser" : follow === null ? "—" : hostOf(follow.origin)}</Row>
       </dl>
       {pending !== null && (
         <p className="rounded border border-amber/40 bg-amber/10 p-3 text-caption leading-relaxed text-amber [overflow-wrap:anywhere]">
-          {pending.promoted ? `A liveness promotion names ${withAddress(labelOf(pending.candidate), pending.candidate)}: its release applies now, and its admin key` : `An election named ${withAddress(labelOf(pending.candidate), pending.candidate)}, which`} takes effect at {formatStamp(pending.effectiveAtMs)} UTC{nowMs > 0 && pending.effectiveAtMs > nowMs ? `, in ${formatDuration(pending.effectiveAtMs - nowMs)}` : ""}.
+          {pending.promoted ? `${withAddress(labelOf(pending.candidate), pending.candidate)} is taking over because the operator stopped responding. Its release is in use now, and its operator key` : `${withAddress(labelOf(pending.candidate), pending.candidate)} won the election. Its operator key`} takes effect at {formatStamp(pending.effectiveAtMs)} UTC{nowMs > 0 && pending.effectiveAtMs > nowMs ? `, in ${spokenLongCountdown(pending.effectiveAtMs, nowMs)}` : ""}.
         </p>
       )}
       {mirrored !== null && (
         <p className="rounded border border-amber/40 bg-amber/10 p-3 text-caption leading-relaxed text-amber [overflow-wrap:anywhere]">
-          The node has logged an election naming {withAddress(labelOf(mirrored.candidate), mirrored.candidate)}, which applies its admin key at {formatStamp(mirrored.effectiveAtMs)} UTC, in {formatDuration(mirrored.effectiveAtMs - nowMs)}.
+          The server has recorded the election of {withAddress(labelOf(mirrored.candidate), mirrored.candidate)}. Its operator key takes effect at {formatStamp(mirrored.effectiveAtMs)} UTC, in {spokenLongCountdown(mirrored.effectiveAtMs, nowMs)}.
         </p>
       )}
-      <ReadNote read={route} loading={nodeReadable ? "Reading the node's figures…" : "The node's figures wait until it is verified."} quiet />
+      <ReadNote read={route} loading={nodeReadable ? "Loading figures…" : "Figures appear once the server is verified."} quiet />
       {wallet === null && decided && <p className={NOTE}>Connect a wallet to delegate your stake.</p>}
-      {wallet?.readOnly === true && <p className={NOTE}>This account is read-only, so its delegations are not read and nothing can be delegated for it.</p>}
+      {wallet?.readOnly === true && <p className={NOTE}>This account is read-only, so its delegations aren&apos;t shown and nothing can be delegated for it.</p>}
       {wallet !== null && wallet.readOnly !== true && mine === null && delegationsRead.read.status === "unavailable" && (
-        <p className={NOTE}>This build names no staking contract, so delegation is not available here.</p>
+        <p className={NOTE}>Delegation isn&apos;t available here.</p>
       )}
       {source.kind === "held" && (
-        <p className={NOTE}>From the operator list last verified at {formatStamp(source.verifiedAtMs)} UTC, as the registry stood at final block {groupThousands(BigInt(source.block))}: {WHY[source.why]}.</p>
+        <p className={NOTE}>Showing the operator list last verified at {formatStamp(source.verifiedAtMs)} UTC (confirmed block {groupThousands(BigInt(source.block))}), because {WHY[source.why]}.</p>
       )}
       {wallet !== null && wallet.readOnly !== true && delegationsRead.account === wallet.address && (delegationsRead.read.status === "loading" || delegationsRead.read.status === "failed") && (
-        <ReadNote read={delegationsRead.read} loading="Reading your delegations from the chain…" quiet />
+        <ReadNote read={delegationsRead.read} loading="Loading your delegations…" quiet />
       )}
       {/* No single operator may stop a staker voting away from it: off the node's current list, an address the chain alone checks stays a way. The block stays while its editor is open, so clearing the typed address never hides it under the visitor's cursor. */}
       {typedOffered && mine !== null && (
@@ -179,7 +179,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-[min(14rem,100%)] flex-1 space-y-1">
               <label htmlFor={searchId} className="block text-caption text-fg-2">Search operators</label>
-              <input id={searchId} type="search" value={search} maxLength={MAX_SEARCH} spellCheck={false} autoComplete="off" placeholder="Hostname or address" onChange={(event) => { setView({ search: event.target.value, page: 0 }); }} className={FIELD} />
+              <input id={searchId} type="search" value={search} maxLength={MAX_SEARCH} spellCheck={false} autoComplete="off" placeholder="Name or address" onChange={(event) => { setView({ search: event.target.value, page: 0 }); }} className={FIELD} />
             </div>
             <div className="space-y-1">
               <span id={showId} className="block text-caption text-fg-2">Show</span>
@@ -192,7 +192,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
               <Select<SortId> label="Sort by" value={sort} options={SORTS} onChange={(value) => { setView({ sort: value, page: 0 }); }} />
             </div>
           </div>
-          {view !== null && !rows.some((row) => row.listed) && <p className={NOTE}>No candidate&apos;s release has been approved yet.</p>}
+          {view !== null && !rows.some((row) => row.listed) && <p className={NOTE}>No candidate has been approved yet.</p>}
           <p role="status" className="text-caption text-fg-2">{countText(pageView, search)}</p>
           {pageView.rows.length > 0 && (
             <OperatorTable
@@ -208,7 +208,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
             </nav>
           )}
           {/* After the rows, where it arrives with the list: the toolbar and the chain's rows already shown above never move for it. */}
-          {view !== null && <p className={NOTE}>As the registry stood at final block {groupThousands(BigInt(view.block.number))}, at {formatStamp(view.block.timeMs)} UTC, read by the node from the chain. It is read again by itself, and counts a delegation once its block is final.</p>}
+          {view !== null && <p className={NOTE}>As of confirmed block {groupThousands(BigInt(view.block.number))}, at {formatStamp(view.block.timeMs)} UTC. This list updates automatically, and a new delegation shows once its block is confirmed.</p>}
         </>
       )}
       {/* Beside the table, and there with no wallet too: a change's outcome outlives the connection that sent it. */}
@@ -216,12 +216,12 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
       {/* Not painted while the first list is on its way: the rows it brings land above these notes, and what is shown never moves for them. */}
       {source.kind !== "loading" && (
         <>
-          <p className={NOTE}>You delegate amounts of your stake to any candidates the registry lists, and may move or take them back at any time; the next election close counts them. Stake you have not delegated abstains, and stake you have started to unstake does not vote. Delegation changes nothing about distributions, and delegators share no rewards.</p>
-          {unreachable.size > 0 && <p className={NOTE}>Not in this build: this console build does not list that operator&apos;s hostname, so it could not connect there if the operator were elected.</p>}
-          <p className={NOTE}>The standby is the eligible candidate the registry would promote, while rotation is on and no election waits, once the vault has gone its liveness timeout without a checkpoint. The release is the enclave build and configuration an operator runs, as the vault names it.</p>
+          <p className={NOTE}>You can delegate any part of your stake to listed candidates, and move it or take it back at any time. Delegations count at the next election. Undelegated stake doesn&apos;t vote, and neither does stake you&apos;re unstaking. Delegating doesn&apos;t change your USDC distributions, and you don&apos;t share in an operator&apos;s rewards.</p>
+          {unreachable.size > 0 && <p className={NOTE}>Needs an app update: this version of the app can&apos;t connect to that operator&apos;s server, so you&apos;d need an update if it were elected.</p>}
+          <p className={NOTE}>The standby is the candidate that takes over if the vault goes too long without an update from the server. This applies while rotation is on and no election is pending. The release is the exact server software and settings an operator runs.</p>
         </>
       )}
-      <ReadNote read={listRead} loading={nodeReadable ? "Reading the operator list…" : "The operator list waits until the node is verified."} />
+      <ReadNote read={listRead} loading={nodeReadable ? "Loading the operator list…" : "The operator list appears once the server is verified."} />
     </Card>
   );
 }

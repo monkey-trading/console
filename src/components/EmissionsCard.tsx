@@ -35,7 +35,7 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
   // The page's last read of the vault's record, for the account it names.
   const record = state.wallet !== null && figures.address === state.wallet.address ? figures.record : null;
   // The read's own reason; a generic one only for an error that carries none.
-  const recordProblem = record?.status === "failed" ? (record.message || "the read failed").replace(/\.+$/, "") : null;
+  const recordProblem = record?.status === "failed" ? (record.message || "unknown error").replace(/\.+$/, "") : null;
   const act = () => {
     if (state.busy) return;
     void claim().then(() => focusHeading("monkey-title"));
@@ -59,52 +59,52 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
       </div>
       {readOnly.note}
       {(state.wallet !== null || !state.walletDecided) && boost !== null && (
-        <p className="mt-3 flex justify-between gap-2 text-caption"><span className="text-fg">Emissions boost</span><span className="text-fg-2">{boost === undefined ? "—" : `${describeBoost(boost.bps)} your weight, volume tier ${boost.tier}`}</span></p>
+        <p className="mt-3 flex justify-between gap-2 text-caption"><span className="text-fg">Reward boost</span><span className="text-fg-2">{boost === undefined ? "—" : `${describeBoost(boost.bps)} for volume tier ${boost.tier}`}</span></p>
       )}
       {reading ? (
         <div className="mt-3 text-caption">
-          <p className="flex justify-between gap-2"><span className="text-fg">Accrued</span><span className="text-fg-2">—</span></p>
-          <p className="mt-2 text-fg-3">Reading your MONKEY emissions…</p>
+          <p className="flex justify-between gap-2"><span className="text-fg">Earned</span><span className="text-fg-2">—</span></p>
+          <p className="mt-2 text-fg-3">Loading your MONKEY…</p>
           {buttonSlot}
         </div>
       ) : !state.wallet ? (
-        <p className="mt-3 text-caption text-fg-3">Connect a wallet to see your MONKEY emissions.</p>
+        <p className="mt-3 text-caption text-fg-3">Connect a wallet to see the MONKEY you&apos;ve earned.</p>
       ) : proof === null ? (
         pending.kind === "awaiting" ? (
-          <p role="status" className="mt-3 text-caption text-fg-3">You realised a loss in emission period {pending.period}, which has closed. Any MONKEY it earned you becomes claimable once the vault has the checkpoint covering it, and is read again by itself.</p>
+          <p role="status" className="mt-3 text-caption text-fg-3">You made a loss in reward period {pending.period}, which has ended. Any MONKEY you earned then can be claimed after the vault&apos;s next update. This page checks automatically.</p>
         ) : (
-          <p className="mt-3 text-caption text-fg-3">No MONKEY accrued yet. MONKEY accrues from the engine&apos;s fixed ten-minute emission budgets, shared between the accounts that realised a loss in each period.</p>
+          <p className="mt-3 text-caption text-fg-3">You haven&apos;t earned any MONKEY yet. Every 10 minutes, a set amount of MONKEY is shared between the traders who made a loss, in proportion to their losses.</p>
         )
       ) : (
         <div className="mt-3 text-caption">
-          <p className="flex justify-between gap-2"><span className="text-fg">Accrued</span><span className="text-fg-2">{accrued}</span></p>
+          <p className="flex justify-between gap-2"><span className="text-fg">Earned</span><span className="text-fg-2">{accrued}</span></p>
           {position.claimed !== null ? (
-            <p className="mt-2 text-fg-3">Claimed {formatMonkey(position.claimed)} of {accrued} accrued.</p>
+            <p className="mt-2 text-fg-3">You&apos;ve claimed {formatMonkey(position.claimed)} of {accrued} earned.</p>
           ) : state.wallet.readOnly === true ? (
             // The console reads the chain only through a connected wallet, and a watched account has none (#288).
-            <p className="mt-2 text-fg-3">What the vault has minted to this account is read through a connected wallet, so it does not show for a watched account.</p>
+            <p className="mt-2 text-fg-3">How much has been claimed shows only with a connected wallet, so it isn&apos;t shown for a read-only account.</p>
           ) : (
             // One status line that changes its words, so a failure is announced.
             <p role="status" className={`mt-2 ${recordProblem === null ? "text-fg-3" : "text-amber"}`}>
-              {recordProblem === null ? "Reading the vault's record of what it has minted…" : `Could not read the vault's record of what it has minted: ${recordProblem}. It is read again by itself.`}
+              {recordProblem === null ? "Checking how much you've claimed…" : `Couldn't check how much you've claimed: ${recordProblem}. Trying again automatically.`}
             </p>
           )}
           {recordPending && buttonSlot}
           {position.claimable > 0n && (
             <>
-              <button type="button" aria-disabled={!idle || gate.blocked} aria-describedby={readOnly.describedBy ?? gate.describedBy} onClick={() => !gate.blocked && act()} className={BUTTON}>Claim {formatMonkey(position.claimable)} on the vault</button>
+              <button type="button" aria-disabled={!idle || gate.blocked} aria-describedby={readOnly.describedBy ?? gate.describedBy} onClick={() => !gate.blocked && act()} className={BUTTON}>Claim {formatMonkey(position.claimable)}</button>
               {/* A read-only account's own note above already says why. */}
               {!readOnly.readOnly && gate.note}
             </>
           )}
           {position.awaiting > 0n && (
-            <p className="mt-2 text-fg-3">{formatMonkey(position.awaiting)} of this is not claimable yet; the rest follows once the vault reaches the newest checkpoint.</p>
+            <p className="mt-2 text-fg-3">{formatMonkey(position.awaiting)} of this can be claimed after the vault&apos;s next update.</p>
           )}
           {position.claimed !== null && position.checkpoint === "waiting" && position.accrued > position.claimed && (
-            <p className="mt-2 text-fg-3">The vault has not accepted a checkpoint covering this yet; the claim unlocks once it does. It is checked again by itself.</p>
+            <p className="mt-2 text-fg-3">You can claim this after the vault&apos;s next update. This page checks automatically.</p>
           )}
           {position.claimed !== null && position.checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && (
-            <p className="mt-2 text-fg-3">All accrued MONKEY is claimed.</p>
+            <p className="mt-2 text-fg-3">You&apos;ve claimed all the MONKEY you&apos;ve earned.</p>
           )}
         </div>
       )}

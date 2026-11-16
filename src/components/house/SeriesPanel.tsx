@@ -41,9 +41,9 @@ export interface LineSpec {
 }
 
 /** What the footnote says of a sampled line. The answers carry the time of the last scan but not how often the node scans, so it says periodic. */
-const ALL = `All covers the most recent ${groupThousands(ALL_WINDOW_DAYS)} days, the most one read holds at daily buckets.`;
+const ALL = `"All" shows up to the last ${groupThousands(ALL_WINDOW_DAYS)} days.`;
 
-const SAMPLED = "These figures are the node's periodic scan of every account, so a position opened and closed between two scans does not show.";
+const SAMPLED = "These figures come from regular snapshots of all accounts, so a position opened and closed between two snapshots doesn't show.";
 
 interface Props {
   title: string;
@@ -108,18 +108,18 @@ function SeriesPanelView({ title, tip, lines, markets, range: driven, currents, 
         })}
       </p>
       {unavailable ? (
-        <Quiet>This node does not serve its history yet, so there is no chart. It appears once the node is updated.</Quiet>
+        <Quiet>History isn&apos;t available from this server yet, so there&apos;s no chart.</Quiet>
       ) : (
         <>
           <div className="relative flex min-h-52 flex-1 flex-col">
             <Chart series={plotted} nonNegative={nonNegative} floor={floor} format={formatCompactUsd} label={`${title} chart, ${RANGES.find((r) => r.id === range)?.label ?? range}`} />
-            <DataTable summary={`${title} as a table`} caption={`The latest ${rows.length} buckets of ${title}, newest first`} columns={["Time (UTC)", ...lines.map((line) => line.label)]} rows={rows} />
+            <DataTable summary={`${title} as a table`} caption={`The latest ${rows.length} points of ${title}, newest first`} columns={["Time (UTC)", ...lines.map((line) => line.label)]} rows={rows} />
           </div>
           {reading ? (
             // The loaded footnote's sentences, unseen, hold its wrapped height while the first read runs.
             <p className="relative text-label text-fg-3">
               <span aria-hidden="true" className="invisible">{[heldBeginsText(formatStamp), range === "all" ? ALL : null, sampled ? SAMPLED : null, note].filter((part) => part !== null).join(" ")}</span>
-              <span className="absolute inset-x-0 top-0">Reading the node&apos;s signed history…</span>
+              <span className="absolute inset-x-0 top-0">Loading history…</span>
             </p>
           ) : (
             <p className="text-label text-fg-3">

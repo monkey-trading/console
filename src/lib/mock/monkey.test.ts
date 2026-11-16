@@ -66,7 +66,7 @@ describe("staking in the mock", () => {
     expect(BigInt(overview(state).staking?.total_staked ?? "0")).toBe(staked);
     // Tokens in their cooldown have left the wallet and are not back yet.
     expect(walletBalance(state, ME)).toBe(600n * MONKEY_UNIT);
-    expect(() => completeUnstake(state, ME)).toThrow("cooldown has not passed");
+    expect(() => completeUnstake(state, ME)).toThrow("waiting period isn't over");
     state.now += COOLDOWN_MS;
     const counted = BigInt(overview(state).staking?.total_staked ?? "0");
     completeUnstake(state, ME);
@@ -78,7 +78,7 @@ describe("staking in the mock", () => {
   it("refuses to unstake more than is staked", () => {
     const state = node();
     stake(state, ME, 10n * MONKEY_UNIT);
-    expect(() => startUnstake(state, ME, 11n * MONKEY_UNIT)).toThrow("not staked that much");
+    expect(() => startUnstake(state, ME, 11n * MONKEY_UNIT)).toThrow("haven't staked that much");
   });
 });
 

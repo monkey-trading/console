@@ -81,7 +81,7 @@ describe("the simulated registry", () => {
     expect(controls.stakeDelegations(ME)).toMatchObject({ delegated: 1n, delegations: [{ candidate: "0x00000000000000000000000000000000000000ff", amount: 1n }] });
     controls.moveDelegation(ME, "0x00000000000000000000000000000000000000ff", null, 1n);
     controls.moveDelegation(ME, null, alpha, 5n);
-    expect(() => controls.moveDelegation(ME, alpha, alpha, 1n)).toThrow("another candidate");
+    expect(() => controls.moveDelegation(ME, alpha, alpha, 1n)).toThrow("to the same candidate");
   });
 
   it("forgets a reset account's delegations", () => {

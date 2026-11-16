@@ -175,7 +175,7 @@ describe("claimEmissions", () => {
     client.emissions = original;
     client.entitlement = null;
     await claimEmissions(store);
-    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "The node holds no entitlement proof for this account right now." });
+    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "There's no MONKEY to claim for this account right now." });
   });
 
   it("refuses a claim without a wallet or with a proof for another account, and sends nothing", async () => {
@@ -189,7 +189,7 @@ describe("claimEmissions", () => {
     other.client.entitlement = { ...proof(5n * MONKEY_UNIT), account: "0x00000000000000000000000000000000000000aa" };
     other.provider.vault.latestSeq = 40;
     await claimEmissions(other.store);
-    expect(other.store.getSnapshot().notices.emissions).toMatchObject({ tone: "error", text: "The entitlement proof is for another account." });
+    expect(other.store.getSnapshot().notices.emissions).toMatchObject({ tone: "error", text: "This MONKEY is for another account." });
     expect(other.provider.sent).toHaveLength(0);
   });
 

@@ -13,11 +13,11 @@ export function RecentTable({ title, lines, data, format }: { title: string; lin
   const rows = first.slice(-ROWS).reverse();
   return (
     <details className="sr-only focus-within:not-sr-only focus-within:mt-2 focus-within:block focus-within:max-h-56 focus-within:overflow-auto focus-within:rounded focus-within:border focus-within:border-line-2 focus-within:bg-ink-2 focus-within:p-2 focus-within:text-label">
-      <summary className="text-fg-2">{title}: latest buckets as a table</summary>
+      <summary className="text-fg-2">{title}: latest figures as a table</summary>
       <table>
-        <caption className="sr-only">The latest {rows.length} buckets of {title}, newest first. Times are UTC.</caption>
+        <caption className="sr-only">The latest {rows.length} points of {title}, newest first. Times are UTC.</caption>
         <thead>
-          <tr><th scope="col">Bucket start (UTC)</th>{lines.map((line) => <th key={line.metric} scope="col">{line.label}</th>)}</tr>
+          <tr><th scope="col">Time (UTC)</th>{lines.map((line) => <th key={line.metric} scope="col">{line.label}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map((row) => (

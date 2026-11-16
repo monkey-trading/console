@@ -71,7 +71,7 @@ function Name({ row, cells, reachable }: { row: OperatorRow; cells: OperatorCell
     <>
       <span className={`block break-all ${row.hostname === null ? "text-fg-3" : "text-fg"}`}>{cells.name}</span>
       <span className="block text-label text-fg-3" title={row.address}>{cells.address}</span>
-      {row.listed && !reachable && <span className="mt-1 block text-label text-amber">Not in this build</span>}
+      {row.listed && !reachable && <span className="mt-1 block text-label text-amber">Needs an app update</span>}
     </>
   );
 }
@@ -141,12 +141,12 @@ export function OperatorTable(props: Props) {
               </div>
               <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-fg-2">
                 <div><dt className="text-label text-fg-3">Delegated stake</dt><dd>{cells.delegated}</dd></div>
-                <div><dt className="text-label text-fg-3">Self-bond</dt><dd>{cells.bond}</dd></div>
-                <div><dt className="text-label text-fg-3">Rotation set</dt><dd>{cells.membership}</dd></div>
-                <div><dt className="text-label text-fg-3">Set weight</dt><dd>{cells.setWeight}</dd></div>
+                <div><dt className="text-label text-fg-3">Own stake</dt><dd>{cells.bond}</dd></div>
+                <div><dt className="text-label text-fg-3">In rotation</dt><dd>{cells.membership}</dd></div>
+                <div><dt className="text-label text-fg-3">Rotation weight</dt><dd>{cells.setWeight}</dd></div>
                 <div><dt className="text-label text-fg-3">Share of turns</dt><dd>{cells.turnShare}</dd></div>
                 <div><dt className="text-label text-fg-3">Release</dt><dd title={row.release}>{cells.release}</dd></div>
-                <div className="col-span-2"><dt className="text-label text-fg-3">Handover endpoint</dt><dd className="[overflow-wrap:anywhere]">{cells.endpoint}</dd></div>
+                <div className="col-span-2"><dt className="text-label text-fg-3">Handover address</dt><dd className="[overflow-wrap:anywhere]">{cells.endpoint}</dd></div>
                 <div><dt className="text-label text-fg-3">Yours</dt><dd className={mine > 0n ? "text-glow" : ""}>{mine > 0n ? formatMonkey(mine) : "—"}</dd></div>
               </dl>
               <Actions {...props} row={row} label={props.nameOf(row.address)} editorId={editorId} />
@@ -157,18 +157,18 @@ export function OperatorTable(props: Props) {
       </ul>
       <div role="region" aria-label="Operators table" tabIndex={0} className="hidden overflow-x-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow lg:block">
         <table className="w-full min-w-[80rem] text-caption">
-          <caption className="sr-only">Operators the registry lists, with each one&apos;s role, delegated stake and share of all stake, self-bond, whether it is in the rotation set with its weight there and the share of turns the weight draws, release and handover endpoint, and what you delegate to it. Amounts are in MONKEY.</caption>
+          <caption className="sr-only">Listed operators, with each one&apos;s role, delegated stake and share of all stake, own stake, whether it&apos;s in the rotation with its weight and share of turns there, release, handover address, and what you&apos;ve delegated to it. Amounts are in MONKEY.</caption>
           <thead>
             <tr className="border-b border-line">
               <th scope="col" aria-sort={ariaSort("name", sort)} className={TH}>Operator</th>
               <th scope="col" aria-sort={ariaSort("role", sort)} className={TH}>Role</th>
               <th scope="col" aria-sort={ariaSort("votes", sort)} className={TH}>Delegated stake</th>
-              <th scope="col" aria-sort={ariaSort("bond", sort)} className={TH}>Self-bond</th>
-              <th scope="col" className={TH}>Rotation set</th>
-              <th scope="col" className={TH}>Set weight</th>
+              <th scope="col" aria-sort={ariaSort("bond", sort)} className={TH}>Own stake</th>
+              <th scope="col" className={TH}>In rotation</th>
+              <th scope="col" className={TH}>Rotation weight</th>
               <th scope="col" aria-sort={ariaSort("turns", sort)} className={TH}>Share of turns</th>
               <th scope="col" className={TH}>Release</th>
-              <th scope="col" className={TH}>Handover endpoint</th>
+              <th scope="col" className={TH}>Handover address</th>
               <th scope="col" className={TH}>Yours</th>
               <th scope="col" className={TH}><span className="sr-only">Delegate, move and take back</span></th>
             </tr>

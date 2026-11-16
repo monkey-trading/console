@@ -148,7 +148,7 @@ describe("OperatorReads", () => {
     expect(operators.getSnapshot().list).toEqual({ status: "failed", value: held, message: "the operator list is stale: the last read is too old" });
     node.client.stats.operators = async (): Promise<OperatorList> => ({ ...(await listRead()), total_staked: "lots" });
     await operators.refresh();
-    expect(operators.getSnapshot().list).toMatchObject({ status: "failed", value: held, message: "The operator list named a total stake that is not a whole amount." });
+    expect(operators.getSnapshot().list).toMatchObject({ status: "failed", value: held, message: "The server's operator list has a total stake that isn't a whole amount." });
     stop();
   });
 

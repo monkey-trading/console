@@ -14,7 +14,7 @@ export function Reassignments({ records, empty, nameOf }: { records: readonly Tu
   return (
     <Card id="rotation-moves-title" title="Skips and promotions">
       <TurnRecords records={moved} caption="Turns reassigned by a skip or a promotion, or refused, newest first." empty={empty} nameOf={nameOf} />
-      <p className={NOTE}>A skip names the next member in the turn&apos;s order when the one before it did not take the turn in time. A promotion moves the turn from a failed member by the liveness rule. A refused assignment changes nothing: the key in effect stays.</p>
+      <p className={NOTE}>A skip passes the turn to the next operator in line when the one before didn&apos;t start it in time. A promotion hands the turn to a backup when an operator stops responding. A refused turn changes nothing, and the current operator carries on.</p>
     </Card>
   );
 }

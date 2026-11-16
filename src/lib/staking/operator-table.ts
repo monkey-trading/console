@@ -77,8 +77,8 @@ export const SORTS: readonly { value: SortId; label: string; column: SortColumn;
   { value: "role", label: "Role, then delegated stake", column: "role", direction: "other" },
   { value: "votes-desc", label: "Delegated stake, most first", column: "votes", direction: "descending" },
   { value: "votes-asc", label: "Delegated stake, least first", column: "votes", direction: "ascending" },
-  { value: "bond-desc", label: "Self-bond, most first", column: "bond", direction: "descending" },
-  { value: "bond-asc", label: "Self-bond, least first", column: "bond", direction: "ascending" },
+  { value: "bond-desc", label: "Own stake, most first", column: "bond", direction: "descending" },
+  { value: "bond-asc", label: "Own stake, least first", column: "bond", direction: "ascending" },
   { value: "turns-desc", label: "Share of turns, most first", column: "turns", direction: "descending" },
   { value: "turns-asc", label: "Share of turns, least first", column: "turns", direction: "ascending" },
   { value: "name-asc", label: "Hostname, A to Z", column: "name", direction: "ascending" },
@@ -105,7 +105,7 @@ const UNITS = /^\d+$/;
  * - it is not one
  */
 function units(text: string, what: string): bigint {
-  if (!UNITS.test(text)) throw new Error(`The operator list named ${what} that is not a whole amount.`);
+  if (!UNITS.test(text)) throw new Error(`The server's operator list has ${what} that isn't a whole amount.`);
   return BigInt(text);
 }
 
@@ -115,7 +115,7 @@ function units(text: string, what: string): bigint {
  * - it is not one
  */
 function address(text: string): string {
-  if (!ADDRESS.test(text)) throw new Error("The operator list named an address that is not one.");
+  if (!ADDRESS.test(text)) throw new Error("The server's operator list has an invalid address.");
   return text.toLowerCase();
 }
 
@@ -141,7 +141,7 @@ function standbyOf(rows: readonly OperatorRow[], inEffect: string, open: boolean
  * - an amount or address is malformed, or the list names more candidates than the registry holds
  */
 export function operatorsView(list: OperatorList): OperatorsView {
-  if (list.candidates.length > CANDIDATE_LIMIT) throw new Error("The operator list named more candidates than the registry can hold.");
+  if (list.candidates.length > CANDIDATE_LIMIT) throw new Error("The server's operator list has more candidates than allowed.");
   const totalStaked = units(list.total_staked, "a total stake");
   const inEffect = address(list.operator_in_effect.candidate);
   const election = list.pending_election;
@@ -171,7 +171,7 @@ export function operatorsView(list: OperatorList): OperatorsView {
   try {
     proposals = list.proposals === undefined ? null : proposalsView(list.proposals);
   } catch (error) {
-    proposalsProblem = error instanceof Error ? error.message : "The operator list named malformed open proposals.";
+    proposalsProblem = error instanceof Error ? error.message : "The server sent invalid open proposals.";
   }
   return { block: { number: list.block.number, hash: list.block.hash, timeMs: list.block.time_ms }, rotationEnabled: list.rotation_enabled, totalStaked, inEffect, pending, rows, proposals, proposalsProblem };
 }
@@ -267,7 +267,7 @@ export function countText(view: TableView, search: string): string {
   const last = first + view.rows.length - 1;
   const range = first === last ? `${first}` : `${first}–${last}`;
   if (search.slice(0, MAX_SEARCH).trim() === "") return view.total === 0 ? "No operators." : `Showing ${range} of ${view.total} ${noun}.`;
-  if (view.matched === 0) return "No operator matches.";
+  if (view.matched === 0) return "No operators match.";
   return `${view.matched} of ${view.total} ${noun} ${view.matched === 1 ? "matches" : "match"}; showing ${range}.`;
 }
 

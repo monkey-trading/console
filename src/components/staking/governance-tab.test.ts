@@ -65,7 +65,7 @@ describe("VoteControl", () => {
   it("offers no vote once voting has closed, and says so while rotation is off", () => {
     expect(vote({ closesAtMs: NOW })).not.toContain("<button");
     const off = vote({ rotationOn: false });
-    expect(off).toContain("The vote contract takes no votes while operator rotation is off.");
+    expect(off).toContain("Voting is closed while rotation is off.");
     expect(off).not.toContain("<button");
   });
 
@@ -77,9 +77,9 @@ describe("VoteControl", () => {
 
 const item = (over: Partial<ProposalItemProps> = {}) => {
   const props: ProposalItemProps = {
-    id: 5, headingId: "proposal-waiting-5", fast: false, stage: "waiting", title: "New protocol parameters", details: ["Close-out level 55.00% (now 50.00%)"],
+    id: 5, headingId: "proposal-waiting-5", fast: false, stage: "waiting", title: "New trading terms", details: ["Close-out level 55.00% (now 50.00%)"],
     tally: { yes: 800n * MONKEY_UNIT, total: 1_000n * MONKEY_UNIT }, command: { action: "set_params", closeout_level_bps: 5500 },
-    wait: { label: "Applies", atMs: NOW + 7 * DAY - 60_000, reached: "Applying with the node's next command", onReached: () => undefined },
+    wait: { label: "Takes effect", atMs: NOW + 7 * DAY - 60_000, reached: "Taking effect now", onReached: () => undefined },
     members: [{ address: "0xa1", label: "alpha.example", standing: "yes" }, { address: "0xb2", label: "bravo.example", standing: "no" }], ...over,
   };
   return renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Section, null, createElement(ProposalItem, props))));
@@ -88,29 +88,29 @@ const item = (over: Partial<ProposalItemProps> = {}) => {
 describe("ProposalItem", () => {
   it("counts down to its next step in days, with a spoken label, and holds its place at zero until the node moves it on", () => {
     const html = item();
-    expect(html).toContain("Applies in 6d 23h 59m");
-    expect(html).toContain('aria-label="Applies in 6 days 23 hours"');
-    const reached = item({ wait: { label: "Applies", atMs: NOW, reached: "Applying with the node's next command", onReached: () => undefined } });
-    expect(reached).toContain("Applying with the node&#x27;s next command");
-    expect(reached).not.toContain("Applies in");
+    expect(html).toContain("Takes effect in 6d 23h 59m");
+    expect(html).toContain('aria-label="Takes effect in 6 days 23 hours"');
+    const reached = item({ wait: { label: "Takes effect", atMs: NOW, reached: "Taking effect now", onReached: () => undefined } });
+    expect(reached).toContain("Taking effect now");
+    expect(reached).not.toContain("Takes effect in");
   });
 
   it("shows its number and path, what it does, its tally, how the members voted, and the command as proposed", () => {
     const html = item();
-    expect(html).toContain("Proposal 5 · normal path");
+    expect(html).toContain("Proposal 5 · standard change");
     expect(html).toContain('id="proposal-waiting-5"');
     expect(html).toContain("Close-out level 55.00% (now 50.00%)");
     expect(html).toContain("Yes 800 MONKEY of 1,000 MONKEY (80.00%): more than two thirds, so it passed.");
     expect(html).toContain("alpha.example</span> voted yes");
     expect(html).toContain("bravo.example</span> did not vote");
-    expect(html).toContain("The command as proposed");
+    expect(html).toContain("Full proposal");
     expect(html).toContain("&quot;closeout_level_bps&quot;: 5500");
   });
 
   it("says a passed proposal passed when its tally is not read, and leaves out the members it cannot read", () => {
     const html = item({ tally: null, members: null, command: null });
-    expect(html).toContain("Passed with more than two thirds of its set&#x27;s weight.");
-    expect(html).not.toContain("Members you delegate to");
-    expect(html).not.toContain("The command as proposed");
+    expect(html).toContain("Passed with more than two thirds of the vote.");
+    expect(html).not.toContain("Operators you delegate to");
+    expect(html).not.toContain("Full proposal");
   });
 });

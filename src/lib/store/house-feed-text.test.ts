@@ -14,12 +14,12 @@ describe("feedProblem", () => {
   });
 
   it("says a feed that never answered has nothing to show, with the reason", () => {
-    expect(feedProblem(state({ status: "failed", data: null, error: "the node stalled" }), "positions")).toBe("The node did not answer for positions (the node stalled), so there is nothing to show yet. The page keeps asking.");
+    expect(feedProblem(state({ status: "failed", data: null, error: "the node stalled" }), "positions")).toBe("Couldn't load positions: the node stalled. Trying again automatically.");
   });
 
   it("says retained figures may be behind after a failed read, or are the last answered once the node stops serving them", () => {
-    expect(feedProblem(state({ stale: true, error: "x" }), "MONKEY totals")).toBe("The last read of MONKEY totals failed, so this may be behind.");
-    expect(feedProblem(state({ status: "unavailable", stale: true }), "MONKEY totals")).toBe("The node has stopped serving MONKEY totals, so this is the last it answered.");
-    expect(feedProblem(state({ status: "waiting", stale: true }), "positions")).toBe("The node is rescanning, so this is the last it answered for positions.");
+    expect(feedProblem(state({ stale: true, error: "x" }), "MONKEY totals")).toBe("Couldn't refresh MONKEY totals, so this may be out of date.");
+    expect(feedProblem(state({ status: "unavailable", stale: true }), "MONKEY totals")).toBe("The server has stopped sending MONKEY totals, so this may be out of date.");
+    expect(feedProblem(state({ status: "waiting", stale: true }), "positions")).toBe("The server is updating positions, so this may be out of date.");
   });
 });

@@ -41,8 +41,8 @@ export function CountdownView({ label, target, now }: { label: string; target: n
 /** The countdown's place while the close it counted to waits for the checkpoint that carries the next answer. */
 export function AwaitingCheckpoint({ label }: { label: string }) {
   return (
-    <span role="timer" aria-label={`${label}: waiting for the checkpoint`} className="ml-auto text-label whitespace-nowrap text-fg-3 tabular-nums">
-      Waiting for the checkpoint
+    <span role="timer" aria-label={`${label}: updating`} className="ml-auto text-label whitespace-nowrap text-fg-3 tabular-nums">
+      Updating…
     </span>
   );
 }
@@ -50,11 +50,11 @@ export function AwaitingCheckpoint({ label }: { label: string }) {
 /** The next ten-minute budget, from the last `/v1/monkey` answer; hidden until there is one with an emission schedule. */
 export function BudgetCountdown() {
   const emissions = usePanelState().overview.value?.emissions ?? null;
-  return <Countdown label="Next budget" awaiting={(now) => budgetAwaitingCheckpoint(emissions, now)} at={(now) => nextBudgetMs(emissions, now)} />;
+  return <Countdown label="Next reward period" awaiting={(now) => budgetAwaitingCheckpoint(emissions, now)} at={(now) => nextBudgetMs(emissions, now)} />;
 }
 
 /** The next epoch close, from the last `/v1/monkey` answer; hidden until there is one with a distribution. */
 export function CloseCountdown() {
   const distribution = usePanelState().overview.value?.distribution ?? null;
-  return <Countdown label="Next epoch close" awaiting={(now) => closeAwaitingCheckpoint(distribution, now)} at={(now) => nextCloseMs(distribution, now)} />;
+  return <Countdown label="Next distribution" awaiting={(now) => closeAwaitingCheckpoint(distribution, now)} at={(now) => nextCloseMs(distribution, now)} />;
 }

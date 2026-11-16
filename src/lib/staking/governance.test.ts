@@ -37,12 +37,12 @@ describe("proposalsView", () => {
       { yes_weight: "4e2" }, { total_weight: "-1" }, { closes_at_ms: 1_000 }, { opens_at_ms: -1 }, { set_id: 1.5 }, { proposer: "0x12" },
       { command_hash: "0xab" }, { command: { level: 2 } as unknown as OpenProposalWire["command"] },
     ];
-    for (const over of bad) expect(() => proposalsView(wire([open(1, over)]))).toThrow("malformed open proposal 1");
-    expect(() => proposalsView({ ...wire([]), vote: "vote" })).toThrow("not an address");
+    for (const over of bad) expect(() => proposalsView(wire([open(1, over)]))).toThrow("invalid proposal 1");
+    expect(() => proposalsView({ ...wire([]), vote: "vote" })).toThrow("invalid voting contract address");
   });
 
   it("refuses more yes weight than the set holds, and takes all of it", () => {
-    expect(() => proposalsView(wire([open(2, { yes_weight: "901" })]))).toThrow("more yes weight than its set holds");
+    expect(() => proposalsView(wire([open(2, { yes_weight: "901" })]))).toThrow("more yes votes than possible");
     expect(proposalsView(wire([open(2, { yes_weight: "900" })])).open[0]?.tally).toEqual({ yes: 900n, total: 900n });
   });
 });
@@ -80,9 +80,9 @@ describe("governanceView", () => {
   });
 
   it("refuses a malformed vote contract, change or restriction", () => {
-    expect(() => governanceView({ config: { vote: "nope", restriction_ttl_ms: 1 } })).toThrow("malformed vote contract");
-    expect(() => governanceView({ pending: [{ proposal: 1, command: { action: "x" }, applies_at: -5 }] })).toThrow("malformed waiting change");
-    expect(() => governanceView({ restrictions: { x: { limit: { kind: "reduce_only", market: null }, command_hash: HASH, expires_at: 1 } } })).toThrow("malformed restriction");
+    expect(() => governanceView({ config: { vote: "nope", restriction_ttl_ms: 1 } })).toThrow("invalid voting settings");
+    expect(() => governanceView({ pending: [{ proposal: 1, command: { action: "x" }, applies_at: -5 }] })).toThrow("invalid passed change");
+    expect(() => governanceView({ restrictions: { x: { limit: { kind: "reduce_only", market: null }, command_hash: HASH, expires_at: 1 } } })).toThrow("invalid fast change");
   });
 });
 

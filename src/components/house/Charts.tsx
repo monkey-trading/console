@@ -16,12 +16,12 @@ import { SeriesPanel, type LineSpec } from "./SeriesPanel";
 import { useFeed, useSelected } from "./use-feed";
 import { useMarketOptions } from "./use-markets";
 
-const NAV_LINES: readonly LineSpec[] = [{ id: "nav", metric: "nav", label: "NAV", tip: "The house's net asset value now: its cash less its clients' unrealised profit.", tone: "glow", area: true }];
+const NAV_LINES: readonly LineSpec[] = [{ id: "nav", metric: "nav", label: "House value", tip: "This is what the house is worth now: its cash plus its profit or loss on traders' open positions.", tone: "glow", area: true }];
 const EXPOSURE_LINES: readonly LineSpec[] = [
-  { id: "long", metric: "long", label: "Long", tip: "Clients' long notional in this market: positions that gain when the price rises, so the house loses.", tone: "glow", nonNegative: true, sampled: true },
-  { id: "short", metric: "short", label: "Short", tip: "Clients' short notional in this market: positions that gain when the price falls.", tone: "ember", nonNegative: true, sampled: true },
+  { id: "long", metric: "long", label: "Long", tip: "This is the total size of traders' long positions in this market. They profit when the price rises, and the house loses.", tone: "glow", nonNegative: true, sampled: true },
+  { id: "short", metric: "short", label: "Short", tip: "This is the total size of traders' short positions in this market. They profit when the price falls.", tone: "ember", nonNegative: true, sampled: true },
 ];
-const QUEUE_LINES: readonly LineSpec[] = [{ id: "queue", metric: "withdrawal_queue", label: "Queued", tip: "What the withdrawal queue still owes now.", tone: "amber", area: true, nonNegative: true }];
+const QUEUE_LINES: readonly LineSpec[] = [{ id: "queue", metric: "withdrawal_queue", label: "Queued", tip: "This is what's still owed to traders in the withdrawal queue.", tone: "amber", area: true, nonNegative: true }];
 
 const selectNav = (s: ConsoleState) => ({ nav: fixedToNumber(s.house.nav) });
 // The headline is the walked total only while the walk was complete, steady and its last read succeeded; otherwise the chart's own last bucket stands in.
@@ -39,11 +39,11 @@ export function NavChart({ range, className, floor, pending }: { range?: RangeId
   const monkey = useFeed(useMemo(() => (readHere ? monkeyFeed(store) : null), [readHere, store]));
   const floorText = readHere ? monkey.data?.distribution?.liquidity_floor : undefined;
   const value = readHere ? (floorText === undefined ? null : fixedToNumber(fixedFromWire(floorText))) : floor.value;
-  const note = readHere ? feedProblem(monkey, "the liquidity floor") : floor.note;
+  const note = readHere ? feedProblem(monkey, "the reserve") : floor.note;
   return (
     <SeriesPanel
-      title="NAV"
-      tip="The house's net asset value: its cash less its clients' unrealised profit at current marks. Where the node reports one, the shaded area is below the liquidity floor, under which no staker distribution is paid."
+      title="House value"
+      tip="This is what the house is worth: its cash plus its profit or loss on traders' open positions at current prices. The shaded area is below the reserve, and stakers are paid only from value above it."
       lines={NAV_LINES}
       markets={null}
       range={range}
@@ -62,7 +62,7 @@ export function ExposureChart({ range, className, pending }: { range?: RangeId; 
   return (
     <SeriesPanel
       title="House exposure"
-      tip="What the house's clients hold in the market, long and short, in dollars of notional. The house takes the other side of both."
+      tip="This is the total size of traders' long and short positions in this market, in dollars. The house takes the other side of both."
       lines={EXPOSURE_LINES}
       markets={markets}
       range={range}
@@ -82,8 +82,8 @@ export function QueueChart({ range, className, walked = true, pending }: { range
   const totals = useSelected(selectQueue);
   return (
     <SeriesPanel
-      title="Queue total"
-      tip="The dollars waiting in the first-in first-out withdrawal queue: requests the vault could not pay yet."
+      title="Withdrawal queue"
+      tip="This is the total waiting in the withdrawal queue: requests that couldn't be paid straight away."
       lines={QUEUE_LINES}
       markets={null}
       range={range}

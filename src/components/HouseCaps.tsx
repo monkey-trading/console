@@ -14,11 +14,11 @@ const FLOOR_NONE = "None";
 
 /** What each column means, shared by the table's heads and the stacked labels so the two cannot drift. */
 const TIPS = {
-  share: "The share of the house's NAV that caps its net exposure in the market.",
-  floor: "The least the market's cap may be, in dollars, whatever NAV is.",
-  cap: "The larger of the share of NAV and the floor, at the current NAV: the most net exposure the house takes in the market.",
-  exposure: "The house's net notional in the market at the node's last scan: clients' long less short.",
-  used: "Net exposure as a share of the cap.",
+  share: "This is the share of the house value that sets the market's limit.",
+  floor: "This is the lowest the market's limit can be, in dollars, whatever the house value.",
+  cap: "This is the most net exposure the house takes in the market: the share of the house value, or the minimum if that's higher.",
+  exposure: "This is the house's net exposure in the market as of the last update: traders' longs minus their shorts.",
+  used: "This is net exposure as a share of the limit.",
 } as const;
 
 /** One market's cap terms and, from the node's scan, the house's net exposure in it. */
@@ -47,7 +47,7 @@ export function HouseCaps({ rows, nav }: { rows: readonly CapRow[]; nav: Fixed }
     const used = row.net === null ? null : utilBps(absFixed(row.net), cap);
     return { id: row.id, symbol: row.symbol, share: formatRate(row.bps), floor: row.floor === undefined ? FLOOR_NONE : formatUsd(floor), cap: formatUsd(cap), exposure: row.net === null ? "—" : formatUsd(absFixed(row.net)), used: used === null ? "—" : formatRate(used) };
   });
-  const caption = "Each market's house exposure cap: its share of the house's net asset value, its dollar floor, the cap those give at the current net asset value, and the house's net exposure against it.";
+  const caption = "Each market's exposure limit: its share of the house value, its dollar minimum, the limit those give at the current house value, and the house's net exposure against it.";
   return (
     <>
       <div className="hidden sm:block">
@@ -56,9 +56,9 @@ export function HouseCaps({ rows, nav }: { rows: readonly CapRow[]; nav: Fixed }
           <thead>
             <tr className="border-b border-line">
               <th scope="col" className={`${HEAD} py-1 pr-3 font-normal`}>Market</th>
-              <th scope="col" className={`${HEAD} py-1 pr-3 text-right font-normal`}><Term label="Share of NAV" tip={TIPS.share} /></th>
-              <th scope="col" className={`${HEAD} py-1 pr-3 text-right font-normal`}><Term label="Floor" tip={TIPS.floor} /></th>
-              <th scope="col" className={`${HEAD} py-1 pr-3 text-right font-normal`}><Term label="Cap" tip={TIPS.cap} /></th>
+              <th scope="col" className={`${HEAD} py-1 pr-3 text-right font-normal`}><Term label="Share of house value" tip={TIPS.share} /></th>
+              <th scope="col" className={`${HEAD} py-1 pr-3 text-right font-normal`}><Term label="Minimum" tip={TIPS.floor} /></th>
+              <th scope="col" className={`${HEAD} py-1 pr-3 text-right font-normal`}><Term label="Limit" tip={TIPS.cap} /></th>
               <th scope="col" className={`${HEAD} py-1 pr-3 text-right font-normal`}><Term label="Net exposure" tip={TIPS.exposure} /></th>
               <th scope="col" className={`${HEAD} py-1 text-right font-normal`}><Term label="Used" tip={TIPS.used} /></th>
             </tr>
@@ -83,9 +83,9 @@ export function HouseCaps({ rows, nav }: { rows: readonly CapRow[]; nav: Fixed }
           {figures.map((r) => (
             <div key={r.id} className="space-y-0.5 border-b border-line pb-2">
               <dt className={`${HEAD} font-normal`}>{r.symbol}</dt>
-              <dd className={CELL}><Term label="Share of NAV" tip={TIPS.share} />: {r.share}</dd>
-              <dd className={CELL}><Term label="Floor" tip={TIPS.floor} />: {r.floor}</dd>
-              <dd className={CELL}><Term label="Cap" tip={TIPS.cap} />: {r.cap}</dd>
+              <dd className={CELL}><Term label="Share of house value" tip={TIPS.share} />: {r.share}</dd>
+              <dd className={CELL}><Term label="Minimum" tip={TIPS.floor} />: {r.floor}</dd>
+              <dd className={CELL}><Term label="Limit" tip={TIPS.cap} />: {r.cap}</dd>
               <dd className={CELL}><Term label="Net exposure" tip={TIPS.exposure} />: {r.exposure} (<Term label="used" tip={TIPS.used} />: {r.used})</dd>
             </div>
           ))}

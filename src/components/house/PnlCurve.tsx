@@ -57,16 +57,16 @@ export function PnlCurve({ className }: { className?: string }) {
   return (
     <Panel
       title="House P&L at ±1%"
-      tip="The house's result if the index moved 1% either way from now, before any close-out. A straight line from the market's net client exposure: when clients are net long the house loses on a rise."
+      tip="This is the house's profit or loss if the price moved up to 1% either way, before any positions are closed out. When traders are net long, the house loses if the price rises."
       className={className}
       controls={<Pick label="House P&L market" value={market ?? 0} options={markets.map((m) => ({ value: m.id, label: m.label }))} onChange={setPicked} />}
     >
       {curve === null || first === undefined || last === undefined ? (
-        <Quiet>The node has not reported this market&apos;s net exposure yet.</Quiet>
+        <Quiet>This market&apos;s net exposure isn&apos;t available yet.</Quiet>
       ) : (
         <>
           <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-labelledby={`${id}-t`} className="h-auto w-full">
-            <title id={`${id}-t`}>{`House result for a price move from -1% to +1%: ${formatCompactUsd(first.usd)} at -1%, ${formatCompactUsd(last.usd)} at +1%, before close-outs`}</title>
+            <title id={`${id}-t`}>{`House profit or loss for a price move from -1% to +1%: ${formatCompactUsd(first.usd)} at -1%, ${formatCompactUsd(last.usd)} at +1%, before close-outs`}</title>
             <clipPath id={`${id}-up`}><rect x="0" y="0" width={W} height={H / 2} /></clipPath>
             <clipPath id={`${id}-down`}><rect x="0" y={H / 2} width={W} height={H / 2} /></clipPath>
             <path d={`${path} L${x(RANGE_BPS)} ${H / 2} L${x(-RANGE_BPS)} ${H / 2} Z`} clipPath={`url(#${id}-up)`} className="fill-glow/20" />
@@ -84,7 +84,7 @@ export function PnlCurve({ className }: { className?: string }) {
             <span className={`min-w-0 [overflow-wrap:anywhere] ${first.usd < 0 ? "text-ember" : "text-glow"}`}>{formatCompactUsd(first.usd)}</span>
             <span className={`min-w-0 text-right [overflow-wrap:anywhere] ${last.usd < 0 ? "text-ember" : "text-glow"}`}>{formatCompactUsd(last.usd)}</span>
           </p>
-          <p className="text-label text-fg-3">A straight line from net exposure, before close-outs.</p>
+          <p className="text-label text-fg-3">Estimated from net exposure, before any close-outs.</p>
         </>
       )}
     </Panel>

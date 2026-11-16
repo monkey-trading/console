@@ -12,7 +12,7 @@ import { ReadNote } from "./ReadNote";
 import { NOTE } from "./styles";
 import { usePanelState } from "./use-monkey";
 
-const LABELS: Record<ActivityKind, string> = { loss_close: "Loss close", stake: "Stake", unstake: "Unstake" };
+const LABELS: Record<ActivityKind, string> = { loss_close: "Earned", stake: "Stake", unstake: "Unstake" };
 const TONES: Record<ActivityKind, string> = {
   loss_close: "border-ember/40 text-ember",
   stake: "border-glow/40 text-glow",
@@ -50,10 +50,10 @@ export function ActivityTable() {
         // The table's place while the first read runs: its head, a reading row, and the rows it will hold, unseen.
         <div className="-mx-1">
           <table className="w-full table-fixed text-label sm:text-caption">
-            <caption className="sr-only">The latest MONKEY events, being read.</caption>
+            <caption className="sr-only">The latest MONKEY activity, loading.</caption>
             <Head />
             <tbody>
-              <tr className="border-t border-line align-top"><td colSpan={4} className="px-1 py-1.5 text-fg-3">Reading the latest activity…</td></tr>
+              <tr className="border-t border-line align-top"><td colSpan={4} className="px-1 py-1.5 text-fg-3">Loading recent activity…</td></tr>
               {HELD_ROWS.map((index) => (
                 <tr key={index} aria-hidden="true" className="invisible border-t border-line align-top">
                   <td className="px-1 py-1.5">—</td>
@@ -66,9 +66,9 @@ export function ActivityTable() {
           </table>
         </div>
       ) : page === null ? (
-        <ReadNote read={activity} loading="Reading the latest activity…" />
+        <ReadNote read={activity} loading="Loading recent activity…" />
       ) : page.entries.length === 0 ? (
-        <p className={NOTE}>No MONKEY activity has been recorded yet.</p>
+        <p className={NOTE}>No MONKEY activity yet.</p>
       ) : (
         <div className="-mx-1">
           <table className="w-full table-fixed text-label sm:text-caption">
@@ -88,7 +88,7 @@ export function ActivityTable() {
         </div>
       )}
       {page !== null && <ReadNote read={activity} />}
-      {page !== null && page.truncated && <p className={NOTE}>The node keeps only the newest events; older ones have been dropped.</p>}
+      {page !== null && page.truncated && <p className={NOTE}>Only the most recent activity is kept.</p>}
     </Card>
   );
 }

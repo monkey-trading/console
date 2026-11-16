@@ -23,7 +23,7 @@ export function HouseOverview() {
           <Parameters />
           <Checkpoints />
           <div className="col-span-full">
-            <DashboardLink href="/dashboard#house">See the history of NAV, exposure and the queue on the Dashboard</DashboardLink>
+            <DashboardLink href="/dashboard#house">See the history of house value, exposure and the withdrawal queue on the Dashboard</DashboardLink>
           </div>
         </div>
       )}
