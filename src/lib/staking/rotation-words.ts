@@ -31,7 +31,7 @@ export function nextGroupLine(next: RotationSet | null, context: { current: bool
     const starts = context.current ? "takes over from the current group" : "begins running the trading server in turns";
     return `The next group has ${operators(next)}, listed below, and ${starts} at ${at(next.effectiveAtMs, nowMs)}.${ahead && context.current ? " Until then, the current group continues to run the trading server." : ""}`;
   }
-  if (context.rotationOn === false) return "No next group of operators has been chosen, and none is chosen while operator rotation is off.";
+  if (context.rotationOn === false) return "No next group of operators has been chosen, and none will be chosen while operator rotation is off.";
   const { electionAtMs } = context;
   const election = electionAtMs === null ? "It will be chosen at the next election."
     : nowMs > 0 && electionAtMs <= nowMs ? `It will be chosen when the current election is closed, which has been due since ${formatStamp(electionAtMs)} UTC.`
@@ -52,16 +52,16 @@ const KEPT = "The operator already running the trading server stays in place.";
 const REFUSALS: readonly [RegExp, string][] = [
   [/^turn \d+ ended before its assignment was mirrored$/, "The turn had already ended when the trading server recorded the operator assigned to it."],
   [/^set \d+ is not among the sets mirrored$/, "The trading server has no record of the operator group the turn was drawn from."],
-  [/^set \d+ does not name candidate /, "The operator group the turn was drawn from does not include this operator with its current operator key."],
-  [/, less than seven days before the turn applies at \d+$/, "An operator must be announced at least seven days before its turn begins, and the operator assigned this turn was announced later than that."],
-  [/, less than one turn before the turn applies at \d+$/, "An operator must be announced at least one turn before its turn begins, and the operator assigned this turn was announced later than that."],
+  [/^set \d+ does not name candidate /, "The operator group the turn was drawn from does not include the assigned operator with its current operator key."],
+  [/, less than seven days before the turn applies at \d+$/, "An operator must be announced at least seven days before its turn begins, and the operator assigned the turn was announced later than that."],
+  [/, less than one turn before the turn applies at \d+$/, "An operator must be announced at least one turn before its turn begins, and the operator assigned the turn was announced later than that."],
 ];
 
 /** How a record stands: refused, with the engine's reason in words, taken since a time, or assigned and waiting for its member's enclave. */
 export function recordOutcome(record: TurnRecord): string {
   if (record.refused !== null) {
     const known = REFUSALS.find(([pattern]) => pattern.test(record.refused ?? ""));
-    return `Refused. ${known === undefined ? "The operator assigned this turn could not take over." : known[1]} ${KEPT}`;
+    return `Refused. ${known === undefined ? "The operator assigned the turn could not take over." : known[1]} ${KEPT}`;
   }
   if (record.takenMs !== null) return `Started at ${formatStampWithYear(record.takenMs)} UTC`;
   return "Assigned but not yet started";

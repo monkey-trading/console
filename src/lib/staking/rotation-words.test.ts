@@ -40,7 +40,7 @@ describe("nextGroupLine", () => {
   });
 
   it("says no next group is chosen while operator rotation is off", () => {
-    expect(nextGroupLine(null, { ...ON, rotationOn: false, electionAtMs: EFFECTIVE }, EFFECTIVE - DAY)).toBe("No next group of operators has been chosen, and none is chosen while operator rotation is off.");
+    expect(nextGroupLine(null, { ...ON, rotationOn: false, electionAtMs: EFFECTIVE }, EFFECTIVE - DAY)).toBe("No next group of operators has been chosen, and none will be chosen while operator rotation is off.");
   });
 
   it("reserves room for the longest line of each card", () => {
@@ -58,16 +58,16 @@ describe("a record's words", () => {
 
   it("explains each refusal the engine logs, in its daily and short-turn forms, and any other plainly", () => {
     const refused = (reason: string) => recordOutcome({ ...RECORD, appliesAtMs: null, refused: reason });
-    const daily = `Refused. An operator must be announced at least seven days before its turn begins, and the operator assigned this turn was announced later than that. ${KEPT}`;
-    const short = `Refused. An operator must be announced at least one turn before its turn begins, and the operator assigned this turn was announced later than that. ${KEPT}`;
+    const daily = `Refused. An operator must be announced at least seven days before its turn begins, and the operator assigned the turn was announced later than that. ${KEPT}`;
+    const short = `Refused. An operator must be announced at least one turn before its turn begins, and the operator assigned the turn was announced later than that. ${KEPT}`;
     expect(refused("set 1 was logged at 1794865500000, less than seven days before the turn applies at 1794865800000")).toBe(daily);
     expect(refused("set 2 names the key the log has named since 1794865500000, less than seven days before the turn applies at 1794865800000")).toBe(daily);
     expect(refused("set 1 was logged at 1794865500000, less than one turn before the turn applies at 1794865800000")).toBe(short);
     expect(refused("set 2 names the key the log has named since 1794865500000, less than one turn before the turn applies at 1794865800000")).toBe(short);
     expect(refused("turn 812 ended before its assignment was mirrored")).toBe(`Refused. The turn had already ended when the trading server recorded the operator assigned to it. ${KEPT}`);
     expect(refused("set 3 is not among the sets mirrored")).toBe(`Refused. The trading server has no record of the operator group the turn was drawn from. ${KEPT}`);
-    expect(refused("set 3 does not name candidate 0xab with key 0xcd")).toBe(`Refused. The operator group the turn was drawn from does not include this operator with its current operator key. ${KEPT}`);
-    expect(refused("no set names its key")).toBe(`Refused. The operator assigned this turn could not take over. ${KEPT}`);
+    expect(refused("set 3 does not name candidate 0xab with key 0xcd")).toBe(`Refused. The operator group the turn was drawn from does not include the assigned operator with its current operator key. ${KEPT}`);
+    expect(refused("no set names its key")).toBe(`Refused. The operator assigned the turn could not take over. ${KEPT}`);
   });
 
   it("says when a taken turn started, and that one not taken yet has not started", () => {

@@ -86,7 +86,7 @@ describe("the Rotation tab", () => {
     const moves = html.slice(html.indexOf("Reassigned and refused turns"), html.indexOf("Turn history"));
     expect(moves).toContain("Skip");
     expect(moves).toContain("Promotion");
-    expect(moves).toContain(`Refused. The operator assigned this turn could not take over. ${KEPT}`);
+    expect(moves).toContain(`Refused. The operator assigned the turn could not take over. ${KEPT}`);
     expect(moves.match(/Started at/g)).toHaveLength(1);
     const history = html.slice(html.indexOf("Turn history"));
     expect(history.indexOf(formatStampWithYear(NOW + 23 * 3_600_000))).toBeLessThan(history.indexOf(formatStampWithYear(NOW - 3_600_000)));
@@ -99,7 +99,7 @@ describe("the Rotation tab", () => {
     const html = tab(loaded({ ...ROUTE, turns: { records: [refused], next: null, truncated: false, retained_from_seq: null } }));
     const moves = html.slice(html.indexOf("Reassigned and refused turns"), html.indexOf("Turn history"));
     expect(moves).toContain("2026-11-16 21:50");
-    expect(moves).toContain(`Refused. An operator must be announced at least one turn before its turn begins, and the operator assigned this turn was announced later than that. ${KEPT}`);
+    expect(moves).toContain(`Refused. An operator must be announced at least one turn before its turn begins, and the operator assigned the turn was announced later than that. ${KEPT}`);
     expect(moves).not.toMatch(/5982886|position/);
   });
 

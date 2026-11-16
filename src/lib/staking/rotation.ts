@@ -189,9 +189,9 @@ export function isReassignment(record: TurnRecord): boolean {
 
 /** What a turn's reason says in words. */
 export const REASON_WORDS: Record<TurnReason, string> = {
-  draw: "Chosen at random for the turn, with a chance in proportion to its weight.",
-  skip: "Assigned the turn because the operator assigned before it did not start in time.",
-  promotion: "Took over because the operator running the trading server stopped responding.",
+  draw: "The operator was chosen at random for the turn, with a chance in proportion to its weight.",
+  skip: "The operator was assigned the turn because the operator assigned before it did not start in time.",
+  promotion: "The operator took over because the operator running the trading server had stopped responding.",
 };
 /** The reason's one word, for a table's cell. */
 export const REASON_CELL: Record<TurnReason, string> = { draw: "Draw", skip: "Skip", promotion: "Promotion" };
