@@ -39,81 +39,92 @@ function Seed({ patch }: { patch: Partial<ConsoleState> }) {
   return null;
 }
 const render = (patch: Partial<ConsoleState>) => renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Seed, { patch }), createElement(PositionsView)));
-const cells = (html: string) => (html.split("<tbody>")[1] ?? "").split("</tr>").flatMap((row) => (row.includes("<td") ? [row.split("<td").length - 1] : []));
+/** The text of each cell of the table's rows, without the explanation a cell's `Term` holds. */
+const rows = (html: string) => (html.split("<tbody>")[1] ?? "").split("</tr>").filter((row) => row.includes("<td")).map((row) => row.split("<td").slice(1).map((cell) => cell.replace(/<span id="[^"]*" role="tooltip"[\s\S]*$/, "").replace(/<[^>]*>/g, "").replace(/^[^>]*>/, "")));
+const cells = (html: string) => rows(html).map((row) => row.length);
+/** The explanation of a row's details, in the table. */
+const details = (html: string) => (html.split("<tbody>")[1] ?? "").match(/role="tooltip"[^>]*><span[^>]*><span[^>]*>([^<]*)</)?.[1]?.replaceAll("&#x27;", "'") ?? "";
+
+const GAIN = { account: holding(2, 100_000), quotes: { 1: closing("sell", "100979.8") } };
+// The cells by column: market, side, size, entry, mark, close-out, P&L and its details, held, fee rate, fee in USD, close now, close.
+const PNL = 6;
+const FEE_USD = 9;
+const CLOSE_NOW = 10;
 
 describe("a position whose mark gain is smaller than its exit spread", () => {
   it("shows a long's loss at the bid, with no profit fee, the gain at the mark in the explanation", () => {
     // 2 BTC from 100,990 at a mark of 101,000: +$20 at the mark, but the bid is 100,979.8.
     const html = render({ account: holding(2, 100_990), quotes: { 1: closing("sell", "100979.8") } });
-    expect(html).toMatch(/<button[^>]*>-\$20\.40<\/button>/);
-    expect(html).toContain("At the mark it is $20.00, before the exit spread.");
+    const [row] = rows(html);
+    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["-$20.40Details", "$0.00", "-$20.40"]);
+    expect(details(html)).toBe("At the node's closing price for this size. At the mark it is $20.00, before the exit spread. No profit fee on this close: it realises a loss or nothing. Profit fee rate: Base rate.");
     expect(html).toContain('aria-hidden="false" class="block text-label text-fg-3">No profit fee on this close');
-    expect(html).not.toMatch(/<button[^>]*>\$20\.00<\/button>/);
-    // Its P&L in the card and in the table, and the table's close now, which pays no fee.
-    expect(html.match(/<button[^>]*>-\$20\.40<\/button>/g)).toHaveLength(3);
   });
 
   it("shows a short's loss at the offer the same way", () => {
     // 2 BTC short from 101,010 at a mark of 101,000: +$20 at the mark, but the offer is 101,020.
     const html = render({ account: holding(-2, 101_010), quotes: { 1: closing("buy", "101020") } });
-    expect(html).toMatch(/<button[^>]*>-\$20\.00<\/button>/);
-    expect(html).toContain("At the mark it is $20.00, before the exit spread.");
-    expect(html).toContain('aria-hidden="false" class="block text-label text-fg-3">No profit fee on this close');
+    const [row] = rows(html);
+    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["-$20.00Details", "$0.00", "-$20.00"]);
+    expect(details(html)).toContain("At the mark it is $20.00, before the exit spread. No profit fee on this close");
   });
 });
 
 describe("a position at a gain after the exit spread", () => {
   it("shows the gain at the close quote, the fee in USD and what the close keeps", () => {
     // 2 x (100,979.8 - 100,000) = $1,959.60, a tenth of it the fee.
-    const html = render({ account: holding(2, 100_000), quotes: { 1: closing("sell", "100979.8") } });
-    expect(html).toMatch(/<button[^>]*>\$1,959\.60<\/button>/);
-    expect(html).toMatch(/<button[^>]*>\$195\.96<\/button>/);
-    expect(html).toMatch(/<button[^>]*>\$1,763\.64<\/button>/);
+    const html = render(GAIN);
+    const [row] = rows(html);
+    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["$1,959.60Details", "$195.96", "$1,763.64"]);
+    expect(details(html)).toBe("At the node's closing price for this size. At the mark it is $2,000.00, before the exit spread. Profit fee rate: Base rate.");
     // The card reserves the note's line, hidden from view and from a screen reader.
     expect(html).toContain('aria-hidden="true" class="block text-label invisible">No profit fee on this close');
   });
 });
 
 describe("the table's one row per position", () => {
-  const quotes = { 1: closing("sell", "100979.8") };
-
   it("holds hold, fee rate, fee in USD and close now as columns, with no second line", () => {
-    const html = render({ account: holding(2, 100_000), quotes });
+    const html = render(GAIN);
     for (const head of ["Held", "Profit fee", "Fee \\(USD\\)", "Close now"]) expect(html).toMatch(new RegExp(`<th[^>]*><span[^>]*><button[^>]*>${head}<`));
     expect(cells(html)).toEqual([12]);
     expect(html).not.toContain('colspan="');
   });
 
   it("keeps the P&L at the close quote while the fee's terms are stale, and withholds the fee and what a close keeps, saying why", () => {
-    const html = render({ account: holding(2, 100_000), quotes, pricingCurrent: false, houseStateStatus: "read" });
-    expect(cells(html)).toEqual([12]);
-    expect(html).toMatch(/<button[^>]*>\$1,959\.60<\/button>/);
-    expect(html.split(">—</button>").length - 1).toBe(2);
-    expect(html.split("Reading the node&#x27;s parameters again after a change.").length - 1).toBeGreaterThanOrEqual(3);
+    const html = render({ ...GAIN, pricingCurrent: false, houseStateStatus: "read" });
+    const [row] = rows(html);
+    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["$1,959.60Details", "—", "—"]);
+    expect(details(html)).toContain("The profit fee and what a close keeps are withheld: Reading the node's parameters again after a change.");
   });
 
-  it("withholds every figure that needs a price while the node has quoted none", () => {
+  it("withholds every figure that needs a price while the node has quoted none, naming the market to select", () => {
     const html = render({ account: holding(2, 100_000), quotes: {} });
-    expect(cells(html)).toEqual([12]);
-    // The card's P&L, and the table's three figures.
-    expect(html.split(">—</button>").length - 1).toBe(4);
-    expect(html).toContain("No closing price has reached the console yet. At the mark it is $2,000.00.");
+    const [row] = rows(html);
+    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["—Details", "—", "—"]);
+    expect(details(html)).toContain("Select BTC-USD to get its closing price. At the mark it is $2,000.00.");
   });
 
-  it("gives the three figure columns the same width, shown or withheld, and keeps each a focusable explanation", () => {
-    const widths = (html: string) => (html.split("<tbody>")[1] ?? "").match(/min-w-\[calc\(1[234]ch\+1rem\)\]/g);
-    const shown = render({ account: holding(2, 100_000), quotes });
+  it("says a closed market is closed, not that its rate is unread, though the mock still prices it", () => {
+    const html = render({ ...GAIN, markets: [{ ...market, open: false }] });
+    expect(details(html)).toContain("The market is closed, so it has no closing price.");
+    expect(details(html)).not.toContain("rate has not been read");
+  });
+
+  it("gives the figure columns the same width, shown or withheld, and the hold room for its longest value", () => {
+    const widths = (html: string) => (html.split("<tbody>")[1] ?? "").match(/min-w-\[[^\]]*\]/g);
     const withheld = render({ account: holding(2, 100_000), quotes: {} });
-    expect(widths(shown)).toEqual(["min-w-[calc(12ch+1rem)]", "min-w-[calc(13ch+1rem)]", "min-w-[calc(14ch+1rem)]"]);
-    expect(widths(withheld)).toEqual(widths(shown));
-    // The fee cell is the same element at a gain and at a loss, so a focused one survives a quote that crosses zero.
-    const loss = render({ account: holding(2, 100_990), quotes });
-    expect(shown).toMatch(/<button[^>]*>\$195\.96<\/button>/);
-    expect(loss).toMatch(/<td[^>]*><span[^>]*><button[^>]*>\$0\.00<\/button>/);
+    expect(widths(render(GAIN))).toEqual(["min-w-[12ch]", "min-w-[calc(7ch+1rem)]", "min-w-[calc(13ch+1rem)]", "min-w-[calc(14ch+1rem)]"]);
+    expect(widths(withheld)).toEqual(widths(render(GAIN)));
+  });
+
+  it("holds no live figure as the name of a button", () => {
+    const html = render(GAIN);
+    const names = [...(html.split("<tbody>")[1] ?? "").matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map((m) => m[1]);
+    expect(names).toEqual(["Details", "Close"]);
   });
 
   it("wraps every explanation inside its box, whatever the cell's own white-space", () => {
-    const tips = render({ account: holding(2, 100_000), quotes }).match(/<span id="[^"]*" role="tooltip"[^>]*>/g) ?? [];
+    const tips = render(GAIN).match(/<span id="[^"]*" role="tooltip"[^>]*>/g) ?? [];
     expect(tips.length).toBeGreaterThan(10);
     for (const tip of tips) expect(tip).toContain("whitespace-normal");
   });
@@ -125,7 +136,7 @@ describe("a fee that may still change", () => {
     const account = holding(2, 100_000);
     const [position] = account.positions;
     if (position === undefined) throw new Error("no position");
-    const html = render({ account: { ...account, positions: [{ ...position, closeFee: { openedAt: 1_940_000, feeBps: 6_421, fallsAt: 2_000_005 } }] }, quotes: { 1: closing("sell", "100979.8") } });
-    expect(html).toMatch(/<button[^>]*>≤ \$1,258\.26<\/button>/);
+    const html = render({ account: { ...account, positions: [{ ...position, closeFee: { openedAt: 1_940_000, feeBps: 6_421, fallsAt: 2_000_005 } }] }, quotes: GAIN.quotes });
+    expect(rows(html)[0]?.[FEE_USD]).toBe("≤ $1,258.26");
   });
 });
