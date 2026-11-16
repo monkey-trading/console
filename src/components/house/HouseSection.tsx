@@ -57,13 +57,13 @@ export function HouseSection({ children }: { children: ReactNode }) {
           <h2 className="text-lead tracking-caps text-glow uppercase">House</h2>
           <p className="text-caption text-fg-3">
             {simulated
-              ? "The house takes the other side of every trade. This build simulates the node in the browser, so every figure here is generated and unsigned."
-              : "The house takes the other side of every trade. Every figure comes from an answer the node's enclave signed for this page's request; an answer that does not verify is discarded, never shown."}
+              ? "The house takes the other side of every trade. This is a demo running in your browser, so every figure here is simulated."
+              : "The house takes the other side of every trade. Every figure here is verified as coming from the server, and a figure that fails verification is never shown."}
           </p>
         </header>
-        {blocked && <p className="mt-3 text-data text-fg-2">Figures appear once the node&apos;s attestation is verified and its feed is live.</p>}
-        {!blocked && ready && !fresh && <p className="mt-3 text-data text-fg-2">The node&apos;s answers have stopped refreshing, so the figures on this page may be behind.</p>}
-        {!blocked && !ready && <p className="mt-3 text-data text-fg-2">{simulated ? "Reading the simulated node's first answers…" : "Reading the node's first signed answers…"}</p>}
+        {blocked && <p className="mt-3 text-data text-fg-2">Figures appear once the server is verified and connected.</p>}
+        {!blocked && ready && !fresh && <p className="mt-3 text-data text-fg-2">Figures have stopped updating, so they may be out of date.</p>}
+        {!blocked && !ready && <p className="mt-3 text-data text-fg-2">{simulated ? "Loading the demo figures…" : "Loading figures…"}</p>}
         {/* The tab bar stays in view at the top of the scroll region; its background covers what scrolls under it. A level above the charts' crosshair readout, which is later in the tree at the same z. */}
         <div className="sticky top-0 z-20 -mx-4 mt-4 bg-ink-1 px-4 sm:-mx-6 sm:px-6">
           <SectionTabs section={SECTION} />

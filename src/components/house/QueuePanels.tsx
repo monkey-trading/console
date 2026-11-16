@@ -21,16 +21,16 @@ const amount = (value: Fixed | null): string => (value === null ? "None" : forma
 export function QueueStats() {
   const { totals, failed } = useSelected(selectQueue);
   return (
-    <Panel title="Withdrawal queue" tip="Withdrawals the vault could not pay at once wait here and are paid in the order they were asked, each up to the collateral the vault holds.">
+    <Panel title="Withdrawal queue" tip="Withdrawals that can't be paid straight away wait here. They're paid in the order they were requested, as funds become available.">
       {totals === null ? (
-        <Quiet>{failed ? "The queue read keeps failing." : "Reading the queue…"}</Quiet>
+        <Quiet>{failed ? "Couldn't load the queue. Trying again automatically." : "Loading the queue…"}</Quiet>
       ) : (
         <>
           <dl className="space-y-1">
-            <Row label="Queue total" tip="The dollars every waiting request still owes." value={formatUsd(totals.remaining)} tone={totals.remaining > 0n ? "ember" : "fg"} />
-            <Row label="Requests waiting" tip="How many withdrawal requests are in the queue." value={String(totals.count)} />
-            <Row label="Largest entry" tip="The most any one waiting request still owes." value={amount(totals.largest)} />
-            <Row label="Next to be paid" tip="What the request at the head of the queue still owes. It is paid first when the vault has funds." value={amount(totals.head)} />
+            <Row label="Queue total" tip="This is the total still owed to everyone waiting, in dollars." value={formatUsd(totals.remaining)} tone={totals.remaining > 0n ? "ember" : "fg"} />
+            <Row label="Requests waiting" tip="This is the number of withdrawal requests waiting." value={String(totals.count)} />
+            <Row label="Largest request" tip="This is the most still owed on any one request." value={amount(totals.largest)} />
+            <Row label="Next to be paid" tip="This is what's still owed on the request at the front of the queue. It's paid first when funds are available." value={amount(totals.head)} />
           </dl>
           {queueCaveats(totals, failed).map((line) => <p key={line} className="text-label text-fg-3">{line}</p>)}
         </>
@@ -47,11 +47,11 @@ export function QueuePlace() {
   const waiting = exact && count !== null ? Math.max(count, ...queue.map((request) => request.position)) : null;
   const marks = waiting === null ? new Set<number>() : queueMarks(queue.map((request) => request.position), waiting, SEGMENTS);
   return (
-    <Panel title="Your place" tip="Where the connected account's withdrawal requests stand in the queue.">
+    <Panel title="Your place" tip="This is where your withdrawal requests are in the queue.">
       {wallet === null ? (
         <Quiet>Connect a wallet to see your place in the queue.</Quiet>
       ) : !read ? (
-        <Quiet>Reading your place in the queue. It appears once the node answers.</Quiet>
+        <Quiet>Loading your place in the queue…</Quiet>
       ) : first === undefined ? (
         <Quiet>You have no withdrawal waiting.</Quiet>
       ) : (
@@ -63,7 +63,7 @@ export function QueuePlace() {
               <ol aria-hidden="true" className="flex h-2 gap-px">
                 {Array.from({ length: SEGMENTS }, (_, i) => <li key={i} className={`flex-1 ${marks.has(i + 1) ? "bg-glow" : "bg-line-2"}`} />)}
               </ol>
-              <p className="text-label text-fg-3">Head of the queue on the left. {queue.length > 1 ? `Your ${queue.length} requests are lit.` : "Your request is lit."}</p>
+              <p className="text-label text-fg-3">The front of the queue is on the left. {queue.length > 1 ? `Your ${queue.length} requests are highlighted.` : "Your request is highlighted."}</p>
             </>
           )}
         </>

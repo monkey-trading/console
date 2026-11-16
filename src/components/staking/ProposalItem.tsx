@@ -87,7 +87,7 @@ export function ProposalItem({ id, headingId, fast, stage, title, details, tally
     <li data-proposal={id} className="space-y-2 border-t border-line-2 pt-3 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h4 id={headingId} tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">
-          Proposal {id} · {fast ? "fast path" : "normal path"}
+          Proposal {id} · {fast ? "fast change" : "standard change"}
         </h4>
         <Wait {...wait} />
       </div>
@@ -97,10 +97,10 @@ export function ProposalItem({ id, headingId, fast, stage, title, details, tally
           {details.map((line) => <li key={line}>{line}</li>)}
         </ul>
       )}
-      {tally !== null ? <TallyLine tally={tally} open={open} /> : <p className="text-caption text-fg-2">Passed with more than two thirds of its set&apos;s weight.</p>}
+      {tally !== null ? <TallyLine tally={tally} open={open} /> : <p className="text-caption text-fg-2">Passed with more than two thirds of the vote.</p>}
       {members !== null && members.length > 0 && (
         <div>
-          <p className="text-label tracking-caps text-fg-3 uppercase">Members you delegate to</p>
+          <p className="text-label tracking-caps text-fg-3 uppercase">Operators you delegate to</p>
           <ul className="mt-0.5 space-y-0.5 text-caption leading-relaxed text-fg-2">
             {members.map((member) => (
               <li key={member.address} className="[overflow-wrap:anywhere]">
@@ -113,7 +113,7 @@ export function ProposalItem({ id, headingId, fast, stage, title, details, tally
       {vote}
       {command !== null && (
         <details className="text-caption text-fg-2">
-          <summary className="inline-flex min-h-11 cursor-pointer items-center text-glow hover:text-glow-hover focus-visible:outline-2 focus-visible:outline-glow lg:min-h-6">The command as proposed</summary>
+          <summary className="inline-flex min-h-11 cursor-pointer items-center text-glow hover:text-glow-hover focus-visible:outline-2 focus-visible:outline-glow lg:min-h-6">Full proposal</summary>
           <pre className="mt-1 rounded border border-line-2 bg-ink-2 p-2 text-label leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{JSON.stringify(command, null, 2)}</pre>
         </details>
       )}

@@ -181,7 +181,7 @@ describe("the page's transactions", () => {
     const claims = vi.spyOn(node.controls, "claimDistribution");
     expect(await claimDistribution(panel)).toBe(false);
     expect(claims).not.toHaveBeenCalled();
-    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: "The wallet changed while the claim was prepared, so nothing was sent." });
+    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: "Your wallet changed, so nothing was sent." });
     stop();
   });
 
@@ -191,7 +191,7 @@ describe("the page's transactions", () => {
     const claims = vi.spyOn(node.controls, "claimDistribution");
     expect(await claimDistribution(panel)).toBe(false);
     expect(claims).not.toHaveBeenCalled();
-    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: "The node holds no distribution proof for this account right now." });
+    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: "There's no distribution to claim for this account right now." });
     stop();
   });
 
@@ -201,7 +201,7 @@ describe("the page's transactions", () => {
     if (wallet === null) throw new Error("the wallet connected");
     store.liveWallet = { address: wallet.address, label: "Read-only", readOnly: true, sign: wallet.sign, deposit: wallet.deposit, claim: wallet.claim };
     expect(await stakeMonkey(panel, MONKEY_UNIT)).toBe(false);
-    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "error", text: "This wallet cannot send transactions." });
+    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "error", text: "This wallet can't send transactions." });
     stop();
   });
 
@@ -245,7 +245,7 @@ describe("the page's transactions", () => {
     held.release();
     expect(await staked).toBe(false);
     expect(held.stakes).toBe(0);
-    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "info", text: "The wallet changed while this was waiting, so nothing was sent." });
+    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "info", text: "Your wallet changed, so nothing was sent." });
     stop();
   });
 
@@ -257,7 +257,7 @@ describe("the page's transactions", () => {
     const first = stakeMonkey(panel, MONKEY_UNIT);
     await flush();
     expect(await stakeMonkey(panel, MONKEY_UNIT)).toBe(false);
-    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "info", text: "Your earlier request is still with your wallet." });
+    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "info", text: "Your wallet is still waiting on an earlier request." });
     held.release();
     expect(await first).toBe(true);
     expect(held.stakes).toBe(1);

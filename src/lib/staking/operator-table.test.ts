@@ -79,11 +79,11 @@ describe("operatorsView", () => {
   });
 
   it("refuses a malformed amount or address, or more candidates than the registry holds", () => {
-    expect(() => operatorsView(list([candidate(1, { votes: "1e3" })]))).toThrow("not a whole amount");
-    expect(() => operatorsView(list([candidate(1, { self_bond: "-1" })]))).toThrow("not a whole amount");
-    expect(() => operatorsView(list([candidate(1)], undefined, { total_staked: "" }))).toThrow("not a whole amount");
-    expect(() => operatorsView(list([candidate(1, { address: "0x12" })]))).toThrow("address that is not one");
-    expect(() => operatorsView(list(Array.from({ length: 101 }, (_, i) => candidate(i + 1))))).toThrow("more candidates than the registry can hold");
+    expect(() => operatorsView(list([candidate(1, { votes: "1e3" })]))).toThrow("isn't a whole amount");
+    expect(() => operatorsView(list([candidate(1, { self_bond: "-1" })]))).toThrow("isn't a whole amount");
+    expect(() => operatorsView(list([candidate(1)], undefined, { total_staked: "" }))).toThrow("isn't a whole amount");
+    expect(() => operatorsView(list([candidate(1, { address: "0x12" })]))).toThrow("has an invalid address");
+    expect(() => operatorsView(list(Array.from({ length: 101 }, (_, i) => candidate(i + 1))))).toThrow("more candidates than allowed");
   });
 
   it("keeps the candidates when the open proposals fail their check, saying why apart", () => {
@@ -91,7 +91,7 @@ describe("operatorsView", () => {
     const proposal = { id: 1, proposer: vote, set_id: 1, fast: false, opens_at_ms: 5, closes_at_ms: 5, total_weight: "9", yes_weight: "4", command_hash: `0x${"ab".repeat(32)}`, command: null };
     const view = operatorsView(list([candidate(1), candidate(2)], undefined, { proposals: { vote, open: [proposal], truncated: false } }));
     expect(view.rows).toHaveLength(2);
-    expect(view).toMatchObject({ proposals: null, proposalsProblem: "The operator list named a malformed open proposal 1." });
+    expect(view).toMatchObject({ proposals: null, proposalsProblem: "The server sent an invalid proposal 1." });
     const fine = operatorsView(list([candidate(1)], undefined, { proposals: { vote, open: [{ ...proposal, closes_at_ms: 9 }], truncated: false } }));
     expect(fine).toMatchObject({ proposals: { vote, truncated: false, unavailable: false }, proposalsProblem: null });
     expect(operatorsView(list([candidate(1)]))).toMatchObject({ proposals: null, proposalsProblem: null });
@@ -194,7 +194,7 @@ describe("countText", () => {
     expect(countText(tableView(rows, "", "role", 2), "")).toBe("Showing 51–60 of 60 operators.");
     expect(countText(tableView(rows, "op-1", "role", 0), "op-1")).toBe("11 of 60 operators match; showing 1–11.");
     expect(countText(tableView(rows, "op-27.", "role", 0), "op-27.")).toBe("1 of 60 operators matches; showing 1.");
-    expect(countText(tableView(rows, "nothing", "role", 0), "nothing")).toBe("No operator matches.");
+    expect(countText(tableView(rows, "nothing", "role", 0), "nothing")).toBe("No operators match.");
     expect(countText(tableView(rows.slice(0, 1), "", "role", 0), "  ")).toBe("Showing 1 of 1 operator.");
     expect(countText(tableView([], "", "role", 0), "")).toBe("No operators.");
   });

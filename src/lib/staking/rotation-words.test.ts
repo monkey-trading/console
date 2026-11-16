@@ -12,12 +12,12 @@ const RECORD: TurnRecord = { turn: 9, position: 0, reason: "draw", candidate: "0
 
 describe("setLine", () => {
   it("says when a set takes effect and the wait, while that is ahead", () => {
-    expect(setLine(SET, EFFECTIVE - 3 * 86_400_000)).toBe("Set 4, adopted at registry epoch 42, 2 members; takes effect at 18 Nov 22:30:00 UTC, in 3d 0h.");
+    expect(setLine(SET, EFFECTIVE - 3 * 86_400_000)).toBe("Rotation 4, chosen at election 42, with 2 operators. Starts at 18 Nov 22:30:00 UTC, in 3d 0h.");
   });
 
   it("says since when a set is in effect once its time has come, and with no clock read yet, and counts one member as one", () => {
-    expect(setLine(SET, EFFECTIVE)).toBe("Set 4, adopted at registry epoch 42, 2 members; in effect since 18 Nov 22:30:00 UTC.");
-    expect(setLine({ ...SET, members: [member("0xa")] }, 0)).toBe("Set 4, adopted at registry epoch 42, 1 member; in effect since 18 Nov 22:30:00 UTC.");
+    expect(setLine(SET, EFFECTIVE)).toBe("Rotation 4, chosen at election 42, with 2 operators. Running since 18 Nov 22:30:00 UTC.");
+    expect(setLine({ ...SET, members: [member("0xa")] }, 0)).toBe("Rotation 4, chosen at election 42, with 1 operator. Running since 18 Nov 22:30:00 UTC.");
   });
 });
 
@@ -28,8 +28,8 @@ describe("a record's words", () => {
   });
 
   it("says a refused assignment kept the key, a taken one when, and one not taken yet that its member has not started it", () => {
-    expect(recordOutcome({ ...RECORD, appliesAtMs: null, refused: "no set names its key" })).toBe("Refused: no set names its key. The key in effect stayed.");
-    expect(recordOutcome({ ...RECORD, takenMs: EFFECTIVE + 4_000 })).toBe("Taken at 2026-11-18 22:30 UTC");
-    expect(recordOutcome(RECORD)).toBe("Assigned; its member has not started it");
+    expect(recordOutcome({ ...RECORD, appliesAtMs: null, refused: "no set names its key" })).toBe("Refused: no set names its key. The current operator carried on.");
+    expect(recordOutcome({ ...RECORD, takenMs: EFFECTIVE + 4_000 })).toBe("Started at 2026-11-18 22:30 UTC");
+    expect(recordOutcome(RECORD)).toBe("Assigned, not started yet");
   });
 });

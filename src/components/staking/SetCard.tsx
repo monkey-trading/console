@@ -42,10 +42,10 @@ export function SetCard({ id, title, set, empty, nowMs, nameOf, needsUpdate, chi
       <div role="region" aria-label={`${title}: members`} tabIndex={0} className="-mx-1 h-52 overflow-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
         {set !== null && (
           <table className="w-full min-w-[26rem] text-label sm:text-caption">
-            <caption className="sr-only">{title}: each member with the weight its turns are drawn by and its expected share of turns. Amounts are in MONKEY.</caption>
+            <caption className="sr-only">{title}: each operator, its weight in the daily draw and its expected share of turns. Amounts are in MONKEY.</caption>
             <thead className="sticky top-0 bg-ink-1">
               <tr>
-                <th scope="col" className={TH}>Member</th>
+                <th scope="col" className={TH}>Operator</th>
                 <th scope="col" className={`${TH} text-right`}>Weight</th>
                 <th scope="col" className={`${TH} text-right`}>Share of turns</th>
               </tr>
@@ -55,7 +55,7 @@ export function SetCard({ id, title, set, empty, nowMs, nameOf, needsUpdate, chi
                 <tr key={member.address} className="border-t border-line">
                   <td className={`${TD} break-all text-fg`}>
                     <span title={member.address}>{withAddress(nameOf(member.address), member.address)}</span>
-                    {needsUpdate(member.address) && <span className="mt-1 block text-label text-amber">Needs a console update: this build does not list its hostname</span>}
+                    {needsUpdate(member.address) && <span className="mt-1 block text-label text-amber">Needs an app update to connect to this operator</span>}
                   </td>
                   <td className={`${TD} whitespace-nowrap text-right text-fg-2`}>{formatMonkey(member.weight)}</td>
                   <td className={`${TD} whitespace-nowrap text-right text-fg`}>{formatRate(member.turnShareBps)}</td>

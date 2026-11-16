@@ -13,9 +13,9 @@ const sentence = (message: string) => message.replace(/\.+$/, "");
  * pending line for screen readers alone, for a card whose dashed figures already hold its loaded
  * shape, so the line's leaving moves nothing below.
  */
-export function ReadNote({ read, loading = "Reading the node's figures…", quiet = false }: { read: Pick<Read<unknown>, "status" | "value" | "message">; loading?: string; quiet?: boolean }) {
-  if (read.status === "unavailable") return <p className={NOTE}>This node does not serve these figures yet.</p>;
-  if (read.status === "failed") return <p role="status" className="text-caption leading-relaxed text-amber">Could not read: {sentence(read.message ?? "the read failed")}. It is tried again at the next refresh.</p>;
+export function ReadNote({ read, loading = "Loading figures…", quiet = false }: { read: Pick<Read<unknown>, "status" | "value" | "message">; loading?: string; quiet?: boolean }) {
+  if (read.status === "unavailable") return <p className={NOTE}>These figures aren&apos;t available from this server yet.</p>;
+  if (read.status === "failed") return <p role="status" className="text-caption leading-relaxed text-amber">Couldn&apos;t load these figures: {sentence(read.message ?? "unknown error")}. Trying again automatically.</p>;
   if (read.status === "loading" && read.value === null) return <p className={quiet ? "sr-only" : NOTE}>{loading}</p>;
   return null;
 }

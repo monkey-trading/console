@@ -150,11 +150,11 @@ describe("queueMarks", () => {
 
 describe("paramsSource", () => {
   it("names the log entry that set the values when the node knows it", () => {
-    expect(paramsSource({ seq: 12 }, false)).toBe("The log records these values at seq 12.");
+    expect(paramsSource({ seq: 12 }, false)).toBe("These terms are recorded in the server's public log.");
   });
 
   it("calls the values the launch values only in the simulation, and says nothing for a live node that does not know their source", () => {
-    expect(paramsSource({ seq: null }, true)).toBe("These are the launch values.");
+    expect(paramsSource({ seq: null }, true)).toBe("These are the launch terms.");
     expect(paramsSource({ seq: null }, false)).toBeNull();
   });
 });
@@ -167,9 +167,9 @@ describe("queueCaveats", () => {
   });
 
   it("names a lower bound, an approximation and a read that may be behind, each from its own cause", () => {
-    expect(queueCaveats({ ...totals, complete: false }, false)).toEqual([expect.stringContaining("lower bounds")]);
+    expect(queueCaveats({ ...totals, complete: false }, false)).toEqual([expect.stringContaining("may be higher")]);
     expect(queueCaveats({ ...totals, stable: false }, false)).toEqual([expect.stringContaining("approximate")]);
-    expect(queueCaveats(totals, true)).toEqual([expect.stringContaining("may be behind")]);
+    expect(queueCaveats(totals, true)).toEqual([expect.stringContaining("may be out of date")]);
     expect(queueCaveats({ ...totals, complete: false, stable: false }, true)).toHaveLength(2);
   });
 });

@@ -43,25 +43,25 @@ export function OpenPositions() {
     return { long: sum((m) => m.long), short: sum((m) => m.short), net: sum((m) => m.net) };
   }, [scan]);
   return (
-    <Panel title="Open positions" tip="What the house's clients hold open, every account on the node and not only the connected wallet's, at the node's last scan. The house is the counterparty to each.">
+    <Panel title="Open positions" tip="These are all traders' open positions, not just yours, as of the last update. The house takes the other side of each one.">
       {scan === null ? (
-        <Quiet>This node does not report open positions yet. They appear once it is updated.</Quiet>
+        <Quiet>Open positions aren&apos;t available from this server yet.</Quiet>
       ) : (
         <>
           <dl className="space-y-1">
-            <Row label="Open interest" tip="The notional of every open position, long and short added together, in dollars." value={scan.openInterest === null ? "—" : formatUsd(scan.openInterest)} />
-            <Row label="Open margin" tip="The margin clients have posted against their open positions, in dollars." value={scan.openMargin === null ? "—" : formatUsd(scan.openMargin)} />
-            <Row label="Open positions" tip="How many positions are open across all markets." value={scan.openPositions === null ? "—" : groupThousands(scan.openPositions)} />
+            <Row label="Open interest" tip="This is the total size of all open positions, longs and shorts added together, in dollars." value={scan.openInterest === null ? "—" : formatUsd(scan.openInterest)} />
+            <Row label="Open margin" tip="This is the margin traders have put up for their open positions, in dollars." value={scan.openMargin === null ? "—" : formatUsd(scan.openMargin)} />
+            <Row label="Open positions" tip="This is the number of open positions across all markets." value={scan.openPositions === null ? "—" : groupThousands(scan.openPositions)} />
           </dl>
           <div role="region" aria-label="Open positions by market" tabIndex={0} className="max-w-full overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow">
             <table className="w-full border-collapse">
-              <caption className="sr-only">Clients&apos; long and short notional in each market, and the net of the two</caption>
+              <caption className="sr-only">Traders&apos; long and short position size in each market, and the net of the two</caption>
               <thead>
                 <tr>
                   <th scope="col" className="py-1 text-left text-label font-normal tracking-caps text-fg-3 uppercase">Market</th>
-                  <th scope="col" className={HEAD}><Term label="Long" tip="Clients' long notional: positions that gain when the price rises, so the house loses." /></th>
-                  <th scope="col" className={HEAD}><Term label="Short" tip="Clients' short notional: positions that gain when the price falls." /></th>
-                  <th scope="col" className={HEAD}><Term label="Net" tip="Long less short. The house holds the opposite: a positive net leaves it short." /></th>
+                  <th scope="col" className={HEAD}><Term label="Long" tip="This is the total size of traders' long positions. They profit when the price rises, and the house loses." /></th>
+                  <th scope="col" className={HEAD}><Term label="Short" tip="This is the total size of traders' short positions. They profit when the price falls." /></th>
+                  <th scope="col" className={HEAD}><Term label="Net" tip="This is long minus short. The house holds the opposite, so a positive net means the house is short." /></th>
                 </tr>
               </thead>
               <tbody>
@@ -84,7 +84,7 @@ export function OpenPositions() {
               </tfoot>
             </table>
           </div>
-          <p className="text-label text-fg-3">Every account on the node, not only yours. {scan.snapshotMs === null ? "The node has not completed its first scan yet." : `Scanned at ${formatClock(scan.snapshotMs)} UTC.`}</p>
+          <p className="text-label text-fg-3">All traders, not just you. {scan.snapshotMs === null ? "The first update hasn't finished yet." : `Updated at ${formatClock(scan.snapshotMs)} UTC.`}</p>
         </>
       )}
     </Panel>
@@ -101,15 +101,15 @@ export function HouseFigures() {
   const simulated = store.deps.client.signatures === "none";
   const unrealised = scan?.unrealised ?? nav - cash;
   return (
-    <Panel title="House" tip={simulated ? "The house's own finances, simulated in this browser and signed by nothing." : "The house's own finances, from the node's signed answers."}>
+    <Panel title="House" tip={simulated ? "These are the house's own finances, simulated in your browser." : "These are the house's own finances, verified from the server."}>
       <dl className="space-y-1">
-        <Row label="House funds" tip="The house's cash: its capital plus what clients have lost and paid in fees, less what they have won." value={formatUsd(cash)} tone="glow" />
-        <Row label="NAV" tip="Net asset value: cash less the clients' unrealised profit at current marks." value={formatUsd(nav)} />
-        <Row label="Unrealised P&L" tip="The house's result on the positions open now at current marks: NAV less cash. Negative when clients are ahead." value={formatUsd(unrealised)} tone={sign(unrealised)} />
-        <Row label="Queued withdrawals" tip="What the vault still owes clients waiting in the withdrawal queue." value={queue === null ? "—" : formatUsd(queue.remaining)} />
-        <Row label="Distributed" tip="USDC the node has distributed in total out of NAV above the liquidity floor: to stakers, and while operator rotation is on, a fifth of each close to the operator in effect. Each epoch that pays steps NAV down by what it paid, marked on the NAV chart on the Dashboard." value={paid === null ? "—" : formatUsdc(paid)} />
-        <Row label="Gross exposure" tip="The sum of the house's absolute net exposure in each market, in dollars: opposite positions in different markets do not cancel." value={formatUsd(gross)} />
-        <Row label="Volume" tip={scan === null ? "USD traded in the recent window." : `USD traded since ${formatStamp(scan.volumeSinceMs)} UTC, the start of the node's volume window.`} value={scan === null ? "—" : formatUsd(scan.volume)} />
+        <Row label="House funds" tip="This is the house's cash: its capital, plus what traders have lost and paid in fees, minus what they have won." value={formatUsd(cash)} tone="glow" />
+        <Row label="House value" tip="This is what the house is worth now: its cash minus traders' profit on open positions at current prices." value={formatUsd(nav)} />
+        <Row label="Unrealised P&L" tip="This is the house's profit or loss on open positions at current prices. It's negative when traders are ahead." value={formatUsd(unrealised)} tone={sign(unrealised)} />
+        <Row label="Queued withdrawals" tip="This is what's still owed to traders waiting in the withdrawal queue." value={queue === null ? "—" : formatUsd(queue.remaining)} />
+        <Row label="Distributed" tip="This is all the USDC distributed so far from the house's value above its reserve. Stakers share it, and while rotation is on, a fifth of each distribution goes to the operator. Each distribution lowers the house value by the amount paid." value={paid === null ? "—" : formatUsdc(paid)} />
+        <Row label="Gross exposure" tip="This is the house's net exposure in each market, added up across all markets in dollars. Exposure in one market doesn't offset another." value={formatUsd(gross)} />
+        <Row label="Volume" tip={scan === null ? "This is the dollar value traded recently." : `This is the dollar value traded since ${formatStamp(scan.volumeSinceMs)} UTC.`} value={scan === null ? "—" : formatUsd(scan.volume)} />
       </dl>
       {queue !== null && queueCaveats(queue, queueFailed).map((line) => <p key={line} className="text-label text-fg-3">{line}</p>)}
     </Panel>
@@ -125,18 +125,18 @@ export function MonkeyFigures() {
   return (
     <Panel
       title="MONKEY"
-      tip="The protocol token: emitted to clients for their realised losses, and staked to receive the USDC distributions the engine pays from the house's NAV above its liquidity floor."
+      tip="MONKEY is the platform's token. Traders earn it when they close trades at a loss, and stakers receive USDC from the house's value above its reserve."
       controls={<>{MONKEY_LINKS.filter((link) => LISTED.includes(link.href)).map((link) => <Link key={link.href} href={link.href} className={LINK}>{link.label}</Link>)}</>}
     >
       {feed.status === "failed" ? (
         <Quiet>{feedProblem(feed, "the MONKEY totals")}</Quiet>
       ) : feed.status === "unavailable" && monkey === null ? (
-        <Quiet>This node does not report MONKEY totals yet.</Quiet>
+        <Quiet>MONKEY totals aren&apos;t available from this server yet.</Quiet>
       ) : (
         <>
         <dl className="space-y-1">
           {rows.map((row) => <Row key={row.label} label={row.label} tip={row.tip} value={row.value} />)}
-          <Row label="Reward token" tip="The token distributions are paid in." value={monkey?.distribution ? "USDC" : "—"} />
+          <Row label="Reward token" tip="This is the token stakers are paid in." value={monkey?.distribution ? "USDC" : "—"} />
         </dl>
         {feedProblem(feed, "the MONKEY totals") !== null && <p className="text-label text-fg-3">{feedProblem(feed, "the MONKEY totals")}</p>}
         </>

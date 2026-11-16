@@ -66,11 +66,11 @@ export function StakePanel({ delegations = null, labelOf = shortHex }: { delegat
           <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
             <Row label="Staked">{position === null ? "—" : formatMonkey(position.staked)}</Row>
             <Row label="Delegated" reserve={SPLIT_RESERVE}>{split === null ? "—" : `${formatMonkey(split.delegated)} to ${split.delegations.length} ${split.delegations.length === 1 ? "candidate" : "candidates"}`}</Row>
-            <Row label="Undelegated" reserve={SPLIT_RESERVE}>{split === null || undelegated === null ? "—" : `${formatMonkey(undelegated)}${undelegated > 0n ? " (abstains)" : ""}`}</Row>
+            <Row label="Undelegated" reserve={SPLIT_RESERVE}>{split === null || undelegated === null ? "—" : `${formatMonkey(undelegated)}${undelegated > 0n ? " (not voting)" : ""}`}</Row>
             <Row label="Wallet balance">{position === null ? "—" : formatMonkey(position.balance)}</Row>
             <Row label="Share of all stake">{share === null ? "—" : formatRate(share)}</Row>
           </dl>
-          {reading ? <p className="sr-only">Reading your stake…</p> : <ReadNote read={figures.position} />}
+          {reading ? <p className="sr-only">Loading your stake…</p> : <ReadNote read={figures.position} />}
           <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
             <AmountForm field="stake" label="Stake" action="Stake" max={position?.balance ?? 0n} maxLabel="your wallet balance" disabled={busy || settling || position === null} onSubmit={(amount, onLanded) => stakeMonkey(panel, amount, onLanded)} />
             <AmountForm
@@ -84,12 +84,12 @@ export function StakePanel({ delegations = null, labelOf = shortHex }: { delegat
           {delegations !== null && delegations.read.status === "failed" && <ReadNote read={delegations.read} />}
           <Notice surface="stake" />
           <p className={NOTE}>
-            An unstake takes your undelegated stake first, then the rest from each of your delegations in proportion to its size. {staking === null ? "It waits out a cooldown before it can be completed." : `It waits ${formatDuration(staking.cooldown_ms)} before it can be completed.`} Until then it still counts as staked, so it stays in your share.
+            Unstaking uses your undelegated stake first, then takes the rest from your delegations in proportion to their size. {staking === null ? "You can complete it after a waiting period." : `You can complete it after ${formatDuration(staking.cooldown_ms)}.`} Until then it still counts as staked.
           </p>
           {pending !== null && (
             <div className="space-y-2 rounded border border-line-2 p-3">
               <p className="text-caption text-fg">Unstaking {formatMonkey(pending.amount)}</p>
-              <p className={NOTE}>{left > 0 ? `${formatDuration(left)} left in the cooldown.` : "The cooldown has passed."}</p>
+              <p className={NOTE}>{left > 0 ? `${formatDuration(left)} left to wait.` : "The waiting period is over."}</p>
               <button type="button" aria-disabled={busy || left > 0} onClick={() => { if (!busy && left <= 0) void completeUnstake(panel).then(() => focusHeading("stake-title")); }} className={`${BUTTON} w-full`}>Complete unstake</button>
             </div>
           )}
@@ -97,14 +97,14 @@ export function StakePanel({ delegations = null, labelOf = shortHex }: { delegat
       ) : wallet === null ? (
         <p className={NOTE}>Connect a wallet to stake or unstake MONKEY.</p>
       ) : readOnly ? (
-        <p role="status" className="text-caption leading-relaxed text-amber">This account is read-only. Its stake and wallet balance are read through a wallet&apos;s own chain connection, and nothing can be signed for it.</p>
+        <p role="status" className="text-caption leading-relaxed text-amber">This account is read-only, so its stake isn&apos;t shown and nothing can be signed for it.</p>
       ) : position === null ? (
-        <ReadNote read={figures.position} loading="Reading your stake…" />
+        <ReadNote read={figures.position} loading="Loading your stake…" />
       ) : (
         <>
           <dl className="space-y-2"><Row label="Wallet balance">{formatMonkey(position.balance)}</Row></dl>
           <ReadNote read={figures.position} />
-          <p className={NOTE}>This build names no staking contract, so staking and unstaking are not available here.</p>
+          <p className={NOTE}>Staking isn&apos;t available here.</p>
         </>
       )}
     </Card>

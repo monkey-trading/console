@@ -41,7 +41,7 @@ describe("claimMonkeyEmissions", () => {
     held.release();
     await claimed;
     expect(node.client.state.claimedMonkey.get(DEMO_ADDRESS)).toBeUndefined();
-    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "The wallet changed while this was waiting, so nothing was sent." });
+    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "Your wallet changed, so nothing was sent." });
     stop();
   });
 
@@ -54,7 +54,7 @@ describe("claimMonkeyEmissions", () => {
     await flush();
     const claimed = claimMonkeyEmissions(panel);
     await flush();
-    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "Your earlier request is still with your wallet." });
+    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "Your wallet is still waiting on an earlier request." });
     held.release();
     await claimed;
     await staked;

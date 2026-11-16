@@ -22,15 +22,15 @@ describe("sectionOfHash", () => {
 
 describe("houseGateLine", () => {
   it("says the first signed answers are being read on a live build, instead of showing NAV $0", () => {
-    expect(houseGateLine({ trusted: true, ready: false, fresh: false, simulated: false })).toBe("Reading the node's first signed answers…");
+    expect(houseGateLine({ trusted: true, ready: false, fresh: false, simulated: false })).toBe("Loading figures…");
   });
 
   it("names the simulated node on the mock build", () => {
-    expect(houseGateLine({ trusted: true, ready: false, fresh: true, simulated: true })).toBe("Reading the simulated node's first answers…");
+    expect(houseGateLine({ trusted: true, ready: false, fresh: true, simulated: true })).toBe("Loading the demo figures…");
   });
 
   it("says the figures may be behind after a refresh has failed", () => {
-    expect(houseGateLine({ trusted: true, ready: true, fresh: false, simulated: false })).toBe("The node's answers have stopped refreshing, so the figures on this page may be behind.");
+    expect(houseGateLine({ trusted: true, ready: true, fresh: false, simulated: false })).toBe("Figures have stopped updating, so they may be out of date.");
   });
 
   it("holds nothing once the figures are ready and fresh, and never overrides the not-trusted line", () => {
@@ -40,10 +40,10 @@ describe("houseGateLine", () => {
 });
 
 describe("overviewProblem", () => {
-  it.each(["the liquidity floor", "the emission budget and halving schedule"])("qualifies %s for first failures, held failures and unavailable routes", (what) => {
-    expect(overviewProblem({ status: "failed", value: null, message: "Timed out." }, what)).toBe(`The node did not answer for ${what} (Timed out), so there is nothing to show yet. The page keeps asking.`);
-    expect(overviewProblem({ status: "failed", value: {}, message: null }, what)).toBe(`The last read of ${what} failed, so this may be behind.`);
-    expect(overviewProblem({ status: "unavailable", value: null, message: null }, what)).toBe(`This node does not serve ${what} yet.`);
+  it.each(["the liquidity floor", "the reward schedule"])("qualifies %s for first failures, held failures and unavailable routes", (what) => {
+    expect(overviewProblem({ status: "failed", value: null, message: "Timed out." }, what)).toBe(`Couldn't load ${what}: Timed out. Trying again automatically.`);
+    expect(overviewProblem({ status: "failed", value: {}, message: null }, what)).toBe(`Couldn't refresh ${what}, so this may be out of date.`);
+    expect(overviewProblem({ status: "unavailable", value: null, message: null }, what)).toBe(`This server doesn't provide ${what} yet.`);
     expect(overviewProblem({ status: "ready", value: {}, message: null }, what)).toBeNull();
     expect(overviewProblem({ status: "loading", value: null, message: null }, what)).toBeNull();
   });

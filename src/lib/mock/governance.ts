@@ -156,11 +156,11 @@ export class MockGovernance {
   castVote(id: number, member: string, now: number): void {
     const proposal = this.proposals.get(id);
     const key = member.toLowerCase();
-    if (proposal === undefined) throw new Error("The vote contract holds no proposal by this number, so nothing was sent.");
-    if (proposal.passed) throw new Error("This proposal has already passed, so the vote contract takes no more votes on it and nothing was sent.");
-    if (proposal.closesAtMs <= now) throw new Error("This proposal's voting window has closed, so the vote contract refused the vote and nothing was sent.");
-    if (!this.members.has(key)) throw new Error("This account is not a member of the set this proposal opened under, so the vote contract refused the vote and nothing was sent.");
-    if (proposal.voters.has(key)) throw new Error("The vote contract already holds this account's vote on this proposal, so nothing was sent.");
+    if (proposal === undefined) throw new Error("There's no proposal with this number, so nothing was sent.");
+    if (proposal.passed) throw new Error("This proposal has already passed, so it takes no more votes. Nothing was sent.");
+    if (proposal.closesAtMs <= now) throw new Error("Voting on this proposal has closed, so nothing was sent.");
+    if (!this.members.has(key)) throw new Error("This account can't vote on this proposal, so nothing was sent.");
+    if (proposal.voters.has(key)) throw new Error("This account has already voted on this proposal, so nothing was sent.");
     proposal.voters.add(key);
     if (!passes(this.tally(proposal))) return;
     proposal.passed = true;

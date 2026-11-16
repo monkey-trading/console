@@ -49,7 +49,7 @@ describe("the cards while the page load's wallet is not settled", () => {
 
   it("holds the stake card's rows and forms with dashes, and says no wallet is connected only once settled", () => {
     const html = render(StakePanel, unsettled);
-    for (const text of ["Staked", "Wallet balance", "Share of all stake", "Start unstake", "Reading your stake…", "—"]) expect(html, text).toContain(text);
+    for (const text of ["Staked", "Wallet balance", "Share of all stake", "Start unstake", "Loading your stake…", "—"]) expect(html, text).toContain(text);
     expect(html).not.toContain("Connect a wallet");
     const settled = render(StakePanel, { wallet: null, walletDecided: true });
     expect(settled).toContain("Connect a wallet to stake or unstake MONKEY.");
@@ -58,16 +58,16 @@ describe("the cards while the page load's wallet is not settled", () => {
 
   it("holds the distribution claim's rows and its button's place", () => {
     const html = render(DistributionClaim, unsettled);
-    for (const text of ["Distributed to you", "Paid by the vault", "Claimable", "Reading your distributions…"]) expect(html, text).toContain(text);
+    for (const text of ["Distributed to you", "Claimed", "Claimable", "Loading your distributions…"]) expect(html, text).toContain(text);
     expect(held(html)).toBe(1);
     expect(render(DistributionClaim, { wallet: null, walletDecided: true })).toContain("Connect a wallet to see your USDC distributions.");
   });
 
   it("holds the emissions card's row and its button's place", () => {
     const html = render(Emissions, unsettled, "monkey");
-    expect(html).toContain("Reading your MONKEY emissions…");
+    expect(html).toContain("Loading your MONKEY…");
     expect(held(html)).toBe(1);
-    expect(render(Emissions, { wallet: null, walletDecided: true }, "monkey")).toContain("Connect a wallet to see your MONKEY emissions.");
+    expect(render(Emissions, { wallet: null, walletDecided: true }, "monkey")).toContain("Connect a wallet to see the MONKEY you&#x27;ve earned.");
   });
 });
 
@@ -75,7 +75,7 @@ describe("the cards while a connected wallet's first reads run", () => {
   it("holds the stake card's layout until the stake is read", () => {
     const html = render(StakePanel, { wallet: WALLET, walletDecided: true });
     expect(html).toContain("Start unstake");
-    expect(html).toContain("Reading your stake…");
+    expect(html).toContain("Loading your stake…");
   });
 
   it("holds the stake card's split rows at the wrapped size their figures take, and the unstake preview's place, so the reads landing move nothing (monkey-trading/console#332)", () => {
@@ -97,20 +97,20 @@ describe("the cards while a connected wallet's first reads run", () => {
   it("holds no button's place on the emissions card for a watched account, which can claim nothing", () => {
     const entitlement = { seq: 1, root: `0x${"ab".repeat(32)}`, account: WALLET.address, entitled: "5", siblings: [] };
     const watched = render(Emissions, { wallet: { ...WALLET, readOnly: true }, walletDecided: true, accountRead: true, entitlement, emissionsVault: null }, "monkey");
-    expect(watched).toContain("Accrued");
+    expect(watched).toContain("Earned");
     expect(held(watched)).toBe(0);
-    // It says plainly that the vault's record needs a wallet, never reading it for ever (#288).
-    expect(watched).toContain("What the vault has minted to this account is read through a connected wallet, so it does not show for a watched account.");
-    expect(watched).not.toContain("Reading the vault&#x27;s record");
+    // It says plainly that the claimed amount needs a wallet, never checking it for ever (#288).
+    expect(watched).toContain("How much has been claimed shows only with a connected wallet, so it isn&#x27;t shown for a read-only account.");
+    expect(watched).not.toContain("Checking how much you&#x27;ve claimed");
     const connected = render(Emissions, { wallet: WALLET, walletDecided: true, accountRead: true, entitlement, emissionsVault: null }, "monkey");
     expect(held(connected)).toBe(1);
-    expect(connected).toContain("Reading the vault&#x27;s record of what it has minted…");
+    expect(connected).toContain("Checking how much you&#x27;ve claimed…");
   });
 
   it("holds the emissions card's layout while the account or its closed periods are read", () => {
-    expect(render(Emissions, { wallet: WALLET, walletDecided: true, accountRead: false }, "monkey")).toContain("Reading your MONKEY emissions…");
+    expect(render(Emissions, { wallet: WALLET, walletDecided: true, accountRead: false }, "monkey")).toContain("Loading your MONKEY…");
     const periods = render(Emissions, { wallet: WALLET, walletDecided: true, accountRead: true, entitlement: null }, "monkey");
-    expect(periods).toContain("Reading your MONKEY emissions…");
+    expect(periods).toContain("Loading your MONKEY…");
     expect(held(periods)).toBe(1);
   });
 });
@@ -118,21 +118,21 @@ describe("the cards while a connected wallet's first reads run", () => {
 describe("the cards while the node's totals are read", () => {
   it("holds the activity table's head, a reading row and the rows it will hold, unseen", () => {
     const html = render(ActivityTable, {}, "monkey");
-    expect(html).toContain("Reading the latest activity…");
+    expect(html).toContain("Loading recent activity…");
     expect(html).toContain(">Time<");
     expect(held(html)).toBe(24);
   });
 
   it("holds the distribution card's rows with dashes, and keeps the token card's reading line for screen readers alone", () => {
     const distribution = render(DistributionPanel, {});
-    for (const text of ["Excess above the floor now", "Liquidity floor", "Last distribution", "Next close"]) expect(distribution, text).toContain(text);
-    expect(render(TokenPanel, {}, "monkey")).toMatch(/<p class="sr-only">Reading the node&#x27;s figures…<\/p>/);
+    for (const text of ["Available to distribute now", "Reserve", "Last distribution", "Next distribution"]) expect(distribution, text).toContain(text);
+    expect(render(TokenPanel, {}, "monkey")).toMatch(/<p class="sr-only">Loading figures…<\/p>/);
   });
 
   it("holds a chart card's lines below the chart while its data is read", () => {
     const html = render(Chart, {});
-    expect(html).toContain("Reading the chart&#x27;s data…");
+    expect(html).toContain("Loading chart…");
     expect(html).toMatch(/aria-hidden="true" class="invisible"/);
-    expect(html).toContain("All covers the most recent 1,998 days");
+    expect(html).toContain("&quot;All&quot; shows up to the last 1,998 days");
   });
 });

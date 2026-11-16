@@ -26,12 +26,12 @@ import { useConsoleSelect, useMonkeyPanel, usePanelState } from "./use-monkey";
 
 /** What the card says while the node holds no proof: what is known of the last paying epoch, never that nothing was distributed because no proof exists yet. */
 function PendingLine({ pending }: { pending: ReturnType<typeof pendingDistribution> }) {
-  if (pending.kind === "reading") return <p className={NOTE}>Reading the epochs that have paid stakers…</p>;
-  if (pending.kind === "none") return <p className={NOTE}>No USDC has been distributed to you yet. Stakers share the house&apos;s excess above its floor at each epoch close, less the operator&apos;s fifth while operator rotation is on.</p>;
-  const paid = pending.paid === null ? `Epoch ${pending.epoch} closed and paid stakers.` : `Epoch ${pending.epoch} closed and paid ${formatUsdc(usdcFixed(pending.paid))} to stakers.`;
-  if (pending.staker === null) return <p role="status" className={NOTE}>{paid} If you staked, your share shows here once the vault has the checkpoint covering it.</p>;
-  const share = pending.share === null ? "" : ` If you were staking then, your share is about ${formatUsdc(usdcFixed(pending.share))}, estimated from your stake now.`;
-  return <p role="status" className={NOTE}>{paid}{share} It becomes claimable once the vault has the checkpoint covering it, and is read again by itself.</p>;
+  if (pending.kind === "reading") return <p className={NOTE}>Loading recent distributions…</p>;
+  if (pending.kind === "none") return <p className={NOTE}>No USDC has been distributed to you yet. At the end of each staking period, stakers share what the house holds above its reserve. While rotation is on, a fifth goes to the operator first.</p>;
+  const paid = pending.paid === null ? `Staking period ${pending.epoch} ended and paid stakers.` : `Staking period ${pending.epoch} ended and paid ${formatUsdc(usdcFixed(pending.paid))} to stakers.`;
+  if (pending.staker === null) return <p role="status" className={NOTE}>{paid} If you were staking, your share shows here after the vault&apos;s next update.</p>;
+  const share = pending.share === null ? "" : ` If you were staking then, your share is about ${formatUsdc(usdcFixed(pending.share))}, based on your stake now.`;
+  return <p role="status" className={NOTE}>{paid}{share} You can claim it after the vault&apos;s next update. This page checks automatically.</p>;
 }
 
 /** No closed epochs, for a card shown without the page's reads of them. */
@@ -72,10 +72,10 @@ export function DistributionClaim({ epochs = null }: { epochs?: EpochReads | nul
         <>
           <dl className="space-y-2">
             <Row label="Distributed to you">{proof === null ? "—" : formatUsdc(usdcFixed(position.accrued))}</Row>
-            <Row label="Paid by the vault">—</Row>
+            <Row label="Claimed">—</Row>
             <Row label="Claimable">—</Row>
           </dl>
-          <p className="sr-only">{proof === null ? "Reading your distributions…" : "Reading the vault's record of what it has paid…"}</p>
+          <p className="sr-only">{proof === null ? "Loading your distributions…" : "Checking how much you've claimed…"}</p>
           {/* The claim button's place, held while the reads that decide it run. */}
           <div aria-hidden="true" className={`${BUTTON} invisible w-full`}>Claim</div>
         </>
@@ -86,26 +86,26 @@ export function DistributionClaim({ epochs = null }: { epochs?: EpochReads | nul
       ) : proof === null ? null : (
         <dl className="space-y-2">
           <Row label="Distributed to you">{formatUsdc(usdcFixed(position.accrued))}</Row>
-          {position.claimed !== null && <Row label="Paid by the vault">{formatUsdc(usdcFixed(position.claimed))}</Row>}
+          {position.claimed !== null && <Row label="Claimed">{formatUsdc(usdcFixed(position.claimed))}</Row>}
           {position.claimable > 0n && <Row label="Claimable">{formatUsdc(usdcFixed(position.claimable))}</Row>}
         </dl>
       )}
-      {!reading && proof !== null && position.awaiting > 0n && <p className={NOTE}>{formatUsdc(usdcFixed(position.awaiting))} of this is not claimable yet; the rest follows once the vault reaches the newest checkpoint.</p>}
+      {!reading && proof !== null && position.awaiting > 0n && <p className={NOTE}>{formatUsdc(usdcFixed(position.awaiting))} of this can be claimed after the vault&apos;s next update.</p>}
       {mine && !reading && <ReadNote read={figures.proof} />}
       {mine && figures.position.status === "failed" && <ReadNote read={figures.position} />}
-      {mine && readOnly && proof !== null && <p role="status" className="text-caption leading-relaxed text-amber">Claiming is off: this account is read-only, so nothing can be signed for it. What the vault has paid is read from a wallet&apos;s own chain connection, which a watched account does not have.</p>}
+      {mine && readOnly && proof !== null && <p role="status" className="text-caption leading-relaxed text-amber">You can&apos;t claim from a read-only account.</p>}
       {mine && !readOnly && !reading && position.claimable > 0n && (
         <div>
           <button type="button" aria-disabled={busy || gate.blocked} aria-describedby={gate.describedBy} onClick={() => { if (!busy && !gate.blocked) void claimDistribution(panel).then(() => focusHeading("distributions-title")); }} className={`${BUTTON} w-full`}>
-            Claim {formatUsdc(usdcFixed(position.claimable))} on the vault
+            Claim {formatUsdc(usdcFixed(position.claimable))}
           </button>
           {gate.note}
         </div>
       )}
       <Notice surface="distribution" />
-      {mine && !readOnly && proof !== null && held === null && figures.position.status === "failed" && <p className={NOTE}>The vault&apos;s record of what it has paid could not be read; it is read again by itself.</p>}
-      {mine && !readOnly && position.claimed !== null && position.checkpoint === "waiting" && position.accrued > position.claimed && <p className={NOTE}>The vault has not accepted a checkpoint covering this yet; the claim unlocks once it does. It is checked again by itself.</p>}
-      {mine && !readOnly && position.claimed !== null && position.checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && <p className={NOTE}>All distributed USDC is claimed.</p>}
+      {mine && !readOnly && proof !== null && held === null && figures.position.status === "failed" && <p className={NOTE}>Couldn&apos;t check how much you&apos;ve claimed. Trying again automatically.</p>}
+      {mine && !readOnly && position.claimed !== null && position.checkpoint === "waiting" && position.accrued > position.claimed && <p className={NOTE}>You can claim this after the vault&apos;s next update. This page checks automatically.</p>}
+      {mine && !readOnly && position.claimed !== null && position.checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && <p className={NOTE}>You&apos;ve claimed all the USDC distributed to you.</p>}
     </Card>
   );
 }

@@ -17,7 +17,7 @@ function listed(parts: readonly string[]): string {
 export function unstakeWords(staked: bigint, delegations: readonly Delegation[], amount: bigint, labelOf: (address: string) => string): string | null {
   if (amount <= 0n || amount > staked) return null;
   const { fromUndelegated, reductions } = unstakeTakes(staked, delegations, amount);
-  if (reductions.length === 0) return `This takes ${formatMonkey(amount)} from your undelegated stake, so no delegation changes.`;
+  if (reductions.length === 0) return `This takes ${formatMonkey(amount)} from your undelegated stake, so your delegations don't change.`;
   const cuts = listed(reductions.map((reduction) => `${formatMonkey(reduction.amount)} from your delegation to ${labelOf(reduction.candidate)}`));
   return fromUndelegated > 0n ? `This takes all ${formatMonkey(fromUndelegated)} of your undelegated stake, then ${cuts}.` : `This takes ${cuts}.`;
 }

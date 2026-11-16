@@ -33,17 +33,17 @@ export function isPlainClick(click: ClickKeys): boolean {
 /** What the page says above its charts while the house read warms up or has stopped refreshing; null when nothing holds it (the not-trusted line covers that wait). */
 export function houseGateLine({ trusted, ready, fresh, simulated }: { trusted: boolean; ready: boolean; fresh: boolean; simulated: boolean }): string | null {
   if (!trusted) return null;
-  if (!ready) return simulated ? "Reading the simulated node's first answers…" : "Reading the node's first signed answers…";
-  if (!fresh) return "The node's answers have stopped refreshing, so the figures on this page may be behind.";
+  if (!ready) return simulated ? "Loading the demo figures…" : "Loading figures…";
+  if (!fresh) return "Figures have stopped updating, so they may be out of date.";
   return null;
 }
 
 /** A failed or unavailable MONKEY overview must qualify each chart that uses its floor or schedule. */
 export function overviewProblem(read: Read<unknown>, what: string): string | null {
-  if (read.status === "unavailable") return `This node does not serve ${what} yet.`;
+  if (read.status === "unavailable") return `This server doesn't provide ${what} yet.`;
   if (read.status !== "failed") return null;
-  const reason = read.message === null ? "" : ` (${read.message.replace(/\.+$/, "")})`;
+  const reason = read.message === null ? "" : `: ${read.message.replace(/\.+$/, "")}`;
   return read.value === null
-    ? `The node did not answer for ${what}${reason}, so there is nothing to show yet. The page keeps asking.`
-    : `The last read of ${what} failed${reason}, so this may be behind.`;
+    ? `Couldn't load ${what}${reason}. Trying again automatically.`
+    : `Couldn't refresh ${what}${reason}, so this may be out of date.`;
 }

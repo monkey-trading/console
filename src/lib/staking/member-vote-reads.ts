@@ -207,7 +207,7 @@ export class MemberVoteReads {
         this.set({ facts, status: "ready", error: null });
       } catch (error) {
         this.backoff.record(true);
-        if (current()) this.set({ facts, status: "failed", error: error instanceof Error ? error.message : "The wallet did not answer." });
+        if (current()) this.set({ facts, status: "failed", error: error instanceof Error ? error.message : "Your wallet didn't respond." });
       }
     }).finally(() => {
       if (this.reading === entry) this.reading = null;

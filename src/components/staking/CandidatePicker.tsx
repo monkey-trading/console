@@ -41,7 +41,7 @@ export function CandidatePicker({ label, options, value, onChange, source, typed
   const [focused, setFocused] = useState(false);
   return (
     <div className="space-y-2">
-      {source.kind === "loading" && <p className={NOTE}>Reading the operator list…</p>}
+      {source.kind === "loading" && <p className={NOTE}>Loading the operator list…</p>}
       {options.length > 0 && <Select label={label} value={value ?? ""} options={[{ value: "", label: "Choose a candidate" }, ...options]} onChange={onChange} />}
       {(offersTyped(source, typed) || focused || keep) && (
         <>
@@ -49,7 +49,7 @@ export function CandidatePicker({ label, options, value, onChange, source, typed
           {/* Cleared, the list's choice applies again; typed, it holds even once the node's list is back. */}
           <input id={id} value={typed} maxLength={44} spellCheck={false} autoComplete="off" placeholder="0x…" aria-invalid={wrong} aria-describedby={`${id}-note`} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onChange={(event) => onTyped(event.target.value)} className={FIELD} />
           <p id={`${id}-note`} className={wrong ? "text-caption text-amber" : NOTE}>
-            {wrong ? "Enter a candidate's 0x address of 40 hexadecimal digits, as its checksum has it. " : ""}An address typed here is checked only by the chain, and the staking contract takes any address: make sure it is a candidate&apos;s.
+            {wrong ? "Enter a valid address: 0x followed by 40 characters, with capitals exactly as given. " : ""}This address isn&apos;t checked against the operator list, and staking accepts any address, so make sure it&apos;s a candidate&apos;s.
           </p>
         </>
       )}

@@ -112,8 +112,8 @@ export function queueTotals(pages: readonly { seq: number | null; queue: readonl
  * a build that simulates the node, and nothing for a live node that does not know (one restored from an older snapshot).
  */
 export function paramsSource(params: Pick<HouseParams, "seq">, simulated: boolean): string | null {
-  if (params.seq !== null) return `The log records these values at seq ${params.seq}.`;
-  return simulated ? "These are the launch values." : null;
+  if (params.seq !== null) return "These terms are recorded in the server's public log.";
+  return simulated ? "These are the launch terms." : null;
 }
 
 /**
@@ -134,9 +134,9 @@ export function queueMarks(positions: readonly number[], waiting: number, segmen
  */
 export function queueCaveats(totals: QueueTotals, failed: boolean): string[] {
   return [
-    !totals.complete ? "The queue's first pages only are counted, so these are lower bounds." : null,
-    totals.complete && !totals.stable ? "The queue changed while it was read, so these figures are approximate." : null,
-    failed ? "The last read failed, so these figures may be behind." : null,
+    !totals.complete ? "Only part of the queue has been counted, so the real figures may be higher." : null,
+    totals.complete && !totals.stable ? "The queue changed while it was being counted, so these figures are approximate." : null,
+    failed ? "Couldn't refresh the queue, so these figures may be out of date." : null,
   ].filter((line) => line !== null);
 }
 

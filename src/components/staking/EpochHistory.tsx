@@ -45,9 +45,9 @@ function Head() {
   return (
     <thead className="sticky top-0 bg-ink-1">
       <tr>
-        <th scope="col" className={TH}>Epoch</th>
-        <th scope="col" className={TH}>Closed</th>
-        <th scope="col" className={`${TH} text-right`}>NAV / floor</th>
+        <th scope="col" className={TH}>Period</th>
+        <th scope="col" className={TH}>Ended</th>
+        <th scope="col" className={`${TH} text-right`}>Value / reserve</th>
         <th scope="col" className={`${TH} text-right`}>To stakers</th>
         <th scope="col" className={TH}>Operator&apos;s share</th>
       </tr>
@@ -85,20 +85,20 @@ export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf:
   const firstRead = state.epochs.length === 0 && (state.status === "reading" || state.status === "idle");
   const more = state.status === "ready" && state.next !== null;
   return (
-    <Card id={TITLE_ID} title="Closed epochs">
+    <Card id={TITLE_ID} title="Past staking periods">
       {/* One viewport at the same height in every state — reading, empty, failed, or holding any
           number of epochs — so the charts below the card never move; the empty and failure lines
           sit inside it. */}
-      <div role="region" aria-label="Closed distribution epochs" tabIndex={0} className="relative -mx-1 h-96 overflow-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
+      <div role="region" aria-label="Past staking periods" tabIndex={0} className="relative -mx-1 h-96 overflow-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
         {gone !== "" && <p role="status" className={`${NOTE} px-1 pb-1`}>{gone}</p>}
         {state.epochs.length > 0 ? (
           <table className="w-full min-w-[36rem] text-label sm:text-caption">
-            <caption className="sr-only">Each closed distribution epoch, newest first: when it closed, the house NAV against the floor, what went to stakers, and each recipient of the operator&apos;s share. Times are UTC.</caption>
+            <caption className="sr-only">Each past staking period, newest first: when it ended, the house value against the reserve, what went to stakers, and who received the operator&apos;s share. Times are UTC.</caption>
             <Head />
             <tbody>
               {state.epochs.map((close) => (
                 <tr key={close.epoch} className="border-t border-line">
-                  <td className={`${TD} text-fg-2 tabular-nums`}>{close.epoch}{close.skipped !== null && <span className="block text-fg-3">{close.skipped.first === close.skipped.last ? `epoch ${close.skipped.first} closed` : `epochs ${close.skipped.first}–${close.skipped.last} closed`} with no distribution</span>}</td>
+                  <td className={`${TD} text-fg-2 tabular-nums`}>{close.epoch}{close.skipped !== null && <span className="block text-fg-3">{close.skipped.first === close.skipped.last ? `period ${close.skipped.first} ended` : `periods ${close.skipped.first}–${close.skipped.last} ended`} with no distribution</span>}</td>
                   <td className={`${TD} text-fg-2`}>{formatStampWithYear(close.close_ms)}</td>
                   <td className={`${TD} text-right text-fg-2`}>{usd(close.nav)}<span className="block text-fg-3">{usd(close.floor)}</span></td>
                   <td className={`${TD} text-right text-fg`}>{usdc(close.stakers_usdc_units)}<span className="block text-fg-3">{close.stakers === 1 ? "1 staker" : `${close.stakers} stakers`}</span></td>
@@ -109,10 +109,10 @@ export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf:
           </table>
         ) : firstRead ? (
           <table className="w-full min-w-[36rem] text-label sm:text-caption">
-            <caption className="sr-only">Each closed distribution epoch, being read.</caption>
+            <caption className="sr-only">Past staking periods, loading.</caption>
             <Head />
             <tbody>
-              <tr className="border-t border-line"><td colSpan={5} className={`${TD} text-fg-3`}>Reading the closed epochs…</td></tr>
+              <tr className="border-t border-line"><td colSpan={5} className={`${TD} text-fg-3`}>Loading past staking periods…</td></tr>
               {HELD_ROWS.map((index) => (
                 <tr key={index} aria-hidden="true" className="invisible border-t border-line align-top">
                   <td className={`${TD} tabular-nums`}>—</td>
@@ -125,21 +125,21 @@ export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf:
             </tbody>
           </table>
         ) : state.status === "ready" ? (
-          <p className={`${NOTE} px-1`}>No distribution epoch has closed yet.</p>
+          <p className={`${NOTE} px-1`}>No staking period has ended yet.</p>
         ) : (
-          <ReadNote read={read} loading="Reading the closed epochs…" />
+          <ReadNote read={read} loading="Loading past staking periods…" />
         )}
       </div>
       {/* The Load more row and the cover line hold their places in every state, so nothing below
           the card moves when a read lands. */}
       {more ? (
-        <button type="button" aria-disabled={state.more} onClick={loadMore} className={LOAD}>{state.more ? "Loading" : "Load more"}<span className="sr-only"> epochs</span></button>
+        <button type="button" aria-disabled={state.more} onClick={loadMore} className={LOAD}>{state.more ? "Loading" : "Load more"}<span className="sr-only"> periods</span></button>
       ) : (
         <span aria-hidden="true" className={`${LOAD} block invisible`}>Load more</span>
       )}
       <p role="status" className="text-caption leading-relaxed text-amber empty:hidden">{problem}</p>
       {covered !== null ? <p className={NOTE}>{covered}</p> : <p aria-hidden="true" className={`${NOTE} invisible`}>{"\u00a0"}</p>}
-      <p className={NOTE}>Each close distributes the excess as the Distribution card describes; the operator&apos;s fifth, while rotation is on, is named in the last column.</p>
+      <p className={NOTE}>Each period&apos;s distribution works as the Distribution card describes. The operator&apos;s fifth, paid while rotation is on, is shown in the last column.</p>
     </Card>
   );
 }

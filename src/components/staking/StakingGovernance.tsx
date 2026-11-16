@@ -125,26 +125,26 @@ export function StakingGovernance() {
     // The figures are hidden, not unmounted, while the node is not trusted, as on the other tabs.
     <div className={`mt-4 ${trusted ? "grid" : "hidden"} gap-4`}>
       {/* Mounted before any vote, so a vote that lands is read out wherever its proposal now sits. */}
-      <p role="status" className="sr-only">{votes.landed === null ? "" : `Your yes vote on proposal ${votes.landed} landed.`}</p>
+      <p role="status" className="sr-only">{votes.landed === null ? "" : `Your yes vote on proposal ${votes.landed} went through.`}</p>
       <p className={`${NOTE} max-w-prose`}>
-        Members of the rotation set vote with the stake the set adopted, and a proposal passes once more than two thirds of its set&apos;s weight has voted yes; a member that does not vote counts against it.
-        A normal change takes effect seven days after the engine logs it, so anyone holding a position can act first.
-        A fast-path change takes effect at once, but only as a restriction that reduces risk, which lapses {ttl === null ? "after a recorded lifetime" : `after ${lifetimeText(ttl)}`} unless another vote renews it.
+        Operators in the rotation vote with the stake they had when the rotation was chosen. A proposal passes once more than two thirds of that stake votes yes, so not voting counts against it.
+        A standard change takes effect 7 days after the server records it, so traders can act first.
+        A fast change takes effect at once, but it can only reduce risk, and it ends {ttl === null ? "after a set time" : `after ${lifetimeText(ttl)}`} unless another vote renews it.
       </p>
       {!readable && <p className={NOTE}>{walletLine(wallet, readable)}</p>}
       {/* Said only from a read that succeeded: a failed one is not an empty list. */}
-      {readable && settled && chain.read.status === "ready" && delegated.length === 0 && <p className={NOTE}>This account delegates to no member, so no member&apos;s vote is shown for it.</p>}
+      {readable && settled && chain.read.status === "ready" && delegated.length === 0 && <p className={NOTE}>You don&apos;t delegate to any operator in the rotation, so there are no votes to show.</p>}
       {!settled ? (
-        <p className={NOTE}>{gate === "wallet" ? "Reading the votes through your wallet…" : "Reading the node's proposals…"}</p>
+        <p className={NOTE}>{gate === "wallet" ? "Loading votes from your wallet…" : "Loading proposals…"}</p>
       ) : (
         <div ref={grid} className="grid items-start gap-4 xl:grid-cols-2">
-          <Card id="open-proposals-title" title="Open proposals" aside={list.value === null ? undefined : <span className="text-label text-fg-3">At final block {list.value.block.number}</span>}>
+          <Card id="open-proposals-title" title="Open proposals" aside={list.value === null ? undefined : <span className="text-label text-fg-3">As of block {list.value.block.number}</span>}>
             <ReadNote read={list} />
-            {list.value !== null && proposals === null && <p className={NOTE}>This node follows no vote contract.</p>}
-            {list.value?.proposalsProblem != null && <p role="status" className="text-caption leading-relaxed text-amber">The node&apos;s open proposals did not pass the console&apos;s check: {list.value.proposalsProblem}</p>}
-            {proposals?.unavailable === true && <p role="status" className="text-caption leading-relaxed text-amber">The node could not read the open proposals at its last read; they are read again shortly.</p>}
+            {list.value !== null && proposals === null && <p className={NOTE}>Voting isn&apos;t set up on this server.</p>}
+            {list.value?.proposalsProblem != null && <p role="status" className="text-caption leading-relaxed text-amber">The open proposals from the server couldn&apos;t be checked: {list.value.proposalsProblem}</p>}
+            {proposals?.unavailable === true && <p role="status" className="text-caption leading-relaxed text-amber">The server couldn&apos;t load the open proposals. Trying again shortly.</p>}
             {proposals !== null && !proposals.unavailable && (
-              <Items empty="No proposal is taking votes.">
+              <Items empty="No proposals are open for voting.">
                 {open.map((proposal) => {
                   const target = { id: proposal.id, setId: proposal.setId };
                   const headingId = `proposal-open-${proposal.id}`;
@@ -152,7 +152,7 @@ export function StakingGovernance() {
                     <ProposalItem
                       key={proposal.id} id={proposal.id} headingId={headingId} fast={proposal.fast} stage="open" title={commandTitle(proposal.command, inForce)} details={commandDetails(proposal.command, inForce)}
                       tally={proposal.tally} command={proposal.command} members={membersOf(target)}
-                      wait={{ label: "Voting closes", atMs: proposal.closesAtMs, reached: "Voting has closed; it leaves this list once the node reads a final block past the close", onReached: () => void operators.refresh() }}
+                      wait={{ label: "Voting closes", atMs: proposal.closesAtMs, reached: "Voting has closed. This proposal leaves the list shortly", onReached: () => void operators.refresh() }}
                       vote={account === null ? null : (
                         <VoteControl
                           vote={proposals.vote} id={proposal.id} standing={standing(votes.facts, target, account)} weight={weightIn(votes.facts, target, account)}
@@ -164,7 +164,7 @@ export function StakingGovernance() {
                 })}
               </Items>
             )}
-            {proposals?.truncated === true && <p className={NOTE}>The node read the newest proposals only; older ones may still be open.</p>}
+            {proposals?.truncated === true && <p className={NOTE}>Only the newest proposals are shown. Older ones may still be open.</p>}
             {/* A vote's request or refusal keeps a place once its proposal has left the list. */}
             {awayLabelShown(votes.votingOn, open.map((proposal) => proposal.id), speaks) && (
               <div>
@@ -174,30 +174,30 @@ export function StakingGovernance() {
             )}
           </Card>
           <div className="grid gap-4">
-            <Card id="waiting-changes-title" title="Passed, waiting out the notice">
+            <Card id="waiting-changes-title" title="Passed, waiting to take effect">
               <ReadNote read={held} />
               {view !== null && (
-                <Items empty="No passed change is waiting.">
+                <Items empty="No passed changes are waiting.">
                   {view.waiting.map((change) => (
                     <ProposalItem
                       key={change.id} id={change.id} headingId={`proposal-waiting-${change.id}`} fast={false} stage="waiting" title={commandTitle(change.command, inForce)} details={commandDetails(change.command, inForce)}
                       tally={chainTally(votes.facts, change.id)} command={change.command} members={membersOf({ id: change.id, setId: null })}
-                      wait={{ label: "Applies", atMs: change.appliesAtMs, reached: "Applying with the node's next command", onReached: () => void governance.refresh() }}
+                      wait={{ label: "Takes effect", atMs: change.appliesAtMs, reached: "Taking effect now", onReached: () => void governance.refresh() }}
                     />
                   ))}
                 </Items>
               )}
             </Card>
-            <Card id="restrictions-title" title="Fast-path restrictions in force">
+            <Card id="restrictions-title" title="Fast changes in effect">
               <ReadNote read={held} />
               {view !== null && (
-                <Items empty="No fast-path restriction is in force.">
+                <Items empty="No fast changes are in effect.">
                   {view.inForce.map((restriction) => (
                     <ProposalItem
                       key={restriction.id} id={restriction.id} headingId={`proposal-restriction-${restriction.id}`} fast stage="in-force" title={limitTitle(restriction.limit, inForce)}
                       details={limitDetails(restriction.limit, { params_baseline: view.paramsBaseline ?? undefined, market_baselines: view.marketBaselines })}
                       tally={chainTally(votes.facts, restriction.id)} command={null} members={membersOf({ id: restriction.id, setId: null })}
-                      wait={{ label: "Lapses", atMs: restriction.expiresAtMs, reached: "Lapsing with the node's next command", onReached: () => void governance.refresh() }}
+                      wait={{ label: "Ends", atMs: restriction.expiresAtMs, reached: "Ending now", onReached: () => void governance.refresh() }}
                     />
                   ))}
                 </Items>

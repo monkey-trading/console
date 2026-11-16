@@ -60,7 +60,7 @@ export class ProviderStaking implements StakingWallet {
   ) {}
 
   private staking(): string {
-    if (this.chain.staking === undefined || this.chain.staking === null) throw new Error("This build names no staking contract, so it cannot stake.");
+    if (this.chain.staking === undefined || this.chain.staking === null) throw new Error("Staking isn't available here.");
     return this.chain.staking;
   }
 
@@ -135,11 +135,11 @@ export class ProviderStaking implements StakingWallet {
       const held = decodeFunctionResult({ abi: STAKING, functionName: "delegationsOf", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegationsOf", args: [owner] })) });
       if ((await stakes()) !== staked || (await delegatedStake()) !== delegated) continue;
       const delegations = held.map((delegation) => ({ candidate: delegation.candidate.toLowerCase(), amount: delegation.amount }));
-      if (delegations.reduce((sum, delegation) => sum + delegation.amount, 0n) !== delegated || delegated > staked) throw new Error("The chain read named delegations that do not add up to the delegated stake within the stake.");
+      if (delegations.reduce((sum, delegation) => sum + delegation.amount, 0n) !== delegated || delegated > staked) throw new Error("Your delegations on chain don't add up to your delegated stake.");
       await onChain();
       return { staked, delegated, delegations };
     }
-    throw new Error("Your stake changed on every read; it is read again shortly.");
+    throw new Error("Your stake kept changing while it loaded. Trying again shortly.");
   }
 
   async stake(amount: bigint, progress: Progress = () => undefined): Promise<string> {
@@ -149,7 +149,7 @@ export class ProviderStaking implements StakingWallet {
     const owner = hexOf(this.address);
     const spender = hexOf(staking);
     const token = await this.tokenAddress();
-    if (token === null) throw new Error("The vault has not deployed its MONKEY token yet.");
+    if (token === null) throw new Error("The MONKEY token isn't available yet.");
     const balance = decodeFunctionResult({ abi: ERC20, functionName: "balanceOf", data: await this.call(token, encodeFunctionData({ abi: ERC20, functionName: "balanceOf", args: [owner] })) });
     if (balance < amount) throw new Error("Your wallet holds less MONKEY than that.");
     const allowance = decodeFunctionResult({ abi: ERC20, functionName: "allowance", data: await this.call(token, encodeFunctionData({ abi: ERC20, functionName: "allowance", args: [owner, spender] })) });
@@ -178,16 +178,16 @@ export class ProviderStaking implements StakingWallet {
 
   async redelegate(from: string, to: string, amount: bigint, progress: Progress = () => undefined): Promise<string> {
     if (amount <= 0n) throw new Error("The amount must be more than zero.");
-    if (from.toLowerCase() === to.toLowerCase()) throw new Error("A delegation moves to another candidate than its own.");
+    if (from.toLowerCase() === to.toLowerCase()) throw new Error("You can't move a delegation to the same candidate.");
     return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "redelegate", args: [hexOf(from), hexOf(to), amount] }), "move your delegation", progress);
   }
 
   /** Claims at the checkpoint the proof's `seq` names. The proof names this account: the node signed it for the account's own route. */
   async claimDistribution(proof: DistributionProof, progress: Progress = () => undefined): Promise<string> {
-    if (proof.account.toLowerCase() !== this.address.toLowerCase()) throw new Error("The distribution proof is for another account.");
+    if (proof.account.toLowerCase() !== this.address.toLowerCase()) throw new Error("This distribution is for another account.");
     // `BigInt` throws on a malformed string; the enclave signed this shape for the account's route.
     const entitled = BigInt(proof.entitled);
-    if (entitled <= 0n) throw new Error("The distribution proof names nothing to claim.");
+    if (entitled <= 0n) throw new Error("There's no distribution to claim.");
     const data = encodeFunctionData({ abi: VAULT, functionName: "claimDistribution", args: [hexOf(this.address), entitled, BigInt(proof.seq), proof.siblings.map(hexOf)] });
     return this.transport.send(this.chain.vault, data, "claim your USDC distribution", progress).catch((error: unknown) => {
       throw claimFailure(error);

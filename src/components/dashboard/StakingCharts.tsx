@@ -17,8 +17,8 @@ export function StakingCharts({ range }: { range: DashboardRangeId }) {
   const panel = useMonkeyPanel();
   return (
     <>
-      <ChartCard id="dash-epochs" title="USDC distributed per epoch" caption="What each epoch close distributed: to stakers, and while operator rotation is on, a fifth to the operator in effect." feed={panel.feed("epochs")} kind="bars" lines={EPOCH_LINES} format={formatCompactUsd} timeframe={range} />
-      <ChartCard id="dash-rewards" title="Total USDC distributed" caption="Cumulative, across every epoch close, the operator's fifth included." feed={panel.feed("rewards")} kind="area" lines={REWARD_LINES} format={formatCompactUsd} timeframe={range} />
+      <ChartCard id="dash-epochs" title="USDC distributed per staking period" caption="What was distributed at the end of each staking period. While rotation is on, a fifth goes to the operator and the rest to stakers." feed={panel.feed("epochs")} kind="bars" lines={EPOCH_LINES} format={formatCompactUsd} timeframe={range} />
+      <ChartCard id="dash-rewards" title="Total USDC distributed" caption="Everything distributed so far, including the operator's fifth." feed={panel.feed("rewards")} kind="area" lines={REWARD_LINES} format={formatCompactUsd} timeframe={range} />
     </>
   );
 }

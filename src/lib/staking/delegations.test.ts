@@ -77,7 +77,7 @@ describe("unstakeWords", () => {
   const label = (address: string) => (address === A ? "alpha.example" : "bravo.example");
 
   it("says an unstake within the undelegated stake changes no delegation", () => {
-    expect(unstakeWords(1_000n * M, [{ candidate: A, amount: 500n * M }], 400n * M, label)).toBe("This takes 400 MONKEY from your undelegated stake, so no delegation changes.");
+    expect(unstakeWords(1_000n * M, [{ candidate: A, amount: 500n * M }], 400n * M, label)).toBe("This takes 400 MONKEY from your undelegated stake, so your delegations don't change.");
   });
 
   it("names each delegation a larger one reduces, and by how much, after all of the undelegated stake", () => {

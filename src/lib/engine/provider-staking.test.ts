@@ -136,7 +136,7 @@ describe("ProviderStaking.delegations", () => {
     const moving = rig({ ...WORLD, delegated: 40n, delegations }, CHAIN, TOKEN, (call, world) => {
       if (call === "stakes") world.staked += 1n;
     });
-    await expect(moving.staking.delegations()).rejects.toThrow("Your stake changed on every read");
+    await expect(moving.staking.delegations()).rejects.toThrow("Your stake kept changing");
   });
 
   it("refuses an answer when the wallet changed chain during the read", async () => {
@@ -147,8 +147,8 @@ describe("ProviderStaking.delegations", () => {
   });
 
   it("refuses delegations that do not add up to the delegated stake, or pass the stake, which only a lying RPC answers, and a wallet on another chain", async () => {
-    await expect(rig({ ...WORLD, delegated: 39n, delegations }).staking.delegations()).rejects.toThrow("do not add up");
-    await expect(rig({ ...WORLD, staked: 39n, delegated: 40n, delegations }).staking.delegations()).rejects.toThrow("do not add up");
+    await expect(rig({ ...WORLD, delegated: 39n, delegations }).staking.delegations()).rejects.toThrow("don't add up");
+    await expect(rig({ ...WORLD, staked: 39n, delegated: 40n, delegations }).staking.delegations()).rejects.toThrow("don't add up");
     await expect(rig({ ...WORLD, chainId: 1, delegated: 40n, delegations }).staking.delegations()).rejects.toThrow("on chain 1, not chain 31337");
   });
 });
@@ -170,9 +170,9 @@ describe("ProviderStaking transactions", () => {
     const { staking, sent } = rig(WORLD);
     await expect(staking.delegate(CANDIDATE, 0n)).rejects.toThrow("more than zero");
     await expect(staking.undelegate(CANDIDATE, 0n)).rejects.toThrow("more than zero");
-    await expect(staking.redelegate(CANDIDATE, CANDIDATE.toUpperCase().replace("0X", "0x"), 5n)).rejects.toThrow("another candidate");
+    await expect(staking.redelegate(CANDIDATE, CANDIDATE.toUpperCase().replace("0X", "0x"), 5n)).rejects.toThrow("to the same candidate");
     expect(sent).toEqual([]);
-    await expect(rig(WORLD, { ...CHAIN, staking: null }).staking.delegate(CANDIDATE, 5n)).rejects.toThrow("names no staking contract");
+    await expect(rig(WORLD, { ...CHAIN, staking: null }).staking.delegate(CANDIDATE, 5n)).rejects.toThrow("Staking isn't available here");
   });
 
   it("approves the staking contract for the amount before staking when the allowance is short", async () => {
@@ -191,14 +191,14 @@ describe("ProviderStaking transactions", () => {
 
   it("refuses to stake, or unstake, when the build names no staking contract", async () => {
     const { staking, sent } = rig(WORLD, { ...CHAIN, staking: null });
-    await expect(staking.stake(1n)).rejects.toThrow("names no staking contract");
-    await expect(staking.startUnstake(1n)).rejects.toThrow("names no staking contract");
+    await expect(staking.stake(1n)).rejects.toThrow("Staking isn't available here");
+    await expect(staking.startUnstake(1n)).rejects.toThrow("Staking isn't available here");
     expect(sent).toEqual([]);
   });
 
   it("refuses to stake while the vault has no token", async () => {
     const { staking, sent } = rig(WORLD, CHAIN, "0x0000000000000000000000000000000000000000");
-    await expect(staking.stake(1n)).rejects.toThrow("not deployed its MONKEY token");
+    await expect(staking.stake(1n)).rejects.toThrow("The MONKEY token isn't available yet");
     expect(sent).toEqual([]);
   });
 
@@ -226,6 +226,6 @@ describe("ProviderStaking transactions", () => {
     expect(String(sent[0]?.args[0]).toLowerCase()).toBe(ME);
     expect(sent[0]?.args.slice(1)).toEqual([123n, 9n, [sibling]]);
     await expect(staking.claimDistribution({ seq: 9, root: "0x", account: "0x00000000000000000000000000000000000000ee", entitled: "1", siblings: [] })).rejects.toThrow("another account");
-    await expect(staking.claimDistribution({ seq: 9, root: "0x", account: ME, entitled: "0", siblings: [] })).rejects.toThrow("nothing to claim");
+    await expect(staking.claimDistribution({ seq: 9, root: "0x", account: ME, entitled: "0", siblings: [] })).rejects.toThrow("no distribution to claim");
   });
 });

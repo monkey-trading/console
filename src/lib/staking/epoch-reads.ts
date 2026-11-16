@@ -76,14 +76,14 @@ export function checkedPage(page: DistributionEpochsPage): DistributionEpochsPag
       && [close.epoch, close.close_seq, close.close_ms, close.ended_ms, close.stakers].every(whole)
       && close.operator_shares.every((share) => ADDRESS.test(share.account))
       && (close.skipped === null || (whole(close.skipped.first) && whole(close.skipped.last)));
-    if (!ok) throw new Error(`The closed epochs named a malformed figure for epoch ${String(close.epoch)}.`);
+    if (!ok) throw new Error(`The server sent an invalid figure for staking period ${String(close.epoch)}.`);
   }
-  if (page.next !== null && !whole(page.next)) throw new Error("The closed epochs named a cursor that is not an epoch.");
+  if (page.next !== null && !whole(page.next)) throw new Error("The server sent an invalid page of staking periods.");
   return page;
 }
 
 /** The text of a failed read for the card. */
-const describe = (error: unknown): string => (error instanceof Error ? error.message : "The node did not answer.");
+const describe = (error: unknown): string => (error instanceof Error ? error.message : "The server didn't respond.");
 
 export class EpochReads {
   private state: EpochsState = IDLE;

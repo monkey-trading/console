@@ -53,10 +53,10 @@ export async function claimEmissionsTx(
   proof: EntitlementProof,
   progress: Progress,
 ): Promise<string> {
-  if (proof.account.toLowerCase() !== address.toLowerCase()) throw new Error("The entitlement proof is for another account.");
+  if (proof.account.toLowerCase() !== address.toLowerCase()) throw new Error("This MONKEY is for another account.");
   // `BigInt` throws on a malformed string; the enclave signed this shape for the account's route.
   const entitled = BigInt(proof.entitled);
-  if (entitled <= 0n) throw new Error("The entitlement proof names nothing to claim.");
+  if (entitled <= 0n) throw new Error("There's no MONKEY to claim.");
   const data = encodeFunctionData({ abi: VAULT, functionName: "claimEmissions", args: [hexOf(address), entitled, BigInt(proof.seq), proof.siblings.map(hexOf)] });
   return sendVault(data, "claim your MONKEY emissions", progress).catch((error: unknown) => {
     throw claimFailure(error);

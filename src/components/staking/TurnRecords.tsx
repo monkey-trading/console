@@ -31,9 +31,9 @@ export function TurnRecords({ records, caption, empty, nameOf }: { records: read
         <thead className="sticky top-0 bg-ink-1">
           <tr>
             <th scope="col" className={TH}>Turn</th>
-            <th scope="col" className={TH}>Member</th>
-            <th scope="col" className={TH}>Named by</th>
-            <th scope="col" className={TH}>Signs from</th>
+            <th scope="col" className={TH}>Operator</th>
+            <th scope="col" className={TH}>Chosen by</th>
+            <th scope="col" className={TH}>Starts</th>
             <th scope="col" className={TH}>Outcome</th>
           </tr>
         </thead>

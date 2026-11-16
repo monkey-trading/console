@@ -80,17 +80,17 @@ function change(label: string, proposed: string | null, now: string | null): str
 
 /** What `command` does, in one line. */
 export function commandTitle(command: AdminCommandWire | null, inForce: InForce): string {
-  if (command === null) return "Bytes that are no admin command, which the engine refuses if the proposal passes";
+  if (command === null) return "A proposal that isn't a valid change. It will be rejected if it passes";
   switch (command.action) {
-    case "set_params": return "New protocol parameters";
-    case "upsert_market": return `New listing terms for ${marketName(command.id, inForce)}`;
-    case "set_toxicity_notional": return "Toxicity weighting by notional";
-    case "adopt_close_spread_ceiling": return `A close-spread ceiling of ${int(command.max_close_spread_bps) ?? "?"} bps for ${marketName(command.market, inForce)}`;
-    case "set_access_policy": return "A new access policy";
-    case "activate_protocol": return `Activate protocol ${typeof command.version === "string" ? command.version : "?"}`;
-    case "set_stress_floor": return `A stress floor at level ${int(command.level) ?? "?"} in ${marketName(command.market, inForce)}`;
-    case "set_reduce_only": return `${command.reduce_only === false ? "Lift reduce-only" : "Reduce-only"} in ${marketName(command.market, inForce)}`;
-    default: return `The admin command ${command.action}`;
+    case "set_params": return "New trading terms";
+    case "upsert_market": return `New terms for ${marketName(command.id, inForce)}`;
+    case "set_toxicity_notional": return "How trade size counts toward the extra spread";
+    case "adopt_close_spread_ceiling": return `A maximum closing spread of ${int(command.max_close_spread_bps) ?? "?"} bps for ${marketName(command.market, inForce)}`;
+    case "set_access_policy": return "New access rules";
+    case "activate_protocol": return `Turn on engine upgrade ${typeof command.version === "string" ? command.version : "?"}`;
+    case "set_stress_floor": return `Keep ${marketName(command.market, inForce)} at stress level ${int(command.level) ?? "?"} or higher`;
+    case "set_reduce_only": return command.reduce_only === false ? `Accept all orders in ${marketName(command.market, inForce)} again` : `Only accept orders that reduce positions in ${marketName(command.market, inForce)}`;
+    default: return `A change this page can't describe (${command.action})`;
   }
 }
 
@@ -104,8 +104,8 @@ export function commandDetails(command: AdminCommandWire | null, inForce: InForc
     lines.push(
       change("Profit fee", rate(command.profit_fee_bps), params === null ? null : formatRate(params.profitFeeBps)),
       change("Close-out level", rate(command.closeout_level_bps), params === null ? null : formatRate(params.closeoutLevelBps)),
-      change("House cap", rate(command.house_total_cap_bps), params === null ? null : formatRate(params.totalCapBps)),
-      change("House cap floor", usd(command.house_total_cap_floor ?? "0"), params === null ? null : formatUsd(params.totalCapFloor)),
+      change("Total limit", rate(command.house_total_cap_bps), params === null ? null : formatRate(params.totalCapBps)),
+      change("Total limit minimum", usd(command.house_total_cap_floor ?? "0"), params === null ? null : formatUsd(params.totalCapFloor)),
     );
   } else if (command.action === "upsert_market") {
     const market = int(command.id) === null ? null : inForce.market(int(command.id) ?? 0);
@@ -113,8 +113,8 @@ export function commandDetails(command: AdminCommandWire | null, inForce: InForc
     lines.push(
       change("Margin", tiers(command.margin_tiers), market === null ? null : tiersText(market.margin_tiers)),
       change("Spread", isSpreadTiers(command.spread_tiers) ? spreadTiersText(command.spread_tiers) : null, market === null ? null : spreadTiersText(market.spread_tiers)),
-      change("House cap", int(command.house_cap_bps) === null ? null : formatRate(int(command.house_cap_bps) ?? 0), market === null ? null : formatRate(market.house_cap_bps)),
-      change("House cap floor", usd(command.house_cap_floor ?? "0"), market === null ? null : usd(market.house_cap_floor ?? "0")),
+      change("Market limit", int(command.house_cap_bps) === null ? null : formatRate(int(command.house_cap_bps) ?? 0), market === null ? null : formatRate(market.house_cap_bps)),
+      change("Market limit minimum", usd(command.house_cap_floor ?? "0"), market === null ? null : usd(market.house_cap_floor ?? "0")),
     );
   } else if (command.action === "adopt_close_spread_ceiling" && int(command.effective_at) !== null) {
     lines.push(`In effect from ${formatStampWithYear(int(command.effective_at) ?? 0)} UTC`);
@@ -125,11 +125,11 @@ export function commandDetails(command: AdminCommandWire | null, inForce: InForc
 /** What a restriction holds, in one line. */
 export function limitTitle(limit: ShownLimit, inForce: InForce): string {
   switch (limit.kind) {
-    case "unknown": return `A restriction of a kind this console does not describe (${limit.name})`;
+    case "unknown": return `A limit this page can't describe (${limit.name})`;
     case "params": return "Tighter house limits";
     case "market": return `Tighter terms for ${marketName(limit.market, inForce)}`;
-    case "stress_floor": return `A stress floor at level ${limit.level} in ${marketName(limit.market, inForce)}`;
-    case "reduce_only": return `Reduce-only in ${marketName(limit.market, inForce)}`;
+    case "stress_floor": return `Keep ${marketName(limit.market, inForce)} at stress level ${limit.level} or higher`;
+    case "reduce_only": return `Only accept orders that reduce positions in ${marketName(limit.market, inForce)}`;
     default: {
       const never: never = limit;
       throw new Error(`Unknown restriction ${String(never)}.`);
@@ -139,22 +139,22 @@ export function limitTitle(limit: ShownLimit, inForce: InForce): string {
 
 /** Each bound a restriction holds, beside the baseline it sits over where the log keeps one. */
 export function limitDetails(limit: ShownLimit, baselines: Pick<GovernanceWire, "params_baseline" | "market_baselines">): string[] {
-  const bound = (label: string, value: string | null, baseline: string | null) => (value === null ? null : baseline === null ? `${label} ${value}` : `${label} ${value} (baseline ${baseline})`);
+  const bound = (label: string, value: string | null, baseline: string | null) => (value === null ? null : baseline === null ? `${label} ${value}` : `${label} ${value} (normally ${baseline})`);
   const rate = (bps: number | undefined) => (bps === undefined ? null : formatRate(bps));
   let lines: (string | null)[] = [];
   if (limit.kind === "params") {
     const base = baselines.params_baseline;
     lines = [
       bound("Close-out level at least", rate(limit.closeout_level_bps), base === undefined ? null : formatRate(base.closeout_level_bps)),
-      bound("House cap at most", rate(limit.house_total_cap_bps), base === undefined ? null : formatRate(base.house_total_cap_bps)),
-      bound("House cap floor at most", usd(limit.house_total_cap_floor), base === undefined ? null : usd(base.house_total_cap_floor)),
+      bound("Total limit at most", rate(limit.house_total_cap_bps), base === undefined ? null : formatRate(base.house_total_cap_bps)),
+      bound("Total limit minimum at most", usd(limit.house_total_cap_floor), base === undefined ? null : usd(base.house_total_cap_floor)),
     ];
   } else if (limit.kind === "market") {
     const base = baselines.market_baselines?.[String(limit.market)];
     lines = [
       bound("Margin at least", limit.margin_tiers === undefined ? null : tiersText(limit.margin_tiers), base === undefined ? null : tiersText(base.margin_tiers)),
-      bound("House cap at most", rate(limit.house_cap_bps), base === undefined ? null : formatRate(base.house_cap_bps)),
-      bound("House cap floor at most", usd(limit.house_cap_floor), base === undefined ? null : usd(base.house_cap_floor)),
+      bound("Market limit at most", rate(limit.house_cap_bps), base === undefined ? null : formatRate(base.house_cap_bps)),
+      bound("Market limit minimum at most", usd(limit.house_cap_floor), base === undefined ? null : usd(base.house_cap_floor)),
     ];
   }
   return lines.filter((line): line is string => line !== null);
@@ -165,8 +165,8 @@ export function standingText(standing: "yes" | "no" | "outside" | "unknown", ope
   switch (standing) {
     case "yes": return "voted yes";
     case "no": return open ? "has not voted yet" : "did not vote";
-    case "outside": return "is not in this proposal's set";
-    case "unknown": return "reading…";
+    case "outside": return "can't vote on this proposal";
+    case "unknown": return "loading…";
     default: {
       const never: never = standing;
       throw new Error(`Unknown standing ${String(never)}.`);
@@ -184,9 +184,9 @@ const CENT = MONKEY_UNIT / 100n;
 export function tallyText(tally: Tally, open: boolean): string {
   const head = `Yes ${formatMonkey(tally.yes)} of ${formatMonkey(tally.total)} (${formatRate(yesShareBps(tally))})`;
   if (passes(tally)) return `${head}: more than two thirds, so it ${open ? "passes" : "passed"}.`;
-  if (!open) return `${head}: short of two thirds.`;
+  if (!open) return `${head}: less than two thirds.`;
   const needed = weightToPass(tally);
-  return `${head}: ${formatMonkey(((needed + CENT - 1n) / CENT) * CENT)} more passes it.`;
+  return `${head}: ${formatMonkey(((needed + CENT - 1n) / CENT) * CENT)} more would pass it.`;
 }
 
 const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"}`;
@@ -205,12 +205,12 @@ export function lifetimeText(ms: number): string {
  */
 export function walletLine(wallet: { readOnly?: boolean } | null, reads: boolean): string | null {
   if (reads) return null;
-  if (wallet === null) return "Connect a wallet to see how the members you delegate to voted, and to vote as a member.";
-  if (wallet.readOnly === true) return "A watched account is not read through a wallet, so how the members it delegates to voted is not shown.";
-  return "This wallet does not read the chain here, so how the members you delegate to voted is not shown.";
+  if (wallet === null) return "Connect a wallet to see how the operators you delegate to voted, or to vote if you're one of them.";
+  if (wallet.readOnly === true) return "How the operators you delegate to voted isn't shown for a read-only account.";
+  return "This wallet can't read the chain here, so how the operators you delegate to voted isn't shown.";
 }
 
 /** A failed wallet read of `what`, in one sentence, with the wallet's own words and their full stop trimmed. */
 export function failureLine(what: string, message: string | null): string {
-  return `Could not read ${what} through your wallet: ${(message ?? "the read failed").replace(/\.+$/, "")}. They are read again shortly.`;
+  return `Couldn't load ${what} from your wallet: ${(message ?? "unknown error").replace(/\.+$/, "")}. Trying again shortly.`;
 }

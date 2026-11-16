@@ -66,7 +66,7 @@ export function DashboardPage() {
   const floorText = overview.value?.distribution?.liquidity_floor;
   const floor = {
     value: floorText === undefined ? null : fixedToNumber(fixedFromWire(floorText)),
-    note: overviewProblem(overview, "the liquidity floor"),
+    note: overviewProblem(overview, "the reserve"),
   };
   // The house feeds read only while the Dashboard is open; visibility also asks that the tab shows and the node is trusted, as on the House page.
   useEffect(() => {
@@ -101,9 +101,9 @@ export function DashboardPage() {
         <div className="mx-auto flex w-full max-w-[120rem] flex-col gap-4 p-4 sm:p-6">
           <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <h2 className="text-lead tracking-caps text-glow uppercase">Dashboard</h2>
-            <p className="text-caption text-fg-3">The history of the house&apos;s NAV, exposure and withdrawal queue, MONKEY emissions and supply, and the USDC distributions — with one range setting every chart&apos;s window.</p>
+            <p className="text-caption text-fg-3">The history of the house&apos;s value, exposure and withdrawal queue, the MONKEY earned and staked, and the USDC distributed to stakers. One range setting controls every chart.</p>
           </header>
-          {!trusted && <p className="text-data text-fg-2">Figures appear once the node&apos;s attestation is verified and its feed is live.</p>}
+          {!trusted && <p className="text-data text-fg-2">Figures appear once the server is verified and connected.</p>}
           {/* The charts are hidden, not unmounted, while the node is not trusted, so no figure from before a gap in the feed shows. */}
           <div hidden={!trusted} className="flex flex-col gap-6">
             <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">

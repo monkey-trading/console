@@ -47,7 +47,7 @@ export function emissionsPosition(entitlement: EntitlementProof | null, vault: {
 const CLAIM_PROOF_ATTEMPTS = 3;
 
 /** What a claim says when the vault has not accepted the checkpoint of the node's proof. */
-export const WAITING_ON_VAULT = "The vault has not accepted the checkpoint of the node's latest proof yet; the claim unlocks once it does.";
+export const WAITING_ON_VAULT = "You can claim this after the vault's next update.";
 
 /**
  * Reads the vault's record of the connected account's MONKEY through the wallet's chain provider:
@@ -84,7 +84,7 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
   // Bound to the wallet: calling the method without a receiver unbinds `this` in the provider wallet.
   const claim = wallet.claimEmissions?.bind(wallet);
   const readRecord = wallet.emissionsClaimed?.bind(wallet);
-  if (claim === undefined || readRecord === undefined) return store.notify("emissions", "This wallet cannot claim MONKEY.");
+  if (claim === undefined || readRecord === undefined) return store.notify("emissions", "This wallet can't claim MONKEY.");
   store.patch({ busy: true });
   // Set once the mint has landed: the token offer is made after the claim has finished, so a caller that queues the claim holds the wallet until the offer has been answered too.
   let offered: Wallet | null = null;
@@ -97,7 +97,7 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
       const [record, proof] = await Promise.all([readRecord(), store.deps.client.emissions(wallet.address)]);
       if (store.liveWallet !== wallet) return; // the wallet changed while the reads ran; its claim is not this one's
       store.patch({ entitlement: proof === null ? null : carryAccrued(store.getSnapshot().entitlement, proof), emissionsVault: record });
-      if (proof === null) return store.notify("emissions", "The node holds no entitlement proof for this account right now.", "info");
+      if (proof === null) return store.notify("emissions", "There's no MONKEY to claim for this account right now.", "info");
       if (checkpointOf(proof, record.latestSeq) === "posted") {
         const due = BigInt(proof.entitled) - record.claimed;
         if (due <= 0n) return; // the card already says all of it is claimed

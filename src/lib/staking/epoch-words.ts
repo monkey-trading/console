@@ -5,8 +5,8 @@ import type { EpochCover, EpochsState } from "./epoch-reads";
 
 /** Where the node's record begins, which bounds what the list can show; null when it holds every epoch. */
 export function coverText(cover: EpochCover): string | null {
-  if (cover.truncated) return `The node keeps the newest epochs only, from epoch ${cover.retained_from_epoch ?? "—"} on.`;
-  if (!cover.from_genesis && cover.begins_ms !== null) return `The node's record of closes begins at ${formatStamp(cover.begins_ms)} UTC; earlier epochs are not listed.`;
+  if (cover.truncated) return `Only recent staking periods are kept, from period ${cover.retained_from_epoch ?? "—"} on.`;
+  if (!cover.from_genesis && cover.begins_ms !== null) return `This list starts at ${formatStamp(cover.begins_ms)} UTC. Earlier staking periods aren't shown.`;
   return null;
 }
 
@@ -16,8 +16,8 @@ export function coverText(cover: EpochCover): string | null {
  */
 export function problemText(state: Pick<EpochsState, "status" | "error" | "moreError">): string {
   if (state.status !== "ready") return "";
-  if (state.error !== null) return `Could not check for newly closed epochs: ${state.error.replace(/\.+$/, "")}. The check is made again by itself.`;
-  return state.moreError === null ? "" : `Could not read older epochs: ${state.moreError.replace(/\.+$/, "")}.`;
+  if (state.error !== null) return `Couldn't check for newly ended periods: ${state.error.replace(/\.+$/, "")}. Trying again automatically.`;
+  return state.moreError === null ? "" : `Couldn't load older periods: ${state.moreError.replace(/\.+$/, "")}.`;
 }
 
 /**
@@ -26,5 +26,5 @@ export function problemText(state: Pick<EpochsState, "status" | "error" | "moreE
  * unavailable line says it.
  */
 export function unavailableText(state: Pick<EpochsState, "status" | "epochs">): string {
-  return state.status === "unavailable" && state.epochs.length > 0 ? "This node no longer serves the closed epochs, so these are the ones read earlier and the list is not updated." : "";
+  return state.status === "unavailable" && state.epochs.length > 0 ? "This server has stopped providing past staking periods, so this list no longer updates." : "";
 }

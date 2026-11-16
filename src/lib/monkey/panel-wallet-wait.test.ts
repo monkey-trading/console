@@ -21,7 +21,7 @@ describe("MonkeyPanel wallet reads behind an unanswered call", () => {
     await vi.advanceTimersByTimeAsync(29_000);
     expect(panel.getSnapshot().wallet.proof.status).toBe("ready");
     await vi.advanceTimersByTimeAsync(2_000);
-    expect(panel.getSnapshot().wallet.position).toMatchObject({ status: "failed", message: "Your wallet has not answered an earlier request." });
+    expect(panel.getSnapshot().wallet.position).toMatchObject({ status: "failed", message: "Your wallet hasn't answered an earlier request." });
     finish();
     await queued;
     expect(panel.getSnapshot().wallet.position.status).toBe("ready");
@@ -37,7 +37,7 @@ describe("MonkeyPanel wallet reads behind an unanswered call", () => {
     await vi.advanceTimersByTimeAsync(29_000);
     expect(panel.getSnapshot().wallet.record.status).not.toBe("failed");
     await vi.advanceTimersByTimeAsync(2_000);
-    expect(panel.getSnapshot().wallet.record).toMatchObject({ status: "failed", message: "Your wallet has not answered an earlier request." });
+    expect(panel.getSnapshot().wallet.record).toMatchObject({ status: "failed", message: "Your wallet hasn't answered an earlier request." });
     expect(panel.getSnapshot().wallet.position.status).toBe("loading");
     finish();
     await queued;

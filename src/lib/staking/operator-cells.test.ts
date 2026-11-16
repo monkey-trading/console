@@ -21,7 +21,7 @@ describe("operatorCells", () => {
   });
 
   it("names a hostname the build cannot show, an ineligible candidate, and an empty endpoint plainly, and labels the row by its address", () => {
-    expect(operatorCells({ ...ROW, hostname: null, eligible: false, endpoint: "" })).toMatchObject({ name: "Not a plain hostname", label: "0x000000…00a1", eligibility: "Not eligible", endpoint: "—" });
+    expect(operatorCells({ ...ROW, hostname: null, eligible: false, endpoint: "" })).toMatchObject({ name: "No valid name", label: "0x000000…00a1", eligibility: "Not eligible", endpoint: "—" });
   });
 
   it("labels every row by its hostname or, with none to show, its own address, never the name cell's placeholder", () => {
@@ -31,7 +31,7 @@ describe("operatorCells", () => {
 
   it("names an operator in effect with no candidacy as the deployment's, with no figures read for it", () => {
     expect(operatorCells({ ...ROW, hostname: null, role: "active", listed: false, eligible: false, votes: null, shareBps: 0, bond: null, endpoint: null })).toMatchObject({
-      name: "The deployment's initial operator", label: "0x000000…00a1", role: "Active", eligibility: "Not listed", delegated: "—", bond: "—", endpoint: "—",
+      name: "The launch operator", label: "0x000000…00a1", role: "Active", eligibility: "Not listed", delegated: "—", bond: "—", endpoint: "—",
     });
   });
 

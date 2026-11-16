@@ -84,7 +84,7 @@ const WEIGHT = /^\d+$/;
  * - it is not one
  */
 function address(text: unknown): string {
-  if (typeof text !== "string" || !ADDRESS.test(text)) throw new Error("The node's rotation named an address that is not one.");
+  if (typeof text !== "string" || !ADDRESS.test(text)) throw new Error("The server sent a rotation with an invalid address.");
   return text.toLowerCase();
 }
 
@@ -94,7 +94,7 @@ function address(text: unknown): string {
  * - it is not a safe non-negative integer
  */
 function count(value: unknown, what: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new Error(`The node's rotation named ${what} that is not a whole number.`);
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new Error(`The server sent a rotation with ${what} that isn't a whole number.`);
   return value;
 }
 
@@ -105,7 +105,7 @@ function count(value: unknown, what: string): number {
  */
 function reason(value: unknown): TurnReason {
   const found = REASONS.find((known) => known === value);
-  if (found === undefined) throw new Error("The node's rotation named a reason for a turn that this console does not know.");
+  if (found === undefined) throw new Error("The server sent a turn with a reason this app doesn't recognise.");
   return found;
 }
 
@@ -116,7 +116,7 @@ function reason(value: unknown): TurnReason {
  */
 export function rotationSet(wire: RotationSetView): RotationSet {
   const weights = wire.members.map((member) => {
-    if (typeof member.weight !== "string" || !WEIGHT.test(member.weight)) throw new Error("The node's rotation set named a weight that is not a whole amount.");
+    if (typeof member.weight !== "string" || !WEIGHT.test(member.weight)) throw new Error("The server sent a rotation with an invalid weight.");
     return BigInt(member.weight);
   });
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0n);
@@ -124,8 +124,8 @@ export function rotationSet(wire: RotationSetView): RotationSet {
     const weight = weights[index] ?? 0n;
     return { address: address(member.candidate), adminKey: address(member.admin_key), weight, turnShareBps: shareBps(weight, totalWeight) };
   });
-  if (new Set(members.map((member) => member.address)).size !== members.length) throw new Error("The node's rotation set named a member twice.");
-  return { set: count(wire.set, "a set number"), epoch: count(wire.epoch, "an epoch"), effectiveAtMs: count(wire.effective_at, "a time"), members, totalWeight };
+  if (new Set(members.map((member) => member.address)).size !== members.length) throw new Error("The server sent a rotation that lists an operator twice.");
+  return { set: count(wire.set, "a rotation number"), epoch: count(wire.epoch, "an election number"), effectiveAtMs: count(wire.effective_at, "a time"), members, totalWeight };
 }
 
 /**
@@ -135,7 +135,7 @@ export function rotationSet(wire: RotationSetView): RotationSet {
  */
 export function turnOf(wire: TurnView): Turn {
   return {
-    turn: count(wire.turn, "a turn"), position: count(wire.position, "a position"), reason: reason(wire.reason), set: count(wire.set, "a set number"),
+    turn: count(wire.turn, "a turn"), position: count(wire.position, "a position"), reason: reason(wire.reason), set: count(wire.set, "a rotation number"),
     candidate: address(wire.candidate), adminKey: address(wire.admin_key), appliesAtMs: count(wire.applies_at, "a time"), taken: wire.taken === true,
   };
 }
@@ -146,7 +146,7 @@ function recordOf(wire: TurnRecordView): TurnRecord {
     turn: count(wire.turn, "a turn"), position: count(wire.position, "a position"), reason: reason(wire.reason), candidate: address(wire.candidate),
     appliesAtMs: wire.applies_at === null ? null : count(wire.applies_at, "a time"),
     refused: typeof wire.refused === "string" ? wire.refused : null,
-    assignedSeq: count(wire.assigned_seq, "a seq"), assignedMs: count(wire.assigned_ms, "a time"),
+    assignedSeq: count(wire.assigned_seq, "a log entry number"), assignedMs: count(wire.assigned_ms, "a time"),
     takenMs: wire.taken_ms === null || wire.taken_ms === undefined ? null : count(wire.taken_ms, "a time"),
   };
 }
@@ -161,8 +161,8 @@ export const TURNS_PAGE_LIMIT = 100;
  */
 export function turnHistory(wire: { records: TurnRecordView[]; next: number | null; truncated: boolean } | undefined): TurnHistory {
   if (wire === undefined) return { records: [], next: null, truncated: false };
-  if (wire.records.length > TURNS_PAGE_LIMIT) throw new Error("The node's turn history page is longer than its limit.");
-  return { records: wire.records.map(recordOf), next: wire.next === null ? null : count(wire.next, "a seq"), truncated: wire.truncated === true };
+  if (wire.records.length > TURNS_PAGE_LIMIT) throw new Error("The server sent more turns than expected.");
+  return { records: wire.records.map(recordOf), next: wire.next === null ? null : count(wire.next, "a log entry number"), truncated: wire.truncated === true };
 }
 
 /**
@@ -178,7 +178,7 @@ export function rotationView(route: OperatorRoute): RotationView {
     turn: route.turn === undefined || route.turn === null ? null : turnOf(route.turn),
     nextTurn: route.next_turn === undefined || route.next_turn === null ? null : turnOf(route.next_turn),
     history: turnHistory(route.turns),
-    signer: route.signer === undefined ? null : { epoch: count(route.signer.epoch, "an epoch"), address: address(route.signer.address) },
+    signer: route.signer === undefined ? null : { epoch: count(route.signer.epoch, "a key version"), address: address(route.signer.address) },
   };
 }
 
@@ -189,9 +189,9 @@ export function isReassignment(record: TurnRecord): boolean {
 
 /** What a turn's reason says in words. */
 export const REASON_WORDS: Record<TurnReason, string> = {
-  draw: "Draw: the day's draw named this member",
-  skip: "Skip: the member before it did not take the turn in time",
-  promotion: "Promotion: the liveness rule moved the turn from a failed member",
+  draw: "Draw: chosen in the day's draw",
+  skip: "Skip: the operator before it didn't start the turn in time",
+  promotion: "Promotion: took over from an operator that stopped responding",
 };
 /** The reason's one word, for a table's cell. */
 export const REASON_CELL: Record<TurnReason, string> = { draw: "Draw", skip: "Skip", promotion: "Promotion" };

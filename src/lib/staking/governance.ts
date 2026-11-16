@@ -86,14 +86,14 @@ const isCommand = (command: unknown): command is AdminCommandWire =>
  * - any of those is malformed
  */
 export function proposalsView(wire: OpenProposalsWire): ProposalsView {
-  if (!ADDRESS.test(wire.vote)) throw new Error("The operator list named a vote contract that is not an address.");
+  if (!ADDRESS.test(wire.vote)) throw new Error("The server sent an invalid voting contract address.");
   const open = wire.open.map((proposal): OpenProposal => {
     const ok = [proposal.id, proposal.set_id, proposal.opens_at_ms, proposal.closes_at_ms].every(whole) && proposal.closes_at_ms > proposal.opens_at_ms
       && UNITS.test(proposal.yes_weight) && UNITS.test(proposal.total_weight) && ADDRESS.test(proposal.proposer) && HASH.test(proposal.command_hash)
       && typeof proposal.fast === "boolean" && (proposal.command === null || isCommand(proposal.command));
-    if (!ok) throw new Error(`The operator list named a malformed open proposal ${String(proposal.id)}.`);
+    if (!ok) throw new Error(`The server sent an invalid proposal ${String(proposal.id)}.`);
     const tally = { yes: BigInt(proposal.yes_weight), total: BigInt(proposal.total_weight) };
-    if (tally.yes > tally.total) throw new Error(`The operator list named proposal ${proposal.id} with more yes weight than its set holds.`);
+    if (tally.yes > tally.total) throw new Error(`The server sent proposal ${proposal.id} with more yes votes than possible.`);
     return {
       id: proposal.id, proposer: proposal.proposer.toLowerCase(), setId: proposal.set_id, fast: proposal.fast, opensAtMs: proposal.opens_at_ms,
       closesAtMs: proposal.closes_at_ms, tally, commandHash: proposal.command_hash.toLowerCase(), command: proposal.command,
@@ -111,14 +111,14 @@ export function proposalsView(wire: OpenProposalsWire): ProposalsView {
 export function governanceView(wire: GovernanceWire | null): GovernanceView {
   if (wire === null) return NO_GOVERNANCE;
   const config = wire.config;
-  if (config !== undefined && (!ADDRESS.test(config.vote) || !whole(config.restriction_ttl_ms))) throw new Error("The house state named a malformed vote contract.");
+  if (config !== undefined && (!ADDRESS.test(config.vote) || !whole(config.restriction_ttl_ms))) throw new Error("The server sent invalid voting settings.");
   const waiting = (wire.pending ?? []).map((change): WaitingChange => {
-    if (!whole(change.proposal) || !whole(change.applies_at) || !isCommand(change.command)) throw new Error("The house state named a malformed waiting change.");
+    if (!whole(change.proposal) || !whole(change.applies_at) || !isCommand(change.command)) throw new Error("The server sent an invalid passed change.");
     return { id: change.proposal, command: change.command, appliesAtMs: change.applies_at };
   });
   const inForce = Object.entries(wire.restrictions ?? {}).map(([key, restriction]): RestrictionInForce => {
     const id = Number(key);
-    if (!/^\d+$/.test(key) || !whole(id) || !whole(restriction.expires_at) || typeof restriction.limit?.kind !== "string") throw new Error("The house state named a malformed restriction.");
+    if (!/^\d+$/.test(key) || !whole(id) || !whole(restriction.expires_at) || typeof restriction.limit?.kind !== "string") throw new Error("The server sent an invalid fast change.");
     // A kind a later engine added is listed by its name, so the rest still show.
     const limit: ShownLimit = LIMIT_KINDS.has(restriction.limit.kind) ? restriction.limit : { kind: "unknown", name: restriction.limit.kind };
     return { id, limit, expiresAtMs: restriction.expires_at };

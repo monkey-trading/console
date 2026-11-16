@@ -43,12 +43,12 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
   const operator = hasOperatorShare(rows);
   const more = mine && state.status === "ready" && moreRemain(state.data);
   const bounded = mine && epochsLeftOut(state.data);
-  const error = (state.error ?? "the read failed").replace(/\.+$/, "");
+  const error = (state.error ?? "unknown error").replace(/\.+$/, "");
   // The first read's failure, the newest pages' second read's, or Load more's: one status line that changes its words, so each is announced.
   const problem = !mine ? ""
-    : state.status === "failed" ? `Could not read your distributions: ${error}. The read is made again by itself.`
-      : state.recheckError !== null ? `Could not check for epochs the node had not listed yet: ${state.recheckError.replace(/\.+$/, "")}. The check is made again by itself.`
-        : state.error !== null ? `Could not read older epochs: ${error}.` : "";
+    : state.status === "failed" ? `Couldn't load your distributions: ${error}. Trying again automatically.`
+      : state.recheckError !== null ? `Couldn't check for new staking periods: ${state.recheckError.replace(/\.+$/, "")}. Trying again automatically.`
+        : state.error !== null ? `Couldn't load older periods: ${error}.` : "";
   const loadMore = () => {
     if (state.more) return;
     void history.loadMore().then(() => {
@@ -59,19 +59,19 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
   return (
     <Card id={TITLE_ID} title="Your distributions">
       {account === null ? (
-        <p className={NOTE}>Connect a wallet to see the USDC each epoch distributed to you.</p>
+        <p className={NOTE}>Connect a wallet to see the USDC distributed to you in each staking period.</p>
       ) : rows.length === 0 ? (
-        !mine || state.status === "idle" || state.status === "reading" ? <p className={NOTE}>Reading your distributions by epoch…</p>
+        !mine || state.status === "idle" || state.status === "reading" ? <p className={NOTE}>Loading your distributions…</p>
           : state.status === "failed" ? null
             : <p className={NOTE}>{emptyHistoryText(entitled)}</p>
       ) : (
-        <div role="region" aria-label="Your distributions by epoch" tabIndex={0} className="relative -mx-1 max-h-80 overflow-y-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
+        <div role="region" aria-label="Your distributions by staking period" tabIndex={0} className="relative -mx-1 max-h-80 overflow-y-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
           <table className="w-full table-fixed text-label sm:text-caption">
-            <caption className="sr-only">USDC distributed to you by epoch, newest first. Times are UTC.</caption>
+            <caption className="sr-only">USDC distributed to you by staking period, newest first. Times are UTC.</caption>
             <thead className="sticky top-0 bg-ink-1">
               <tr>
-                <th scope="col" className={`${TH} w-[20%]`}>Epoch</th>
-                <th scope="col" className={`${TH} w-[34%]`}>Closed</th>
+                <th scope="col" className={`${TH} w-[20%]`}>Period</th>
+                <th scope="col" className={`${TH} w-[34%]`}>Ended</th>
                 <th scope="col" className={`${TH} text-right`}>To you</th>
                 {operator && <th scope="col" className={`${TH} text-right`}>Operator share</th>}
               </tr>
@@ -89,9 +89,9 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
           </table>
         </div>
       )}
-      {more && <button type="button" aria-disabled={state.more} onClick={loadMore} className={LOAD}>{state.more ? "Loading" : "Load more"}<span className="sr-only"> epochs</span></button>}
+      {more && <button type="button" aria-disabled={state.more} onClick={loadMore} className={LOAD}>{state.more ? "Loading" : "Load more"}<span className="sr-only"> periods</span></button>}
       <p role="status" className="text-caption leading-relaxed text-amber empty:hidden">{problem}</p>
-      {bounded && <p className={NOTE}>Only the newest {groupThousands(MAX_EPOCHS)} epochs are kept here.</p>}
+      {bounded && <p className={NOTE}>Only the newest {groupThousands(MAX_EPOCHS)} staking periods are kept here.</p>}
     </Card>
   );
 }

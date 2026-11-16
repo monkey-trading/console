@@ -28,7 +28,7 @@ const selectQueue = (s: ConsoleState) => ({ totals: s.withdrawalTotals, failed: 
 function Meter({ bps }: { bps: number }) {
   const clamped = Math.min(10_000, Math.max(0, bps));
   return (
-    <div role="meter" aria-label="Exposure against the cap" aria-valuemin={0} aria-valuemax={10_000} aria-valuenow={clamped} aria-valuetext={formatRate(bps)} className="h-2 w-full border border-line-2 bg-ink-2">
+    <div role="meter" aria-label="Exposure against the limit" aria-valuemin={0} aria-valuemax={10_000} aria-valuenow={clamped} aria-valuetext={formatRate(bps)} className="h-2 w-full border border-line-2 bg-ink-2">
       <div className="h-full bg-glow" style={{ width: `${clamped / 100}%` }} />
     </div>
   );
@@ -36,29 +36,28 @@ function Meter({ bps }: { bps: number }) {
 
 /** What a panel fed by the node's house state says while it has nothing to show; `none` is the answer of a node that holds none. */
 function unread(status: ConsoleState["houseStateStatus"], none: string): string {
-  if (status === "unavailable") return "Not available: this node does not serve the house state yet.";
-  if (status === "failed") return "The node's answer could not be read. The console tries again with its next read.";
-  return status === "pending" ? "Waiting for the node's answer." : none;
+  if (status === "unavailable") return "These figures aren't available from this server yet.";
+  if (status === "failed") return "Couldn't load these figures. Trying again automatically.";
+  return status === "pending" ? "Loading…" : none;
 }
 
 /** Gross exposure against the total cap. */
 export function CapPanel() {
   const { nav, gross, params, status } = useSelected(selectCap);
-  const simulated = useSession().store.deps.client.signatures === "none";
   const totalCap = params === null ? null : capFor(nav, params.totalCapBps, params.totalCapFloor);
   const used = totalCap === null ? null : utilBps(gross, totalCap);
   return (
-    <Panel title="Exposure against the cap" tip="The house's gross exposure as a share of the cap on it: the larger of a share of NAV and a dollar floor.">
+    <Panel title="Total exposure limit" tip="This is how much of its total exposure limit the house is using. The limit is a share of the house value, with a dollar minimum.">
       {params === null ? (
-        <Quiet>{unread(status, "The cap's parameters have not been set in the log yet.")}</Quiet>
+        <Quiet>{unread(status, "The limit hasn't been set yet.")}</Quiet>
       ) : used === null || totalCap === null ? (
-        <p className={NOTE}>The cap is not positive at the current net asset value, so no utilisation can be stated.</p>
+        <p className={NOTE}>The limit is zero at the current house value, so there&apos;s no usage to show.</p>
       ) : (
         <>
           <Meter bps={used} />
-          <p aria-hidden="true" className="text-caption text-fg-2">{formatRate(used)} of a {formatUsd(totalCap)} cap</p>
-          <p className="sr-only">Exposure is {formatRate(used)} of a {formatUsd(totalCap)} cap at the current net asset value, refreshed from {simulated ? "the simulation in this browser, which signs nothing" : "the node's signed answers"}.</p>
-          <p className={NOTE}>The cap is the larger of {formatRate(params.totalCapBps)} of net asset value and a {formatUsd(params.totalCapFloor)} floor.</p>
+          <p aria-hidden="true" className="text-caption text-fg-2">{formatRate(used)} of a {formatUsd(totalCap)} limit</p>
+          <p className="sr-only">Exposure is {formatRate(used)} of a {formatUsd(totalCap)} limit at the current house value.</p>
+          <p className={NOTE}>The limit is {formatRate(params.totalCapBps)} of the house value, or {formatUsd(params.totalCapFloor)} if that&apos;s higher.</p>
         </>
       )}
     </Panel>
@@ -69,7 +68,7 @@ export function CapPanel() {
 export function MarketCaps() {
   const { nav, rows } = useSelected(selectRows);
   return (
-    <Panel title="Market caps" tip="Each market's cap is the larger of its share of the house's NAV and its dollar floor; the table also shows the house's net exposure in the market at the node's last scan.">
+    <Panel title="Market limits" tip="Each market's limit is a share of the house value, with a dollar minimum. The table also shows the house's net exposure in each market as of the last update.">
       <HouseCaps rows={rows} nav={nav} />
     </Panel>
   );
@@ -81,20 +80,20 @@ export function Parameters() {
   const simulated = useSession().store.deps.client.signatures === "none";
   const source = params === null ? null : paramsSource(params, simulated);
   return (
-    <Panel title="Parameters" tip="The operator may raise the profit fee's base by up to half its launch value and raise its hold curve, never below launch, and move the close-out level within half of its launch value, each only after a public notice of at least seven days.">
+    <Panel title="Trading terms" tip="The operator can change these only after at least 7 days' public notice. The profit fee can never go below its launch rates, and its base rate can rise by at most half. The close-out level can move by up to half its launch value.">
       {params === null ? (
-        <Quiet>{unread(status, "No parameters have been set in the log yet.")}</Quiet>
+        <Quiet>{unread(status, "These terms haven't been set yet.")}</Quiet>
       ) : (
         <>
           <dl className="space-y-1">
-            <Row label="Profit fee" tip="The share of a winning close's realised profit the house keeps: the larger of the base and the hold curve's rate at the hold of what it closes." value={`${formatRate(params.profitFeeBps)} base`} />
-            <Row label="Close-out level" tip="The share of an account's margin requirement below which its positions close." value={`${formatRate(params.closeoutLevelBps)} of margin`} />
+            <Row label="Profit fee" tip="This is the share of your profit the house keeps when you close a winning trade. It's the higher of the base rate and the rate for how long you held the position." value={`${formatRate(params.profitFeeBps)} base`} />
+            <Row label="Close-out level" tip="Your positions are closed out when your equity falls below this share of your margin." value={`${formatRate(params.closeoutLevelBps)} of margin`} />
           </dl>
           <p className={NOTE}>{describeSchedule(params)}</p>
           {params.profitFeeCurve.length > 0 && (
             <table className="w-full text-caption">
-              <caption className="sr-only">The profit fee&apos;s hold curve: the rate a gain pays at each hold, linear between them</caption>
-              <thead><tr className="text-label text-fg-3"><th scope="col" className="py-0.5 text-left font-normal">Held</th><th scope="col" className="py-0.5 text-right font-normal">Curve rate</th></tr></thead>
+              <caption className="sr-only">The profit fee by how long the position was held, changing evenly between the times shown</caption>
+              <thead><tr className="text-label text-fg-3"><th scope="col" className="py-0.5 text-left font-normal">Held</th><th scope="col" className="py-0.5 text-right font-normal">Fee</th></tr></thead>
               <tbody>
                 {params.profitFeeCurve.map((point) => <tr key={point.hold_ms}><td className="py-0.5 text-fg-2">{formatCurveHold(point.hold_ms)}</td><td className="py-0.5 text-right tabular-nums">{formatRate(point.fee_bps)}</td></tr>)}
               </tbody>
@@ -112,19 +111,19 @@ export function Checkpoints() {
   const { signatures } = useSession().store.deps.client;
   const { checkpoint, status } = useSelected(selectCheckpoint);
   return (
-    <Panel title="Checkpoints" tip="The enclave signs a root of its state as it sequences commands and posts it in the public log. Anyone may replay the log to a checkpoint's sequence and check its root.">
+    <Panel title="Checkpoints" tip="The server regularly records a fingerprint of its whole state in its public log. Anyone can replay the log to check that the fingerprint matches.">
       {checkpoint === null ? (
-        <Quiet>{unread(status, "The log holds no checkpoint yet.")}</Quiet>
+        <Quiet>{unread(status, "No checkpoint has been recorded yet.")}</Quiet>
       ) : (
         <>
           <dl className="space-y-1">
-            <Row label="Latest checkpoint" tip="The log sequence number the latest posted root covers." value={`seq ${checkpoint.seq}`} />
+            <Row label="Latest checkpoint" tip="This is the number of the log entry the latest checkpoint covers." value={`Entry ${checkpoint.seq}`} />
             <div className="space-y-0.5">
-              <dt className="text-caption text-fg-3"><Term label="State root" tip="The keccak-256 root of the engine's state at that sequence number. Replay the public log to it and compare." /></dt>
+              <dt className="text-caption text-fg-3"><Term label="State fingerprint" tip="This is the fingerprint of the server's state at that log entry. Replay the public log up to that entry and compare." /></dt>
               <dd className="text-data break-all text-fg">{checkpoint.root}</dd>
             </div>
           </dl>
-          {signatures === "none" && <p className={NOTE}>This build runs the in-browser simulation: it signs nothing, and the roots here are the mock&apos;s stand-ins.</p>}
+          {signatures === "none" && <p className={NOTE}>This is a demo, so these checkpoints are simulated.</p>}
         </>
       )}
     </Panel>
@@ -134,15 +133,14 @@ export function Checkpoints() {
 /** What is owed in the queue, and how the figures were read. */
 export function WithdrawalHealth() {
   const { totals, failed } = useSelected(selectQueue);
-  const simulated = useSession().store.deps.client.signatures === "none";
   return (
-    <Panel title="Withdrawal health" tip="Withdrawals are paid in the order asked, each up to the collateral the vault holds; one it cannot cover yet waits in a public first-in first-out queue.">
+    <Panel title="Withdrawal health" tip="Withdrawals are paid in the order they were requested. One that can't be paid straight away waits in a public queue until funds are available.">
       <dl className="space-y-1">
-        <Row label="Requests waiting" tip="How many requests wait in the queue." value={totals === null ? "—" : String(totals.count)} />
-        <Row label="Queued" tip="What the queue still owes, in dollars." value={totals === null ? "—" : formatUsd(totals.remaining)} />
+        <Row label="Requests waiting" tip="This is the number of withdrawal requests waiting." value={totals === null ? "—" : String(totals.count)} />
+        <Row label="Queued" tip="This is what's still owed to everyone in the queue, in dollars." value={totals === null ? "—" : formatUsd(totals.remaining)} />
       </dl>
-      {totals === null ? <p className={NOTE}>The queue&apos;s size is read from {simulated ? "the simulation in this browser, which signs nothing" : "the node's signed answers"}; that read {failed ? "keeps failing." : "has not finished."}</p> : queueCaveats(totals, failed).map((line) => <p key={line} className={NOTE}>{line}</p>)}
-      <p className={NOTE}>The node signs no flag that pauses withdrawals: custody-side pauses are the vault contract&apos;s own state, on chain, outside the node&apos;s signed answers.</p>
+      {totals === null ? <p className={NOTE}>{failed ? "Couldn't load the queue. Trying again automatically." : "Loading the queue…"}</p> : queueCaveats(totals, failed).map((line) => <p key={line} className={NOTE}>{line}</p>)}
+      <p className={NOTE}>This page can&apos;t show whether the on-chain vault that holds deposits has paused withdrawals. The server doesn&apos;t report it.</p>
     </Panel>
   );
 }

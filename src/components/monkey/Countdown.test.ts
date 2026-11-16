@@ -31,7 +31,7 @@ describe("the countdowns", () => {
   it("shows the next budget in the emissions card, with no wallet connected", () => {
     const html = render(view, "emissions");
     expect(html).toContain("Next in 7m 42s");
-    expect(html).toContain('aria-label="Next budget in 8 minutes"');
+    expect(html).toContain('aria-label="Next reward period in 8 minutes"');
     expect(html).toContain("text-glow");
     expect(html).toContain("tabular-nums");
   });
@@ -39,14 +39,14 @@ describe("the countdowns", () => {
   it("shows the next epoch close in the distributions card", () => {
     const html = render(view, "distributions");
     expect(html).toContain("Next in 7m 42s");
-    expect(html).toContain('aria-label="Next epoch close in 8 minutes"');
+    expect(html).toContain('aria-label="Next distribution in 8 minutes"');
   });
 
   it("holds a stale close at zero, waiting for the checkpoint, until a fresh answer lands", () => {
     const stale = { ...view, distribution: { epoch_ms: 300_000, next_close_ms: NOW - 1_000 } } as MonkeyView;
     const held = render(stale, "distributions");
-    expect(held).toContain("Waiting for the checkpoint");
-    expect(held).toContain('aria-label="Next epoch close: waiting for the checkpoint"');
+    expect(held).toContain("Updating…");
+    expect(held).toContain('aria-label="Next distribution: updating"');
     expect(held).not.toContain("Next in");
     const fresh = { ...view, distribution: { epoch_ms: 300_000, next_close_ms: NOW + 300_000 } } as MonkeyView;
     expect(render(fresh, "distributions")).toContain("Next in 5m 00s");
@@ -55,7 +55,7 @@ describe("the countdowns", () => {
   it("holds a stale budget at zero the same way", () => {
     const open = { start_ms: 1_793_662_020_000, period_ms: 600_000, period: 0 } as MonkeyView["emissions"];
     const stale = { ...view, emissions: open } as MonkeyView;
-    expect(render(stale, "emissions")).toContain("Waiting for the checkpoint");
+    expect(render(stale, "emissions")).toContain("Updating…");
     const landed = { ...open, period: 3 } as MonkeyView["emissions"];
     const fresh = { ...view, emissions: landed } as MonkeyView;
     expect(render(fresh, "emissions")).toContain("Next in");

@@ -5,7 +5,7 @@ import type { RotationSet } from "./rotation";
 
 /** What the table's membership cell says: "Member", "Outside the set", or a dash while no set is known. */
 export function membershipWord(membership: RowMembership | null): string {
-  return membership === null ? "—" : membership.inSet ? "Member" : "Outside the set";
+  return membership === null ? "—" : membership.inSet ? "Yes" : "No";
 }
 
 /** `rows` with each one's place in `set`; with no set, every row's membership is unknown. */

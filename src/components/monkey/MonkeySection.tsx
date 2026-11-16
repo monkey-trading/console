@@ -47,7 +47,7 @@ export function MonkeySection({ children }: { children: ReactNode }) {
       <div ref={scrollRef} role="region" aria-label="MONKEY details" tabIndex={0} className="relative min-h-0 flex-1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow lg:overflow-y-auto lg:scroll-pt-12">
         <div className="mx-auto w-full max-w-[110rem] px-4 py-5 max-lg:min-h-dvh sm:px-6">
           <h2 className="text-lead tracking-caps text-glow uppercase">MONKEY</h2>
-          {!trusted && <p className="mt-3 text-data leading-relaxed text-fg-2">Figures appear once the node&apos;s attestation is verified and its feed is live.</p>}
+          {!trusted && <p className="mt-3 text-data leading-relaxed text-fg-2">Figures appear once the server is verified and connected.</p>}
           {/* The tab bar stays in view at the top of the scroll region; its background covers what scrolls under it. */}
           <div className="sticky top-0 z-20 -mx-4 mt-4 bg-ink-1 px-4 sm:-mx-6 sm:px-6">
             <SectionTabs section={SECTION} />

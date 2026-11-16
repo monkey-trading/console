@@ -45,7 +45,7 @@ export function VoteControl({ vote, id, standing, weight, rotationOn, closesAtMs
   const notice = here ? <Notice surface="governance" /> : null;
   const member = weight !== null && weight > 0n && (standing === "yes" || standing === "no");
   let control: ReactNode = null;
-  if (member && standing === "no" && open && !rotationOn) control = <p className="text-caption text-fg-2">The vote contract takes no votes while operator rotation is off.</p>;
+  if (member && standing === "no" && open && !rotationOn) control = <p className="text-caption text-fg-2">Voting is closed while rotation is off.</p>;
   else if (member && standing === "no" && open) {
     control = (
       <button

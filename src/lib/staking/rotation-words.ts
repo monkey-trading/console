@@ -7,9 +7,9 @@ import type { RotationSet, TurnRecord } from "./rotation";
 /** A set's line: its number and registry epoch, and when it took effect or takes effect, with the wait when that is ahead. */
 export function setLine(set: RotationSet, nowMs: number): string {
   const ahead = nowMs > 0 && set.effectiveAtMs > nowMs;
-  const when = ahead ? `takes effect at ${formatStamp(set.effectiveAtMs)} UTC, in ${formatDuration(set.effectiveAtMs - nowMs)}` : `in effect since ${formatStamp(set.effectiveAtMs)} UTC`;
-  const members = set.members.length === 1 ? "1 member" : `${set.members.length} members`;
-  return `Set ${set.set}, adopted at registry epoch ${set.epoch}, ${members}; ${when}.`;
+  const when = ahead ? `Starts at ${formatStamp(set.effectiveAtMs)} UTC, in ${formatDuration(set.effectiveAtMs - nowMs)}` : `Running since ${formatStamp(set.effectiveAtMs)} UTC`;
+  const members = set.members.length === 1 ? "1 operator" : `${set.members.length} operators`;
+  return `Rotation ${set.set}, chosen at election ${set.epoch}, with ${members}. ${when}.`;
 }
 
 /** When a record's key signs from: a dash for an assignment the engine refused. */
@@ -19,9 +19,9 @@ export function recordFrom(record: TurnRecord): string {
 
 /** How a record stands: refused with the engine's reason, taken since a time, or assigned and waiting for its member's enclave. */
 export function recordOutcome(record: TurnRecord): string {
-  if (record.refused !== null) return `Refused: ${record.refused}. The key in effect stayed.`;
-  if (record.takenMs !== null) return `Taken at ${formatStampWithYear(record.takenMs)} UTC`;
-  return "Assigned; its member has not started it";
+  if (record.refused !== null) return `Refused: ${record.refused}. The current operator carried on.`;
+  if (record.takenMs !== null) return `Started at ${formatStampWithYear(record.takenMs)} UTC`;
+  return "Assigned, not started yet";
 }
 
 /** The longest turn line a row is likely to show, laid out unseen so the line landing moves nothing below it. */

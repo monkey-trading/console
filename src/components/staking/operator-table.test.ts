@@ -127,7 +127,7 @@ describe("the row editors", () => {
     const editing = { ...open(ALPHA, "move"), typedMove: "0x1234" };
     const html = render(view.rows, editing, { source: { kind: "held", verifiedAtMs: 1_793_000_000_000, block: 4_321, why: "unverified" } });
     expect(html).toContain("Or a candidate&#x27;s address");
-    expect(html).toContain("An address typed here is checked only by the chain");
+    expect(html).toContain("This address isn&#x27;t checked against the operator list");
   });
 
   it("says what a Take back would change, from the delegation and the undelegated stake", () => {
