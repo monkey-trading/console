@@ -259,6 +259,10 @@ README.
 - Are the only people, accounts, and contacts named those in `src/lib/site.ts` and the William
   Jevons persona, with no other person, account, or machine path?
 - Is public prose written as prose, following [writing-style](writing-style.md)?
+- Does every string a trader reads in the app — labels, tooltips, notices, errors, empty states,
+  buttons, `aria-label`s, and messages built in `src/lib/` — follow
+  [interface-copy](interface-copy.md): plain words, short sentences, the trader's decision only, and
+  no engine internals? Was each changed string read aloud as a trader would hear it?
 
 ## 13. Rollout
 
