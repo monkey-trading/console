@@ -70,6 +70,8 @@ export class LiveEngineClient implements EngineClient {
   readonly withdrawalTotals: () => Promise<QueueTotals>;
   private readonly lastRoute: { route: OperatorRoute | null } = { route: null }; // stays with a refusal
   readonly stats = liveStats((path) => this.transport.get(path), (route) => this.trust.heedOperator(route), this.lastRoute);
+  readonly signerNamed: EngineClient["signerNamed"] = () => this.trust.signerNamed;
+  readonly heedSigner: EngineClient["heedSigner"] = (signer) => this.trust.heedSigner(signer);
   readonly emissions: (address: Address) => Promise<EntitlementProof | null>;
 
   constructor(private readonly deps: LiveDeps) {
@@ -162,7 +164,6 @@ export class LiveEngineClient implements EngineClient {
     this.houseFold.foldRead(read);
     return { seq: read.seq, ...this.houseFold.current(), listingNotices: read.listingNotices, governance: read.governance };
   }
-
 
   async account(address: Address): Promise<AccountView> {
     return (await this.transport.get(`/v1/accounts/${address}`)) as AccountView;
@@ -271,7 +272,6 @@ export class LiveEngineClient implements EngineClient {
       const stream = new LiveStream({
         ...this.deps, verifier: () => this.verifiers.loaded(), origin: this.deps.streamOrigin, trust: this.trust, challenge: this.deps.challenge ?? (() => newChallenge()),
         onMessage: (message) => {
-
           const entry = setParamsOf(message.cmd, message.events);
           if (entry !== null) this.houseFold.foldStreamParams(message.seq, entry);
           for (const subscriber of this.subscribers) subscriber(message);

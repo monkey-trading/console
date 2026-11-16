@@ -131,6 +131,33 @@ describe("a node the vault no longer names", () => {
   });
 });
 
+describe("another node's word on the signer (monkey-trading/console#374)", () => {
+  it("ends a read-only verdict when it names another key at a later epoch, the node's own word or none before it, and refuses the enclave", async () => {
+    for (const own of [{ epoch: 4, address: OLD }, null]) {
+      const { trust, statuses } = await verified({ address: OLD });
+      if (own !== null) trust.heedOperator({ enclave: OLD, signer: own });
+      expect(trust.status.kind).toBe("attested");
+      trust.heedSigner({ epoch: 5, address: NEW });
+      expect(trust.status).toEqual({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+      expect(statuses.at(-1)).toBe("unverified");
+      expect(trust.refuses(OLD)).toBe(true);
+      expect(trust.signerNamed).toEqual({ epoch: 5, address: NEW });
+      await expect(trust.signer()).rejects.toThrow(SIGNER_SUPERSEDED);
+    }
+  });
+
+  it("leaves the verdict for an earlier epoch's word, and for the same key at the node's own epoch, and names the highest heard", async () => {
+    const { trust } = await verified({ address: OLD });
+    expect(trust.signerNamed).toBeNull();
+    trust.heedOperator({ enclave: OLD, signer: { epoch: 4, address: OLD } });
+    trust.heedSigner({ epoch: 3, address: NEW });
+    trust.heedSigner({ epoch: 4, address: OLD.toUpperCase().replace("0X", "0x") });
+    expect(trust.status.kind).toBe("attested");
+    expect(trust.refuses(OLD)).toBe(false);
+    expect(trust.signerNamed).toEqual({ epoch: 4, address: OLD });
+  });
+});
+
 describe("the operator route's read", () => {
   const route: OperatorRoute = { operator: OLD, pending_rotation: null, rotation_enabled: true, last_election: null, signer: { epoch: 5, address: NEW } };
 

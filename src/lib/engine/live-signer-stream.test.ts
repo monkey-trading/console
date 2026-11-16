@@ -90,3 +90,34 @@ describe("a stream opened under a key a later epoch replaces", () => {
     expect(events).toContainEqual({ type: "problem", reason: SIGNER_SUPERSEDED });
   });
 });
+
+describe("a stream under a key another node's word puts aside (monkey-trading/console#374)", () => {
+  it("ends the verdict and delivers nothing more from it, and says what the node's own word named until then", async () => {
+    const node = new FakeNode();
+    node.attestation(() => ENCLAVE);
+    node.signed(OPERATOR_CLAIM, () => ({ status: 200, signature: "0x", timeMs: 1, seq: 1, body: JSON.stringify({ operator: ENCLAVE, pending_rotation: null, rotation_enabled: true, last_election: null, enclave: ENCLAVE, signer: { epoch: 4, address: ENCLAVE } }) }));
+    const sockets: FakeSocket[] = [];
+    const client = new LiveEngineClient({
+      origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: vectorResponse("markets").vault, heartbeatMs: 5_000,
+      loadVerifier: async () => acceptAll, releases: [], acceptsMock: true, fetch: node.fetch,
+      openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; }, scheduler: new FakeScheduler(), nowMs: () => 1, challenge: () => "ab".repeat(32),
+    });
+    const events: ClientEvent[] = [];
+    client.watch((event) => events.push(event));
+    expect(await client.verify()).toEqual({ kind: "mock" });
+    expect(client.signerNamed()).toEqual({ epoch: 4, address: ENCLAVE });
+    client.subscribe(() => {});
+    await settle();
+    const socket = sockets[0];
+    if (socket === undefined) throw new Error("the stream opened no socket");
+    socket.open();
+    socket.receive(frame(0, 9));
+    expect(events).toContainEqual({ type: "checkpoint", seq: 9 });
+    client.heedSigner({ epoch: 5, address: OTHER });
+    expect(events).toContainEqual({ type: "attestation", status: { kind: "unverified", reason: SIGNER_SUPERSEDED } });
+    socket.receive(frame(1, 10));
+    expect(events).not.toContainEqual({ type: "checkpoint", seq: 10 });
+    expect(socket.closed).toBe(true);
+    expect(client.signerNamed()).toEqual({ epoch: 5, address: OTHER });
+  });
+});

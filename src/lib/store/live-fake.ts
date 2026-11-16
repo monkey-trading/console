@@ -117,6 +117,8 @@ export class FakeClient implements EngineClient {
   chainsRead: unknown[] = [];
   async readChainThrough(chain: unknown) { this.chainsRead.push(chain); }
   async heedVault() {}
+  signerNamed() { return null; }
+  heedSigner() {}
   async nonce() { return { next_nonce: 0 }; }
   /** The declaration the eligibility read answers with, and how many times it and the withdrawal queue were read. */
   declared: EligibilityClass | null = null;

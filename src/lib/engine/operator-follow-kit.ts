@@ -4,7 +4,9 @@ import type { AttestationStatus } from "./attestation";
 import type { ClientEvent, EngineClient } from "./client";
 import { OperatorFollower } from "./operator-follow";
 import type { DeploymentReads, NamedOperator, VaultFacts } from "./registry";
+import { SignerNaming, type NamedSigner, type OperatorClaim } from "./signer-naming";
 import { FakeScheduler } from "./test-kit";
+import { RefusedAnswer } from "./trust-errors";
 import type { StreamMessage } from "./types";
 
 export const BUILD = "https://build.example";
@@ -27,9 +29,25 @@ export class TrialClient {
   verify = async () => { this.verifies += 1; return this.verdict; };
   /** The node's signed `/v1/operators`, of which the follower reads each candidate's registered hostname. */
   operatorList: () => Promise<unknown> = async () => ({ candidates: [] });
-  stats = { operator: () => this.signedRead(), operators: () => this.operatorList() };
+  stats = { operator: () => this.operatorRead(), operators: () => this.operatorList() };
+  /** The signer every route read named, a refused one's included, as a live client's naming keeps it. */
+  readonly naming = new SignerNaming();
+  /** Each signer the follower put to this client, oldest first. */
+  heard: NamedSigner[] = [];
+  signerNamed = () => this.naming.highest;
+  heedSigner = (signer: NamedSigner) => { this.heard.push(signer); this.naming.judge(null, { signer }); };
   watch(listener: (event: ClientEvent) => void) { this.watchers.add(listener); return () => { this.watchers.delete(listener); }; }
   subscribe(onMessage: (message: StreamMessage) => void) { this.subscribers.add(onMessage); return () => { this.subscribers.delete(onMessage); }; }
+  private async operatorRead(): Promise<unknown> {
+    try {
+      const route = await this.signedRead();
+      this.naming.judge(null, route as OperatorClaim); // a test's route has the operator route's shape, or none of its fields
+      return route;
+    } catch (error) {
+      if (error instanceof RefusedAnswer) this.naming.judge(null, error.answer);
+      throw error;
+    }
+  }
 }
 
 export function rig(options: { reads?: DeploymentReads | null; operator?: () => Promise<NamedOperator | null>; clients?: Record<string, TrialClient>; deploy?: typeof DEPLOY } = {}) {

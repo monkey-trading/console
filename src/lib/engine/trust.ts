@@ -3,12 +3,10 @@
 import type { Hex } from "viem";
 
 import { MOCK_REFUSED, type AttestationStatus } from "./attestation";
-import type { PinnedRelease } from "./manifests";
-import type { VaultFacts } from "./registry";
+import type { TrustDeps } from "./trust-deps";
 import { readVault } from "./trust-vault";
-import { SignerNaming, type OperatorClaim } from "./signer-naming";
+import { SignerNaming, type NamedSigner, type OperatorClaim } from "./signer-naming";
 import { digestNamed, isConfigHash, manifestText } from "./release-check";
-import type { Verifier } from "./verifier";
 
 export { NotSentError, SignatureError, UntrustedError } from "./trust-errors";
 import { NotSentError, sendRefusal, UntrustedError } from "./trust-errors";
@@ -25,28 +23,6 @@ export const NOT_NAMED = "The node does not run the release the vault names, or 
 export const NOT_THE_SIGNER = "The node's enclave is not the signer the vault names.";
 export { CONNECT_TO_CHECK } from "./trust-errors";
 import { CONNECT_TO_CHECK } from "./trust-errors";
-
-export interface TrustDeps {
-  /** `GET /v1/attestation`, as text. */
-  attestation(): Promise<string>;
-  /** `GET /v1/attestation/collateral`, as text; null when the node has none (a mock quote). */
-  collateral(): Promise<string | null>;
-  /** The verifier, loaded on first use. */
-  verifier(): Promise<Verifier>;
-  /** The releases this build pins. */
-  releases: readonly PinnedRelease[];
-  /** A dev build's stand-ins for the launch digest a mock quote cannot measure; with none, its mock node is not checked against the vault. */
-  devDigests: readonly string[];
-  /** The vault's facts through the connected wallet, bounded in time; null with no wallet that reads a chain. */
-  vaultFacts(): Promise<VaultFacts> | null;
-  acceptsMock: boolean;
-  nowMs(): number;
-  onStatus(status: AttestationStatus): void;
-  /** The verified enclave address changed from an earlier one. */
-  onEnclaveChanged(): void;
-  /** The node's own signed word on its enclave and the signer the vault names (`GET /v1/operator`), read under `address`, just verified and not yet trusted (monkey-trading/console#280): nothing stated from a node that predates the route; rejects when it cannot be read. */
-  operatorClaim?(address: string): Promise<OperatorClaim>;
-}
 
 /**
  * Holds the verified enclave address. The first caller verifies the node's attestation and every
@@ -151,13 +127,28 @@ export class NodeTrust {
    * - the answer is refused: `UntrustedError`
    */
   heedOperator(answer: OperatorClaim): void {
+    const refused = this.judged(answer);
+    if (refused !== null) throw new UntrustedError(refused);
+  }
+
+  /** Another node's signed word names `signer` (monkey-trading/console#374), judged as the node's own word is: the enclave trusted now loses its verdict, read-only or not, if the key named at the highest epoch is not it. */
+  heedSigner(signer: NamedSigner): void {
+    this.judged({ signer });
+  }
+
+  /** The highest signer epoch named by this node's signed word or by another node's put to it, with the key named at it; null before one was. */
+  get signerNamed(): Readonly<NamedSigner> | null {
+    return this.naming.highest;
+  }
+
+  /** Why `answer` is refused, or null; a refusal that puts the trusted enclave aside ends its verdict. */
+  private judged(answer: OperatorClaim): string | null {
     const refusal = this.naming.judge(this.signerAddress ?? this.lastSigner, answer);
-    if (refusal === null) return;
-    if (refusal.supersede && this.signerAddress !== null) {
+    if (refusal?.supersede === true && this.signerAddress !== null) {
       this.signerAddress = null;
       this.setStatus({ kind: "unverified", reason: refusal.reason });
     }
-    throw new UntrustedError(refusal.reason);
+    return refusal?.reason ?? null;
   }
 
   /** Whether connecting a wallet changes this verdict: a quote the vault can judge, which a dev build's mock node with no stand-in digests is not. */
