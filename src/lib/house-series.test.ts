@@ -86,7 +86,7 @@ describe("where a chart's data begins", () => {
     expect(beginsText(data({ begins_ms: 5 }), stamp)).toBe("Data begins t5 UTC, when the server started.");
   });
 
-  it("holds a footnote's place with the sentence a record when the server started gives, so it wraps as the read one will", () => {
+  it("holds a footnote's place with the sentence a record from the server's start gives, so it wraps as the read one will", () => {
     expect(heldBeginsText(stamp)).toBe(beginsText(data({ begins_ms: 0 }), stamp));
   });
 
