@@ -1,6 +1,6 @@
 "use client";
 
-/** The Rotation tab's turn history card (monkey-trading/console#280): every turn assigned, newest first, with older turns on "Load older". */
+/** The Rotation tab's turn history card (monkey-trading/console#280): every turn assigned, by start time, newest first, with older turns on "Load older". */
 
 import { failureText } from "@/lib/format";
 import type { TurnRecord } from "@/lib/staking/rotation";
@@ -22,12 +22,12 @@ interface HistoryProps extends Names {
   onMore: () => void;
 }
 
-/** The turn history, newest first. */
+/** The turn history, by start time, newest first. */
 export function TurnHistoryCard({ records, empty, more, truncated, reading, error, onMore, nameOf }: HistoryProps) {
   const dropped = more === false && truncated && records.length > 0;
   return (
     <Card id="rotation-history-title" title="Turn history">
-      <TurnRecords records={records} caption="Every turn, newest first, showing the operator, how it was chosen, when its turn starts and whether it has started." empty={empty} nameOf={nameOf} />
+      <TurnRecords records={records} caption="Every turn by its start time, newest first, with its operator, how the operator was chosen and the outcome." empty={empty} nameOf={nameOf} />
       {more === true ? (
         <button type="button" aria-disabled={reading} onClick={() => { if (!reading) onMore(); }} className={TOGGLE}>
           {reading ? "Loading" : "Load older"}<span className="sr-only"> turns</span>

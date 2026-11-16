@@ -87,7 +87,7 @@ export function mockRotation(state: MockState, params: { before?: number; limit?
       push(stamp({ ...base, position: 1, reason: "promotion", candidate: next.candidate, admin_key: next.admin_key, assigned_ms: at + 3_600_000, applies_at: at + 3_600_000 }));
     } else if (turn === anchor - 5) {
       push(stamp({ ...base, position: 0, assigned_ms: at - 36 * 3_600_000 }));
-      push({ ...base, position: 1, reason: "skip", refused: "no set mirrored seven days earlier names its key", applies_at: null, assigned_ms: at + 600_000 });
+      push({ ...base, position: 1, reason: "skip", refused: `set ${setAt(at).id} was logged at ${at - 3 * DAY_MS}, less than seven days before the turn applies at ${at + 600_000}`, applies_at: null, assigned_ms: at + 600_000 });
     } else if (turn === anchor - 3) {
       const first = drawnAt(turn);
       const second = setAt(at).members.find((candidate) => candidate.candidate !== first.candidate) ?? first;

@@ -2,7 +2,7 @@
 
 /**
  * The Rotation tab's table of turn assignments (monkey-trading/console#280), which its two turn cards
- * share: each assignment with its member, why it was named, when its key signs from and whether its
+ * share: each assignment by when its member starts, with its member, why it was named and whether its
  * member took it.
  */
 
@@ -20,7 +20,7 @@ export interface Names {
 }
 
 /**
- * The records' table: one row per assignment, the key a record's seq with its turn and position. `empty` is what the viewport says
+ * The records' table: one row per assignment, in the order given, the key a record's seq with its turn and position. `empty` is what the viewport says
  * with no record: it holds one height either way, so nothing below it moves when records land.
  */
 export function TurnRecords({ records, caption, empty, nameOf }: { records: readonly TurnRecord[]; caption: string; empty: string } & Names) {
@@ -30,20 +30,18 @@ export function TurnRecords({ records, caption, empty, nameOf }: { records: read
         <caption className="sr-only">{caption} Times are UTC.</caption>
         <thead className="sticky top-0 bg-ink-1">
           <tr>
-            <th scope="col" className={TH}>Turn</th>
+            <th scope="col" className={TH}>Starts</th>
             <th scope="col" className={TH}>Operator</th>
             <th scope="col" className={TH}>Chosen by</th>
-            <th scope="col" className={TH}>Starts</th>
             <th scope="col" className={TH}>Outcome</th>
           </tr>
         </thead>
         <tbody>
           {records.map((record) => (
             <tr key={`${record.assignedSeq}:${record.turn}:${record.position}`} className="border-t border-line">
-              <td className={`${TD} text-fg-2 tabular-nums`}>{record.turn}<span className="block text-fg-3">position {record.position + 1}</span></td>
+              <td className={`${TD} whitespace-nowrap text-fg-2 tabular-nums`}>{recordFrom(record)}</td>
               <td className={`${TD} break-all text-fg`}><span title={record.candidate}>{withAddress(nameOf(record.candidate), record.candidate)}</span></td>
               <td className={`${TD} text-fg-2`}><span title={REASON_WORDS[record.reason]}>{REASON_CELL[record.reason]}</span></td>
-              <td className={`${TD} whitespace-nowrap text-fg-2`}>{recordFrom(record)}</td>
               <td className={`${TD} ${record.refused === null ? "text-fg-2" : "text-amber"}`}>{recordOutcome(record)}</td>
             </tr>
           ))}

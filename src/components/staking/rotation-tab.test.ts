@@ -13,6 +13,7 @@ import { TurnHistoryReads } from "@/lib/staking/turn-history-reads";
 import type { ConsoleState } from "@/lib/store/state";
 import { NO_EDITING } from "@/lib/staking/delegation-form";
 import { NO_TABLE_VIEW } from "@/lib/staking/operator-table";
+import { formatStampWithYear } from "@/lib/time";
 
 import { ConsoleProvider, useSession } from "../ConsoleProvider";
 import { StakingContext, type StakingReads } from "../StakingSection";
@@ -40,7 +41,8 @@ const ROUTE: OperatorRoute = {
     next: 70, truncated: false, retained_from_seq: 10,
   },
 };
-const loaded = (route: OperatorRoute = ROUTE): OperatorsState => ({ route: ready(route), rotation: rotationView(route), list: ready(view), held: null });
+const loaded = (route: OperatorRoute = ROUTE, list = view): OperatorsState => ({ route: ready(route), rotation: rotationView(route), list: ready(list), held: null });
+const KEPT = "The operator already running the trading server stays in place.";
 
 function Tab({ state, operators }: { state: Partial<ConsoleState>; operators: OperatorsState }) {
   const { store } = useSession();
@@ -56,34 +58,49 @@ function Tab({ state, operators }: { state: Partial<ConsoleState>; operators: Op
 const tab = (operators: OperatorsState, state: Partial<ConsoleState> = VERIFIED) => renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Tab, { state, operators })));
 
 describe("the Rotation tab", () => {
-  it("lists the set in effect with each member's weight and share of turns, and the next set with its time", () => {
+  it("lists the current group with each member's weight and share of turns, and the next group with when it takes over, in plain words", () => {
     const html = tab(loaded());
-    expect(html).toContain("Current rotation");
-    expect(html).toContain("Rotation 3 was chosen at election 41 and has 2 operators. It has been running since");
+    expect(html).toContain("Current operator group");
+    expect(html).toContain("The current group has 2 operators, listed below, and has run the trading server in turns since");
     expect(html).toContain("70.00%");
     expect(html).toContain("30.00%");
     expect(html).toContain("700 MONKEY");
-    expect(html).toContain("Rotation 4 was chosen at election 42 and has 2 operators. It starts at");
-    expect(html).toContain("in 3 days.");
+    expect(html).toMatch(/The next group has 2 operators, listed below, and takes over from the current group at [^<]*, in 3 days\. Until then, the current group continues to run the trading server\./);
+    expect(html).not.toMatch(/Rotation \d|election \d|position \d/);
   });
 
-  it("names today's and tomorrow's turns, tomorrow's as not started", () => {
-    const html = tab(loaded());
-    expect(html).toContain("Today&#x27;s turn");
-    expect(html).toMatch(/Today&#x27;s turn<\/dt>.*?alpha\.example[^<]*, from [^<]*UTC<\/span>/);
-    expect(html).toMatch(/Tomorrow&#x27;s turn<\/dt>.*?bravo\.example[^<]*, from [^<]*UTC, not yet started<\/span>/);
+  it("before the next group is chosen, says when the registry's next election is due to close", () => {
+    const html = tab(loaded({ ...ROUTE, next_rotation_set: null }, { ...view, nextElectionMs: NOW + 5 * 3_600_000 }));
+    expect(html).toMatch(/The next group of operators has not yet been chosen\. It will be chosen at the next election, which is due to close at [^<]*UTC, in 5 hours[^.<]*\. A group takes over about seven days after the election that chooses it, and the current group continues to run the trading server until then\./);
   });
 
-  it("lists the history newest first, with a skip, a promotion and a refusal with the engine's reason, apart under Skips and promotions", () => {
+  it("names the current and next turns, the next as not started", () => {
     const html = tab(loaded());
-    const moves = html.slice(html.indexOf("Skips and promotions"), html.indexOf("Turn history"));
+    expect(html).toMatch(/Current turn<\/dt>.*?alpha\.example[^<]*, from [^<]*UTC<\/span>/);
+    expect(html).toMatch(/Next turn<\/dt>.*?bravo\.example[^<]*, from [^<]*UTC, not yet started<\/span>/);
+    expect(html).not.toContain("Today&#x27;s turn");
+  });
+
+  it("lists the history by start time, newest first, with a skip, a promotion and a refusal in plain words, apart under Reassigned and refused turns", () => {
+    const html = tab(loaded());
+    const moves = html.slice(html.indexOf("Reassigned and refused turns"), html.indexOf("Turn history"));
     expect(moves).toContain("Skip");
     expect(moves).toContain("Promotion");
-    expect(moves).toContain("Refused. The turn could not take effect, so the current operator continued.");
+    expect(moves).toContain(`Refused. The operator assigned the turn could not take over. ${KEPT}`);
     expect(moves.match(/Started at/g)).toHaveLength(1);
     const history = html.slice(html.indexOf("Turn history"));
-    expect(history.indexOf("tabular-nums\">10<")).toBeLessThan(history.indexOf("tabular-nums\">9<"));
+    expect(history.indexOf(formatStampWithYear(NOW + 23 * 3_600_000))).toBeLessThan(history.indexOf(formatStampWithYear(NOW - 3_600_000)));
     expect(history).toContain("Load older");
+  });
+
+  it("shows a refused short turn by its start time with the engine's notice reason in plain words, never its turn number or position", () => {
+    const SHORT = Date.UTC(2026, 10, 16, 21, 50);
+    const refused = record(5_982_886, { position: 1, assigned_ms: SHORT - 240_000, applies_at: null, refused: `set 1 was logged at ${SHORT - 120_000}, less than one turn before the turn applies at ${SHORT}`, taken_seq: null, taken_ms: null, release: null });
+    const html = tab(loaded({ ...ROUTE, turns: { records: [refused], next: null, truncated: false, retained_from_seq: null } }));
+    const moves = html.slice(html.indexOf("Reassigned and refused turns"), html.indexOf("Turn history"));
+    expect(moves).toContain("2026-11-16 21:50");
+    expect(moves).toContain(`Refused. An operator must be announced at least one turn before its turn begins, and the operator assigned the turn was announced later than that. ${KEPT}`);
+    expect(moves).not.toMatch(/5982886|position/);
   });
 
   it("offers no Load older at the history's end, says what a truncated history holds, and holds both lines' places either way", () => {
@@ -98,10 +115,10 @@ describe("the Rotation tab", () => {
 
   it("says no set is in effect, and no later one, from a node that mirrors none", () => {
     const html = tab(loaded({ ...ROUTE, rotation_set: null, next_rotation_set: null, turn: null, next_turn: null, turns: { records: [], next: null, truncated: false, retained_from_seq: null } }));
-    expect(html).toContain("No rotation is running.");
-    expect(html).toContain("No next rotation has been chosen yet.");
-    expect(html).toContain("No one has today&#x27;s turn");
-    expect(html).toContain("Not drawn yet");
+    expect(html).toContain("No group of operators is running the trading server in turns.");
+    expect(html).toContain("The next group of operators has not yet been chosen. It will be chosen when the current election is closed, which has been due since");
+    expect(html).toContain("No turn in progress");
+    expect(html).toContain("Not yet drawn");
     expect(html).toContain("No turns have taken place yet.");
   });
 
@@ -127,12 +144,12 @@ describe("the Rotation tab without a rotation", () => {
 });
 
 describe("the operators card's turns", () => {
-  it("shows today's and tomorrow's turns beside the operator in effect, and dashes before the route is read", () => {
+  it("shows the current and next turns beside the operator in effect, and dashes before the route is read", () => {
     const html = renderOperators({ state: VERIFIED, operators: loaded(), read: chain() });
-    expect(html).toMatch(/Today&#x27;s turn<\/dt>.*?alpha\.example[^<]*, from /);
-    expect(html).toMatch(/Tomorrow&#x27;s turn<\/dt>.*?bravo\.example[^<]*, not yet started/);
+    expect(html).toMatch(/Current turn<\/dt>.*?alpha\.example[^<]*, from /);
+    expect(html).toMatch(/Next turn<\/dt>.*?bravo\.example[^<]*, not yet started/);
     const before = renderOperators({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: chain() });
-    expect(before).toMatch(/Today&#x27;s turn<\/dt>.*?justify-self-end">—<\/span>/);
+    expect(before).toMatch(/Current turn<\/dt>.*?justify-self-end">—<\/span>/);
   });
 
   it("marks each member in the operator table and gives its weight and share of turns", () => {

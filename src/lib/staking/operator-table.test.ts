@@ -86,6 +86,12 @@ describe("operatorsView", () => {
     expect(() => operatorsView(list(Array.from({ length: 101 }, (_, i) => candidate(i + 1))))).toThrow("more candidates than allowed");
   });
 
+  it("gives the time the registry's open election epoch ends, when a close chooses the next rotation set, and none from figures that are not whole numbers", () => {
+    const parameters = { ...list([candidate(1)]).parameters, epoch_length_secs: 86_400 };
+    expect(operatorsView(list([candidate(1)], undefined, { open_epoch_start_ms: 1_793_000_000_000, parameters })).nextElectionMs).toBe(1_793_086_400_000);
+    expect(operatorsView(list([candidate(1)], undefined, { open_epoch_start_ms: 0.5 })).nextElectionMs).toBeNull();
+  });
+
   it("keeps the candidates when the open proposals fail their check, saying why apart", () => {
     const vote = "0x00000000000000000000000000000000000000a1";
     const proposal = { id: 1, proposer: vote, set_id: 1, fast: false, opens_at_ms: 5, closes_at_ms: 5, total_weight: "9", yes_weight: "4", command_hash: `0x${"ab".repeat(32)}`, command: null };
