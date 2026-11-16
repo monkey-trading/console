@@ -20,6 +20,7 @@ import { belowMinimum, contractUnit, MARGIN_SHORT, MARKET_CLOSED, NO_FUNDS, NO_S
 import { currentParams, houseTermsNote, ticketFigures } from "@/lib/ticket-figures";
 import { describeBestPrice } from "@/lib/tier-view";
 import { tradingPaused } from "@/lib/trading-paused";
+import { isPriced, unpricedWhy } from "@/lib/unpriced";
 import { formatLeverage } from "@/lib/volume-tier";
 
 import { CloseSummary } from "./CloseSummary";
@@ -62,7 +63,8 @@ export function DealTicket() {
     unlisted: follow?.kind === "unlisted",
     open: market.open,
     scheduleWords: market.open ? null : describeSchedule(market.view.schedule),
-    priced: market.mark !== null,
+    priced: isPriced(market),
+    unpricedWhy: unpricedWhy(market.view.pricing),
     reduceOnly: market.reduceOnly,
   });
   const triggerPrice = parseFixed(price);

@@ -25,8 +25,10 @@ export function tradingPaused(input: {
   open: boolean;
   /** The schedule in words, for what will end the closed state; null when unknown. */
   scheduleWords: string | null;
-  /** A usable mark exists. */
+  /** The market has a live price. */
   priced: boolean;
+  /** Why it has none, as a clause after "because"; null when the server does not say. */
+  unpricedWhy: string | null;
   /** The market refuses orders that add risk. */
   reduceOnly: boolean;
 }): PausedState | null {
@@ -40,7 +42,8 @@ export function tradingPaused(input: {
     return { cause: "closed", text: input.scheduleWords === null ? "This market is currently closed." : `This market is currently closed. Its trading hours are ${input.scheduleWords}.`, closesAllowed: true };
   }
   if (!input.priced) {
-    return { cause: "price", text: "No live price is currently available for this market, so trading has been suspended. Trading will resume automatically once a live price is available again.", closesAllowed: true };
+    const why = input.unpricedWhy === null ? "" : ` because ${input.unpricedWhy}`;
+    return { cause: "price", text: `No live price is currently available for this market${why}, so trading has been suspended. Trading will resume automatically once a live price is available again.`, closesAllowed: true };
   }
   if (input.reduceOnly) {
     return { cause: "reduce_only", text: "This market is currently accepting only orders that reduce an existing position. You can still close your position from the Positions tab.", closesAllowed: true };

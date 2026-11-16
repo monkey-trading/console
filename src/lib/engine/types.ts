@@ -8,10 +8,10 @@ import type { EngineEvent } from "./event-types";
 export type { EngineEvent } from "./event-types";
 export type { AccountView } from "./account-types";
 import type { HouseScanView } from "./stats-types";
-import type { CurvePoint, SpreadTier, StressLevel } from "./pricing-types";
+import type { CurvePoint, MarketPricing, SpreadTier, StressLevel } from "./pricing-types";
 import type { VolumeTierWire } from "./volume-types";
 export type { VolumeTierWire } from "./volume-types";
-export type { CloseFee, CurvePoint, ListingNotice, ListingNotices, SpreadTier, StressLevel } from "./pricing-types";
+export type { CloseFee, CurvePoint, ListingNotice, ListingNotices, MarketPricing, SpreadTier, StressLevel } from "./pricing-types";
 
 export type Address = string;
 export type MarketId = number;
@@ -58,7 +58,10 @@ export interface MarketView {
   min_order_notional: string;
   open: boolean;
   reduce_only: boolean;
+  /** The last index mark, kept while the market has no price; `pricing` says whether it has one now. */
   mark: string | null;
+  /** How the market is priced now; absent from a node that predates it, and from the mock. */
+  pricing?: MarketPricing;
   /** The FX index a market quoted in another currency is valued at; null or absent for USD markets and before its first price. */
   fx_mark?: string | null;
   stress_level: number;

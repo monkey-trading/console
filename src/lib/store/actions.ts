@@ -10,6 +10,7 @@ import { UntrustedError } from "../engine/trust-errors";
 import { fixedToWire, formatFixedPlaces, parseFixed, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
 import { describeReject } from "../messages";
+import { noPriceRefusal } from "../unpriced";
 import { loadAccount } from "./account";
 import { authorizeBrowser, ensureLogin, liveSessionKey } from "./session";
 import { sessionSigned } from "./session-signed";
@@ -226,9 +227,12 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams, surfa
   const rejected = out.result.events.find((e) => e.type === "order_rejected");
   const filled = out.result.events.some((e) => e.type === "fill");
   const cancelled = out.result.events.some((e) => e.type === "order_cancelled");
-  if (rejected && rejected.type === "order_rejected") store.notify(surface, describeReject(rejected.reason));
-  else if (!filled && cancelled) store.notify(surface, "Your order could not be filled, so it has been cancelled.");
+  const refused = rejected && rejected.type === "order_rejected" ? rejected.reason : null;
+  if (refused !== null && refused.kind !== "no_price") store.notify(surface, describeReject(refused));
+  else if (refused === null && !filled && cancelled) store.notify(surface, "Your order could not be filled, so it has been cancelled.");
   await store.refresh(true);
+  // A refusal for want of a price names why from the market's pricing the read above brought.
+  if (refused?.kind === "no_price") store.notify(surface, noPriceRefusal(store.getSnapshot().markets.find((m) => m.id === market.id)?.view.pricing));
   return rejected === undefined && (filled || !cancelled);
 }
 

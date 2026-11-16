@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { tradingPaused } from "./trading-paused";
 
-const live = { handover: false, unlisted: false, open: true, scheduleWords: null, priced: true, reduceOnly: false };
+const live = { handover: false, unlisted: false, open: true, scheduleWords: null, priced: true, unpricedWhy: null, reduceOnly: false };
 
 describe("tradingPaused", () => {
   it("is null for a live, open, priced market", () => {
@@ -38,6 +38,13 @@ describe("tradingPaused", () => {
     expect(tradingPaused({ ...live, priced: false })?.cause).toBe("price");
     expect(tradingPaused({ ...live, priced: false })?.text).toBe("No live price is currently available for this market, so trading has been suspended. Trading will resume automatically once a live price is available again.");
     expect(tradingPaused({ ...live, priced: false, open: false })?.cause).toBe("closed");
+  });
+
+  it("names why a market has no price where the server says", () => {
+    expect(tradingPaused({ ...live, priced: false, unpricedWhy: "the prices received from Kraken are delayed" })?.text).toBe(
+      "No live price is currently available for this market because the prices received from Kraken are delayed, so trading has been suspended. Trading will resume automatically once a live price is available again.",
+    );
+    expect(tradingPaused({ ...live, priced: false, unpricedWhy: "the prices received from Kraken are delayed", open: false })?.cause).toBe("closed");
   });
 
   it("names reduce-only last and says closing still works", () => {

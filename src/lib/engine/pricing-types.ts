@@ -1,7 +1,8 @@
 /**
  * The pricing shapes the node serves, field for field as `engine_core` serializes them: spread bands
  * (`spread_tier.rs`), stress levels (`params.rs`), the profit fee's hold curve and a position's close
- * fee (`holding_fee`), and a listed market's pending listing notice (`listing_bounds.rs`).
+ * fee (`holding_fee`), a listed market's pending listing notice (`listing_bounds.rs`), and how a market
+ * is priced now (`crates/node/src/api/pricing.rs`).
  */
 
 import type { MarketId, Tier } from "./types";
@@ -46,3 +47,18 @@ export interface ListingNotice {
 
 /** `/v1/house/state`'s `listing_notices`: each listed market with a pending notice, by market id. */
 export type ListingNotices = Partial<Record<MarketId, ListingNotice>>;
+
+/** What one source of a market is doing at the engine's last stamp (`crates/node/src/api/pricing.rs`). */
+export type SourceState = "counts" | "diverging" | "stale" | "silent" | "delayed" | "down" | "off" | "not_expected" | "never_quoted";
+
+/** How a market is priced at the engine's last stamp, from `GET /v1/markets` (monkey-trading/engine#853); a closed market holds no quotes and reads `too_few_sources`. */
+export interface MarketPricing {
+  /** Whether the market has an index. */
+  priced: boolean;
+  /** Why it has none; absent while priced. */
+  unpriced?: "too_few_sources" | "diverging" | "out_of_range";
+  as_of_ms: number;
+  fresh_sources: number;
+  min_sources: number;
+  sources: { source: string; state: SourceState; last_quote_ms: number | null; age_ms: number | null }[];
+}
