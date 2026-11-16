@@ -1,4 +1,4 @@
-/** Tests for the signer floor with no wallet (monkey-trading/console#373, #374): every signer a client's signed routes named holds every node moved to, and the node in use, to it. */
+/** Tests for the signer floor with no wallet (monkey-trading/console#373, #374, #377): every signer a client's signed routes named holds every node moved to, and the node in use, to it. */
 
 import { describe, expect, it } from "vitest";
 
@@ -25,8 +25,8 @@ function visit(hostname: string) {
   const kit = rig({ reads: null, clients });
   const current = new TrialClient();
   current.signedRead = async () => route(hostname, { epoch: 5, address: KA });
-  kit.follower.watch(current as unknown as EngineClient); // the follower uses only what TrialClient has
-  return { ...kit, current, nodeB: clients[B], nodeC: clients[C] };
+  const stopCurrent = kit.follower.watch(current as unknown as EngineClient); // the follower uses only what TrialClient has
+  return { ...kit, current, stopCurrent, nodeB: clients[B], nodeC: clients[C] };
 }
 
 /** A follower with a wallet whose chain names B, over a node in use whose route names nothing. */
@@ -101,7 +101,7 @@ describe("the signer floor a visit holds each node to (monkey-trading/console#37
     await kit.follower.check();
     expect(kit.adopted).toEqual([]);
     expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B, reason: expect.stringContaining("newer signer") });
-    expect(kit.current.heard).toEqual([{ epoch: 7, address: KA }, { epoch: 7, address: KB }]);
+    expect(kit.current.heard).toEqual([{ epoch: 7, address: KB }]);
   });
 
   it("holds a node moved to with a wallet to it too", async () => {
@@ -203,5 +203,45 @@ describe("the node in use under a later signer another node names (monkey-tradin
     expect(kit.adopted).toEqual([C]);
     expect(kit.current.heard).toEqual([{ epoch: 7, address: KC }]);
     expect(kit.follower.getSnapshot()).toEqual({ kind: "pinned", origin: C });
+  });
+});
+
+describe("a read that ends after the follower stopped waiting on its client (monkey-trading/console#377)", () => {
+  /** A read of `client`'s route that ends when the test lands it. */
+  function slowRead(client: TrialClient) {
+    let land: (answer: unknown) => void = () => {};
+    const before = client.signedRead;
+    client.signedRead = () => new Promise((resolve) => { land = resolve; });
+    const read = client.stats.operator();
+    client.signedRead = before;
+    return { read, land: (answer: unknown) => land(answer) };
+  }
+
+  it("raises the floor from the node moved away from, and puts it to the node moved to at once", async () => {
+    const kit = visit("b.example");
+    kit.nodeB.signedRead = async () => route(null, { epoch: 8, address: KB });
+    // A check of the node in use reads its word, which is slow to come, while B is tried.
+    const late = slowRead(kit.current);
+    await kit.follower.check();
+    expect(kit.adopted).toEqual([B]);
+    // As the provider does once the move lands.
+    kit.stopCurrent();
+    kit.follower.watch(kit.nodeB as unknown as EngineClient); // the follower uses only what TrialClient has
+    late.land(route(null, { epoch: 9, address: KC }));
+    await late.read;
+    expect(kit.nodeB.heard).toEqual([{ epoch: 9, address: KC }]);
+  });
+
+  it("raises the floor from a node tried and left waiting, and puts it to the node in use at once", async () => {
+    const kit = visit("b.example");
+    kit.nodeB.verdict = { kind: "unverified", reason: "still taking the keys" };
+    await kit.follower.check();
+    expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B });
+    expect(kit.current.heard).toEqual([]);
+    // B checks itself again, as a wallet's late read of the vault has it do, and its word names a later signer.
+    const late = slowRead(kit.nodeB);
+    late.land(route(null, { epoch: 9, address: KC }));
+    await late.read;
+    expect(kit.current.heard).toEqual([{ epoch: 9, address: KC }]);
   });
 });

@@ -199,3 +199,19 @@ describe("an answer in flight", () => {
     }
   });
 });
+
+describe("the highest signer the client has heard named (monkey-trading/console#377)", () => {
+  it("is reported through watch as it rises, from the first check, a later read or a signer put to the client, with the new signer readable, and not otherwise", async () => {
+    const { live, operator } = client();
+    const told: (number | undefined)[] = [];
+    live.watch((event) => { if (event.type === "signer") told.push(live.signerNamed()?.epoch); });
+    operator({ epoch: 5, address: ENCLAVE });
+    await live.verify();
+    await live.stats.operator({ limit: 1 });
+    operator({ epoch: 6, address: ENCLAVE });
+    await live.stats.operator({ limit: 1 });
+    live.heedSigner({ epoch: 6, address: ENCLAVE });
+    live.heedSigner({ epoch: 7, address: OTHER });
+    expect(told).toEqual([5, 6, 7]);
+  });
+});

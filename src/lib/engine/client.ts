@@ -54,6 +54,8 @@ export type ClientEvent =
   | { type: "feed"; status: FeedStatus; time?: number }
   /** The node's answers now come from another enclave address than before. */
   | { type: "enclave" }
+  /** The highest signer `signerNamed` gives has risen, as a read that named it ended or a signer was put to the client (monkey-trading/console#377). */
+  | { type: "signer" }
   /** Why the stream was dropped, written for the user. */
   | { type: "problem"; reason: string }
   /** A signed checkpoint the stream carried: the vault is about to be posted its root. */

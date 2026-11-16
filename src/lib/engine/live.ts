@@ -88,7 +88,7 @@ export class LiveEngineClient implements EngineClient {
         if (status.kind === "unverified") this.stream?.distrust(status.reason);
         this.emit({ type: "attestation", status });
       },
-      onEnclaveChanged: () => this.emit({ type: "enclave" }),
+      onEnclaveChanged: () => this.emit({ type: "enclave" }), onSignerNamed: () => this.emit({ type: "signer" }),
       operatorClaim: (address) => readClaim(() => this.transport.getUnder("/v1/operator?limit=1", address), this.lastRoute),
     });
     this.transport = new SignedTransport({ ...deps, verifier: () => this.verifiers.loaded(), trust: this.trust, challenge, signal: this.signal });

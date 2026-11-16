@@ -76,6 +76,18 @@ describe("SignerNaming", () => {
     expect(new SignerNaming().judge(OLD, { enclave: OLD })).toBeNull();
     expect(new SignerNaming().judge(null, { signer: { epoch: 1, address: NEW } })).toBeNull();
   });
+
+  it("tells each rise of the highest epoch once the judgement that raised it is settled, and nothing else (monkey-trading/console#377)", () => {
+    const THIRD = "0x00000000000000000000000000000000000000cc";
+    const told: { epoch: number | undefined; trustedRefused: boolean }[] = [];
+    const naming: SignerNaming = new SignerNaming(undefined, () => { told.push({ epoch: naming.highest?.epoch, trustedRefused: naming.refuses(THIRD) }); });
+    naming.judge(null, { signer: { epoch: 4, address: OLD } });
+    naming.judge(null, { signer: { epoch: 4, address: OLD } });
+    naming.judge(null, { signer: { epoch: 3, address: NEW } });
+    naming.judge(OLD, { enclave: NEW, signer: { epoch: 9, address: NEW } });
+    naming.judge(THIRD, { signer: { epoch: 5, address: NEW } });
+    expect(told).toEqual([{ epoch: 4, trustedRefused: false }, { epoch: 5, trustedRefused: true }]);
+  });
 });
 
 /** A trust the verifier of which names the address a test sets. */

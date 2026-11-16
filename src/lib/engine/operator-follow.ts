@@ -14,8 +14,9 @@
 
 import type { EngineClient, Unsubscribe } from "./client";
 import { ROTATION_EVENTS } from "./rotation-events";
+import { SignerFloorWatch } from "./operator-follow-floor";
 import { NodeWord } from "./operator-follow-node";
-import { bounded, lagging, operatorTarget, raised, refusedRoute, signedAnswer, soonest, successor, type FollowerDeps, type FollowStatus, type NodeSaid, type SignerFloor } from "./operator-follow-status";
+import { bounded, operatorTarget, refusedRoute, signedAnswer, soonest, successor, type FollowerDeps, type FollowStatus, type NodeSaid } from "./operator-follow-status";
 import type { DeploymentReads, NamedOperator } from "./registry";
 
 export { operatorTarget, type FollowerDeps, type FollowStatus } from "./operator-follow-status";
@@ -46,8 +47,8 @@ export class OperatorFollower {
   private trial: { origin: string; client: EngineClient } | null = null;
   /** The client of the node in use, which a move of the vault's signer judges again. */
   private current: EngineClient | null = null;
-  /** The highest signer any signed route this visit read named, from the node in use or a node tried, refused or not: no node is moved to whose own word lags it, and the node in use is judged against it (monkey-trading/console#373, #374). */
-  private floor: SignerFloor | null = null;
+  /** The highest signer any signed route this visit read named, from the node in use, a node tried or a node moved away from, refused or not: no node is moved to whose own word lags it, and the node in use is judged against it (monkey-trading/console#373, #374, #377). */
+  private readonly floor = new SignerFloorWatch(() => this.current);
   /** Whether the node in use has lost its verdict. */
   private refused = false;
   /** Whether a timed read was skipped in a hidden tab, and is owed when the tab is seen. */
@@ -89,6 +90,7 @@ export class OperatorFollower {
   watch(client: EngineClient): Unsubscribe {
     this.current = client;
     this.refused = false;
+    this.floor.hear(client);
     const stopEvents = client.watch((event) => {
       if ((event.type === "feed" && event.status === "stale") || event.type === "enclave") this.poke();
       if (event.type !== "attestation") return;
@@ -212,15 +214,6 @@ export class OperatorFollower {
     this.set(state);
   }
 
-  /** Raises the floor by the highest signer `client`'s signed routes named, which is put to the node in use when it moves the floor: its verdict ends if that names another key. */
-  private hear(client: EngineClient | null): void {
-    const named = client?.signerNamed() ?? null;
-    const floor = raised(this.floor, named);
-    if (named === null || floor === this.floor) return;
-    this.floor = floor;
-    this.current?.heedSigner(named);
-  }
-
   /**
    * Runs the whole trust path against the node at `target`, and moves to it only if it holds. Until
    * it does the node in use stays; with rotation off that is no change of operator on its way, as
@@ -232,11 +225,9 @@ export class OperatorFollower {
     const waiting = (reason: string) => (this.deps.chain() !== chain ? this.set(before) : rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, reason }) : this.settled({ kind: "following", origin: this.origin }));
     if (rotationEnabled && !(this.state.kind === "waiting" && this.state.target === target)) waiting("The new operator's node is being verified.");
     let client: EngineClient | null = null;
-    // What a read of the trial named of the signer counts as that read ends, whatever it ends in, before the next read is awaited.
-    const heard = async <T>(read: Promise<T>): Promise<T> => { try { return await read; } finally { this.hear(client); } };
     // With no wallet, a node refused for the signer the vault names still says in its signed route where the operator now runs: the next node, among the listed origins, bounded; its client and turns are never taken.
     const failed = async (reason: string, error?: unknown): Promise<void> => {
-      const route = chain === null && client !== null ? await heard(refusedRoute(this.deps.scheduler, client, error)) : null;
+      const route = chain === null && client !== null ? await refusedRoute(this.deps.scheduler, client, error) : null;
       const next = route === null || this.deps.chain() !== chain ? null : successor(this.deps.deploy, route, [...tried, target]);
       if (route === null || next === null) return waiting(reason);
       if ("unlisted" in next) return this.settled({ kind: "unlisted", origin: this.origin, hostname: next.unlisted });
@@ -245,15 +236,16 @@ export class OperatorFollower {
     try {
       if (this.trial?.origin !== target) this.trial = { origin: target, client: this.deps.open(target) };
       ({ client } = this.trial);
-      await heard(client.readChainThrough(chain));
-      const status = await heard(client.verify());
+      // What each read of the trial names of the signer counts as that read ends, whatever it ends in.
+      this.floor.hear(client);
+      await client.readChainThrough(chain);
+      const status = await client.verify();
       if (status.kind === "unverified") return failed(status.reason);
       // With no wallet no verdict reads the vault, so an attested node is the best a visit without one can have; it reads, and never signs.
       if (status.kind === "attested" && chain !== null) return waiting(status.why);
-      const said = await heard(signedAnswer(client));
+      const said = await signedAnswer(client);
       // Each client judges the signer from its own first check, so the floor, the node in use's own word included, is held here, with a wallet or not.
-      this.hear(this.current);
-      const behind = lagging(this.floor, said, chain !== null && status.kind === "verified");
+      const behind = this.floor.lags(said, chain !== null && status.kind === "verified");
       if (behind !== null) return waiting(behind);
     } catch (error) {
       return failed(error instanceof Error ? error.message : "The node did not answer.", error);

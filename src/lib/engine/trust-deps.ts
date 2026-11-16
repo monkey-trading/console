@@ -26,4 +26,6 @@ export interface TrustDeps {
   onEnclaveChanged(): void;
   /** The node's own signed word on its enclave and the signer the vault names (`GET /v1/operator`), read under `address`, just verified and not yet trusted (monkey-trading/console#280): nothing stated from a node that predates the route; rejects when it cannot be read. */
   operatorClaim?(address: string): Promise<OperatorClaim>;
+  /** The highest signer epoch the node's signed word, or a signer put to it, named has risen (monkey-trading/console#377); absent where nothing hears it. */
+  onSignerNamed?(): void;
 }
