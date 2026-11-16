@@ -125,7 +125,7 @@ describe("a node moved to under a signer the visit heard before (monkey-trading/
 });
 
 describe("a node refused for want of a read of the vault (monkey-trading/console#379)", () => {
-  const LATE = new Error("your wallet did not answer in time");
+  const LATE = new Error("your wallet didn't respond in time");
   /** A node trusted under KB through the wallet's read of the vault, refused by a check whose read failed: held to KA at a later epoch, or put aside by an earlier read naming KA. */
   async function refusedUnread(provider: (typeof PROVIDERS)[number], cause: "a later word" | "an earlier read") {
     const node = silentTrust(provider);

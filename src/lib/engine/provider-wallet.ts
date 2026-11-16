@@ -71,22 +71,22 @@ const hex = (n: number) => `0x${n.toString(16)}`;
 
 /** `value` as `0x` hex, as viem's encoders take it. Error cases: it is not hex, which a wallet or the node answered wrongly. */
 export function hexOf(value: unknown): Hex {
-  if (typeof value !== "string" || !isHex(value)) throw new Error(`Expected 0x hex, got ${String(value)}.`);
+  if (typeof value !== "string" || !isHex(value)) throw new Error(`Got an unexpected value from your wallet or the server: ${String(value)}.`);
   return value;
 }
 
 /** USDC base units for `amount`, which must be a whole number of them. */
 function usdcUnits(amount: Fixed): bigint {
-  if (amount <= 0n || !isWholeUsdc(amount)) throw new Error("The amount must be a positive whole number of USDC base units (six decimal places).");
+  if (amount <= 0n || !isWholeUsdc(amount)) throw new Error("Enter an amount above zero with at most 6 decimal places.");
   return amount / USDC_UNIT;
 }
 
 /** Normalises a 65-byte signature's `v` to 27 or 28, as the engine reads it; some wallets return 0 or 1. */
 export function normaliseSignature(signature: string): Hex {
-  if (!/^0x[0-9a-fA-F]{130}$/.test(signature)) throw new Error("The wallet returned a signature that is not 65 bytes.");
+  if (!/^0x[0-9a-fA-F]{130}$/.test(signature)) throw new Error("Your wallet returned a signature of the wrong length.");
   const v = parseInt(signature.slice(130), 16);
   const fixed = v === 0 || v === 1 ? v + 27 : v;
-  if (fixed !== 27 && fixed !== 28) throw new Error("The wallet returned a signature with an unknown recovery id.");
+  if (fixed !== 27 && fixed !== 28) throw new Error("Your wallet returned a signature this app can't read.");
   return hexOf(`${signature.slice(0, 130)}${fixed.toString(16)}`);
 }
 
@@ -142,7 +142,7 @@ export class ProviderWallet implements Wallet {
       await this.provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] }).catch(() => undefined);
     }
     const after = Number(await withinMs(this.provider, { method: "eth_chainId" }, WALLET_READ_MS));
-    if (after !== this.chain.chainId) throw new Error(`Your wallet is on chain ${after}; switch it to chain ${this.chain.chainId} to continue.`);
+    if (after !== this.chain.chainId) throw new Error(`Your wallet is on chain ${after}. Switch it to chain ${this.chain.chainId} to continue.`);
   }
 
   /**
@@ -178,7 +178,7 @@ export class ProviderWallet implements Wallet {
   async sign(request: SignRequest): Promise<string> {
     const { domain } = request.typed;
     if (domain.chainId !== this.chain.chainId || domain.verifyingContract.toLowerCase() !== this.chain.vault.toLowerCase()) {
-      throw new Error("The request names another chain or vault than this deployment's, so it was not signed.");
+      throw new Error("This request is for a different chain or vault from this app's, so it wasn't signed.");
     }
     await this.ensureChain();
     let signature: Hex;
@@ -191,7 +191,7 @@ export class ProviderWallet implements Wallet {
       throw walletError(error, "sign");
     }
     const signer = await recoverTypedDataAddress({ ...viemTyped(request.typed), signature });
-    if (signer.toLowerCase() !== this.address) throw new Error("The wallet signed with another account than the connected one, so the signature was not sent.");
+    if (signer.toLowerCase() !== this.address) throw new Error("Your wallet signed with a different account from the connected one, so the signature wasn't sent.");
     return signature;
   }
 
@@ -203,7 +203,7 @@ export class ProviderWallet implements Wallet {
   async deposit(amount: Fixed, progress: Progress = () => undefined): Promise<string> {
     const units = usdcUnits(amount);
     const usdc = this.chain.usdc;
-    if (usdc === null) throw new Error("This build names no USDC token, so it cannot deposit.");
+    if (usdc === null) throw new Error("Deposits aren't available in this version of the app because it has no USDC token set.");
     await this.ensureChain();
     const owner = hexOf(this.address);
     const vault = hexOf(this.chain.vault);
@@ -221,9 +221,9 @@ export class ProviderWallet implements Wallet {
    */
   async claim(withdrawal: SignedWithdrawal, progress: Progress = () => undefined): Promise<string> {
     const auth = withdrawal.authorization;
-    if (auth === undefined || withdrawal.approved_seq === undefined) throw new Error("This withdrawal has no authorization to claim yet.");
+    if (auth === undefined || withdrawal.approved_seq === undefined) throw new Error("This withdrawal isn't ready to claim yet.");
     const mine = withdrawal.account.toLowerCase() === this.address && withdrawal.chain_id === this.chain.chainId && withdrawal.vault.toLowerCase() === this.chain.vault.toLowerCase();
-    if (!mine) throw new Error("The authorization is for another account or deployment.");
+    if (!mine) throw new Error("This withdrawal is for a different account or app.");
     await this.ensureChain();
     const data = encodeFunctionData({
       abi: VAULT, functionName: "withdraw",
@@ -268,7 +268,7 @@ export class ProviderWallet implements Wallet {
     try {
       await withinMs(this.provider, { method: "eth_getTransactionReceipt", params: [NO_TRANSACTION] }, WALLET_READ_MS);
     } catch (error) {
-      throw walletError(error, `read transaction receipts, so the console did not ask it to ${action}`);
+      throw walletError(error, `check transactions, so it wasn't asked to ${action}`);
     }
     await this.ensureChain();
     progress(`Confirm in your wallet: ${action}.`);
@@ -278,7 +278,7 @@ export class ProviderWallet implements Wallet {
     } catch (error) {
       throw walletError(error, action);
     }
-    progress(`Waiting for the transaction to ${action} to be mined.`);
+    progress(`Waiting for your transaction to ${action} to go through.`);
     const { stuck } = this.deps;
     await waitMined((txHash) => withinMs(this.provider, { method: "eth_getTransactionReceipt", params: [txHash] }, WALLET_READ_MS), hash, action, this.deps.wait, stuck && (() => stuck(hash, this.address)));
     return hash;

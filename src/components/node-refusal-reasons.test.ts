@@ -94,8 +94,8 @@ describe("a node refused for the signer the vault names", () => {
       expect(trust.status).toEqual({ kind: "unverified", reason: message });
       const { banner, control } = pages(trust.status);
       expect(banner).toContain(message);
-      expect(control).toContain("The console cannot sign now:");
-      expect(control).not.toContain("attestation is not verified");
+      expect(control).toContain("You can't sign right now because");
+      expect(control).not.toContain("the server couldn't be verified");
       // Each page names its reason and neither of the others'.
       for (const other of REFUSALS.filter((refusal) => refusal.message !== message)) {
         expect(banner).not.toContain(other.message);
@@ -111,9 +111,9 @@ describe("a node refused for the signer the vault names", () => {
   });
 
   it("leaves a refusal for another reason as general as it was", () => {
-    const { banner, control } = pages({ kind: "unverified", reason: "The node's quote did not verify." });
-    expect(banner).toContain("The node's quote did not verify.");
-    expect(control).toContain("the node's attestation is not verified");
+    const { banner, control } = pages({ kind: "unverified", reason: "This server's hardware report failed its check." });
+    expect(banner).toContain("This server's hardware report failed its check.");
+    expect(control).toContain("the server couldn't be verified");
   });
 
   for (const { reason, reach, aside, lift, lifted } of REFUSALS) {

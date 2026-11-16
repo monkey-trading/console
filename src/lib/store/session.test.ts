@@ -116,12 +116,12 @@ describe("the session-key login", () => {
     await settle();
     expect(ended).toBe(1);
     expect(client.posted.some((p) => p.route === "session_key_revoke")).toBe(false);
-    expect(store.getSnapshot().notices.wallet).toMatchObject({ text: "The trading authorization was not revoked; it expires on its own." });
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ text: "The trading session wasn't revoked. It will expire by itself." });
   });
 
   it("reuses one candidate key across a connection's failed login attempts, as the client contract settles", async () => {
     const { client, store } = await connected();
-    client.answer = () => { throw new EngineError(0, "The node did not answer."); };
+    client.answer = () => { throw new EngineError(0, "The server didn't respond."); };
     expect(await loginSession(store, "setup")).toBe(false);
     const candidate = store.sessionKey?.address;
     if (candidate === undefined) throw new Error("no candidate kept");

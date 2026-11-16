@@ -119,7 +119,7 @@ export class SessionList {
     if (wallet === null || this.state.revoking !== null) return;
     this.patch({ revoking: address });
     try {
-      const out = await signed(store, "settings", `revoke the trading authorization of session key ${shortHex(address)}`, (terms, account) => revokeSessionKeyTypedData(domainOf(store), account, address, terms), (auth, signer) =>
+      const out = await signed(store, "settings", `revoke session key ${shortHex(address)}`, (terms, account) => revokeSessionKeyTypedData(domainOf(store), account, address, terms), (auth, signer) =>
         store.deps.client.revokeSessionKey({ account: signer.address, session_key: address, auth }), "sign-again");
       if (!out.ok || store.liveWallet !== wallet) return;
       const refused = out.result.events.find((e) => e.type === "session_key_rejected");

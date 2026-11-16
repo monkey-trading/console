@@ -117,7 +117,7 @@ describe("ending this browser's own session", () => {
     };
     await list.revoke(own);
     expect(store.getSnapshot().wallet).toBeNull();
-    expect(store.getSnapshot().notices).toEqual({ wallet: expect.objectContaining({ tone: "info", text: "This browser's trading authorization was revoked, so your wallet was disconnected. Connect again to renew it." }) });
+    expect(store.getSnapshot().notices).toEqual({ wallet: expect.objectContaining({ tone: "info", text: "Your trading session in this browser was revoked, so your wallet was disconnected. Connect again to start a new one." }) });
   });
 
   it("disconnects for a revocation the stream reports while the page is closed, as on every other page, and asks nothing", async () => {

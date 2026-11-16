@@ -15,6 +15,6 @@ export async function loadSessionKeySigner(): Promise<void> {
 
 /** The signer class. Throws if `loadSessionKeySigner` has not finished. */
 export function sessionKeySigner(): typeof SessionKeySigner {
-  if (loaded === null) throw new Error("The session key signer is not loaded.");
+  if (loaded === null) throw new Error("The session key isn't ready yet.");
   return loaded;
 }

@@ -21,7 +21,7 @@ async function stored(label: string, choice: WalletChoice | null, readOnly = fal
 const T1: WalletChoice = { kind: "walletconnect", topic: "topic-1" };
 const T2: WalletChoice = { kind: "walletconnect", topic: "topic-2" };
 const INJECTED: WalletChoice = { kind: "injected" };
-const ENDED_NOTICE = "Your wallet ended the WalletConnect session, so the console disconnected it.";
+const ENDED_NOTICE = "Your wallet ended the WalletConnect session, so it was disconnected here.";
 
 describe("Disconnect", () => {
   it("drops the wallet and forgets the stored choice, so a reload does not reconnect it", async () => {

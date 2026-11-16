@@ -14,9 +14,9 @@ import { SessionRow } from "./SessionRow";
 function noticeFor(status: SessionListStatus): string | null {
   switch (status.kind) {
     case "no-wallet": return "Connect a wallet to see which browsers can trade for your account.";
-    case "waiting": return `Sessions load once the node can be read: ${status.why}.`;
+    case "waiting": return `Sessions can't load yet because ${status.why}.`;
     case "loading": return "Loading sessions…";
-    case "failed": return `The sessions could not be read: ${status.message}`;
+    case "failed": return `Couldn't load your sessions: ${status.message}`;
     case "ready": return null;
     default: return status satisfies never;
   }
@@ -51,13 +51,13 @@ export function SessionsCard() {
         <h3 id="sessions-title" ref={heading} tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">Active sessions{status.kind === "ready" ? ` (${keys.length})` : ""}</h3>
       </div>
       <p className="px-4 pt-2 text-caption leading-relaxed text-fg-3 sm:px-5">
-        Each sign-in registers its own session key, valid for up to 24 hours. A key not marked &quot;This browser&quot; may belong to another browser, or to an earlier sign-in here that was never revoked; it expires on its own within the day. Revoke one you do not recognise.
+        Each sign-in creates a session key: a key in that browser that places orders without a wallet prompt. Each key lasts up to 24 hours. A key not marked &quot;This browser&quot; is from another browser or an earlier sign-in here, and expires by itself. Revoke any you don&apos;t recognise.
       </p>
       <div aria-live="polite" className="px-4 sm:px-5">
         {notice !== null && <p className="mt-3 text-caption leading-relaxed text-fg-2">{notice}</p>}
         {status.kind === "ready" && keys.length === 0 && <p className="mt-3 text-caption text-fg-3">No active sessions.</p>}
-        {!complete && <p className="mt-3 text-caption leading-relaxed text-amber">The node has recorded too many registrations in the last day to read them all, so this list may be missing some sessions.</p>}
-        {watchOnly && keys.length > 0 && <p className="mt-3 text-caption text-fg-3">This account is watched, so only its own wallet can revoke a session.</p>}
+        {!complete && <p className="mt-3 text-caption leading-relaxed text-amber">There were too many sign-ins in the last day to list them all, so some sessions may be missing.</p>}
+        {watchOnly && keys.length > 0 && <p className="mt-3 text-caption text-fg-3">You&apos;re viewing this account read-only, so only its own wallet can revoke a session.</p>}
       </div>
       <div className="px-4 sm:px-5"><Notice surface="settings" /></div>
       {keys.length > 0 && status.kind !== "no-wallet" && (

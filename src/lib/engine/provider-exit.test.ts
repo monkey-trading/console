@@ -55,18 +55,18 @@ describe("ProviderExit", () => {
       expect(chain.asked.filter((name) => /^proves|accountClaim/.test(name))).toEqual(["provesTerms", "accountClaim", "provesApproval", "provesQueued", "provesDistribution", "provesPending"]);
     });
     it.each([
-      ["provesTerms", "the vault's root does not prove its exit terms"],
-      ["provesApproval", "the vault's root does not prove its withdrawal 1"],
-      ["provesQueued", "the vault's root does not prove its queued withdrawal 95"],
-      ["provesDistribution", "the vault's root does not prove its distribution"],
-      ["provesPending", "the vault's root does not prove its pending deposit 2"],
+      ["provesTerms", "the vault's snapshot doesn't confirm its exit terms"],
+      ["provesApproval", "the vault's snapshot doesn't confirm its withdrawal 1"],
+      ["provesQueued", "the vault's snapshot doesn't confirm its queued withdrawal 95"],
+      ["provesDistribution", "the vault's snapshot doesn't confirm its distribution"],
+      ["provesPending", "the vault's snapshot doesn't confirm its pending deposit 2"],
     ])("refuses when %s says no", async (name, reason) => {
       chain.proves[name] = false;
       expect(await exit.check(proof, rootAt(100))).toEqual({ ok: false, reason });
     });
     it("refuses when accountClaim reverts", async () => {
       chain.reverts.add("accountClaim");
-      expect(await exit.check(proof, rootAt(100))).toEqual({ ok: false, reason: "the vault's root does not prove its balance and positions" });
+      expect(await exit.check(proof, rootAt(100))).toEqual({ ok: false, reason: "the vault's snapshot doesn't confirm its balance and positions" });
     });
     it("rejects, and does not call it a refusal, when the wallet is what failed", async () => {
       chain.fails.add("accountClaim");

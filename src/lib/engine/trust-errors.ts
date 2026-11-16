@@ -44,7 +44,7 @@ export class SignatureError extends UntrustedError {
 }
 
 /** Why a quote that verified is not trusted to sign for: no wallet has read the vault. */
-export const CONNECT_TO_CHECK = "Connect a wallet to check the vault's current release before anything is signed.";
+export const CONNECT_TO_CHECK = "Connect a wallet to finish checking this server against the vault. You can trade and move funds once the check passes.";
 
 /** Why a signed request may not leave under `status`, as a sentence, or null when it may: only a verdict that read the vault, or a dev build's mock, signs. */
 export function sendRefusal(status: AttestationStatus): string | null {
@@ -57,10 +57,10 @@ export function sendRefusal(status: AttestationStatus): string | null {
     case "unverified":
       return status.reason;
     case "clock":
-      return `Your device clock differs from the node's signed time by ${Math.round(Math.abs(status.skewMs) / 1000)} s. Correct the clock and reload.`;
+      return `Your device clock is ${Math.round(Math.abs(status.skewMs) / 1000)} seconds off the server's time. Correct it and reload the page.`;
     case "checking":
     case "reverifying":
-      return "The node is not verified.";
+      return "The server hasn't been verified yet.";
     default: {
       const unhandled: never = status;
       throw new Error(`Unknown attestation status: ${String(unhandled)}`);

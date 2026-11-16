@@ -44,7 +44,7 @@ export const SECTIONS: Readonly<Record<"/house" | "/monkey" | "/staking", PageSe
     tabs: [
       { href: "/staking", label: "Delegate" },
       { href: "/staking/rewards", label: "Rewards" },
-      { href: "/staking/epochs", label: "Epochs" },
+      { href: "/staking/epochs", label: "Periods" },
       { href: "/staking/governance", label: "Governance" },
       { href: "/staking/rotation", label: "Rotation" },
     ],

@@ -90,13 +90,13 @@ describe("signed actions", () => {
     const { node, client } = accepting();
     // An older node's router answers an unknown route with an empty signed 404.
     node.signed("/v1/positions/close-all", () => ({ status: 404, body: "", signature: "0x00", timeMs: 1_000, seq: 9 }));
-    await expect(client.closeAll({ account: ACCOUNT, closes: [{ market: 1, quoted: "1" }] })).rejects.toMatchObject({ status: 404, reject: null, message: "The node answered HTTP 404." });
+    await expect(client.closeAll({ account: ACCOUNT, closes: [{ market: 1, quoted: "1" }] })).rejects.toMatchObject({ status: 404, reject: null, message: "The server returned an error (HTTP 404)." });
   });
 
   it("refuses a 2xx action answer that is not a list of events", async () => {
     const { client, reply } = accepting();
     reply("/v1/withdrawals", 200, { status: "queued" });
-    await expect(client.withdraw({} as never)).rejects.toThrow("not a list of events");
+    await expect(client.withdraw({} as never)).rejects.toThrow("reply to your request couldn't be read");
   });
 
   it("posts a reissue to the payout's route and reads the nonce with the node's signed time", async () => {

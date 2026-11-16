@@ -8,8 +8,8 @@ import { mockHex } from "./client";
 import type { MockControls } from "./controls";
 
 const OPTIONS: readonly WalletOption[] = [
-  { id: "browser", label: "Browser wallet", detail: "Mock account, no extension needed" },
-  { id: "walletconnect", label: "WalletConnect", detail: "Mock account, no QR code" },
+  { id: "browser", label: "Browser wallet", detail: "Demo account, no extension needed" },
+  { id: "walletconnect", label: "WalletConnect", detail: "Demo account, no QR code" },
 ];
 
 export class MockWalletConnector implements WalletConnector {
@@ -34,7 +34,7 @@ export class MockWalletConnector implements WalletConnector {
         return `0x${mockHex(`tx-${amount}-${address}`, 32)}`;
       },
       async claim() {
-        throw new Error("The simulated vault pays withdrawals itself; there is nothing to claim.");
+        throw new Error("In the demo, withdrawals are paid automatically, so there's nothing to claim.");
       },
       async claimEmissions(proof: EntitlementProof) {
         controls.claimEmissions(address, BigInt(proof.entitled));

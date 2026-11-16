@@ -31,18 +31,18 @@ export type SignerWord = { enclave?: string; signer?: Readonly<SignerFloor> };
 export type SignerRefusal = { reason: string; vaultLifts: boolean };
 
 /** What the console says when the vault names a signer other than the enclave the node answers with. */
-export const SIGNER_SUPERSEDED = "The on-chain vault now uses a different signing key than this server, so its answers are refused. This clears only if the server switches to that key.";
+export const SIGNER_SUPERSEDED = "The on-chain vault that holds deposits now uses a different signing key from this server, so this server isn't trusted. Waiting won't fix this unless the server switches to the vault's key.";
 /** What the console says when two keys were named as the vault's signer at the highest epoch seen: every key at it is refused, waiting helps only once a later epoch names one (monkey-trading/console#387). */
-export const SIGNER_CONFLICT = "Two signing keys are listed as current, so this server's answers are refused. Waiting helps: this clears once a later key change names just one.";
+export const SIGNER_CONFLICT = "Two signing keys are listed as current, so this server isn't trusted for now. This clears by itself once the next key change names just one.";
 /** What the console says when a node that states no signer has no read of the vault naming its enclave yet: a read of the vault lifts it (monkey-trading/console#387). */
-export const SIGNER_AWAITING_VAULT = "This server doesn't say which signing key it uses, and the vault hasn't been checked for it yet. This clears once the vault is checked, which connecting a wallet does.";
+export const SIGNER_AWAITING_VAULT = "This server doesn't say which signing key it uses, and it hasn't been checked against the on-chain vault that holds deposits yet. Connect a wallet to run that check.";
 /** What the console says when the node's own word on the signer the vault names could not be read, before the read's failure. */
-export const SIGNER_UNREAD = "The node's word on the signer the vault names could not be read, so its answers are not taken yet.";
-/** The refusal reasons above as the clause a control names ("The console cannot sign now: ..."), keyed by the reason (monkey-trading/console#387). */
+export const SIGNER_UNREAD = "Couldn't read which signing key this server uses, so it isn't trusted yet.";
+/** The refusal reasons above as the clause a control names ("You can't sign right now because ..."), keyed by the reason (monkey-trading/console#387). */
 const SIGNER_CLAUSES = new Map<string, string>([
-  [SIGNER_SUPERSEDED, "the vault now uses a different signing key than this server"],
-  [SIGNER_CONFLICT, "two signing keys are listed as current, until a later key change names one"],
-  [SIGNER_AWAITING_VAULT, "the vault hasn't been checked for this server's signing key yet"],
+  [SIGNER_SUPERSEDED, "the vault now uses a different signing key from this server"],
+  [SIGNER_CONFLICT, "two signing keys are listed as current until the next key change names one"],
+  [SIGNER_AWAITING_VAULT, "this server's signing key hasn't been checked against the vault yet"],
 ]);
 
 /** The clause a control names for a refusal `reason`, or null when the reason is not one of these. */
@@ -51,7 +51,7 @@ export function signerClause(reason: string): string | null {
 }
 
 /** What the console says when a node's answer names an enclave other than the one that signed it. */
-const WRONG_ENCLAVE = "The node named an enclave other than the one that signed its answer, so the answer was discarded.";
+const WRONG_ENCLAVE = "The server's reply named a different signing key from the one that signed it, so the reply was ignored.";
 
 /** `floor` raised by `named`: to it at a later epoch, to no key at the same epoch naming another, whichever was read first; `floor` itself otherwise. */
 export function raised(floor: SignerFloor | null, named: Readonly<SignerFloor>): SignerFloor {
@@ -118,7 +118,7 @@ export class SignerNaming {
     try {
       claim = (await this.operatorClaim?.(address)) ?? {};
     } catch (error) {
-      return { reason: `${SIGNER_UNREAD} ${error instanceof Error ? error.message : "The read failed."}`, vaultLifts: false };
+      return { reason: `${SIGNER_UNREAD} ${error instanceof Error ? error.message : "The request failed."}`, vaultLifts: false };
     }
     const judged = this.judge(address, claim);
     if (judged !== null) return { reason: judged.reason, vaultLifts: false };

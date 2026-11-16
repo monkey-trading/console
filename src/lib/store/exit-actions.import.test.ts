@@ -28,7 +28,7 @@ describe("importing a file, with no node", () => {
     const wallet: Wallet = { address: ACCOUNT, label: "Test", exit, sign: async () => "0x", deposit: async () => "0x", claim: async () => "0x" };
     store = new ConsoleStore({ client, wallets: { options: [], connect: async () => wallet }, exitStorage: () => storage, history: () => [], initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
     store.exit.follow({ scheduler: { setTimeout: () => null, clearTimeout: () => undefined }, hidden: () => false, nowMs: () => 0 });
-    store.patch({ attestation: { kind: "unverified", reason: "The node did not answer." }, stream: "stale" });
+    store.patch({ attestation: { kind: "unverified", reason: "The server didn't respond." }, stream: "stale" });
     store.liveWallet = wallet;
     store.patch({ wallet: { address: ACCOUNT, label: "Test" } });
     await settle();
@@ -53,7 +53,7 @@ describe("importing a file, with no node", () => {
       await store.exit.keeper.adopter.adopt(store.liveWallet as Wallet, SCOPE, parseExitProof(fullProof(100)));
       expect(refused()?.tone).toBe("error");
       await importExitFile(store, FILE(100));
-      expect(refused()?.text).toBe("This file is for the checkpoint already saved, and the vault accepts it.");
+      expect(refused()?.text).toBe("This file is for the snapshot already saved, and the vault accepts it.");
     });
 
     it("clears a failed read of the vault once an import's own read answers", async () => {
@@ -83,19 +83,19 @@ describe("importing a file, with no node", () => {
       expect(storage.held.get(exitStorageKey(SCOPE))).toBe(held);
     };
 
-    it("refuses a malformed file, keeping what is saved", () => keeps("{nope", /not imported: it is not JSON/));
-    it("refuses a file that is not a proof", () => keeps(JSON.stringify({ hello: "world" }), /not imported: it is not an exit proof/));
-    it("refuses another account's proof, and says whose", () => keeps(exitFileText({ ...recordAt(100), account: OTHER, proof: fullProof(100, OTHER) }), /it is for account 0x3c44cd…93bc. Connect that wallet to import it/));
-    it("refuses another deployment's, by its chain", () => keeps(exitFileText({ ...recordAt(100), chainId: 1 }), /it is for another deployment \(chain 1/));
-    it("refuses another deployment's, by its vault", () => keeps(exitFileText({ ...recordAt(100), vault: OTHER }), /it is for another deployment/));
-    it("refuses a proof at an older root, which the vault would never take", () => keeps(FILE(50), /it is for checkpoint 50, and the vault's latest is checkpoint 100, so the vault would refuse a claim from it/));
+    it("refuses a malformed file, keeping what is saved", () => keeps("{nope", /wasn't imported: it isn't JSON/));
+    it("refuses a file that is not a proof", () => keeps(JSON.stringify({ hello: "world" }), /wasn't imported: it isn't an exit proof/));
+    it("refuses another account's proof, and says whose", () => keeps(exitFileText({ ...recordAt(100), account: OTHER, proof: fullProof(100, OTHER) }), /it's for account 0x3c44cd…93bc. Connect that wallet to import it/));
+    it("refuses another deployment's, by its chain", () => keeps(exitFileText({ ...recordAt(100), chainId: 1 }), /it's for a different vault \(chain 1/));
+    it("refuses another deployment's, by its vault", () => keeps(exitFileText({ ...recordAt(100), vault: OTHER }), /it's for a different vault/));
+    it("refuses a proof at an older root, which the vault would never take", () => keeps(FILE(50), /it's for snapshot 50, but the vault's latest is snapshot 100, so the vault would refuse a claim based on it/));
 
-    it("refuses one the verifier refuses, keeping what is saved", () => keeps(FILE(100), /the vault's verifier refused it: the vault's root does not prove its exit terms/, () => {
-      exit.verdict = () => ({ ok: false, reason: "the vault's root does not prove its exit terms" });
+    it("refuses one the verifier refuses, keeping what is saved", () => keeps(FILE(100), /the vault's check refused it: the vault's snapshot doesn't confirm its exit terms/, () => {
+      exit.verdict = () => ({ ok: false, reason: "the vault's snapshot doesn't confirm its exit terms" });
     }));
 
     it("refuses a file that holds less than the proof saved at its root, which proves too", () => {
-      return keeps(JSON.stringify({ kind: "monkeytrading.exit-proof", version: 1, chain_id: 31337, vault: VAULT, account: ACCOUNT, proof: { ...fullProof(100), account: null, approvals: [], pending_deposits: [], distribution: null } }), /it holds less than the proof already saved for that checkpoint/);
+      return keeps(JSON.stringify({ kind: "monkeytrading.exit-proof", version: 1, chain_id: 31337, vault: VAULT, account: ACCOUNT, proof: { ...fullProof(100), account: null, approvals: [], pending_deposits: [], distribution: null } }), /it covers less than the proof already saved for that snapshot/);
     });
 
     describe("at the root of a proof this page has not seen", () => {
@@ -108,7 +108,7 @@ describe("importing a file, with no node", () => {
           return accepts({ accountClaim: 1n });
         };
         await importExitFile(store, TRIMMED);
-        expect(refused()?.text).toMatch(/it holds less than the proof already saved for that checkpoint/);
+        expect(refused()?.text).toMatch(/it covers less than the proof already saved for that snapshot/);
         expect(store.getSnapshot().exit.record?.proof.approvals.length).toBe(1);
         expect(parseExitFile(storage.held.get(exitStorageKey(SCOPE)) ?? "").proof.approvals.length).toBe(1);
       });
@@ -119,7 +119,7 @@ describe("importing a file, with no node", () => {
         expect(store.getSnapshot().exit.record?.proof.seq).toBe(50);
         holding(100);
         await importExitFile(store, TRIMMED);
-        expect(refused()?.text).toMatch(/it holds less than the proof already saved for that checkpoint/);
+        expect(refused()?.text).toMatch(/it covers less than the proof already saved for that snapshot/);
         await settle();
         expect(store.getSnapshot().exit.record?.proof.approvals.length).toBe(1); // the page catches up with storage
       });
@@ -129,7 +129,7 @@ describe("importing a file, with no node", () => {
         await store.exit.refresh();
         storage.held.clear();
         await importExitFile(store, TRIMMED);
-        expect(refused()?.text).toMatch(/it holds less than the proof already saved for that checkpoint/);
+        expect(refused()?.text).toMatch(/it covers less than the proof already saved for that snapshot/);
         expect(storage.held.size).toBe(0);
       });
 
@@ -144,7 +144,7 @@ describe("importing a file, with no node", () => {
     it("refuses a file whose seq is not the vault's for that root", async () => {
       const renamed = JSON.stringify(JSON.parse(FILE(100))).replaceAll(`"seq":100`, `"seq":9000`);
       await importExitFile(store, renamed);
-      expect(refused()?.text).toMatch(/the vault's verifier refused it: it names checkpoint 9000 for the root of checkpoint 100/);
+      expect(refused()?.text).toMatch(/the vault's check refused it: it says snapshot 9000 but matches snapshot 100/);
       expect(store.getSnapshot().exit.record).toBeNull();
     });
 
@@ -152,21 +152,21 @@ describe("importing a file, with no node", () => {
       exit.vault = factsAt(100, { chainNow: 1_000 + 2_592_000 });
       await store.exit.refresh();
       await importExitFile(store, JSON.stringify({ seq: 100, root: emptyProof(100).root, account: emptyProof(100), house_pending_deposits: [], calls: [] }));
-      expect(refused()).toMatchObject({ tone: "info", text: "It holds nothing for this account, but the vault accepts its exit terms, so it can start the exit." });
+      expect(refused()).toMatchObject({ tone: "info", text: "It shows nothing for this account, but the vault accepts it, so it can be used to start the exit." });
       expect(store.getSnapshot().exit.terms?.root).toBe(emptyProof(100).root);
       expect(store.getSnapshot().exit.record).toBeNull();
     });
 
     it("refuses a proof that gives the account nothing, and an empty file cannot wipe a saved proof", async () => {
       await importExitFile(store, JSON.stringify({ kind: "monkeytrading.exit-proof", version: 1, chain_id: 31337, vault: VAULT, account: ACCOUNT, proof: emptyProof(100) }));
-      expect(refused()?.text).toMatch(/it gives this account nothing/);
-      await keeps(JSON.stringify({ kind: "monkeytrading.exit-proof", version: 1, chain_id: 31337, vault: VAULT, account: ACCOUNT, proof: emptyProof(100) }), /it holds less than the proof already saved/);
+      expect(refused()?.text).toMatch(/it shows nothing for this account/);
+      await keeps(JSON.stringify({ kind: "monkeytrading.exit-proof", version: 1, chain_id: 31337, vault: VAULT, account: ACCOUNT, proof: emptyProof(100) }), /it covers less than the proof already saved/);
     });
 
     it("says when the wallet could not check it", async () => {
       exit.factsError = new Error("wrong chain");
       await importExitFile(store, FILE(100));
-      expect(refused()?.text).toMatch(/your wallet could not check it: wrong chain/);
+      expect(refused()?.text).toMatch(/your wallet couldn't check it: wrong chain/);
     });
 
     it("says when the browser would not keep what it took, which then holds in the page", async () => {

@@ -27,7 +27,7 @@ const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
 function unsigned(status: number): UntrustedError {
-  return new UntrustedError(`The node's answer (HTTP ${status}) was not signed by the attested enclave, so it was discarded.`);
+  return new UntrustedError(`The server's reply (HTTP ${status}) wasn't signed by the verified server, so it was ignored.`);
 }
 
 /** The refusal of a verified answer under `signer`, a key put aside while it was in flight, carrying the JSON of a 2xx answer signed within the clock tolerance (`fresh`), which can still say what it named of the signer. */
@@ -50,7 +50,7 @@ function refusal(status: number, text: string): EngineError {
     body = null;
   }
   const { error, reason, expected, tier, requests_per_second: perSecond } = typeof body === "object" && body !== null ? (body as { error?: unknown; reason?: unknown; expected?: unknown; tier?: unknown; requests_per_second?: unknown }) : {};
-  const message = typeof error === "string" ? error : `The node answered HTTP ${status}.`;
+  const message = typeof error === "string" ? error : `The server returned an error (HTTP ${status}).`;
   // The node names the region refusal in `reason`; the console's reject types mirror the engine's.
   if (status === 403 && typeof reason === "string") return new EngineError(status, message, { kind: "access", reason } as EngineError["reject"]);
   // A signed request whose nonce is not the account's next: the node names the one it expects.
@@ -134,7 +134,7 @@ export class SignedTransport {
       });
       bytes = new Uint8Array(await response.arrayBuffer());
     } catch (cause) {
-      throw new EngineError(0, "The node did not answer.", null, { cause });
+      throw new EngineError(0, "The server didn't respond.", null, { cause });
     }
     const header = (name: string) => response.headers.get(name);
     if (header(SIGNATURE_HEADER) === null) throw unsigned(response.status);
@@ -142,13 +142,13 @@ export class SignedTransport {
       signer, chainId: this.deps.chainId, vault: this.deps.vault, challenge, method, pathAndQuery: path, requestBody: requestBody === null ? new Uint8Array() : encoder.encode(requestBody),
       status: response.status, signature: header(SIGNATURE_HEADER), time: header(TIME_HEADER), seq: header(SEQ_HEADER), echoedChallenge: header(CHALLENGE_HEADER), body: bytes,
     });
-    if (!checked.ok) throw new SignatureError(`The node's answer did not verify: ${checked.reason}.`);
+    if (!checked.ok) throw new SignatureError(`The server's reply failed its check: ${checked.reason}.`);
     const skewMs = checked.response.timeMs - this.deps.nowMs();
     // The vault named another signer while this request was in flight: an answer from the key it no longer names is discarded, valid as its signature is.
     if (judged && this.deps.trust.refuses(signer)) throw superseded(this.deps.trust.whyRefused(signer), response.ok && Math.abs(skewMs) <= CLOCK_TOLERANCE_MS, bytes, signer);
     if (Math.abs(skewMs) > CLOCK_TOLERANCE_MS) {
       this.deps.trust.clockWrong(skewMs);
-      throw new UntrustedError(`Your device clock differs from the node's signed time by ${Math.round(Math.abs(skewMs) / 1000)} s, so the answer was discarded. Correct the clock and reload.`);
+      throw new UntrustedError(`Your device clock is ${Math.round(Math.abs(skewMs) / 1000)} seconds off the server's time, so the reply was ignored. Correct it and reload the page.`);
     }
     this.deps.trust.clockRight();
     const text = decoder.decode(bytes);
@@ -157,7 +157,7 @@ export class SignedTransport {
     try {
       body = JSON.parse(text);
     } catch (cause) {
-      throw new UntrustedError("The node's signed answer was not JSON.", { cause });
+      throw new UntrustedError("The server's reply couldn't be read.", { cause });
     }
     const seq = header(SEQ_HEADER) === null ? NaN : Number(header(SEQ_HEADER));
     return { body, timeMs: checked.response.timeMs, seq: Number.isSafeInteger(seq) ? seq : null };

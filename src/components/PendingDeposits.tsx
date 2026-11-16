@@ -17,7 +17,7 @@ export function PendingDeposits() {
         {pendingDeposits.map((deposit, index) => (
           <li key={deposit.id ?? `sent-${index}`} className="rounded border border-line-2 px-3 py-3 text-caption">
             <p className="flex justify-between gap-2"><span className="text-fg">Deposit</span><span className="text-fg-2">{formatUsdc(deposit.amount)}</span></p>
-            <p className="mt-2 text-fg-3">The node credits it a few blocks after it is mined. Your balance rises then.</p>
+            <p className="mt-2 text-fg-3">It&apos;s credited a few blocks after the transaction confirms. Your balance goes up then.</p>
           </li>
         ))}
       </ul>

@@ -61,27 +61,27 @@ describe("ExitKeeper", () => {
     });
 
     it("a node read that fails, which another read of the vault alone does not repeat", async () => {
-      kit.client.exitError = new EngineError(0, "The node did not answer.");
+      kit.client.exitError = new EngineError(0, "The server didn't respond.");
       await kit.store.exit.refresh();
       expect(record()?.proof.seq).toBe(100);
-      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "node-failed", reason: "The node did not answer." });
+      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "node-failed", reason: "The server didn't respond." });
       const reads = kit.client.exitReads;
       await kit.store.exit.refresh();
       expect(kit.client.exitReads).toBe(reads);
     });
 
     it("an answer that does not verify, as a node read that fails", async () => {
-      kit.client.exitError = new UntrustedError("The node is not verified.");
+      kit.client.exitError = new UntrustedError("The server hasn't been verified yet.");
       await kit.store.exit.refresh();
-      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "node-failed", reason: "The node is not verified." });
+      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "node-failed", reason: "The server hasn't been verified yet." });
     });
 
     it("a wallet that cannot check it, which the next read of the vault tries again with no new signature", async () => {
       kit.client.exitAnswer = fullProof(200);
-      kit.exit.checkError = new Error("Your wallet did not answer in time.");
+      kit.exit.checkError = new Error("Your wallet didn't respond in time.");
       await kit.store.exit.refresh();
       expect(record()?.proof.seq).toBe(100);
-      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "wallet-failed", reason: "Your wallet did not answer in time." });
+      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "wallet-failed", reason: "Your wallet didn't respond in time." });
       const reads = kit.client.exitReads;
       // Trading goes on: each change to the account must not cost the node another signature.
       kit.store.patch({ account: { balance: 2_000n, unfinalised: 0n, equity: 2_000n, margin: 0n, positions: [], orders: [] } });
@@ -192,7 +192,7 @@ describe("ExitKeeper", () => {
       await next.connect();
       const { record, storageProblem } = next.store.getSnapshot().exit;
       expect(record?.proof.seq).toBe(100);
-      expect(storageProblem).toBe("this browser's storage refused it: the quota is exceeded");
+      expect(storageProblem).toBe("this browser's storage wouldn't save it: the quota is exceeded");
     });
 
     it("brings nothing for another account", async () => {
@@ -206,7 +206,7 @@ describe("ExitKeeper", () => {
 
   describe("how long it has been without a proof", () => {
     it("marks when the page first had none at the vault's root, and clears it once it does", async () => {
-      kit.client.exitError = new EngineError(0, "The node did not answer.");
+      kit.client.exitError = new EngineError(0, "The server didn't respond.");
       kit.exit.vault = factsAt(100, { chainNow: 5_000 });
       await kit.connect();
       expect(kit.store.getSnapshot().exit.missingSince).toBe(5_000);
@@ -224,7 +224,7 @@ describe("ExitKeeper", () => {
   describe("the node gone", () => {
     it("keeps the saved proof and says so, asking the node nothing", async () => {
       writeStoredExit(() => kit.storage, { ...SCOPE, proof: parsed(100), checkpointAt: 900, accountClaim: 1n, distributionOwed: 0n, paidApprovals: [] });
-      await kit.attach({ attestation: { kind: "unverified", reason: "The node did not answer." }, stream: "stale" });
+      await kit.attach({ attestation: { kind: "unverified", reason: "The server didn't respond." }, stream: "stale" });
       kit.exit.vault = factsAt(200);
       await kit.store.exit.refresh();
       expect(kit.client.exitReads).toBe(0);
@@ -233,7 +233,7 @@ describe("ExitKeeper", () => {
     });
 
     it("reads the node once when it comes back", async () => {
-      await kit.attach({ attestation: { kind: "unverified", reason: "The node did not answer." }, stream: "stale", accountRead: true, account: { balance: 1_000n, unfinalised: 0n, equity: 1_000n, margin: 0n, positions: [], orders: [] } });
+      await kit.attach({ attestation: { kind: "unverified", reason: "The server didn't respond." }, stream: "stale", accountRead: true, account: { balance: 1_000n, unfinalised: 0n, equity: 1_000n, margin: 0n, positions: [], orders: [] } });
       expect(kit.client.exitReads).toBe(0);
       kit.store.patch({ attestation: { kind: "mock" }, stream: "live" });
       await settle();

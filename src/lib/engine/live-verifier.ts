@@ -48,7 +48,7 @@ export class VaultReads {
     return new Promise((resolve, reject) => {
       const timer = this.scheduler.setTimeout(() => {
         gaveUp = true;
-        reject(new Error("your wallet did not answer in time"));
+        reject(new Error("your wallet didn't respond in time"));
       }, VAULT_READ_TIMEOUT_MS);
       chain.vault().then(
         (facts) => {
@@ -78,7 +78,7 @@ export class VerifierLoader {
     if (this.ready === null) {
       const timer = { handle: null as unknown };
       const deadline = new Promise<never>((_, reject) => {
-        timer.handle = this.scheduler.setTimeout(() => reject(new Error("The verifier took too long to load.")), VERIFIER_LOAD_TIMEOUT_MS);
+        timer.handle = this.scheduler.setTimeout(() => reject(new Error("The server check took too long to load.")), VERIFIER_LOAD_TIMEOUT_MS);
       });
       this.ready = Promise.race([this.loadVerifier(), deadline]).then(
         (verifier) => {
@@ -97,7 +97,7 @@ export class VerifierLoader {
 
   /** The loaded verifier; the trust check that precedes every use has loaded it. */
   loaded(): Verifier {
-    if (this.held === null) throw new Error("The verifier was used before it loaded.");
+    if (this.held === null) throw new Error("The server check was used before it loaded.");
     return this.held;
   }
 }

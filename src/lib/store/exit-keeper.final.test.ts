@@ -90,7 +90,7 @@ describe("ExitKeeper, and what makes a proof empty", () => {
       reloaded.exit.vault = STARTED;
       reloaded.exit.gapDeposits = [GAP];
       reloaded.client.exitError = new Error("the node is gone");
-      await reloaded.attach({ attestation: { kind: "unverified", reason: "The node did not answer." }, stream: "stale" });
+      await reloaded.attach({ attestation: { kind: "unverified", reason: "The server didn't respond." }, stream: "stale" });
       await reloaded.store.exit.refresh();
       expect(refunds(reloaded)).toEqual([{ kind: "refund-unheld", id: 1, amount: 25_000_000n }]);
       expect(reloaded.client.exitReads).toBe(0);

@@ -94,7 +94,7 @@ describe("a chain check the wallet never answers", () => {
           const silent: Eip1193Provider = { request: (args) => (args.method === "eth_chainId" && asked++ >= answered ? new Promise(() => {}) : provider.request(args)) };
           let settled = false;
           const reading = read(new ProviderDeployment(CHAIN, silent)).finally(() => { settled = true; });
-          const refused = expect(reading, name).rejects.toThrow("did not answer in time");
+          const refused = expect(reading, name).rejects.toThrow("didn't respond in time");
           await vi.advanceTimersByTimeAsync(29_999);
           expect(settled, `${name} before the limit`).toBe(false);
           await vi.advanceTimersByTimeAsync(1);

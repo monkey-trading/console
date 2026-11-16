@@ -11,6 +11,6 @@ export async function readVault(read: Promise<VaultFacts> | null): Promise<Vault
   try {
     return { kind: "read", facts: await read };
   } catch (error) {
-    return { kind: "failed", reason: error instanceof Error ? error.message : "the read failed" };
+    return { kind: "failed", reason: error instanceof Error ? error.message : "the request failed" };
   }
 }

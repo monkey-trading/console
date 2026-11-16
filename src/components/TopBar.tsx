@@ -36,7 +36,7 @@ export function TopBar() {
     <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-4 py-2 sm:px-6">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <h1 className="text-caption font-normal">
-          <Link href="/" aria-label="Monkey Trading console, back to the trading terminal" className="flex min-h-11 items-center gap-3 text-fg focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0">
+          <Link href="/" aria-label="Monkey Trading, back to trading" className="flex min-h-11 items-center gap-3 text-fg focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0">
             <LogoMark className="size-8" />
             <span>MONKEY TRADING</span>
           </Link>
@@ -53,7 +53,7 @@ export function TopBar() {
       </div>
       <div className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
         <span className="hidden text-label tracking-caps text-fg-3 uppercase xl:inline">
-          Node clock <span aria-hidden="true" className="text-fg-2">{now === 0 ? "—" : `${formatClock(now)} UTC`}</span>
+          Server time <span aria-hidden="true" className="text-fg-2">{now === 0 ? "—" : `${formatClock(now)} UTC`}</span>
         </span>
         {node && <button type="button" onClick={() => store.setPaused(!paused)} className={BUTTON}>{paused ? "Play" : "Pause"}<span className="sr-only"> the simulation</span></button>}
         <MockControls />

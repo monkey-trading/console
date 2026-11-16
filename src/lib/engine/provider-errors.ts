@@ -17,7 +17,7 @@ export function walletError(error: unknown, action: string): Error {
   if (errorCode(error) === USER_REJECTED) return new Error(`You declined to ${action} in your wallet.`, { cause: error });
   if (errorCode(error) === UNAUTHORIZED) return new Error(UNAUTHORIZED_ACCOUNT, { cause: error });
   const detail = error instanceof Error ? error.message : typeof error === "object" && error !== null && "message" in error ? String(error.message) : String(error);
-  return new Error(`Your wallet could not ${action}: ${detail}`, { cause: error });
+  return new Error(`Your wallet couldn't ${action}: ${detail}`, { cause: error });
 }
 
 /** Whether an error from `walletError` is the user's own refusal, as opposed to a request that failed. */
@@ -45,7 +45,7 @@ export function isRevert(error: unknown): boolean {
 /** `read`, or a rejection once `ms` has passed without it settling. */
 export function withTimeout<T>(read: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Your wallet did not answer in time.")), ms);
+    const timer = setTimeout(() => reject(new Error("Your wallet didn't respond in time.")), ms);
     read.then(
       (value) => { clearTimeout(timer); resolve(value); },
       (error: unknown) => { clearTimeout(timer); reject(error); },

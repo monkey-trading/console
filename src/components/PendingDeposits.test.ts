@@ -23,7 +23,7 @@ describe("PendingDeposits", () => {
     expect(html).toContain("Deposits on their way");
     expect(html).toContain("100 USDC");
     expect(html).toContain("250 USDC");
-    expect(html).toContain("The node credits it a few blocks after it is mined.");
+    expect(html).toContain("credited a few blocks after the transaction confirms.");
   });
 
   it("shows nothing when none is waiting", () => {

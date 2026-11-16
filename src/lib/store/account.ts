@@ -60,7 +60,7 @@ export async function loadAccount(store: ConsoleStore, withHistory: boolean): Pr
     // Lost trust is reported once by the attestation check itself; the account read that waited on the same check stays silent.
     if (error instanceof UntrustedError || store.noteAccess(error)) return;
     // Said where the account's figures would be; the next read, on the stream's next event, tries again. A failure that repeats keeps the one message.
-    const message = `Your account could not be read: ${(error instanceof Error ? error.message : "the node did not answer").replace(/\.$/, "")}. The console tries again by itself.`;
+    const message = `Couldn't load your account: ${(error instanceof Error ? error.message : "the server didn't respond").replace(/\.$/, "")}. Trying again automatically.`;
     if (store.getSnapshot().notices.accountRead?.text !== message) store.notify("accountRead", message);
   }
 }

@@ -54,12 +54,12 @@ export function ExitPanel() {
   return (
     <section aria-labelledby={title} className="space-y-3 rounded-xl border border-line-2 bg-ink-1 p-4">
       <h3 ref={heading} id={title} tabIndex={-1} className="text-label tracking-caps text-glow uppercase outline-none">Exit proof</h3>
-      <p className="text-caption leading-relaxed text-fg-3">Your own record of what the vault owes you, kept in this browser and brought up to each vault checkpoint while this page is open. If the operator stops, a proof at the vault&apos;s last checkpoint lets you claim with no node.</p>
+      <p className="text-caption leading-relaxed text-fg-3">Your own record of what the vault owes you, saved in this browser and updated at each vault snapshot while this page is open. If the server stops, a proof for the vault&apos;s last snapshot lets you claim your funds without it.</p>
       <p role="status" className="sr-only">{exit.announced}</p>
       {view.lines.map((line) => <Line key={line.text} line={line} />)}
       {view.rebuild !== null && (
         <div className="space-y-1">
-          <p className="text-caption leading-relaxed text-fg-2">Build a current proof from a mirror of the public log with the engine&apos;s offline builder, then import what it prints here:</p>
+          <p className="text-caption leading-relaxed text-fg-2">To build an up-to-date proof yourself, run this offline tool on a copy of the public log, then import what it prints here:</p>
           <code className="block rounded border border-line-2 bg-ink-2 px-2 py-2 text-label break-all text-fg-2">{view.rebuild}</code>
         </div>
       )}

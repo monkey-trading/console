@@ -91,10 +91,10 @@ describe("the session list", () => {
 
   it("keeps the keys it has, says why, and tries again at the slow pace when a read fails", async () => {
     const { client, list, scheduler } = await opened();
-    client.history = async () => { throw new EngineError(0, "The node did not answer."); };
+    client.history = async () => { throw new EngineError(0, "The server didn't respond."); };
     scheduler.fire();
     await settle();
-    expect(list.getSnapshot().status).toEqual({ kind: "failed", message: "The node did not answer." });
+    expect(list.getSnapshot().status).toEqual({ kind: "failed", message: "The server didn't respond." });
     expect(list.getSnapshot().keys).toHaveLength(2);
     expect(scheduler.timers).toHaveLength(1);
   });
@@ -117,7 +117,7 @@ describe("the session list", () => {
     list.open();
     await settle();
     expect(reads).toEqual([]);
-    expect(list.getSnapshot().status).toEqual({ kind: "waiting", why: "the node's feed is stale" });
+    expect(list.getSnapshot().status).toEqual({ kind: "waiting", why: "prices aren't updating" });
     kit.store.patch({ stream: "live" });
     await settle();
     expect(list.getSnapshot().status).toEqual({ kind: "ready" });
@@ -167,7 +167,7 @@ describe("the session list", () => {
 
   it("keeps a failed list on screen, and its Refresh, while the retry runs", async () => {
     const { client, list, scheduler } = await opened();
-    client.history = async () => { throw new EngineError(0, "The node did not answer."); };
+    client.history = async () => { throw new EngineError(0, "The server didn't respond."); };
     scheduler.fire();
     await settle();
     expect(list.getSnapshot().status.kind).toBe("failed");

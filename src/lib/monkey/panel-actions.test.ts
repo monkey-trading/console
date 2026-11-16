@@ -143,7 +143,7 @@ describe("the page's transactions", () => {
     store.patch({ attestation: { kind: "attested", release: "r", address: DEMO_ADDRESS, why: "Your wallet did not answer." } });
     expect(await claimDistribution(panel)).toBe(false);
     expect(claims).not.toHaveBeenCalled();
-    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "error", text: "The console will not claim the USDC distribution: the vault's current release has not been checked." });
+    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "error", text: "You can't claim the USDC distribution right now because this server hasn't been checked against the vault yet." });
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
     stop();
   });
@@ -159,7 +159,7 @@ describe("the page's transactions", () => {
     const claims = vi.spyOn(node.controls, "claimDistribution");
     expect(await claimDistribution(panel)).toBe(false);
     expect(claims).not.toHaveBeenCalled();
-    expect(store.getSnapshot().notices.distribution?.text).toBe("The console will not claim the USDC distribution: your device clock differs from the node's signed time.");
+    expect(store.getSnapshot().notices.distribution?.text).toBe("You can't claim the USDC distribution right now because your device clock is wrong.");
     stop();
   });
 

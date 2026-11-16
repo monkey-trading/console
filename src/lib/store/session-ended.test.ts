@@ -112,7 +112,7 @@ describe("a key that dies while connected", () => {
     expect(store.liveWallet).toBeNull();
     expect(loadChoice(storage)).toBeNull();
     expect(storage.held.has(NAME)).toBe(false);
-    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: "This browser's trading authorization expired, so your wallet was disconnected. Connect again to renew it." });
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: "Your trading session in this browser expired, so your wallet was disconnected. Connect again to start a new one." });
     expect(signatures(provider)).toHaveLength(prompts);
     expect(client.posted.some((p) => p.route === "session_key_revoke")).toBe(false);
   });
@@ -131,7 +131,7 @@ describe("a key that dies while connected", () => {
     expect(store.getSnapshot()).toMatchObject({ busy: false });
     expect(loadChoice(storage)).toBeNull();
     expect(storage.held.has(NAME)).toBe(false);
-    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: "The node no longer accepts this browser's trading authorization, so your wallet was disconnected. Connect again to renew it." });
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ tone: "info", text: "The server no longer accepts this browser's trading session, so your wallet was disconnected. Connect again to start a new one." });
     expect(signatures(provider)).toHaveLength(prompts);
     await connectWallet(store, "injected");
     await settle();

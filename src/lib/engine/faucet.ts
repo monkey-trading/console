@@ -78,11 +78,11 @@ const sleep: Sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * - the mint reverts, or no receipt arrives within the reads
  */
 export async function mintFromAnvil(rpcUrl: string, usdc: Address, to: Address, amount: Fixed, post: JsonRpcPost, wait: Sleep = sleep): Promise<FaucetMint> {
-  if (amount <= 0n || amount % USDC_UNIT !== 0n) throw new Error("The faucet mints a positive whole number of USDC base units.");
+  if (amount <= 0n || amount % USDC_UNIT !== 0n) throw new Error("The faucet can only add a positive, whole amount of USDC.");
   const accounts = await rpcAllow(post, rpcUrl, rpcBody("eth_accounts", []));
   if (accounts.error !== null) return { ok: false, notAnvil: accounts.error.code === METHOD_NOT_FOUND, detail: accounts.error.message };
   const from: unknown = Array.isArray(accounts.result) ? accounts.result[0] : undefined;
-  if (typeof from !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(from)) return { ok: false, notAnvil: true, detail: "it offers no unlocked account to send the mint from" };
+  if (typeof from !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(from)) return { ok: false, notAnvil: true, detail: "it has no unlocked account to send the test USDC from" };
   const data = encodeFunctionData({ abi: MINT, functionName: "mint", args: [to as Hex, amount / USDC_UNIT] });
   const sent = await rpcAllow(post, rpcUrl, rpcBody("eth_sendTransaction", [{ from, to: usdc, data }]));
   if (sent.error !== null) return { ok: false, notAnvil: sent.error.code === METHOD_NOT_FOUND, detail: sent.error.message };
@@ -91,12 +91,12 @@ export async function mintFromAnvil(rpcUrl: string, usdc: Address, to: Address, 
   for (let read = 1; read <= RECEIPT_READS; read += 1) {
     const receipt = await rpc(post, rpcUrl, rpcBody("eth_getTransactionReceipt", [hash]));
     if (typeof receipt === "object" && receipt !== null && "status" in receipt) {
-      if (receipt.status !== "0x1") throw new Error("The faucet's mint reverted.");
+      if (receipt.status !== "0x1") throw new Error("Creating the test USDC failed.");
       return { ok: true, hash };
     }
     if (read < RECEIPT_READS) await wait(RECEIPT_WAIT_MS);
   }
-  throw new Error("The faucet's mint was not confirmed in time.");
+  throw new Error("The test USDC wasn't confirmed in time.");
 }
 
 /** `n` as a `0x` quantity, as JSON-RPC encodes it. */

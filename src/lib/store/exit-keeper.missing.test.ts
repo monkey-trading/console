@@ -14,7 +14,7 @@ describe("ExitKeeper", () => {
     const OLDEST = 5_000;
     const heard = (seconds: number) => kit.store.patch({ history: [{ cursor: "90:1", seq: 90, index: 1, ts: NOW * 1000, type: "deposited", account: ACCOUNT, amount: "1" }, { cursor: "90:0", seq: 90, index: 0, ts: seconds * 1000, type: "deposited", account: ACCOUNT, amount: "1" }] as never });
     const notice = () => exitView(kit.store.getSnapshot().exit, { address: ACCOUNT }).notice?.text;
-    const WARNED = "This browser holds no exit proof at the vault's latest checkpoint.";
+    const WARNED = "This browser has no exit proof for the vault's latest snapshot.";
     beforeEach(() => { kit.exit.vault = factsAt(100, { chainNow: NOW }); });
 
     it("warns at once when the node's answer brought no proof and the account's history goes back an hour", async () => {
@@ -36,7 +36,7 @@ describe("ExitKeeper", () => {
     });
     it("warns when the read failed too", async () => {
       heard(OLDEST);
-      kit.client.exitError = new EngineError(0, "The node did not answer.");
+      kit.client.exitError = new EngineError(0, "The server didn't respond.");
       await kit.connect();
       expect(notice()).toBe(WARNED);
     });
@@ -55,7 +55,7 @@ describe("ExitKeeper", () => {
     });
     it("does not date it from the history of an account that shows no funds", async () => {
       heard(OLDEST);
-      await kit.attach({ attestation: { kind: "unverified", reason: "The node did not answer." }, stream: "stale", accountRead: true, accountHistory: "read", account: null });
+      await kit.attach({ attestation: { kind: "unverified", reason: "The server didn't respond." }, stream: "stale", accountRead: true, accountHistory: "read", account: null });
       expect(kit.store.getSnapshot().exit.attempt?.kind).toBe("node-away");
       expect(kit.store.getSnapshot().exit.missingSince).toBe(NOW);
     });

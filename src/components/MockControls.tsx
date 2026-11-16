@@ -18,8 +18,8 @@ const REGIONS = [
   { value: "sanctioned_jurisdiction", label: "Sanctioned jurisdiction" },
 ] as const;
 const ATTESTATIONS = [
-  { value: "mock", label: "Mock quote (accepted in this build)" },
-  { value: "unverifiable", label: "Hardware quote (cannot be verified)" },
+  { value: "mock", label: "Test server (accepted)" },
+  { value: "unverifiable", label: "Secure hardware (can't verify)" },
 ] as const;
 const BUTTON = "min-h-11 min-w-11 rounded border border-line-2 px-2 py-1.5 lg:min-h-0 lg:min-w-0 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow";
 
@@ -60,15 +60,15 @@ function MockPanel({ node }: { node: MockNode }) {
   return (
     <div ref={root} className="relative">
       <button ref={toggle} type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} className="min-h-11 rounded border border-amber/60 px-2.5 py-2 sm:px-3 lg:min-h-0 text-label tracking-caps text-amber uppercase focus-visible:outline-2 focus-visible:outline-glow">
-        Mock<span className="max-sm:sr-only"> controls</span>
+        Demo<span className="max-sm:sr-only"> controls</span>
       </button>
       {open && (
         <div id={id} className="fixed inset-x-4 bottom-4 z-50 max-h-[calc(100dvh-2rem)] space-y-4 overflow-y-auto sm:absolute sm:inset-x-auto sm:right-0 sm:bottom-auto sm:mt-2 sm:max-h-[calc(100dvh-7rem)] sm:w-80 rounded border border-line-2 bg-ink-2 p-4 text-caption shadow-platform">
-          <button type="button" onClick={() => { setOpen(false); toggle.current?.focus(); }} className={`${BUTTON} w-full sm:hidden`}>Close mock controls</button>
-          <p className="text-label leading-relaxed text-fg-3">Simulated node only. These change the node in your browser to show how the screens behave.{paused && <span className="text-amber"> The simulation is paused, so price shocks and stress changes apply when you press Play.</span>}</p>
-          <Select label="Where the node sees you" value={region} options={REGIONS} onChange={changeRegion} />
+          <button type="button" onClick={() => { setOpen(false); toggle.current?.focus(); }} className={`${BUTTON} w-full sm:hidden`}>Close demo controls</button>
+          <p className="text-label leading-relaxed text-fg-3">Demo only. These change the simulated server in your browser to show how the screens behave.{paused && <span className="text-amber"> The simulation is paused, so price shocks and stress changes apply when you press Play.</span>}</p>
+          <Select label="Where the server sees you" value={region} options={REGIONS} onChange={changeRegion} />
           <div>
-            <Select label="Node attestation" value={controls.attestationMode} options={ATTESTATIONS} onChange={(mode) => { controls.setAttestationMode(mode); void store.checkNode(); }} />
+            <Select label="Server verification" value={controls.attestationMode} options={ATTESTATIONS} onChange={(mode) => { controls.setAttestationMode(mode); void store.checkNode(); }} />
             <p className="mt-1 text-label text-fg-3">Now: {attestation.kind}</p>
           </div>
           {market && (
@@ -87,13 +87,13 @@ function MockPanel({ node }: { node: MockNode }) {
               </div>
             </fieldset>
           )}
-          <button type="button" className={BUTTON} onClick={() => controls.addLiquidity(fixedFromInt(100_000))}>Add $100,000 vault liquidity</button>
+          <button type="button" className={BUTTON} onClick={() => controls.addLiquidity(fixedFromInt(100_000))}>Add $100,000 to the vault</button>
           <fieldset className="space-y-2">
             <legend className="text-fg-2">The vault&apos;s exit</legend>
             <div className="flex flex-wrap gap-2">
-              <button type="button" className={BUTTON} onClick={() => { controls.exit.postCheckpoint(false); void store.exit.refresh(); }}>Post a checkpoint</button>
-              <button type="button" className={BUTTON} onClick={() => { controls.exit.postCheckpoint(true); void store.exit.refresh(); }}>Post one with the node ahead</button>
-              <button type="button" className={BUTTON} onClick={() => { controls.exit.comeDue(); void store.exit.refresh(); }}>Stop checkpoints for the exit period</button>
+              <button type="button" className={BUTTON} onClick={() => { controls.exit.postCheckpoint(false); void store.exit.refresh(); }}>Post a snapshot</button>
+              <button type="button" className={BUTTON} onClick={() => { controls.exit.postCheckpoint(true); void store.exit.refresh(); }}>Post one with the server ahead</button>
+              <button type="button" className={BUTTON} onClick={() => { controls.exit.comeDue(); void store.exit.refresh(); }}>Stop snapshots for the exit period</button>
               <button type="button" className={BUTTON} onClick={() => { controls.exit.closeWindow(); void store.exit.refresh(); }}>Run out the claim window</button>
             </div>
           </fieldset>

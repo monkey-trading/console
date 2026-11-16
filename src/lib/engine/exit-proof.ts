@@ -82,7 +82,7 @@ function distinct<T>(items: T[], path: string, id: (item: T) => number): T[] {
 
 /** The `seq` and `root` every part of a proof names, which must be the whole proof's. */
 function stamp(fields: Record<string, unknown>, path: string, seq: number, root: string): { seq: number; root: string } {
-  if (whole(fields.seq, `${path}.seq`) !== seq || hash(fields.root, `${path}.root`) !== root) return refuse(path, "is for another checkpoint than the rest of the proof");
+  if (whole(fields.seq, `${path}.seq`) !== seq || hash(fields.root, `${path}.root`) !== root) return refuse(path, "is for a different snapshot from the rest of the proof");
   return { seq, root };
 }
 

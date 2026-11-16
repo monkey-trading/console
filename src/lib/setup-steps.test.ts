@@ -30,7 +30,7 @@ describe("setupSteps", () => {
 
   it("summarises what the connection did: minted or skipped, the class, the key's expiry, the deposit", () => {
     const done: SetupFacts = { ...FRESH, fund: "minted", declared: "eligible_client", keyUntil: Date.UTC(2026, 10, 3, 16, 30), deposit: { amount: fixedFromInt(1000), credited: true } };
-    expect(setupSteps(done).map((s) => s.summary)).toEqual(["10,000 USDC minted", "Eligible client", "This browser can trade until 3 Nov 16:30:00 UTC", "1,000 USDC deposited"]);
+    expect(setupSteps(done).map((s) => s.summary)).toEqual(["10,000 USDC added", "Eligible client", "This browser can trade until 3 Nov 16:30:00 UTC", "1,000 USDC deposited"]);
     expect(at({ ...done, fund: "skipped" }, "fund")?.summary).toBe("Skipped");
     expect(at({ ...done, declared: "professional" }, "declare")?.summary).toBe("Professional client");
     expect(currentStep(setupSteps(done))).toBeNull();

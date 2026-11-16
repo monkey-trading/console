@@ -4,7 +4,7 @@ import type { Address } from "./types";
 import type { Wallet, WalletConnector } from "./wallet";
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
-const HINT = "Add ?account=<address> to the page address to watch an account. Connecting a wallet is not available in this build yet.";
+const HINT = "To view an account, add ?account=<address> to the page address. Connecting a wallet isn't available in this version yet.";
 
 export class WatchConnector implements WalletConnector {
   readonly options = [{ id: "watch", label: "Watch an account", detail: "Read-only, from ?account= in the page address" }] as const;
@@ -30,13 +30,13 @@ export class WatchConnector implements WalletConnector {
       label: "Read-only",
       readOnly: true,
       sign: async () => {
-        throw new Error("This account is read-only: nothing can be signed for it.");
+        throw new Error("This account is read-only, so it can't sign anything.");
       },
       deposit: async () => {
-        throw new Error("This account is read-only: nothing can be deposited for it.");
+        throw new Error("This account is read-only, so you can't deposit to it.");
       },
       claim: async () => {
-        throw new Error("This account is read-only: nothing can be claimed for it.");
+        throw new Error("This account is read-only, so you can't claim for it.");
       },
     };
   }

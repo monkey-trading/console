@@ -60,7 +60,7 @@ describe("the first check", () => {
     const wrong = client();
     wrong.operator({ epoch: 5, address: ENCLAVE }, OTHER);
     wrong.reply("/v1/markets", []);
-    await expect(wrong.live.verify()).resolves.toMatchObject({ kind: "unverified", reason: expect.stringContaining("named an enclave other than the one that signed its answer") });
+    await expect(wrong.live.verify()).resolves.toMatchObject({ kind: "unverified", reason: expect.stringContaining("named a different signing key from the one that signed it") });
     const old = client();
     old.reply("/v1/markets", []);
     await expect(old.live.verify()).resolves.toMatchObject({ kind: "mock" });
@@ -109,7 +109,7 @@ describe("a clock verdict from an earlier check", () => {
     node.signed(OPERATOR_CLAIM, () => ({ status: 200, body: "{}", signature: "0x", timeMs: 60_001, seq: 1 }));
     await expect(live.verify()).resolves.toEqual({ kind: "clock", skewMs: 60_000 });
     node.routes.set(OPERATOR_CLAIM, () => { throw new TypeError("Failed to fetch"); });
-    await expect(live.verify()).resolves.toEqual({ kind: "unverified", reason: expect.stringContaining("The node did not answer.") });
+    await expect(live.verify()).resolves.toEqual({ kind: "unverified", reason: expect.stringContaining("The server didn't respond.") });
   });
 });
 

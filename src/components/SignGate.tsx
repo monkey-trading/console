@@ -12,7 +12,7 @@ export function useSignGate(id: string): { blocked: boolean; describedBy: string
   const { attestation, stream, wallet, walletChain } = useConsole();
   const { deploy } = useSession();
   const why = signBlock(attestation, stream, wallet?.readOnly === true);
-  const text = why !== null ? `The console cannot sign now: ${why}.` : walletChain !== null ? chainAway(walletChain, deploy.chainId) : null;
+  const text = why !== null ? `You can't sign right now because ${why}.` : walletChain !== null ? chainAway(walletChain, deploy.chainId) : null;
   return {
     blocked: text !== null,
     describedBy: text === null ? undefined : id,
@@ -27,6 +27,6 @@ export function useReadOnlyNote(id: string, action: string): { readOnly: boolean
   return {
     readOnly,
     describedBy: readOnly ? id : undefined,
-    note: readOnly ? <p id={id} role="status" className="px-4 py-3 text-label leading-relaxed text-amber">{action} is off: this account is read-only, so nothing can be signed for it.</p> : null,
+    note: readOnly ? <p id={id} role="status" className="px-4 py-3 text-label leading-relaxed text-amber">{action} is off because this account is read-only.</p> : null,
   };
 }

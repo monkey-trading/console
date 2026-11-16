@@ -79,30 +79,30 @@ describe("fundWithAnvil", () => {
     const { store } = await connected();
     expect(await fundWithAnvil(store, parseDeploy(LIVE_DEV))).toBe(false);
     expect(methods(bodies)).not.toContain("eth_sendTransaction");
-    expect(store.getSnapshot().notices.faucet?.text).toBe("The build's RPC is not an Anvil node (the method anvil_setBalance does not exist), so the faucet cannot fund this wallet.");
+    expect(store.getSnapshot().notices.faucet?.text).toBe("The faucet only works on a local test chain, and this one isn't (the method anvil_setBalance does not exist).");
   });
 
   it("names an RPC that offers no unlocked account to mint from, or no eth_sendTransaction, as not Anvil", async () => {
     stubRpc({ eth_getBalance: { result: "0xde0b6b3a7640000" }, eth_accounts: { result: [] } });
     const first = await connected();
     expect(await fundWithAnvil(first.store, parseDeploy(LIVE_DEV))).toBe(false);
-    expect(first.store.getSnapshot().notices.faucet?.text).toBe("The build's RPC is not an Anvil node (it offers no unlocked account to send the mint from), so the faucet cannot fund this wallet.");
+    expect(first.store.getSnapshot().notices.faucet?.text).toBe("The faucet only works on a local test chain, and this one isn't (it has no unlocked account to send the test USDC from).");
     stubRpc({ eth_getBalance: { result: "0xde0b6b3a7640000" }, eth_accounts: { result: [ANVIL_0] }, eth_sendTransaction: { error: { code: -32601, message: "the method eth_sendTransaction does not exist" } } });
     const second = await connected();
     expect(await fundWithAnvil(second.store, parseDeploy(LIVE_DEV))).toBe(false);
-    expect(second.store.getSnapshot().notices.faucet?.text).toBe("The build's RPC is not an Anvil node (the method eth_sendTransaction does not exist), so the faucet cannot fund this wallet.");
+    expect(second.store.getSnapshot().notices.faucet?.text).toBe("The faucet only works on a local test chain, and this one isn't (the method eth_sendTransaction does not exist).");
   });
 
   it("reports an RPC that refuses the mint, and one whose mint reverts, at the control, and settles busy", async () => {
     stubRpc({ eth_getBalance: { result: "0xde0b6b3a7640000" }, eth_accounts: { result: [ANVIL_0] }, eth_sendTransaction: { error: { code: -32000, message: "insufficient funds for gas" } } });
     const refused = await connected();
     expect(await fundWithAnvil(refused.store, parseDeploy(LIVE_DEV))).toBe(false);
-    expect(refused.store.getSnapshot().notices.faucet).toMatchObject({ tone: "error", text: "The faucet could not mint USDC: insufficient funds for gas." });
+    expect(refused.store.getSnapshot().notices.faucet).toMatchObject({ tone: "error", text: "The faucet couldn't create test USDC: insufficient funds for gas." });
     expect(refused.store.getSnapshot().busy).toBe(false);
     stubRpc({ eth_getBalance: { result: "0xde0b6b3a7640000" }, ...MINTS, eth_getTransactionReceipt: { result: { status: "0x0" } } });
     const reverted = await connected();
     expect(await fundWithAnvil(reverted.store, parseDeploy(LIVE_DEV))).toBe(false);
-    expect(reverted.store.getSnapshot().notices.faucet).toMatchObject({ tone: "error", text: "The faucet's mint reverted." });
+    expect(reverted.store.getSnapshot().notices.faucet).toMatchObject({ tone: "error", text: "Creating the test USDC failed." });
     expect(reverted.store.getSnapshot().busy).toBe(false);
   });
 
@@ -129,7 +129,7 @@ describe("fundWithAnvil", () => {
     const { store, wallet } = await connected();
     store.liveWallet = { ...wallet, readOnly: true };
     expect(await fundWithAnvil(store, parseDeploy(LIVE_DEV))).toBe(false);
-    expect(store.getSnapshot().notices.faucet).toMatchObject({ tone: "error", text: "The watched account is read-only, so the faucet cannot fund it." });
+    expect(store.getSnapshot().notices.faucet).toMatchObject({ tone: "error", text: "You're viewing this account read-only, so the faucet can't fund it." });
     store.liveWallet = null;
     expect(await fundWithAnvil(store, parseDeploy(LIVE_DEV))).toBe(false);
     expect(store.getSnapshot().notices.faucet).toMatchObject({ tone: "error", text: "Connect a wallet first." });

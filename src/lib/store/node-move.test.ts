@@ -23,7 +23,7 @@ describe("MoveAnnouncer", () => {
 
   it("announces a move to another node even under the same count, and says the attestation verified", () => {
     const announcer = new MoveAnnouncer();
-    expect(announcer.noticeFor(1, "127.0.0.1:8081")).toContain("verified its attestation");
+    expect(announcer.noticeFor(1, "127.0.0.1:8081")).toContain("after verifying it");
     expect(announcer.noticeFor(1, "node.example")).toBe(moveNotice("node.example"));
   });
 

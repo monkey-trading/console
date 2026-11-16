@@ -59,7 +59,7 @@ export function lagging(floor: SignerFloor | null, route: OperatorRoute | null, 
   if (floor === null) return null;
   const named = route?.signer;
   if (named === undefined ? vaultRead : named.epoch > floor.epoch || (named.epoch === floor.epoch && named.address.toLowerCase() === floor.address)) return null;
-  return "A node named a newer signer than this node states, or another key at its epoch, so this node's answers are not taken yet.";
+  return "Another server reported a newer signing key than this one, so this server isn't trusted yet.";
 }
 
 /** How long the wallet may take over one chain read before the check gives up on it, in milliseconds; a wallet asleep must not hold the follower from the next wallet. */
@@ -68,7 +68,7 @@ const CHAIN_READ_MS = 30_000;
 /** `read`, or a rejection once the wallet has had its time. */
 export function bounded<T>(scheduler: Scheduler, read: Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = scheduler.setTimeout(() => reject(new Error("your wallet did not answer in time")), CHAIN_READ_MS);
+    const timer = scheduler.setTimeout(() => reject(new Error("your wallet didn't respond in time")), CHAIN_READ_MS);
     read.then(
       (value) => { scheduler.clearTimeout(timer); resolve(value); },
       (error: unknown) => { scheduler.clearTimeout(timer); reject(error); },

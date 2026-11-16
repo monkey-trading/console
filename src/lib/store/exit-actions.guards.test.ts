@@ -78,10 +78,10 @@ describe("a claim this page has had paid", () => {
     expect(kit.store.getSnapshot().exit.claims?.exitClaim).toBe(7n);
     expect(kit.store.getSnapshot().exit.paid).toBe(paid);
     expect(view().canClaim).toBe(false);
-    expect(view().notice?.text ?? "").not.toMatch(/can be paid/);
+    expect(view().notice?.text ?? "").not.toMatch(/You can now collect/);
   });
   it("is offered still when the claim did not go through", async () => {
-    kit.exit.sendError = new Error("You declined to claim your exit from the vault in your wallet.");
+    kit.exit.sendError = new Error("You declined to claim your funds from the vault in your wallet.");
     await claimVaultExit(kit.store);
     expect(kit.store.getSnapshot().exit.claimed).toBe(false);
     expect(view().canClaim).toBe(true);
@@ -128,7 +128,7 @@ describe("a chosen file", () => {
     expect(second.reads.count).toBe(0);
     first.finish("{nope");
     await pending;
-    expect(notice()).toMatch(/not JSON/);
+    expect(notice()).toMatch(/isn't JSON/);
     expect(readingProof(exit())).toBe(false);
   });
   it("clears the last result when it is chosen", async () => {
@@ -141,7 +141,7 @@ describe("a chosen file", () => {
   });
   it("gives the controls back when a read fails", async () => {
     await importChosenFile(kit.store, { size: 2, text: () => Promise.reject(new Error("gone")) });
-    expect(notice()).toBe("The file could not be read.");
+    expect(notice()).toBe("Couldn't read the file.");
     expect(readingProof(exit())).toBe(false);
   });
   it("gives them back when a read never ends", async () => {
@@ -150,12 +150,12 @@ describe("a chosen file", () => {
     expect(readingProof(exit())).toBe(true);
     await vi.advanceTimersByTimeAsync(120_000);
     await pending;
-    expect(notice()).toBe("The file could not be read.");
+    expect(notice()).toBe("Couldn't read the file.");
     expect(readingProof(exit())).toBe(false);
   });
   it("holds nothing for a file refused for its length", async () => {
     await importChosenFile(kit.store, { size: 17 * 1024 * 1024, text: async () => "{}" });
-    expect(notice()).toMatch(/longer than any exit proof/);
+    expect(notice()).toMatch(/too large to be an exit proof/);
     expect(readingProof(exit())).toBe(false);
   });
   it("holds nothing with no wallet to check it", async () => {

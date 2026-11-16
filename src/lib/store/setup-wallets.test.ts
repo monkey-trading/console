@@ -37,7 +37,7 @@ describe("as the wallet changes around it", () => {
     wallet.sign = () => new Promise<string>((resolve) => { proceed = resolve; });
     const authorizing = authorizeBrowser(store, "setup");
     await settle();
-    expect(store.getSnapshot()).toMatchObject({ busy: true, prompt: expect.stringContaining("authorize this browser") });
+    expect(store.getSnapshot()).toMatchObject({ busy: true, prompt: expect.stringContaining("let this browser trade for you") });
     client.declared = null;
     await connectWallet(store, "other", false, OTHER);
     // The first wallet may never answer: its request holds nothing up for the wallet that replaced it.
@@ -119,7 +119,7 @@ describe("as the wallet changes around it", () => {
     await connectWallet(store, "other", false, OTHER);
     finish(walletError({ code: -32000, message: "the transaction reverted" }, "deposit"));
     await failing;
-    expect(store.getSnapshot().notices.deposit?.text).toBe("Your wallet could not deposit: the transaction reverted");
+    expect(store.getSnapshot().notices.deposit?.text).toBe("Your wallet couldn't deposit: the transaction reverted");
   });
 
   it("reports nothing when the old wallet declines after its connection ended, and leaves the next wallet's request alone", async () => {
