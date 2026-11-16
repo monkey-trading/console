@@ -59,7 +59,7 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
       </div>
       {readOnly.note}
       {(state.wallet !== null || !state.walletDecided) && boost !== null && (
-        <p className="mt-3 flex justify-between gap-2 text-caption"><span className="text-fg">Reward boost</span><span className="text-fg-2">{boost === undefined ? "—" : `${describeBoost(boost.bps)} your share, from volume tier ${boost.tier}`}</span></p>
+        <p className="mt-3 flex justify-between gap-2 text-caption"><span className="text-fg">Reward boost</span><span className="text-fg-2">{boost === undefined ? "—" : `${describeBoost(boost.bps)} for volume tier ${boost.tier}`}</span></p>
       )}
       {reading ? (
         <div className="mt-3 text-caption">

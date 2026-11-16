@@ -12,7 +12,7 @@ const RECORD: TurnRecord = { turn: 9, position: 0, reason: "draw", candidate: "0
 
 describe("setLine", () => {
   it("says when a set takes effect and the wait, while that is ahead", () => {
-    expect(setLine(SET, EFFECTIVE - 3 * 86_400_000)).toBe("Rotation 4, chosen at election 42, with 2 operators. Starts at 18 Nov 22:30:00 UTC, in 3d 0h.");
+    expect(setLine(SET, EFFECTIVE - 3 * 86_400_000)).toBe("Rotation 4, chosen at election 42, with 2 operators. Starts at 18 Nov 22:30:00 UTC, in 3 days.");
   });
 
   it("says since when a set is in effect once its time has come, and with no clock read yet, and counts one member as one", () => {

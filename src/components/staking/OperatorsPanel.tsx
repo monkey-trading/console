@@ -18,7 +18,7 @@ import { useEffect, useId, useMemo, useSyncExternalStore } from "react";
 import { readBlock } from "@/lib/engine/attestation";
 import { groupThousands, shortHex } from "@/lib/format";
 import { changeDelegation, type DelegationChange } from "@/lib/monkey/actions";
-import { formatDuration } from "@/lib/monkey/figures";
+import { spokenLongCountdown } from "@/lib/monkey/countdown";
 import { mirroredElection, type OperatorReads } from "@/lib/monkey/operators";
 import { candidateSource, nodeBlocked, offersTyped, type NoList } from "@/lib/staking/candidate-choice";
 import type { DelegationReads } from "@/lib/staking/delegation-reads";
@@ -127,12 +127,12 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
       </dl>
       {pending !== null && (
         <p className="rounded border border-amber/40 bg-amber/10 p-3 text-caption leading-relaxed text-amber [overflow-wrap:anywhere]">
-          {pending.promoted ? `${withAddress(labelOf(pending.candidate), pending.candidate)} is taking over because the operator stopped responding. Its release is in use now, and its operator key` : `${withAddress(labelOf(pending.candidate), pending.candidate)} won the election and`} takes effect at {formatStamp(pending.effectiveAtMs)} UTC{nowMs > 0 && pending.effectiveAtMs > nowMs ? `, in ${formatDuration(pending.effectiveAtMs - nowMs)}` : ""}.
+          {pending.promoted ? `${withAddress(labelOf(pending.candidate), pending.candidate)} is taking over because the operator stopped responding. Its release is in use now, and its operator key` : `${withAddress(labelOf(pending.candidate), pending.candidate)} won the election. Its operator key`} takes effect at {formatStamp(pending.effectiveAtMs)} UTC{nowMs > 0 && pending.effectiveAtMs > nowMs ? `, in ${spokenLongCountdown(pending.effectiveAtMs, nowMs)}` : ""}.
         </p>
       )}
       {mirrored !== null && (
         <p className="rounded border border-amber/40 bg-amber/10 p-3 text-caption leading-relaxed text-amber [overflow-wrap:anywhere]">
-          The server has recorded the election of {withAddress(labelOf(mirrored.candidate), mirrored.candidate)}. Its operator key takes effect at {formatStamp(mirrored.effectiveAtMs)} UTC, in {formatDuration(mirrored.effectiveAtMs - nowMs)}.
+          The server has recorded the election of {withAddress(labelOf(mirrored.candidate), mirrored.candidate)}. Its operator key takes effect at {formatStamp(mirrored.effectiveAtMs)} UTC, in {spokenLongCountdown(mirrored.effectiveAtMs, nowMs)}.
         </p>
       )}
       <ReadNote read={route} loading={nodeReadable ? "Loading figures…" : "Figures appear once the server is verified."} quiet />
@@ -218,7 +218,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
         <>
           <p className={NOTE}>You can delegate any part of your stake to listed candidates, and move it or take it back at any time. Delegations count at the next election. Undelegated stake doesn&apos;t vote, and neither does stake you&apos;re unstaking. Delegating doesn&apos;t change your USDC distributions, and you don&apos;t share in an operator&apos;s rewards.</p>
           {unreachable.size > 0 && <p className={NOTE}>Needs an app update: this version of the app can&apos;t connect to that operator&apos;s server, so you&apos;d need an update if it were elected.</p>}
-          <p className={NOTE}>The standby is the candidate that takes over while rotation is on and no election is pending, if the vault goes too long without an update from the server. The release is the exact server software and settings an operator runs.</p>
+          <p className={NOTE}>The standby is the candidate that takes over if the vault goes too long without an update from the server. This applies while rotation is on and no election is pending. The release is the exact server software and settings an operator runs.</p>
         </>
       )}
       <ReadNote read={listRead} loading={nodeReadable ? "Loading the operator list…" : "The operator list appears once the server is verified."} />

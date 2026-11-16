@@ -32,8 +32,8 @@ const render = (patch: Partial<ConsoleState>) => renderToStaticMarkup(createElem
 
 describe("EmissionsCard's boost", () => {
   it("names the multiple the account's tier weighs its emission weight, and the tier", () => {
-    expect(render({ wallet: WALLET, accountRead: true, account: account(volume({ emissions_boost_bps: 2_500 })) })).toContain("1.25x your share, from volume tier 2");
-    expect(render({ wallet: WALLET, accountRead: true, account: account(volume({ emissions_boost_bps: 0 })) })).toContain("1x your share, from volume tier 2");
+    expect(render({ wallet: WALLET, accountRead: true, account: account(volume({ emissions_boost_bps: 2_500 })) })).toContain("1.25x for volume tier 2");
+    expect(render({ wallet: WALLET, accountRead: true, account: account(volume({ emissions_boost_bps: 0 })) })).toContain("1x for volume tier 2");
   });
 
   it("holds the line with a dash while the account is read, and shows none from a node that does not serve it or with no wallet", () => {

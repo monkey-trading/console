@@ -8,7 +8,8 @@
 
 import { formatMonkey, formatRate, shortHex } from "@/lib/format";
 import { completeUnstake, stakeMonkey, startUnstake } from "@/lib/monkey/actions";
-import { formatDuration, shareBps } from "@/lib/monkey/figures";
+import { spokenLongCountdown } from "@/lib/monkey/countdown";
+import { shareBps } from "@/lib/monkey/figures";
 import type { StakeDelegations } from "@/lib/engine/staking";
 import type { Read } from "@/lib/monkey/figures";
 import { undelegatedOf } from "@/lib/staking/delegations";
@@ -84,12 +85,12 @@ export function StakePanel({ delegations = null, labelOf = shortHex }: { delegat
           {delegations !== null && delegations.read.status === "failed" && <ReadNote read={delegations.read} />}
           <Notice surface="stake" />
           <p className={NOTE}>
-            Unstaking uses your undelegated stake first, then takes the rest from your delegations in proportion to their size. {staking === null ? "You can complete it after a waiting period." : `You can complete it after ${formatDuration(staking.cooldown_ms)}.`} Until then it still counts as staked.
+            Unstaking uses your undelegated stake first, then takes the rest from your delegations in proportion to their size. {staking === null ? "You can complete it after a waiting period." : `You can complete it after ${spokenLongCountdown(staking.cooldown_ms, 0)}.`} Until then it still counts as staked.
           </p>
           {pending !== null && (
             <div className="space-y-2 rounded border border-line-2 p-3">
               <p className="text-caption text-fg">Unstaking {formatMonkey(pending.amount)}</p>
-              <p className={NOTE}>{left > 0 ? `${formatDuration(left)} left to wait.` : "The waiting period is over."}</p>
+              <p className={NOTE}>{left > 0 ? `${spokenLongCountdown(pending.claimableAtMs, nowMs)} left to wait.` : "The waiting period is over."}</p>
               <button type="button" aria-disabled={busy || left > 0} onClick={() => { if (!busy && left <= 0) void completeUnstake(panel).then(() => focusHeading("stake-title")); }} className={`${BUTTON} w-full`}>Complete unstake</button>
             </div>
           )}

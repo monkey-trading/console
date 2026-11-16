@@ -104,7 +104,7 @@ export function HouseFigures() {
     <Panel title="House" tip={simulated ? "These are the house's own finances, simulated in your browser." : "These are the house's own finances, verified from the server."}>
       <dl className="space-y-1">
         <Row label="House funds" tip="This is the house's cash: its capital, plus what traders have lost and paid in fees, minus what they have won." value={formatUsd(cash)} tone="glow" />
-        <Row label="House value" tip="This is what the house is worth now: its cash minus traders' profit on open positions at current prices." value={formatUsd(nav)} />
+        <Row label="House value" tip="This is what the house is worth now: its cash plus its profit or loss on traders' open positions at current prices." value={formatUsd(nav)} />
         <Row label="Unrealised P&L" tip="This is the house's profit or loss on open positions at current prices. It's negative when traders are ahead." value={formatUsd(unrealised)} tone={sign(unrealised)} />
         <Row label="Queued withdrawals" tip="This is what's still owed to traders waiting in the withdrawal queue." value={queue === null ? "—" : formatUsd(queue.remaining)} />
         <Row label="Distributed" tip="This is all the USDC distributed so far from the house's value above its reserve. Stakers share it, and while rotation is on, a fifth of each distribution goes to the operator. Each distribution lowers the house value by the amount paid." value={paid === null ? "—" : formatUsdc(paid)} />

@@ -64,7 +64,7 @@ describe("the Rotation tab", () => {
     expect(html).toContain("30.00%");
     expect(html).toContain("700 MONKEY");
     expect(html).toContain("Rotation 4, chosen at election 42, with 2 operators. Starts at");
-    expect(html).toContain("in 3d 0h");
+    expect(html).toContain("in 3 days.");
   });
 
   it("names today's and tomorrow's turns, tomorrow's as not started", () => {

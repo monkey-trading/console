@@ -1,13 +1,13 @@
 /** What the Rotation tab says of a set and of each turn record (monkey-trading/console#280), apart from the components so the words are tested. */
 
-import { formatDuration } from "../monkey/figures";
+import { spokenLongCountdown } from "../monkey/countdown";
 import { formatStamp, formatStampWithYear } from "../time";
 import type { RotationSet, TurnRecord } from "./rotation";
 
 /** A set's line: its number and registry epoch, and when it took effect or takes effect, with the wait when that is ahead. */
 export function setLine(set: RotationSet, nowMs: number): string {
   const ahead = nowMs > 0 && set.effectiveAtMs > nowMs;
-  const when = ahead ? `Starts at ${formatStamp(set.effectiveAtMs)} UTC, in ${formatDuration(set.effectiveAtMs - nowMs)}` : `Running since ${formatStamp(set.effectiveAtMs)} UTC`;
+  const when = ahead ? `Starts at ${formatStamp(set.effectiveAtMs)} UTC, in ${spokenLongCountdown(set.effectiveAtMs, nowMs)}` : `Running since ${formatStamp(set.effectiveAtMs)} UTC`;
   const members = set.members.length === 1 ? "1 operator" : `${set.members.length} operators`;
   return `Rotation ${set.set}, chosen at election ${set.epoch}, with ${members}. ${when}.`;
 }

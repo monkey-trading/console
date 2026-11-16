@@ -16,7 +16,7 @@ import { SeriesPanel, type LineSpec } from "./SeriesPanel";
 import { useFeed, useSelected } from "./use-feed";
 import { useMarketOptions } from "./use-markets";
 
-const NAV_LINES: readonly LineSpec[] = [{ id: "nav", metric: "nav", label: "House value", tip: "This is what the house is worth now: its cash minus traders' profit on open positions.", tone: "glow", area: true }];
+const NAV_LINES: readonly LineSpec[] = [{ id: "nav", metric: "nav", label: "House value", tip: "This is what the house is worth now: its cash plus its profit or loss on traders' open positions.", tone: "glow", area: true }];
 const EXPOSURE_LINES: readonly LineSpec[] = [
   { id: "long", metric: "long", label: "Long", tip: "This is the total size of traders' long positions in this market. They profit when the price rises, and the house loses.", tone: "glow", nonNegative: true, sampled: true },
   { id: "short", metric: "short", label: "Short", tip: "This is the total size of traders' short positions in this market. They profit when the price falls.", tone: "ember", nonNegative: true, sampled: true },
@@ -43,7 +43,7 @@ export function NavChart({ range, className, floor, pending }: { range?: RangeId
   return (
     <SeriesPanel
       title="House value"
-      tip="This is what the house is worth: its cash minus traders' profit on open positions at current prices. The shaded area is below the reserve, and stakers are paid only from value above it."
+      tip="This is what the house is worth: its cash plus its profit or loss on traders' open positions at current prices. The shaded area is below the reserve, and stakers are paid only from value above it."
       lines={NAV_LINES}
       markets={null}
       range={range}
