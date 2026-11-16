@@ -303,10 +303,11 @@ rotation_status() {
 
 stop_operator() {
   rotating
-  local named i epoch interval tolerance misses window now length offset next next_member deadline promoted p started=$SECONDS
+  local named i epoch current interval tolerance misses window now length offset next next_member deadline promoted p started=$SECONDS
   named="$(named_operator)"
   i="$(member_of "$named")" || die "the operator in effect, $named, runs no engine of this stack"
   epoch="$(signer_epoch)"
+  [[ "$epoch" =~ ^[0-9]+$ ]] || die "the vault's signer epoch read as \"$epoch\""
   read -r interval tolerance misses _ <<<"$(call "$schedule" 'liveness()(uint64,uint64,uint16,uint16)' | awk '{print $1}' | tr '\n' ' ')"
   window=$((interval * (misses + 1) + tolerance))
   # A turn that passes to another member before a promotion could would leave the stop on an engine no longer in office.
@@ -328,7 +329,8 @@ stop_operator() {
   echo "Stopping the ${member_names[$i]} engine, the operator in effect. The other members record each heartbeat it misses, and"
   echo "once it has missed $misses in a row they promote the next member's standby key to the vault's signer, within about $window s."
   deadline=$((SECONDS + window + 240))
-  while (($(signer_epoch) == epoch)); do
+  # A read that fails is no promotion: it is tried again until the deadline.
+  while ! current="$(signer_epoch)" || [[ ! "$current" =~ ^[0-9]+$ ]] || ((current == epoch)); do
     ((SECONDS < deadline)) || die "no promotion within $((window + 240)) s, so the stack starts the ${member_names[$i]} engine again; see the members' logs in $work_dir"
     sleep 5
   done
