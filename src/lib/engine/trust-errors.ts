@@ -1,6 +1,7 @@
 /** What a node that cannot be trusted raises, apart from the check itself, so a screen can tell the refusals apart without loading the verifier. */
 
 import type { AttestationStatus } from "./attestation";
+import type { OperatorRoute } from "./stats-types";
 
 /** A signed request stopped before it left the page, because the node may not be signed for: unlike a request that went out, it cannot have run. */
 export class NotSentError extends Error {
@@ -20,7 +21,7 @@ export class UntrustedError extends Error {
 
 /** A signed answer that verified but that the console refuses to take as the node's word on the vault's signer; `answer` is what it said, which can still say where the operator now runs. */
 export class RefusedAnswer extends UntrustedError {
-  constructor(reason: string, readonly answer: unknown) {
+  constructor(reason: string, readonly answer: OperatorRoute) {
     super(reason);
     this.name = "RefusedAnswer";
   }

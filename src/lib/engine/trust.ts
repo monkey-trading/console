@@ -203,9 +203,9 @@ export class NodeTrust {
     this.deps.onStatus(status);
   }
 
-  /** Ends a check on `reason`, unless its read of the node's own word found the device clock wrong: that verdict says more, and stays. */
-  private refused(reason: string): void {
-    if (this.current.kind !== "clock") this.setStatus({ kind: "unverified", reason });
+  /** Ends a check on `reason`, unless its own read of the node's word found the device clock wrong (a verdict other than `earlier`): that says more, and stays. */
+  private refused(reason: string, earlier: AttestationStatus): void {
+    if (this.current.kind !== "clock" || this.current === earlier) this.setStatus({ kind: "unverified", reason });
   }
 
   private trust(address: string, judged: boolean): void {
@@ -245,6 +245,7 @@ export class NodeTrust {
   }
 
   private async run(): Promise<void> {
+    const earlier = this.current; // a clock verdict a check before this one reached, which a retry keeps shown
     this.signerAddress = null;
     this.verifiedStatus = null;
     try {
@@ -261,7 +262,7 @@ export class NodeTrust {
         const refused = await this.mockRefusal(configHash, address);
         if (refused !== null) return this.setStatus({ kind: "unverified", reason: refused });
         const superseded = await this.naming.refusal(address);
-        if (superseded !== null) return this.refused(superseded);
+        if (superseded !== null) return this.refused(superseded, earlier);
         this.trust(address, this.deps.devDigests.length > 0);
         return this.setStatus({ kind: "mock" });
       }
@@ -285,7 +286,7 @@ export class NodeTrust {
       if (vault.kind === "read" && heard === this.vaultHeard) this.naming.vaultSays(address, vault.facts.signer);
       if (vault.kind === "read" && address !== vault.facts.signer) return this.setStatus({ kind: "unverified", reason: NOT_THE_SIGNER });
       const superseded = await this.naming.refusal(address);
-      if (superseded !== null) return this.refused(superseded);
+      if (superseded !== null) return this.refused(superseded, earlier);
       this.trust(address, true);
       if (vault.kind === "read") this.setStatus({ kind: "verified", release: release ?? "", config: config ?? "", address });
       else this.setStatus({ kind: "attested", release: release ?? "", address, why: vault.kind === "none" ? CONNECT_TO_CHECK : `Your wallet could not read the vault's current release: ${vault.reason}` });

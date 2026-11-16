@@ -8,7 +8,6 @@
 import type { EngineClient } from "./client";
 import type { Scheduler } from "./live-stream";
 import { bounded, nodeSaid, NOTHING_SAID, type NodeSaid, type SaidTurn } from "./operator-follow-status";
-import type { OperatorRoute } from "./stats-types";
 import { RefusedAnswer } from "./trust-errors";
 
 export class NodeWord {
@@ -28,8 +27,11 @@ export class NodeWord {
     try {
       return this.heard(nodeSaid(await bounded(this.scheduler, current.stats.operator({ limit: 1 })), this.nowMs()));
     } catch (error) {
-      // A node the vault no longer names still says where the registry now runs the operator (the signed route the refusal carries); any other failure says nothing.
-      return error instanceof RefusedAnswer ? this.heard(nodeSaid(error.answer as OperatorRoute, this.nowMs())) : NOTHING_SAID;
+      if (!(error instanceof RefusedAnswer)) return NOTHING_SAID;
+      // A node the vault no longer names still says where the registry now runs the operator (the signed route the refusal carries), but
+      // its own turns are not the operator's: a node promoted past has stopped mirroring them, so the registry's word decides.
+      this.turns = [];
+      return nodeSaid(error.answer, this.nowMs());
     }
   }
 

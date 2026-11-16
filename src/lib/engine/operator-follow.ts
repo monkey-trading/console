@@ -235,8 +235,9 @@ export class OperatorFollower {
    * governance may have installed a fallback on the deployment's own node, so it is not told as one.
    */
   private async tryNode(target: string, chain: DeploymentReads | null, rotationEnabled: boolean): Promise<void> {
-    const waiting = (reason: string) => (rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, reason }) : this.settled({ kind: "following", origin: this.origin }));
     const before = this.state; // trading pauses the moment the chain names another node, as its verification takes the time (monkey-trading/console#280)
+    // A trial another wallet came during says nothing for it, failed or not: the pause it began goes, and `check` runs again for the new one.
+    const waiting = (reason: string) => (this.deps.chain() !== chain ? this.set(before) : rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, reason }) : this.settled({ kind: "following", origin: this.origin }));
     if (rotationEnabled && !(this.state.kind === "waiting" && this.state.target === target)) waiting("The new operator's node is being verified.");
     let client: EngineClient;
     let status: AttestationStatus;
@@ -252,7 +253,6 @@ export class OperatorFollower {
     } catch (error) {
       return waiting(error instanceof Error ? error.message : "The node did not answer.");
     }
-    // Another wallet came while this ran; `check` runs again for it, and the pause this began was for the old one.
     if (this.deps.chain() !== chain) return this.set(before);
     if (this.deps.busy()) return waiting("A wallet request is in progress; the console moves once it has finished.");
     this.deps.adopt(client, target);

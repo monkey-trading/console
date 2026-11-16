@@ -100,6 +100,16 @@ describe("a first check that cannot read the node's word on the signer", () => {
   });
 });
 
+describe("a clock verdict from an earlier check", () => {
+  it("gives way to the next check's own failure, which the device clock does not explain", async () => {
+    const { node, live } = client();
+    node.signed(OPERATOR_CLAIM, () => ({ status: 200, body: "{}", signature: "0x", timeMs: 60_001, seq: 1 }));
+    await expect(live.verify()).resolves.toEqual({ kind: "clock", skewMs: 60_000 });
+    node.routes.set(OPERATOR_CLAIM, () => { throw new TypeError("Failed to fetch"); });
+    await expect(live.verify()).resolves.toEqual({ kind: "unverified", reason: expect.stringContaining("The node did not answer.") });
+  });
+});
+
 describe("a later operator read", () => {
   it("refuses the node once it names another signer at a later epoch, and refuses it at every check after", async () => {
     const { live, operator, reply } = client();

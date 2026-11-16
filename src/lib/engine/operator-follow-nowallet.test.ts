@@ -6,6 +6,9 @@ import { EngineError, type EngineClient } from "./client";
 import { B, BUILD, rig, TrialClient, VERIFIED } from "./operator-follow-kit";
 import { RefusedAnswer } from "./trust-errors";
 
+/** The fields every operator route carries. */
+const ROUTE = { operator: "0x00000000000000000000000000000000000000a1", pending_rotation: null, rotation_enabled: true, last_election: null };
+
 describe("a visit with no wallet to read a chain (monkey-trading/console#280)", () => {
   /** A follower with no chain whose node in use says the registry names `hostname`. */
   function withoutWallet(hostname: string | null, rotationEnabled = true) {
@@ -75,8 +78,23 @@ describe("a visit with no wallet to read a chain (monkey-trading/console#280)", 
   it("moves to the node a refused node says the registry names, after a promotion: the refusal carries the route", async () => {
     const kit = rig({ reads: null });
     const current = new TrialClient();
-    current.signedRead = async () => { throw new RefusedAnswer("The vault names another signer", { rotation_enabled: true, api_hostname: { hostname: "b.example", block: 1, block_hash: "0x" } }); };
+    current.signedRead = async () => { throw new RefusedAnswer("The vault names another signer", { ...ROUTE, api_hostname: { hostname: "b.example", block: 1, block_hash: "0x" } }); };
     kit.follower.watch(current as unknown as EngineClient); // the follower uses only what TrialClient has
+    await kit.follower.check();
+    expect(kit.adopted).toEqual([B]);
+  });
+
+  it("moves to the node a refused node says the registry names, though it still names its own turn, after a promotion", async () => {
+    const kit = rig({ reads: null });
+    const current = new TrialClient();
+    const own = { turn: 9, position: 0, reason: "draw" as const, set: 3, candidate: "0x00000000000000000000000000000000000000a1", admin_key: "0x00000000000000000000000000000000000000a1", applies_at: 0, taken: true };
+    current.operatorList = async () => ({ candidates: [{ address: own.candidate, api_hostname: "build.example" }] });
+    current.signedRead = async () => ({ ...ROUTE, api_hostname: { hostname: "build.example", block: 1, block_hash: "0x" }, turn: own });
+    kit.follower.watch(current as unknown as EngineClient); // the follower uses only what TrialClient has
+    await kit.follower.check();
+    expect(kit.follower.getSnapshot()).toEqual({ kind: "pinned", origin: BUILD });
+    // Promoted past, the node has stopped mirroring turns, while its read of the registry names the promoted operator.
+    current.signedRead = async () => { throw new RefusedAnswer("The vault names another signer", { ...ROUTE, api_hostname: { hostname: "b.example", block: 2, block_hash: "0x" }, turn: own }); };
     await kit.follower.check();
     expect(kit.adopted).toEqual([B]);
   });
