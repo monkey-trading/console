@@ -1,4 +1,4 @@
-/** Tests for the app-wide server line: a venue down, trading suspended, a lost connection, an unverifiable server, and recovery. */
+/** Tests for the app-wide server line: a venue down, a market no feed prices, trading suspended, a lost connection, an unverifiable server, and recovery. */
 
 import { describe, expect, it } from "vitest";
 
@@ -9,7 +9,7 @@ const HEALTHY: ServerStatus = { as_of_ms: 1, takes_orders: true, holds: [], trus
 
 /** A venue quoting `markets` (id and symbol) in `state`. */
 const venue = (name: string, state: VenueState, ...markets: [number, string][]) => ({ venue: name, state, symbols: markets.map(([market, symbol]) => ({ symbol, market, state })) });
-const unpriced = (market: number, symbol: string, reason: UnpricedReason = "too_few_sources") => ({ market, symbol, reason, fresh_sources: 1, min_sources: 2 });
+const unpriced = (market: number, symbol: string, reason: UnpricedReason = "too_few_sources", minSources = 2) => ({ market, symbol, reason, fresh_sources: 1, min_sources: minSources });
 const signed = (status: Partial<ServerStatus>): ServerRead => ({ kind: "signed", status: { ...HEALTHY, ...status } });
 const BTC: [number, string] = [1, "BTC-USD"];
 const ETH: [number, string] = [2, "ETH-USD"];
@@ -28,13 +28,14 @@ describe("markets without a live price", () => {
     ["a delayed venue", [venue("kraken", "delayed", BTC)], "the prices received from Kraken are delayed"],
     ["a silent venue", [venue("bitstamp", "silent", BTC)], "Bitstamp is not currently sending prices"],
     ["two silent venues", [venue("coinbase", "silent", BTC), venue("kraken", "silent", BTC)], "Coinbase and Kraken are not currently sending prices"],
-    ["a venue the server is not connected to", [venue("tradermade", "off", BTC)], "the server is not currently connected to TraderMade"],
+    ["a venue the server is not connected to beside one it has lost", [venue("tradermade", "off", BTC), venue("massive", "down", BTC)], "the server has lost its connection to Massive and the server is not currently connected to TraderMade"],
     ["a venue whose prices are too old to count", [venue("coinbase", "stale", BTC)], "the prices received from Coinbase are out of date"],
     ["a venue down and another delayed", [venue("kraken", "delayed", BTC), venue("coinbase", "down", BTC)], "the server has lost its connection to Coinbase and the prices received from Kraken are delayed"],
     ["a venue this app has no name for", [venue("newvenue", "down", BTC)], "the server has lost its connection to Newvenue"],
-    ["a venue down for another market only", [venue("coinbase", "down", ETH)], "the server is not currently receiving enough up-to-date prices"],
+    ["a venue down for another market only", [venue("coinbase", "down", ETH), venue("kraken", "quoting", BTC)], "the server is not currently receiving enough up-to-date prices"],
   ])("says why for %s, in one market", (_, venues, why) => {
-    expect(serverLine("live", signed({ venues, unpriced_markets: [unpriced(...BTC)] }), null)).toEqual({
+    // A market priced from one venue, so each case's venues are enough to price it once they recover.
+    expect(serverLine("live", signed({ venues, unpriced_markets: [unpriced(...BTC, "too_few_sources", 1)] }), null)).toEqual({
       role: "status", lead: `Live prices for BTC-USD are temporarily unavailable because ${why}.`, rest: "Trading in this market will resume automatically once prices return.",
     });
   });
@@ -43,26 +44,51 @@ describe("markets without a live price", () => {
     ["diverging", "the prices received from different price feeds currently disagree"],
     ["out_of_range", "the underlying futures price is outside its permitted range"],
   ] as const)("gives the server's reason, %s, when no venue reports a problem", (reason, why) => {
-    expect(serverLine("live", signed({ unpriced_markets: [unpriced(1, "M1", reason)] }), null)?.lead).toBe(`Live prices for M1 are temporarily unavailable because ${why}.`);
+    const venues = [venue("coinbase", "quoting", [1, "M1"]), venue("kraken", "quoting", [1, "M1"])];
+    expect(serverLine("live", signed({ venues, unpriced_markets: [unpriced(1, "M1", reason)] }), null)?.lead).toBe(`Live prices for M1 are temporarily unavailable because ${why}.`);
   });
 
   it("gives each market only its own cause, one sentence per cause, those a venue explains first", () => {
-    // As a dev node lists EUR-USD with no venue quoting it while it has lost Kraken for BTC-USD and ETH-USD.
+    const XAU: [number, string] = [11, "XAU-USD"];
     const server = signed({
-      venues: [venue("coinbase", "quoting", BTC, ETH), venue("kraken", "down", BTC, ETH)],
-      unpriced_markets: [unpriced(10, "EUR-USD"), unpriced(...BTC), unpriced(...ETH), unpriced(11, "XAU-USD", "diverging")],
+      venues: [venue("coinbase", "quoting", BTC, ETH), venue("kraken", "down", BTC, ETH), venue("massive", "quoting", XAU), venue("tradermade", "quoting", XAU)],
+      unpriced_markets: [unpriced(...BTC), unpriced(...ETH), unpriced(...XAU, "diverging")],
     });
     expect(serverLine("live", server, null)).toEqual({
       role: "status",
       lead: "Live prices for BTC-USD and ETH-USD are temporarily unavailable because the server has lost its connection to Kraken.",
-      rest: "Live prices for EUR-USD are temporarily unavailable because the server is not currently receiving enough up-to-date prices. Live prices for XAU-USD are temporarily unavailable because the prices received from different price feeds currently disagree. Trading in these markets will resume automatically once prices return.",
+      rest: "Live prices for XAU-USD are temporarily unavailable because the prices received from different price feeds currently disagree. Trading in these markets will resume automatically once prices return.",
     });
   });
 
   it("names four markets in full, and counts the rest past three", () => {
-    const markets = (n: number) => signed({ unpriced_markets: Array.from({ length: n }, (_, i) => unpriced(i + 1, `M${i + 1}`)) });
+    const ids = (n: number) => Array.from({ length: n }, (_, i): [number, string] => [i + 1, `M${i + 1}`]);
+    const markets = (n: number) => signed({ venues: [venue("coinbase", "down", ...ids(n)), venue("kraken", "quoting", ...ids(n))], unpriced_markets: ids(n).map((m) => unpriced(...m)) });
     expect(serverLine("live", markets(4), null)?.lead).toMatch(/^Live prices for M1, M2, M3 and M4 are/);
     expect(serverLine("live", markets(6), null)?.lead).toMatch(/^Live prices for M1, M2, M3 and 3 other markets are/);
+  });
+});
+
+describe("a market no feed prices", () => {
+  it.each([
+    // A dev node lists EUR-USD with no venue to quote it.
+    ["no venue that quotes it", []],
+    // A vendor's markets before its key is delivered.
+    ["venues whose connections are withheld", [venue("massive", "off", [10, "EUR-USD"]), venue("tradermade", "off", [10, "EUR-USD"])]],
+    ["fewer venues that can quote it than its price needs", [venue("massive", "off", [10, "EUR-USD"]), venue("tradermade", "down", [10, "EUR-USD"])]],
+    ["venues that take no quotes for it", [venue("cme", "not_expected", [10, "EUR-USD"]), venue("massive", "quoting", [10, "EUR-USD"])]],
+  ] as [string, ReturnType<typeof venue>[]][])("is left off the line for %s, as nothing but the server's operator changes it", (_, venues) => {
+    expect(serverLine("live", signed({ venues, unpriced_markets: [unpriced(10, "EUR-USD")] }), null)).toBeNull();
+  });
+
+  it("is left off the line while the markets a venue outage stops are named", () => {
+    // A dev node with live venues and Kraken cut: EUR-USD has no venue at all.
+    const server = signed({ venues: [venue("coinbase", "quoting", BTC, ETH), venue("kraken", "down", BTC, ETH)], unpriced_markets: [unpriced(...BTC), unpriced(...ETH), unpriced(10, "EUR-USD")] });
+    expect(serverLine("live", server, null)).toEqual({
+      role: "status",
+      lead: "Live prices for BTC-USD and ETH-USD are temporarily unavailable because the server has lost its connection to Kraken.",
+      rest: "Trading in these markets will resume automatically once prices return.",
+    });
   });
 });
 

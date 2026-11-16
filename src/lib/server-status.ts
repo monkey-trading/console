@@ -1,7 +1,8 @@
 /**
  * The one line across the app that says when the server has a problem (monkey-trading/console#398):
  * the connection to it lost, a server that cannot currently be verified, trading suspended by the
- * server, or open markets with no live price. Each clears by itself once the server says it has recovered.
+ * server, or open markets with no live price. Each clears by itself once the server says it has recovered;
+ * a market no feed prices, which nothing but its operator can change, is not on it.
  */
 
 import type { FeedStatus } from "./engine/attestation";
@@ -26,6 +27,9 @@ const FAILING: readonly [VenueState, (names: string, many: boolean) => string][]
   ["off", (names) => `the server is not currently connected to ${names}`],
   ["stale", (names) => `the prices received from ${names} are out of date`],
 ];
+
+/** The states in which a venue cannot quote a market until the server's operator acts: its connection withheld, or no quotes taken from it. */
+const UNFED: ReadonlySet<VenueState> = new Set(["off", "not_expected"]);
 
 /** Markets named in full before the rest are counted. */
 const NAMED_MARKETS = 3;
@@ -80,6 +84,15 @@ function causeOf(market: ServerStatus["unpriced_markets"][number], venues: Serve
   return causes.length > 0 ? { why: andList(causes), venue: true } : { why: reasonWords(market.reason), venue: false };
 }
 
+/**
+ * Whether as many venues as `market`'s price needs quote it, or will once they recover: false for a market
+ * no feed prices (the engine's `market_unfed`), such as a dev node's markets beyond crypto, or a vendor's
+ * before its key is delivered.
+ */
+function fed(market: ServerStatus["unpriced_markets"][number], venues: ServerStatus["venues"]): boolean {
+  return venues.filter((v) => v.symbols.some((s) => s.market === market.market && !UNFED.has(s.state))).length >= market.min_sources;
+}
+
 /** The markets of one cause, the first three named and the rest counted. */
 function marketWords(symbols: readonly string[]): string {
   return symbols.length > NAMED_MARKETS + 1 ? `${symbols.slice(0, NAMED_MARKETS).join(", ")} and ${symbols.length - NAMED_MARKETS} other markets` : andList(symbols);
@@ -113,5 +126,6 @@ export function serverLine(stream: FeedStatus, server: ServerRead | null, reason
   if (server?.kind !== "signed") return null;
   const hold = server.status.holds[0];
   if (hold !== undefined) return { role: "alert", ...holdLine(hold.cause) };
-  return server.status.unpriced_markets.length === 0 ? null : { role: "status", ...pricesLine(server.status) };
+  const outage = server.status.unpriced_markets.filter((m) => fed(m, server.status.venues));
+  return outage.length === 0 ? null : { role: "status", ...pricesLine({ ...server.status, unpriced_markets: outage }) };
 }
