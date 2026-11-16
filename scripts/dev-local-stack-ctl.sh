@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Drives the two-engine option of `dev-local-stack.sh` (SECOND_ENGINE=1), and its parameter votes
-# (GOVERNANCE=1), from a second terminal, on the running stack's Anvil chain. Development only: it
-# moves the local chain's clock and sends transactions from the stack's published test keys. `status`
-# and `fund-house` also work on one engine under either genesis, where a stack with LAUNCH_VALUES=1 (the
-# default for production-genesis.toml) writes its info file by default.
+# Drives the two-engine option of `dev-local-stack.sh` (SECOND_ENGINE=1), its parameter votes
+# (GOVERNANCE=1) and its rotation (ROTATION=1), from a second terminal, on the running stack's Anvil chain.
+# Development only: it moves the local chain's clock and sends transactions from the stack's published test
+# keys. `status` and `fund-house` also work on one engine under either genesis, where a stack with
+# LAUNCH_VALUES=1 (the default for production-genesis.toml) writes its info file by default.
 #
 #   status            the genesis the node runs and, with two engines, the registry's election, the vault's release,
-#                     both engines, the chain's clock
+#                     both engines, the chain's clock; with ROTATION=1, the turns, the operator in effect, the vault's
+#                     signer and each engine
 #   elect             closes the election epoch once it has ended (the registry's epoch is a minute);
 #                     the candidate with the most delegated stake wins if it is eligible, has the
 #                     quorum, and is not the operator in effect already
@@ -20,6 +21,8 @@
 #                     with GOVERNANCE=1, proposes the admin command JSON (its canonical form, as the
 #                     engine serialises it) as MEMBER (operator, second or third), which votes yes
 #   vote MEMBER ID    with GOVERNANCE=1, votes yes on proposal ID as MEMBER
+#   stop-operator     with ROTATION=1, stops the operator in effect's engine, waits for the other members to promote
+#                     the next member's standby key, then has the stack start the stopped engine again, as a member
 #
 # What `handover` leaves alone and what it does not is in the README's walkthrough: the chain's
 # clock moves, the engine's does not. Withdrawal authorizations expire on the chain's clock, so none
@@ -52,6 +55,9 @@ first_candidate="$(field operator)"
 second_candidate="$(field secondCandidate)"
 third_candidate="$(field thirdCandidate)"
 vote_contract="$(field vote)"
+schedule="$(field schedule)"
+third_api="$(field thirdApiOrigin)"
+work_dir="$(field workDir)"
 usdc_units=1000000
 
 two_engines() {
@@ -79,6 +85,10 @@ who() {
 status() {
   echo "Genesis            $(field genesisFile)"
   echo "                   $(field genesisSummary)"
+  if [[ -n "$third_api" ]]; then
+    rotation_status
+    return
+  fi
   [[ -n "$second_api" ]] || {
     echo "Engine             $(health "$first_api") at $first_api (one engine; SECOND_ENGINE=1 adds the election and the handover)"
     return
@@ -219,6 +229,102 @@ vote() {
   echo "$1 voted yes on proposal $2."
 }
 
+rotating() {
+  [[ -n "$third_api" ]] || die "this stack runs no engine per rotation-set member; start it with ROTATION=1"
+}
+# The rotation-set members' engines, by index, as the stack names them.
+member_names=(first second third)
+member_candidates=("$first_candidate" "$second_candidate" "$third_candidate")
+member_apis=("$first_api" "$second_api" "$third_api")
+member_metrics=("$(field metricsUrl)" "$(field secondMetricsUrl)" "$(field thirdMetricsUrl)")
+# The member whose candidate is `$1`, by index.
+member_of() {
+  local i
+  for i in 0 1 2; do
+    if [[ "$(lower "${member_candidates[$i]}")" == "$(lower "$1")" ]]; then
+      echo "$i"
+      return 0
+    fi
+  done
+  return 1
+}
+# The candidate the registry names as the operator in effect.
+named_operator() { call "$registry" 'namedOperator()((address,address,bytes32,uint64))' | tr -d '()' | cut -d, -f1 | tr -d ' '; }
+signer_epoch() { call "$vault" 'signerEpoch()(uint64)' | first_of; }
+# Whether member `$1`'s engine serves its API, follows the operator in effect (its metrics answer), or is stopped.
+engine_state() {
+  if [[ "$(health "${member_apis[$1]}")" == serving ]]; then
+    echo "serving at ${member_apis[$1]}"
+  elif curl -s --max-time 2 -o /dev/null "${member_metrics[$1]}"; then
+    echo "following the operator in effect"
+  else
+    echo "stopped"
+  fi
+}
+
+rotation_status() {
+  local now wall length offset current turn drawn candidate reason i line named
+  now="$(chain_time)"
+  wall="$(date -u +%s)"
+  length="$(call "$schedule" 'turnLength()(uint64)' | first_of)"
+  offset="$(call "$schedule" 'boundary(uint64)(uint64)' 0 | first_of)"
+  current=$(((now - offset) / length))
+  named="$(named_operator)"
+  echo "Chain clock        $(stamp "$now") ($((now - wall)) s ahead of this machine's clock)"
+  if i="$(member_of "$named")"; then
+    echo "Operator in effect the ${member_names[$i]} engine, at ${member_apis[$i]}"
+  else
+    echo "Operator in effect $named"
+  fi
+  echo "Vault's signer     $(call "$vault" 'checkpointSigner()(address)') (signer epoch $(signer_epoch))"
+  echo "Turns              $((length / 60)) minutes each; the stack draws each one a turn before it begins"
+  for ((turn = current - 1; turn <= current + 2; turn++)); do
+    drawn="$(call "$schedule" 'turnOf(uint64)((address,uint16,uint8,uint32,uint64,uint64,bytes32,address))' "$turn" | tr -d '( )')"
+    candidate="$(cut -d, -f1 <<<"$drawn")"
+    reason="$(cut -d, -f3 <<<"$drawn")"
+    if i="$(member_of "$candidate")"; then
+      line="the ${member_names[$i]} engine"
+      case "$reason" in
+        1) line="$line, by a skip past a member that did not take it" ;;
+        2) line="$line, by a promotion of its standby key" ;;
+      esac
+    elif ((turn > current)); then
+      line="not drawn yet"
+    else
+      line="not drawn, so the member of the turn drawn before it holds on"
+    fi
+    if ((turn == current)); then line="$line (now)"; fi
+    printf '  Turn %-12s from %s: %s\n' "$turn" "$(stamp "$((turn * length + offset))")" "$line"
+  done
+  echo "First engine       $(engine_state 0)"
+  echo "Second engine      $(engine_state 1)"
+  echo "Third engine       $(engine_state 2)"
+}
+
+stop_operator() {
+  rotating
+  local named i epoch interval tolerance misses window deadline promoted p started=$SECONDS
+  named="$(named_operator)"
+  i="$(member_of "$named")" || die "the operator in effect, $named, runs no engine of this stack"
+  epoch="$(signer_epoch)"
+  read -r interval tolerance misses _ <<<"$(call "$schedule" 'liveness()(uint64,uint64,uint16,uint16)' | awk '{print $1}' | tr '\n' ' ')"
+  window=$((interval * (misses + 1) + tolerance))
+  touch "$work_dir/stop-${member_names[$i]}"
+  echo "Stopping the ${member_names[$i]} engine, the operator in effect. The other members record each heartbeat it misses, and"
+  echo "once it has missed $misses in a row they promote the next member's standby key to the vault's signer, about $window s from now."
+  deadline=$((SECONDS + window + 240))
+  while (($(signer_epoch) == epoch)); do
+    ((SECONDS < deadline)) || die "no promotion within $((window + 240)) s; see the members' logs in $work_dir"
+    sleep 5
+  done
+  promoted="$(named_operator)"
+  p="$(member_of "$promoted")" || die "the vault's new signer belongs to no engine of this stack"
+  echo "After $((SECONDS - started)) s, the vault installed the ${member_names[$p]} engine's standby key in signer epoch $(signer_epoch): that engine"
+  echo "serves the turn from its copy of the log, at ${member_apis[$p]}."
+  touch "$work_dir/start-${member_names[$i]}"
+  echo "The ${member_names[$i]} engine starts again and follows the ${member_names[$p]} engine until its next turn."
+}
+
 fund_house() {
   local amount="${1:-100000}" house
   [[ "$amount" =~ ^[0-9]+$ ]] || die "the amount is whole USDC: $amount"
@@ -236,5 +342,6 @@ case "${1:-}" in
   fund-house) fund_house "${2:-}" ;;
   propose) propose "${2:-}" "${3:-}" "${4:-}" ;;
   vote) vote "${2:-}" "${3:-}" ;;
-  *) die "usage: $0 status | elect | handover | fund-house [USDC] | propose MEMBER normal|fast JSON | vote MEMBER ID" ;;
+  stop-operator) stop_operator ;;
+  *) die "usage: $0 status | elect | handover | fund-house [USDC] | propose MEMBER normal|fast JSON | vote MEMBER ID | stop-operator" ;;
 esac

@@ -182,6 +182,53 @@ and with a schedule the registry's closes adopt rotation sets, so `elect` and `h
 proposal's voting window runs on the chain's clock and the tab counts it down on the engine's, so here it reads
 about eight days longer than it is, and the contract closes voting while the tab still counts.
 
+## Watch operator rotation
+
+While operator rotation is on, each turn of the operator schedule names one member of the rotation set as the
+operator, and at the turn's boundary that member's engine takes the keys and the log from the engine that held
+the previous turn. The stack can run an engine for every member, on a development build of the engine whose
+turns last five minutes instead of a day, so the turns hand over while you watch:
+
+```sh
+ROTATION=1 ./scripts/dev-local-stack.sh
+```
+
+This includes the two-engine option and the parameter votes, with the same three candidates, wallets and vote
+contract, and builds the node with the engine's `short-turns` feature, which a production build refuses. Anvil
+starts nine days in the past, so the registry's one-day epoch adopts the three candidates as the rotation set
+and the set's seven-day notice passes on the chain's clock before any engine starts. The stack then draws the turn
+in effect for the first engine (`https://127.0.0.1:8080`) and moves the chain to the present, after which it
+runs on true time, so the chain and the engines keep the same clock. The first engine seals new keys and the
+timelock installs its enclave as the vault's signer. The second (`https://127.0.0.1:8081`) and the third
+(`https://127.0.0.1:8082`) start as members and follow it. Each engine posts its checkpoints and log heads
+through relayers of its own and runs a liveness caller, and each seals a standby key, which the stack registers
+for its candidate once the vault's signer has vouched for it.
+
+An engine accepts a turn only once its log has recorded the rotation set a turn earlier, so the first handover
+comes within ten minutes of the stack coming up; the summary names the first turn the stack draws and when it
+begins. From then on the stack draws every turn at its draw deadline, a turn before it begins. It relays each
+turn's seed itself, in place of the seed relay, choosing one that gives the turns to the second, third and first
+engines in turn. At each boundary:
+
+1. The turn's member takes the keys and the end of the log from the engine that held the previous turn, which
+   goes back to following. The first engine, which started with new keys, exits once it has handed them over,
+   and the stack starts it again as a member.
+2. The console moves to the engine that holds the turn within a minute, with balances and positions intact, and
+   trading continues there. A browser keeps a self-signed certificate per origin: if the console does not move,
+   open the new engine's `/v1/health` once and accept its certificate.
+3. `./scripts/dev-local-stack-ctl.sh status` shows the turns around the present one and the engine each names,
+   the operator in effect, the vault's signer, and whether each engine serves, follows or is stopped.
+
+`./scripts/dev-local-stack-ctl.sh stop-operator` stops the operator in effect's engine. The other members record
+each heartbeat it misses, and after three in a row, within about two and a half minutes, they promote the next
+member's standby key to the vault's signer. That member's engine serves the rest of the turn from its own copy of
+the log, the console moves to it, and the command then has the stack start the stopped engine again as a member.
+At the next boundary the turn's member takes the keys from the promoted engine as from any other.
+
+Because the chain runs on true time, withdrawals pay here. While the turns rotate, the engine authorizes a
+withdrawal only once the next turn's member has checked the log up to its approval, so a withdrawal can be claimed
+from the next boundary, at most five minutes away.
+
 ## Read a local engine development node
 
 Needs the engine's repository, Cargo, and a development node (`config/dev.toml` lists
