@@ -83,12 +83,13 @@ no price, because a node's feed is the live venues or the mock and never both, a
 own domains; the summary lists them as unpriced. A genesis with no crypto market prices nothing, and one that lists
 `[genesis.staking]` is refused, because the stack initialises staking itself against the contracts it deploys.
 
-`config/production-genesis.toml` (or any genesis with `LAUNCH_VALUES=1`; `LAUNCH_VALUES=0` keeps the development values) also
-takes the launch deployment's values from the engine's `ops/runbooks/production-deployment.toml`: the MONKEY period budget and the vault's exit period, claim window and deposit staleness stay as they are at launch. The
+`config/production-genesis.toml` (or any genesis with `LAUNCH_VALUES=1`; `LAUNCH_VALUES=0` keeps the development
+values) also takes the launch deployment's values from the engine's `ops/runbooks/production-deployment.toml`: the
+MONKEY period budget and the vault's exit period, claim window and deposit staleness stay as they are at launch. The
 summary names what the stack shortens to be watchable: the staking epoch and the unstake cooldown (five minutes each), the
 liquidity floor (10,000 USDC, since the house starts empty), the timelock's delay (one second) and the start of
 emissions and staking (the next minute). `./scripts/dev-local-stack-ctl.sh status` names the genesis the stack runs, and
-`fund-house` fills the empty house under either genesis. `./scripts/check-local-stack-genesis.sh` starts the stack on the
+`fund-house` fills the empty house of a stack with launch values. `./scripts/check-local-stack-genesis.sh` starts the stack on the
 launch genesis and checks that the node serves 34 markets with their production cap floors.
 
 ## Try delegation, an election and a handover

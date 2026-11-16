@@ -913,7 +913,7 @@ staking_values="Development values, not production parameters: epochs of $((stak
                    $staking_start, an unstake cooldown of $((staking_cooldown_secs / 60)) minutes, and a liquidity floor of
                    $staking_floor_usdc USDC."
 if [[ "$launch" == 1 ]]; then
-  genesis_label="$genesis_file (a launch genesis, with the launch deployment's values from $deployment)"
+  genesis_label="$genesis_file (with the launch deployment's values from $deployment)"
   staking_values="From $deployment, unchanged: the MONKEY period budget (${monkey_period_budget%000000000000000000} MONKEY), the
                    vault's exit period ($((vault_exit_period / 86400)) days), claim window ($((vault_claim_window / 86400)) days) and
                    deposit staleness ($((vault_stale_after / 86400)) day).

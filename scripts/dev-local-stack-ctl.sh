@@ -2,8 +2,8 @@
 # Drives the two-engine option of `dev-local-stack.sh` (SECOND_ENGINE=1), and its parameter votes
 # (GOVERNANCE=1), from a second terminal, on the running stack's Anvil chain. Development only: it
 # moves the local chain's clock and sends transactions from the stack's published test keys. `status`
-# and `fund-house` also work on one engine under either genesis (GENESIS_FILE), where a stack with
-# a launch genesis writes its info file by default.
+# and `fund-house` also work on one engine under either genesis, where a stack with LAUNCH_VALUES=1 (the
+# default for production-genesis.toml) writes its info file by default.
 #
 #   status            the genesis the node runs and, with two engines, the registry's election, the vault's release,
 #                     both engines, the chain's clock
@@ -34,7 +34,7 @@ die() {
   echo "FAIL: $*" >&2
   exit 1
 }
-[[ -f "$info" ]] || die "no running stack: $info is missing (start the stack with SECOND_ENGINE=1 or GENESIS_FILE set, or give both the same STACK_INFO_FILE)"
+[[ -f "$info" ]] || die "no running stack: $info is missing (start the stack with SECOND_ENGINE=1 or LAUNCH_VALUES=1, or give both the same STACK_INFO_FILE)"
 field() { jq -r ".$1 // empty" "$info"; }
 rpc="$(field rpcUrl)"
 vault="$(field vault)"
