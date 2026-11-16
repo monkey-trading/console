@@ -103,9 +103,9 @@ export class MonkeyPanel {
       },
       // Each page awaits its own claim's proof: the reads the other claim needs stay loading, so it is never awaited here.
       awaitingProof: () => this.page !== "dashboard" && this.store.liveWallet !== null && proofAwaited({ ...this.state, ...this.state.wallet, account: this.store.liveWallet.address, entitlement: this.store.getSnapshot().entitlement, proof: this.state.wallet.proof, position: this.state.wallet.position }),
-      readProofs: () => {
+      readProofs: (fromEvent) => {
         const wallet = this.store.liveWallet;
-        if (this.page === "monkey") void readEntitlement(this.store, () => this.open);
+        if (this.page === "monkey") void readEntitlement(this.store, () => this.open, this.store.monkeySession.entitlementPace, fromEvent, this.state.overview.value?.emissions?.period_ms);
         else if (this.page === "staking" && wallet !== null) void this.readProof(wallet, this.cycle);
       },
       watchCheckpoints: (onCheckpoint) => this.store.deps.client.watch((event) => { if (event.type === "checkpoint") onCheckpoint(); }),
