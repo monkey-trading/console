@@ -29,6 +29,7 @@ describe("markets without a live price", () => {
     ["a silent venue", [venue("bitstamp", "silent", BTC)], "Bitstamp is not currently sending prices"],
     ["two silent venues", [venue("coinbase", "silent", BTC), venue("kraken", "silent", BTC)], "Coinbase and Kraken are not currently sending prices"],
     ["a venue the server is not connected to", [venue("tradermade", "off", BTC)], "the server is not currently connected to TraderMade"],
+    ["a venue whose prices are too old to count", [venue("coinbase", "stale", BTC)], "the prices received from Coinbase are out of date"],
     ["a venue down and another delayed", [venue("kraken", "delayed", BTC), venue("coinbase", "down", BTC)], "the server has lost its connection to Coinbase and the prices received from Kraken are delayed"],
     ["a venue this app has no name for", [venue("newvenue", "down", BTC)], "the server has lost its connection to Newvenue"],
     ["a venue down for another market only", [venue("coinbase", "down", ETH)], "the server is not currently receiving enough up-to-date prices"],

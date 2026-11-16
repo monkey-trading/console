@@ -6,7 +6,7 @@ import type { MarketId } from "./types";
 export type HoldCause = "trusted_time" | "log_sync_held" | "log_rollback";
 
 /** A venue connection's state for one symbol, best first; a venue shows the worst of its symbols. */
-export type VenueState = "not_expected" | "quoting" | "silent" | "delayed" | "down" | "off";
+export type VenueState = "not_expected" | "quoting" | "stale" | "silent" | "delayed" | "down" | "off";
 
 /** Why an open market has no price (`crates/node/src/api/pricing.rs`). */
 export type UnpricedReason = "too_few_sources" | "diverging" | "out_of_range";

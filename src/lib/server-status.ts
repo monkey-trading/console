@@ -24,6 +24,7 @@ const FAILING: readonly [VenueState, (names: string, many: boolean) => string][]
   ["delayed", (names) => `the prices received from ${names} are delayed`],
   ["silent", (names, many) => `${names} ${many ? "are" : "is"} not currently sending prices`],
   ["off", (names) => `the server is not currently connected to ${names}`],
+  ["stale", (names) => `the prices received from ${names} are out of date`],
 ];
 
 /** Markets named in full before the rest are counted. */
