@@ -26,7 +26,7 @@ export function FundingPage() {
           <h2 className="text-lead tracking-caps text-glow uppercase">Funding</h2>
           <Link href="/" className="inline-flex min-h-11 items-center text-caption text-fg-2 underline hover:text-glow focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0">Back to trading</Link>
         </div>
-        {!wallet && <p className="rounded-xl border border-line-2 p-4 text-caption text-fg-2">Connect a wallet from the top bar. It authorizes trading with one signature — the orders then sign in the browser — and it signs each withdrawal and sends each deposit to the vault.</p>}
+        {!wallet && <p className="rounded-xl border border-line-2 p-4 text-caption text-fg-2">Connect a wallet from the top bar. One signature lets this browser trade for you. Your wallet still signs each withdrawal and sends each deposit to the vault.</p>}
         <AccountSummary />
         <VolumeTierCard />
         {urgent && <ExitPanel key="exit" />}

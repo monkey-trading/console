@@ -96,7 +96,7 @@ describe("isCurrentTab", () => {
     expect(SECTIONS["/staking"].tabs.map((tab) => [tab.href, tab.label])).toEqual([
       ["/staking", "Delegate"],
       ["/staking/rewards", "Rewards"],
-      ["/staking/epochs", "Epochs"],
+      ["/staking/epochs", "Periods"],
       ["/staking/governance", "Governance"],
       ["/staking/rotation", "Rotation"],
     ]);

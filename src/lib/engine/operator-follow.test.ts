@@ -100,7 +100,7 @@ describe("OperatorFollower.check", () => {
     trial.verify = () => new Promise((resolve) => { verified = resolve as typeof verified; });
     const checking = follower.check();
     await settle();
-    expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, reason: "The new operator's node is being verified." });
+    expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, reason: "The check is under way." });
     expect(adopted).toEqual([]);
     verified(trial.verdict);
     await checking;
@@ -170,7 +170,7 @@ describe("OperatorFollower.check", () => {
     expect(follower.getSnapshot().kind).toBe("pinned");
     scheduler.advance(1);
     await stuck;
-    expect(follower.getSnapshot()).toEqual({ kind: "failed", origin: BUILD, reason: "your wallet did not answer in time" });
+    expect(follower.getSnapshot()).toEqual({ kind: "failed", origin: BUILD, reason: "your wallet didn't respond in time" });
     setOperator(async () => named());
     await follower.check();
     expect(operatorReads.count).toBe(2);

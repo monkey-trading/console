@@ -74,7 +74,7 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
   }, [built]);
   // A session that cannot be built is as fatal as it was when it was built in the render.
   if (failure !== null) throw failure;
-  if (built === null) return <p role="status" className="min-h-dvh bg-ink-1 p-6 text-data text-fg-2">Loading the console…</p>;
+  if (built === null) return <p role="status" className="min-h-dvh bg-ink-1 p-6 text-data text-fg-2">Loading…</p>;
   return <LoadedConsole initial={built}>{children}</LoadedConsole>;
 }
 

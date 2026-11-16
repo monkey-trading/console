@@ -35,12 +35,12 @@ export function ExitClaim({ view, settled }: { view: ExitView; settled: () => vo
           <button type="button" aria-disabled={held} onClick={unless(() => registerExitClaims(store))} className={BUTTON}>Register, {view.register.length === 1 ? "one transaction" : `${view.register.length} transactions`}</button>
         </div>
       )}
-      {(phase === "open" || phase === "closed") && exit.claimsProblem !== null && <p role="status" className="text-caption text-fg-2">Your wallet could not read what the vault holds for you: {clause(exit.claimsProblem)}. It is read again by itself.</p>}
+      {(phase === "open" || phase === "closed") && exit.claimsProblem !== null && <p role="status" className="text-caption text-fg-2">Your wallet couldn&apos;t check what the vault holds for you: {clause(exit.claimsProblem)}. Trying again automatically.</p>}
       {(phase === "open" || phase === "closed") && registered !== null && (
         <div className="space-y-2">
           <h4 className={STEP}>{phase === "open" ? "Step 2: be paid" : "Be paid"}</h4>
           <p className="text-caption leading-relaxed text-fg-2">
-            {exit.paid !== null ? `The vault paid ${usdc(exit.paid)} to your wallet.` : exit.claimed ? "The vault paid your claim." : registered > 0n ? `Registered: ${usdc(registered)}. ${phase === "open" ? "The vault pays it once the claim window closes, pro rata if it is short." : "The vault pays it now, pro rata if it is short."}` : phase === "open" ? "Nothing is registered yet." : "Nothing is registered for this account, or the vault has paid it."}
+            {exit.paid !== null ? `The vault paid ${usdc(exit.paid)} to your wallet.` : exit.claimed ? "The vault paid your claim." : registered > 0n ? `Registered: ${usdc(registered)}. ${phase === "open" ? "The vault pays it once the claim window closes. If it can't pay every claim in full, it shares its funds in proportion." : "The vault pays it now. If it can't pay every claim in full, it shares its funds in proportion."}` : phase === "open" ? "Nothing is registered yet." : "Nothing is registered for this account, or the vault has already paid it."}
           </p>
           {view.canClaim && <button type="button" aria-disabled={held} onClick={unless(() => claimVaultExit(store))} className={BUTTON}>Claim from the vault</button>}
         </div>
@@ -58,7 +58,7 @@ export function ExitClaim({ view, settled }: { view: ExitView; settled: () => vo
           </ul>
         </div>
       )}
-      {exit.claims?.unheldComplete === false && <p className="text-caption text-amber">The vault holds more deposits than this page reads at once, so a deposit of yours may not be listed. Its id can be refunded on the vault directly.</p>}
+      {exit.claims?.unheldComplete === false && <p className="text-caption text-amber">The vault has more deposits than this page can list, so one of yours may be missing. You can still refund it on the vault directly using its deposit number.</p>}
     </>
   );
 }

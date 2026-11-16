@@ -11,7 +11,7 @@ import { dismissSetup, setupFacts, setupVisible } from "@/lib/store/setup";
 import { useConsole, useSession } from "./ConsoleProvider";
 import { SetupSteps } from "./SetupSteps";
 
-const TITLE: Record<SetupStep, string> = { fund: "Fund with Anvil", declare: "Declaration", authorize: "Authorize this browser", deposit: "Deposit" };
+const TITLE: Record<SetupStep, string> = { fund: "Get test funds", declare: "Declaration", authorize: "Authorize this browser", deposit: "Deposit" };
 const BUTTON = "min-h-11 rounded border px-4 py-1.5 text-caption focus-visible:outline-2 focus-visible:outline-glow";
 
 /** A modal dialog, open while setup is. Every step stays listed: a finished one as a tick and a line, the current one expanded. Closing it, by its button or Escape, lasts for the connection. Focus moves to each step's heading as it becomes current. */

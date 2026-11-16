@@ -17,24 +17,24 @@ describe("exitView, before anything goes wrong", () => {
     expect(exitView(NO_EXIT, { ...WALLET, readOnly: true }).lines[0]?.text).toMatch(/read-only account/);
   });
   it("reads calmly while the vault's first read is out", () => {
-    expect(exitView(NO_EXIT, WALLET).lines).toEqual([{ tone: "calm", text: "Reading the vault…" }]);
+    expect(exitView(NO_EXIT, WALLET).lines).toEqual([{ tone: "calm", text: "Checking the vault…" }]);
   });
   it("says there is nothing to prove against before a first checkpoint", () => {
-    expect(text({ ...NO_EXIT, vault: factsAt(0, { hasCheckpoint: false, latestRoot: `0x${"0".repeat(64)}` }) })).toMatch(/no checkpoint yet/);
+    expect(text({ ...NO_EXIT, vault: factsAt(0, { hasCheckpoint: false, latestRoot: `0x${"0".repeat(64)}` }) })).toMatch(/no snapshot yet/);
   });
   it("says how old a proof at the vault's latest root is, and what it proves, without any warning", () => {
     const view = exitView({ ...NO_EXIT, vault: factsAt(100, { chainNow: 1_300 }), ...acceptedState(recordAt(100)) }, WALLET);
-    expect(view.lines).toEqual([{ tone: "calm", text: "Saved in this browser: checkpoint 100, posted 5 min ago. It proves 5,083 USDC, and a deposit still pending." }]);
+    expect(view.lines).toEqual([{ tone: "calm", text: "Saved in this browser: snapshot 100, posted 5 min ago. It covers 5,083 USDC, and a deposit still pending." }]);
     expect(view.notice).toBeNull();
     expect(view.rebuild).toBeNull();
   });
   it("says a proof holds only a pending deposit when that is all it holds", () => {
     const record = { ...recordAt(100), accountClaim: 0n, distributionOwed: 0n, proof: { ...recordAt(100).proof, approvals: [], queued: [] } };
-    expect(text({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(record) })).toMatch(/It proves a deposit still pending\.$/);
+    expect(text({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(record) })).toMatch(/It covers a deposit still pending\.$/);
   });
   it("stops counting a pending deposit once the vault has refunded it", () => {
     const record = recordAt(100);
-    expect(text({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(record), claims: { ...NO_CLAIMS, refunded: [2] } })).toMatch(/It proves 5,083 USDC\.$/);
+    expect(text({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(record), claims: { ...NO_CLAIMS, refunded: [2] } })).toMatch(/It covers 5,083 USDC\.$/);
   });
   it("says a proof has nothing left once all of it is paid or refunded", () => {
     const record = { ...recordAt(100), accountClaim: 0n, distributionOwed: 0n, paidApprovals: [1], proof: { ...recordAt(100).proof, queued: [] } };
@@ -42,7 +42,7 @@ describe("exitView, before anything goes wrong", () => {
   });
   it("is calm about an account with nothing at stake", () => {
     const exit = { ...NO_EXIT, vault: factsAt(100), nothing: true };
-    expect(exitView(exit, WALLET).lines).toEqual([{ tone: "calm", text: "Nothing to save: this account holds nothing in the vault." }]);
+    expect(exitView(exit, WALLET).lines).toEqual([{ tone: "calm", text: "Nothing to save: this account has nothing in the vault." }]);
     expect(exitView(exit, WALLET).notice).toBeNull();
   });
   it("is calm before a first proof has been tried", () => {
@@ -50,7 +50,7 @@ describe("exitView, before anything goes wrong", () => {
   });
   it("says it is updating only while a file is read, and holds its line through the node's reads", () => {
     const exit = { ...NO_EXIT, vault: factsAt(200), record: recordAt(100), attempt: { kind: "node-ahead", nodeSeq: 300 } as const };
-    expect(exitView({ ...exit, importing: true }, WALLET).lines).toEqual([{ tone: "calm", text: "Updating your proof to the vault's latest checkpoint…" }]);
+    expect(exitView({ ...exit, importing: true }, WALLET).lines).toEqual([{ tone: "calm", text: "Updating your proof to the vault's latest snapshot…" }]);
     expect(exitView({ ...exit, reading: true }, WALLET).lines).toEqual(exitView(exit, WALLET).lines);
   });
 });
@@ -58,12 +58,12 @@ describe("exitView, before anything goes wrong", () => {
 describe("exitView, when the proof has gone stale", () => {
   const behind = { ...NO_EXIT, vault: factsAt(200, { chainNow: 1_600 }), record: recordAt(100) };
   it("says calmly which checkpoint it is from, while being behind has not lasted", () => {
-    expect(exitView(behind, WALLET).lines).toEqual([{ tone: "calm", text: "Saved in this browser: checkpoint 100, posted 10 min ago." }]);
+    expect(exitView(behind, WALLET).lines).toEqual([{ tone: "calm", text: "Saved in this browser: snapshot 100, posted 10 min ago." }]);
   });
   it("leaves the other pages alone for the first hour, then tells them", () => {
     expect(exitView(behind, WALLET).notice).toBeNull();
     const old = { ...behind, vault: factsAt(200, { chainNow: 1_000 + 3_600 }) };
-    const warned = { tone: "warn", text: "Your exit proof is 1 h old, behind the vault's latest checkpoint." };
+    const warned = { tone: "warn", text: "Your exit proof is 1 h old and behind the vault's latest snapshot." };
     expect(exitView({ ...old, attempt: { kind: "node-failed", reason: "x" } }, WALLET).notice).toEqual(warned);
     expect(exitView({ ...old, missingSince: 1_000 }, WALLET).notice).toEqual(warned);
   });
@@ -73,12 +73,12 @@ describe("exitView, when the proof has gone stale", () => {
     expect(exitView({ ...old, reading: true, attempt: { kind: "node-failed", reason: "x" } }, WALLET).notice).toBeNull();
   });
   it.each<[string, ExitState["attempt"], RegExp, string]>([
-    ["a failed read", { kind: "node-failed", reason: "timed out" }, /could not be read: timed out\. It is read again by itself\./, "calm"],
-    ["the node away", { kind: "node-away", reason: "the node's feed is stale" }, /cannot be read now: the node's feed is stale/, "warn"],
-    ["a refused proof", { kind: "refused", reason: "its exit terms do not prove" }, /did not pass the vault's check, so it was not saved: its exit terms do not prove/, "bad"],
-    ["a wallet that could not check", { kind: "wallet-failed", reason: "no answer" }, /Your wallet could not check the proof: no answer\. It is checked again by itself\./, "calm"],
+    ["a failed read", { kind: "node-failed", reason: "timed out" }, /Couldn't get the proof from the server: timed out\. Trying again automatically\./, "calm"],
+    ["the node away", { kind: "node-away", reason: "prices aren't updating" }, /Can't get a proof from the server right now: prices aren't updating/, "warn"],
+    ["a refused proof", { kind: "refused", reason: "its exit terms do not prove" }, /failed the vault's check, so it wasn't saved: its exit terms do not prove/, "bad"],
+    ["a wallet that could not check", { kind: "wallet-failed", reason: "no answer" }, /Your wallet couldn't check the proof: no answer\. Trying again automatically\./, "calm"],
     ["no proof at the node yet", { kind: "no-proof" }, /has no proof to give yet/, "calm"],
-    ["the node behind the vault", { kind: "node-behind", nodeSeq: 50 }, /The node is behind the vault: its newest checkpoint is 50\. It is read again by itself\./, "calm"],
+    ["the node behind the vault", { kind: "node-behind", nodeSeq: 50 }, /The server is behind the vault: its newest snapshot is 50\. Trying again automatically\./, "calm"],
   ])("says why for %s", (_name, attempt, message, tone) => {
     const view = exitView({ ...behind, attempt }, WALLET);
     expect(view.lines.map((line) => line.text).join(" ")).toMatch(message);
@@ -86,48 +86,48 @@ describe("exitView, when the proof has gone stale", () => {
   });
   it("says calmly that a vault read which failed is read again by itself, until it has gone on failing", () => {
     for (const exit of [{ ...behind, vaultProblem: "wrong chain" }, { ...NO_EXIT, vaultProblem: "wrong chain" }]) {
-      expect(exitView(exit, WALLET).lines.at(-1)?.text).toMatch(/wrong chain\. It is read again by itself\.$/);
+      expect(exitView(exit, WALLET).lines.at(-1)?.text).toMatch(/wrong chain\. Trying again automatically\.$/);
       expect(exitView(exit, WALLET).lines.at(-1)?.tone).toBe("calm");
       expect(exitView({ ...exit, vaultFailures: 5 }, WALLET).lines.at(-1)?.tone).toBe("warn");
     }
   });
   it("says a wallet could not check a proof it still shows as saved, which no action trusts yet", () => {
     const view = exitView({ ...NO_EXIT, vault: factsAt(100), record: recordAt(100), attempt: { kind: "wallet-failed", reason: "no answer" } }, WALLET);
-    expect(view.lines.at(-1)).toEqual({ tone: "calm", text: "Your wallet could not check the proof: no answer. It is checked again by itself." });
+    expect(view.lines.at(-1)).toEqual({ tone: "calm", text: "Your wallet couldn't check the proof: no answer. Trying again automatically." });
   });
   it("says a saved proof the vault refused was removed", () => {
     const view = exitView({ ...NO_EXIT, vault: factsAt(100), attempt: { kind: "saved-refused", reason: "the root does not prove it" } }, WALLET);
-    expect(view.lines.at(-1)).toEqual({ tone: "bad", text: "The proof saved in this browser did not pass the vault's check, so it was removed: the root does not prove it." });
-    expect(view.notice?.text).toBe("Your exit proof did not pass the vault's check.");
+    expect(view.lines.at(-1)).toEqual({ tone: "bad", text: "The proof saved in this browser failed the vault's check, so it was removed: the root does not prove it." });
+    expect(view.notice?.text).toBe("Your exit proof failed the vault's check.");
   });
   it("is calm when the vault's latest checkpoint is only older than the account's funds", () => {
     const view = exitView({ ...NO_EXIT, vault: factsAt(100), attempt: { kind: "not-covered" } }, WALLET);
-    expect(view.lines).toEqual([{ tone: "calm", text: "No proof is saved in this browser for this account." }, { tone: "calm", text: "The vault's latest checkpoint is older than what this account holds now, so the next one brings its proof." }]);
+    expect(view.lines).toEqual([{ tone: "calm", text: "No proof is saved in this browser for this account." }, { tone: "calm", text: "The vault's latest snapshot is older than this account's current holdings, so the proof comes with the next one." }]);
     expect(view.notice).toBeNull();
   });
   it("tells every page once an account has gone an hour with no proof", () => {
     const missing = { ...NO_EXIT, vault: factsAt(100, { chainNow: 5_000 }), attempt: { kind: "node-ahead", nodeSeq: 200 } as const };
     expect(exitView({ ...missing, missingSince: 5_000 - 3_599 }, WALLET).notice).toBeNull();
-    expect(exitView({ ...missing, missingSince: 5_000 - 3_600 }, WALLET).notice?.text).toBe("This browser holds no exit proof at the vault's latest checkpoint.");
+    expect(exitView({ ...missing, missingSince: 5_000 - 3_600 }, WALLET).notice?.text).toBe("This browser has no exit proof for the vault's latest snapshot.");
     expect(exitView({ ...missing, missingSince: 5_000 - 3_600, nothing: true }, WALLET).notice).toBeNull();
   });
   it("tells every page when the vault's reads keep failing, and not for one", () => {
     expect(exitView({ ...behind, vaultProblem: "x", vaultFailures: 4 }, WALLET).notice).toBeNull();
-    expect(exitView({ ...behind, vaultProblem: "x", vaultFailures: 5 }, WALLET).notice?.text).toBe("Your wallet could not read the vault, so your exit proof may be behind.");
-    expect(exitView({ ...NO_EXIT, vaultProblem: "x", vaultFailures: 5 }, WALLET).notice?.text).toBe("Your wallet could not read the vault, so your exit proof may be behind.");
+    expect(exitView({ ...behind, vaultProblem: "x", vaultFailures: 5 }, WALLET).notice?.text).toBe("Your wallet couldn't reach the vault, so your exit proof may be out of date.");
+    expect(exitView({ ...NO_EXIT, vaultProblem: "x", vaultFailures: 5 }, WALLET).notice?.text).toBe("Your wallet couldn't reach the vault, so your exit proof may be out of date.");
   });
   it("says calmly that a node read which failed is read again by itself", () => {
-    expect(exitView({ ...behind, attempt: { kind: "node-failed", reason: "x" } }, WALLET).lines.at(-1)).toEqual({ tone: "calm", text: "The node's proof could not be read: x. It is read again by itself." });
+    expect(exitView({ ...behind, attempt: { kind: "node-failed", reason: "x" } }, WALLET).lines.at(-1)).toEqual({ tone: "calm", text: "Couldn't get the proof from the server: x. Trying again automatically." });
     expect(exitView({ ...NO_EXIT, vault: factsAt(100), attempt: { kind: "node-failed", reason: "x" } }, WALLET).lines[0]?.tone).toBe("calm");
   });
   it("tells every page when the node's proof fails the vault's check", () => {
-    expect(exitView({ ...behind, attempt: { kind: "refused", reason: "x" } }, WALLET).notice?.text).toBe("Your exit proof did not pass the vault's check.");
+    expect(exitView({ ...behind, attempt: { kind: "refused", reason: "x" } }, WALLET).notice?.text).toBe("Your exit proof failed the vault's check.");
   });
   it("still shows the proof when the vault's read fails, saying it is from the last read", () => {
-    expect(text({ ...NO_EXIT, vault: factsAt(100), record: recordAt(100), vaultProblem: "no answer" })).toMatch(/could not read the vault just now, so this is from its last read: no answer/);
+    expect(text({ ...NO_EXIT, vault: factsAt(100), record: recordAt(100), vaultProblem: "no answer" })).toMatch(/couldn't reach the vault just now, so this shows the last check: no answer/);
   });
   it("says so when the vault cannot be read at all", () => {
-    expect(exitView({ ...NO_EXIT, vaultProblem: "wrong chain" }, WALLET).lines).toEqual([{ tone: "calm", text: "Your wallet could not read the vault: wrong chain. It is read again by itself." }]);
+    expect(exitView({ ...NO_EXIT, vaultProblem: "wrong chain" }, WALLET).lines).toEqual([{ tone: "calm", text: "Your wallet couldn't reach the vault: wrong chain. Trying again automatically." }]);
   });
 });
 
@@ -135,15 +135,15 @@ describe("exitView, when the browser will not keep it", () => {
   it("tells this page to export it, and every other page to look", () => {
     const exit = { ...NO_EXIT, vault: factsAt(100), record: recordAt(100), storageProblem: "the quota is exceeded" };
     const view = exitView(exit, WALLET);
-    expect(view.lines.at(-1)).toEqual({ tone: "bad", text: "This browser did not keep your proof: the quota is exceeded. Export it now, or it is gone when this page closes." });
-    expect(view.notice?.text).toBe("This browser did not keep your exit proof.");
+    expect(view.lines.at(-1)).toEqual({ tone: "bad", text: "This browser didn't save your proof: the quota is exceeded. Export it now, or it's lost when you close this page." });
+    expect(view.notice?.text).toBe("This browser didn't save your exit proof.");
   });
   it("ends the browser's own sentence once", () => {
     const line = exitView({ ...NO_EXIT, vault: factsAt(100), record: recordAt(100), storageProblem: "The quota has been exceeded." }, WALLET).lines.at(-1);
-    expect(line?.text).toBe("This browser did not keep your proof: The quota has been exceeded. Export it now, or it is gone when this page closes.");
+    expect(line?.text).toBe("This browser didn't save your proof: The quota has been exceeded. Export it now, or it's lost when you close this page.");
   });
   it("says so with no proof to export", () => {
-    expect(text({ ...NO_EXIT, vault: factsAt(100), storageProblem: "denied" })).toMatch(/Your proof cannot be saved: denied/);
+    expect(text({ ...NO_EXIT, vault: factsAt(100), storageProblem: "denied" })).toMatch(/Your proof can't be saved: denied/);
   });
 });
 
@@ -152,8 +152,8 @@ describe("exitView, as the vault's exit comes", () => {
     const view = exitView({ ...NO_EXIT, vault: factsAt(100, { chainNow: DUE }), record: recordAt(100), terms: recordAt(100).proof.terms }, WALLET);
     expect(view.phase).toBe("due");
     expect(view.canStart).toBe(true);
-    expect(view.lines[0]?.text).toMatch(/No checkpoint has been posted for 30 d, so anyone may start the vault's exit. Starting it is permanent/);
-    expect(view.notice?.text).toBe("No checkpoint has been posted for 30 d. The vault's exit can start.");
+    expect(view.lines[0]?.text).toMatch(/The server hasn't posted a snapshot for 30 d, so anyone can start the vault's exit. Starting it is permanent/);
+    expect(view.notice?.text).toBe("The server hasn't posted a snapshot for 30 d, so the vault's exit can now start.");
   });
   it("does not offer to start it with a proof at another root", () => {
     const view = exitView({ ...NO_EXIT, vault: factsAt(200, { chainNow: DUE }), record: recordAt(100) }, WALLET);
@@ -177,7 +177,7 @@ describe("exitView, as the vault's exit comes", () => {
     expect(view.register).toEqual([]);
     expect(view.refunds).toEqual([]);
     expect(view.canClaim).toBe(false);
-    expect(view.lines[1]?.text).toMatch(/Your saved proof is from checkpoint 100.*The vault's latest is checkpoint 200, so the vault would refuse a claim from it/);
+    expect(view.lines[1]?.text).toMatch(/Your saved proof is from snapshot 100.*The vault's latest snapshot is 200, so the vault would refuse a claim based on it/);
     expect(view.rebuild).toBe(`engine exit-proof --log <mirrored log> --seq 200 --account ${ACCOUNT}`);
   });
   it("does not send an account with nothing at stake to the offline builder, or interrupt its other pages", () => {
@@ -204,7 +204,7 @@ describe("exitView, as the vault's exit comes", () => {
     expect(view.phase).toBe("closed");
     expect(view.canClaim).toBe(true);
     expect(view.register).toEqual([]);
-    expect(view.notice?.text).toMatch(/Your registered 0.000007 USDC can be paid/);
+    expect(view.notice?.text).toMatch(/You can now collect your registered 0.000007 USDC/);
   });
   it("offers to start from exit terms the vault accepted, though the proof gave this account nothing", () => {
     const view = exitView({ ...NO_EXIT, vault: factsAt(100, { chainNow: DUE }), terms: fullProof(100).terms }, WALLET);
@@ -214,11 +214,11 @@ describe("exitView, as the vault's exit comes", () => {
   it("promises no next checkpoint once the exit has started", () => {
     const started = factsAt(200, { exitStartedAt: 5_000, chainNow: 6_000 });
     const said = (attempt: ExitState["attempt"]) => exitView({ ...NO_EXIT, vault: started, record: recordAt(100), attempt }, WALLET).lines.map((line) => line.text).join(" ");
-    expect(said({ kind: "node-ahead", nodeSeq: 300 })).toMatch(/does not hold\. The vault takes no more checkpoints now\./);
-    expect(said({ kind: "node-failed", reason: "x" })).toMatch(/It is read again by itself\./);
-    expect(said({ kind: "no-proof" })).toMatch(/The vault takes no more checkpoints now\./);
-    expect(said({ kind: "not-covered" })).toMatch(/final checkpoint is older than what this account holds now/);
-    expect(said({ kind: "node-ahead", nodeSeq: 300 })).not.toMatch(/next checkpoint/);
+    expect(said({ kind: "node-ahead", nodeSeq: 300 })).toMatch(/doesn't have\. The vault takes no more snapshots now\./);
+    expect(said({ kind: "node-failed", reason: "x" })).toMatch(/Trying again automatically\./);
+    expect(said({ kind: "no-proof" })).toMatch(/The vault takes no more snapshots now\./);
+    expect(said({ kind: "not-covered" })).toMatch(/final snapshot is older than this account's current holdings/);
+    expect(said({ kind: "node-ahead", nodeSeq: 300 })).not.toMatch(/next snapshot/);
   });
   it("offers a claim with no proof, which it does not need", () => {
     expect(exitView({ ...NO_EXIT, vault: closed, claims: { ...NO_CLAIMS, exitClaim: 7n } }, WALLET).canClaim).toBe(true);

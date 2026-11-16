@@ -210,10 +210,10 @@ describe("claimEmissions", () => {
 
   it("waits on a verdict that may sign, says why, and sends nothing: the transaction would be built from the node's proof", async () => {
     const refusals: [AttestationStatus, string][] = [
-      [{ kind: "attested", release: "r", address: ACCOUNT, why: "Your wallet did not answer." }, "the vault's current release has not been checked"],
-      [{ kind: "clock", skewMs: 60_000 }, "your device clock differs from the node's signed time"],
-      [{ kind: "unverified", reason: "no" }, "the node's attestation is not verified"],
-      [{ kind: "reverifying" }, "the node is being verified again"],
+      [{ kind: "attested", release: "r", address: ACCOUNT, why: "Your wallet did not answer." }, "this server hasn't been checked against the vault yet"],
+      [{ kind: "clock", skewMs: 60_000 }, "your device clock is wrong"],
+      [{ kind: "unverified", reason: "no" }, "the server couldn't be verified"],
+      [{ kind: "reverifying" }, "the server is being verified again"],
     ];
     for (const [attestation, why] of refusals) {
       const { client, provider, store } = await connected({ emissionsClaimed: 0n, latestSeq: 40 });
@@ -221,7 +221,7 @@ describe("claimEmissions", () => {
       store.patch({ attestation });
       await claimEmissions(store);
       expect(provider.sent).toHaveLength(0);
-      expect(store.getSnapshot().notices.emissions?.text).toBe(`The console will not claim MONKEY: ${why}.`);
+      expect(store.getSnapshot().notices.emissions?.text).toBe(`You can't claim MONKEY right now because ${why}.`);
       expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
     }
   });
@@ -234,7 +234,7 @@ describe("claimEmissions", () => {
     };
     await claimEmissions(store);
     expect(provider.sent).toHaveLength(0);
-    expect(store.getSnapshot().notices.emissions?.text).toBe("The console will not claim MONKEY: the vault's current release has not been checked.");
+    expect(store.getSnapshot().notices.emissions?.text).toBe("You can't claim MONKEY right now because this server hasn't been checked against the vault yet.");
   });
 
   it("stands down when the wallet changes while the fresh reads run", async () => {

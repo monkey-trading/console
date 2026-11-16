@@ -11,7 +11,7 @@ distributions paid — live on the Dashboard page under one range control.
 
 By default this build runs against a simulated node inside the browser. Prices, fills and funds are
 simulated, and the app says so on screen. It opens on a demo account with positions, resting orders,
-history and a withdrawal in the queue; Mock controls can reset it to an empty account.
+history and a withdrawal in the queue; Demo controls can reset it to an empty account.
 
 A build can instead talk to a real engine node: it checks the node's attestation, shows only answers the
 attested enclave signed for the request, and follows the node's signed stream, which starts at the live end of the log and reconnects there, marking the feed stale
@@ -33,7 +33,7 @@ npm ci
 npm run dev
 ```
 
-The app is served at `http://localhost:3000`. The Mock controls button in the top strip changes the
+The app is served at `http://localhost:3000`. The Demo controls button in the top strip changes the
 simulated node: the region it sees you in (to show the geo-block), its attestation, price shocks that
 trigger a close-out, market halts, stress levels, and vault liquidity for the withdrawal queue. Before sending a change, run `npm run lint`,
 `npm run typecheck`, `npm test`, `npm run build`, and `npm audit --audit-level=high`; CI runs these,

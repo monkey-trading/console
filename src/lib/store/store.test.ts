@@ -97,7 +97,7 @@ describe("the user's path", () => {
     await attestEligibility(store, "professional");
     expect(store.getSnapshot().attestation.kind).toBe("unverified");
     expect(store.getSnapshot().eligibility).toBeNull();
-    expect(store.getSnapshot().notices.setup?.text).toContain("will not sign");
+    expect(store.getSnapshot().notices.setup?.text).toContain("You can't sign right now because");
   });
 
   it("shows the geo-block when the node refuses the region, and clears it when the region changes", async () => {
@@ -137,7 +137,7 @@ describe("what the store refuses or hides", () => {
     node.controls.setAttestationMode("unverifiable");
     await store.checkNode();
     await deposit(store, fixedFromInt(1_000));
-    expect(store.getSnapshot().notices.deposit?.text).toContain("will not send a deposit");
+    expect(store.getSnapshot().notices.deposit?.text).toContain("You can't deposit right now because");
     expect(node.client.state.account(store.getSnapshot().wallet?.address ?? "").pending).toEqual([]);
   });
 
@@ -187,7 +187,7 @@ describe("what the store refuses or hides", () => {
     const { node, store } = await funded();
     const me = store.getSnapshot().wallet?.address ?? "";
     node.client.state.emit({ type: "tick" }, [{ type: "order_cancelled", account: me, order_id: 7, reason: "unfillable" }]);
-    expect(store.getSnapshot().notices.account?.text).toContain("could not be filled and was cancelled");
+    expect(store.getSnapshot().notices.account?.text).toContain("couldn't be filled, so it was cancelled");
     node.client.state.emit({ type: "tick" }, [{ type: "close_out", account: me, equity: "1", margin: "10" }]);
     expect(store.getSnapshot().notices.account?.text).toContain("closed out");
     // Another account's close-out or cancelled order is not the user's news.

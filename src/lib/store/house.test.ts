@@ -87,7 +87,7 @@ describe("the store's house panel state", () => {
     // The account failure cannot stale the figures the markets and house reads just refreshed.
     expect(store.getSnapshot().houseFresh).toBe(true);
     const first = store.getSnapshot().notices.accountRead;
-    expect(first).toMatchObject({ tone: "error", text: "Your account could not be read: account unavailable. The console tries again by itself." });
+    expect(first).toMatchObject({ tone: "error", text: "Couldn't load your account: account unavailable. Trying again automatically." });
     // The same failure on the next refresh is the same notice, not a new one.
     await store.refresh(false);
     await settle();

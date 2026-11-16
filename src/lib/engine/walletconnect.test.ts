@@ -26,7 +26,7 @@ describe("WalletConnectConnector.connect", () => {
     expect(rest).toEqual({
       projectId: "0123456789abcdef0123456789abcdef",
       relayUrl: WALLETCONNECT_RELAY,
-      metadata: { name: "Monkey Trading", description: "The Monkey Trading console", url: "https://console.example", icons: [] },
+      metadata: { name: "Monkey Trading", description: "The Monkey Trading app", url: "https://console.example", icons: [] },
       telemetryEnabled: false,
       logger: "silent",
     });
@@ -44,7 +44,7 @@ describe("WalletConnectConnector.connect", () => {
       const connecting = env.connector.connect();
       await env.fake.called.promise;
       env.fake.pending.resolve(approved);
-      await expect(connecting).rejects.toThrow("did not approve signing on chain 31337");
+      await expect(connecting).rejects.toThrow("didn't approve signing on chain 31337");
       expect([env.fake.disconnects, env.fake.closes]).toEqual([1, 1]);
       expect(env.connector.pairing()).toEqual({ status: "idle" });
     }
@@ -56,7 +56,7 @@ describe("WalletConnectConnector.connect", () => {
     await expect(connector.connect()).rejects.toThrow("already open");
     await fake.called.promise;
     fake.emit("display_uri", "https://example.com/pair");
-    await expect(connecting).rejects.toThrow("pairing link the console does not recognise");
+    await expect(connecting).rejects.toThrow("pairing link this app doesn't recognise");
     expect(connector.pairing()).toEqual({ status: "idle" });
   });
 
@@ -65,7 +65,7 @@ describe("WalletConnectConnector.connect", () => {
     const connecting = connector.connect();
     await fake.called.promise;
     fake.pending.reject({ code: 5000, message: "User rejected." });
-    await expect(connecting).rejects.toThrow("Your wallet did not connect over WalletConnect: User rejected.");
+    await expect(connecting).rejects.toThrow("Your wallet didn't connect over WalletConnect: User rejected.");
     // Nothing is left for the relay socket to carry, so it closes.
     expect([fake.cleanups.length, fake.closes]).toEqual([1, 1]);
   });
@@ -76,8 +76,8 @@ describe("WalletConnectConnector.connect", () => {
       loads += 1;
       throw new Error("chunk failed");
     });
-    await expect(connector.connect()).rejects.toThrow("WalletConnect did not start");
-    await expect(connector.connect()).rejects.toThrow("WalletConnect did not start");
+    await expect(connector.connect()).rejects.toThrow("WalletConnect didn't start");
+    await expect(connector.connect()).rejects.toThrow("WalletConnect didn't start");
     expect(loads).toBe(2);
   });
 });
@@ -142,7 +142,7 @@ describe("the WalletConnect wallet", () => {
     expect(await wallet.claimed?.(3)).toBe(true);
     // A balance and an allowance of nothing; the approval is not sent, since the session cannot return its receipt.
     fake.answers = [`0x${"f".repeat(64)}`, `0x${"0".repeat(64)}`];
-    await expect(wallet.deposit(10_000_000_000n)).rejects.toThrow("could not read transaction receipts, so the console did not ask it to approve the vault: Your wallet does not allow eth_getTransactionReceipt over WalletConnect");
+    await expect(wallet.deposit(10_000_000_000n)).rejects.toThrow("couldn't check transactions, so it wasn't asked to approve the vault: Your wallet doesn't allow eth_getTransactionReceipt over WalletConnect");
     expect(fake.requests.map((r) => [r.method, r.chain])).toEqual([
       ["eth_call", "eip155:31337"],
       ["eth_call", "eip155:31337"],

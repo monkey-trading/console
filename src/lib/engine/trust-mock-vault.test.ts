@@ -44,6 +44,6 @@ describe("a dev build's mock node", () => {
   it("refuses a release the vault does not name, an enclave it does not name, and a failed read", async () => {
     expect((await judge([DIGEST], { release: `0x${"ee".repeat(32)}`, signer: ENCLAVE })).status).toEqual({ kind: "unverified", reason: NOT_NAMED });
     expect((await judge([DIGEST], { release: releaseName(DIGEST, CONFIG), signer: "0xff" })).status).toEqual({ kind: "unverified", reason: NOT_THE_SIGNER });
-    expect((await judge([DIGEST], new Error("no answer"))).status).toEqual({ kind: "unverified", reason: "Your wallet could not read the vault's current release: no answer" });
+    expect((await judge([DIGEST], new Error("no answer"))).status).toEqual({ kind: "unverified", reason: "Your wallet couldn't check this server against the vault: no answer" });
   });
 });

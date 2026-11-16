@@ -17,9 +17,9 @@ export function FaucetCard() {
   const able = wallet !== null && !readOnly && !busy;
   return (
     <section aria-labelledby="faucet-title" className="p-4">
-      <h4 id="faucet-title" className="text-label tracking-caps text-fg-3 uppercase">Dev faucet</h4>
+      <h4 id="faucet-title" className="text-label tracking-caps text-fg-3 uppercase">Test faucet</h4>
       <p className="mt-3 text-caption text-fg-2">
-        Mint 10,000 mock USDC to the connected wallet and top its gas up to 1 ETH, straight from the local Anvil chain. Dev builds only; your wallet signs nothing.
+        Add 10,000 test USDC to the connected wallet and top its gas up to 1 ETH, straight from the local test chain. This is only in test versions, and your wallet doesn&apos;t sign anything.
       </p>
       <button
         type="button"
@@ -27,11 +27,11 @@ export function FaucetCard() {
         aria-disabled={!able}
         className="mt-4 min-h-11 rounded border border-glow bg-glow/10 px-4 py-2.5 text-caption text-glow hover:bg-glow/20 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 lg:min-h-0"
       >
-        Fund with Anvil
+        Get test funds
       </button>
       <Notice surface="faucet" />
       {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet first.</p>}
-      {readOnly && <p className="mt-2 text-label text-fg-3">The watched account is read-only, so the faucet cannot fund it.</p>}
+      {readOnly && <p className="mt-2 text-label text-fg-3">You&apos;re viewing this account read-only, so the faucet can&apos;t fund it.</p>}
     </section>
   );
 }

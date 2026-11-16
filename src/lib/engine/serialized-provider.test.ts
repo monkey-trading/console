@@ -174,7 +174,7 @@ describe("requestWithin", () => {
       const wallet = serialized({ request: ({ method }) => { asked.push(method); return method === "eth_chainId" ? new Promise(() => {}) : Promise.resolve(method); } });
       const read = withinMs(wallet, { method: "eth_chainId" }, 1000);
       const sign = wallet.request({ method: "eth_signTypedData_v4" });
-      const refused = expect(read).rejects.toThrow("did not answer in time");
+      const refused = expect(read).rejects.toThrow("didn't respond in time");
       await vi.advanceTimersByTimeAsync(999);
       expect(asked).toEqual(["eth_chainId"]);
       await vi.advanceTimersByTimeAsync(1);

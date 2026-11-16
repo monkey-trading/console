@@ -96,7 +96,7 @@ export class MockControls {
     const { state } = this.client;
     const key = address.toLowerCase();
     const claimed = state.claimedMonkey.get(key) ?? 0n;
-    if (entitled <= claimed) throw new Error("The simulated vault has already minted at least that much to this account.");
+    if (entitled <= claimed) throw new Error("In the demo, the vault has already paid at least that much MONKEY to this account.");
     state.claimedMonkey.set(key, entitled);
   }
 
@@ -160,7 +160,7 @@ export class MockControls {
   claimDistribution(address: string, proof: DistributionProof): void {
     // The simulated vault, like the real one, takes a proof at any checkpoint it has reached; a distribution only grows, so none names more than its newest does.
     const held = distributionProof(this.client.state, address);
-    if (proof.seq > held.seq || BigInt(proof.entitled) > BigInt(held.entitled)) throw new Error("The simulated vault holds no such proof for this account.");
+    if (proof.seq > held.seq || BigInt(proof.entitled) > BigInt(held.entitled)) throw new Error("In the demo, the vault has no matching record for this account.");
     claimDistribution(this.client.state, address, BigInt(proof.entitled));
   }
 

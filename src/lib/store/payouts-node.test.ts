@@ -153,7 +153,7 @@ describe("the node's payouts", () => {
     expect(client.payoutsReads).toHaveLength(20);
     expect(store.getSnapshot().payoutsRead).toBeNull();
     expect(payoutsOf(store.getSnapshot())[0]?.status.kind).toBe("waiting");
-    expect(store.getSnapshot().payoutsProblem).toContain("longer than this page reads");
+    expect(store.getSnapshot().payoutsProblem).toContain("more payouts than this page can show");
   });
 
   it("shows waiting with no message and no notice when the node predates the route, and keeps what the stream delivered", async () => {
@@ -170,9 +170,9 @@ describe("the node's payouts", () => {
   it("says plainly that a failed read failed, with no notice, and reads again on the next trigger", async () => {
     const { client, store } = await connected();
     store.patch({ approvals: [approved(1, 40)] });
-    client.payoutsError = new EngineError(0, "The node did not answer.");
+    client.payoutsError = new EngineError(0, "The server didn't respond.");
     await loadPayouts(store);
-    expect(store.getSnapshot().payoutsProblem).toBe("The node's list of your payouts could not be read: The node did not answer. It is read again by itself while a log check is named, and otherwise when the next withdrawal is approved or the page reloads.");
+    expect(store.getSnapshot().payoutsProblem).toBe("Couldn't load your payouts: The server didn't respond. It's checked again automatically when a records check is due, when your next withdrawal is approved, or when you reload the page.");
     expect(store.getSnapshot().notices).toEqual({});
     expect(payoutsOf(store.getSnapshot())[0]?.status.kind).toBe("waiting");
     client.payoutsError = null;
@@ -206,7 +206,7 @@ describe("the node's payouts", () => {
   it("drops a failure that arrives after the wallet changed", async () => {
     const { client, store } = await connected();
     let fail: () => void = () => undefined;
-    client.payouts = () => new Promise((_, reject) => { fail = () => reject(new EngineError(0, "The node did not answer.")); });
+    client.payouts = () => new Promise((_, reject) => { fail = () => reject(new EngineError(0, "The server didn't respond.")); });
     const reading = loadPayouts(store);
     store.setWallet({ address: OTHER, label: "Other" });
     fail();

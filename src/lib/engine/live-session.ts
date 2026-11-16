@@ -32,8 +32,8 @@ export interface Browser {
  * - `origin` is not one the build lists, which its CSP would refuse anyway
  */
 export function createLiveClient(deploy: Deploy, browser: Browser, load: typeof loadVerifier = loadVerifier, origin: string | null = deploy.origin): LiveEngineClient {
-  if (origin === null || deploy.chainId === null || deploy.vault === null) throw new Error("A live client needs a deployment with a node origin, chain id and vault.");
-  if (!listedOrigins(deploy).includes(origin)) throw new Error(`This build does not list the node origin ${origin}.`);
+  if (origin === null || deploy.chainId === null || deploy.vault === null) throw new Error("This version of the app is missing its server, chain or vault settings.");
+  if (!listedOrigins(deploy).includes(origin)) throw new Error(`This version of the app doesn't know the server at ${origin}.`);
   const allowMock = acceptsMockAttestation(deploy, origin);
   return new LiveEngineClient({
     origin, streamOrigin: streamOrigin(origin), chainId: deploy.chainId, vault: deploy.vault, heartbeatMs: deploy.heartbeatMs,

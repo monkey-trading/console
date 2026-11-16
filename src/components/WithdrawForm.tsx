@@ -40,7 +40,7 @@ export function WithdrawForm() {
           <input {...AMOUNT_INPUT} id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} className={INPUT} />
           <button type="submit" aria-disabled={!wallet || !valid || busy || gate.blocked} aria-describedby={gate.describedBy} className={SUBMIT}>Request withdrawal</button>
         </div>
-        <p className="mt-2 text-label leading-relaxed text-fg-3">The amount leaves your balance when you ask. The vault pays requests in order as it has liquidity, to six decimal places; the rest waits in the withdrawal queue.</p>
+        <p className="mt-2 text-label leading-relaxed text-fg-3">The amount leaves your balance as soon as you request it. Requests are paid in order as funds become available, and anything not paid straight away waits in the withdrawal queue.</p>
         {gate.note}
         <Notice surface="withdraw" />
         {account && account.unfinalised > 0n && <p className="mt-2 text-label text-fg-3">${formatFixedPlaces(account.unfinalised, 2)} of your balance is locked until its deposit is final.</p>}

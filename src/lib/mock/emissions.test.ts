@@ -195,7 +195,7 @@ describe("MONKEY emissions", () => {
     expect(await wallet.emissionsClaimed?.()).toEqual({ claimed: 0n, latestSeq: node.client.state.postedSeq });
     await wallet.claimEmissions?.(proof);
     expect(await wallet.emissionsClaimed?.()).toEqual({ claimed: EMISSION_PERIOD_BUDGET, latestSeq: node.client.state.postedSeq });
-    await expect(wallet.claimEmissions?.(proof)).rejects.toThrow("already minted");
+    await expect(wallet.claimEmissions?.(proof)).rejects.toThrow("already paid");
   });
 
   it("drops an account's pending period weight when the account is reset", async () => {

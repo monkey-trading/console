@@ -160,7 +160,7 @@ describe("close all", () => {
     await closeAll(store, TARGETS, BPS);
     expect(client.posted.filter((p) => p.route === "close_all")).toHaveLength(1);
     expect(client.marketReads).toBeGreaterThan(reads);
-    expect(store.getSnapshot().notices.positions?.text).toMatch(/^The node had already used nonce 4 for this account, so it did not take this request as sent\./);
+    expect(store.getSnapshot().notices.positions?.text).toMatch(/^Another request from this account was handled first, so this one wasn't accepted\./);
   });
 
   it("says plainly that an older node does not support it, and falls back to no single orders", async () => {

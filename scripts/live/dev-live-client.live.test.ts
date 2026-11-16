@@ -80,12 +80,12 @@ describe("reads", () => {
     const client = clientFor(proxy.url);
     await client.house();
     proxy.tamper.replay = true;
-    await expect(client.house()).rejects.toThrow("did not verify");
+    await expect(client.house()).rejects.toThrow("failed its check");
   });
 
   it("refuse a mock attestation in a production build, with the message", async () => {
     await expect(clientFor(proxy.url, { production: true }).verify()).resolves.toEqual({
-      kind: "unverified", reason: "The node presents a mock attestation, which this build refuses.",
+      kind: "unverified", reason: "This server is a test server that can't be verified, so this version of the app won't use it.",
     });
   });
 });
@@ -112,7 +112,7 @@ describe("the stream", () => {
     proxy.tamper.dropFrame = 2;
     const seen = follow(clientFor(proxy.url));
     await until(() => seen.problems.length > 0);
-    expect(seen.problems[0]).toContain("skipped");
+    expect(seen.problems[0]).toContain("out of order");
     expect(seen.feed).toContain("stale");
   });
 });

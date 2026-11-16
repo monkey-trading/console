@@ -33,8 +33,8 @@ export async function staleNonce(rpcUrl: string, post: JsonRpcPost, hash: string
 /** Whether the pinned RPC says it is Anvil: its `web3_clientVersion` is `anvil/…`; null when it is, else why not. */
 async function notAnvil(rpcUrl: string, post: JsonRpcPost): Promise<string | null> {
   const version = await rpcAllow(post, rpcUrl, rpcBody("web3_clientVersion", []));
-  if (version.error !== null) return "the chain's RPC does not say what it is";
-  return typeof version.result === "string" && /^anvil\//i.test(version.result) ? null : `the chain's RPC is not Anvil (it is ${String(version.result)})`;
+  if (version.error !== null) return "the chain doesn't say what it is";
+  return typeof version.result === "string" && /^anvil\//i.test(version.result) ? null : `the chain isn't a local test chain (it's ${String(version.result)})`;
 }
 
 /**
@@ -51,15 +51,15 @@ export async function movePastNonce(rpcUrl: string, post: JsonRpcPost, hash: str
     if (why !== null) return { moved: false, why };
     const refused = (step: string, error: { code: number; message: string }) => ({
       moved: false as const,
-      why: error.code === METHOD_NOT_FOUND ? "the chain's RPC is not Anvil" : `the chain's RPC refused to ${step}: ${error.message.replace(/\.+$/, "")}`,
+      why: error.code === METHOD_NOT_FOUND ? "the chain isn't a local test chain" : `the chain refused to ${step}: ${error.message.replace(/\.+$/, "")}`,
     });
     const dropped = await rpcAllow(post, rpcUrl, rpcBody("anvil_dropTransaction", [hash]));
-    if (dropped.error !== null) return refused("drop it", dropped.error);
+    if (dropped.error !== null) return refused("drop them", dropped.error);
     const set = await rpcAllow(post, rpcUrl, rpcBody("anvil_setNonce", [account, toQuantity(nonce + 1n)]));
-    if (set.error !== null) return refused("move the account's count past it", set.error);
+    if (set.error !== null) return refused("skip past them", set.error);
     return { moved: true };
   } catch (error) {
-    return { moved: false, why: `the chain's RPC did not answer: ${error instanceof Error ? error.message.replace(/\.+$/, "") : String(error)}` };
+    return { moved: false, why: `the chain didn't respond: ${error instanceof Error ? error.message.replace(/\.+$/, "") : String(error)}` };
   }
 }
 

@@ -22,7 +22,7 @@ export function Payouts() {
   const state = useConsole();
   const { store } = useSession();
   const heading = useRef<HTMLHeadingElement>(null);
-  const readOnly = useReadOnlyNote(useId(), "Claiming and asking for a new authorization");
+  const readOnly = useReadOnlyNote(useId(), "Claiming and renewing withdrawals");
   const payouts = payoutsOf(state);
   const address = state.wallet?.address;
   // A new approval reaches the recent history first; it prompts a fresh read of every approval and of the node's payouts.
@@ -66,7 +66,7 @@ export function Payouts() {
   const idle = !state.busy;
   return (
     <section aria-labelledby="payouts-title" className="p-4">
-      <h4 ref={heading} id="payouts-title" tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">Claims on the vault</h4>
+      <h4 ref={heading} id="payouts-title" tabIndex={-1} className="text-label tracking-caps text-fg-3 uppercase outline-none">Approved withdrawals</h4>
       {readOnly.note}
       <Notice surface="payoutReads" />
       <Notice surface="payoutVault" />
@@ -94,21 +94,21 @@ function PayoutRow({ payout, nowMs, idle, signs, describedBy, problem, act }: { 
     <li className="rounded border border-line-2 px-3 py-3 text-caption">
       <p className="flex justify-between gap-2"><span className="text-fg">Withdrawal {nonce}</span><span className="text-fg-2">{amount}</span></p>
       {status.kind === "paid" && <p className="mt-2 text-glow">Paid to your wallet.</p>}
-      {status.kind !== "paid" && status.kind !== "waiting" && !payout.read && <p className="mt-2 text-fg-3">The vault&apos;s record of whether it was paid has not been read.</p>}
+      {status.kind !== "paid" && status.kind !== "waiting" && !payout.read && <p className="mt-2 text-fg-3">Waiting to check whether the vault has paid this.</p>}
       {status.kind === "claimable" && (
         <>
-          <p className="mt-2 text-fg-3">Authorized until {formatStamp(status.expiresAt * 1000)} UTC.</p>
-          <button type="button" aria-disabled={!idle || !signs} aria-describedby={describedBy} onClick={() => signs && act(() => claim(store, nonce))} className={BUTTON}>Claim {amount} on the vault</button>
+          <p className="mt-2 text-fg-3">Ready to claim until {formatStamp(status.expiresAt * 1000)} UTC.</p>
+          <button type="button" aria-disabled={!idle || !signs} aria-describedby={describedBy} onClick={() => signs && act(() => claim(store, nonce))} className={BUTTON}>Claim {amount} from the vault</button>
         </>
       )}
       {status.kind === "expired" && (
         <>
-          <p className="mt-2 text-fg-3">Its authorization expired{payout.read ? " unclaimed" : ""} at {formatStamp(status.expiresAt * 1000)} UTC.</p>
-          <button type="button" aria-disabled={!idle || !signs} aria-describedby={describedBy} onClick={() => signs && act(() => reissue(store, nonce, status.expiresAt))} className={BUTTON}>Ask for a new authorization</button>
+          <p className="mt-2 text-fg-3">It could be claimed until {formatStamp(status.expiresAt * 1000)} UTC{payout.read ? ", but it wasn't" : ""}.</p>
+          <button type="button" aria-disabled={!idle || !signs} aria-describedby={describedBy} onClick={() => signs && act(() => reissue(store, nonce, status.expiresAt))} className={BUTTON}>Renew the claim</button>
         </>
       )}
       {status.kind === "waiting" && !payout.read && status.checkAtMs === undefined && (
-        <p className="mt-2 text-fg-3">{signs ? "Checking the vault…" : "The vault's record of this withdrawal could not be read for a read-only account."}</p>
+        <p className="mt-2 text-fg-3">{signs ? "Checking the vault…" : "The vault can't be checked for this withdrawal while you're viewing read-only."}</p>
       )}
       {status.kind === "waiting" && (payout.read || status.checkAtMs !== undefined) && <p className="mt-2 text-fg-3">{waitingWords(status.checkAtMs, nowMs)}</p>}
       {problem !== null && (status.kind === "waiting" || status.kind === "expired") && <p className="mt-2 text-fg-3">{problem}</p>}

@@ -94,7 +94,7 @@ describe("with the vault not read", () => {
 
   it("says why when the wallet could not read the vault, and never counts that as the vault's word", async () => {
     const { status } = await judge({ vault: new Error("your wallet is on chain 1, not chain 31337") });
-    expect(status).toEqual({ kind: "attested", release: "test-release-v1", address: ENCLAVE, why: "Your wallet could not read the vault's current release: your wallet is on chain 1, not chain 31337" });
+    expect(status).toEqual({ kind: "attested", release: "test-release-v1", address: ENCLAVE, why: "Your wallet couldn't check this server against the vault: your wallet is on chain 1, not chain 31337" });
   });
 });
 
@@ -251,7 +251,7 @@ describe("what a hostile node, candidate or RPC gets", () => {
     expect(seen).toEqual([]);
     // With no vault read, the guard alone stands between that text and the manifests.
     const unread = await judge({ attestation: hostile });
-    expect(unread.status).toEqual({ kind: "unverified", reason: "The node's attestation names no configuration hash, so it cannot be verified." });
+    expect(unread.status).toEqual({ kind: "unverified", reason: "This server's verification data is incomplete, so it can't be verified." });
     expect(unread.seen).toEqual([]);
   });
 

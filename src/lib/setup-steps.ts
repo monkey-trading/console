@@ -58,7 +58,7 @@ export function setupSteps(facts: SetupFacts): readonly StepView[] {
     ...(facts.faucet ? [{
       step: "fund" as const,
       done: facts.fund !== null || held || facts.credited,
-      summary: !(facts.fund !== null || held || facts.credited) ? null : facts.fund === "minted" ? `${formatUsdc(FAUCET_USDC)} minted` : facts.fund === "skipped" ? "Skipped" : held && facts.walletHolds !== null ? `Wallet holds ${formatUsdc(facts.walletHolds)}` : "Account already funded",
+      summary: !(facts.fund !== null || held || facts.credited) ? null : facts.fund === "minted" ? `${formatUsdc(FAUCET_USDC)} added` : facts.fund === "skipped" ? "Skipped" : held && facts.walletHolds !== null ? `Wallet holds ${formatUsdc(facts.walletHolds)}` : "Account already funded",
     }] : []),
     { step: "declare", done: facts.declared !== null, summary: facts.declared === null ? null : CLASS_LABEL[facts.declared] },
     { step: "authorize", done: facts.keyUntil !== null, summary: facts.keyUntil === null ? null : `This browser can trade until ${formatStamp(facts.keyUntil)} UTC` },

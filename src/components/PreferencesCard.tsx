@@ -55,18 +55,18 @@ export function PreferencesCard() {
   return (
     <section aria-labelledby="preferences-title" className="rounded-xl border border-line-2 bg-ink-1 p-4 sm:p-5">
       <h3 id="preferences-title" className="text-label tracking-caps text-fg-3 uppercase">Trading preferences</h3>
-      <p className="mt-2 text-caption leading-relaxed text-fg-3">Kept in this browser only. They set where the deal ticket starts; anything you have already chosen or typed on the ticket stays as it is.</p>
-      <p role="status" className="mt-2 text-caption text-amber">{saved ? "" : "This browser would not store them, so they last until you close or reload the page."}</p>
+      <p className="mt-2 text-caption leading-relaxed text-fg-3">Saved in this browser only. They set how the deal ticket starts. Anything you&apos;ve already chosen or typed on the ticket stays as it is.</p>
+      <p role="status" className="mt-2 text-caption text-amber">{saved ? "" : "This browser won't save them, so they only last until you close or reload the page."}</p>
       <Choice legend="Default order type" columns="grid-cols-3" value={prefs.orderType} onPick={(value) => store.set("orderType", value)} options={ORDER_TYPES.map((value) => ({ value, label: ORDER_LABELS[value] }))}
         note="The ticket opens on this type for each market." />
-      <Choice legend="Default slippage bound" columns="grid-cols-2 sm:grid-cols-4" value={prefs.slippageBps} onPick={(value) => store.set("slippageBps", value)} options={SLIPPAGE_CHOICES.map((bps) => ({ value: bps, label: `${bps} bps` }))}
-        note="Market orders are declined if the live price is worse than the quote by more than this. A market whose own maximum is lower uses that." />
+      <Choice legend="Default max slippage" columns="grid-cols-2 sm:grid-cols-4" value={prefs.slippageBps} onPick={(value) => store.set("slippageBps", value)} options={SLIPPAGE_CHOICES.map((bps) => ({ value: bps, label: `${bps} bps` }))}
+        note="A market order won't fill if the price is worse than the one you saw by more than this. If a market's own limit is lower, that limit applies." />
       <Choice legend="Default size" columns="grid-cols-1 min-[400px]:grid-cols-2" value={prefs.size} onPick={(value) => store.set("size", value)} options={SIZE_CHOICES}
-        note="Where the size field starts. The last size used is kept for each market, and is raised to the market's minimum if that has risen since." />
+        note="The size the ticket starts with. Your last size is remembered for each market, and raised to the market's minimum if that has gone up." />
       <Switch label="Ask before Cancel all and Close all" on={prefs.confirmBatch} onChange={(on) => store.set("confirmBatch", on)}
-        note={`On, the button asks for a second press within ${CONFIRM_MS / 1000} seconds. Off, one press sends the request.`} />
+        note={`When on, you press the button again within ${CONFIRM_MS / 1000} seconds to confirm. When off, one press sends it.`} />
       <Switch label="Show entry and order lines on the chart" on={prefs.chartLines} onChange={(on) => store.set("chartLines", on)}
-        note="Your position's entry price and your resting orders. The close-out price always shows." />
+        note="Shows your entry price and open orders on the chart. The close-out price always shows." />
     </section>
   );
 }

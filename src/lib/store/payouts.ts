@@ -24,7 +24,7 @@ const PAYOUTS_LIMIT = 200;
 /** The most pages of payouts read, so a node that keeps answering with more cannot keep the page reading. */
 const PAYOUT_PAGES = 20;
 /** What a row says a failed read will do next: reads happen on triggers; the one timer is the read after a named log check (`payout-checks.ts`). */
-const READ_AGAIN = "It is read again by itself while a log check is named, and otherwise when the next withdrawal is approved or the page reloads.";
+const READ_AGAIN = "It's checked again automatically when a records check is due, when your next withdrawal is approved, or when you reload the page.";
 /** Paid payouts shown beside the unpaid ones, newest first. */
 const PAID_SHOWN = 5;
 
@@ -121,7 +121,7 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
   } catch (error) {
     // Reads that ask before the node is trusted are asked again once it is, which the banner says; they are not a failure of the list.
     if (awaitsTrust(error)) return;
-    if (store.getSnapshot().wallet?.address === address) store.notify("payoutReads", `Your approved withdrawals could not be read: ${errorText(error)}`);
+    if (store.getSnapshot().wallet?.address === address) store.notify("payoutReads", `Couldn't load your approved withdrawals: ${errorText(error)}`);
   }
 }
 
@@ -163,7 +163,7 @@ export async function loadPayouts(store: ConsoleStore): Promise<void> {
       return signed ? keepLatest(held, withdrawal) : held;
     }, [...from]);
     const authorizations = withListed(state.authorizations);
-    const problem = !loaded ? "The node is still loading its record of your payouts after a restart." : after !== undefined ? "The node's list of your payouts is longer than this page reads." : null;
+    const problem = !loaded ? "Your payout history is still loading." : after !== undefined ? "You have more payouts than this page can show." : null;
     store.patch({
       authorizations,
       payoutsRead: problem === null && seq !== null ? { seq, listed: entries.map((e) => e.nonce) } : state.payoutsRead,
@@ -174,7 +174,7 @@ export async function loadPayouts(store: ConsoleStore): Promise<void> {
   } catch (error) {
     if (!current()) return;
     // A node that predates the route has no list to read; its rows wait for the stream, as they do between checkpoints. A node not verified yet is the banner's to say, and the read runs again once it is.
-    store.patch({ payoutsProblem: (error instanceof EngineError && error.status === 404) || awaitsTrust(error) ? null : `The node's list of your payouts could not be read: ${errorText(error)} ${READ_AGAIN}` });
+    store.patch({ payoutsProblem: (error instanceof EngineError && error.status === 404) || awaitsTrust(error) ? null : `Couldn't load your payouts: ${errorText(error)} ${READ_AGAIN}` });
   }
 }
 
@@ -212,7 +212,7 @@ export async function checkPaid(store: ConsoleStore): Promise<void> {
     }
     if (current()) store.clearNotice("payoutVault");
   } catch (error) {
-    if (current() && !awaitsTrust(error)) store.notify("payoutVault", `The vault's payouts could not be read: ${errorText(error)}`);
+    if (current() && !awaitsTrust(error)) store.notify("payoutVault", `Couldn't check the vault's payouts: ${errorText(error)}`);
   } finally {
     if (store.paidCheck === wallet) store.paidCheck = null;
   }
@@ -264,11 +264,11 @@ export async function reissue(store: ConsoleStore, nonce: number, expiresAt: num
   let reread = false;
   try {
     const typed = reissueTypedData(domainOf(store), wallet.address, nonce, expiresAt);
-    const summary = `ask for a new authorization of withdrawal ${nonce}`;
+    const summary = `renew the claim for withdrawal ${nonce}`;
     const signature = await prompting(store, wallet, "payouts", `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
     await store.deps.client.reissue(wallet.address, nonce, { replaces_expires_at: expiresAt, signature });
     // The row shows nothing new until the node signs, so the request is said to have gone.
-    store.notify("payouts", "Requested. The new authorization arrives here once the node signs it.", "info");
+    store.notify("payouts", "Requested. You can claim again here once the server approves it.", "info");
     reread = true;
   } catch (error) {
     if (abandoned(store, wallet, error)) return;
@@ -277,7 +277,7 @@ export async function reissue(store: ConsoleStore, nonce: number, expiresAt: num
     if (stale?.[1] !== undefined) reread = true;
     // The node holds no unpaid approval under this nonce (`reissue.rs`, `Reissue::Unknown`), so the vault's record is read again.
     else if (error instanceof EngineError && error.status === 404) {
-      store.notify("payouts", `The node holds no unpaid withdrawal ${nonce} for this account: the vault has paid it, or the node is still loading it after a restart.`);
+      store.notify("payouts", `Withdrawal ${nonce} isn't waiting to be paid. The vault may have paid it already, or the server is still loading it after a restart.`);
       if (asking()) store.patch({ unpaid: store.getSnapshot().unpaid.filter((n) => n !== nonce) });
     } else if (!store.noteAccess(error)) store.notify("payouts", errorText(error));
   } finally {

@@ -35,7 +35,7 @@ export async function createLiveSession(deploy: Deploy): Promise<Session> {
     loadGlue: () => import(/* webpackIgnore: true */ /* turbopackIgnore: true */ GLUE_PATH) as Promise<VerifierModule>,
   };
   const client = createLiveClient(deploy, browser);
-  if (deploy.origin === null || deploy.chainId === null || deploy.vault === null) throw new Error("A live session needs the deployment's node, chain id and vault.");
+  if (deploy.origin === null || deploy.chainId === null || deploy.vault === null) throw new Error("This version of the app is missing its server, chain or vault settings.");
   const chain = { chainId: deploy.chainId, vault: deploy.vault, usdc: deploy.usdc, staking: deploy.staking, registry: deploy.registry, add: deploy.rpcUrl === null ? null : { name: deploy.chainId === 31337 ? "Anvil (local)" : `Chain ${deploy.chainId}`, rpcUrl: deploy.rpcUrl } };
   const deps = walletDeps(deploy, (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   // The choice and the session key persist in localStorage, reached lazily, only from effects and handlers.

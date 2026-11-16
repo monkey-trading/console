@@ -221,7 +221,7 @@ describe("a node the vault no longer names", () => {
 
   it("refuses an answer naming another enclave than the verified one, and leaves the verdict standing", async () => {
     const { trust } = await verified({ address: OLD });
-    expect(() => trust.heedOperator({ enclave: NEW })).toThrow("The node named an enclave other than the one that signed its answer");
+    expect(() => trust.heedOperator({ enclave: NEW })).toThrow("The server's reply named a different signing key from the one that signed it");
     expect(trust.status.kind).toBe("attested");
   });
 });

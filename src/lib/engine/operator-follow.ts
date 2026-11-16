@@ -160,7 +160,7 @@ export class OperatorFollower {
     this.lastCheckAt = this.deps.nowMs();
     const chain = this.deps.chain();
     if (chain === null) return this.followNode(await node);
-    const reason = (error: unknown) => (error instanceof Error ? error.message : "the read failed");
+    const reason = (error: unknown) => (error instanceof Error ? error.message : "the request failed");
     // First, whatever the registry goes on to answer: a retirement or a promotion's `setSigner` ends
     // the verdict on the node in use whatever comes of the operator's node. A move of the release alone
     // does not: the incumbent holds the vault's signer key and keeps sequencing until its successor has taken it.
@@ -223,7 +223,7 @@ export class OperatorFollower {
     const before = this.state; // trading pauses the moment the chain names another node, as its verification takes the time (monkey-trading/console#280)
     // A trial another wallet came during says nothing for it, failed or not: the pause it began goes, and `check` runs again for the new one.
     const waiting = (reason: string) => (this.deps.chain() !== chain ? this.set(before) : rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, reason }) : this.settled({ kind: "following", origin: this.origin }));
-    if (rotationEnabled && !(this.state.kind === "waiting" && this.state.target === target)) waiting("The new operator's node is being verified.");
+    if (rotationEnabled && !(this.state.kind === "waiting" && this.state.target === target)) waiting("The check is under way.");
     let client: EngineClient | null = null;
     // With no wallet, a node refused for the signer the vault names still says in its signed route where the operator now runs: the next node, among the listed origins, bounded; its client and turns are never taken.
     const failed = async (reason: string, error?: unknown): Promise<void> => {
@@ -248,10 +248,10 @@ export class OperatorFollower {
       const behind = this.floor.lags(said, chain !== null && status.kind === "verified");
       if (behind !== null) return waiting(behind);
     } catch (error) {
-      return failed(error instanceof Error ? error.message : "The node did not answer.", error);
+      return failed(error instanceof Error ? error.message : "The server didn't respond.", error);
     }
     if (this.deps.chain() !== chain) return this.set(before);
-    if (this.deps.busy()) return waiting("A wallet request is in progress; the console moves once it has finished.");
+    if (this.deps.busy()) return waiting("A wallet request is in progress. You'll switch once it finishes.");
     this.deps.adopt(client, target);
     // In use from now, before the provider watches it: a check the floor's refusal of the old node starts reads this one.
     this.current = client;

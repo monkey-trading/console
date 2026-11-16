@@ -18,7 +18,7 @@ describe("checkAttestation", () => {
   });
 
   it("refuses a mock quote in a production build", () => {
-    expect(checkAttestation(base, false)).toEqual({ kind: "unverified", reason: "The node presents a mock attestation, which this build refuses." });
+    expect(checkAttestation(base, false)).toEqual({ kind: "unverified", reason: "This server is a test server that can't be verified, so this version of the app won't use it." });
     expect(checkAttestation({ ...base, quote: `0x${base.quote}` }, false)?.kind).toBe("unverified");
   });
 
@@ -49,17 +49,17 @@ describe("signBlock", () => {
   it("reads under a quote the vault has not judged, and signs nothing", () => {
     const attested = { kind: "attested", release: "r", address: "0x1", why: "w" } as const;
     expect(readBlock(attested, "live")).toBeNull();
-    expect(signBlock(attested, "live")).toContain("vault's current release");
+    expect(signBlock(attested, "live")).toBe("this server hasn't been checked against the vault yet");
     expect(signBlock(attested, "live")).not.toBeNull();
-    expect(readBlock(attested, "stale")).toContain("stale");
+    expect(readBlock(attested, "stale")).toBe("prices aren't updating");
     for (const status of [{ kind: "checking" }, { kind: "reverifying" }, { kind: "clock", skewMs: 60_000 }, { kind: "unverified", reason: "x" }] as const) {
       expect(readBlock(status, "live")).not.toBeNull();
     }
   });
 
   it("says why it may not", () => {
-    expect(signBlock({ kind: "mock" }, "stale")).toContain("stale");
-    expect(signBlock({ kind: "checking" }, "live")).toContain("attestation");
+    expect(signBlock({ kind: "mock" }, "stale")).toBe("prices aren't updating");
+    expect(signBlock({ kind: "checking" }, "live")).toBe("the server hasn't been verified yet");
     expect(signBlock({ kind: "mock" }, "live")).toBeNull();
   });
 

@@ -101,7 +101,7 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     return true;
   } catch (error) {
     // A node that cannot be trusted is reported by the attestation banner and the stream, once; the account read waiting on the same check does not repeat it.
-    if (!store.noteAccess(error) && !(error instanceof UntrustedError)) store.notify("wallet", error instanceof Error ? error.message : "The wallet did not connect.");
+    if (!store.noteAccess(error) && !(error instanceof UntrustedError)) store.notify("wallet", error instanceof Error ? error.message : "Your wallet didn't connect.");
     if (!store.getSnapshot().wallet) store.liveWallet = null;
     return false;
   }
@@ -111,7 +111,7 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
 /** Signs and sends the declaration, then reads the account again, so what comes next sees it. True when this connection's declaration was recorded. */
 export async function attestEligibility(store: ConsoleStore, cls: EligibilityClass): Promise<boolean> {
   const wallet = store.liveWallet;
-  const out = await signed(store, "setup", `declare "${STATEMENTS[cls]}"`, (t, account) => eligibilityTypedData(domainOf(store), account, cls, t), (auth, wallet) =>
+  const out = await signed(store, "setup", `sign the declaration "${STATEMENTS[cls]}"`, (t, account) => eligibilityTypedData(domainOf(store), account, cls, t), (auth, wallet) =>
     store.deps.client.attestEligibility({ account: wallet.address, class: cls, auth }), "sign-again",
   );
   if (!out.ok) return false;
@@ -127,12 +127,12 @@ export async function attestEligibility(store: ConsoleStore, cls: EligibilityCla
 /** Sends a deposit from the wallet to the vault, approving the vault first if needed; the node credits it once it is final. */
 export async function deposit(store: ConsoleStore, amount: Fixed, surface: NoticeSurface = "deposit"): Promise<void> {
   store.clearNotice(surface);
-  const wallet = usableWallet(store, "send a deposit", surface);
+  const wallet = usableWallet(store, "deposit", surface);
   if (!wallet) return;
   const shown = formatUsdc(amount);
   store.patch({ busy: true });
   try {
-    await prompting(store, wallet, surface, `Confirm in your wallet: deposit ${shown} to the vault (an approval first, if the vault needs one).`, (progress) => wallet.deposit(amount, progress));
+    await prompting(store, wallet, surface, `Confirm in your wallet: deposit ${shown} to the vault. Your wallet may ask you to approve USDC first.`, (progress) => wallet.deposit(amount, progress));
     noteDeposit(store, amount);
     noteSentDeposit(store, amount);
     void readWalletUsdc(store, true);
@@ -160,7 +160,7 @@ export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy, surface
     return false;
   }
   if (wallet.readOnly === true) {
-    store.notify(surface, "The watched account is read-only, so the faucet cannot fund it.");
+    store.notify(surface, "You're viewing this account read-only, so the faucet can't fund it.");
     return false;
   }
   const { rpcUrl, usdc } = deploy;
@@ -173,15 +173,15 @@ export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy, surface
     const gas = await topUpGas(rpcUrl, wallet.address, postJsonRpc);
     if (!gas.ok) {
       if (store.liveWallet === wallet) store.notify(surface, gas.notAnvil
-        ? `The build's RPC is not an Anvil node (${gas.detail}), so the faucet cannot fund this wallet.`
-        : `The faucet could not top up gas: ${gas.detail}.`);
+        ? `The faucet only works on a local test chain, and this one isn't (${gas.detail}).`
+        : `The faucet couldn't add gas to your wallet: ${gas.detail}.`);
       return false;
     }
     const minted = await mintFromAnvil(rpcUrl, usdc, wallet.address, FAUCET_USDC, postJsonRpc);
     if (!minted.ok) {
       if (store.liveWallet === wallet) store.notify(surface, minted.notAnvil
-        ? `The build's RPC is not an Anvil node (${minted.detail}), so the faucet cannot fund this wallet.`
-        : `The faucet could not mint USDC: ${minted.detail}.`);
+        ? `The faucet only works on a local test chain, and this one isn't (${minted.detail}).`
+        : `The faucet couldn't create test USDC: ${minted.detail}.`);
       return false;
     }
     void readWalletUsdc(store, true);
@@ -227,7 +227,7 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams, surfa
   const filled = out.result.events.some((e) => e.type === "fill");
   const cancelled = out.result.events.some((e) => e.type === "order_cancelled");
   if (rejected && rejected.type === "order_rejected") store.notify(surface, describeReject(rejected.reason));
-  else if (!filled && cancelled) store.notify(surface, "The order was accepted but could not be filled, so it was cancelled.");
+  else if (!filled && cancelled) store.notify(surface, "Your order couldn't be filled, so it was cancelled.");
   await store.refresh(true);
   return rejected === undefined && (filled || !cancelled);
 }

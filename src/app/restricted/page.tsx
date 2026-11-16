@@ -13,8 +13,8 @@ export default function Page() {
       <p className="text-label tracking-label text-amber uppercase">{SITE_NAME}</p>
       <h1 className="text-lead tracking-caps text-glow uppercase">Not available in your region</h1>
       <p className="text-data text-fg-2">
-        This app is not available in your region. It is in build, nothing is live yet, and nothing on it is an
-        offer.
+        This app isn&apos;t available in your region. It&apos;s still being built, nothing is live yet, and nothing on it
+        is an offer.
       </p>
     </main>
   );

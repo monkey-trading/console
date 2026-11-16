@@ -114,7 +114,7 @@ export class MockVaultExit {
     return {
       facts: async () => facts(),
       check: async (proof: ExitProof, root: string): Promise<ExitCheck> => {
-        if (proof.root !== root) return { ok: false, reason: "its exit terms do not prove against the vault's root" };
+        if (proof.root !== root) return { ok: false, reason: "its exit terms don't match the vault's snapshot" };
         const paid = this.state.monkey.distClaimed.get(key) ?? 0n;
         const entitled = BigInt(proof.distribution?.entitled ?? "0");
         const distributionOwed = entitled > paid ? entitled - paid : 0n;

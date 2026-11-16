@@ -52,7 +52,7 @@ describe("a 429 that names the account's volume tier", () => {
     const plain = await keyed();
     plain.client.answer = (posted) => (posted.route === "session_key" ? new ActionClient().answer(posted) : (() => { throw new EngineError(429, "rate limited"); })());
     expect(await order(plain.store)).toBe(false);
-    expectOnly(plain.store, "ticket", "The node is limiting requests; try again in a moment.");
+    expectOnly(plain.store, "ticket", "Too many requests right now. Try again in a moment.");
   });
 
   it("shows them at the withdraw form on the wallet-signed path", async () => {
@@ -138,15 +138,15 @@ describe("a refused or failed action lands on its own surface", () => {
       stub(answers("refused"));
       const refused = await connected(FUNDED);
       expect(await fundWithAnvil(refused.store, deploy)).toBe(false);
-      expectOnly(refused.store, "faucet", "The faucet could not mint USDC: insufficient funds.");
+      expectOnly(refused.store, "faucet", "The faucet couldn't create test USDC: insufficient funds.");
       stub(answers("0x0"));
       const reverted = await connected(FUNDED);
       expect(await fundWithAnvil(reverted.store, deploy)).toBe(false);
-      expectOnly(reverted.store, "faucet", "The faucet's mint reverted.");
+      expectOnly(reverted.store, "faucet", "Creating the test USDC failed.");
       stub(answers("refused"));
       const inSetup = await connected(FUNDED);
       expect(await fundWithAnvil(inSetup.store, deploy, "setup")).toBe(false);
-      expectOnly(inSetup.store, "setup", "The faucet could not mint USDC: insufficient funds.");
+      expectOnly(inSetup.store, "setup", "The faucet couldn't create test USDC: insufficient funds.");
     } finally {
       vi.unstubAllGlobals();
     }

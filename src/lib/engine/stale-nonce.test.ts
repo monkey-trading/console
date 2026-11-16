@@ -60,9 +60,9 @@ describe("waitMined with a stale-nonce check", () => {
     const moved = async () => { checks.push(1); return { moved: true as const }; };
     await expect(waitMined(pending(Infinity), HASH, "deposit", async () => undefined, moved)).rejects.toThrow(MOVED_PAST);
     expect(checks).toHaveLength(1);
-    const refused = async () => ({ moved: false as const, why: "the chain's RPC is not Anvil" });
-    await expect(waitMined(pending(Infinity), HASH, "deposit", async () => undefined, refused)).rejects.toThrow(staleNonceText("the chain's RPC is not Anvil"));
-    expect(staleNonceText("the chain's RPC is not Anvil")).toContain("Clear your wallet's activity data for this network");
+    const refused = async () => ({ moved: false as const, why: "the chain isn't a local test chain" });
+    await expect(waitMined(pending(Infinity), HASH, "deposit", async () => undefined, refused)).rejects.toThrow(staleNonceText("the chain isn't a local test chain"));
+    expect(staleNonceText("the chain isn't a local test chain")).toContain("Clear your wallet's activity data for this network");
   });
 
   it("goes on waiting while the check says no, and never asks for a transaction mined at once", async () => {

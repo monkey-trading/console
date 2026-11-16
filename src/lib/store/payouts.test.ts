@@ -29,12 +29,12 @@ describe("approvals and paid payouts", () => {
 
   it("says on the claims that the approvals could not be read, until a read lands, and says nothing while the node is not yet trusted", async () => {
     const { client, store } = await connected();
-    vi.spyOn(client, "history").mockRejectedValueOnce(new UntrustedError("The node is not verified."));
+    vi.spyOn(client, "history").mockRejectedValueOnce(new UntrustedError("The server hasn't been verified yet."));
     await loadApprovals(store);
     expect(store.getSnapshot().notices).toEqual({});
     vi.spyOn(client, "history").mockRejectedValueOnce(new EngineError(500, "boom"));
     await loadApprovals(store);
-    expect(store.getSnapshot().notices.payoutReads).toMatchObject({ tone: "error", text: "Your approved withdrawals could not be read: boom" });
+    expect(store.getSnapshot().notices.payoutReads).toMatchObject({ tone: "error", text: "Couldn't load your approved withdrawals: boom" });
     await loadApprovals(store);
     expect(store.getSnapshot().notices.payoutReads).toBeUndefined();
   });
@@ -74,7 +74,7 @@ describe("approvals and paid payouts", () => {
     await checkPaid(elsewhere.store);
     expect(elsewhere.store.getSnapshot()).toMatchObject({ paid: [], unpaid: [] });
     expect(payoutsOf(elsewhere.store.getSnapshot())[0]?.read).toBe(false);
-    expect(elsewhere.store.getSnapshot().notices.payoutVault).toMatchObject({ tone: "error", text: "The vault's payouts could not be read: your wallet is on chain 1, not chain 31337" });
+    expect(elsewhere.store.getSnapshot().notices.payoutVault).toMatchObject({ tone: "error", text: "Couldn't check the vault's payouts: your wallet is on chain 1, not chain 31337" });
   });
 
   it("reads each payout once in one run at a time, however often the page asks again, including one that arrives during the run", async () => {
@@ -169,7 +169,7 @@ describe("payouts after a reload, with no authorization held", () => {
 });
 
 describe("claims", () => {
-  it("claims with the authorization and marks it paid, even while the node's feed is stale", async () => {
+  it("claims with the authorization and marks it paid, even while prices aren't updating", async () => {
     const { provider, store } = await connected();
     store.patch({ approvals: [approved(1, 40)], authorizations: [signed(1, 2_000_000_000)], stream: "stale" });
     await claim(store, 1);
@@ -184,7 +184,7 @@ describe("claims", () => {
     await claim(store, 1);
     expect(store.getSnapshot().paid).toEqual([]);
     expect(unreadPayouts(store.getSnapshot())).toEqual([1]);
-    expect(store.getSnapshot().notices.payouts?.text).toContain("failed on chain");
+    expect(store.getSnapshot().notices.payouts?.text).toContain("Your transaction to claim the withdrawal failed");
   });
 
   it("does not mark another account's payout paid when the wallet changed during the claim", async () => {
@@ -209,7 +209,7 @@ describe("authorizations", () => {
     const body = posted?.body as { replaces_expires_at: number; signature: string };
     expect(body.replaces_expires_at).toBe(1_700_000_000);
     expect(await signerOf(reissueTypedData(requestDomain(vectors.chain_id, VAULT), ACCOUNT, 3, 1_700_000_000), body.signature)).toBe(ACCOUNT);
-    expect(store.getSnapshot().notices.payouts).toMatchObject({ tone: "info", text: "Requested. The new authorization arrives here once the node signs it." });
+    expect(store.getSnapshot().notices.payouts).toMatchObject({ tone: "info", text: "Requested. You can claim again here once the server approves it." });
     expect(client.payoutsReads).toHaveLength(1);
     expect(store.getSnapshot().authorizations).toEqual([signed(3, 2_000_000_000)]);
   });
@@ -219,7 +219,7 @@ describe("authorizations", () => {
     store.patch({ authorizations: [signed(3, 1_700_000_000)], unpaid: [3] });
     client.answer = () => { throw new EngineError(404, "not found"); };
     await reissue(store, 3, 1_700_000_000);
-    expect(store.getSnapshot().notices.payouts).toMatchObject({ tone: "error", text: "The node holds no unpaid withdrawal 3 for this account: the vault has paid it, or the node is still loading it after a restart." });
+    expect(store.getSnapshot().notices.payouts).toMatchObject({ tone: "error", text: "Withdrawal 3 isn't waiting to be paid. The vault may have paid it already, or the server is still loading it after a restart." });
     // The vault's record of it is read again.
     expect(unreadPayouts(store.getSnapshot())).toEqual([3]);
     expect(client.payoutsReads).toEqual([]);

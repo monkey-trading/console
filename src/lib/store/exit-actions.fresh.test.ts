@@ -19,7 +19,7 @@ describe("an exit action, on what the vault holds as it is pressed", () => {
     writeStoredExit(() => kit.storage, recordAt(100));
     kit.exit.vault = vault;
     kit.client.exitError = new Error("the node is gone");
-    await kit.attach({ attestation: { kind: "unverified", reason: "The node did not answer." }, stream: "stale" });
+    await kit.attach({ attestation: { kind: "unverified", reason: "The server didn't respond." }, stream: "stale" });
     await kit.store.exit.refresh();
   };
   beforeEach(() => { kit = exitWatchKit(); });
@@ -37,7 +37,7 @@ describe("an exit action, on what the vault holds as it is pressed", () => {
       kit.exit.claimsHeld = NO_CLAIMS;
       await claimVaultExit(kit.store);
       expect(kit.exit.sent).toEqual([]);
-      expect(said()).toBe("Nothing is registered for this account, or the vault has paid it, so nothing was sent.");
+      expect(said()).toBe("Nothing is registered for this account, or the vault has already paid it, so nothing was sent.");
     });
     it("reads a distribution's claim as registered too", async () => {
       kit.exit.claimsHeld = { ...NO_CLAIMS, exitDistributionClaim: 1n };
@@ -54,14 +54,14 @@ describe("an exit action, on what the vault holds as it is pressed", () => {
       fail(kit.exit);
       await claimVaultExit(kit.store);
       expect(kit.exit.sent).toEqual([]);
-      expect(said()).toBe("The vault's record could not be read, so nothing was sent.");
+      expect(said()).toBe("Couldn't check the vault's record, so nothing was sent.");
     });
     it("sends nothing while the window is open, and says so", async () => {
       kit.exit.claimsHeld = { ...NO_CLAIMS, exitClaim: 7n };
       await connected(OPEN);
       await claimVaultExit(kit.store);
       expect(kit.exit.sent).toEqual([]);
-      expect(said()).toBe("The vault's claim window has not closed, so nothing was sent.");
+      expect(said()).toBe("The vault's claim window hasn't closed, so nothing was sent.");
     });
   });
 
@@ -71,7 +71,7 @@ describe("an exit action, on what the vault holds as it is pressed", () => {
       await connected();
       await registerExitClaims(kit.store);
       expect(kit.exit.sent).toEqual([]);
-      expect(said()).toBe("The vault has not accepted a proof at its latest checkpoint, so nothing was sent.");
+      expect(said()).toBe("The vault hasn't accepted a proof for its latest snapshot, so nothing was sent.");
     });
   });
 
@@ -81,7 +81,7 @@ describe("an exit action, on what the vault holds as it is pressed", () => {
       await connected();
       await refundExitDeposit(kit.store, pending());
       expect(kit.exit.sent).toEqual([]);
-      expect(said()).toBe("The vault has not accepted a proof at its latest checkpoint, so nothing was sent.");
+      expect(said()).toBe("The vault hasn't accepted a proof for its latest snapshot, so nothing was sent.");
     });
     it("still refunds what needs no proof, with a proof the verifier has not accepted", async () => {
       kit.exit.checkError = new Error("no answer");
@@ -96,7 +96,7 @@ describe("an exit action, on what the vault holds as it is pressed", () => {
       await connected();
       await refundExitDeposit(kit.store, pending());
       expect(kit.exit.sent).toEqual([]);
-      expect(said()).toBe("The vault's record of deposit 2 is not what this proof says, so nothing was sent.");
+      expect(said()).toBe("The vault's record of deposit 2 doesn't match this proof, so nothing was sent.");
       expect(kit.store.getSnapshot().exit.record?.proof.seq).toBe(100);
     });
   });

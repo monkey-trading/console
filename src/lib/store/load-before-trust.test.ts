@@ -6,7 +6,7 @@ import { UntrustedError } from "../engine/trust";
 import { connected } from "./live-kit";
 import { loadApprovals, loadPayouts } from "./payouts";
 
-const NOT_VERIFIED = () => new UntrustedError("The node is not verified.");
+const NOT_VERIFIED = () => new UntrustedError("The server hasn't been verified yet.");
 
 describe("reads that meet a node not yet verified", () => {
   it("shows no notice and no problem for the approvals and payouts a reattached wallet reads first, and reads them once the node is trusted", async () => {
@@ -30,8 +30,8 @@ describe("reads that meet a node not yet verified", () => {
 
   it("still reports a read that fails for a real reason", async () => {
     const { client, store } = await connected();
-    client.history = async () => { throw new Error("The node answered HTTP 500."); };
+    client.history = async () => { throw new Error("The server returned an error (HTTP 500)."); };
     await loadApprovals(store);
-    expect(store.getSnapshot().notices.payoutReads?.text).toBe("Your approved withdrawals could not be read: The node answered HTTP 500.");
+    expect(store.getSnapshot().notices.payoutReads?.text).toBe("Couldn't load your approved withdrawals: The server returned an error (HTTP 500).");
   });
 });

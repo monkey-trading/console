@@ -11,7 +11,7 @@ import { qrPath } from "@/lib/qr";
 import { useSession } from "./ConsoleProvider";
 
 const ACTION = "flex min-h-11 items-center justify-center rounded border px-4 py-2.5 text-caption focus-visible:outline-2 focus-visible:outline-glow";
-const NOT_COPIED = "The link could not be copied. Scan the code or open the link instead.";
+const NOT_COPIED = "Couldn't copy the link. Scan the code or open the link instead.";
 
 /** Shows the pairing dialog in a build with WalletConnect; renders nothing in one without. */
 export function WalletConnectPairing() {
@@ -68,7 +68,7 @@ function PairingDialog({ connector }: { connector: WalletConnectConnector }) {
           </>
         )}
         <p className="text-label leading-relaxed text-fg-3">
-          The pairing runs through WalletConnect&apos;s relay and Verify service, a third party that passes encrypted messages between this page and your wallet, tells your wallet this page&apos;s domain, and sees your IP address.{" "}
+          Pairing runs through WalletConnect&apos;s relay and Verify service, which a third party runs. It passes encrypted messages between this page and your wallet, tells your wallet this site&apos;s domain, and sees your IP address.{" "}
           <a href="/notices" target="_blank" rel="noopener noreferrer" className="text-fg-2 underline focus-visible:outline-2 focus-visible:outline-glow">Privacy and notices<span className="sr-only"> (opens in a new tab)</span></a>
         </p>
       </div>
@@ -82,7 +82,7 @@ function QrCode({ uri }: { uri: string }) {
   return (
     <svg
       role="img"
-      aria-label="QR code of the pairing link, for a wallet app to scan. Open in a wallet app and Copy link below give the same link."
+      aria-label="QR code for the pairing link. Scan it with a wallet app, or use the buttons below for the same link."
       viewBox={`0 0 ${size} ${size}`}
       shapeRendering="crispEdges"
       className="mx-auto block aspect-square w-full max-w-60 rounded bg-fg"

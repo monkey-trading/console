@@ -33,7 +33,7 @@ function stepAction(step: ExitStep): string {
     case "distribution": return "register your distribution";
     case "refund": return `refund deposit ${step.proof.deposit.deposit_id}`;
     case "refund-unheld": return `refund deposit ${step.id}`;
-    case "claim": return "claim your exit from the vault";
+    case "claim": return "claim your funds from the vault";
     default: return step satisfies never;
   }
 }
@@ -148,7 +148,7 @@ export class ProviderExit implements ExitWallet {
     const account = hexOf(this.address);
     const bytes = hexOf(root);
     const proves = (data: Hex) => this.bool(verifier, data);
-    const refused = (what: string): ExitCheck => ({ ok: false, reason: `the vault's root does not prove its ${what}` });
+    const refused = (what: string): ExitCheck => ({ ok: false, reason: `the vault's snapshot doesn't confirm its ${what}` });
     if (!(await proves(encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "provesTerms", args: [bytes, ...termsArgs(proof.terms)] })))) return refused("exit terms");
     let accountClaim = 0n;
     if (proof.account !== null) {

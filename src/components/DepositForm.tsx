@@ -49,7 +49,7 @@ export function DepositForm({ embedded = false }: { embedded?: boolean }) {
           </>}
           {walletUsdc.read.status === "wrong_chain" && `Your wallet is on ${chainName(walletUsdc.read.chainId)}. Switch it to ${chain} to see its USDC.`}
           {walletUsdc.read.status === "failed" && <>
-            <span>Your wallet&apos;s USDC could not be read.</span>
+            <span>Couldn&apos;t read your wallet&apos;s USDC balance.</span>
             <button type="button" onClick={() => void readWalletUsdc(store, true)} className={LINK}>Try again</button>
           </>}
         </p>
@@ -60,12 +60,12 @@ export function DepositForm({ embedded = false }: { embedded?: boolean }) {
           <input {...AMOUNT_INPUT} id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} aria-describedby={`${id}-hint`} className={INPUT} />
           <button type="submit" aria-disabled={!wallet || !valid || busy || gate.blocked} aria-describedby={gate.describedBy} className={SUBMIT}>Deposit</button>
         </div>
-        <p id={`${id}-hint`} className="mt-2 text-label leading-relaxed text-fg-3">10 to 1,000,000,000 USDC. Your wallet approves the vault for the amount, if it needs to, then deposits it. The node counts a deposit as collateral once it is credited and releases it for withdrawal when it is final.</p>
+        <p id={`${id}-hint`} className="mt-2 text-label leading-relaxed text-fg-3">Deposit 10 to 1,000,000,000 USDC. Your wallet may ask you to approve the amount first. Your balance goes up once the deposit is credited, and you can withdraw it once it&apos;s final.</p>
         {gate.note}
         <Notice surface={surface} />
         {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet first.</p>}
-        {wallet && over && held !== null && <p className="mt-2 text-label text-ember">That is more than the {formatFixedPlaces(held, 2)} USDC your wallet holds on {chain}.</p>}
-        {wallet && !over && amount.trim() !== "" && !valid && <p className="mt-2 text-label text-ember">Enter an amount from 10 to 1,000,000,000 USDC, to at most six decimal places.</p>}
+        {wallet && over && held !== null && <p className="mt-2 text-label text-ember">That&apos;s more than the {formatFixedPlaces(held, 2)} USDC your wallet holds on {chain}.</p>}
+        {wallet && !over && amount.trim() !== "" && !valid && <p className="mt-2 text-label text-ember">Enter an amount from 10 to 1,000,000,000 USDC, with at most 6 decimal places.</p>}
       </form>
     </section>
   );

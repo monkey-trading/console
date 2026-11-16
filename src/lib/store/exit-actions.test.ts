@@ -31,7 +31,7 @@ describe("the exit's actions, with no node", () => {
     const wallet: Wallet = { address: ACCOUNT, label: "Test", exit, sign: async () => "0x", deposit: async () => "0x", claim: async () => "0x" };
     store = new ConsoleStore({ client, wallets: { options: [], connect: async () => wallet }, exitStorage: () => storage, history: () => [], initial: { markets: [], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
     store.exit.follow({ scheduler: { setTimeout: () => null, clearTimeout: () => undefined }, hidden: () => false, nowMs: () => 0 });
-    store.patch({ attestation: { kind: "unverified", reason: "The node did not answer." }, stream: "stale" });
+    store.patch({ attestation: { kind: "unverified", reason: "The server didn't respond." }, stream: "stale" });
     store.liveWallet = wallet;
     store.patch({ wallet: { address: ACCOUNT, label: "Test" } });
     await settle();
@@ -64,7 +64,7 @@ describe("the exit's actions, with no node", () => {
       exit.vault = factsAt(100, { chainNow: DUE, lastCheckpointAt: DUE });
       await startVaultExit(store);
       expect(exit.sent).toEqual([]);
-      expect(said(store)).toBe("The vault's exit is not due, so nothing was sent.");
+      expect(said(store)).toBe("The vault's exit can't start yet, so nothing was sent.");
     });
     it("sends nothing when the vault cannot be read", async () => {
       holding(100);
@@ -73,7 +73,7 @@ describe("the exit's actions, with no node", () => {
       exit.factsError = new Error("wrong chain");
       await startVaultExit(store);
       expect(exit.sent).toEqual([]);
-      expect(said(store)).toBe("The vault could not be read, so nothing was sent.");
+      expect(said(store)).toBe("Couldn't reach the vault, so nothing was sent.");
     });
     it("starts from exit terms the verifier accepted, though the proof gave the account nothing", async () => {
       exit.vault = factsAt(100, { chainNow: DUE });
@@ -139,7 +139,7 @@ describe("the exit's actions, with no node", () => {
       exit.claimsError = new Error("the wallet's RPC failed");
       await registerExitClaims(store);
       expect(exit.sent).toEqual([]);
-      expect(said(store)).toBe("The vault's record could not be read, so nothing was sent.");
+      expect(said(store)).toBe("Couldn't check the vault's record, so nothing was sent.");
     });
     it("stops at a step that fails, saying why", async () => {
       exit.sendError = new Error("You declined to register your balance and positions in your wallet.");
@@ -200,7 +200,7 @@ describe("the exit's actions, with no node", () => {
       exit.claimsError = new Error("the wallet's RPC failed");
       await refundExitDeposit(store, pending());
       expect(exit.sent).toEqual([]);
-      expect(said(store)).toBe("The vault's record could not be read, so nothing was sent.");
+      expect(said(store)).toBe("Couldn't check the vault's record, so nothing was sent.");
     });
   });
 

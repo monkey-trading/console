@@ -135,10 +135,10 @@ describe("mintFromAnvil", () => {
 
   it("throws when the mint reverts, or when no receipt lands within its reads", async () => {
     const reverted = stub({ eth_accounts: { result: [ANVIL_0] }, eth_sendTransaction: { result: TX }, eth_getTransactionReceipt: { result: { status: "0x0" } } });
-    await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, reverted.post, waits().wait)).rejects.toThrow("The faucet's mint reverted.");
+    await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, reverted.post, waits().wait)).rejects.toThrow("Creating the test USDC failed.");
     const never = stub({ eth_accounts: { result: [ANVIL_0] }, eth_sendTransaction: { result: TX }, eth_getTransactionReceipt: { result: null } });
     const { paused, wait } = waits();
-    await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, never.post, wait)).rejects.toThrow("The faucet's mint was not confirmed in time.");
+    await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, never.post, wait)).rejects.toThrow("The test USDC wasn't confirmed in time.");
     expect(never.bodies).toHaveLength(32); // eth_accounts, eth_sendTransaction, then 30 reads
     expect(paused).toHaveLength(29);
   });
@@ -147,7 +147,7 @@ describe("mintFromAnvil", () => {
     const missing = stub({ eth_accounts: { error: { code: -32601, message: "Method not found" } } });
     await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, missing.post)).resolves.toEqual({ ok: false, notAnvil: true, detail: "Method not found" });
     const locked = stub({ eth_accounts: { result: [] } });
-    await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, locked.post)).resolves.toEqual({ ok: false, notAnvil: true, detail: "it offers no unlocked account to send the mint from" });
+    await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, locked.post)).resolves.toEqual({ ok: false, notAnvil: true, detail: "it has no unlocked account to send the test USDC from" });
     const refused = stub({ eth_accounts: { result: [ANVIL_0] }, eth_sendTransaction: { error: { code: -32000, message: "insufficient funds for gas" } } });
     await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, refused.post)).resolves.toEqual({ ok: false, notAnvil: false, detail: "insufficient funds for gas" });
     expect(refused.bodies).toHaveLength(2);
@@ -158,7 +158,7 @@ describe("mintFromAnvil", () => {
     await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, odd.post)).rejects.toThrow("The chain's RPC answered eth_sendTransaction with 0x1234.");
     const none = stub({});
     for (const amount of [0n, -FAUCET_USDC, FAUCET_USDC + 1n]) {
-      await expect(mintFromAnvil(RPC, USDC, ACCOUNT, amount, none.post)).rejects.toThrow("The faucet mints a positive whole number of USDC base units.");
+      await expect(mintFromAnvil(RPC, USDC, ACCOUNT, amount, none.post)).rejects.toThrow("The faucet can only add a positive, whole amount of USDC.");
     }
     expect(none.bodies).toEqual([]);
   });

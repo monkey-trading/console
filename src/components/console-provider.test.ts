@@ -33,7 +33,7 @@ describe("ConsoleProvider", () => {
     vi.stubEnv("NEXT_PUBLIC_ENGINE_VAULT", "0x0000000000000000000000000000000000000000");
     const html = render();
     expect(html).toContain('role="status"');
-    expect(html).toContain("Loading the console…");
+    expect(html).toContain("Loading…");
     expect(html).not.toContain("session ");
   });
 });

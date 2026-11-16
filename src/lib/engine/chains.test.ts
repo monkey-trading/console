@@ -16,6 +16,6 @@ describe("chainName", () => {
   });
 
   it("names the mock build's chain when the deployment has no chain id", () => {
-    expect(chainName(null)).toBe("the mock chain");
+    expect(chainName(null)).toBe("the demo chain");
   });
 });

@@ -18,7 +18,7 @@ const TOTALS_RETRY_AFTER_FAILURE_MS = 30_000;
  */
 export class QueueTotalsRetrying extends Error {
   constructor() {
-    super("The queue read failed and is waiting to retry.");
+    super("Couldn't load the withdrawal queue. Trying again shortly.");
   }
 }
 

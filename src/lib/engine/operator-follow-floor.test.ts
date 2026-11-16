@@ -16,8 +16,8 @@ const KC = "0x00000000000000000000000000000000000000c1";
 const ROUTE = { operator: KA, pending_rotation: null, rotation_enabled: true, last_election: null };
 /** A route that says the registry names `hostname` and the vault names `signer`. */
 const route = (hostname: string | null, signer: NamedSigner) => ({ ...ROUTE, ...(hostname === null ? {} : { api_hostname: { hostname, block: 1, block_hash: "0x" } }), signer });
-const silent = async (): Promise<never> => { throw new EngineError(0, "The node did not answer."); };
-const LAGS = { kind: "waiting", target: C, reason: expect.stringContaining("newer signer") };
+const silent = async (): Promise<never> => { throw new EngineError(0, "The server didn't respond."); };
+const LAGS = { kind: "waiting", target: C, reason: expect.stringContaining("newer signing key") };
 
 /** A follower with no wallet over the node in use, whose route names `hostname` under epoch 5's key, and the listed nodes B and C. */
 function visit(hostname: string) {
@@ -100,7 +100,7 @@ describe("the signer floor a visit holds each node to (monkey-trading/console#37
     kit.nodeB.signedRead = async () => route(null, { epoch: 7, address: KB });
     await kit.follower.check();
     expect(kit.adopted).toEqual([]);
-    expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B, reason: expect.stringContaining("newer signer") });
+    expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B, reason: expect.stringContaining("newer signing key") });
     expect(kit.current.heard).toEqual([{ epoch: 7, address: KB }]);
   });
 
@@ -111,7 +111,7 @@ describe("the signer floor a visit holds each node to (monkey-trading/console#37
     kit.nodeB.signedRead = async () => route(null, { epoch: 7, address: KB });
     await kit.follower.check();
     expect(kit.adopted).toEqual([]);
-    expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B, reason: expect.stringContaining("newer signer") });
+    expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B, reason: expect.stringContaining("newer signing key") });
   });
 
   it("holds a node it moves to with a wallet, whose route states no signer, to the floor, and no node it leaves waiting (monkey-trading/console#376)", async () => {

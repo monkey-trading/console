@@ -191,7 +191,7 @@ export class LiveEngineClient implements EngineClient {
   /** Sends a signed action — `POST`, or `DELETE` for the session-key revocation — and answers with the events its command produced, signed for this request. */
   private async action(method: "POST" | "DELETE", path: string, body: unknown): Promise<ActionResult> {
     const answer = method === "POST" ? await this.transport.post(path, body) : await this.transport.delete(path, body);
-    if (!Array.isArray(answer.body)) throw new EngineError(0, "The node's signed answer to the action was not a list of events.");
+    if (!Array.isArray(answer.body)) throw new EngineError(0, "The server's reply to your request couldn't be read.");
     // The attested enclave signed this list for this request, so its events are the engine's.
     return { seq: answer.seq ?? 0, events: answer.body as ActionResult["events"] };
   }
