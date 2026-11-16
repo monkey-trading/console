@@ -114,7 +114,7 @@ function declinedProblem(quote: MarketQuote, side: Side, declined: Reject, limit
   const fitting = [...steps].reverse().find((s) => s.declined === undefined);
   // In contracts, cut to the size field's step so it can be typed as it reads; a smaller size still fits.
   const largest = fitting === undefined ? 0n : truncateToStep(fixedFromWire(fitting.qty));
-  if (largest <= 0n) return `Insufficient margin. Your equity does not cover the margin for a position in this market.${leverageReason(limits)}`;
+  if (largest <= 0n) return `Insufficient margin. Your equity does not cover the margin this order requires.${leverageReason(limits)}`;
   const text = fixedToWire(largest);
-  return `Insufficient margin for this order size. With your current equity, the largest order you can place in this market is approximately ${text} ${text === "1" ? "contract" : "contracts"}.${leverageReason(limits)}`;
+  return `Insufficient margin for this order size. With your current equity, the largest order you can place is approximately ${text} ${text === "1" ? "contract" : "contracts"}.${leverageReason(limits)}`;
 }

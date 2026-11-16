@@ -22,6 +22,11 @@ describe("placeTooltip", () => {
     expect(placeTooltip({ left: 20, top: 640, bottom: 660 }, phone)).toEqual({ left: 20, width: 240, bottom: 60 });
   });
 
+  it("opens below only with room for the tallest tooltip, 240 px, under the label", () => {
+    expect(placeTooltip({ left: 20, top: 440, bottom: 460 }, phone)).toEqual({ left: 20, width: 240, top: 460 });
+    expect(placeTooltip({ left: 20, top: 441, bottom: 461 }, phone)).toEqual({ left: 20, width: 240, bottom: 259 });
+  });
+
   it("opens below when there is no room above either, and not at all for a label out of view", () => {
     expect(placeTooltip({ left: 20, top: 100, bottom: 120 }, { width: 320, height: 200 })).toEqual({ left: 20, width: 240, top: 120 });
     expect(placeTooltip({ left: 20, top: 800, bottom: 820 }, phone)).toBeNull();

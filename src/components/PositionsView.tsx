@@ -56,7 +56,7 @@ const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-g
 const CLOSEOUT_TIP = "The price at which your account would be closed out, assuming your other positions remain at their current prices. Because margin is shared across your account, your largest losing position is closed first, and that may not be this one. Due means your account is already below the close-out level. None means no realistic price would close out your account.";
 
 /** What the P&L column means, shared by the table's head and the phone rows' labels. */
-const PNL_TIP = "The profit or loss you would realise by closing the entire position now, before the profit fee. It is calculated at the price at which the position would close (the bid for a long position, the offer for a short), so the spread is already taken into account. Details shows the figure at the mark price.";
+const PNL_TIP = "The profit or loss you would realise by closing the entire position now, before the profit fee. It is calculated at the price at which the position would close (the bid for a long position, the offer for a short), so the spread is already taken into account. Details shows the profit or loss at the mark price.";
 
 /** What the hold, fee and close columns mean, shared by the table's head and the phone rows' labels. */
 const HOLD_TIP = "The length of time the position has been open, which determines its profit fee rate. Adding to a position reduces its holding time in proportion to the size added. Reducing a position leaves it unchanged.";
