@@ -28,11 +28,11 @@ import { Term } from "./house/Panel";
 import { useConfirmWindow } from "./use-confirm-window";
 import { usePrefs } from "./use-prefs";
 
-const TH = "whitespace-nowrap px-3 py-3 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
+const TH = "whitespace-nowrap px-2 py-3 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
 /** A body cell: one line, so a row's height never depends on its figures. */
-const TD = "whitespace-nowrap px-3 py-4";
+const TD = "whitespace-nowrap px-2 py-4";
 /** A figure column's least width, so a withheld figure ("—") and a shown one take the same room. */
-const FIG = "min-w-[12ch]";
+const FIG = "min-w-[10ch]";
 const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 /** The button while it waits for its second press: the hover colours, held. */
 const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
@@ -181,7 +181,7 @@ export function PositionsView() {
         ))}
       </ul>
       {reasons.map((why) => <p key={why} className="hidden border-b border-line px-4 py-2 text-label text-fg-3 lg:block">{why}</p>)}
-      <div className="relative hidden overflow-x-auto lg:block">
+      <div role="region" aria-label="Open positions" tabIndex={0} className="relative hidden overflow-x-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow lg:block">
         <table className="w-full min-w-max text-caption">
           <thead>
             <tr className="border-b border-line">

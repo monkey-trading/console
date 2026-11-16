@@ -49,7 +49,7 @@ describe("a position whose mark gain is smaller than its exit spread", () => {
     expect(html).toContain("At the mark it is $20.00, before the exit spread.");
     expect(html).toContain("No profit fee on this close");
     expect(html).not.toMatch(/<button[^>]*>\$20\.00<\/button>/);
-    expect(html).toContain("<td class=\"whitespace-nowrap px-3 py-4 min-w-[12ch]\">-$20.40</td>");
+    expect(html).toMatch(/<td[^>]*>-\$20\.40<\/td>/);
   });
 
   it("shows a short's loss at the offer the same way", () => {
