@@ -81,14 +81,16 @@ for i, want in sorted(wanted.items()):
     got = served[i]
     name = f"{want['symbol']} ({i})"
     assert got["symbol"] == want["symbol"], f"{name}: served as {got['symbol']}"
-    assert Decimal(got["house_cap_floor"]) == Decimal(want["house_cap_floor"]), f"{name}: cap floor {got['house_cap_floor']}"
-    assert got["house_cap_bps"] == want["house_cap_bps"], f"{name}: cap share {got['house_cap_bps']}"
-    assert got["max_slippage_bps"] == want["max_slippage_bps"], f"{name}: slippage {got['max_slippage_bps']}"
-    assert bands(got["margin_tiers"]) == bands(want["margin_tiers"]), f"{name}: margin tiers {got['margin_tiers']}"
-    assert bands(got["spread_tiers"]) == bands(want["spread_tiers"]), f"{name}: spread tiers {got['spread_tiers']}"
-total = Decimal(genesis["params"]["house_total_cap_floor"])
+    # A field the file leaves out takes the engine's default for its asset class, so only listed ones are compared.
+    for field in ("house_cap_floor", "house_cap_bps", "max_slippage_bps"):
+        if field in want:
+            assert Decimal(got[field]) == Decimal(want[field]), f"{name}: {field} {got[field]}"
+    for field in ("margin_tiers", "spread_tiers"):
+        if field in want:
+            assert bands(got[field]) == bands(want[field]), f"{name}: {field} {got[field]}"
+total = Decimal(genesis["params"].get("house_total_cap_floor", params["house_total_cap_floor"]))
 assert Decimal(params["house_total_cap_floor"]) == total, f"total cap floor {params['house_total_cap_floor']}"
-assert len(params["volume_tiers"]) == len(genesis["params"]["volume_tiers"]), "volume tiers differ"
+assert len(params["volume_tiers"]) == len(genesis["params"].get("volume_tiers", [])), "volume tiers differ"
 if genesis["house_capital"] == "0":
     assert Decimal(house["cash"]) == 0 and Decimal(house["nav"]) == 0, f"the house starts with {house['nav']}, not nothing"
 print(f"{len(wanted)} markets match, total cap floor {total:,.0f} USD, {len(params['volume_tiers'])} volume tiers")
@@ -96,5 +98,6 @@ PY
 
 echo "==> Check the summary and the control script name the genesis"
 grep -Fq "Genesis            $genesis" "$work/stack.log" || die "the stack's summary does not name $genesis"
-"$root/scripts/dev-local-stack-ctl.sh" status | grep -Fq "$genesis" || die "dev-local-stack-ctl.sh status does not name $genesis"
+status="$("$root/scripts/dev-local-stack-ctl.sh" status)" || die "dev-local-stack-ctl.sh status failed"
+grep -Fq "$genesis" <<<"$status" || die "dev-local-stack-ctl.sh status does not name $genesis"
 echo "OK: the node runs $genesis"
