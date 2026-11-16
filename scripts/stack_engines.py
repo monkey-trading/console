@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from stack_toml import dumps  # noqa: E402
 
 
-def sealed(cfg: dict, data: Path, handover_port) -> None:
+def sealed(cfg: dict, data: Path, handover_port: int) -> None:
     """Seals the engine's keys under `data` and offers them to a successor at `handover_port`.
     Rotation on makes the node follow the registry's elections. The mock TEE seals with a public
     stand-in, and the successor's TLS check is off because both engines' keys are self-generated."""

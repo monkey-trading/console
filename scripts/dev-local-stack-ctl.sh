@@ -303,25 +303,39 @@ rotation_status() {
 
 stop_operator() {
   rotating
-  local named i epoch interval tolerance misses window deadline promoted p started=$SECONDS
+  local named i epoch interval tolerance misses window now length offset next next_member deadline promoted p started=$SECONDS
   named="$(named_operator)"
   i="$(member_of "$named")" || die "the operator in effect, $named, runs no engine of this stack"
   epoch="$(signer_epoch)"
   read -r interval tolerance misses _ <<<"$(call "$schedule" 'liveness()(uint64,uint64,uint16,uint16)' | awk '{print $1}' | tr '\n' ' ')"
   window=$((interval * (misses + 1) + tolerance))
+  # A turn that passes to another member before a promotion could would leave the stop on an engine no longer in office.
+  now="$(chain_time)"
+  length="$(call "$schedule" 'turnLength()(uint64)' | first_of)"
+  offset="$(call "$schedule" 'boundary(uint64)(uint64)' 0 | first_of)"
+  next=$((((now - offset) / length + 1) * length + offset))
+  next_member="$(call "$schedule" 'turnOf(uint64)((address,uint16,uint8,uint32,uint64,uint64,bytes32,address))' $(((now - offset) / length + 1)) | tr -d '( )' | cut -d, -f1)"
+  if [[ "$(lower "$next_member")" != "$(lower "$named")" && "$next_member" != 0x0000000000000000000000000000000000000000 ]] &&
+    ((next - now < window + 60)); then
+    die "the turn passes to another engine in $((next - now)) s, before a promotion could: run stop-operator again after $(stamp "$next")"
+  fi
   touch "$work_dir/stop-${member_names[$i]}"
+  # However this command ends, the stack then starts the stopped engine again.
+  # shellcheck disable=SC2064 # The engine to start again is fixed here.
+  trap "touch '$work_dir/start-${member_names[$i]}'" EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   echo "Stopping the ${member_names[$i]} engine, the operator in effect. The other members record each heartbeat it misses, and"
-  echo "once it has missed $misses in a row they promote the next member's standby key to the vault's signer, about $window s from now."
+  echo "once it has missed $misses in a row they promote the next member's standby key to the vault's signer, within about $window s."
   deadline=$((SECONDS + window + 240))
   while (($(signer_epoch) == epoch)); do
-    ((SECONDS < deadline)) || die "no promotion within $((window + 240)) s; see the members' logs in $work_dir"
+    ((SECONDS < deadline)) || die "no promotion within $((window + 240)) s, so the stack starts the ${member_names[$i]} engine again; see the members' logs in $work_dir"
     sleep 5
   done
   promoted="$(named_operator)"
-  p="$(member_of "$promoted")" || die "the vault's new signer belongs to no engine of this stack"
+  p="$(member_of "$promoted")" || die "the operator the registry names after the promotion, $promoted, runs no engine of this stack"
   echo "After $((SECONDS - started)) s, the vault installed the ${member_names[$p]} engine's standby key in signer epoch $(signer_epoch): that engine"
   echo "serves the turn from its copy of the log, at ${member_apis[$p]}."
-  touch "$work_dir/start-${member_names[$i]}"
   echo "The ${member_names[$i]} engine starts again and follows the ${member_names[$p]} engine until its next turn."
 }
 

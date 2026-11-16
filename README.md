@@ -194,7 +194,8 @@ ROTATION=1 ./scripts/dev-local-stack.sh
 ```
 
 This includes the two-engine option and the parameter votes, with the same three candidates, wallets and vote
-contract, and builds the node with the engine's `short-turns` feature, which a production build refuses. Anvil
+contract, and builds the node with the engine's `short-turns` feature (monkey-trading/engine#850), which a
+production build refuses, so the engine checkout must include it. Anvil
 starts nine days in the past, so the registry's one-day epoch adopts the three candidates as the rotation set
 and the set's seven-day notice passes on the chain's clock before any engine starts. The stack then draws the turn
 in effect for the first engine (`https://127.0.0.1:8080`) and moves the chain to the present, after which it
@@ -214,8 +215,8 @@ engines in turn. At each boundary:
    goes back to following. The first engine, which started with new keys, exits once it has handed them over,
    and the stack starts it again as a member.
 2. The console moves to the engine that holds the turn within a minute, with balances and positions intact, and
-   trading continues there. A browser keeps a self-signed certificate per origin: if the console does not move,
-   open the new engine's `/v1/health` once and accept its certificate.
+   trading continues there. Each engine serves a self-signed certificate: if the console does not move, open that
+   engine's `/v1/health` and accept its certificate.
 3. `./scripts/dev-local-stack-ctl.sh status` shows the turns around the present one and the engine each names,
    the operator in effect, the vault's signer, and whether each engine serves, follows or is stopped.
 

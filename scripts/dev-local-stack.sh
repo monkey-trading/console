@@ -59,7 +59,8 @@
 # console's node_modules (`npm ci`); and the internet, for the node's Roughtime servers and venues.
 #
 # Environment:
-#   ENGINE_DIR       the engine checkout (default: `engine` beside the console's main checkout)
+#   ENGINE_DIR       the engine checkout (default: `engine` beside the console's main checkout); GOVERNANCE=1 and
+#                    ROTATION=1 need one with monkey-trading/engine#850's turn length and `short-turns` feature
 #   CARGO_CMD        a prefix for every Cargo command, such as a build-slot wrapper (default: none)
 #   ANVIL_PORT, API_PORT, CONSOLE_PORT, METRICS_PORT, ACCESS_SOURCE_PORT
 #                    override 8545, 8080, 3000, 9464 and 18846; each must be free
@@ -890,62 +891,85 @@ if [[ "$rotation" == 1 ]]; then
     done
     return 1
   }
+  # Stops the stack if any member's engine has exited.
+  members_alive() {
+    local i pid
+    for i in 0 1 2; do
+      pid="$(member_pid "$i")"
+      alive "$pid" || { step_log="${member_logs[$i]}" && die "the ${member_names[$i]} engine exited"; }
+    done
+  }
   # Starts member `$1`'s engine as a member, which follows the operator in effect until its turn.
   start_member() {
     (cd "${member_dirs[$1]}" && exec "$engine" run --config "${member_configs[$1]}" --mock-launch-digest "${member_digests[$1]}") \
       >>"${member_logs[$1]}" 2>&1 &
     set_member_pid "$1" "$!"
   }
-  # The registration each member's node last wrote that the stack sent, as its calldata.
+  # The registration each member's node last wrote that the schedule took, as its calldata, and when the stack may send
+  # one the schedule refused again.
   registered_calls=("" "" "")
-  # Sends each standby key registration a member's node has written, from its candidate, once each, and records the key
-  # registered in `standby-<name>` in the work directory.
+  registration_retry_at=(0 0 0)
+  # Sends each standby key registration a member's node has written, from its candidate, until the schedule takes it, and
+  # records the key registered in `standby-<name>` in the work directory.
   send_standby_registrations() {
-    local i file calldata key
+    local i file calldata key now
+    now="$(date +%s)"
     for i in 0 1 2; do
       file="${member_dirs[$i]}/keys/standby-registration.json"
       calldata="$(jq -r '.calldata // empty' "$file" 2>/dev/null)" || continue
-      [[ -n "$calldata" && "$calldata" != "${registered_calls[$i]}" ]] || continue
-      registered_calls[i]="$calldata"
+      if [[ -z "$calldata" || "$calldata" == "${registered_calls[$i]}" ]] || ((now < registration_retry_at[i])); then continue; fi
       key="$(jq -r '.key' "$file")"
       if send_as "${member_candidates[$i]}" "$schedule" "$calldata"; then
+        registered_calls[i]="$calldata"
         echo "$key" >"$work/standby-${member_names[$i]}"
         step "Registered the ${member_names[$i]} engine's standby key $key, which a promotion can make the vault's signer"
       else
-        echo "    The schedule refused the ${member_names[$i]} engine's standby key registration; its node writes another (see $step_log)" >&2
+        registration_retry_at[i]=$((now + 15))
+        echo "    The schedule refused the ${member_names[$i]} engine's standby key registration; the stack sends it again in 15 s (see $step_log)" >&2
       fi
     done
   }
   stamp() { date -u -r "$1" '+%H:%M:%S UTC'; }
-  # Draws the turns from `next_turn`: relays each one's seed for the member after the last drawn one before its draw
-  # deadline, and draws it at the deadline. A turn whose draw window passes undrawn stays undrawn, and the turn drawn last
-  # keeps naming its member.
+  # Draws the turns from `next_turn`: relays each one's seed, for the member after the last one drawn, before its draw
+  # deadline, and draws it from the deadline until it begins. A failed relay or draw is tried again 10 s later while its
+  # window is open; a turn whose window passes undrawn stays undrawn, and the turn drawn last keeps naming its member.
   seeded=""
+  turn_retry_at=0
   turn_tick() {
     local now boundary seed drawn i
     now="$(date +%s)"
     boundary="$(boundary_of "$next_turn")"
     if ((now >= boundary - 2)); then
+      echo "    Turn $next_turn was not drawn before it began; the turn drawn last keeps naming its member" >&2
       next_turn=$((next_turn + 1))
       seeded=""
+      turn_retry_at=0
       return 0
     fi
+    ((now >= turn_retry_at)) || return 0
     if [[ -z "$seeded" ]] && ((now < boundary - turn_secs - 5)); then
-      seeded=failed
-      if seed="$(seed_for "$next_turn" "${member_candidates[$next_member]}")" && relay_seed "$next_turn" "$seed"; then seeded=yes; fi
+      if seed="$(seed_for "$next_turn" "${member_candidates[$next_member]}")" && relay_seed "$next_turn" "$seed"; then
+        seeded=yes
+      else
+        turn_retry_at=$((now + 10))
+        echo "    The seed for turn $next_turn could not be relayed (see $step_log); trying again in 10 s" >&2
+        return 0
+      fi
     fi
     ((now >= boundary - turn_secs + 1)) || return 0
-    if send "$schedule" 'draw(uint64)' "$next_turn" --private-key "$payer_key"; then
-      drawn="$(drawn_candidate "$next_turn")"
-      if i="$(member_of "$drawn")"; then
-        step "Drew turn $next_turn for the ${member_names[$i]} engine, from $(stamp "$boundary"); it takes the keys then"
-        next_member=$(((i + 1) % 3))
-      fi
+    send "$schedule" 'draw(uint64)' "$next_turn" --private-key "$payer_key" || true
+    # A draw whose answer was lost may still have landed: the chain says whom the turn names.
+    drawn="$(drawn_candidate "$next_turn")" || drawn=""
+    if i="$(member_of "$drawn")"; then
+      step "Drew turn $next_turn for the ${member_names[$i]} engine, from $(stamp "$boundary"); it takes the keys then"
+      next_member=$(((i + 1) % 3))
+      next_turn=$((next_turn + 1))
+      seeded=""
+      turn_retry_at=0
     else
-      echo "    Turn $next_turn could not be drawn (see $step_log); the turn drawn last keeps naming its member" >&2
+      turn_retry_at=$((now + 10))
+      echo "    Turn $next_turn could not be drawn (see $step_log); trying again in 10 s" >&2
     fi
-    next_turn=$((next_turn + 1))
-    seeded=""
   }
   # The standby key registrations, and the turns once the stack writes the first turn to draw and its member to
   # `turns-from` in the work directory, beside the stack's own steps and loop, so neither waits on them. A step that
@@ -999,11 +1023,13 @@ if [[ "$rotation" == 1 ]]; then
 fi
 node_up() {
   alive "$node_pid" || die "the node exited"
+  [[ "$rotation" == 0 ]] || members_alive
   [[ "$(curl -sk --max-time 2 "$api/v1/health" 2>/dev/null)" == ok ]]
 }
 if [[ "$second_engine" == 1 ]]; then
   attestation_up() {
     alive "$node_pid" || die "the node exited"
+    [[ "$rotation" == 0 ]] || members_alive
     [[ -n "$(curl -sk --max-time 2 "$api/v1/attestation" 2>/dev/null | jq -r '.enclave_address // empty' 2>/dev/null)" ]]
   }
   poll 120 attestation_up || die "the node did not serve its attestation on $api/v1/attestation"
@@ -1024,6 +1050,7 @@ step_log="$work/init-emissions.log"
 # then, so wait for the sequenced markets before sending the operator's schedule.
 genesis_applied() {
   alive "$node_pid" || die "the node exited"
+  [[ "$rotation" == 0 ]] || members_alive
   [[ "$(curl -sk --max-time 2 "$api/v1/markets" 2>/dev/null)" != "[]" ]]
 }
 genesis_wait=120
@@ -1072,13 +1099,6 @@ done
 if [[ "$parameter_votes" == 1 && "$rotation" == 0 ]]; then adopt_rotation_set; fi
 
 if [[ "$rotation" == 1 ]]; then
-  members_alive() {
-    local i pid
-    for i in 0 1 2; do
-      pid="$(member_pid "$i")"
-      alive "$pid" || { step_log="${member_logs[$i]}" && die "the ${member_names[$i]} engine exited"; }
-    done
-  }
   # An engine accepts a turn's key only once its log has named the turn's set a turn earlier.
   step "Wait for the first engine's log to name the rotation set"
   logged_ms=""
@@ -1091,8 +1111,9 @@ if [[ "$rotation" == 1 ]]; then
   earliest=$((logged_ms / 1000 + turn_secs))
   if ((earliest < $(date +%s) + turn_secs + 60)); then earliest=$(($(date +%s) + turn_secs + 60)); fi
   next_turn=$(((earliest - turn_offset + turn_secs - 1) / turn_secs))
-  # The turns go to the members in order, from the second engine.
-  echo "$next_turn 1" >"$work/turns-from"
+  # The turns go to the members in order, from the second engine; the driver reads the file whole once it exists.
+  echo "$next_turn 1" >"$work/turns-from.tmp"
+  mv "$work/turns-from.tmp" "$work/turns-from"
   step_log="$work/turns.log"
   step "Register each engine's standby key, which its node writes once the vault's signer vouches for it"
   standbys_registered() {
@@ -1236,7 +1257,8 @@ Rotation           Each member of the rotation set runs an engine built with fiv
                    next member in that order, and at each boundary that member's engine takes the keys from
                    the previous one. An engine serves its API only while it holds a turn: if the console does
                    not move to the engine that holds the turn, open that engine's /v1/health and accept its
-                   certificate.
+                   certificate. A withdrawal can be claimed once the next turn's member has checked the log up
+                   to its approval, from the next boundary.
 Relayers           Each engine posts its checkpoints and its log heads (to the LogHeads contract $logheads)
                    through relayers of its own, Anvil accounts 9 and 10, 11 and 12, and 13 and 14, and runs a
                    liveness caller from account 15, 16 or 17.
