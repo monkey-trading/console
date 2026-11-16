@@ -28,6 +28,22 @@
 # chain's clock then runs eight days ahead of the engine's, so withdrawal authorizations do not pay,
 # and with a schedule closes adopt rotation sets, so `elect` and `handover` do not apply.
 #
+# ROTATION=1 runs the parameter votes' rotation set with an engine for each member, on a node built with
+# the engine's development-only `short-turns` feature, whose operator turns last five minutes. Anvil
+# starts nine days in the past, so the registry's one-day epoch and the set's seven-day notice pass on the
+# chain's clock before any engine starts; the turn in effect now is drawn for the first engine, and the
+# chain then runs on true time. The first engine seals new keys and the timelock installs its enclave;
+# the second and third start as members, following it. Each member posts through relayers of its own
+# (checkpoints: Anvil accounts 9, 11 and 13; log heads: 10, 12 and 14) and runs a liveness caller (15, 16
+# and 17), and the stack sends each standby key registration a member's node writes, from its candidate.
+# From the first turn the engines accept, a turn after the first engine's log names the set, the stack
+# relays each turn's seed from the seed relay's aliased address, as the Arbitrum bridge delivers it,
+# choosing seeds that give the turns to the members in order, and draws each turn at its draw deadline.
+# At each boundary the turn's member takes the keys by itself; the first engine, which started with new
+# keys, exits once it has handed them over, and the stack starts it again as a member.
+# `dev-local-stack-ctl.sh status` shows the turns, and `stop-operator` stops the operator in effect so
+# the other members promote the next one's standby key.
+#
 # GENESIS_FILE=config/production-genesis.toml runs the node on the launch genesis instead of the development one:
 # every launch market with its margin and spread bands, house cap floors, volume tiers, order and request
 # limits and fee discounts, and no house capital, so trades open against the cap floors as at launch. The stack
@@ -43,7 +59,8 @@
 # console's node_modules (`npm ci`); and the internet, for the node's Roughtime servers and venues.
 #
 # Environment:
-#   ENGINE_DIR       the engine checkout (default: `engine` beside the console's main checkout)
+#   ENGINE_DIR       the engine checkout (default: `engine` beside the console's main checkout); GOVERNANCE=1 and
+#                    ROTATION=1 need one with monkey-trading/engine#850's turn length and `short-turns` feature
 #   CARGO_CMD        a prefix for every Cargo command, such as a build-slot wrapper (default: none)
 #   ANVIL_PORT, API_PORT, CONSOLE_PORT, METRICS_PORT, ACCESS_SOURCE_PORT
 #                    override 8545, 8080, 3000, 9464 and 18846; each must be free
@@ -53,6 +70,10 @@
 #                    with SECOND_ENGINE=1, override 8081, 9465, 9443 and 9444; each must be free
 #   DEV_WALLET2      with SECOND_ENGINE=1, the second staking wallet, instead of Anvil account 3
 #   GOVERNANCE       `1` adds the parameter votes described above (needs SECOND_ENGINE=1; default off)
+#   ROTATION         `1` runs an engine for each rotation-set member, as described above (sets SECOND_ENGINE=1 and
+#                    GOVERNANCE=1; default off)
+#   THIRD_API_PORT, THIRD_METRICS_PORT, THIRD_HANDOVER_PORT
+#                    with ROTATION=1, override 8082, 9466 and 9445; each must be free
 #   RESTRICTION_TTL  with GOVERNANCE=1, how long a fast-path restriction lasts (default 3m: a development
 #                    value; the engine takes up to seven days)
 #   GENESIS_FILE     an engine config file whose `[genesis]` table the node takes: a path, or one relative to the engine
@@ -80,15 +101,25 @@ access_port="${ACCESS_SOURCE_PORT:-18846}"
 console_build="${CONSOLE_BUILD:-dev}"
 second_engine="${SECOND_ENGINE:-0}"
 parameter_votes="${GOVERNANCE:-0}"
+rotation="${ROTATION:-0}"
+# Rotation runs the two-engine option's registry with the parameter votes' schedule and set.
+if [[ "$rotation" == 1 ]]; then
+  second_engine=1
+  parameter_votes=1
+fi
 restriction_ttl="${RESTRICTION_TTL:-3m}"
 second_api_port="${SECOND_API_PORT:-8081}"
 second_metrics_port="${SECOND_METRICS_PORT:-9465}"
 handover_port="${HANDOVER_PORT:-9443}"
 second_handover_port="${SECOND_HANDOVER_PORT:-9444}"
+third_api_port="${THIRD_API_PORT:-8082}"
+third_metrics_port="${THIRD_METRICS_PORT:-9466}"
+third_handover_port="${THIRD_HANDOVER_PORT:-9445}"
 rpc="http://127.0.0.1:$anvil_port"
 # The node serves its API over TLS with a key it generates at startup, so curl skips verification.
 api="https://127.0.0.1:$api_port"
 second_api="https://127.0.0.1:$second_api_port"
+third_api="https://127.0.0.1:$third_api_port"
 # The node allows this browser origin only.
 console_url="http://localhost:$console_port"
 metrics_url="http://127.0.0.1:$metrics_port/metrics"
@@ -135,9 +166,17 @@ candidate_bond_monkey=1
 # which follows the period budget, bounds the total. The election's thresholds are shares of the
 # stake, not of the supply, so they need no scaling with the budget.
 wallet_monkey=20000
-# The two releases' launch measurements: the mock TEE's stand-ins, which its sealing derives keys from.
+# The releases' launch measurements: the mock TEE's stand-ins, which its sealing derives keys from.
 first_digest_byte=5a
 second_digest_byte=71
+third_digest_byte=7c
+# With ROTATION=1, a short-turns build's five-minute turns, which the seed receiver numbers the turns by
+# (a day otherwise, as the engine's default build has them); the heartbeat rule and take window are the
+# engine's short-turns scenario's, whose take window fits in a turn (see the schedule's deployment below).
+turn_secs=86400
+# How far in the past Anvil starts: past the registry's one-day epoch and the set's seven-day notice.
+rotation_past_secs=$((9 * 86400))
+if [[ "$rotation" == 1 ]]; then turn_secs=300; fi
 
 work=""
 step_log=""
@@ -147,6 +186,8 @@ node_pid=""
 console_pid=""
 info_written=""
 second_pid=""
+third_pid=""
+driver_pid=""
 
 step() { echo "==> $*"; }
 die() {
@@ -210,7 +251,9 @@ cleanup() {
   echo "==> Stopping the local stack" >&2
   # Quietly: bash reports each child a signal stops.
   if [[ -n "$console_pid" ]]; then stop_group "$console_pid" 2>/dev/null; fi
+  if [[ -n "$driver_pid" ]]; then stop_pid "$driver_pid" 5 2>/dev/null; fi
   # The node drains on TERM; give it time to finish its log.
+  if [[ -n "$third_pid" ]]; then stop_pid "$third_pid" 30 2>/dev/null; fi
   if [[ -n "$second_pid" ]]; then stop_pid "$second_pid" 30 2>/dev/null; fi
   if [[ -n "$node_pid" ]]; then stop_pid "$node_pid" 30 2>/dev/null; fi
   if [[ -n "$access_pid" ]]; then stop_pid "$access_pid" 5 2>/dev/null; fi
@@ -264,11 +307,13 @@ fi
 [[ -x "$root/node_modules/.bin/next" ]] || die "the console's dependencies are not installed: run \`npm ci\` in $root"
 [[ "$console_build" == dev || "$console_build" == production ]] || die "CONSOLE_BUILD must be dev or production: $console_build"
 [[ "$second_engine" == 0 || "$second_engine" == 1 ]] || die "SECOND_ENGINE must be 0 or 1: $second_engine"
+[[ "$rotation" == 0 || "$rotation" == 1 ]] || die "ROTATION must be 0 or 1: $rotation"
 [[ "$parameter_votes" == 0 || "$second_engine" == 1 ]] || die "GOVERNANCE=1 needs SECOND_ENGINE=1, whose rotation it votes under"
 [[ "$parameter_votes" == 0 || "$parameter_votes" == 1 ]] || die "GOVERNANCE must be 0 or 1: $parameter_votes"
 [[ "$restriction_ttl" =~ ^[1-9][0-9]*(s|m|h)$ ]] || die "RESTRICTION_TTL must be a whole number of seconds, minutes or hours, such as 3m: $restriction_ttl"
 ports=("$anvil_port" "$api_port" "$console_port" "$metrics_port" "$access_port")
 [[ "$second_engine" == 0 ]] || ports+=("$second_api_port" "$second_metrics_port" "$handover_port" "$second_handover_port")
+[[ "$rotation" == 0 ]] || ports+=("$third_api_port" "$third_metrics_port" "$third_handover_port")
 for port in "${ports[@]}"; do
   if ! [[ "$port" =~ ^[0-9]+$ ]] || ((port < 1 || port > 65535)); then die "not a port: $port"; fi
   if port_answers "$port"; then
@@ -276,7 +321,7 @@ for port in "${ports[@]}"; do
   fi
 done
 [[ "$(printf '%s\n' "${ports[@]}" | sort -u | wc -l | tr -d ' ')" == "${#ports[@]}" ]] ||
-  die "ANVIL_PORT, API_PORT, CONSOLE_PORT, METRICS_PORT, ACCESS_SOURCE_PORT and, with SECOND_ENGINE=1, the second engine's ports must differ"
+  die "ANVIL_PORT, API_PORT, CONSOLE_PORT, METRICS_PORT, ACCESS_SOURCE_PORT and, with SECOND_ENGINE=1 or ROTATION=1, the other engines' ports must differ"
 [[ "$staking_epoch_secs" =~ ^[1-9][0-9]*$ ]] || die "STAKING_EPOCH_SECS must be a positive whole number of seconds: $staking_epoch_secs"
 if [[ -n "${DEV_WALLET:-}" ]]; then
   [[ "$DEV_WALLET" =~ ^0x[0-9a-fA-F]{40}$ ]] || die "DEV_WALLET must be a 0x address: $DEV_WALLET"
@@ -291,7 +336,11 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/local-stack.XXXXXX")"
 
 # Built first, so a slow build cannot leave the chain's head stale by the time the node starts.
 step "Build the node and the local access source"
-cargo_run build --locked -p engine-node --bin engine --example access_source --manifest-path "$engine_dir/Cargo.toml"
+build_features=()
+# Five-minute turns: a development-only feature, which a production build refuses.
+if [[ "$rotation" == 1 ]]; then build_features=(--features short-turns); fi
+cargo_run build --locked -p engine-node --bin engine --example access_source ${build_features[@]+"${build_features[@]}"} \
+  --manifest-path "$engine_dir/Cargo.toml"
 # Wherever Cargo put it: `CARGO_TARGET_DIR` or `build.target-dir` may move the target directory.
 target="$(cargo_run metadata --format-version 1 --no-deps --manifest-path "$engine_dir/Cargo.toml" | jq -r .target_directory)"
 engine="$target/debug/engine"
@@ -301,7 +350,9 @@ step_log="$work/forge-build.log"
 
 # Anvil's default test mnemonic: account 0 deploys and signs the synthetic access source's
 # screenings, 1 is the dev wallet, 2 funds the house, 8 deploys the registry lens (and, with SECOND_ENGINE=1,
-# LogHeads), 9 relays checkpoints and, with SECOND_ENGINE=1, account 10 relays log heads.
+# LogHeads), 9 relays checkpoints and, with SECOND_ENGINE=1, account 10 relays log heads. With ROTATION=1, 11
+# and 12 relay the second engine's checkpoints and log heads, 13 and 14 the third's, and 15, 16 and 17 are
+# the three engines' liveness callers.
 mnemonic="test test test test test test test test test test test junk"
 key() { cast wallet private-key --mnemonic "$mnemonic" --mnemonic-index "$1"; }
 address() { cast wallet address --private-key "$1"; }
@@ -341,6 +392,7 @@ if [[ "$second_engine" == 1 ]]; then
   fi
   first_digest="$(hex_bytes "$first_digest_byte" 48)"
   second_digest="$(hex_bytes "$second_digest_byte" 48)"
+  third_digest="$(hex_bytes "$third_digest_byte" 48)"
 fi
 # The node's published mock enclave key (tee.use_published_mock_key): 32 bytes of 0x43. The vault
 # checks checkpoints and withdrawal authorizations against it.
@@ -365,9 +417,10 @@ if [[ "$second_engine" == 1 ]]; then
   heads_relayer="$(address "$(key 10)")"
   anvil_accounts=11
 fi
+if [[ "$rotation" == 1 ]]; then anvil_accounts=18; fi
 # With GOVERNANCE=1, Anvil account 5 deploys the seed receiver the schedule is built over (no turn is
-# drawn here, so no seed is relayed), the schedule and the vote contract, at its first three nonces,
-# and account 6 is the third candidate.
+# drawn without ROTATION=1, so no seed is relayed), the schedule and the vote contract, at its first three
+# nonces, and account 6 is the third candidate.
 seed_receiver=""
 schedule=""
 vote=""
@@ -492,22 +545,42 @@ if [[ "$launch" == 1 ]]; then
 fi
 
 if [[ "$second_engine" == 1 ]]; then
-  step "Write the two engines' configs"
+  step "Write the engines' configs"
   step_log="$work/engines.log"
   # The registry names each engine's release by its config's hash, so the configs are final here.
-  second_admin_public="0x04$(cast wallet public-key --private-key "$second_admin_key" | sed 's/^0x//')"
-  hashes="$(python3 "$root/scripts/stack_engines.py" "$work" "$handover_port" "$second_api_port" "$second_metrics_port" \
-    "$second_handover_port" "$second_admin_public" 2>"$step_log")" || die "could not write the two engines' configs"
-  read -r first_config_hash second_config_hash <<<"$hashes"
+  admin_of() { printf '0x04%s' "$(cast wallet public-key --private-key "$1" | sed 's/^0x//')"; }
+  # The engines as stack_engines.py takes them (see its usage).
+  spec="$(jq -n --argjson h1 "$handover_port" --argjson api2 "$second_api_port" --argjson metrics2 "$second_metrics_port" \
+    --argjson h2 "$second_handover_port" --arg admin2 "$(admin_of "$second_admin_key")" \
+    '{first: {handover: $h1}, others: [{name: "second", api: $api2, metrics: $metrics2, handover: $h2, admin: $admin2}]}')"
+  if [[ "$rotation" == 1 ]]; then
+    # The third candidate's engine, and every member posting through relayers of its own and running a
+    # liveness caller from its own account.
+    account() { address "$(key "$1")"; }
+    spec="$(jq --argjson api3 "$third_api_port" --argjson metrics3 "$third_metrics_port" --argjson h3 "$third_handover_port" \
+      --arg admin3 "$(admin_of "$third_candidate_key")" \
+      --arg c1 "$(account 9)" --arg l1 "$(account 10)" --arg v1 "$(account 15)" \
+      --arg c2 "$(account 11)" --arg l2 "$(account 12)" --arg v2 "$(account 16)" \
+      --arg c3 "$(account 13)" --arg l3 "$(account 14)" --arg v3 "$(account 17)" \
+      '.others += [{name: "third", api: $api3, metrics: $metrics3, handover: $h3, admin: $admin3}]
+        | .first += {checkpoints: $c1, heads: $l1, caller: $v1}
+        | .others[0] += {checkpoints: $c2, heads: $l2, caller: $v2}
+        | .others[1] += {checkpoints: $c3, heads: $l3, caller: $v3}' <<<"$spec")"
+  fi
+  hashes="$(python3 "$root/scripts/stack_engines.py" "$work" "$spec" 2>"$step_log")" || die "could not write the engines' configs"
+  read -r first_config_hash second_config_hash third_config_hash <<<"$hashes"
 fi
 
 step "Start Anvil on $rpc"
 step_log="$work/anvil.log"
 # A block every second and one for each transaction, so wallet transactions and checkpoints land at
 # once while deposits keep confirming; with one slot per epoch, the safe and finalized blocks trail
-# the head by one and two.
+# the head by one and two. With ROTATION=1 the chain starts in the past, so the registry's epoch and the
+# set's notice can pass on its clock before the engines start; it then catches up with true time.
+anvil_start=()
+if [[ "$rotation" == 1 ]]; then anvil_start=(--timestamp "$(($(date +%s) - rotation_past_secs))"); fi
 nice -n 10 anvil --host 127.0.0.1 --port "$anvil_port" --chain-id 31337 --block-time 1 --mixed-mining \
-  --slots-in-an-epoch 1 --accounts "$anvil_accounts" --silent >"$step_log" 2>&1 &
+  --slots-in-an-epoch 1 --accounts "$anvil_accounts" ${anvil_start[@]+"${anvil_start[@]}"} --silent >"$step_log" 2>&1 &
 anvil_pid=$!
 rpc_up() {
   alive "$anvil_pid" || die "Anvil exited"
@@ -595,17 +668,19 @@ vault_finalized() {
 poll 30 vault_finalized || die "the vault's deployment did not reach a finalized block"
 
 if [[ "$second_engine" == 1 ]]; then
-  step "Register both engines as candidates, turn rotation on and fund the staking wallets"
+  step "Register the engines as candidates, turn rotation on and fund the staking wallets"
   step_log="$work/election-setup.log"
   mkdir -p "$work/second"
+  if [[ "$rotation" == 1 ]]; then mkdir -p "$work/third"; fi
   # Sends from an account the node does not hold a key for, such as the operator's or a contract.
   send_as() {
-    local from="$1"
+    local from="$1" status=0
     shift
     cast rpc anvil_impersonateAccount "$from" --rpc-url "$rpc" >>"$step_log" 2>&1
     cast rpc anvil_setBalance "$from" 0x56bc75e2d63100000 --rpc-url "$rpc" >>"$step_log" 2>&1
-    send "$@" --unlocked --from "$from"
+    send "$@" --unlocked --from "$from" || status=$?
     cast rpc anvil_stopImpersonatingAccount "$from" --rpc-url "$rpc" >>"$step_log" 2>&1
+    return "$status"
   }
   # Has the timelock call `$1` with `$2`: scheduled by the deployer, executed by anyone once its
   # one-second delay has passed in a mined block.
@@ -652,25 +727,48 @@ if [[ "$second_engine" == 1 ]]; then
   send "$usdc" 'mint(address,uint256)' "$dev_wallet2" $((dev_usdc * usdc_units)) --private-key "$deployer_key"
   if [[ "$parameter_votes" == 1 ]]; then
     # The registry takes a schedule only while rotation is off, and the vote contract is built over it.
-    # The third candidate's release is a stand-in no engine runs: it only ever votes.
+    # Without ROTATION=1 the third candidate's release is a stand-in no engine runs: it only ever votes.
     step_log="$work/votes-setup.log"
-    deployed_receiver="$(create --private-key "$vote_deployer_key" src/SeedReceiver.sol:SeedReceiver --constructor-args "$relayer" 1606824023)"
+    # The receiver numbers turns by the build's turn length, which a node checks the schedule against.
+    deployed_receiver="$(create --private-key "$vote_deployer_key" src/SeedReceiver.sol:SeedReceiver --constructor-args "$relayer" 1606824023 "$turn_secs")"
     # The schedule reads the rotating nodes' LogHeads for its heartbeat rule, which takes the engine's scenario values: 60 s slots,
     # 30 s tolerance, five misses and 200 blocks, within bounds of (30, 5, 2, 10) and (120, 60, 9, 256), and a take window of
     # 8 slots within (8, 24): its minimum must exceed the switch budget plus one interval plus a head's inclusion, which the
     # tolerance bounds, at the rule's shortest interval and longest tolerance. The switch budget is 120 s and Arbitrum's block
-    # time 250 ms. No node here runs a liveness caller, and no turn is drawn, so neither the promotion nor the skip fires.
+    # time 250 ms. Without ROTATION=1 no node runs a liveness caller, and no turn is drawn, so neither the promotion nor the
+    # skip fires.
+    liveness_rule="(60,30,5,200)"
+    take_window="(8,8,24)"
+    switch_budget=120
+    if [[ "$rotation" == 1 ]]; then
+      # With ROTATION=1, the engine's short-turns scenario's: 30 s slots, 20 s tolerance, three misses and 10 blocks, and a take
+      # window of 4 slots within (4, 8) under a 20 s switch budget, since its maximum must also fit in a turn (8 x 30 s within
+      # 300 s). Each engine runs a liveness caller, so a turn whose member takes nothing is skipped to the next member, and an
+      # operator that stops is replaced by a promotion.
+      liveness_rule="(30,20,3,10)"
+      take_window="(4,4,8)"
+      switch_budget=20
+    fi
     deployed_schedule="$(create --private-key "$vote_deployer_key" src/OperatorSchedule.sol:OperatorSchedule --constructor-args "$registry" "$seed_receiver" \
-      "$logheads" "(60,30,5,200)" "(30,5,2,10)" "(120,60,9,256)" "(8,8,24)" 120 250)"
+      "$logheads" "$liveness_rule" "(30,5,2,10)" "(120,60,9,256)" "$take_window" "$switch_budget" 250)"
     deployed_vote="$(create --private-key "$vote_deployer_key" src/ParameterVote.sol:ParameterVote \
       --constructor-args "$schedule" "$vote_normal_window" "$vote_fast_window")"
     [[ "$(lower "$deployed_receiver")" == "$(lower "$seed_receiver")" && "$(lower "$deployed_schedule")" == "$(lower "$schedule")" &&
       "$(lower "$deployed_vote")" == "$(lower "$vote")" ]] || die "the vote's contracts did not deploy where the node config names them"
-    register_candidate "$third_candidate" "$third_candidate_key" "$(hex_bytes 7c 48)" "$(hex_bytes 7c 32)" localhost:9 localhost:9
+    third_release=("$third_digest" "$(hex_bytes 7c 32)" localhost:9 localhost:9)
+    if [[ "$rotation" == 1 ]]; then
+      third_release=("$third_digest" "$third_config_hash" "127.0.0.1:$third_api_port" "127.0.0.1:$third_handover_port")
+      # The schedule's witnesses and heads read Arbitrum's block number from ArbSys, which Anvil lacks: the engine's stand-in,
+      # which answers the chain's own, takes its address.
+      arb_sys="$(create --private-key "$vote_deployer_key" test/mocks/ChainArbSys.sol:ChainArbSys)"
+      cast rpc anvil_setCode 0x0000000000000000000000000000000000000064 "$(cast code "$arb_sys" --rpc-url "$rpc")" --rpc-url "$rpc" >>"$step_log" 2>&1
+    fi
+    register_candidate "$third_candidate" "$third_candidate_key" "${third_release[@]}"
     govern "$registry" "$(cast calldata 'setSchedule(address)' "$schedule")"
     # A close adopts only candidates holding a standby key the vault's signer vouched for. The published mock key signs each
-    # vouch while the vault still names it, before the first engine's sealed key takes its place. No promotion runs here, so
-    # nothing ever uses these keys: each is the address of a stand-in key, 32 bytes of `$4`.
+    # vouch while the vault still names it, before the first engine's sealed key takes its place. Each is the address of a
+    # stand-in key, 32 bytes of `$4`, which nothing ever uses: no promotion runs without ROTATION=1, and with it each engine
+    # registers a standby key of its own once it runs, which the stack sends before it reports the stack up.
     register_standby() {
       local candidate="$1" release standby expiry digest vouch
       release="$(cast keccak "${2}${3#0x}")"
@@ -682,7 +780,39 @@ if [[ "$second_engine" == 1 ]]; then
     }
     register_standby "$operator" "$first_digest" "$first_config_hash" 61
     register_standby "$second_candidate" "$second_digest" "$second_config_hash" 62
-    register_standby "$third_candidate" "$(hex_bytes 7c 48)" "$(hex_bytes 7c 32)" 63
+    register_standby "$third_candidate" "${third_release[0]}" "${third_release[1]}" 63
+    # Moves the chain's clock, not the engine's: the next block is mined at `$1`.
+    mine_at() {
+      cast rpc evm_setNextBlockTimestamp "$1" --rpc-url "$rpc" >>"$step_log" 2>&1
+      cast rpc evm_mine --rpc-url "$rpc" >>"$step_log" 2>&1
+    }
+    # Stakes for the three candidates, closes the registry's epoch, which adopts them as the rotation set,
+    # and passes the set's notice, by the chain's clock.
+    adopt_rotation_set() {
+      step "Make the three candidates the rotation set: stake, delegate, close the registry's epoch, pass the set's notice"
+      step_log="$work/votes-set.log"
+      # Stakes `$2` whole MONKEY for candidate `$1`, then delegates each following candidate and whole amount.
+      member_stake() {
+        local member="$1" amount="$2$mon"
+        shift 2
+        mint_monkey "$member" "$amount"
+        send_as "$member" "$monkey" 'approve(address,uint256)' "$staking" "$amount"
+        send_as "$member" "$staking" 'stake(uint256)' "$amount"
+        while (($# > 0)); do
+          send_as "$member" "$staking" 'delegate(address,uint256)' "$1" "$2$mon"
+          shift 2
+        done
+      }
+      member_stake "$operator" 40000 "$operator" 40000
+      member_stake "$second_candidate" 25000 "$second_candidate" 24000 "$third_candidate" 1000
+      member_stake "$third_candidate" 34000 "$third_candidate" 34000
+      mine_at $(($(cast call "$registry" 'openEpochStart()(uint64)' --rpc-url "$rpc" | awk 'NR == 1 {print $1}') + registry_epoch_secs + 1))
+      send "$registry" 'closeEpoch()' --private-key "$payer_key"
+      [[ "$(cast call "$schedule" 'setCount()(uint32)' --rpc-url "$rpc")" == 1 ]] || die "the close adopted no rotation set (see $step_log)"
+      mine_at $(($(cast call "$schedule" 'setOf(uint32)(uint64,uint64,address[],uint256[])' 1 --rpc-url "$rpc" | sed -n 2p | awk '{print $1}') + 1))
+      set_in_effect() { [[ "$(cast call "$schedule" 'currentSetId()(uint32)' --block finalized --rpc-url "$rpc" 2>/dev/null)" == 1 ]]; }
+      poll 60 set_in_effect || die "the rotation set is not in effect at a finalized block"
+    }
   fi
   govern "$registry" "$(cast calldata 'setRotation(bool)' true)"
   first_release="$(cast keccak "${first_digest}${first_config_hash#0x}")"
@@ -693,6 +823,168 @@ if [[ "$second_engine" == 1 ]]; then
   send "$vault" 'syncRelease()' --private-key "$payer_key"
   folded() { release_is currentRelease "$first_release" && release_is syncedRelease "$first_release"; }
   poll 30 folded || die "the vault does not name the first engine's release at a finalized block"
+fi
+
+if [[ "$rotation" == 1 ]]; then
+  adopt_rotation_set
+  step "Draw the turn in effect now for the first engine, then run the chain on true time"
+  step_log="$work/turns.log"
+  first_of() { awk 'NR == 1 {print $1}'; }
+  turn_offset="$(cast call "$schedule" 'boundary(uint64)(uint64)' 0 --rpc-url "$rpc" | first_of)"
+  # When turn `$1` starts; its draw deadline, from which it may be drawn until it starts, is a turn earlier.
+  boundary_of() { echo $(($1 * turn_secs + turn_offset)); }
+  relay_alias="$(cast call "$seed_receiver" 'relayAlias()(address)' --rpc-url "$rpc")"
+  # A seed whose draw of turn `$1` gives its first position to candidate `$2`, from the set in effect.
+  seed_for() {
+    local turn="$1" candidate="$2" set_id byte seed
+    set_id="$(cast call "$schedule" 'currentSetId()(uint32)' --rpc-url "$rpc")"
+    for byte in $(seq 1 100); do
+      seed="$(hex_bytes "$(printf '%02x' "$byte")" 32)"
+      if [[ "$(lower "$(cast call "$schedule" 'memberAt(uint32,bytes32,uint64,uint16)(address)' "$set_id" "$seed" "$turn" 0 --rpc-url "$rpc")")" == "$(lower "$candidate")" ]]; then
+        echo "$seed"
+        return 0
+      fi
+    done
+    return 1
+  }
+  # Records seed `$2` as turn `$1`'s, sent from the relay's aliased address as the Arbitrum bridge delivers a relay.
+  relay_seed() {
+    send_as "$relay_alias" "$seed_receiver" 'receiveSeed(uint64,uint64,bytes32)' "$1" \
+      "$(cast call "$seed_receiver" 'seedEpoch(uint64)(uint64)' "$1" --rpc-url "$rpc" | first_of)" "$2"
+  }
+  drawn_candidate() { cast call "$schedule" 'turnOf(uint64)((address,uint16,uint8,uint32,uint64,uint64,bytes32,address))' "$1" --rpc-url "$rpc" | tr -d '(' | cut -d, -f1; }
+  # The turn in effect on true time, with at least a minute of it left.
+  now="$(date +%s)"
+  first_turn=$(((now - turn_offset) / turn_secs))
+  if (($(boundary_of $((first_turn + 1))) < now + 60)); then
+    echo "    Waiting $(($(boundary_of $((first_turn + 1))) + 5 - now)) s for the next turn, as this one ends within a minute"
+    sleep $(($(boundary_of $((first_turn + 1))) + 5 - now))
+    first_turn=$((first_turn + 1))
+  fi
+  seed="$(seed_for "$first_turn" "$operator")" || die "no seed draws turn $first_turn for the first engine"
+  mine_at $(($(boundary_of "$first_turn") - turn_secs - 10))
+  relay_seed "$first_turn" "$seed"
+  mine_at $(($(boundary_of "$first_turn") - turn_secs))
+  send "$schedule" 'draw(uint64)' "$first_turn" --private-key "$payer_key"
+  [[ "$(lower "$(drawn_candidate "$first_turn")")" == "$(lower "$operator")" ]] || die "turn $first_turn was not drawn for the first engine"
+  mine_at "$(date +%s)"
+  # A turn names the operator from its boundary: the vault's release is the turn's, in the turn's generation.
+  poll 30 folded || die "the vault does not name the first engine's release at a finalized block on true time"
+
+  # The members' engines, by index: the first engine, which holds the first turn, then the second and the third.
+  member_names=(first second third)
+  member_candidates=("$operator" "$second_candidate" "$third_candidate")
+  member_dirs=("$work" "$work/second" "$work/third")
+  member_configs=("$work/node.toml" "$work/second.toml" "$work/third.toml")
+  member_digests=("$first_digest" "$second_digest" "$third_digest")
+  member_logs=("$work/node.log" "$work/second.log" "$work/third.log")
+  member_pid() { case "$1" in 0) echo "$node_pid" ;; 1) echo "$second_pid" ;; *) echo "$third_pid" ;; esac; }
+  set_member_pid() { case "$1" in 0) node_pid="$2" ;; 1) second_pid="$2" ;; *) third_pid="$2" ;; esac; }
+  # The member whose candidate is `$1`, by index.
+  member_of() {
+    local i
+    for i in 0 1 2; do
+      if [[ "$(lower "${member_candidates[$i]}")" == "$(lower "$1")" ]]; then
+        echo "$i"
+        return 0
+      fi
+    done
+    return 1
+  }
+  # Stops the stack if any member's engine has exited.
+  members_alive() {
+    local i pid
+    for i in 0 1 2; do
+      pid="$(member_pid "$i")"
+      alive "$pid" || { step_log="${member_logs[$i]}" && die "the ${member_names[$i]} engine exited"; }
+    done
+  }
+  # Starts member `$1`'s engine as a member, which follows the operator in effect until its turn.
+  start_member() {
+    (cd "${member_dirs[$1]}" && exec "$engine" run --config "${member_configs[$1]}" --mock-launch-digest "${member_digests[$1]}") \
+      >>"${member_logs[$1]}" 2>&1 &
+    set_member_pid "$1" "$!"
+  }
+  # The registration each member's node last wrote that the schedule took, as its calldata, and when the stack may send
+  # one the schedule refused again.
+  registered_calls=("" "" "")
+  registration_retry_at=(0 0 0)
+  # Sends each standby key registration a member's node has written, from its candidate, until the schedule takes it, and
+  # records the key registered in `standby-<name>` in the work directory.
+  send_standby_registrations() {
+    local i file calldata key now
+    now="$(date +%s)"
+    for i in 0 1 2; do
+      file="${member_dirs[$i]}/keys/standby-registration.json"
+      calldata="$(jq -r '.calldata // empty' "$file" 2>/dev/null)" || continue
+      if [[ -z "$calldata" || "$calldata" == "${registered_calls[$i]}" ]] || ((now < registration_retry_at[i])); then continue; fi
+      key="$(jq -r '.key' "$file")"
+      # A send whose answer was lost may still have landed: the schedule then lists the key, and refuses it a second time.
+      if send_as "${member_candidates[$i]}" "$schedule" "$calldata" || [[ "$(lower "$(cast call "$schedule" 'promotable(address)(address)' \
+        "${member_candidates[$i]}" --rpc-url "$rpc" 2>/dev/null)")" == "$(lower "$key")" ]]; then
+        registered_calls[i]="$calldata"
+        echo "$key" >"$work/standby-${member_names[$i]}"
+        step "Registered the ${member_names[$i]} engine's standby key $key, which a promotion can make the vault's signer"
+      else
+        registration_retry_at[i]=$((now + 15))
+        echo "    The schedule refused the ${member_names[$i]} engine's standby key registration; the stack sends it again in 15 s (see $step_log)" >&2
+      fi
+    done
+  }
+  stamp() { date -u -r "$1" '+%H:%M:%S UTC'; }
+  # Draws the turns from `next_turn`: relays each one's seed, for the member after the last one drawn, before its draw
+  # deadline, and draws it from the deadline until it begins. A failed relay or draw is tried again 10 s later while its
+  # window is open; a turn whose window passes undrawn stays undrawn, and the turn drawn last keeps naming its member.
+  seeded=""
+  turn_retry_at=0
+  turn_tick() {
+    local now boundary seed drawn i
+    now="$(date +%s)"
+    boundary="$(boundary_of "$next_turn")"
+    if ((now >= boundary - 2)); then
+      echo "    Turn $next_turn was not drawn before it began; the turn drawn last keeps naming its member" >&2
+      next_turn=$((next_turn + 1))
+      seeded=""
+      turn_retry_at=0
+      return 0
+    fi
+    ((now >= turn_retry_at)) || return 0
+    if [[ -z "$seeded" ]] && ((now < boundary - turn_secs - 5)); then
+      if seed="$(seed_for "$next_turn" "${member_candidates[$next_member]}")" && relay_seed "$next_turn" "$seed"; then
+        seeded=yes
+      else
+        turn_retry_at=$((now + 10))
+        echo "    The seed for turn $next_turn could not be relayed (see $step_log); trying again in 10 s" >&2
+        return 0
+      fi
+    fi
+    ((now >= boundary - turn_secs + 1)) || return 0
+    send "$schedule" 'draw(uint64)' "$next_turn" --private-key "$payer_key" || true
+    # A draw whose answer was lost may still have landed: the chain says whom the turn names.
+    drawn="$(drawn_candidate "$next_turn")" || drawn=""
+    if i="$(member_of "$drawn")"; then
+      step "Drew turn $next_turn for the ${member_names[$i]} engine, from $(stamp "$boundary"); it takes the keys then"
+      next_member=$(((i + 1) % 3))
+      next_turn=$((next_turn + 1))
+      seeded=""
+      turn_retry_at=0
+    else
+      turn_retry_at=$((now + 10))
+      echo "    Turn $next_turn could not be drawn (see $step_log); trying again in 10 s" >&2
+    fi
+  }
+  # The standby key registrations, and the turns once the stack writes the first turn to draw and its member to
+  # `turns-from` in the work directory, beside the stack's own steps and loop, so neither waits on them. A step that
+  # fails is reported and tried again at the next tick.
+  next_turn=""
+  drive_turns() {
+    while :; do
+      send_standby_registrations || true
+      if [[ -z "$next_turn" && -f "$work/turns-from" ]]; then read -r next_turn next_member <"$work/turns-from"; fi
+      if [[ -n "$next_turn" ]]; then turn_tick || true; fi
+      sleep 2
+    done
+  }
 fi
 
 step "Start the local access source, which clears every screening with Anvil account 0's key"
@@ -719,13 +1011,27 @@ node_args=(run --config "$work/node.toml")
 if [[ "$second_engine" == 1 ]]; then node_args+=(--new-key --mock-launch-digest "$first_digest"); fi
 (cd "$work" && exec "$engine" "${node_args[@]}") >"$step_log" 2>&1 &
 node_pid=$!
+# The first engine sequences nothing, genesis included, until another member of the turn's set has answered its start
+# check under the standby key the schedule lists for it: the second and third engines start with it, as members, and
+# follow it once it serves, while the stack registers each member's standby key once the first engine vouches for it.
+if [[ "$rotation" == 1 ]]; then
+  step "Start the second and third engines as members, which follow the first engine until their turns"
+  start_member 1
+  start_member 2
+  step_log="$work/turns.log"
+  drive_turns &
+  driver_pid=$!
+  step_log="$work/node.log"
+fi
 node_up() {
   alive "$node_pid" || die "the node exited"
+  [[ "$rotation" == 0 ]] || members_alive
   [[ "$(curl -sk --max-time 2 "$api/v1/health" 2>/dev/null)" == ok ]]
 }
 if [[ "$second_engine" == 1 ]]; then
   attestation_up() {
     alive "$node_pid" || die "the node exited"
+    [[ "$rotation" == 0 ]] || members_alive
     [[ -n "$(curl -sk --max-time 2 "$api/v1/attestation" 2>/dev/null | jq -r '.enclave_address // empty' 2>/dev/null)" ]]
   }
   poll 120 attestation_up || die "the node did not serve its attestation on $api/v1/attestation"
@@ -746,9 +1052,14 @@ step_log="$work/init-emissions.log"
 # then, so wait for the sequenced markets before sending the operator's schedule.
 genesis_applied() {
   alive "$node_pid" || die "the node exited"
+  [[ "$rotation" == 0 ]] || members_alive
   [[ "$(curl -sk --max-time 2 "$api/v1/markets" 2>/dev/null)" != "[]" ]]
 }
-poll 120 genesis_applied || die "genesis did not apply within two minutes"
+genesis_wait=120
+# With ROTATION=1 the first engine sequences genesis only once a member has answered its start check, under the standby
+# key the stack registers once the first engine has vouched for it.
+if [[ "$rotation" == 1 ]]; then genesis_wait=300; fi
+poll "$genesis_wait" genesis_applied || die "genesis did not apply within $((genesis_wait / 60)) minutes"
 # The operator's signed schedule, taken once by a fresh log: period 0 at the next whole minute
 # with the period budget the vault deployed with, which the node reconciles against the MONKEY
 # cap before it sequences this (a budget the cap was not derived from is refused). The operator
@@ -786,35 +1097,33 @@ for _attempt in 1 2 3; do
 done
 [[ -n "$staking_applied" ]] || die "the node did not sequence init-staking (see $step_log)"
 
-if [[ "$parameter_votes" == 1 ]]; then
-  step "Make the three candidates the rotation set: stake, delegate, close the registry's epoch, pass the set's notice"
-  step_log="$work/votes-set.log"
-  # Stakes `$2` whole MONKEY for candidate `$1`, then delegates each following candidate and whole amount.
-  member_stake() {
-    local member="$1" amount="$2$mon"
-    shift 2
-    mint_monkey "$member" "$amount"
-    send_as "$member" "$monkey" 'approve(address,uint256)' "$staking" "$amount"
-    send_as "$member" "$staking" 'stake(uint256)' "$amount"
-    while (($# > 0)); do
-      send_as "$member" "$staking" 'delegate(address,uint256)' "$1" "$2$mon"
-      shift 2
-    done
+# With ROTATION=1 the set was adopted before the engines started, on the chain's past.
+if [[ "$parameter_votes" == 1 && "$rotation" == 0 ]]; then adopt_rotation_set; fi
+
+if [[ "$rotation" == 1 ]]; then
+  # An engine accepts a turn's key only once its log has named the turn's set a turn earlier.
+  step "Wait for the first engine's log to name the rotation set"
+  logged_ms=""
+  set_logged() {
+    members_alive
+    logged_ms="$(curl -sk --max-time 5 "$api/v1/operator" 2>/dev/null | jq -er '.rotation_set.logged_at' 2>/dev/null)"
   }
-  member_stake "$operator" 40000 "$operator" 40000
-  member_stake "$second_candidate" 25000 "$second_candidate" 24000 "$third_candidate" 1000
-  member_stake "$third_candidate" 34000 "$third_candidate" 34000
-  # Moves the chain's clock, not the engine's: the next block is mined at `$1`.
-  mine_at() {
-    cast rpc evm_setNextBlockTimestamp "$1" --rpc-url "$rpc" >>"$step_log" 2>&1
-    cast rpc evm_mine --rpc-url "$rpc" >>"$step_log" 2>&1
+  poll 120 set_logged || die "the first engine's log did not name the rotation set within two minutes"
+  # The first turn to draw: a turn after the log named the set, with time to relay its seed before its draw deadline.
+  earliest=$((logged_ms / 1000 + turn_secs))
+  if ((earliest < $(date +%s) + turn_secs + 60)); then earliest=$(($(date +%s) + turn_secs + 60)); fi
+  next_turn=$(((earliest - turn_offset + turn_secs - 1) / turn_secs))
+  # The turns go to the members in order, from the second engine; the driver reads the file whole once it exists.
+  echo "$next_turn 1" >"$work/turns-from.tmp"
+  mv "$work/turns-from.tmp" "$work/turns-from"
+  step_log="$work/turns.log"
+  step "Register each engine's standby key, which its node writes once the vault's signer vouches for it"
+  standbys_registered() {
+    members_alive
+    alive "$driver_pid" || { step_log="$work/turns.log" && die "the turn driver stopped"; }
+    [[ -f "$work/standby-first" && -f "$work/standby-second" && -f "$work/standby-third" ]]
   }
-  mine_at $(($(cast call "$registry" 'openEpochStart()(uint64)' --rpc-url "$rpc" | awk 'NR == 1 {print $1}') + registry_epoch_secs + 1))
-  send "$registry" 'closeEpoch()' --private-key "$payer_key"
-  [[ "$(cast call "$schedule" 'setCount()(uint32)' --rpc-url "$rpc")" == 1 ]] || die "the close adopted no rotation set (see $step_log)"
-  mine_at $(($(cast call "$schedule" 'setOf(uint32)(uint64,uint64,address[],uint256[])' 1 --rpc-url "$rpc" | sed -n 2p | awk '{print $1}') + 1))
-  set_in_effect() { [[ "$(cast call "$schedule" 'currentSetId()(uint32)' --block finalized --rpc-url "$rpc" 2>/dev/null)" == 1 ]]; }
-  poll 60 set_in_effect || die "the rotation set is not in effect at a finalized block"
+  poll 300 standbys_registered || die "not every engine registered a standby key within five minutes (see each engine's log)"
 fi
 
 # Every market a configured venue quotes, BTC-USD among them.
@@ -851,6 +1160,10 @@ if [[ "$second_engine" == 1 ]]; then
   # dev origin it may present the mock attestation the mock TEE gives.
   export NEXT_PUBLIC_ENGINE_CANDIDATE_ORIGINS="$second_api"
   export NEXT_PUBLIC_ENGINE_DEV_ORIGINS="$api,$second_api"
+  if [[ "$rotation" == 1 ]]; then
+    export NEXT_PUBLIC_ENGINE_CANDIDATE_ORIGINS="$second_api,$third_api"
+    export NEXT_PUBLIC_ENGINE_DEV_ORIGINS="$api,$second_api,$third_api"
+  fi
 fi
 if [[ "$console_build" == production ]]; then
   step_log="$work/console-build.log"
@@ -882,6 +1195,8 @@ if [[ -n "${STACK_INFO_FILE:-}" ]]; then
     --arg operator "${operator:-}" --arg secondCandidate "${second_candidate:-}" \
     --arg vote "$vote" --arg schedule "$schedule" --arg thirdCandidate "${third_candidate:-}" \
     --arg secondCandidateKey "${second_candidate_key:-}" --arg thirdCandidateKey "${third_candidate_key:-}" \
+    --arg rotation "$rotation" --arg thirdApiOrigin "$third_api" --arg thirdNodeLog "$work/third.log" \
+    --arg secondMetricsUrl "http://127.0.0.1:$second_metrics_port/metrics" --arg thirdMetricsUrl "http://127.0.0.1:$third_metrics_port/metrics" \
     '{consoleUrl: $consoleUrl, apiOrigin: $apiOrigin, rpcUrl: $rpcUrl, chainId: 31337, vault: $vault, usdc: $usdc,
       monkey: $monkey, staking: $staking, registry: $registry,
       devWallet: $devWallet, devWalletKey: (if $devWalletKey == "" then null else $devWalletKey end),
@@ -891,7 +1206,9 @@ if [[ -n "${STACK_INFO_FILE:-}" ]]; then
           payerKey: $payerKey, firstRelease: $firstRelease, secondRelease: $secondRelease,
           operator: $operator, secondCandidate: $secondCandidate} else {} end)
       + (if $vote != "" then {vote: $vote, schedule: $schedule, thirdCandidate: $thirdCandidate,
-          secondCandidateKey: $secondCandidateKey, thirdCandidateKey: $thirdCandidateKey} else {} end)' \
+          secondCandidateKey: $secondCandidateKey, thirdCandidateKey: $thirdCandidateKey} else {} end)
+      + (if $rotation == "1" then {thirdApiOrigin: $thirdApiOrigin, thirdNodeLog: $thirdNodeLog,
+          secondMetricsUrl: $secondMetricsUrl, thirdMetricsUrl: $thirdMetricsUrl} else {} end)' \
     >"$STACK_INFO_FILE.tmp"
   mv "$STACK_INFO_FILE.tmp" "$STACK_INFO_FILE"
   info_written=yes
@@ -923,6 +1240,19 @@ if [[ "$launch" == 1 ]]; then
                    $((launch_timelock_delay / 86400)) days), and the start of emissions and staking (the next minute). The house starts with no
                    capital, as at launch: \`dev-local-stack-ctl.sh fund-house\` or clients' losses fill it."
 fi
+withdrawals_line="The engine approves a withdrawal; the next checkpoint (every 1000 commands, within
+                   seconds) is posted to the vault, and the console then claims it on the vault."
+logs_line="Node log           $work/node.log
+Metrics            $metrics_url"
+if [[ "$rotation" == 1 ]]; then
+  withdrawals_line="The engine approves a withdrawal and the next checkpoint (every 1000 commands, within
+                   seconds) is posted to the vault. While the turns rotate, the withdrawal can be claimed
+                   only once the next turn's member has checked the log up to its approval, from the
+                   next boundary; the console then claims it on the vault."
+  logs_line="Engine logs        $work/node.log, $work/second.log and $work/third.log
+Metrics            $metrics_url, http://127.0.0.1:$second_metrics_port/metrics and
+                   http://127.0.0.1:$third_metrics_port/metrics"
+fi
 if [[ "$second_engine" == 1 ]]; then
   rotation_state="rotation on"
   signer_line="$enclave (the first engine's sealed key, installed through the timelock)"
@@ -933,7 +1263,29 @@ if [[ "$second_engine" == 1 ]]; then
   else
     wallet2_line="$dev_wallet2 (DEV_WALLET2, given 100 ETH for gas)"
   fi
-  two_engines="
+  if [[ "$rotation" == 1 ]]; then
+    two_engines="
+Rotation           Each member of the rotation set runs an engine built with five-minute turns, a development
+                   option. The first engine ($api) holds turn $first_turn, which began at $(stamp "$(boundary_of "$first_turn")"),
+                   and the second ($second_api) and the third ($third_api) follow it.
+                   The stack draws each turn from turn $next_turn, which begins at $(stamp "$(boundary_of "$next_turn")"), for the
+                   next member in that order, and at each boundary that member's engine takes the keys from
+                   the previous one. An engine serves its API only while it holds a turn: if the console does
+                   not move to the engine that holds the turn, open that engine's /v1/health and accept its
+                   certificate.
+Relayers           Each engine posts its checkpoints and its log heads (to the LogHeads contract $logheads)
+                   through relayers of its own, Anvil accounts 9 and 10, 11 and 12, and 13 and 14, and runs a
+                   liveness caller from account 15, 16 or 17.
+Second wallet      $wallet2_line
+MONKEY to stake    Both wallets hold $wallet_monkey MONKEY to stake and delegate on the Staking page; the stack also gave the
+                   second wallet $dev_usdc mock USDC.
+Watch it           ./scripts/dev-local-stack-ctl.sh status shows the turns, the operator in effect and each engine.
+                   ./scripts/dev-local-stack-ctl.sh stop-operator stops the operator in effect's engine: the
+                   other members promote the next member's standby key, and the stopped engine then starts
+                   again and follows. Both read $STACK_INFO_FILE.
+"
+  else
+    two_engines="
 Two engines        The first engine ($api) is the operator in effect, under sealed keys.
                    The second ($second_api) is registered with an approved release, and
                    the stack starts it once an election has made the vault name its release;
@@ -947,7 +1299,12 @@ MONKEY to stake    Both wallets hold $wallet_monkey MONKEY to stake and delegate
 Drive it           ./scripts/dev-local-stack-ctl.sh status | elect | handover | fund-house <USDC>
                    (reads $STACK_INFO_FILE)
 "
+  fi
   if [[ "$parameter_votes" == 1 ]]; then
+    clock_note="A fast-path restriction lasts $restriction_ttl. The chain's clock is eight days ahead of the
+                   engine's, so withdrawal authorizations do not pay, \`elect\` and \`handover\` do not apply,
+                   and the Governance tab counts a voting window, which runs on the chain's clock, eight days long."
+    if [[ "$rotation" == 1 ]]; then clock_note="A fast-path restriction lasts $restriction_ttl."; fi
     two_engines="$two_engines
 Parameter votes    The rotation set in effect is the first engine's candidate $operator (40,000
                    MONKEY), the second engine's $second_candidate (24,000) and the third
@@ -957,9 +1314,7 @@ Member wallet      To vote on the Staking page's Governance tab, import the seco
                    to itself and the third candidate.
 Propose and vote   ./scripts/dev-local-stack-ctl.sh propose operator|second|third normal|fast '<admin command JSON>'
                    ./scripts/dev-local-stack-ctl.sh vote operator|second|third <proposal>
-                   A fast-path restriction lasts $restriction_ttl. The chain's clock is eight days ahead of the
-                   engine's, so withdrawal authorizations do not pay, \`elect\` and \`handover\` do not apply,
-                   and the Governance tab counts a voting window, which runs on the chain's clock, eight days long.
+                   $clock_note
 "
   fi
 else
@@ -1004,16 +1359,14 @@ Setup              Connecting a wallet opens the console's setup popup: the Anvi
 Deposits           Approve the vault and deposit from the console. The node sees a deposit a few
                    blocks (seconds) after it is mined and credits it; a deposit sent straight to the
                    vault before a declaration stays pending until the wallet signs one.
-Withdrawals        The engine approves a withdrawal; the next checkpoint (every 1000 commands, within
-                   seconds) is posted to the vault, and the console then claims it on the vault.
+Withdrawals        $withdrawals_line
 MONKEY             Emissions run from $emissions_start: ten-minute budgets accrue to each period's
                    gross realised losses and show in the console once a losing trade closes; claim
                    them on the MONKEY page, then stake. An epoch that closes with a stake while the
                    house's NAV is above the floor pays the excess to the stakers in USDC.
 
 $two_engines
-Node log           $work/node.log
-Metrics            $metrics_url
+$logs_line
 EOF
 [[ "${KEEP_WORK:-0}" == 1 ]] || echo "The work directory is removed on exit; set KEEP_WORK=1 to keep it."
 
@@ -1035,6 +1388,42 @@ second_engine_tick() {
   fi
 }
 
+# What the rotation option does between turns. The first engine, started with new keys, exits once it has handed them
+# over, and starts again as a member, which follows the operator in effect until its next turn. `dev-local-stack-ctl.sh
+# stop-operator` stops the operator in effect's engine, and starts it again, by creating a file for each.
+rotation_tick() {
+  local i pid name
+  for i in 0 1 2; do
+    pid="$(member_pid "$i")"
+    name="${member_names[$i]}"
+    if [[ -f "$work/stop-$name" ]]; then
+      rm -f "$work/stop-$name"
+      if [[ -n "$pid" ]]; then
+        step "Stopping the $name engine, the operator in effect"
+        stop_pid "$pid" 30
+        set_member_pid "$i" ""
+        pid=""
+      fi
+    fi
+    if [[ -f "$work/start-$name" ]]; then
+      rm -f "$work/start-$name"
+      if [[ -z "$pid" ]]; then
+        step "Starting the $name engine again: it follows the operator in effect until its next turn"
+        start_member "$i"
+      fi
+    elif [[ -n "$pid" ]] && ! alive "$pid"; then
+      if wait "$pid"; then
+        step "The $name engine handed its keys over and exited: starting it again, to follow the operator in effect"
+        start_member "$i"
+      else
+        step_log="${member_logs[$i]}"
+        die "the $name engine exited"
+      fi
+    fi
+  done
+  alive "$driver_pid" || { step_log="$work/turns.log" && die "the turn driver stopped"; }
+}
+
 # Anvil can deadlock under load, still running but answering nothing, and the chain is lost with it. A
 # long election test would otherwise sit on a dead chain, so the two-engine option probes it.
 probe_ticks=0
@@ -1053,9 +1442,14 @@ anvil_probe() {
 while :; do
   alive "$anvil_pid" || { step_log="$work/anvil.log" && die "Anvil exited"; }
   alive "$access_pid" || { step_log="$work/access-source.log" && die "the access source exited"; }
-  if [[ -n "$node_pid" ]] && ! alive "$node_pid" && [[ -z "$second_pid" ]]; then step_log="$work/node.log" && die "the node exited"; fi
-  if [[ -n "$second_pid" ]]; then alive "$second_pid" || { step_log="$work/second.log" && die "the second engine exited"; }; fi
-  if [[ "$second_engine" == 1 ]]; then second_engine_tick; anvil_probe; fi
+  if [[ "$rotation" == 1 ]]; then
+    rotation_tick
+  else
+    if [[ -n "$node_pid" ]] && ! alive "$node_pid" && [[ -z "$second_pid" ]]; then step_log="$work/node.log" && die "the node exited"; fi
+    if [[ -n "$second_pid" ]]; then alive "$second_pid" || { step_log="$work/second.log" && die "the second engine exited"; }; fi
+    if [[ "$second_engine" == 1 ]]; then second_engine_tick; fi
+  fi
+  if [[ "$second_engine" == 1 ]]; then anvil_probe; fi
   alive "$console_pid" || { step_log="$work/console.log" && die "the console exited"; }
   # In the background, so a signal's trap runs at once.
   sleep 2 &
