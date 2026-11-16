@@ -46,18 +46,18 @@ const cells = (html: string) => rows(html).map((row) => row.length);
 const details = (html: string) => (html.split("<tbody>")[1] ?? "").match(/role="tooltip"[^>]*><span[^>]*><span[^>]*>([^<]*)</)?.[1]?.replaceAll("&#x27;", "'") ?? "";
 
 const GAIN = { account: holding(2, 100_000), quotes: { 1: closing("sell", "100979.8") } };
-// The cells by column: market, side, size, entry, mark, close-out, P&L and its details, held, fee rate, fee in USD, close now, close.
-const PNL = 6;
-const FEE_RATE = 8;
-const FEE_USD = 9;
-const CLOSE_NOW = 10;
+// The cells by column: market and side, size and held, entry and mark, close-out, P&L and its details, fee rate and when it falls, fee in USD, close now and its button.
+const PNL = 4;
+const FEE_RATE = 5;
+const FEE_USD = 6;
+const CLOSE_NOW = 7;
 
 describe("a position whose mark gain is smaller than its exit spread", () => {
   it("shows a long's loss at the bid, with no profit fee, the gain at the mark in the explanation", () => {
     // 2 BTC from 100,990 at a mark of 101,000: +$20 at the mark, but the bid is 100,979.8.
     const html = render({ account: holding(2, 100_990), quotes: { 1: closing("sell", "100979.8") } });
     const [row] = rows(html);
-    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["-$20.40Details", "$0.00", "-$20.40"]);
+    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["-$20.40Details", "$0.00", "-$20.40Close"]);
     expect(details(html)).toBe("At the node's closing price for this size. At the mark it is $20.00, before the exit spread. No profit fee on this close: it realises a loss or nothing.");
     expect(html).toContain('aria-hidden="false" class="block text-label text-fg-3">No profit fee on this close');
   });
@@ -66,7 +66,7 @@ describe("a position whose mark gain is smaller than its exit spread", () => {
     // 2 BTC short from 101,010 at a mark of 101,000: +$20 at the mark, but the offer is 101,020.
     const html = render({ account: holding(-2, 101_010), quotes: { 1: closing("buy", "101020") } });
     const [row] = rows(html);
-    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["-$20.00Details", "$0.00", "-$20.00"]);
+    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["-$20.00Details", "$0.00", "-$20.00Close"]);
     expect(details(html)).toContain("At the mark it is $20.00, before the exit spread. No profit fee on this close");
   });
 });
@@ -76,7 +76,7 @@ describe("a position at a gain after the exit spread", () => {
     // 2 x (100,979.8 - 100,000) = $1,959.60, a tenth of it the fee.
     const html = render(GAIN);
     const [row] = rows(html);
-    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["$1,959.60Details", "$195.96", "$1,763.64"]);
+    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["$1,959.60Details", "$195.96", "$1,763.64Close"]);
     expect(details(html)).toBe("At the node's closing price for this size. At the mark it is $2,000.00, before the exit spread.");
     // The card reserves the note's line, hidden from view and from a screen reader.
     expect(html).toContain('aria-hidden="true" class="block text-label invisible">No profit fee on this close');
@@ -84,24 +84,26 @@ describe("a position at a gain after the exit spread", () => {
 });
 
 describe("the table's one row per position", () => {
-  it("holds hold, fee rate, fee in USD and close now as columns, with no second line", () => {
+  it("holds the hold, fee rate, fee in USD and close now in columns of two lines at most, so the table fits a 740 px pane", () => {
     const html = render(GAIN);
-    for (const head of ["Held", "Profit fee", "Fee \\(USD\\)", "Close now"]) expect(html).toMatch(new RegExp(`<th[^>]*><span[^>]*><button[^>]*>${head}<`));
-    expect(cells(html)).toEqual([12]);
+    for (const head of ["Profit fee", "Fee \\(USD\\)", "Close now"]) expect(html).toMatch(new RegExp(`<th[^>]*><span[^>]*><button[^>]*>${head}<`));
+    expect(html).toMatch(/<th[^>]*><span[^>]*>Size<\/span><span[^>]*><span[^>]*><button[^>]*>Held</);
+    expect(rows(html)[0]?.[1]).toBe("2.000000Held 33m 20s");
+    expect(cells(html)).toEqual([8]);
     expect(html).not.toContain('colspan="');
   });
 
   it("keeps the P&L at the close quote while the fee's terms are stale, and withholds the fee and what a close keeps, saying why", () => {
     const html = render({ ...GAIN, pricingCurrent: false, houseStateStatus: "read" });
     const [row] = rows(html);
-    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["$1,959.60Details", "—", "—"]);
+    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["$1,959.60Details", "—", "—Close"]);
     expect(details(html)).toContain("The profit fee and what a close keeps are withheld: Reading the node's parameters again after a change.");
   });
 
   it("withholds every figure that needs a price while the node has quoted none, naming the market to select", () => {
     const html = render({ account: holding(2, 100_000), quotes: {} });
     const [row] = rows(html);
-    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["—Details", "—", "—"]);
+    expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["—Details", "—", "—Close"]);
     expect(details(html)).toContain("Select BTC-USD to get its closing price. At the mark it is $2,000.00.");
   });
 
@@ -114,7 +116,7 @@ describe("the table's one row per position", () => {
   it("gives the figure columns the same width, shown or withheld, and the hold room for its longest value", () => {
     const widths = (html: string) => (html.split("<tbody>")[1] ?? "").match(/min-w-\[[^\]]*\]/g);
     const withheld = render({ account: holding(2, 100_000), quotes: {} });
-    expect(widths(render(GAIN))).toEqual(["min-w-[12ch]", "min-w-[calc(7ch+1rem)]", "min-w-[8ch]", "min-w-[29ch]", "min-w-[calc(13ch+1rem)]", "min-w-[calc(14ch+1rem)]"]);
+    expect(widths(render(GAIN))).toEqual(["min-w-[12ch]", "min-w-[8ch]", "min-w-[16ch]", "min-w-[calc(13ch+0.75rem)]", "min-w-[calc(14ch+0.75rem)]"]);
     expect(widths(withheld)).toEqual(widths(render(GAIN)));
   });
 
@@ -132,13 +134,14 @@ describe("the table's one row per position", () => {
 });
 
 describe("the profit fee rate's cell", () => {
-  it("says when the rate next falls beside the rate, on the row's one line", () => {
-    expect(rows(render(GAIN))[0]?.[FEE_RATE]).toBe("10.00%Base rate");
+  it("says when the rate next falls under the rate in 16 characters, the whole sentence kept for a screen reader", () => {
+    expect(rows(render(GAIN))[0]?.[FEE_RATE]).toBe("10.00%Base rateBase rate");
     const account = holding(2, 100_000);
     const [position] = account.positions;
     if (position === undefined) throw new Error("no position");
     const falling = render({ account: { ...account, positions: [{ ...position, closeFee: { openedAt: 1_940_000, feeBps: 6_421, fallsAt: 2_000_005 } }] }, quotes: GAIN.quotes });
-    expect(rows(falling)[0]?.[FEE_RATE]).toBe("64.21%Falling to 10.00% in 14m 00s");
+    expect(rows(falling)[0]?.[FEE_RATE]).toBe("64.21%Base in 14m 00sFalling to 10.00% in 14m 00s");
+    expect(falling).toContain('<span aria-hidden="true">Base in 14m 00s</span><span class="sr-only">Falling to 10.00% in 14m 00s</span>');
   });
 });
 
@@ -152,3 +155,40 @@ describe("a fee that may still change", () => {
     expect(rows(html)[0]?.[FEE_USD]).toBe("≤ $1,258.26");
   });
 });
+
+describe("a held market the node does not quote", () => {
+  const unquoted = () => render({ account: holding(2, 100_000), quotes: {} });
+  const left = (html: string) => html.match(/Close all leaves out [^<]*/)?.[0];
+
+  it("tells the desktop trader, in Close all's note, to select the market for its closing price", () => {
+    expect(left(unquoted())).toBe("Close all leaves out BTC-USD (select it for its closing price).");
+  });
+
+  it("does not say so of a market that is quoted, or of one the mock prices itself", () => {
+    expect(left(render({ ...GAIN, quoted: [1] }))).toBeUndefined();
+    expect(left(render({ ...GAIN, signatures: "none" }))).toBeUndefined();
+  });
+});
+
+describe("the phone card's height", () => {
+  /** The card's markup, with what a withheld figure and an unquoted market add: neither may add or remove an element. */
+  const card = (html: string) => (html.split("<ul")[1] ?? "").split("</ul>")[0] ?? "";
+  const shape = (html: string) => card(html).replace(/>[^<]*</g, "><").replace(/ (id|aria-describedby|aria-hidden)="[^"]*"/g, "").replace(/ (disabled|class)="[^"]*"/g, "");
+
+  it("keeps the Close now figure's reason out of the card, in the row's explanation only", () => {
+    const html = unquotedCard();
+    expect(card(html)).not.toContain("No closing price has reached the console yet");
+    expect(details(html)).toContain("Select BTC-USD to get its closing price.");
+  });
+
+  it("has the same elements whether or not a closing price has arrived, the select line mounted and hidden when it is not needed", () => {
+    const quoted = render({ ...GAIN, quoted: [1] });
+    expect(shape(unquotedCard())).toBe(shape(quoted));
+    expect(card(quoted)).toContain('aria-hidden="true" class="mt-2 text-label invisible">Select BTC-USD to get its closing price.');
+    expect(card(unquotedCard())).toContain('aria-hidden="false" class="mt-2 text-label text-fg-3">Select BTC-USD to get its closing price.');
+  });
+});
+
+function unquotedCard() {
+  return render({ account: holding(2, 100_000), quotes: {} });
+}
