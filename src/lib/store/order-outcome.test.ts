@@ -39,6 +39,30 @@ function liveConnected(options: { nowMs?: number } = {}) {
   return { ...live, store };
 }
 
+describe("an order refused for want of a price", () => {
+  it("names why the market has no price, from the read that follows the refusal", async () => {
+    const { client, store } = await keyed();
+    client.answer = answer([{ type: "order_rejected", account: ACCOUNT, client_id: 1, reason: { kind: "no_price" } }]);
+    client.markets = async () => [{ ...BTC, pricing: { priced: false, unpriced: "too_few_sources", as_of_ms: 1, fresh_sources: 1, min_sources: 2, sources: [{ source: "coinbase", state: "counts", last_quote_ms: 1, age_ms: 0 }, { source: "kraken", state: "delayed", last_quote_ms: 1, age_ms: 4_000 }] } }];
+    expect(await send(store)).toBe(false);
+    expect(store.getSnapshot().notices.ticket?.text).toBe("No live price is currently available for this market because the prices received from Kraken are delayed.");
+  });
+
+  it("says why at once for any other refusal, before the read that follows it answers", async () => {
+    const { client, store } = await keyed();
+    client.answer = answer([{ type: "order_rejected", account: ACCOUNT, client_id: 1, reason: { kind: "market_closed" } }]);
+    let reading = () => {};
+    const read = new Promise<void>((resolve) => { reading = resolve; });
+    let answerRead: (markets: (typeof BTC)[]) => void = () => {};
+    client.markets = () => { reading(); return new Promise((resolve) => { answerRead = resolve; }); };
+    const sent = send(store);
+    await read;
+    expect(store.getSnapshot().notices.ticket?.text).toBe("This market is closed.");
+    answerRead([BTC]);
+    expect(await sent).toBe(false);
+  });
+});
+
 describe("what the user is told of a request that stopped or went unanswered", () => {
   const stopped = "Your request was not sent. Connect a wallet to complete the verification, in which your wallet checks the server against the on-chain vault that holds deposits. You can trade and move funds once that check passes.";
 

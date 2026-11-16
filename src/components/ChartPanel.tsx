@@ -9,6 +9,7 @@ import { closeOutMarker } from "@/lib/liquidation";
 import type { MarketModel } from "@/lib/models";
 import { formatMark, splitDecimals } from "@/lib/price-format";
 import type { ConsoleState } from "@/lib/store/state";
+import { marketStatus, STATUS_LABELS } from "@/lib/unpriced";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { Notice } from "./Notice";
@@ -35,6 +36,10 @@ export function markersFor(state: ConsoleState, market: MarketModel, lines = tru
   return out;
 }
 
+/** The status label's colour, hidden on wide screens except for a market with no live price; Tailwind needs each class name whole. */
+const STATUS_TEXT = { open: "text-glow lg:hidden", closed: "text-ember lg:hidden", unpriced: "text-amber", unfed: "text-fg-3" } as const;
+
+/** The selected market's header and chart. */
 export function ChartPanel() {
   const state = useConsole();
   const { store } = useSession();
@@ -45,11 +50,13 @@ export function ChartPanel() {
   const change = market.mark !== null && market.reference !== null ? moveBps(market.reference, market.mark) : 0;
   const shown = market.mark === null ? "—" : formatMark(market.mark, market.places);
   const [whole, decimals] = splitDecimals(shown);
+  // The status shows on narrow screens, where the market list is on another view; a market with no live price is marked at every width.
+  const status = marketStatus(market);
   return (
     <div className="flex min-w-0 flex-1 flex-col lg:min-h-[26rem]">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-3 sm:px-6 lg:py-4">
         <div>
-          <h2 id="market-title" tabIndex={-1} className="text-sm font-medium outline-none">{market.symbol.replace("-", " / ")} <span className="ml-2 text-caption font-normal text-fg-3">{market.name}</span> <span className={`ml-2 text-label font-normal ${market.open ? "text-glow" : "text-ember"} lg:hidden`}>{market.open ? "Open" : "Closed"}</span></h2>
+          <h2 id="market-title" tabIndex={-1} className="text-sm font-medium outline-none">{market.symbol.replace("-", " / ")} <span className="ml-2 text-caption font-normal text-fg-3">{market.name}</span> <span className={`ml-2 text-label font-normal ${STATUS_TEXT[status]}`}>{STATUS_LABELS[status]}</span></h2>
           <p className="mt-1 text-2xl tracking-tight lg:mt-2">
             <span aria-hidden="true">{whole}<span className="text-fg-3">{decimals}</span></span>{" "}
             <span aria-hidden="true" className={`text-caption ${change < 0 ? "text-ember" : "text-glow"}`}>{formatMovePercent(change)}</span>

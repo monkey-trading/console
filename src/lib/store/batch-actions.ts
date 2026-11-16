@@ -43,14 +43,19 @@ export async function cancelAll(store: ConsoleStore): Promise<void> {
  */
 export async function closeAll(store: ConsoleStore, targets: readonly CloseTarget[], slippageBps: number): Promise<void> {
   if (targets.length === 0) return;
-  const symbolOf = (market: MarketId) => store.getSnapshot().markets.find((m) => m.id === market)?.symbol ?? String(market);
+  const listed = store.getSnapshot().markets; // named as they stood when the trader pressed
+  const symbolOf = (market: MarketId) => listed.find((m) => m.id === market)?.symbol ?? String(market);
   const closes = targets.map((t) => ({ market: t.market, quoted: fixedToWire(t.quoted) }));
   const summary = `close ${targets.length === 1 ? "1 position" : `${targets.length} positions`} (${targets.map((t) => symbolOf(t.market)).join(", ")}) with a maximum slippage of ${slippageBps} bps each`;
   const out = await sessionSigned(store, "positions", summary, (t, account) => closeAllTypedData(domainOf(store), { account, closes, max_slippage_bps: slippageBps }, t), (auth, wallet) =>
     ifSupported("Close all", () => store.deps.client.closeAll({ account: wallet.address, closes, max_slippage_bps: slippageBps, auth })), "report",
   );
   if (!out.ok) return;
-  const text = describeCloseAll(closeAllOutcome(targets.map((t) => t.market), out.result.events), symbolOf);
+  const outcome = closeAllOutcome(targets.map((t) => t.market), out.result.events);
+  // An entry refused for want of a price names why from the market's pricing the next read brings, so that read comes first.
+  const noPrice = outcome.kind === "entries" && outcome.entries.some((e) => e.result === "refused" && e.reason.kind === "no_price");
+  if (noPrice) await store.refresh(true);
+  const text = describeCloseAll(outcome, symbolOf, (market) => store.getSnapshot().markets.find((m) => m.id === market)?.view.pricing);
   if (text !== null) store.notify("positions", text);
-  await store.refresh(true);
+  if (!noPrice) await store.refresh(true);
 }

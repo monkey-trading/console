@@ -20,6 +20,7 @@ import { belowMinimum, contractUnit, MARGIN_SHORT, MARKET_CLOSED, NO_FUNDS, NO_S
 import { currentParams, houseTermsNote, ticketFigures } from "@/lib/ticket-figures";
 import { describeBestPrice } from "@/lib/tier-view";
 import { tradingPaused } from "@/lib/trading-paused";
+import { isPriced, isUnfed, unpricedWhy } from "@/lib/unpriced";
 import { formatLeverage } from "@/lib/volume-tier";
 
 import { CloseSummary } from "./CloseSummary";
@@ -62,7 +63,9 @@ export function DealTicket() {
     unlisted: follow?.kind === "unlisted",
     open: market.open,
     scheduleWords: market.open ? null : describeSchedule(market.view.schedule),
-    priced: market.mark !== null,
+    priced: isPriced(market),
+    unfed: isUnfed(market.view.pricing),
+    unpricedWhy: unpricedWhy(market.view.pricing),
     reduceOnly: market.reduceOnly,
   });
   const triggerPrice = parseFixed(price);
@@ -92,7 +95,9 @@ export function DealTicket() {
   const setupNote = setup === null ? null : setup === "reading" ? "Loading your account…" : "To trade, sign the eligibility declaration and authorize this browser.";
   // Why the console cannot sign comes first: a node it does not trust may never answer the read that setup waits on.
   // The paused state then names the one market-level reason, folding the ticket's own line for it.
-  const gate = !state.wallet ? "Connect a wallet to trade." : blockSentence(readOnlyWhy) ?? setupNote ?? paused?.text ?? null;
+  // A market no feed prices cannot be traded whatever the wallet or its setup, so that comes first.
+  const unfed = paused?.cause === "unfed" ? paused.text : null;
+  const gate = unfed ?? (!state.wallet ? "Connect a wallet to trade." : null) ?? blockSentence(readOnlyWhy) ?? setupNote ?? paused?.text ?? null;
   const folded = paused?.cause === "closed" ? MARKET_CLOSED : paused?.cause === "reduce_only" ? REDUCE_ONLY : null;
   const shownProblems = folded === null ? problems : problems.filter((p) => p !== folded);
   const canPlace = gate === null && shownProblems.length === 0 && sizeProblems.length === 0 && !sizeMissing && !state.busy;

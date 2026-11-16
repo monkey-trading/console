@@ -5,10 +5,10 @@ import { describe, expect, it } from "vitest";
 import { EngineError } from "../engine/client";
 import { cancelAllTypedData, closeAllTypedData, requestDomain } from "../engine/eip712";
 import vectors from "../engine/eip712-vectors.json";
-import type { CancelAllRequest, CloseAllRequest, EngineEvent, RestingOrder } from "../engine/types";
+import type { CancelAllRequest, CloseAllRequest, EngineEvent, MarketPricing, RestingOrder } from "../engine/types";
 import { fixedFromInt } from "../fixed";
 import { cancelAll, closeAll } from "./batch-actions";
-import { ActionClient, connected, NODE_TIME, signerOf, VAULT } from "./live-kit";
+import { ActionClient, BTC, connected, NODE_TIME, signerOf, VAULT } from "./live-kit";
 import { loginSession } from "./session";
 import { REQUEST_TTL_MS } from "./signing";
 
@@ -138,6 +138,14 @@ describe("close all", () => {
     const { store } = await setup(() => () => ({ seq: 6, events: [rejected(0, slippage), fill(1)] }));
     await closeAll(store, TARGETS, BPS);
     expect(store.getSnapshot().notices.positions).toMatchObject({ tone: "error", text: "1 of 2 positions was closed. The ETH-USD position was not closed, because the price moved by more than your maximum slippage." });
+  });
+
+  it("names why an entry's market has no price, from the read that follows the refusal", async () => {
+    const { client, store } = await setup(() => () => ({ seq: 6, events: [fill(2), rejected(1, { kind: "no_price" })] }));
+    const lagging: MarketPricing = { priced: false, unpriced: "too_few_sources", as_of_ms: 1, fresh_sources: 1, min_sources: 2, sources: [{ source: "coinbase", state: "counts", last_quote_ms: 1, age_ms: 0 }, { source: "kraken", state: "delayed", last_quote_ms: 1, age_ms: 4_000 }] };
+    client.markets = async () => [{ ...BTC, pricing: lagging }];
+    await closeAll(store, TARGETS, BPS);
+    expect(store.getSnapshot().notices.positions?.text).toBe("1 of 2 positions was closed. The BTC-USD position was not closed, because no live price is currently available for its market. The prices received from Kraken are delayed.");
   });
 
   it("does not mistake a refusal of the whole request for entry 0's rejection", async () => {

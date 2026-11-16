@@ -7,6 +7,7 @@ import { formatHold } from "./fee-words";
 import { absFixed, fixedFromWire, formatFixedPlaces, formatUsd } from "./fixed";
 import { formatMonkey, formatRate } from "./format";
 import { formatTenthBps, tenthBpsOfValue } from "./spread-bands";
+import { noPriceRefusal } from "./unpriced";
 
 /** An engine decimal with at most `places` places, grouped in thousands. */
 function decimals(wire: string, places: number): string {
@@ -38,7 +39,7 @@ export function describeReject(reject: Reject): string {
       return reject.reason === "eligibility_required" ? "Your eligibility has not been declared. Sign the eligibility declaration to continue." : reject.reason === "already_attested" ? "Your eligibility declaration has already been recorded." : "This service is not available in your region.";
     case "market_closed": return "This market is closed.";
     case "reduce_only": return "This market is currently accepting only orders that reduce an existing position.";
-    case "no_price": return "No live price is currently available for this market.";
+    case "no_price": return noPriceRefusal(undefined);
     case "unknown_market": return "This market is not listed.";
     case "unknown_order": return "This order is no longer working. It may already have been filled or cancelled.";
     case "invalid_order": return describeInvalidOrder(reject.reason);
