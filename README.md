@@ -64,6 +64,32 @@ house's USDC above its floor. The staking epoch, unstake cooldown and floor are 
 script prints. Its header lists the variables that move its ports, fund
 another address, or serve a production build.
 
+### Run the launch genesis
+
+`GENESIS_FILE` chooses the genesis the node starts from: any engine config file with a `[genesis]` table, by path or
+relative to the engine checkout. The default is `config/dev.toml`, a handful of markets. To trade on the launch values
+instead:
+
+```sh
+GENESIS_FILE=config/production-genesis.toml ./scripts/dev-local-stack.sh
+```
+
+The stack copies that table into the one `node.toml` it assembles, so the node still loads a single config file and
+attests its hash. The node then lists all 34 launch markets with their margin and spread bands, per-market and total
+house cap floors, close-spread ceilings, volume tiers with their limits and fee discounts, and a house with no capital,
+so an opening order meets the cap floors as at launch. The crypto markets (BTC-USD, ETH-USD, SOL-USD) price from the live
+venues. The markets whose launch sources are vendors needing keys (foreign exchange, indices, commodities, shares) have
+no price, because a node's feed is the live venues or the mock and never both, and the vendor sources accept only their
+own domains; the summary lists them as unpriced.
+
+A launch genesis also takes the launch deployment's values from the engine's `ops/runbooks/production-deployment.toml`:
+the MONKEY period budget and the vault's exit period, claim window and deposit staleness stay as they are at launch. The
+summary names what the stack shortens to be watchable: the staking epoch and the unstake cooldown (five minutes each), the
+liquidity floor (10,000 USDC, since the house starts empty), the timelock's delay (one second) and the start of
+emissions and staking (the next minute). `./scripts/dev-local-stack-ctl.sh status` names the genesis the stack runs, and
+`fund-house` fills the empty house under either genesis. `./scripts/check-local-stack-genesis.sh` starts the stack on the
+launch genesis and checks that the node serves 34 markets with their production cap floors.
+
 ## Try delegation, an election and a handover
 
 The same stack can run two engines, so a staker's vote moves the operator and the console follows it:
