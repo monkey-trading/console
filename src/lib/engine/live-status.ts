@@ -64,10 +64,16 @@ export class StatusWatch {
     this.deps.report({ kind: "signed", status });
   }
 
-  /** The stream went stale, when the status is read now and every `STALE_STATUS_READ_MS` until it is live while the node is trusted, or live again, when its connection's first status frame says what holds. */
+  /**
+   * The stream went stale, when what was said before is no longer current and the status is read now
+   * and every `STALE_STATUS_READ_MS` until it is live while the node is trusted; or live again, when its
+   * connection's first status frame says what holds.
+   */
   feed(status: FeedStatus): void {
     this.stop();
-    if (status === "stale") void this.poll();
+    if (status !== "stale") return;
+    this.deps.report(null);
+    void this.poll();
   }
 
   stop(): void {

@@ -63,13 +63,13 @@ describe("the stale stream's reads", () => {
     const t = watching(new EngineError(0, "down"), new UnsignedAnswer("unsigned"));
     t.watch.feed("stale");
     await settle();
-    expect(t.reports).toEqual([{ kind: "unreachable" }]);
+    expect(t.reports).toEqual([null, { kind: "unreachable" }]);
     t.scheduler.advance(STALE_STATUS_READ_MS - 1);
     await settle();
     expect(t.reads()).toBe(1);
     t.scheduler.advance(1);
     await settle();
-    expect(t.reports).toEqual([{ kind: "unreachable" }, { kind: "unsigned" }]);
+    expect(t.reports).toEqual([null, { kind: "unreachable" }, { kind: "unsigned" }]);
     t.watch.feed("live");
     t.scheduler.advance(STALE_STATUS_READ_MS * 3);
     await settle();
@@ -87,7 +87,16 @@ describe("the stale stream's reads", () => {
     t.trust.held = true;
     t.scheduler.advance(STALE_STATUS_READ_MS);
     await settle();
-    expect(t.reports).toEqual([{ kind: "unsigned" }]);
+    expect(t.reports).toEqual([null, { kind: "unsigned" }]);
+  });
+
+  it("forgets what an earlier outage's read said as soon as the stream goes stale again", async () => {
+    const t = watching(new UnsignedAnswer("unsigned"), new EngineError(0, "down"));
+    t.watch.feed("stale");
+    await settle();
+    t.watch.feed("live");
+    t.watch.feed("stale");
+    expect(t.reports).toEqual([null, { kind: "unsigned" }, null]);
   });
 
   it("drops a read that answers after the stream came back", async () => {
@@ -95,9 +104,9 @@ describe("the stale stream's reads", () => {
     t.watch.feed("stale");
     t.watch.feed("live");
     await settle();
-    expect(t.reports).toEqual([]);
+    expect(t.reports).toEqual([null]);
     t.watch.frame(STATUS);
-    expect(t.reports).toEqual([{ kind: "signed", status: STATUS }]);
+    expect(t.reports).toEqual([null, { kind: "signed", status: STATUS }]);
   });
 });
 
