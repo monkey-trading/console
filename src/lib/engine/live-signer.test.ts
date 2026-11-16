@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AttestationStatus } from "./attestation";
 import { LiveEngineClient } from "./live";
-import { SIGNER_SUPERSEDED, SIGNER_UNREAD } from "./signer-naming";
+import { SIGNER_CONFLICT, SIGNER_SUPERSEDED, SIGNER_UNREAD } from "./signer-naming";
 import { acceptAll, FakeNode, FakeScheduler, FakeSocket, OPERATOR_CLAIM, settle } from "./test-kit";
 import { UntrustedError } from "./trust";
 import { RefusedAnswer } from "./trust-errors";
@@ -191,13 +191,14 @@ describe("an answer in flight", () => {
       held.address = OTHER;
       node.attestation(() => OTHER);
       operator({ epoch: 5, address: OTHER }, OTHER);
-      await expect(live.verify(), lands).resolves.toEqual({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+      await expect(live.verify(), lands).resolves.toEqual({ kind: "unverified", reason: SIGNER_CONFLICT });
       if (lands === "at the later epoch") {
         operator({ epoch: 6, address: OTHER }, OTHER);
         await expect(live.verify(), lands).resolves.toMatchObject({ kind: "mock" });
       }
       release();
-      await expect(inFlight, lands).rejects.toThrow(SIGNER_SUPERSEDED);
+      // A later epoch that names the other key makes the first one another signer, not a conflict.
+      await expect(inFlight, lands).rejects.toThrow(lands === "at the later epoch" ? SIGNER_SUPERSEDED : SIGNER_CONFLICT);
     }
   });
 
@@ -213,11 +214,11 @@ describe("an answer in flight", () => {
     const inFlight = live.markets();
     await settle();
     live.heedSigner({ epoch: 5, address: null });
-    expect(statuses).toEqual([{ kind: "unverified", reason: SIGNER_SUPERSEDED }]);
+    expect(statuses).toEqual([{ kind: "unverified", reason: SIGNER_CONFLICT }]);
     release();
-    await expect(inFlight).rejects.toThrow(SIGNER_SUPERSEDED);
+    await expect(inFlight).rejects.toThrow(SIGNER_CONFLICT);
     // The node's own word still names its key at that epoch, which no word now takes.
-    await expect(live.verify()).resolves.toEqual({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+    await expect(live.verify()).resolves.toEqual({ kind: "unverified", reason: SIGNER_CONFLICT });
   });
 
   it("ends an archive scan under a signer the vault stopped naming, on the next frame", async () => {

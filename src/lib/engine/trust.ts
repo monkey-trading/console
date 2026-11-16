@@ -11,8 +11,6 @@ import { digestNamed, isConfigHash, manifestText } from "./release-check";
 export { NotSentError, SignatureError, UntrustedError } from "./trust-errors";
 import { NotSentError, sendRefusal, UntrustedError } from "./trust-errors";
 
-export { SIGNER_SUPERSEDED } from "./signer-naming";
-
 /** How long a failure under an address that re-verified unchanged goes without another re-verification, in milliseconds. */
 const RECHECK_COOLDOWN_MS = 30_000;
 /** The messages the verifier gives when a certificate or list is outside its dates, which a wrong device clock also causes. */
@@ -228,6 +226,9 @@ export class NodeTrust {
 
   /** Whether a signer's answers are refused: another signer was named since it was verified. */
   refuses = (signer: string): boolean => this.naming.refuses(signer);
+
+  /** Why a signer's answers are refused, as the error that refuses them says it. */
+  whyRefused = (signer: string): string => this.naming.why(signer);
 
   /**
    * Why a dev build refuses its mock node, or whether the vault judged it. With stand-in digests named, the mock node passes
