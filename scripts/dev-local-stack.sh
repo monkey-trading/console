@@ -24,7 +24,8 @@
 # engine's (Anvil account 4) and the third (Anvil account 6) staking 40, 25 and 34 thousand MONKEY, the
 # second delegating 1 thousand of its 25 to the third. The chain's clock moves past the registry's
 # one-day epoch and the set's seven-day notice, so the three are the rotation set in effect, and the
-# node mirrors each passed proposal; `dev-local-stack-ctl.sh propose` and `vote` act as members. The
+# node mirrors each passed proposal, but the engine applies one only while a drawn turn is in effect, which
+# only ROTATION=1 draws; `dev-local-stack-ctl.sh propose` and `vote` act as members. The
 # chain's clock then runs eight days ahead of the engine's, so withdrawal authorizations do not pay,
 # and with a schedule closes adopt rotation sets, so `elect` and `handover` do not apply.
 #
@@ -1301,8 +1302,8 @@ Drive it           ./scripts/dev-local-stack-ctl.sh status | elect | handover | 
 "
   fi
   if [[ "$parameter_votes" == 1 ]]; then
-    clock_note="A fast-path restriction lasts $restriction_ttl. The chain's clock is eight days ahead of the
-                   engine's, so withdrawal authorizations do not pay, \`elect\` and \`handover\` do not apply,
+    clock_note="No turn is drawn, so a passed change applies nothing (ROTATION=1 draws one). The chain's clock is
+                   eight days ahead of the engine's, so withdrawal authorizations do not pay, \`elect\` and \`handover\` do not apply,
                    and the Governance tab counts a voting window, which runs on the chain's clock, eight days long."
     if [[ "$rotation" == 1 ]]; then clock_note="A fast-path restriction lasts $restriction_ttl."; fi
     two_engines="$two_engines
