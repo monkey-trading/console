@@ -105,12 +105,38 @@ export function proofAwaited(reads: ProofReads): boolean {
   return distribution || (reads.entitlement === null && pendingEmission(reads.activity, reads.overview, reads.account).kind === "awaiting");
 }
 
-/** Reads the connected account's MONKEY entitlement proof into the store, as the account read does, while `open` holds and the wallet is still the one asked for; a failure leaves the card saying what it knew, and the next tick asks again. */
-export async function readEntitlement(store: ConsoleStore, open: () => boolean): Promise<void> {
+/** The reward period's length when the node's totals have not said it: ten minutes. */
+const DEFAULT_PERIOD_MS = 600_000;
+
+/**
+ * When the node last answered that it holds no entitlement for an account. A 404 means nothing is
+ * earned yet, and nothing can change that until the next reward period closes or a checkpoint is
+ * posted, so the timer reads again only after a period, and a checkpoint frame reads at once.
+ */
+export class EntitlementPace {
+  private miss: { account: string; at: number } | null = null;
+
+  /** Whether the node may be asked for `account`'s entitlement: no miss held for it, a checkpoint just arrived, or a reward period has passed since the miss. */
+  due(account: string, periodMs: number, fromEvent: boolean, now = Date.now()): boolean {
+    const miss = this.miss;
+    return fromEvent || miss === null || miss.account !== account.toLowerCase() || now - miss.at >= periodMs;
+  }
+
+  record(account: string, absent: boolean, now = Date.now()): void {
+    this.miss = absent ? { account: account.toLowerCase(), at: now } : null;
+  }
+}
+
+/**
+ * Reads the connected account's MONKEY entitlement proof into the store, as the account read does, while `open` holds and the wallet is still the one asked for; a failure leaves the card saying what it knew, and the next tick asks again.
+ * A node with no proof for the account (a 404) is read again only when `pace` says so: `fromEvent` is a checkpoint frame, and `periodMs` is the reward period.
+ */
+export async function readEntitlement(store: ConsoleStore, open: () => boolean, pace: EntitlementPace, fromEvent: boolean, periodMs: number = DEFAULT_PERIOD_MS): Promise<void> {
   const address = store.liveWallet?.address;
-  if (address === undefined) return;
+  if (address === undefined || !pace.due(address, periodMs, fromEvent)) return;
   try {
     const proof = await store.deps.client.emissions(address);
+    if (open() && store.liveWallet?.address === address) pace.record(address, proof === null);
     if (open() && store.liveWallet?.address === address && proof !== null) store.patch({ entitlement: carryAccrued(store.getSnapshot().entitlement, proof) });
   } catch {
     // Not a verdict: the card keeps what it knew.

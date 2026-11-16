@@ -111,7 +111,7 @@ export interface LiveDeps {
    * (`watchCheckpoints`: checkpoints are frames of their own, not commands, so `rereadsFor` never sees them).
    */
   awaitingProof?(): boolean;
-  readProofs?(): void;
+  readProofs?(fromEvent: boolean): void;
   watchCheckpoints?(onCheckpoint: () => void): () => void;
   /** The base tick, the node's slower read and the wallet's, in milliseconds. */
   tickMs: number;
@@ -131,7 +131,7 @@ export function followLive(deps: LiveDeps): () => void {
     ticks += 1;
     if (ticks % (deps.nodeEveryMs / deps.tickMs) === 0 && deps.nodeDue()) deps.readNode();
     if (ticks % (WALLET_READ_EVERY_MS / deps.tickMs) === 0 && deps.account() !== null && deps.walletDue()) deps.readWallet();
-    if (deps.account() !== null && deps.awaitingProof?.() === true) deps.readProofs?.();
+    if (deps.account() !== null && deps.awaitingProof?.() === true) deps.readProofs?.(false);
     deps.tickCharts();
   }, deps.tickMs);
   const node = new Limiter(deps.readNode, EVENT_READ_MS);
@@ -142,7 +142,7 @@ export function followLive(deps: LiveDeps): () => void {
     if (reads.node) node.call();
     if (reads.wallet) wallet.call();
   });
-  const proofs = new Limiter(() => deps.readProofs?.(), EVENT_READ_MS);
+  const proofs = new Limiter(() => deps.readProofs?.(true), EVENT_READ_MS);
   const unwatch = deps.watchCheckpoints?.(() => {
     if (deps.isHidden() || !deps.open() || deps.account() === null || deps.awaitingProof?.() !== true) return;
     proofs.call();

@@ -73,7 +73,7 @@ async function awaitingEmission(page: PanelPage) {
 }
 
 describe("the MONKEY page while an emission proof is awaited", () => {
-  it("reads the entitlement on every tick and on each checkpoint frame until a proof exists, then stops", async () => {
+  it("reads the entitlement on a checkpoint frame, and once a reward period after a 404 on the tick, until a proof exists, then stops", async () => {
     const { node, panel, stop, reads, gate, checkpoint } = await awaitingEmission("monkey");
     expect(pendingEmission(panel.getSnapshot().activity, panel.getSnapshot().overview, DEMO_ADDRESS).kind).toBe("awaiting");
     reads.mockClear();
@@ -84,12 +84,25 @@ describe("the MONKEY page while an emission proof is awaited", () => {
     expect(reads).toHaveBeenCalledTimes(2);
     gate.proofAvailable = true;
     node.client.state.entitledMonkey.set(DEMO_ADDRESS.toLowerCase(), MONKEY_UNIT);
-    await vi.advanceTimersByTimeAsync(LIVE_READ_MS);
+    checkpoint();
+    await vi.advanceTimersByTimeAsync(1_000);
     const settled = reads.mock.calls.length;
     await vi.advanceTimersByTimeAsync(2 * LIVE_READ_MS);
     checkpoint();
     await flush();
     expect(reads.mock.calls.length).toBe(settled);
+    stop();
+  });
+
+  it("answers a 404 as nothing earned yet: one read per reward period on the tick, not one per tick", async () => {
+    const { panel, stop, reads } = await awaitingEmission("monkey");
+    const period = panel.getSnapshot().overview.value?.emissions?.period_ms ?? 0;
+    expect(period).toBeGreaterThan(0);
+    reads.mockClear();
+    await vi.advanceTimersByTimeAsync(period - LIVE_READ_MS);
+    expect(reads.mock.calls.length).toBeLessThanOrEqual(1);
+    await vi.advanceTimersByTimeAsync(2 * LIVE_READ_MS);
+    expect(reads.mock.calls.length).toBeLessThanOrEqual(2);
     stop();
   });
 

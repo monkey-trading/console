@@ -9,6 +9,7 @@ import type { Wallet } from "../engine/wallet";
 import type { DistributionHistoryReads } from "../staking/history-reads";
 import type { DelegationReads } from "../staking/delegation-reads";
 import type { MonkeyPanel } from "./panel";
+import { EntitlementPace } from "./pending";
 
 interface Entry {
   /** Whether it is a page read rather than a transaction. */
@@ -92,6 +93,8 @@ export class MonkeySession {
     this.openings += 1;
     return this.openings;
   }
+  /** When the node last had no MONKEY entitlement for the account, so a reopened page does not ask again at once. */
+  readonly entitlementPace = new EntitlementPace();
   panel: MonkeyPanel | null = null;
   /** The Staking page's distribution history while it reads. */
   history: DistributionHistoryReads | null = null;
