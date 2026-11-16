@@ -39,12 +39,23 @@ describe("markets without a live price", () => {
   });
 
   it.each([
-    [["diverging"], "the prices received from different price feeds currently disagree"],
-    [["out_of_range"], "the underlying futures price is outside its permitted range"],
-    [["diverging", "too_few_sources"], "the server is not currently receiving reliable prices"],
-  ] as const)("gives the server's reason, %s, when no venue reports a problem", (reasons, why) => {
-    const server = signed({ unpriced_markets: reasons.map((reason, i) => unpriced(i + 1, `M${i + 1}`, reason)) });
-    expect(serverLine("live", server, null)?.lead).toBe(`Live prices for ${reasons.length === 1 ? "M1" : "M1 and M2"} are temporarily unavailable because ${why}.`);
+    ["diverging", "the prices received from different price feeds currently disagree"],
+    ["out_of_range", "the underlying futures price is outside its permitted range"],
+  ] as const)("gives the server's reason, %s, when no venue reports a problem", (reason, why) => {
+    expect(serverLine("live", signed({ unpriced_markets: [unpriced(1, "M1", reason)] }), null)?.lead).toBe(`Live prices for M1 are temporarily unavailable because ${why}.`);
+  });
+
+  it("gives each market only its own cause, one sentence per cause, those a venue explains first", () => {
+    // As a dev node lists EUR-USD with no venue quoting it while it has lost Kraken for BTC-USD and ETH-USD.
+    const server = signed({
+      venues: [venue("coinbase", "quoting", BTC, ETH), venue("kraken", "down", BTC, ETH)],
+      unpriced_markets: [unpriced(10, "EUR-USD"), unpriced(...BTC), unpriced(...ETH), unpriced(11, "XAU-USD", "diverging")],
+    });
+    expect(serverLine("live", server, null)).toEqual({
+      role: "status",
+      lead: "Live prices for BTC-USD and ETH-USD are temporarily unavailable because the server has lost its connection to Kraken.",
+      rest: "Live prices for EUR-USD are temporarily unavailable because the server is not currently receiving enough up-to-date prices. Live prices for XAU-USD are temporarily unavailable because the prices received from different price feeds currently disagree. Trading in these markets will resume automatically once prices return.",
+    });
   });
 
   it("names four markets in full, and counts the rest past three", () => {

@@ -55,10 +55,8 @@ function holdLine(cause: HoldCause): Omit<ServerLine, "role"> {
 }
 
 /** Why no price forms when no venue that quotes the market reports a problem. */
-function reasonWords(reasons: ReadonlySet<UnpricedReason>): string {
-  const [only] = reasons;
-  if (reasons.size !== 1 || only === undefined) return "the server is not currently receiving reliable prices";
-  switch (only) {
+function reasonWords(reason: UnpricedReason): string {
+  switch (reason) {
     case "too_few_sources":
       return "the server is not currently receiving enough up-to-date prices";
     case "diverging":
@@ -66,23 +64,38 @@ function reasonWords(reasons: ReadonlySet<UnpricedReason>): string {
     case "out_of_range":
       return "the underlying futures price is outside its permitted range";
     default:
-      only satisfies never;
+      // A reason from a newer server than this app knows.
+      reason satisfies never;
       return "the server is not currently receiving reliable prices";
   }
 }
 
-/** Which open markets have no live price, and why: the venues that quote them and report a problem, or else the server's reason. */
-function pricesLine({ unpriced_markets: unpriced, venues }: ServerStatus): Omit<ServerLine, "role"> {
-  const ids = new Set(unpriced.map((m) => m.market));
-  const symbols = unpriced.map((m) => m.symbol);
-  const markets = symbols.length > NAMED_MARKETS + 1 ? `${symbols.slice(0, NAMED_MARKETS).join(", ")} and ${symbols.length - NAMED_MARKETS} other markets` : andList(symbols);
+/** Why one market has no price: the venues that quote it and report a problem, or else the server's reason; `venue` says which. */
+function causeOf(market: ServerStatus["unpriced_markets"][number], venues: ServerStatus["venues"]): { why: string; venue: boolean } {
   const causes = FAILING.flatMap(([state, words]) => {
-    const names = venues.filter((v) => v.symbols.some((s) => s.state === state && ids.has(s.market))).map((v) => venueName(v.venue));
+    const names = venues.filter((v) => v.symbols.some((s) => s.state === state && s.market === market.market)).map((v) => venueName(v.venue));
     return names.length === 0 ? [] : [words(andList(names), names.length > 1)];
   });
-  const why = causes.length > 0 ? andList(causes) : reasonWords(new Set(unpriced.map((m) => m.reason)));
+  return causes.length > 0 ? { why: andList(causes), venue: true } : { why: reasonWords(market.reason), venue: false };
+}
+
+/** The markets of one cause, the first three named and the rest counted. */
+function marketWords(symbols: readonly string[]): string {
+  return symbols.length > NAMED_MARKETS + 1 ? `${symbols.slice(0, NAMED_MARKETS).join(", ")} and ${symbols.length - NAMED_MARKETS} other markets` : andList(symbols);
+}
+
+/** Which open markets have no live price and why, one sentence per cause, those a venue explains first. */
+function pricesLine({ unpriced_markets: unpriced, venues }: ServerStatus): Omit<ServerLine, "role"> {
+  const groups = new Map<string, { venue: boolean; symbols: string[] }>();
+  for (const market of unpriced) {
+    const { why, venue } = causeOf(market, venues);
+    const group = groups.get(why) ?? { venue, symbols: [] };
+    group.symbols.push(market.symbol);
+    groups.set(why, group);
+  }
+  const [lead = "", ...others] = [...groups].sort(([, a], [, b]) => Number(b.venue) - Number(a.venue)).map(([why, { symbols }]) => `Live prices for ${marketWords(symbols)} are temporarily unavailable because ${why}.`);
   const one = unpriced.length === 1;
-  return { lead: `Live prices for ${markets} are temporarily unavailable because ${why}.`, rest: `Trading in ${one ? "this market" : "these markets"} will resume automatically once prices return.` };
+  return { lead, rest: [...others, `Trading in ${one ? "this market" : "these markets"} will resume automatically once prices return.`].join(" ") };
 }
 
 /**
