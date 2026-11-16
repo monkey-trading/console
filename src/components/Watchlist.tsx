@@ -14,7 +14,7 @@ import { useConsole, useSession } from "./ConsoleProvider";
 const CLASS_WORDS: [AssetClass, string][] = [["crypto", "crypto"], ["fx", "FX"], ["index", "index"], ["commodity", "commodity"], ["equity", "share"]];
 
 /** The dot beside each market status; Tailwind needs each class name whole. */
-const DOT = { open: "bg-glow", closed: "bg-ember", unpriced: "bg-amber" } as const;
+const DOT = { open: "bg-glow", closed: "bg-ember", unpriced: "bg-amber", unfed: "bg-fg-3" } as const;
 
 /** The note under the list, naming the kinds of market it holds, or null for an empty list. */
 export function describeListing(classes: readonly AssetClass[]): string | null {

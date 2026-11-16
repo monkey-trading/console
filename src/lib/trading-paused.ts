@@ -1,6 +1,8 @@
 /** The one plain-words state for which trading is paused on the trading page (monkey-trading/console#273): a single reason, what will end it, and whether closing still works. */
 
-export type PausedCause = "handover" | "unlisted" | "closed" | "price" | "reduce_only";
+import { UNFED_TEXT } from "./unpriced";
+
+export type PausedCause = "handover" | "unlisted" | "closed" | "unfed" | "price" | "reduce_only";
 
 export type PausedState = {
   cause: PausedCause;
@@ -12,8 +14,8 @@ export type PausedState = {
 
 /**
  * The reason trading is paused for the selected market, or null when it is not. One cause wins, in
- * the order a trader asks about them: an operator handover first, then an operator on a node this console does not list, then a closed market, then no
- * usable price, then a reduce-only market. A node the console does not trust is the caller's own
+ * the order a trader asks about them: an operator handover first, then an operator on a node this console does not list, then a closed market, then a
+ * market no feed prices on this server, then no usable price, then a reduce-only market. A node the console does not trust is the caller's own
  * gate and never reaches here.
  */
 export function tradingPaused(input: {
@@ -27,6 +29,8 @@ export function tradingPaused(input: {
   scheduleWords: string | null;
   /** The market has a live price. */
   priced: boolean;
+  /** No feed prices the market on this server, so it has no price and will not have one by itself. */
+  unfed: boolean;
   /** Why it has none, as a clause after "because"; null when the server does not say. */
   unpricedWhy: string | null;
   /** The market refuses orders that add risk. */
@@ -41,6 +45,7 @@ export function tradingPaused(input: {
   if (!input.open) {
     return { cause: "closed", text: input.scheduleWords === null ? "This market is currently closed." : `This market is currently closed. Its trading hours are ${input.scheduleWords}.`, closesAllowed: true };
   }
+  if (!input.priced && input.unfed) return { cause: "unfed", text: UNFED_TEXT, closesAllowed: false };
   if (!input.priced) {
     const why = input.unpricedWhy === null ? "" : ` because ${input.unpricedWhy}`;
     return { cause: "price", text: `No live price is currently available for this market${why}, so trading has been suspended. Trading will resume automatically once a live price is available again.`, closesAllowed: true };

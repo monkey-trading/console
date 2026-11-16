@@ -142,7 +142,7 @@ describe("close all", () => {
 
   it("names why an entry's market has no price, from the read that follows the refusal", async () => {
     const { client, store } = await setup(() => () => ({ seq: 6, events: [fill(2), rejected(1, { kind: "no_price" })] }));
-    const lagging: MarketPricing = { priced: false, unpriced: "too_few_sources", as_of_ms: 1, fresh_sources: 1, min_sources: 2, sources: [{ source: "kraken", state: "delayed", last_quote_ms: 1, age_ms: 4_000 }] };
+    const lagging: MarketPricing = { priced: false, unpriced: "too_few_sources", as_of_ms: 1, fresh_sources: 1, min_sources: 2, sources: [{ source: "coinbase", state: "counts", last_quote_ms: 1, age_ms: 0 }, { source: "kraken", state: "delayed", last_quote_ms: 1, age_ms: 4_000 }] };
     client.markets = async () => [{ ...BTC, pricing: lagging }];
     await closeAll(store, TARGETS, BPS);
     expect(store.getSnapshot().notices.positions?.text).toBe("1 of 2 positions was closed. The BTC-USD position was not closed, because no live price is currently available for its market. The prices received from Kraken are delayed.");

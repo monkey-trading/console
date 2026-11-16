@@ -37,7 +37,7 @@ export function markersFor(state: ConsoleState, market: MarketModel, lines = tru
 }
 
 /** The status label's colour, hidden on wide screens except for a market with no live price; Tailwind needs each class name whole. */
-const STATUS_TEXT = { open: "text-glow lg:hidden", closed: "text-ember lg:hidden", unpriced: "text-amber" } as const;
+const STATUS_TEXT = { open: "text-glow lg:hidden", closed: "text-ember lg:hidden", unpriced: "text-amber", unfed: "text-fg-3" } as const;
 
 /** The selected market's header and chart. */
 export function ChartPanel() {

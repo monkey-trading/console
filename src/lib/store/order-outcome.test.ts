@@ -43,7 +43,7 @@ describe("an order refused for want of a price", () => {
   it("names why the market has no price, from the read that follows the refusal", async () => {
     const { client, store } = await keyed();
     client.answer = answer([{ type: "order_rejected", account: ACCOUNT, client_id: 1, reason: { kind: "no_price" } }]);
-    client.markets = async () => [{ ...BTC, pricing: { priced: false, unpriced: "too_few_sources", as_of_ms: 1, fresh_sources: 1, min_sources: 2, sources: [{ source: "kraken", state: "delayed", last_quote_ms: 1, age_ms: 4_000 }] } }];
+    client.markets = async () => [{ ...BTC, pricing: { priced: false, unpriced: "too_few_sources", as_of_ms: 1, fresh_sources: 1, min_sources: 2, sources: [{ source: "coinbase", state: "counts", last_quote_ms: 1, age_ms: 0 }, { source: "kraken", state: "delayed", last_quote_ms: 1, age_ms: 4_000 }] } }];
     expect(await send(store)).toBe(false);
     expect(store.getSnapshot().notices.ticket?.text).toBe("No live price is currently available for this market because the prices received from Kraken are delayed.");
   });

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { tradingPaused } from "./trading-paused";
 
-const live = { handover: false, unlisted: false, open: true, scheduleWords: null, priced: true, unpricedWhy: null, reduceOnly: false };
+const live = { handover: false, unlisted: false, open: true, scheduleWords: null, priced: true, unfed: false, unpricedWhy: null, reduceOnly: false };
 
 describe("tradingPaused", () => {
   it("is null for a live, open, priced market", () => {
@@ -38,6 +38,12 @@ describe("tradingPaused", () => {
     expect(tradingPaused({ ...live, priced: false })?.cause).toBe("price");
     expect(tradingPaused({ ...live, priced: false })?.text).toBe("No live price is currently available for this market, so trading has been suspended. Trading will resume automatically once a live price is available again.");
     expect(tradingPaused({ ...live, priced: false, open: false })?.cause).toBe("closed");
+  });
+
+  it("says a market no feed prices cannot be traded on this server, without promising it resumes, and keeps a closed market closed", () => {
+    const state = tradingPaused({ ...live, priced: false, unfed: true, unpricedWhy: "the server is not currently receiving enough up-to-date prices" });
+    expect(state).toEqual({ cause: "unfed", text: "Live prices for this market are not available on this server, so it cannot be traded.", closesAllowed: false });
+    expect(tradingPaused({ ...live, priced: false, unfed: true, open: false })?.cause).toBe("closed");
   });
 
   it("names why a market has no price where the server says", () => {

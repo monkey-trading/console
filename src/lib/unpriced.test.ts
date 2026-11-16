@@ -1,11 +1,11 @@
-/** Tests for a market's live price and why it has none: a lagging venue, a closed market, recovery, and the refusals that name the reason. */
+/** Tests for a market's live price and why it has none: a lagging venue, a market no feed prices, a closed market, recovery, and the refusals that name the reason. */
 
 import { describe, expect, it } from "vitest";
 
 import type { MarketPricing, SourceState } from "./engine/pricing-types";
 import { decodeMarket } from "./models";
 import { BTC } from "./store/live-kit";
-import { isPriced, marketStatus, noPriceClose, noPriceRefusal, unpricedWhy } from "./unpriced";
+import { isPriced, isUnfed, marketStatus, noPriceClose, noPriceRefusal, unpricedWhy } from "./unpriced";
 
 const source = (name: string, state: SourceState) => ({ source: name, state, last_quote_ms: state === "never_quoted" ? null : 1, age_ms: state === "never_quoted" ? null : 0 });
 
@@ -33,6 +33,34 @@ describe("whether a market has a live price", () => {
   it("reads a mark as a price from a server that does not say, and the mock", () => {
     expect(isPriced(market(undefined))).toBe(true);
     expect(isPriced(decodeMarket({ ...BTC, mark: null }, undefined, false))).toBe(false);
+  });
+});
+
+describe("a market no feed prices on this server", () => {
+  it.each([
+    // A dev node lists EUR-USD with no venue to quote it.
+    ["no source at all", [], true],
+    // A vendor's markets before its key is delivered.
+    ["sources whose connections are withheld", [["massive", "off"], ["tradermade", "off"]], true],
+    ["fewer sources that can count than its price needs", [["coinbase", "counts"], ["kraken", "off"]], true],
+    ["sources that take no quotes for it", [["cme", "not_expected"], ["massive", "counts"]], true],
+    ["sources that have never quoted it", [["massive", "never_quoted"], ["tradermade", "never_quoted"]], true],
+    ["sources that can recover by themselves", [["coinbase", "counts"], ["kraken", "down"]], false],
+  ] as [string, [string, SourceState][], boolean][])("is told from an outage for %s", (_, sources, unfed) => {
+    expect(isUnfed(pricing(sources, "too_few_sources"))).toBe(unfed);
+    expect(marketStatus(market(pricing(sources, "too_few_sources")))).toBe(unfed ? "unfed" : "unpriced");
+  });
+
+  it("is never unfed while priced, closed, or from a server that does not say", () => {
+    expect(isUnfed(pricing([]))).toBe(false);
+    expect(isUnfed(undefined)).toBe(false);
+    expect(marketStatus(market(pricing([], "too_few_sources"), false))).toBe("closed");
+  });
+
+  it("says plainly that it cannot be traded, without promising it resumes", () => {
+    const unfed = pricing([], "too_few_sources");
+    expect(noPriceRefusal(unfed)).toBe("Live prices for this market are not available on this server, so it cannot be traded.");
+    expect(noPriceClose("EUR-USD", unfed)).toBe("The EUR-USD position was not closed, because live prices for its market are not available on this server.");
   });
 });
 
