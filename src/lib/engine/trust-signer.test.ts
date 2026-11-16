@@ -109,17 +109,20 @@ describe("SignerNaming", () => {
 
   it("names no key at an epoch two keys were named at, however the second came, tells it, and refuses each key there until a later epoch names one (monkey-trading/console#381)", async () => {
     const THIRD = "0x00000000000000000000000000000000000000cc";
-    const seconds: { way: string; second: (naming: SignerNaming) => void }[] = [
-      { way: "the node's own word", second: (naming) => naming.judge(OLD, { signer: { epoch: 4, address: NEW } }) },
-      { way: "a word put to it", second: (naming) => naming.judge(null, { signer: { epoch: 4, address: NEW } }) },
-      { way: "a word held to it", second: (naming) => naming.hold({ epoch: 4, address: NEW }) },
-      { way: "a floor of two keys held to it", second: (naming) => naming.hold({ epoch: 4, address: null }) },
+    // A word puts the key named first aside at once, its answers in flight included; a hold puts none aside.
+    const seconds: { way: string; second: (naming: SignerNaming) => void; asideAtOnce: boolean }[] = [
+      { way: "the node's own word", second: (naming) => naming.judge(OLD, { signer: { epoch: 4, address: NEW } }), asideAtOnce: true },
+      { way: "a word put to it", second: (naming) => naming.judge(null, { signer: { epoch: 4, address: NEW } }), asideAtOnce: true },
+      { way: "a floor of two keys put to it", second: (naming) => naming.judge(null, { signer: { epoch: 4, address: null } }), asideAtOnce: true },
+      { way: "a word held to it", second: (naming) => naming.hold({ epoch: 4, address: NEW }), asideAtOnce: false },
+      { way: "a floor of two keys held to it", second: (naming) => naming.hold({ epoch: 4, address: null }), asideAtOnce: false },
     ];
-    for (const { way, second } of seconds) {
+    for (const { way, second, asideAtOnce } of seconds) {
       const told: (Readonly<SignerFloor> | null)[] = [];
       const naming: SignerNaming = new SignerNaming(async () => ({}), () => told.push(naming.highest));
       naming.judge(null, { signer: { epoch: 4, address: OLD } });
       second(naming);
+      expect(naming.refuses(OLD), way).toBe(asideAtOnce);
       naming.judge(null, { signer: { epoch: 3, address: OLD } });
       expect(told, way).toEqual([{ epoch: 4, address: OLD }, { epoch: 4, address: null }]);
       expect(naming.judge(OLD, { signer: { epoch: 4, address: OLD } }), way).toEqual({ reason: SIGNER_SUPERSEDED, supersede: true });

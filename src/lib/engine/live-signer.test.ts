@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import type { AttestationStatus } from "./attestation";
 import { LiveEngineClient } from "./live";
 import { SIGNER_SUPERSEDED, SIGNER_UNREAD } from "./signer-naming";
 import { acceptAll, FakeNode, FakeScheduler, FakeSocket, OPERATOR_CLAIM, settle } from "./test-kit";
@@ -198,6 +199,25 @@ describe("an answer in flight", () => {
       release();
       await expect(inFlight, lands).rejects.toThrow(SIGNER_SUPERSEDED);
     }
+  });
+
+  it("is discarded, and the verdict ends, when two keys named at its epoch are put to the client (monkey-trading/console#381)", async () => {
+    const { live, operator, reply, gates } = client();
+    operator({ epoch: 5, address: ENCLAVE });
+    reply("/v1/markets", []);
+    await live.verify();
+    const statuses: AttestationStatus[] = [];
+    live.watch((event) => { if (event.type === "attestation") statuses.push(event.status); });
+    let release: () => void = () => undefined;
+    gates.markets = new Promise<void>((resolve) => { release = resolve; });
+    const inFlight = live.markets();
+    await settle();
+    live.heedSigner({ epoch: 5, address: null });
+    expect(statuses).toEqual([{ kind: "unverified", reason: SIGNER_SUPERSEDED }]);
+    release();
+    await expect(inFlight).rejects.toThrow(SIGNER_SUPERSEDED);
+    // The node's own word still names its key at that epoch, which no word now takes.
+    await expect(live.verify()).resolves.toEqual({ kind: "unverified", reason: SIGNER_SUPERSEDED });
   });
 
   it("ends an archive scan under a signer the vault stopped naming, on the next frame", async () => {

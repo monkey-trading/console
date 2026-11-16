@@ -238,6 +238,19 @@ describe("the node in use under a later signer another node names (monkey-tradin
   });
 });
 
+describe("two keys a trial's own word named at one epoch (monkey-trading/console#381)", () => {
+  it("puts them to the node in use, which then refuses the key it held at that epoch", async () => {
+    const kit = visit("b.example");
+    let says = KA;
+    kit.nodeB.verify = async () => { kit.nodeB.naming.judge(null, { signer: { epoch: 8, address: says } }); return { kind: "unverified", reason: "still taking the keys" }; };
+    await kit.follower.check();
+    // B's enclave restarts, and its next check names another key at that epoch.
+    says = KB;
+    await kit.follower.check();
+    expect([kit.current.heard, kit.current.naming.refuses(KA)]).toEqual([[{ epoch: 8, address: KA }, { epoch: 8, address: null }], true]);
+  });
+});
+
 describe("a read that ends after the follower stopped waiting on its client (monkey-trading/console#377)", () => {
   /** A read of `client`'s route that ends when the test lands it. */
   function slowRead(client: TrialClient) {

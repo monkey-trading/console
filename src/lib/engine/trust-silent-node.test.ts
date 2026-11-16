@@ -144,17 +144,14 @@ describe("a node refused for want of a read of the vault (monkey-trading/console
   }
 
   it("checks it again once that read lands late, or the follower's read comes, and takes it when the read names its enclave", async () => {
-    for (const provider of PROVIDERS) {
-      for (const cause of ["a later word", "an earlier read"] as const) {
-        for (const read of ["late", "the follower's"] as const) {
-          const { trust, vault, release } = await refusedUnread(provider, cause);
-          vault.facts = { release, signer: KB };
-          if (read === "late") trust.vaultAnsweredLate();
-          else await trust.heedVault(KB);
-          await settle();
-          expect([trust.status.kind, trust.refuses(KB)], `${provider}, ${cause}, ${read}`).toEqual([provider === "mock" ? "mock" : "verified", false]);
-        }
-      }
+    const cases = PROVIDERS.flatMap((provider) => (["a later word", "an earlier read"] as const).flatMap((cause) => (["late", "the follower's"] as const).map((read) => ({ provider, cause, read }))));
+    for (const { provider, cause, read } of cases) {
+      const { trust, vault, release } = await refusedUnread(provider, cause);
+      vault.facts = { release, signer: KB };
+      if (read === "late") trust.vaultAnsweredLate();
+      else await trust.heedVault(KB);
+      await settle();
+      expect([trust.status.kind, trust.refuses(KB)], `${provider}, ${cause}, ${read}`).toEqual([provider === "mock" ? "mock" : "verified", false]);
     }
   });
 
