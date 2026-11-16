@@ -193,7 +193,7 @@ export function moveDelegation(state: MockState, address: string, from: string |
   const key = address.toLowerCase();
   let delegations = delegationsOf(state, key);
   if (amount <= 0n) throw new Error("The amount must be greater than zero.");
-  if (to === NO_CANDIDATE) throw new Error("Please enter a candidate's address rather than the zero address.");
+  if (to === NO_CANDIDATE) throw new Error("Enter a candidate's address rather than the zero address.");
   if (to !== null && to === from) throw new Error("A delegation cannot be moved to the candidate it is already delegated to.");
   const held = from === null ? (state.monkey.staked.get(key) ?? 0n) - delegatedOf(delegations) : delegationTo(delegations, from);
   if (amount > held) throw new Error(from === null ? "Your undelegated stake is less than the amount entered." : "Your delegation to that candidate is less than the amount entered.");

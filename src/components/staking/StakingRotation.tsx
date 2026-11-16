@@ -62,7 +62,7 @@ export function StakingRotation() {
         <SetCard id="rotation-next-title" title="Next rotation" set={rotation?.nextSet ?? null} empty={rotation === null ? unread : "No next rotation has been chosen yet."} nowMs={nowMs} nameOf={labelOf} needsUpdate={needsUpdate} />
       </div>
       {/* Both cards are there from the first paint, each in a viewport of one height, so nothing moves when the first read lands. */}
-      <Reassignments records={history?.records ?? []} empty={rotation === null ? unread : "None of the turns shown was skipped, promoted or refused."} nameOf={labelOf} />
+      <Reassignments records={history?.records ?? []} empty={rotation === null ? unread : "None of the turns shown was reassigned or refused."} nameOf={labelOf} />
       <TurnHistoryCard
         records={history?.records ?? []} empty={rotation === null ? unread : "No turns have taken place yet."} more={history === null ? null : history.next !== null} truncated={history?.truncated ?? false} reading={pages.reading} error={pages.error}
         onMore={() => {

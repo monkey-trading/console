@@ -32,7 +32,7 @@ export class ProviderDeployment implements DeploymentReads {
   /** A background read: the wallet is not asked to switch chains, and the read is refused on another one. */
   private async onChain(): Promise<void> {
     const current = Number(await withinMs(this.provider, { method: "eth_chainId" }, CALL_MS));
-    if (current !== this.chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chain.chainId}`);
+    if (current !== this.chain.chainId) throw new Error(`your wallet is connected to chain ${current}, not chain ${this.chain.chainId}`);
   }
 
   private async call(to: string, data: Hex): Promise<Hex> {

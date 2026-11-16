@@ -36,7 +36,7 @@ export class ProviderGovernance implements GovernanceWallet {
   /** Refused while the wallet is on another chain, where the contract's address names something else. */
   async onChain(): Promise<void> {
     const current = Number(await withinMs(this.provider, { method: "eth_chainId" }, WALLET_READ_MS));
-    if (current !== this.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chainId}`);
+    if (current !== this.chainId) throw new Error(`your wallet is connected to chain ${current}, not chain ${this.chainId}`);
   }
 
   private async call(to: string, data: Hex): Promise<Hex> {

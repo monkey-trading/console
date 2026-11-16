@@ -17,9 +17,20 @@ export function recordFrom(record: TurnRecord): string {
   return record.appliesAtMs === null ? "—" : formatStampWithYear(record.appliesAtMs);
 }
 
-/** How a record stands: refused with the engine's reason, taken since a time, or assigned and waiting for its member's enclave. */
+/** Why the engine refused a turn, in words, by the reason it logs; a reason not known here reads as the generic line. */
+const REFUSALS: readonly [RegExp, string][] = [
+  [/^turn \d+ ended before its assignment was mirrored$/, "Refused, because the turn had already ended when it was recorded."],
+  [/^set \d+ is not among the sets mirrored$/, "Refused, because the rotation it was drawn from had not been recorded."],
+  [/^set \d+ does not name candidate /, "Refused, because the rotation it was drawn from does not name this operator with this key."],
+  [/less than seven days before the turn applies|seven days earlier names its key$/, "Refused, because its operator was not named in a rotation announced at least seven days earlier."],
+];
+
+/** How a record stands: refused, with the engine's reason in words, taken since a time, or assigned and waiting for its member's enclave. */
 export function recordOutcome(record: TurnRecord): string {
-  if (record.refused !== null) return `Refused: ${record.refused}. The current operator continued.`;
+  if (record.refused !== null) {
+    const known = REFUSALS.find(([pattern]) => pattern.test(record.refused ?? ""));
+    return known === undefined ? "Refused. The turn could not take effect, so the current operator continued." : `${known[1]} The current operator continued.`;
+  }
   if (record.takenMs !== null) return `Started at ${formatStampWithYear(record.takenMs)} UTC`;
   return "Assigned but not yet started";
 }

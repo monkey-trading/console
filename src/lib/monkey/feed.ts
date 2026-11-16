@@ -205,7 +205,7 @@ export class ChartFeed {
       this.set({ read: ready({ ...current, lines, latest }) });
     } catch (error) {
       // A live refresh that fails leaves the chart as it was; the next tick tries again.
-      if (stamp === this.generation) this.set({ read: { ...this.state.read, message: error instanceof Error ? error.message : "No reason was given." } });
+      if (stamp === this.generation) this.set({ read: { ...this.state.read, message: error instanceof Error ? error.message : "" } });
     } finally {
       if (stamp === this.generation) this.reading = false;
     }

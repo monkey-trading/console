@@ -83,7 +83,7 @@ describe("where a chart's data begins", () => {
 
   it("is the record's start from genesis, and says so", () => {
     expect(beginsOf(data({ begins_ms: 5 }))).toEqual({ ms: 5, reason: "genesis" });
-    expect(beginsText(data({ begins_ms: 5 }), stamp)).toBe("Data begins t5 UTC, when the trading server first started.");
+    expect(beginsText(data({ begins_ms: 5 }), stamp)).toBe("The data begins at t5 UTC, when the trading server first started.");
   });
 
   it("holds a footnote's place with the sentence a record from the server's start gives, so it wraps as the read one will", () => {
@@ -96,7 +96,7 @@ describe("where a chart's data begins", () => {
 
   it("is the retention edge when the node has pruned past the record's start, never claimed as the first command", () => {
     expect(beginsOf(data({ begins_ms: 5, retained_from_ms: 9 }))).toEqual({ ms: 9, reason: "retention" });
-    expect(beginsText(data({ begins_ms: 5, retained_from_ms: 9 }), stamp)).toBe("Data begins t9 UTC, the earliest point the server retains at this level of detail.");
+    expect(beginsText(data({ begins_ms: 5, retained_from_ms: 9 }), stamp)).toBe("The data begins at t9 UTC, the earliest point the server retains at this level of detail.");
     expect(beginsOf(data({ begins_ms: 9, retained_from_ms: 5 }))?.reason).toBe("genesis");
   });
 

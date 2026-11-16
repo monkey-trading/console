@@ -76,7 +76,7 @@ describe("ProviderGovernance", () => {
   });
 
   it("says whether the wallet is on the deployment's chain, which a caller checks around its reads", async () => {
-    await expect(rig(1).governance.onChain()).rejects.toThrow("your wallet is on chain 1, not chain 31337");
+    await expect(rig(1).governance.onChain()).rejects.toThrow("your wallet is connected to chain 1, not chain 31337");
     await expect(rig().governance.onChain()).resolves.toBeUndefined();
   });
 

@@ -23,7 +23,7 @@ export function QueueStats() {
   return (
     <Panel title="Withdrawal queue" tip="Withdrawals that cannot be paid immediately wait in this queue. They are paid in the order in which they were requested, as funds become available.">
       {totals === null ? (
-        <Quiet>{failed ? "The withdrawal queue could not be loaded. The page will try again automatically." : "Loading the withdrawal queue…"}</Quiet>
+        <Quiet>{failed ? "The withdrawal queue could not be loaded. The app will try again automatically." : "Loading the withdrawal queue…"}</Quiet>
       ) : (
         <>
           <dl className="space-y-1">

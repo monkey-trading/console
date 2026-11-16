@@ -16,7 +16,7 @@ import { SeriesPanel, type LineSpec } from "./SeriesPanel";
 import { useFeed, useSelected } from "./use-feed";
 import { useMarketOptions } from "./use-markets";
 
-const NAV_LINES: readonly LineSpec[] = [{ id: "nav", metric: "nav", label: "House value", tip: "The current value of the house: its cash balance plus its profit or loss on traders' open positions.", tone: "glow", area: true }];
+const NAV_LINES: readonly LineSpec[] = [{ id: "nav", metric: "nav", label: "House value", tip: "The current value of the house, made up of its cash balance plus its profit or loss on traders' open positions.", tone: "glow", area: true }];
 const EXPOSURE_LINES: readonly LineSpec[] = [
   { id: "long", metric: "long", label: "Long", tip: "The total size of traders' long positions in this market. A long position profits when the price rises, and the house, as counterparty, incurs the corresponding loss.", tone: "glow", nonNegative: true, sampled: true },
   { id: "short", metric: "short", label: "Short", tip: "The total size of traders' short positions in this market. A short position profits when the price falls, and the house, as counterparty, incurs the corresponding loss.", tone: "ember", nonNegative: true, sampled: true },
@@ -43,7 +43,7 @@ export function NavChart({ range, className, floor, pending }: { range?: RangeId
   return (
     <SeriesPanel
       title="House value"
-      tip="The value of the house over time: its cash balance plus its profit or loss on traders' open positions at current prices. The shaded area lies below the house's reserve, and distributions to stakers are paid only from value above the reserve."
+      tip="The value of the house over time, made up of its cash balance plus its profit or loss on traders' open positions at current prices. The shaded area lies below the house's reserve, and distributions to stakers are paid only from value above the reserve."
       lines={NAV_LINES}
       markets={null}
       range={range}

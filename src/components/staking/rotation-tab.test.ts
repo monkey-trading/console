@@ -79,7 +79,7 @@ describe("the Rotation tab", () => {
     const moves = html.slice(html.indexOf("Skips and promotions"), html.indexOf("Turn history"));
     expect(moves).toContain("Skip");
     expect(moves).toContain("Promotion");
-    expect(moves).toContain("Refused: no set names its key. The current operator continued.");
+    expect(moves).toContain("Refused. The turn could not take effect, so the current operator continued.");
     expect(moves.match(/Started at/g)).toHaveLength(1);
     const history = html.slice(html.indexOf("Turn history"));
     expect(history.indexOf("tabular-nums\">10<")).toBeLessThan(history.indexOf("tabular-nums\">9<"));

@@ -33,7 +33,7 @@ async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, s
   store.clearNotice(surface);
   const wallet = store.liveWallet;
   if (wallet === null) {
-    store.notify(surface, "Please connect a wallet first.");
+    store.notify(surface, "Connect a wallet to continue.");
     return false;
   }
   const staking = wallet.staking;
@@ -57,7 +57,7 @@ async function run(panel: MonkeyPanel, surface: NoticeSurface, action: string, s
     }
     store.patch({ busy: true });
     try {
-      if (await prompting(store, wallet, surface, `Please confirm in your wallet to ${action}.`, (progress) => step(wallet, staking, progress))) {
+      if (await prompting(store, wallet, surface, `Confirm the request in your wallet to ${action}.`, (progress) => step(wallet, staking, progress))) {
         landed = true;
         onLanded?.();
       }

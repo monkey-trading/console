@@ -80,11 +80,11 @@ export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> 
 export async function claimEmissions(store: ConsoleStore): Promise<void> {
   store.clearNotice("emissions");
   const wallet = store.liveWallet;
-  if (!wallet) return store.notify("emissions", "Please connect a wallet first.");
+  if (!wallet) return store.notify("emissions", "Connect a wallet to continue.");
   // Bound to the wallet: calling the method without a receiver unbinds `this` in the provider wallet.
   const claim = wallet.claimEmissions?.bind(wallet);
   const readRecord = wallet.emissionsClaimed?.bind(wallet);
-  if (claim === undefined || readRecord === undefined) return store.notify("emissions", "This wallet cannot claim MONKEY.");
+  if (claim === undefined || readRecord === undefined) return store.notify("emissions", "This wallet cannot send transactions, so it cannot claim MONKEY.");
   store.patch({ busy: true });
   // Set once the mint has landed: the token offer is made after the claim has finished, so a caller that queues the claim holds the wallet until the offer has been answered too.
   let offered: Wallet | null = null;
@@ -104,7 +104,7 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
         // Checked last: the verdict may have ended while the reads above waited on the wallet.
         if (usableWallet(store, "claim MONKEY", "emissions") === null) return;
         const amount = formatMonkey(due);
-        await prompting(store, wallet, "emissions", `Please confirm the claim of ${amount} from the vault in your wallet.`, (progress) => claim(proof, progress));
+        await prompting(store, wallet, "emissions", `Confirm the request in your wallet to claim ${amount} from the vault.`, (progress) => claim(proof, progress));
         offered = wallet;
         break;
       }

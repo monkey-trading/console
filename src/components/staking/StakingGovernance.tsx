@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
-import { asSentence } from "@/lib/format";
+import { errorText } from "@/lib/format";
 import { accountReadsSettled } from "@/lib/staking/delegation-reads";
 import { awayLabelShown, focusAfterLeaving, focusLeftCards, governanceGate, stillOpen, type Tally } from "@/lib/staking/governance";
 import { commandDetails, commandTitle, failureLine, lifetimeText, limitDetails, limitTitle, listingsKey, listingsOf, walletLine, type InForce } from "@/lib/staking/governance-words";
@@ -139,11 +139,11 @@ export function StakingGovernance() {
         <p className={NOTE}>{gate === "wallet" ? "Loading votes from your wallet…" : "Loading proposals…"}</p>
       ) : (
         <div ref={grid} className="grid items-start gap-4 xl:grid-cols-2">
-          <Card id="open-proposals-title" title="Open proposals" aside={list.value === null ? undefined : <span className="text-label text-fg-3">As of block {list.value.block.number}</span>}>
+          <Card id="open-proposals-title" title="Open proposals" aside={list.value === null ? undefined : <span className="text-label text-fg-3">As at block {list.value.block.number}</span>}>
             <ReadNote read={list} />
             {list.value !== null && proposals === null && <p className={NOTE}>Voting is not configured on this trading server.</p>}
-            {list.value?.proposalsProblem != null && <p role="status" className="text-caption leading-relaxed text-amber">The open proposals sent by the trading server could not be checked. {asSentence(list.value.proposalsProblem)}</p>}
-            {proposals?.unavailable === true && <p role="status" className="text-caption leading-relaxed text-amber">The trading server could not load the open proposals. The page will try again shortly.</p>}
+            {list.value?.proposalsProblem != null && <p role="status" className="text-caption leading-relaxed text-amber">{errorText("The open proposals sent by the trading server could not be checked.", list.value.proposalsProblem)}</p>}
+            {proposals?.unavailable === true && <p role="status" className="text-caption leading-relaxed text-amber">The trading server could not load the open proposals. The app will try again shortly.</p>}
             {proposals !== null && !proposals.unavailable && (
               <Items empty="No proposals are open for voting.">
                 {open.map((proposal) => {

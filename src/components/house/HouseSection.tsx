@@ -57,7 +57,7 @@ export function HouseSection({ children }: { children: ReactNode }) {
           <h2 className="text-lead tracking-caps text-glow uppercase">House</h2>
           <p className="text-caption text-fg-3">
             {simulated
-              ? "The house is the counterparty to every trade on the platform. This is a demonstration running in your browser, so every figure on this page is simulated."
+              ? "The house is the counterparty to every trade on the platform. This is a demo running in your browser, so every figure on this page is simulated."
               : "The house is the counterparty to every trade on the platform. Every figure on this page is verified as coming from the trading server, and a figure that fails verification is never displayed."}
           </p>
         </header>

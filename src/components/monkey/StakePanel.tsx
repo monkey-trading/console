@@ -98,7 +98,7 @@ export function StakePanel({ delegations = null, labelOf = shortHex }: { delegat
       ) : wallet === null ? (
         <p className={NOTE}>Connect a wallet to stake or unstake MONKEY.</p>
       ) : readOnly ? (
-        <p role="status" className="text-caption leading-relaxed text-amber">This account is read-only, so its stake is not shown and no transactions can be signed for it.</p>
+        <p role="status" className="text-caption leading-relaxed text-amber">You are viewing this account in read-only mode, so its stake is not shown and no transactions can be signed for it.</p>
       ) : position === null ? (
         <ReadNote read={figures.position} loading="Loading your stake…" />
       ) : (

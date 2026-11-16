@@ -4,7 +4,7 @@
 
 import { useId } from "react";
 
-import { asSentence, formatMonkey } from "@/lib/format";
+import { errorText, formatMonkey } from "@/lib/format";
 import type { Pending, PendingEmission } from "@/lib/monkey/pending";
 import { emissionsPosition } from "@/lib/store/emissions";
 import { describeBoost } from "@/lib/tier-view";
@@ -35,7 +35,7 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
   // The page's last read of the vault's record, for the account it names.
   const record = state.wallet !== null && figures.address === state.wallet.address ? figures.record : null;
   // The read's own reason; a generic one only for an error that carries none.
-  const recordProblem = record?.status === "failed" ? asSentence(record.message || "No reason was given") : null;
+  const recordProblem = record?.status === "failed" ? (record.message ?? "") : null;
   const act = () => {
     if (state.busy) return;
     void claim().then(() => focusHeading("monkey-title"));
@@ -82,11 +82,11 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
             <p className="mt-2 text-fg-3">You have claimed {formatMonkey(position.claimed)} of the {accrued} you have earned.</p>
           ) : state.wallet.readOnly === true ? (
             // The console reads the chain only through a connected wallet, and a watched account has none (#288).
-            <p className="mt-2 text-fg-3">The amount claimed can only be read through a connected wallet, so it is not shown for a read-only account.</p>
+            <p className="mt-2 text-fg-3">The amount you have claimed can be checked only through a connected wallet, so it is not shown while you are viewing this account in read-only mode.</p>
           ) : (
             // One status line that changes its words, so a failure is announced.
             <p role="status" className={`mt-2 ${recordProblem === null ? "text-fg-3" : "text-amber"}`}>
-              {recordProblem === null ? "Checking how much you have claimed…" : `The amount you have claimed could not be checked. ${recordProblem} The page will try again automatically.`}
+              {recordProblem === null ? "Checking how much you have claimed…" : errorText("The amount you have claimed could not be checked.", recordProblem, "The app will try again automatically.")}
             </p>
           )}
           {recordPending && buttonSlot}

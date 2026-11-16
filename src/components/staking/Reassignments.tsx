@@ -13,8 +13,8 @@ export function Reassignments({ records, empty, nameOf }: { records: readonly Tu
   const moved = records.filter(isReassignment);
   return (
     <Card id="rotation-moves-title" title="Skips and promotions">
-      <TurnRecords records={moved} caption="Turns that were reassigned by a skip or a promotion, or refused, newest first." empty={empty} nameOf={nameOf} />
-      <p className={NOTE}>A skip passes a turn to the next operator in line when the assigned operator did not start its turn in time. A promotion hands the turn to the standby when the current operator stops responding. A refused turn changes nothing, and the current operator continues.</p>
+      <TurnRecords records={moved} caption="Turns that were reassigned by a skip or a promotion, and turns that were refused, newest first." empty={empty} nameOf={nameOf} />
+      <p className={NOTE}>A skip passes a turn to the next operator in line when the assigned operator did not start its turn in time. A promotion hands the turn to the standby when the current operator stops responding. A turn is refused when it cannot take effect, for example because its operator was not named in a rotation announced at least seven days earlier, and a refused turn leaves the current operator in place.</p>
     </Card>
   );
 }

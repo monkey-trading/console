@@ -107,7 +107,7 @@ export function beginsOf(data: SeriesData): Begins | null {
 export function beginsText(data: SeriesData | null, stamp: (ms: number) => string): string {
   const begins = data === null ? null : beginsOf(data);
   if (begins === null) return "There is no data for this chart yet.";
-  return `Data begins ${stamp(begins.ms)} UTC, ${BEGINS_WHY[begins.reason]}.`;
+  return `The data begins at ${stamp(begins.ms)} UTC, ${BEGINS_WHY[begins.reason]}.`;
 }
 
 /** Why a chart's data begins where it does, by reason. */
@@ -118,7 +118,7 @@ const BEGINS_WHY = { genesis: "when the trading server first started", recovery:
  * record starts at its log's first command gives, so the footnote wraps as it will once read.
  */
 export function heldBeginsText(stamp: (ms: number) => string): string {
-  return `Data begins ${stamp(0)} UTC, ${BEGINS_WHY.genesis}.`;
+  return `The data begins at ${stamp(0)} UTC, ${BEGINS_WHY.genesis}.`;
 }
 
 /** The buckets a follow-up read asks for beyond the last one held. */

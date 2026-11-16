@@ -41,8 +41,8 @@ describe("houseGateLine", () => {
 
 describe("overviewProblem", () => {
   it.each(["the liquidity floor", "the reward schedule"])("qualifies %s for first failures, held failures and unavailable routes", (what) => {
-    expect(overviewProblem({ status: "failed", value: null, message: "Timed out." }, what)).toBe(`The page could not load ${what}. Timed out. The page will try again automatically.`);
-    expect(overviewProblem({ status: "failed", value: {}, message: null }, what)).toBe(`The page could not refresh ${what}. The information shown may be out of date.`);
+    expect(overviewProblem({ status: "failed", value: null, message: "Timed out." }, what)).toBe(`${what.charAt(0).toUpperCase()}${what.slice(1)} could not be loaded. Timed out. The app will try again automatically.`);
+    expect(overviewProblem({ status: "failed", value: {}, message: null }, what)).toBe(`${what.charAt(0).toUpperCase()}${what.slice(1)} could not be refreshed. The information shown may be out of date.`);
     expect(overviewProblem({ status: "unavailable", value: null, message: null }, what)).toBe(`This trading server does not yet provide ${what}.`);
     expect(overviewProblem({ status: "ready", value: {}, message: null }, what)).toBeNull();
     expect(overviewProblem({ status: "loading", value: null, message: null }, what)).toBeNull();

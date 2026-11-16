@@ -31,7 +31,7 @@ function PendingLine({ pending }: { pending: ReturnType<typeof pendingDistributi
   const paid = pending.paid === null ? `Staking period ${pending.epoch} has ended, and a distribution has been paid to stakers.` : `Staking period ${pending.epoch} has ended, and ${formatUsdc(usdcFixed(pending.paid))} has been distributed to stakers.`;
   if (pending.staker === null) return <p role="status" className={NOTE}>{paid} If you were staking during that period, your share will appear here once the vault has recorded the next snapshot.</p>;
   const share = pending.share === null ? "" : ` If you were staking during that period, your share is approximately ${formatUsdc(usdcFixed(pending.share))}, estimated from your current stake.`;
-  return <p role="status" className={NOTE}>{paid}{share} It can be claimed once the vault has recorded the next snapshot. This page checks for it automatically.</p>;
+  return <p role="status" className={NOTE}>{paid}{share} Your share can be claimed once the vault has recorded the next snapshot. This page checks for it automatically.</p>;
 }
 
 /** No closed epochs, for a card shown without the page's reads of them. */
@@ -93,7 +93,7 @@ export function DistributionClaim({ epochs = null }: { epochs?: EpochReads | nul
       {!reading && proof !== null && position.awaiting > 0n && <p className={NOTE}>{formatUsdc(usdcFixed(position.awaiting))} of this amount can be claimed once the vault has recorded the next snapshot.</p>}
       {mine && !reading && <ReadNote read={figures.proof} />}
       {mine && figures.position.status === "failed" && <ReadNote read={figures.position} />}
-      {mine && readOnly && proof !== null && <p role="status" className="text-caption leading-relaxed text-amber">Distributions cannot be claimed from a read-only account.</p>}
+      {mine && readOnly && proof !== null && <p role="status" className="text-caption leading-relaxed text-amber">You are viewing this account in read-only mode, so its distributions cannot be claimed.</p>}
       {mine && !readOnly && !reading && position.claimable > 0n && (
         <div>
           <button type="button" aria-disabled={busy || gate.blocked} aria-describedby={gate.describedBy} onClick={() => { if (!busy && !gate.blocked) void claimDistribution(panel).then(() => focusHeading("distributions-title")); }} className={`${BUTTON} w-full`}>
@@ -103,7 +103,7 @@ export function DistributionClaim({ epochs = null }: { epochs?: EpochReads | nul
         </div>
       )}
       <Notice surface="distribution" />
-      {mine && !readOnly && proof !== null && held === null && figures.position.status === "failed" && <p className={NOTE}>The amount you have claimed could not be checked. The page will try again automatically.</p>}
+      {mine && !readOnly && proof !== null && held === null && figures.position.status === "failed" && <p className={NOTE}>The amount you have claimed could not be checked. The app will try again automatically.</p>}
       {mine && !readOnly && position.claimed !== null && position.checkpoint === "waiting" && position.accrued > position.claimed && <p className={NOTE}>The rest of your distribution can be claimed once the vault has recorded the next snapshot. This page checks for it automatically.</p>}
       {mine && !readOnly && position.claimed !== null && position.checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && <p className={NOTE}>You have claimed all the USDC distributed to you.</p>}
     </Card>

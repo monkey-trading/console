@@ -19,7 +19,7 @@ describe("MonkeyCharts before its overview is read", () => {
   it("holds the budget line's place unseen, and the chart's begins and All lines, so the card keeps its loaded height", () => {
     const html = renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Section)));
     expect(html).toMatch(/aria-hidden="true" class="[^"]*\binvisible\b[^"]*">Each reward period distributes 1,000 MONKEY in total, until the amount halves at 1 Jan 00:00:00 UTC\. Past halvings are marked on the chart\./);
-    expect(html).toMatch(/aria-hidden="true" class="invisible">[^]*Data begins 1 Jan 00:00:00 UTC\.[^]*The &quot;All&quot; range shows up to the last 1,998 days/);
+    expect(html).toMatch(/aria-hidden="true" class="invisible">[^]*The data begins at 1 Jan 00:00:00 UTC\.[^]*The &quot;All&quot; range shows up to the last 1,998 days/);
     // The supply card's two figures wrap onto two lines once read, so the held line carries both labels with a typical figure.
     expect(html).toContain("Earned 000,000,000 MONKEY  ·  Staked 000,000,000 MONKEY");
     expect(html).toContain("Latest —");

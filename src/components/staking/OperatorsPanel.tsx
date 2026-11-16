@@ -50,7 +50,7 @@ const TITLE_ID = "operators-title";
 const FIELD = "min-h-11 w-full rounded border border-edge bg-ink px-2 py-2 text-data text-fg placeholder:text-fg-3 hover:border-glow focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0";
 
 /** Why the list in hand is not the node's current one, as the held list's note ends. */
-const WHY: Record<NoList, string> = { unverified: "the trading server is not currently verified", clock: "your device's clock is incorrect", unread: "the current operator list cannot be loaded" };
+const WHY: Record<NoList, string> = { unverified: "the trading server is not currently verified", clock: "your device clock is incorrect", unread: "the current operator list cannot be loaded" };
 
 /** The host of an `https://` origin. */
 const hostOf = (origin: string) => new URL(origin).host;
@@ -137,7 +137,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
       )}
       <ReadNote read={route} loading={nodeReadable ? "Loading figures…" : "Figures will appear once the trading server has been verified."} quiet />
       {wallet === null && decided && <p className={NOTE}>Connect a wallet to delegate your stake.</p>}
-      {wallet?.readOnly === true && <p className={NOTE}>This account is read-only, so its delegations are not shown and no stake can be delegated from it.</p>}
+      {wallet?.readOnly === true && <p className={NOTE}>You are viewing this account in read-only mode, so its delegations are not shown and no stake can be delegated from it.</p>}
       {wallet !== null && wallet.readOnly !== true && mine === null && delegationsRead.read.status === "unavailable" && (
         <p className={NOTE}>Delegation is not currently available.</p>
       )}

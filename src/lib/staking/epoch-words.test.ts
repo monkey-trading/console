@@ -29,7 +29,7 @@ describe("problemText", () => {
   });
 
   it("says a failed check for new closes ahead of a failed Load more, without doubling the full stop", () => {
-    expect(problemText({ status: "ready", error: "The node did not answer.", moreError: "gone" })).toBe("The page could not check for newly ended staking periods. The node did not answer. It will try again automatically.");
+    expect(problemText({ status: "ready", error: "The node did not answer.", moreError: "gone" })).toBe("Newly ended staking periods could not be checked. The node did not answer. The app will try again automatically.");
     expect(problemText({ status: "ready", error: null, moreError: "The node did not answer." })).toBe("Older staking periods could not be loaded. The node did not answer.");
     expect(problemText({ status: "ready", error: null, moreError: null })).toBe("");
   });

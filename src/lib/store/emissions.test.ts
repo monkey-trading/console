@@ -184,7 +184,7 @@ describe("claimEmissions", () => {
     bare.store.patch({ entitlement: proof(5n * MONKEY_UNIT), emissionsVault: { claimed: 0n, latestSeq: 40 } });
     bare.store.liveWallet = null;
     await claimEmissions(bare.store);
-    expect(bare.store.getSnapshot().notices.emissions).toMatchObject({ tone: "error", text: "Please connect a wallet first." });
+    expect(bare.store.getSnapshot().notices.emissions).toMatchObject({ tone: "error", text: "Connect a wallet to continue." });
     const other = await connected();
     other.client.entitlement = { ...proof(5n * MONKEY_UNIT), account: "0x00000000000000000000000000000000000000aa" };
     other.provider.vault.latestSeq = 40;

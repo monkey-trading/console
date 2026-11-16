@@ -100,7 +100,7 @@ describe("the cards while a connected wallet's first reads run", () => {
     expect(watched).toContain("Earned");
     expect(held(watched)).toBe(0);
     // It says plainly that the claimed amount needs a wallet, never checking it for ever (#288).
-    expect(watched).toContain("The amount claimed can only be read through a connected wallet, so it is not shown for a read-only account.");
+    expect(watched).toContain("The amount you have claimed can be checked only through a connected wallet, so it is not shown while you are viewing this account in read-only mode.");
     expect(watched).not.toContain("Checking how much you have claimed");
     const connected = render(Emissions, { wallet: WALLET, walletDecided: true, accountRead: true, entitlement, emissionsVault: null }, "monkey");
     expect(held(connected)).toBe(1);

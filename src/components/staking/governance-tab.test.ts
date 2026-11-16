@@ -100,7 +100,7 @@ describe("ProposalItem", () => {
     expect(html).toContain("Proposal 5 · standard change");
     expect(html).toContain('id="proposal-waiting-5"');
     expect(html).toContain("Close-out level 55.00% (now 50.00%)");
-    expect(html).toContain("800 MONKEY of 1,000 MONKEY (80.00%) voted yes, which is more than two thirds, so the proposal passed.");
+    expect(html).toContain("Yes votes: 800 MONKEY of 1,000 MONKEY (80.00%), which is more than two thirds, so the proposal has passed.");
     expect(html).toContain("alpha.example</span> voted yes");
     expect(html).toContain("bravo.example</span> did not vote");
     expect(html).toContain("Full proposal");

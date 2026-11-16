@@ -101,10 +101,10 @@ export function HouseFigures() {
   const simulated = store.deps.client.signatures === "none";
   const unrealised = scan?.unrealised ?? nav - cash;
   return (
-    <Panel title="House" tip={simulated ? "The house's own finances, simulated in your browser for this demonstration." : "The house's own finances, as reported by the trading server and verified by this app."}>
+    <Panel title="House" tip={simulated ? "The house's own finances, simulated in your browser for this demo." : "The house's own finances, as reported by the trading server and verified by this app."}>
       <dl className="space-y-1">
-        <Row label="House funds" tip="The house's cash balance: its capital, plus the losses and fees that traders have paid, minus the profits that traders have realised." value={formatUsd(cash)} tone="glow" />
-        <Row label="House value" tip="The current value of the house: its cash balance plus its profit or loss on traders' open positions at current prices." value={formatUsd(nav)} />
+        <Row label="House funds" tip="The house's cash balance, which is its capital plus the losses and fees that traders have paid, less the profits that traders have realised." value={formatUsd(cash)} tone="glow" />
+        <Row label="House value" tip="The current value of the house, made up of its cash balance plus its profit or loss on traders' open positions at current prices." value={formatUsd(nav)} />
         <Row label="Unrealised P&L" tip="The house's unrealised profit or loss on all open positions at current prices. The figure is negative when traders' open positions are, in aggregate, in profit." value={formatUsd(unrealised)} tone={sign(unrealised)} />
         <Row label="Queued withdrawals" tip="The amount still owed to traders whose withdrawal requests are waiting in the withdrawal queue." value={queue === null ? "—" : formatUsd(queue.remaining)} />
         <Row label="Distributed" tip="The total USDC distributed to date from the house's value above its reserve. Each distribution is shared among stakers, and while operator rotation is active, one fifth of it is paid to the operator. Each distribution reduces the house value by the amount paid." value={paid === null ? "—" : formatUsdc(paid)} />

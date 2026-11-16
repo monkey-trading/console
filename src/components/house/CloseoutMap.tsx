@@ -165,10 +165,10 @@ export function CloseoutMap({ className }: { className?: string }) {
       ? "The map will appear once the trading server has completed its first calculation across all accounts."
       : positions.status === "failed" ? feedProblem(positions, "the close-out map") : null;
   const candleBegin = candleBars?.[0];
-  const provenance = candles.data?.provenance === "seeded_from_provider" ? "with earlier prices supplied by a market data provider" : candles.data?.provenance === "log_derived" ? "taken from the server's own price record" : null;
+  const provenance = candles.data?.provenance === "seeded_from_provider" ? ", with earlier prices supplied by a market data provider" : candles.data?.provenance === "log_derived" ? " and are taken from the server's own price record" : "";
   const candleNote = candles.status === "unavailable" && candles.data === null
     ? "Price history is not available, so no candles are shown."
-    : candleBegin === undefined ? null : `The candles begin at ${formatStamp(candleBegin.time * 1000)} UTC${provenance === null ? "" : `, ${provenance}`}${candles.data?.complete === false ? ", and the price history for this period is incomplete" : ""}.`;
+    : candleBegin === undefined ? null : `The candles begin at ${formatStamp(candleBegin.time * 1000)} UTC${provenance}${candles.data?.complete === false ? ", and the price history for this period is incomplete" : ""}.`;
   const problems = [message === null ? feedProblem(positions, "the close-out bands") : null, feedProblem(candles, "the candles")].filter((line) => line !== null);
   return (
     <Panel

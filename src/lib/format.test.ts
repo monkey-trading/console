@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { asSentence, formatMonkey, formatMonkeyFigure, formatMovePercent, formatRate, groupThousands, MONKEY_UNIT, shortHex } from "./format";
+import { asSentence, errorText, formatMonkey, formatMonkeyFigure, formatMovePercent, formatRate, groupThousands, MONKEY_UNIT, shortHex } from "./format";
 
 describe("format", () => {
   it("shortens long hex and leaves short hex alone", () => {
@@ -75,5 +75,11 @@ describe("formatMonkeyFigure", () => {
     expect(asSentence("your wallet is on chain 1, not chain 31337")).toBe("Your wallet is on chain 1, not chain 31337.");
     expect(asSentence("The server did not respond...")).toBe("The server did not respond.");
     expect(asSentence(" MONKEY is not available ")).toBe("MONKEY is not available.");
+  });
+
+  it("writes an error as what happened, its reason where there is one, and what happens next", () => {
+    expect(errorText("The chart could not be loaded.", "the server did not respond", "The app will try again automatically.")).toBe("The chart could not be loaded. The server did not respond. The app will try again automatically.");
+    expect(errorText("The chart could not be loaded.", "", "The app will try again automatically.")).toBe("The chart could not be loaded. The app will try again automatically.");
+    expect(errorText("The chart could not be loaded.", null)).toBe("The chart could not be loaded.");
   });
 });

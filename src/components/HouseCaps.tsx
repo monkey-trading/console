@@ -15,9 +15,9 @@ const FLOOR_NONE = "None";
 /** What each column means, shared by the table's heads and the stacked labels so the two cannot drift. */
 const TIPS = {
   share: "The percentage of the house value that sets the market's exposure limit.",
-  floor: "The lowest that the market's exposure limit can be, in US dollars, whatever the house value.",
-  cap: "The maximum net exposure the house will take in the market: its percentage of the house value, or the minimum if that is higher.",
-  exposure: "The house's net exposure in the market as at the most recent update: traders' long positions minus their short positions.",
+  floor: "The lowest that the market's exposure limit can be, in US dollars, regardless of the house value.",
+  cap: "The maximum net exposure the house will take in the market, which is its percentage of the house value or its dollar minimum, whichever is higher.",
+  exposure: "The house's net exposure in the market as at the most recent update, calculated as traders' long positions minus their short positions.",
   used: "The house's net exposure as a percentage of the market's exposure limit.",
 } as const;
 

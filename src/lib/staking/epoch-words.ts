@@ -1,6 +1,6 @@
 /** What the closed-epochs card says about where the node's record begins and about a read that failed (monkey-trading/console#279). */
 
-import { asSentence } from "../format";
+import { errorText } from "../format";
 import { formatStamp } from "../time";
 import type { EpochCover, EpochsState } from "./epoch-reads";
 
@@ -17,8 +17,8 @@ export function coverText(cover: EpochCover): string | null {
  */
 export function problemText(state: Pick<EpochsState, "status" | "error" | "moreError">): string {
   if (state.status !== "ready") return "";
-  if (state.error !== null) return `The page could not check for newly ended staking periods. ${asSentence(state.error)} It will try again automatically.`;
-  return state.moreError === null ? "" : `Older staking periods could not be loaded. ${asSentence(state.moreError)}`;
+  if (state.error !== null) return errorText("Newly ended staking periods could not be checked.", state.error, "The app will try again automatically.");
+  return state.moreError === null ? "" : errorText("Older staking periods could not be loaded.", state.moreError);
 }
 
 /**

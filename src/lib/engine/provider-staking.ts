@@ -90,7 +90,7 @@ export class ProviderStaking implements StakingWallet {
    */
   async position(): Promise<StakingPosition> {
     const current = Number(await withinMs(this.provider, { method: "eth_chainId" }, WALLET_READ_MS));
-    if (current !== this.chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chain.chainId}`);
+    if (current !== this.chain.chainId) throw new Error(`your wallet is connected to chain ${current}, not chain ${this.chain.chainId}`);
     const owner = hexOf(this.address);
     const paid = decodeFunctionResult({ abi: VAULT, functionName: "distributionsClaimed", data: await this.call(this.chain.vault, encodeFunctionData({ abi: VAULT, functionName: "distributionsClaimed", args: [owner] })) });
     const latestSeq = decodeFunctionResult({ abi: VAULT, functionName: "latestSeq", data: await this.call(this.chain.vault, encodeFunctionData({ abi: VAULT, functionName: "latestSeq" })) });
@@ -123,7 +123,7 @@ export class ProviderStaking implements StakingWallet {
     if (staking === null) return null;
     const onChain = async () => {
       const current = Number(await withinMs(this.provider, { method: "eth_chainId" }, WALLET_READ_MS));
-      if (current !== this.chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${this.chain.chainId}`);
+      if (current !== this.chain.chainId) throw new Error(`your wallet is connected to chain ${current}, not chain ${this.chain.chainId}`);
     };
     const owner = hexOf(this.address);
     const stakes = async () => decodeFunctionResult({ abi: STAKING, functionName: "stakes", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "stakes", args: [owner] })) });
@@ -139,7 +139,7 @@ export class ProviderStaking implements StakingWallet {
       await onChain();
       return { staked, delegated, delegations };
     }
-    throw new Error("Your stake changed repeatedly while it was being loaded.");
+    throw new Error("Your stake changed several times while it was being loaded.");
   }
 
   async stake(amount: bigint, progress: Progress = () => undefined): Promise<string> {

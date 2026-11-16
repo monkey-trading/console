@@ -28,7 +28,12 @@ describe("a record's words", () => {
   });
 
   it("says a refused assignment kept the key, a taken one when, and one not taken yet that its member has not started it", () => {
-    expect(recordOutcome({ ...RECORD, appliesAtMs: null, refused: "no set names its key" })).toBe("Refused: no set names its key. The current operator continued.");
+    expect(recordOutcome({ ...RECORD, appliesAtMs: null, refused: "no set names its key" })).toBe("Refused. The turn could not take effect, so the current operator continued.");
+    expect(recordOutcome({ ...RECORD, appliesAtMs: null, refused: "turn 812 ended before its assignment was mirrored" })).toBe("Refused, because the turn had already ended when it was recorded. The current operator continued.");
+    expect(recordOutcome({ ...RECORD, appliesAtMs: null, refused: "set 3 is not among the sets mirrored" })).toBe("Refused, because the rotation it was drawn from had not been recorded. The current operator continued.");
+    expect(recordOutcome({ ...RECORD, appliesAtMs: null, refused: "set 3 does not name candidate 0xab with key 0xcd" })).toBe("Refused, because the rotation it was drawn from does not name this operator with this key. The current operator continued.");
+    expect(recordOutcome({ ...RECORD, appliesAtMs: null, refused: "set 3 was logged at 5, less than seven days before the turn applies at 9" })).toBe("Refused, because its operator was not named in a rotation announced at least seven days earlier. The current operator continued.");
+    expect(recordOutcome({ ...RECORD, appliesAtMs: null, refused: "no set mirrored seven days earlier names its key" })).toBe("Refused, because its operator was not named in a rotation announced at least seven days earlier. The current operator continued.");
     expect(recordOutcome({ ...RECORD, takenMs: EFFECTIVE + 4_000 })).toBe("Started at 2026-11-18 22:30 UTC");
     expect(recordOutcome(RECORD)).toBe("Assigned but not yet started");
   });

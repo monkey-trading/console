@@ -4,7 +4,7 @@
 
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
-import { asSentence, groupThousands } from "@/lib/format";
+import { errorText, groupThousands } from "@/lib/format";
 import { ALL_WINDOW_DAYS } from "@/lib/house-series";
 import type { ChartFeed } from "@/lib/monkey/feed";
 import { latestText } from "@/lib/monkey/figures";
@@ -44,7 +44,7 @@ const ALL_LINE = `The "All" range shows up to the last ${groupThousands(ALL_WIND
 /** Where the node's record for this chart begins, and why it might not reach further back. */
 function beginsText(begins: number | null, fromGenesis: boolean, retained: number | null): string {
   if (begins === null) return "There is no data for this chart yet.";
-  const parts = [`Data begins ${formatStamp(begins)} UTC`];
+  const parts = [`The data begins at ${formatStamp(begins)} UTC`];
   if (!fromGenesis) parts.push("when the trading server was last restored from a backup, so earlier history is not available");
   if (retained !== null) parts.push(`but only data from ${formatStamp(retained)} UTC onwards is retained`);
   return `${parts.join(", ")}.`;
@@ -85,7 +85,7 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
           <p className={`${NOTE} flex items-center ${CHART_HEIGHT}`}>This chart is not yet available from this trading server.</p>
         ) : data === null ? (
           read.status === "failed" ? (
-            <p role="status" className={`flex flex-wrap content-center items-center gap-2 text-caption text-amber ${CHART_HEIGHT}`}>This chart could not be loaded. {asSentence(read.message ?? "No reason was given")} <button type="button" onClick={() => void feed.load().then(() => focusHeading(id))} className="min-h-6 rounded border border-line-2 px-2 text-fg-2 hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Try again</button></p>
+            <p role="status" className={`flex flex-wrap content-center items-center gap-2 text-caption text-amber ${CHART_HEIGHT}`}>{errorText("This chart could not be loaded.", read.message)} <button type="button" onClick={() => void feed.load().then(() => focusHeading(id))} className="min-h-6 rounded border border-line-2 px-2 text-fg-2 hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Try again</button></p>
           ) : <p className={`${NOTE} flex items-center ${CHART_HEIGHT}`}>Loading chart…</p>
         ) : (
           <ChartCanvas kind={kind} lines={lines} data={data} format={format} marks={marks} label={`${title} chart`} />
@@ -112,11 +112,11 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
       )}
       {data !== null && read.status === "failed" && (
         <p role="status" className="mt-1 text-caption text-amber">
-          The {frameOf(timeframe ?? held).label} view could not be loaded. {asSentence(read.message ?? "No reason was given")} The {frameOf(data.timeframe).label} view is shown instead.{" "}
+          {errorText(`The ${frameOf(timeframe ?? held).label} view could not be loaded.`, read.message, `The ${frameOf(data.timeframe).label} view is shown instead.`)}{" "}
           <button type="button" onClick={() => void feed.load().then(() => focusHeading(id))} className="min-h-6 rounded border border-line-2 px-2 text-fg-2 hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Try again</button>
         </p>
       )}
-      {data !== null && read.status === "ready" && read.message !== null && <p role="status" className="mt-1 text-caption text-amber">The chart could not be refreshed. {asSentence(read.message)}</p>}
+      {data !== null && read.status === "ready" && read.message !== null && <p role="status" className="mt-1 text-caption text-amber">{errorText("The chart could not be refreshed.", read.message)}</p>}
       {footer}
     </section>
   );

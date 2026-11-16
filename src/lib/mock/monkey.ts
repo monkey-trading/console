@@ -249,7 +249,7 @@ export function completeUnstake(state: MockState, address: string): void {
 export function claimDistribution(state: MockState, address: string, entitled: bigint): void {
   const key = address.toLowerCase();
   const claimed = state.monkey.distClaimed.get(key) ?? 0n;
-  if (entitled <= claimed) throw new Error("The demo vault has already paid this account at least that much.");
+  if (entitled <= claimed) throw new Error("In the demo, the vault has already paid this account at least the amount entered.");
   state.monkey.distClaimed.set(key, entitled);
 }
 

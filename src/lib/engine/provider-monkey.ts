@@ -73,7 +73,7 @@ export async function claimEmissionsTx(
  */
 export async function emissionsClaimedRead(address: Address, chain: WalletChain, provider: Eip1193Provider): Promise<{ claimed: bigint; latestSeq: number }> {
   const current = Number(await withinMs(provider, { method: "eth_chainId" }, WALLET_READ_MS));
-  if (current !== chain.chainId) throw new Error(`your wallet is on chain ${current}, not chain ${chain.chainId}`);
+  if (current !== chain.chainId) throw new Error(`your wallet is connected to chain ${current}, not chain ${chain.chainId}`);
   const read = async (data: Hex) => hexOf(await withinMs(provider, { method: "eth_call", params: [{ to: chain.vault, data }, "latest"] }, WALLET_READ_MS));
   const claimedData = encodeFunctionData({ abi: VAULT, functionName: "emissionsClaimed", args: [hexOf(address)] });
   const claimed = decodeFunctionResult({ abi: VAULT, functionName: "emissionsClaimed", data: await read(claimedData) });

@@ -8,7 +8,7 @@
 import type { AdminCommandWire, GovernanceWire } from "../engine/governance-types";
 import type { MarketView, SpreadTier, Tier } from "../engine/types";
 import { formatUsd, parseFixed } from "../fixed";
-import { asSentence, formatMonkey, formatRate, MONKEY_UNIT } from "../format";
+import { asSentence, errorText, formatMonkey, formatRate, MONKEY_UNIT } from "../format";
 import type { HouseParams } from "../house";
 import { formatTenthBps, tenthBpsOf } from "../spread-bands";
 import { formatStampWithYear } from "../time";
@@ -80,17 +80,17 @@ function change(label: string, proposed: string | null, now: string | null): str
 
 /** What `command` does, in one line. */
 export function commandTitle(command: AdminCommandWire | null, inForce: InForce): string {
-  if (command === null) return "A proposal that is not a valid change. It will be rejected if it passes";
+  if (command === null) return "An invalid proposal, which will be rejected even if it passes";
   switch (command.action) {
     case "set_params": return "New trading terms";
     case "upsert_market": return `New terms for ${marketName(command.id, inForce)}`;
-    case "set_toxicity_notional": return "How trade size counts toward the extra spread";
+    case "set_toxicity_notional": return "How trade size counts towards the extra spread";
     case "adopt_close_spread_ceiling": return `A maximum closing spread of ${int(command.max_close_spread_bps) ?? "?"} bps for ${marketName(command.market, inForce)}`;
     case "set_access_policy": return "New access rules";
-    case "activate_protocol": return `Activate server software upgrade ${typeof command.version === "string" ? command.version : "?"}`;
+    case "activate_protocol": return "Activate a new version of the trading rules";
     case "set_stress_floor": return `Keep ${marketName(command.market, inForce)} at stress level ${int(command.level) ?? "?"} or higher`;
     case "set_reduce_only": return command.reduce_only === false ? `Accept all orders in ${marketName(command.market, inForce)} again` : `Only accept orders that reduce positions in ${marketName(command.market, inForce)}`;
-    default: return `A change this page cannot describe (${command.action})`;
+    default: return "A change that this page cannot describe. The full proposal shows its details.";
   }
 }
 
@@ -118,6 +118,8 @@ export function commandDetails(command: AdminCommandWire | null, inForce: InForc
     );
   } else if (command.action === "adopt_close_spread_ceiling" && int(command.effective_at) !== null) {
     lines.push(`In effect from ${formatStampWithYear(int(command.effective_at) ?? 0)} UTC`);
+  } else if (command.action === "activate_protocol" && typeof command.version === "string") {
+    lines.push(`Trading rules version ${command.version}`);
   }
   return lines.filter((line): line is string => line !== null);
 }
@@ -125,7 +127,7 @@ export function commandDetails(command: AdminCommandWire | null, inForce: InForc
 /** What a restriction holds, in one line. */
 export function limitTitle(limit: ShownLimit, inForce: InForce): string {
   switch (limit.kind) {
-    case "unknown": return `A limit this page cannot describe (${limit.name})`;
+    case "unknown": return "A limit that this page cannot describe.";
     case "params": return "Tighter house limits";
     case "market": return `Tighter terms for ${marketName(limit.market, inForce)}`;
     case "stress_floor": return `Keep ${marketName(limit.market, inForce)} at stress level ${limit.level} or higher`;
@@ -182,11 +184,11 @@ const CENT = MONKEY_UNIT / 100n;
  * A weight still needed is rounded up to what the page shows, so it never reads short of passing.
  */
 export function tallyText(tally: Tally, open: boolean): string {
-  const head = `${formatMonkey(tally.yes)} of ${formatMonkey(tally.total)} (${formatRate(yesShareBps(tally))}) ${open ? "has voted" : "voted"} yes`;
-  if (passes(tally)) return `${head}, which is more than two thirds, so the proposal ${open ? "passes" : "passed"}.`;
+  const head = `Yes votes: ${formatMonkey(tally.yes)} of ${formatMonkey(tally.total)} (${formatRate(yesShareBps(tally))})`;
+  if (passes(tally)) return `${head}, which is more than two thirds, so the proposal has passed.`;
   if (!open) return `${head}, which is less than two thirds, so the proposal did not pass.`;
   const needed = weightToPass(tally);
-  return `${head}. A further ${formatMonkey(((needed + CENT - 1n) / CENT) * CENT)} voting yes would pass the proposal.`;
+  return `${head}. A further ${formatMonkey(((needed + CENT - 1n) / CENT) * CENT)} in yes votes would pass the proposal.`;
 }
 
 const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"}`;
@@ -206,11 +208,11 @@ export function lifetimeText(ms: number): string {
 export function walletLine(wallet: { readOnly?: boolean } | null, reads: boolean): string | null {
   if (reads) return null;
   if (wallet === null) return "Connect a wallet to see how the operators you delegate to have voted, or to vote if you are one of them.";
-  if (wallet.readOnly === true) return "The votes of the operators you delegate to are not shown for a read-only account.";
+  if (wallet.readOnly === true) return "The votes of the operators you delegate to are not shown while you are viewing this account in read-only mode.";
   return "This wallet cannot read on-chain data, so the votes of the operators you delegate to cannot be shown.";
 }
 
 /** A failed wallet read of `what`, in one sentence, with the wallet's own words and their full stop trimmed. */
 export function failureLine(what: string, message: string | null): string {
-  return `The page could not load ${what} from your wallet. ${asSentence(message ?? "No reason was given")} It will try again shortly.`;
+  return errorText(asSentence(`${what} could not be loaded from your wallet`), message, "The app will try again shortly.");
 }

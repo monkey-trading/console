@@ -1,6 +1,6 @@
 /** What the Dashboard page decides beyond its charts (monkey-trading/console#310): the section a URL hash names, and the line the House section is held with until the node's first signed answers land and while they have gone stale, as the House page does. */
 
-import { asSentence } from "./format";
+import { asSentence, errorText } from "./format";
 import type { Read } from "./monkey/figures";
 
 /** The ids of the Dashboard's three sections; its in-page links target them, and a #hash load scrolls to one once the page is trusted. */
@@ -43,8 +43,7 @@ export function houseGateLine({ trusted, ready, fresh, simulated }: { trusted: b
 export function overviewProblem(read: Read<unknown>, what: string): string | null {
   if (read.status === "unavailable") return `This trading server does not yet provide ${what}.`;
   if (read.status !== "failed") return null;
-  const reason = read.message === null ? "" : ` ${asSentence(read.message)}`;
   return read.value === null
-    ? `The page could not load ${what}.${reason} The page will try again automatically.`
-    : `The page could not refresh ${what}.${reason} The information shown may be out of date.`;
+    ? errorText(asSentence(`${what} could not be loaded`), read.message, "The app will try again automatically.")
+    : errorText(asSentence(`${what} could not be refreshed`), read.message, "The information shown may be out of date.");
 }

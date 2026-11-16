@@ -37,7 +37,7 @@ function Meter({ bps }: { bps: number }) {
 /** What a panel fed by the node's house state says while it has nothing to show; `none` is the answer of a node that holds none. */
 function unread(status: ConsoleState["houseStateStatus"], none: string): string {
   if (status === "unavailable") return "These figures are not yet available from this trading server.";
-  if (status === "failed") return "These figures could not be loaded. The page will try again automatically.";
+  if (status === "failed") return "These figures could not be loaded. The app will try again automatically.";
   return status === "pending" ? "Loading…" : none;
 }
 
@@ -68,7 +68,7 @@ export function CapPanel() {
 export function MarketCaps() {
   const { nav, rows } = useSelected(selectRows);
   return (
-    <Panel title="Market limits" tip="Each market has its own exposure limit: a set percentage of the house value, or a fixed dollar minimum if that is higher. The table also shows the house's net exposure in each market as at the most recent update.">
+    <Panel title="Market limits" tip="Each market has its own exposure limit, which is a set percentage of the house value or a fixed dollar minimum, whichever is higher. The table also shows the house's net exposure in each market as at the most recent update.">
       <HouseCaps rows={rows} nav={nav} />
     </Panel>
   );
@@ -80,7 +80,7 @@ export function Parameters() {
   const simulated = useSession().store.deps.client.signatures === "none";
   const source = params === null ? null : paramsSource(params, simulated);
   return (
-    <Panel title="Trading terms" tip="The operator may change these terms only after giving at least seven days' public notice. The profit fee can never be set below its launch rates, and its base rate can rise by no more than half of its launch value. The close-out level can move by no more than half of its launch value in either direction.">
+    <Panel title="Trading terms" tip="Changes to these terms take effect only after at least seven days' public notice. The exception is a fast change approved by the operators' vote while operator rotation is active, which can raise the close-out level immediately, but only to reduce risk and only for a limited time. The profit fee can never be set below its launch rates, and its base rate can rise by no more than half of its launch value. The close-out level can move by no more than half of its launch value in either direction.">
       {params === null ? (
         <Quiet>{unread(status, "The trading terms have not yet been set.")}</Quiet>
       ) : (
@@ -117,13 +117,13 @@ export function Checkpoints() {
       ) : (
         <>
           <dl className="space-y-1">
-            <Row label="Latest snapshot" tip="The number of the log entry that the latest snapshot covers." value={`Entry ${checkpoint.seq}`} />
+            <Row label="Latest snapshot" tip="The latest snapshot, identified by the number of the public log entry it covers. Elsewhere in the app, a snapshot is referred to by this number." value={`Log entry ${checkpoint.seq}`} />
             <div className="space-y-0.5">
               <dt className="text-caption text-fg-3"><Term label="State fingerprint" tip="The fingerprint of the server's state at that log entry. You can verify it by replaying the public log up to the same entry and comparing the result." /></dt>
               <dd className="text-data break-all text-fg">{checkpoint.root}</dd>
             </div>
           </dl>
-          {signatures === "none" && <p className={NOTE}>This is a demonstration, so these snapshots are simulated.</p>}
+          {signatures === "none" && <p className={NOTE}>This is a demo, so these snapshots are simulated.</p>}
         </>
       )}
     </Panel>
@@ -139,7 +139,7 @@ export function WithdrawalHealth() {
         <Row label="Requests waiting" tip="The number of withdrawal requests waiting in the queue." value={totals === null ? "—" : String(totals.count)} />
         <Row label="Queued" tip="The total amount still owed to everyone in the withdrawal queue, in US dollars." value={totals === null ? "—" : formatUsd(totals.remaining)} />
       </dl>
-      {totals === null ? <p className={NOTE}>{failed ? "The withdrawal queue could not be loaded. The page will try again automatically." : "Loading the withdrawal queue…"}</p> : queueCaveats(totals, failed).map((line) => <p key={line} className={NOTE}>{line}</p>)}
+      {totals === null ? <p className={NOTE}>{failed ? "The withdrawal queue could not be loaded. The app will try again automatically." : "Loading the withdrawal queue…"}</p> : queueCaveats(totals, failed).map((line) => <p key={line} className={NOTE}>{line}</p>)}
       <p className={NOTE}>The trading server does not report whether the on-chain vault that holds deposits has paused withdrawals, so this page cannot show it.</p>
     </Panel>
   );
