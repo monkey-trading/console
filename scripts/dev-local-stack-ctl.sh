@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Drives the two-engine option of `dev-local-stack.sh` (SECOND_ENGINE=1), and its parameter votes
 # (GOVERNANCE=1), from a second terminal, on the running stack's Anvil chain. Development only: it
-# moves the local chain's clock and sends transactions from the stack's published test keys.
+# moves the local chain's clock and sends transactions from the stack's published test keys. `status`
+# and `fund-house` also work on one engine under either genesis, where a stack with LAUNCH_VALUES=1 (the
+# default for production-genesis.toml) writes its info file by default.
 #
-#   status            the registry's election, the vault's release, both engines, the chain's clock
+#   status            the genesis the node runs and, with two engines, the registry's election, the vault's release,
+#                     both engines, the chain's clock
 #   elect             closes the election epoch once it has ended (the registry's epoch is a minute);
 #                     the candidate with the most delegated stake wins if it is eligible, has the
 #                     quorum, and is not the operator in effect already
@@ -31,7 +34,7 @@ die() {
   echo "FAIL: $*" >&2
   exit 1
 }
-[[ -f "$info" ]] || die "no running stack: $info is missing (start it with SECOND_ENGINE=1 ./scripts/dev-local-stack.sh)"
+[[ -f "$info" ]] || die "no running stack: $info is missing (start the stack with SECOND_ENGINE=1 or LAUNCH_VALUES=1, or give both the same STACK_INFO_FILE)"
 field() { jq -r ".$1 // empty" "$info"; }
 rpc="$(field rpcUrl)"
 vault="$(field vault)"
@@ -74,7 +77,12 @@ who() {
 }
 
 status() {
-  two_engines
+  echo "Genesis            $(field genesisFile)"
+  echo "                   $(field genesisSummary)"
+  [[ -n "$second_api" ]] || {
+    echo "Engine             $(health "$first_api") at $first_api (one engine; SECOND_ENGINE=1 adds the election and the handover)"
+    return
+  }
   local now wall rotation named total votes_first votes_second current pending
   now="$(chain_time)"
   wall="$(date -u +%s)"
