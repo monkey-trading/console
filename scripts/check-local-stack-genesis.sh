@@ -9,7 +9,7 @@
 # The stack runs on its own ports (default 18545, 18080, 13000, 19464 and 28846; ANVIL_PORT, API_PORT,
 # CONSOLE_PORT, METRICS_PORT and ACCESS_SOURCE_PORT move them) and on its own info file, so it never meets a stack
 # already running on the defaults. It needs what the stack needs, builds the node (set CARGO_CMD to prefix Cargo, for
-# example with a build-slot wrapper), and takes a few minutes. ENGINE_DIR names the engine checkout.
+# example with a build-slot wrapper), and takes a few minutes, longer while a build slot is taken (it waits up to an hour). ENGINE_DIR names the engine checkout.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -46,12 +46,12 @@ echo "==> Start the stack on $GENESIS_FILE (API port $API_PORT)"
 "$root/scripts/dev-local-stack.sh" >"$work/stack.log" 2>&1 &
 stack_pid=$!
 # The stack writes its info file once the console answers, after the node has applied the genesis.
-for _ in $(seq 1 1800); do
+for _ in $(seq 1 3600); do
   [[ -f "$STACK_INFO_FILE" ]] && break
   kill -0 "$stack_pid" 2>/dev/null || die "the stack exited before it was up"
   sleep 1
 done
-[[ -f "$STACK_INFO_FILE" ]] || die "the stack was not up within 30 minutes"
+[[ -f "$STACK_INFO_FILE" ]] || die "the stack was not up within an hour"
 
 api="$(jq -r .apiOrigin "$STACK_INFO_FILE")"
 genesis="$(jq -r .genesisFile "$STACK_INFO_FILE")"
