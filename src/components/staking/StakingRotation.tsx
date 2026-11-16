@@ -1,9 +1,10 @@
 "use client";
 
 /**
- * The Staking section's Rotation tab (monkey-trading/console#280): the operator group in effect and the
- * next one, the current and next turns, the reassigned and refused turns, and the turn history by start
- * time, from the node's signed `GET /v1/operator`, with the next election's time from the registry's
+ * The Staking section's Rotation tab (monkey-trading/console#280): under the current and next turns, a
+ * grid of the operator group in effect, the next one, the turn history (who ran the trading server and
+ * when, then the turns to come, #435) and the reassigned and refused turns, from the node's signed
+ * `GET /v1/operator`, with the next election's time from the registry's
  * `GET /v1/operators`. The tab starts only the operator reads and the older-turn reads.
  */
 
@@ -62,6 +63,7 @@ export function StakingRotation() {
         <Row label="Next turn" reserve={TURN_RESERVE}>{rotation === null ? "—" : turnLine(rotation.nextTurn, nameOf, "Not yet drawn")}</Row>
       </dl>
       <ReadNote read={route} loading="Loading the rotation…" quiet />
+      {/* Two by two from 1280 px, stacked in the same order below it; each card is there from the first paint, each list in a viewport of one height, so nothing moves when the first read lands. */}
       <div className="grid items-start gap-4 xl:grid-cols-2">
         <SetCard
           id="rotation-set-title" title="Current operator group" set={current} reserve={CURRENT_GROUP_RESERVE} nameOf={labelOf} needsUpdate={needsUpdate}
@@ -71,18 +73,17 @@ export function StakingRotation() {
           id="rotation-next-title" title="Next operator group" set={next} reserve={NEXT_GROUP_RESERVE} nameOf={labelOf} needsUpdate={needsUpdate}
           line={rotation === null ? unread : nextGroupLine(next, nextContext, nowMs)}
         />
+        <TurnHistoryCard
+          records={records} unread={rotation === null ? unread : null} nowMs={nowMs} more={history === null ? null : history.next !== null} truncated={history?.truncated ?? false} reading={pages.reading} error={pages.error}
+          onMore={() => {
+            if (rotation === null) return;
+            // The last page removes the button that has focus: focus goes to the card's heading, as on the other history cards.
+            void turns.loadOlder(rotation.history).then(() => { if (joinHistory(rotation.history, turns.getSnapshot().older).next === null) focusHeading("rotation-history-title"); });
+          }}
+          nameOf={labelOf}
+        />
+        <Reassignments records={records} empty={rotation === null ? unread : "None of the turns shown was reassigned or refused."} nameOf={labelOf} />
       </div>
-      {/* Both cards are there from the first paint, each in a viewport of one height, so nothing moves when the first read lands. */}
-      <Reassignments records={records} empty={rotation === null ? unread : "None of the turns shown was reassigned or refused."} nameOf={labelOf} />
-      <TurnHistoryCard
-        records={records} empty={rotation === null ? unread : "No turns have taken place yet."} more={history === null ? null : history.next !== null} truncated={history?.truncated ?? false} reading={pages.reading} error={pages.error}
-        onMore={() => {
-          if (rotation === null) return;
-          // The last page removes the button that has focus: focus goes to the card's heading, as on the other history cards.
-          void turns.loadOlder(rotation.history).then(() => { if (joinHistory(rotation.history, turns.getSnapshot().older).next === null) focusHeading("rotation-history-title"); });
-        }}
-        nameOf={labelOf}
-      />
       <p className={NOTE}>The trading server is run in turns by a group of operators chosen at an election. For each turn, one operator in the group is drawn at random, with a chance in proportion to its weight, which is the stake delegated to it when the group was chosen, so an operator&apos;s expected share of turns equals its share of the group&apos;s total weight. When a turn begins, this app connects to the new operator&apos;s server once that server has been verified.</p>
     </div>
   );

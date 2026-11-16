@@ -45,6 +45,8 @@ export interface TurnRecord {
   position: number;
   reason: TurnReason;
   candidate: string;
+  /** The operator key the assignment names. */
+  adminKey: string;
   /** The turn's key and when it signs from; `appliesAtMs` is null for an assignment the engine refused. */
   appliesAtMs: number | null;
   /** Why the engine refused the assignment, keeping the key in effect. */
@@ -143,7 +145,7 @@ export function turnOf(wire: TurnView): Turn {
 /** One record of the turn history; `null` for the fields a record may lack. */
 function recordOf(wire: TurnRecordView): TurnRecord {
   return {
-    turn: count(wire.turn, "a turn"), position: count(wire.position, "a position"), reason: reason(wire.reason), candidate: address(wire.candidate),
+    turn: count(wire.turn, "a turn"), position: count(wire.position, "a position"), reason: reason(wire.reason), candidate: address(wire.candidate), adminKey: address(wire.admin_key),
     appliesAtMs: wire.applies_at === null ? null : count(wire.applies_at, "a time"),
     refused: typeof wire.refused === "string" ? wire.refused : null,
     assignedSeq: count(wire.assigned_seq, "a log entry number"), assignedMs: count(wire.assigned_ms, "a time"),

@@ -9,7 +9,7 @@ const DAY = 86_400_000;
 const EFFECTIVE = Date.UTC(2026, 10, 18, 22, 30);
 const member = (address: string) => ({ address, adminKey: address, weight: 1n, turnShareBps: 5_000 });
 const SET: RotationSet = { set: 4, epoch: 42, effectiveAtMs: EFFECTIVE, members: [member("0xa"), member("0xb")], totalWeight: 2n };
-const RECORD: TurnRecord = { turn: 9, position: 0, reason: "draw", candidate: "0xa", appliesAtMs: EFFECTIVE, refused: null, assignedSeq: 10, assignedMs: EFFECTIVE - 3_600_000, takenMs: null };
+const RECORD: TurnRecord = { turn: 9, position: 0, reason: "draw", candidate: "0xa", adminKey: "0xa", appliesAtMs: EFFECTIVE, refused: null, assignedSeq: 10, assignedMs: EFFECTIVE - 3_600_000, takenMs: null };
 const ON = { current: true, rotationOn: true, electionAtMs: null };
 const KEPT = "The operator already running the trading server stays in place.";
 

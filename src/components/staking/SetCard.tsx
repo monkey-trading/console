@@ -43,7 +43,7 @@ export function SetCard({ id, title, set, line, reserve, nameOf, needsUpdate, ch
         <span aria-hidden="true" className="invisible col-start-1 row-start-1">{reserve}</span>
         <span className="col-start-1 row-start-1">{line}</span>
       </p>
-      <div role="region" aria-label={`${title}: members`} tabIndex={0} className="-mx-1 h-52 overflow-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
+      <div role="region" aria-label={`${title}: members`} tabIndex={0} className="-mx-1 h-32 overflow-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
         {set !== null && (
           <table className="w-full min-w-[26rem] text-label sm:text-caption">
             <caption className="sr-only">{title}: each operator, its weight in the draw for each turn and its expected share of turns. Amounts are in MONKEY.</caption>
