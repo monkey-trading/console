@@ -32,8 +32,9 @@
 # ROTATION=1 runs the parameter votes' rotation set with an engine for each member, on a node built with
 # the engine's development-only `short-turns` feature, whose operator turns last five minutes. Anvil
 # starts nine days in the past, so the registry's one-day epoch and the set's seven-day notice pass on the
-# chain's clock before any engine starts, and the chain then runs on true time. The first engine seals new keys and the timelock installs its enclave;
-# the second and third start as members, following it. Each member posts through relayers of its own
+# chain's clock before any engine starts, and the chain then runs on true time. The first engine seals new
+# keys and the timelock installs its enclave, and it holds them until the first turn the stack draws, a turn
+# after its log names the set; the second and third start as members, following it. Each member posts through relayers of its own
 # (checkpoints: Anvil accounts 9, 11 and 13; log heads: 10, 12 and 14) and runs a liveness caller (15, 16
 # and 17), and the stack sends each standby key registration a member's node writes, from its candidate.
 # From the first turn the engines accept, a turn after the first engine's log names the set, the stack
@@ -858,7 +859,7 @@ if [[ "$rotation" == 1 ]]; then
   mine_at "$(date +%s)"
   poll 30 folded || die "the vault does not name the first engine's release at a finalized block on true time"
 
-  # The members' engines, by index: the first engine, which holds the first turn, then the second and the third.
+  # The members' engines, by index: the first engine, which holds the installed key until the first turn, then the second and the third.
   member_names=(first second third)
   member_candidates=("$operator" "$second_candidate" "$third_candidate")
   member_dirs=("$work" "$work/second" "$work/third")
