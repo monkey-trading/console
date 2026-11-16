@@ -129,7 +129,6 @@ export function PositionsView() {
       // A fee that may still change is an upper bound, rounded up the way "at most" reads.
       feeUsd: closeNow === null ? "—" : closeNow.exact || closeNow.fee === 0n ? formatUsd(closeNow.fee) : `≤ ${formatUsd(roundToPlaces(closeNow.fee, 2, "up"))}`,
       noFee,
-      noClose,
       // One static-named explanation per row, so no live figure is the name of a control.
       details: describeDetails({ pnl: describePnl(atMark === null ? null : formatUsd(atMark), pnl === null ? noPrice : null), noClose, noFee }),
       closeout: formatCloseout(p.closeout, places),
