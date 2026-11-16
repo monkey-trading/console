@@ -138,12 +138,31 @@ describe("a node the visit with no wallet moved to that is promoted past (monkey
     expect(adopted).toEqual([C]);
   });
 
-  it("keeps the pause on the refused node when the route it names does not verify either, and tries again", async () => {
+  it("moves the pause to the successor the route names when it does not verify either", async () => {
     const { follower, adopted, clients } = chain("c.example:8443");
     clients[C].verdict = { kind: "unverified", reason: "still taking the keys" };
     await follower.check();
     expect(adopted).toEqual([]);
     expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", target: C, reason: "still taking the keys" });
+  });
+
+  it("does not take a successor whose own word on the signer lags behind the one the refused node's route named, and takes it once it does not", async () => {
+    const X = "0x00000000000000000000000000000000000000d1";
+    const lagging = [{ epoch: 6, address: "0x00000000000000000000000000000000000000c1" }, { epoch: 7, address: "0x00000000000000000000000000000000000000c2" }, undefined];
+    const fine = [{ epoch: 7, address: X.toUpperCase().replace("0X", "0x") }, { epoch: 8, address: "0x00000000000000000000000000000000000000c3" }];
+    for (const [index, signer] of [...lagging, ...fine].entries()) {
+      const { follower, adopted, clients, current } = chain("c.example:8443");
+      clients[B].signedRead = async () => { throw new RefusedAnswer("The vault names another signer", { ...names("c.example:8443"), signer: { epoch: 7, address: X } }); };
+      clients[C].signedRead = async () => ({ ...ROUTE, ...(signer === undefined ? {} : { signer }) });
+      await follower.check();
+      if (index < lagging.length) {
+        expect(follower.getSnapshot(), String(index)).toMatchObject({ kind: "waiting", target: C, reason: expect.stringContaining("later signer") });
+        // The node in use stops, and what the refused node named still counts at the next check.
+        current.signedRead = async () => { throw new EngineError(0, "The node did not answer."); };
+        await follower.check();
+      }
+      expect(adopted, String(index)).toEqual(index < lagging.length ? [] : [C]);
+    }
   });
 
   it("says the console needs updating when the route names a node the build does not list, and never goes in a circle or past the bound", async () => {

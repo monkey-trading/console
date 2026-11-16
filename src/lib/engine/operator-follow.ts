@@ -13,14 +13,12 @@
  */
 
 import type { EngineClient, Unsubscribe } from "./client";
-import type { Deploy } from "./deploy";
-import type { Scheduler } from "./live-stream";
 import { ROTATION_EVENTS } from "./rotation-events";
 import { NodeWord } from "./operator-follow-node";
-import { bounded, operatorTarget, refusedRoute, signedAnswer, soonest, successor, type FollowStatus, type NodeSaid } from "./operator-follow-status";
+import { bounded, lagging, operatorTarget, raised, refusedRoute, signedAnswer, soonest, successor, type FollowerDeps, type FollowStatus, type NodeSaid, type SignerFloor } from "./operator-follow-status";
 import type { DeploymentReads, NamedOperator } from "./registry";
 
-export { operatorTarget, type FollowStatus } from "./operator-follow-status";
+export { operatorTarget, type FollowerDeps, type FollowStatus } from "./operator-follow-status";
 
 /** The slow read, in milliseconds. */
 export const SLOW_READ_MS = 5 * 60_000;
@@ -28,22 +26,6 @@ export const SLOW_READ_MS = 5 * 60_000;
 export const RETRY_MS = 30_000;
 /** How long after a pending election's effective time it is read again, so the chain has passed it, in milliseconds. */
 const AFTER_EFFECT_MS = 5_000;
-
-export interface FollowerDeps {
-  deploy: Pick<Deploy, "origin" | "candidateOrigins">;
-  /** The node the session starts on. */
-  origin: string;
-  /** The connected wallet's chain reads; null with no wallet that reads a chain. */
-  chain(): DeploymentReads | null;
-  /** A new client for the node at `origin`. */
-  open(origin: string): EngineClient;
-  /** Whether a wallet request is in flight, which a move would orphan. */
-  busy(): boolean;
-  /** Moves the session to `client`, already verified. */
-  adopt(client: EngineClient, origin: string): void;
-  scheduler: Scheduler;
-  nowMs(): number;
-}
 
 export class OperatorFollower {
   private state: FollowStatus;
@@ -64,6 +46,8 @@ export class OperatorFollower {
   private trial: { origin: string; client: EngineClient } | null = null;
   /** The client of the node in use, which a move of the vault's signer judges again. */
   private current: EngineClient | null = null;
+  /** With no wallet, the highest signer a refused node's route named. */
+  private floor: SignerFloor | null = null;
   /** Whether the node in use has lost its verdict. */
   private refused = false;
   /** Whether a timed read was skipped in a hidden tab, and is owed when the tab is seen. */
@@ -239,14 +223,14 @@ export class OperatorFollower {
     const waiting = (reason: string) => (this.deps.chain() !== chain ? this.set(before) : rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, reason }) : this.settled({ kind: "following", origin: this.origin }));
     if (rotationEnabled && !(this.state.kind === "waiting" && this.state.target === target)) waiting("The new operator's node is being verified.");
     let client: EngineClient | null = null;
-    // A node refused for the signer the vault names still says, in its signed route, where the registry now runs the operator; with no wallet that is the only word on it,
-    // so the next node is the one it names, among the origins the build lists. The refused client and its turns are never taken, and the moves in one run are bounded.
+    // With no wallet, a node refused for the signer the vault names still says in its signed route where the operator now runs: the next node, among the listed origins, bounded; its client and turns are never taken.
     const failed = async (reason: string, error?: unknown): Promise<void> => {
       const route = chain === null && client !== null ? await refusedRoute(this.deps.scheduler, client, error) : null;
+      if (route !== null) this.floor = raised(this.floor, route);
       const next = route === null || this.deps.chain() !== chain ? null : successor(this.deps.deploy, route, [...tried, target]);
-      if (next === null) return waiting(reason);
+      if (route === null || next === null) return waiting(reason);
       if ("unlisted" in next) return this.settled({ kind: "unlisted", origin: this.origin, hostname: next.unlisted });
-      return this.tryNode(next.origin, chain, route?.rotation_enabled ?? rotationEnabled, [...tried, target]);
+      return this.tryNode(next.origin, chain, route.rotation_enabled, [...tried, target]);
     };
     try {
       if (this.trial?.origin !== target) this.trial = { origin: target, client: this.deps.open(target) };
@@ -256,7 +240,9 @@ export class OperatorFollower {
       if (status.kind === "unverified") return failed(status.reason);
       // With no wallet no verdict reads the vault, so an attested node is the best a visit without one can have; it reads, and never signs.
       if (status.kind === "attested" && chain !== null) return waiting(status.why);
-      await signedAnswer(client);
+      const said = await signedAnswer(client);
+      const behind = chain === null ? lagging(this.floor, said) : null; // each client judges the signer from its own first check, so the refused route's is held here
+      if (behind !== null) return waiting(behind);
     } catch (error) {
       return failed(error instanceof Error ? error.message : "The node did not answer.", error);
     }

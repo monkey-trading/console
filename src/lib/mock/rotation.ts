@@ -1,10 +1,11 @@
 /**
  * The simulated daily rotation as `GET /v1/operator` carries it (monkey-trading/console#280): a
- * rotation set of the four leading candidates weighted by their votes, today's turn held by the
- * operator in effect and tomorrow's by the one in effect at its boundary, a next set that takes effect
- * three days after the node's clock starts, and a history of the last days' turns, drawn from the set in effect
- * at each, with one skip, one promotion and one refused assignment. The turn changes at 22:30 UTC as
- * the engine's does; the draw is seeded, so the same day gives the same member.
+ * rotation set of the four leading candidates weighted by their votes, each turn from the node's clock
+ * start held by the operator in effect at its boundary (so an election mid-turn changes the next turn only),
+ * a next set that takes effect three days after the node's clock starts, and a history of the last days'
+ * turns, earlier ones drawn from the set in effect at each, with one skip, one promotion and one refused
+ * assignment on fixed turns. The turn changes at 22:30 UTC as the engine's does; the draw is seeded, so
+ * the same turn gives the same member, and a record's seq follows its turn and position.
  */
 
 import type { OperatorRoute, TurnRecordView, TurnView } from "../engine/stats-types";

@@ -5,7 +5,7 @@ import { hostnameOrigin, listedOrigins, type Deploy } from "./deploy";
 import type { Scheduler } from "./live-stream";
 import type { OperatorRoute } from "./stats-types";
 import { RefusedAnswer } from "./trust-errors";
-import type { NamedOperator } from "./registry";
+import type { DeploymentReads, NamedOperator } from "./registry";
 
 /** What the console knows of the node it should talk to; `origin` is the node it talks to now. */
 export type FollowStatus =
@@ -39,13 +39,31 @@ export function soonest(a: number | null, b: number | null): number | null {
   return a === null ? b : b === null ? a : Math.min(a, b);
 }
 
-/** The enclave answered a signed read: an enclave the vault does not name serves only its attestation, and a node that predates the route still signs its 404. */
-export async function signedAnswer(client: EngineClient): Promise<void> {
+/** The enclave answered a signed read, and its route: an enclave the vault does not name serves only its attestation, and a node that predates the route still signs its 404, which answers null. */
+export async function signedAnswer(client: EngineClient): Promise<OperatorRoute | null> {
   try {
-    await client.stats.operator();
+    return await client.stats.operator();
   } catch (error) {
     if (!(error instanceof EngineError && error.status === 404)) throw error;
+    return null;
   }
+}
+
+/** The signer a refused node's signed route named: the highest epoch seen, which no node a no-wallet visit moves to may lag behind. */
+export type SignerFloor = { epoch: number; address: string };
+
+/** `floor` raised by what `route` names. */
+export function raised(floor: SignerFloor | null, route: OperatorRoute): SignerFloor | null {
+  const named = route.signer;
+  return named !== undefined && (floor === null || named.epoch > floor.epoch) ? { epoch: named.epoch, address: named.address.toLowerCase() } : floor;
+}
+
+/** Why a node whose route is `route` is not taken after a refused node named `floor`: its own word on the signer is older than that, names another key at that epoch, or is absent. */
+export function lagging(floor: SignerFloor | null, route: OperatorRoute | null): string | null {
+  if (floor === null) return null;
+  const named = route?.signer;
+  if (named !== undefined && (named.epoch > floor.epoch || (named.epoch === floor.epoch && named.address.toLowerCase() === floor.address))) return null;
+  return "A node the console moved from named a later signer than this node does, so this node's answers are not taken yet.";
 }
 
 /** How long the wallet may take over one chain read before the check gives up on it, in milliseconds; a wallet asleep must not hold the follower from the next wallet. */
@@ -112,4 +130,20 @@ export function successor(deploy: Pick<Deploy, "origin" | "candidateOrigins">, r
   const target = operatorTarget(deploy, { hostname, rotationEnabled: route.rotation_enabled });
   if ("unlisted" in target) return target;
   return target.origin === null || tried.includes(target.origin) ? null : { origin: target.origin };
+}
+
+export interface FollowerDeps {
+  deploy: Pick<Deploy, "origin" | "candidateOrigins">;
+  /** The node the session starts on. */
+  origin: string;
+  /** The connected wallet's chain reads; null with no wallet that reads a chain. */
+  chain(): DeploymentReads | null;
+  /** A new client for the node at `origin`. */
+  open(origin: string): EngineClient;
+  /** Whether a wallet request is in flight, which a move would orphan. */
+  busy(): boolean;
+  /** Moves the session to `client`, already verified. */
+  adopt(client: EngineClient, origin: string): void;
+  scheduler: Scheduler;
+  nowMs(): number;
 }
