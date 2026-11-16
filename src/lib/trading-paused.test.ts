@@ -15,15 +15,14 @@ describe("tradingPaused", () => {
   it("names a handover first, whatever else holds", () => {
     const state = tradingPaused({ ...live, handover: true, open: false, priced: false, reduceOnly: true });
     expect(state?.cause).toBe("handover");
-    expect(state?.why).toContain("handing over");
+    expect(state?.why).toBe("a new operator is taking over, and trading resumes once their server is verified");
     expect(state?.closesAllowed).toBe(true);
   });
 
   it("names an operator on an unlisted node, after a handover and before the market's own states", () => {
     const state = tradingPaused({ ...live, unlisted: true, open: false, priced: false, reduceOnly: true });
     expect(state?.cause).toBe("unlisted");
-    expect(state?.why).toContain("does not list");
-    expect(state?.why).toContain("needs an update");
+    expect(state?.why).toBe("the new operator's server isn't supported by this version of the console, so it needs an update");
     expect(state?.closesAllowed).toBe(true);
     expect(tradingPaused({ ...live, unlisted: true, handover: true })?.cause).toBe("handover");
   });
@@ -43,6 +42,6 @@ describe("tradingPaused", () => {
   it("names reduce-only last and says closing still works", () => {
     const state = tradingPaused({ ...live, reduceOnly: true });
     expect(state?.cause).toBe("reduce_only");
-    expect(state?.why).toContain("closing a position still works");
+    expect(state?.why).toBe("this market only accepts orders that reduce a position, so you can still close");
   });
 });

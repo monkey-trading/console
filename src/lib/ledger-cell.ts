@@ -8,10 +8,10 @@ import type { LedgerItem, LedgerTotals, Share } from "./ledger-share";
 import type { LedgerState } from "./store/ledger";
 
 /** Why a closed period can allocate an account nothing, for the "0" a losing row then shows. */
-export const NO_ALLOCATION = "This period allocated nothing to the account. A period allocates nothing when the loss was written off, when debt from an earlier write-off is being paid down first, or when the account's cash was negative at the period's close.";
-export const ACCRUES = "A share of the MONKEY the loss's ten-minute period allocated, in proportion to the period's losses. It accrues until claimed; the token mints on claim.";
+export const NO_ALLOCATION = "You earned no MONKEY in this reward period. This happens when a loss was written off, when an earlier write-off is still being repaid, or when your balance was negative at the end of the period.";
+export const ACCRUES = "This is the MONKEY this loss earned. Each 10-minute reward period's MONKEY is shared in proportion to the losses in it. It builds up until you claim it.";
 /** What the column's other words mean, shown under the ledger. */
-export const COLUMN_NOTE = "MONKEY is a share of the allocation of the ten-minute period a loss fell in, and accrues until claimed. Pending: the period is still open. Loading: more of its rows or its allocation are still to be read. 0: the period allocated nothing, as when a loss was written off, earlier write-off debt is paid down first, or cash was negative at its close.";
+export const COLUMN_NOTE = "Each loss earns a share of its 10-minute reward period's MONKEY, and what you earn builds up until you claim it. Pending means the period hasn't ended yet, and Loading means its figures are still loading. 0 means you earned nothing that period, for example because a loss was written off or your balance was negative when it ended.";
 
 export interface MonkeyCell {
   text: string;
@@ -23,10 +23,10 @@ export function monkeyCell(share: Share, scheduleStatus: LedgerState["scheduleSt
   switch (share.kind) {
     case "none": return null;
     case "share": return { text: formatMonkeyFigure(share.units), title: ACCRUES };
-    case "pending": return { text: "Pending", title: "The loss's period is still open. Its allocation is set when it closes." };
-    case "loading": return { text: "Loading", title: "Not all of this period's rows or its allocation are read yet." };
+    case "pending": return { text: "Pending", title: "This reward period hasn't ended yet. Your MONKEY for it is set when it does." };
+    case "loading": return { text: "Loading", title: "This reward period's figures are still loading." };
     case "zero": return { text: "0", title: NO_ALLOCATION };
-    case "unknown": return { text: "—", title: scheduleNotice(scheduleStatus) ?? "The loss's period cannot be told." };
+    case "unknown": return { text: "—", title: scheduleNotice(scheduleStatus) ?? "The reward period for this loss isn't known." };
     default: return never(share);
   }
 }
@@ -37,8 +37,8 @@ function never(value: never): never {
 
 /** The visible line for a schedule that could not be had, or null when it was. */
 export function scheduleNotice(status: LedgerState["scheduleStatus"]): string | null {
-  if (status === "unavailable") return "This node does not report its emission schedule, so MONKEY shows — for each loss.";
-  if (status === "failed") return "The node did not answer the emission schedule read, so MONKEY shows — for each loss. Reopen this tab to ask again.";
+  if (status === "unavailable") return "This server doesn't publish its MONKEY reward schedule, so MONKEY shows — for each loss.";
+  if (status === "failed") return "The MONKEY reward schedule couldn't be loaded, so MONKEY shows — for each loss. Reopen this tab to try again.";
   return null;
 }
 
@@ -46,8 +46,8 @@ export function scheduleNotice(status: LedgerState["scheduleStatus"]): string | 
 export function coverageNote(held: number, totals: LedgerTotals, more: boolean, full: boolean): string {
   const results = `${groupThousands(held)} result${held === 1 ? "" : "s"}`;
   const covers = full
-    ? `Totals cover the ${results} loaded, the most the ledger holds; results not loaded are left out.`
-    : more ? `Totals cover the ${results} loaded so far, not the whole history. Load more for older ones.` : "Totals cover every realised result of this account.";
+    ? `Totals cover the ${results} loaded, the most this list holds. Older results aren't included.`
+    : more ? `Totals cover the ${results} loaded so far. Load more to include older ones.` : "Totals cover all your realised results.";
   return totals.monkeyShort ? `${covers} The MONKEY total leaves out losses shown as Pending, Loading or —.` : covers;
 }
 

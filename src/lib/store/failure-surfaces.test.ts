@@ -41,7 +41,7 @@ const TIER_LIMITED = (): never => {
   error.tierLimit = { tier: 1, requestsPerSecond: 5 };
   throw error;
 };
-const TIER_TEXT = "Requests are coming faster than volume tier 1 allows, 5 a second. Nothing was recorded. Wait a moment and try again.";
+const TIER_TEXT = "You're sending requests faster than volume tier 1 allows, which is 5 a second. Nothing was done. Wait a moment and try again.";
 
 describe("a 429 that names the account's volume tier", () => {
   it("shows the tier and its rate at the ticket on the session-signed path, and a plain limit without them", async () => {

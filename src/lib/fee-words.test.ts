@@ -64,9 +64,11 @@ describe("describeNextFallShort", () => {
 });
 
 describe("describeSchedule", () => {
-  it("states the full fee's hold and where the base takes over, or the one rate with no curve", () => {
-    expect(describeSchedule(TERMS)).toBe("A realised gain pays 100.00% on a close within 10 s of the position's open, falling with the hold to 10.00% from 15 min on.");
-    expect(describeSchedule({ profitFeeBps: 1_500, profitFeeCurve: LAUNCH_CURVE })).toBe("A realised gain pays 100.00% on a close within 10 s of the position's open, falling with the hold to 15.00% from 11 min 58.821 s on.");
-    expect(describeSchedule({ profitFeeBps: 1_000, profitFeeCurve: [] })).toBe("A realised gain pays 10.00%, however long the position was held.");
+  it("states the fee on a new position, the lowest fee and the hold it applies from in spoken units, or one rate when the fee never falls", () => {
+    expect(describeSchedule(TERMS)).toBe("The fee decays over time, starting at 100% on a newly opened position and falling to 10% for positions held for 15 minutes or more.");
+    expect(describeSchedule({ profitFeeBps: 1_500, profitFeeCurve: LAUNCH_CURVE })).toBe("The fee decays over time, starting at 100% on a newly opened position and falling to 15% for positions held for 11 minutes 59 seconds or more.");
+    expect(describeSchedule({ profitFeeBps: 925, profitFeeCurve: [{ hold_ms: 1_000, fee_bps: 5_050 }, { hold_ms: 3_600_000, fee_bps: 925 }] })).toBe("The fee decays over time, starting at 50.5% on a newly opened position and falling to 9.25% for positions held for 1 hour or more.");
+    expect(describeSchedule({ profitFeeBps: 6_000, profitFeeCurve: [{ hold_ms: 1_000, fee_bps: 6_000 }, { hold_ms: 61_000, fee_bps: 1_000 }] })).toBe("The fee is 60% of the profit, however long you hold the position.");
+    expect(describeSchedule({ profitFeeBps: 1_000, profitFeeCurve: [] })).toBe("The fee is 10% of the profit, however long you hold the position.");
   });
 });

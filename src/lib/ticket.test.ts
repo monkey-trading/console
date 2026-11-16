@@ -32,8 +32,8 @@ describe("previewTicket", () => {
 
   it("lists why an order cannot go: no equity, too much margin, closed; a resting order is admitted while closed", async () => {
     const market = await btcAt(100_000);
-    expect(previewTicket({ market, side: "buy", qty: q("0.5"), slippageBps: 10, account: null, houseNav: NAV }).problems).toContain("Fund your account to trade.");
-    expect(previewTicket({ market, side: "buy", qty: q("9"), slippageBps: 10, account: account(1_000), houseNav: NAV }).problems).toContain("Not enough equity for the margin this needs.");
+    expect(previewTicket({ market, side: "buy", qty: q("0.5"), slippageBps: 10, account: null, houseNav: NAV }).problems).toContain("Deposit funds to start trading.");
+    expect(previewTicket({ market, side: "buy", qty: q("9"), slippageBps: 10, account: account(1_000), houseNav: NAV }).problems).toContain("Not enough equity to cover the margin for this order.");
     expect(previewTicket({ market: { ...market, open: false }, side: "buy", qty: q("0.01"), slippageBps: 10, account: account(1_000), houseNav: NAV }).problems).toContain("This market is closed.");
     const closed = { market: { ...market, open: false }, side: "buy" as const, qty: q("0.01"), slippageBps: 10, account: account(1), houseNav: NAV };
     expect(previewTicket({ ...closed, resting: true }).problems).toEqual([]);
@@ -42,7 +42,7 @@ describe("previewTicket", () => {
   it("lists a refusal when the spread alone exhausts a positive equity", async () => {
     const market = await btcAt(100_000);
     const tiny = previewTicket({ market, side: "buy", qty: q("0.5"), slippageBps: 10, account: account(1), houseNav: NAV });
-    expect(tiny.problems).toContain("Not enough equity for the margin this needs.");
+    expect(tiny.problems).toContain("Not enough equity to cover the margin for this order.");
   });
 
   it("checks the minimum on the exact quantity, with no rounding up to reach it", async () => {
@@ -72,7 +72,7 @@ describe("previewTicket", () => {
     const market = await btcAt(100_000);
     const base = { side: "buy" as const, slippageBps: 10, account: account(10_000), houseNav: NAV };
     const unpriced = previewTicket({ ...base, market: { ...market, mark: null }, qty: q("0.5") });
-    expect(unpriced.problems).toEqual(["No price yet."]);
+    expect(unpriced.problems).toEqual(["This market has no price yet."]);
     expect(unpriced.notional).toBeNull();
     expect(unpriced.qty).toBe(q("0.5"));
     expect(previewTicket({ ...base, market, qty: 0n }).problems).toContain(NO_SIZE);

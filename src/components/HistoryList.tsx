@@ -9,7 +9,7 @@ import { formatStamp } from "@/lib/time";
 import { useConsole } from "./ConsoleProvider";
 
 const KIND: Partial<Record<EngineEvent["type"], string>> = {
-  fill: "Fill", close_out: "Close-out", deposited: "Deposit", withdrawal_approved: "Withdrawal", withdrawal_queued: "Withdrawal",
+  fill: "Trade", close_out: "Close-out", deposited: "Deposit", withdrawal_approved: "Withdrawal", withdrawal_queued: "Withdrawal",
   withdrawal_queue_updated: "Withdrawal", withdrawal_rejected: "Withdrawal", order_rejected: "Order", order_cancelled: "Order",
   eligibility_attested: "Eligibility", eligibility_rejected: "Eligibility", financing: "Financing", bad_debt: "Close-out",
 };
@@ -24,7 +24,7 @@ export function HistoryList() {
   return (
     <div>
       {rows.length === 0 ? (
-        <p className="px-4 py-6 text-caption text-fg-3">{wallet ? "Nothing yet. Fills, deposits and withdrawals appear here." : "Connect a wallet to see your history."}</p>
+        <p className="px-4 py-6 text-caption text-fg-3">{wallet ? "Nothing yet. Your trades, deposits and withdrawals will show here." : "Connect a wallet to see your history."}</p>
       ) : (
         <ol>
           {rows.map(({ entry, text }) => (

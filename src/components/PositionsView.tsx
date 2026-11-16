@@ -21,7 +21,7 @@ import { closingPrice } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
 import { closeAll } from "@/lib/store/batch-actions";
 import { previewTicket, unrealisedPnl, usdConverter } from "@/lib/ticket";
-import { accountFeeTerms, currentParams, positionClose, positionFeeNow } from "@/lib/ticket-figures";
+import { accountFeeTerms, CLOSE_WAITS, currentParams, positionClose, positionFeeNow } from "@/lib/ticket-figures";
 import { accountPricing } from "@/lib/tier-view";
 
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -53,16 +53,16 @@ const CELL_BUTTON = `${BUTTON} mt-1`;
 const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 
 /** What the Close-out value means, shared by the table's head and the phone rows' label. */
-const CLOSEOUT_TIP = "Where this market must reach for your account to fall below its close-out level, with your other positions held at their marks. Margin is shared, and the largest losing position closes first, which may be another. Due: already below it. None: no price in the node's range reaches it.";
+const CLOSEOUT_TIP = "This is the price at which your account would be closed out, with your other positions at their current prices. Margin is shared, and your largest losing position is closed first, which may be a different one. Due means your account is already below the close-out level, and None means no realistic price reaches it.";
 
 /** What the P&L column means, shared by the table's head and the phone rows' labels. */
-const PNL_TIP = "What closing the whole position now realises, before the profit fee: at the node's closing price for the position's size (the bid for a long, the offer for a short), not at the mark, so it already counts the exit spread. Point at or focus Details for the result at the mark.";
+const PNL_TIP = "This is your profit or loss if you close the whole position now, before the profit fee. It uses the price you'd close at (the bid for a long, the offer for a short), so the spread is already included. Details shows the figure at the mark price.";
 
 /** What the hold, fee and close columns mean, shared by the table's head and the phone rows' labels. */
-const HOLD_TIP = "How long the position has been held, from its open time: an add moves the open time to the size-weighted average of now and the open time, counting the units already held as no older than the fee curve's end (15 minutes at launch); a reduction leaves it.";
-const NO_FEE_NOTE = "No profit fee on this close";
-const FEE_USD_TIP = "The profit fee closing the whole position now pays, in USD: the fee rate on a realised gain, and nothing on a close that realises a loss or nothing. A figure after ≤ is the most a close pays while the price and the FX rate hold and the fee rate falls.";
-const CLOSE_TIP = "What closing the whole position now moves your cash by: the realised result at the node's closing price, less the profit fee. Exact while the price, the fee rate and, for a market quoted in another currency, the FX rate hold; a figure after ≥ is the least a close keeps while the price and the FX rate hold and the fee rate falls.";
+const HOLD_TIP = "This is how long you've held the position, which sets its profit fee. Adding to the position shortens this time, weighted by the size you add. Reducing it leaves the time as it is.";
+const NO_FEE_NOTE = "No fee without a profit";
+const FEE_USD_TIP = "This is the profit fee, in USD, for closing the whole position now. There's no fee if you close without a profit. A ≤ means the fee rate is about to fall, so you may pay less if the price holds.";
+const CLOSE_TIP = "This is what closing the whole position now adds to or takes from your balance: the profit or loss at the closing price, less the profit fee. It changes as prices move. A ≥ means the fee rate is about to fall, so you may keep more.";
 
 /** The slippage bound a Close sends, capped at the market's own. */
 const CLOSE_SLIPPAGE_BPS = 25;
@@ -80,7 +80,7 @@ export function PositionsView() {
   const { armed, state, arm, cancel } = useConfirmWindow(CONFIRM_MS, CONFIRM_MIN_GAP_MS);
   const { confirmBatch } = usePrefs().prefs;
   const positions = account?.positions ?? [];
-  const feeTip = `The profit fee rate a close of this position pays on a gain now. ${feeTerms === null ? "It falls as the hold lengthens to the curve's end." : describeSchedule(feeTerms)}`;
+  const feeTip = `This is the fee rate paid on a winning trade. ${feeTerms === null ? "The fee falls the longer you hold the position." : describeSchedule(feeTerms)}`;
   const rows = positions.map((p) => {
     const market = markets.find((m) => m.id === p.market);
     // An unpriced market shows no mark and no profit, not the entry price as if it were the mark.
@@ -110,7 +110,7 @@ export function PositionsView() {
     };
     // Why a figure that needs a price, or the fee's terms, is withheld.
     const noPrice = describeNoPrice(gaps);
-    const noClose = closeNow === null ? describeNoClose(gaps) ?? "The close figures show once the node's price and fee rate are read." : null;
+    const noClose = closeNow === null ? describeNoClose(gaps) ?? CLOSE_WAITS : null;
     const noFee = closeNow !== null && closeNow.fee === 0n && closeNow.realised <= 0n;
     const slippageBps = Math.min(CLOSE_SLIPPAGE_BPS, market?.view.max_slippage_bps ?? CLOSE_SLIPPAGE_BPS);
     const close = (event: { currentTarget: HTMLElement }) => {
@@ -157,7 +157,7 @@ export function PositionsView() {
   const listed = targetsKey(targets);
   useEffect(() => cancel(), [listed, cancel]);
   // An account that could not be read (the panel above says so) shows no positions, rather than none as if it had none.
-  if (account === null && notices.accountRead !== undefined) return <p className="px-4 py-6 text-caption text-fg-3">Your positions show once your account can be read.</p>;
+  if (account === null && notices.accountRead !== undefined) return <p className="px-4 py-6 text-caption text-fg-3">Your positions will show once your account loads.</p>;
   if (positions.length === 0) return <><p className="px-4 py-6 text-caption text-fg-3">No open positions.</p><div className="px-4 has-[p]:pb-3"><Notice surface="positions" /></div></>;
   const closeEverything = (event: { currentTarget: HTMLElement }) => {
     const press = pressBatch(confirmBatch, state(), count);
@@ -200,7 +200,7 @@ export function PositionsView() {
               <div><dt className="text-label text-fg-3"><Term label="Close now" tip={CLOSE_TIP} /></dt><dd>{r.proceeds}</dd></div>
             </dl>
             <button type="button" disabled={!r.closable} className={`${BUTTON} mt-3 w-full`} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-            <p aria-hidden={!r.unquoted} className={`mt-2 text-label ${r.unquoted ? "text-fg-3" : "invisible"}`}>Select {r.symbol} to get its closing price.</p>
+            <p aria-hidden={!r.unquoted} className={`mt-2 text-label ${r.unquoted ? "text-fg-3" : "invisible"}`}>Select {r.symbol} to see its closing price.</p>
           </li>
         ))}
       </ul>

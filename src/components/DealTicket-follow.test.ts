@@ -32,13 +32,13 @@ const render = (status: FollowStatus | null) => {
 
 describe("the ticket while the operator moves", () => {
   it("pauses on a handover and on an operator whose node the build does not list, each in its own words", () => {
-    expect(render({ kind: "waiting", origin: "https://a.test", target: "https://b.test", reason: "r" })).toContain("the operator is handing over");
+    expect(render({ kind: "waiting", origin: "https://a.test", target: "https://b.test", reason: "r" })).toContain("Trading is paused: a new operator is taking over, and trading resumes once their server is verified.");
     const unlisted = render({ kind: "unlisted", origin: "https://a.test", hostname: "c.test" });
-    expect(unlisted).toContain("Trading is paused: the operator now runs on a node this console does not list, so the console needs an update.");
+    expect(unlisted).toContain("Trading is paused: the new operator&#x27;s server isn&#x27;t supported by this version of the console, so it needs an update.");
   });
 
   it("does not pause on a node followed or pinned", () => {
-    expect(render({ kind: "following", origin: "https://a.test" })).not.toContain("Trading is paused: the operator");
-    expect(render(null)).not.toContain("Trading is paused: the operator");
+    expect(render({ kind: "following", origin: "https://a.test" })).not.toContain("new operator");
+    expect(render(null)).not.toContain("new operator");
   });
 });

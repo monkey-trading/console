@@ -33,8 +33,8 @@ export function OrdersView() {
   // The window confirms the count it was armed for: when an order rests or goes, it closes and the next press arms again.
   useEffect(() => cancel(), [count, cancel]);
   // An account that could not be read (the panel above says so) shows no orders, rather than none as if it had none.
-  if (account === null && notices.accountRead !== undefined) return <p className="px-4 py-6 text-caption text-fg-3">Your orders show once your account can be read.</p>;
-  if (count === 0) return <><p className="px-4 py-6 text-caption text-fg-3">No resting orders.</p><div className="px-4 has-[p]:pb-3"><Notice surface="orders" /></div></>;
+  if (account === null && notices.accountRead !== undefined) return <p className="px-4 py-6 text-caption text-fg-3">Your orders will show once your account loads.</p>;
+  if (count === 0) return <><p className="px-4 py-6 text-caption text-fg-3">No open orders.</p><div className="px-4 has-[p]:pb-3"><Notice surface="orders" /></div></>;
   const rows = (account?.orders ?? []).map((o) => {
     const market = markets.find((m) => m.id === o.market);
     return {

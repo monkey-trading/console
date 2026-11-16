@@ -38,7 +38,7 @@ describe("markersFor", () => {
     const orders = [order(1, "buy", "limit"), order(2, "sell", "limit"), order(3, "buy", "stop"), order(4, "sell", "stop")];
     const lines = markersFor(withAccount(base, account(0n, orders)), market);
     expect(lines.map((l) => [l.title, l.tone])).toEqual([
-      ["limit buy", "glow"], ["limit sell", "ember"], ["stop buy", "glow"], ["stop sell", "ember"],
+      ["Limit buy", "glow"], ["Limit sell", "ember"], ["Stop buy", "glow"], ["Stop sell", "ember"],
     ]);
     expect(lines.every((l) => l.style === "dotted")).toBe(true);
   });
@@ -57,7 +57,7 @@ describe("markersFor", () => {
       const lines = markersFor(withAccount(base, account(qty, [order(1, "sell", "limit")])), market);
       const closeOut = lines.find((l) => l.title === "Close-out");
       expect(closeOut).toMatchObject({ price, tone: "fg-3", style: "dashed" });
-      expect(lines.find((l) => l.title === "limit sell")?.style).toBe("dotted");
+      expect(lines.find((l) => l.title === "Limit sell")?.style).toBe("dotted");
     }
   });
 
@@ -73,7 +73,7 @@ describe("markersFor", () => {
     const { market, base } = await fixture();
     const held = withAccount(base, account(fixedFromInt(1), [order(1, "sell", "limit")]));
     const titles = (lines: boolean) => markersFor(held, market, lines).map((l) => l.title);
-    expect(titles(true)).toEqual(expect.arrayContaining(["Long entry", "limit sell", "Close-out"]));
+    expect(titles(true)).toEqual(expect.arrayContaining(["Long entry", "Limit sell", "Close-out"]));
     expect(titles(false)).toEqual(["Close-out"]);
     expect(markersFor(withAccount(base, account(0n, [order(1, "sell", "limit")])), market, false)).toEqual([]);
   });

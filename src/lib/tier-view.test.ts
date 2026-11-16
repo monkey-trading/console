@@ -81,11 +81,11 @@ describe("a weekend margin that applies now", () => {
 
   it("names the weekend margin, not the tier, as what sets the leverage when it is above the tier's floor", () => {
     const set = (floorBps: number | null, weekendBps: number) => leverageReason(ticketLimits(account(), 1, { floorBps, weekendBps }));
-    expect(set(500, 750)).toBe(" The weekend margin applies here, which allows up to 20x.");
-    expect(set(500, 300)).toBe(" Volume tier 0 allows up to 20x here.");
-    expect(set(500, 0)).toBe(" Volume tier 0 allows up to 20x here.");
+    expect(set(500, 750)).toBe(" Weekend margin applies here, which allows up to 20x leverage.");
+    expect(set(500, 300)).toBe(" Volume tier 0 allows up to 20x leverage here.");
+    expect(set(500, 0)).toBe(" Volume tier 0 allows up to 20x leverage here.");
     // With the tier table unread the floor is unknown, and a weekend margin that applies is what is named.
-    expect(set(null, 750)).toContain("weekend margin applies");
+    expect(set(null, 750)).toContain("Weekend margin applies");
   });
 });
 
@@ -103,7 +103,7 @@ describe("ticketLimits", () => {
 
 describe("orderLimitProblem", () => {
   it("stops a resting order once the account rests its tier's limit, and names the tier", () => {
-    expect(orderLimitProblem(ticketLimits(account(0, 25), 1), true)).toBe("You rest 25 orders, the most at volume tier 0. Cancel one to place another, or trade up a tier for a higher limit.");
+    expect(orderLimitProblem(ticketLimits(account(0, 25), 1), true)).toBe("You have 25 open orders, the most for volume tier 0. Cancel one to place another, or trade more to reach a higher tier.");
   });
 
   it("lets an order through while there is room, a market order at the limit, and a tier that names no limit", () => {
@@ -117,7 +117,7 @@ describe("orderLimitProblem", () => {
 
 describe("leverageReason", () => {
   it("names the tier's leverage in a market, and nothing without it", () => {
-    expect(leverageReason(ticketLimits(account(0), 1))).toBe(" Volume tier 0 allows up to 20x here.");
+    expect(leverageReason(ticketLimits(account(0), 1))).toBe(" Volume tier 0 allows up to 20x leverage here.");
     expect(leverageReason(ticketLimits(account(0), 2))).toBe("");
     expect(leverageReason(null)).toBe("");
   });
@@ -138,9 +138,9 @@ describe("words", () => {
     const table = decodeTiers(TABLE) ?? [];
     const volume = decodeVolume({ ...wire(0), progress: [{ capped: "0", days: 0 }, { capped: "300000", days: 0 }, { capped: "0", days: 0 }] });
     const next = volume && nextTier(volume, table);
-    expect(next && describeNextTier(next)).toBe("Tier 1 needs $700,000 more counted volume, over at least 2 more days at the day cap of $500,000 (the tier takes at least 2 days of trading).");
-    expect(describeNextTier({ tier: 1, volumeLeft: 0n, dayCap: fixedFromInt(500_000), daysNeeded: 2, daysLeast: 0 })).toBe("Tier 1 needs trading on at least 2 days, each counting up to $500,000.");
-    expect(describeNextTier({ tier: 1, volumeLeft: 1n, dayCap: fixedFromInt(500_000), daysNeeded: 2, daysLeast: 1 })).toContain("over at least one more day");
+    expect(next && describeNextTier(next)).toBe("Tier 1 needs $700,000 more counted volume. Each day counts up to $500,000, so that takes at least 2 more days of trading.");
+    expect(describeNextTier({ tier: 1, volumeLeft: 0n, dayCap: fixedFromInt(500_000), daysNeeded: 2, daysLeast: 0 })).toBe("Tier 1 needs trading on at least 2 days. Each day counts up to $500,000.");
+    expect(describeNextTier({ tier: 1, volumeLeft: 1n, dayCap: fixedFromInt(500_000), daysNeeded: 2, daysLeast: 1 })).toContain("so that takes at least one more day of trading");
   });
 
   it("states a discount as a share and a boost as the multiple it weighs", () => {
@@ -150,9 +150,9 @@ describe("words", () => {
 
   it("states a bound, a limit and a whole-dollar amount", () => {
     expect(describeBestPrice(fixedFromInt(500_000))).toBe("Up to $500,000");
-    expect(describeBestPrice(null)).toBe("Whole size");
+    expect(describeBestPrice(null)).toBe("Any size");
     expect(describeLimit(25)).toBe("25");
-    expect(describeLimit(null)).toBe("Node's default");
+    expect(describeLimit(null)).toBe("Standard");
     expect(usdWhole(q("1234.9"))).toBe("$1,234");
   });
 });

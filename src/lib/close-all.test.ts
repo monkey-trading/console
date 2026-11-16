@@ -17,8 +17,8 @@ describe("planning a close all", () => {
 
   it("tells a position the node quotes only once its market is selected apart from one with no price yet", () => {
     const plan = planCloseAll([row(1, "BTC-USD", { quoted: null, select: true }), row(2, "ETH-USD", { quoted: null, select: false })]);
-    expect(plan.leftOut).toEqual([{ symbol: "BTC-USD", why: "select it for its closing price" }, { symbol: "ETH-USD", why: "no closing price yet" }]);
-    expect(describeLeftOut(plan.leftOut)).toBe("Close all leaves out BTC-USD (select it for its closing price), ETH-USD (no closing price yet).");
+    expect(plan.leftOut).toEqual([{ symbol: "BTC-USD", why: "select it to get a price" }, { symbol: "ETH-USD", why: "no closing price yet" }]);
+    expect(describeLeftOut(plan.leftOut)).toBe("Close all skips BTC-USD (select it to get a price), ETH-USD (no closing price yet).");
   });
 
   it("leaves out a position in a closed market, even with a quote, as its Close button is disabled", () => {
@@ -40,7 +40,7 @@ describe("planning a close all", () => {
 
 describe("describing what a close all leaves out", () => {
   it("names each position and why", () => {
-    expect(describeLeftOut([{ symbol: "ETH-USD", why: "no closing price yet" }, { symbol: "US500", why: "market closed" }])).toBe("Close all leaves out ETH-USD (no closing price yet), US500 (market closed).");
+    expect(describeLeftOut([{ symbol: "ETH-USD", why: "no closing price yet" }, { symbol: "US500", why: "market closed" }])).toBe("Close all skips ETH-USD (no closing price yet), US500 (market closed).");
   });
 
   it("says nothing when nothing is left out", () => {

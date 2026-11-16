@@ -15,7 +15,7 @@ async function ifSupported(action: string, send: () => Promise<ActionResult>): P
   try {
     return await send();
   } catch (error) {
-    if (error instanceof EngineError && error.status === 404) throw new EngineError(404, `This node does not support ${action} yet. It needs to restart onto a newer version.`, null, { cause: error });
+    if (error instanceof EngineError && error.status === 404) throw new EngineError(404, `This server doesn't support ${action} yet.`, null, { cause: error });
     throw error;
   }
 }
@@ -27,8 +27,8 @@ async function ifSupported(action: string, send: () => Promise<ActionResult>): P
 export async function cancelAll(store: ConsoleStore): Promise<void> {
   const count = store.getSnapshot().account?.orders.length ?? 0;
   if (count === 0) return;
-  const out = await sessionSigned(store, "orders", `cancel all ${count} resting ${count === 1 ? "order" : "orders"}`, (t, account) => cancelAllTypedData(domainOf(store), { account }, t), (auth, wallet) =>
-    ifSupported("cancel all", () => store.deps.client.cancelAll({ account: wallet.address, auth })), "sign-again",
+  const out = await sessionSigned(store, "orders", `cancel all ${count} open ${count === 1 ? "order" : "orders"}`, (t, account) => cancelAllTypedData(domainOf(store), { account }, t), (auth, wallet) =>
+    ifSupported("Cancel all", () => store.deps.client.cancelAll({ account: wallet.address, auth })), "sign-again",
   );
   if (!out.ok) return;
   const text = describeCancelAll(out.result.events);
@@ -45,9 +45,9 @@ export async function closeAll(store: ConsoleStore, targets: readonly CloseTarge
   if (targets.length === 0) return;
   const symbolOf = (market: MarketId) => store.getSnapshot().markets.find((m) => m.id === market)?.symbol ?? String(market);
   const closes = targets.map((t) => ({ market: t.market, quoted: fixedToWire(t.quoted) }));
-  const summary = `close ${targets.length === 1 ? "1 position" : `${targets.length} positions`} (${targets.map((t) => symbolOf(t.market)).join(", ")}), up to ${slippageBps} bps worse each`;
+  const summary = `close ${targets.length === 1 ? "1 position" : `${targets.length} positions`} (${targets.map((t) => symbolOf(t.market)).join(", ")}) with up to ${slippageBps} bps slippage each`;
   const out = await sessionSigned(store, "positions", summary, (t, account) => closeAllTypedData(domainOf(store), { account, closes, max_slippage_bps: slippageBps }, t), (auth, wallet) =>
-    ifSupported("close all", () => store.deps.client.closeAll({ account: wallet.address, closes, max_slippage_bps: slippageBps, auth })), "report",
+    ifSupported("Close all", () => store.deps.client.closeAll({ account: wallet.address, closes, max_slippage_bps: slippageBps, auth })), "report",
   );
   if (!out.ok) return;
   const text = describeCloseAll(closeAllOutcome(targets.map((t) => t.market), out.result.events), symbolOf);

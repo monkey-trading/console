@@ -38,7 +38,7 @@ const render = (resting = 3, toxicityBps = 0, patch?: Partial<ConsoleState>) => 
 describe("the deal ticket's tier limits", () => {
   it("shows the account's best-price size, leverage and resting orders in the selected market", () => {
     const html = render(3);
-    expect(html).toContain("Volume tier 0 limits in BTC-USD");
+    expect(html).toContain("Your volume tier 0 limits in BTC-USD");
     expect(html).toContain("Up to $500,000");
     expect(html).toContain("20x");
     expect(html).toContain("3 of 25");
@@ -73,9 +73,9 @@ describe("the spread bands in Market info", () => {
 });
 
 describe("the toxicity add-on", () => {
-  it("names the add-on the signed quote carries beside the executable spread, and none when it is zero", () => {
+  it("names the add-on the signed quote carries beside the executable spread as extra spread, and none when it is zero", () => {
     // Market info's own words name the add-on in general; the label is the figure beside the spread.
-    expect(render(0, 2)).toMatch(/including a <span[^>]*>\+2 bps<\/span> toxicity add-on on each price/);
+    expect(render(0, 2)).toMatch(/including <span[^>]*>\+2 bps<\/span> of extra spread on each price/);
   });
 
   it("reserves the add-on's wrapped height, an unseen copy carrying it, so the footprint is the same with and without one", () => {
@@ -83,8 +83,8 @@ describe("the toxicity add-on", () => {
     const without = line(render(0, 0));
     const withAddOn = line(render(0, 2));
     // The hidden copy states the add-on in both, and is not read out.
-    expect(without).toMatch(/<span aria-hidden="true" class="invisible[^"]*">.*toxicity add-on on each price/);
-    expect(withAddOn).toMatch(/<span aria-hidden="true" class="invisible[^"]*">.*toxicity add-on on each price/);
-    expect(without.replace(/<span aria-hidden.*$/, "")).not.toContain("toxicity add-on");
+    expect(without).toMatch(/<span aria-hidden="true" class="invisible[^"]*">.*of extra spread on each price/);
+    expect(withAddOn).toMatch(/<span aria-hidden="true" class="invisible[^"]*">.*of extra spread on each price/);
+    expect(without.replace(/<span aria-hidden.*$/, "")).not.toContain("extra spread");
   });
 });

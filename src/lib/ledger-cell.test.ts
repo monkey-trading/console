@@ -20,7 +20,7 @@ describe("monkeyCell", () => {
     expect(monkeyCell({ kind: "pending" }, "ready")?.text).toBe("Pending");
     expect(monkeyCell({ kind: "loading" }, "ready")?.text).toBe("Loading");
     expect(monkeyCell({ kind: "zero" }, "ready")).toEqual({ text: "0", title: NO_ALLOCATION });
-    expect(NO_ALLOCATION).toMatch(/written off.*paid down.*negative/);
+    expect(NO_ALLOCATION).toMatch(/written off.*repaid.*negative/);
   });
 
   it("shows — for an unknown period and says why by what the schedule read did", () => {
@@ -40,17 +40,17 @@ describe("scheduleNotice", () => {
 
 describe("coverageNote", () => {
   it("says the totals cover the whole account only when nothing more can be read", () => {
-    expect(coverageNote(7, totals(false), false, false)).toBe("Totals cover every realised result of this account.");
+    expect(coverageNote(7, totals(false), false, false)).toBe("Totals cover all your realised results.");
   });
 
   it("says the totals cover only what is loaded, with the singular for one result", () => {
-    expect(coverageNote(1, totals(false), true, false)).toBe("Totals cover the 1 result loaded so far, not the whole history. Load more for older ones.");
+    expect(coverageNote(1, totals(false), true, false)).toBe("Totals cover the 1 result loaded so far. Load more to include older ones.");
     expect(coverageNote(1_500, totals(false), true, false)).toContain("the 1,500 results loaded");
   });
 
   it("names the bound, and does not offer Load more, when the ledger is full", () => {
     const note = coverageNote(2_000, totals(false), true, true);
-    expect(note).toBe("Totals cover the 2,000 results loaded, the most the ledger holds; results not loaded are left out.");
+    expect(note).toBe("Totals cover the 2,000 results loaded, the most this list holds. Older results aren't included.");
   });
 
   it("adds that the MONKEY total leaves losses out while some share is not known", () => {

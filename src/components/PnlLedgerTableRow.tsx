@@ -14,7 +14,7 @@ export const PnlLedgerTableRow = memo(function PnlLedgerTableRow({ item, symbol,
     <tr className="border-b border-line last:border-b-0">
       <td className="px-4 py-4 whitespace-nowrap text-fg-3"><time>{r.time}</time></td>
       <td className="px-4 py-4 text-fg">{symbol}</td>
-      <td className="px-4 py-4 text-fg-2">{r.closed}{r.liquidation && <span className="text-ember"> · Liquidated</span>}</td>
+      <td className="px-4 py-4 text-fg-2">{r.closed}{r.liquidation && <span className="text-ember"> · Closed out</span>}</td>
       <td className="px-4 py-4">{r.qty}</td>
       <td className="px-4 py-4">{r.price}</td>
       <td className={`px-4 py-4 ${r.loss ? "text-ember" : "text-glow"}`}>{r.pnl}</td>

@@ -88,7 +88,7 @@ describe("a fresh wallet at tier 0", () => {
     await wait(() => ticketFor(rig.store, BTC, "buy", qty).prices.problem !== null, 30_000, "the ticket's reason");
     const { prices } = ticketFor(rig.store, BTC, "buy", qty);
     expect(prices.problemIsSize).toBe(true);
-    expect(prices.problem).toContain("Volume tier 0 allows up to 20x here.");
+    expect(prices.problem).toContain("Volume tier 0 allows up to 20x leverage here.");
     // An order inside it has no problem.
     expect(ticketFor(rig.store, BTC, "buy", sizeFor(marketOf(rig.store, BTC), 150_000)).prices.problem).toBeNull();
   });
@@ -102,11 +102,11 @@ describe("a fresh wallet at tier 0", () => {
     }
     const limits = ticketLimits(snapshot().account, BTC);
     expect(limits).toMatchObject({ orderLimit: 3, resting: 3 });
-    expect(orderLimitProblem(limits, true)).toBe("You rest 3 orders, the most at volume tier 0. Cancel one to place another, or trade up a tier for a higher limit.");
+    expect(orderLimitProblem(limits, true)).toBe("You have 3 open orders, the most for volume tier 0. Cancel one to place another, or trade more to reach a higher tier.");
     expect(orderLimitProblem(limits, false)).toBeNull();
     // Sent anyway, the node's own refusal names the tier and its limit, at the control that sent it.
     expect(await placeOrder(rig.store, order)).toBe(false);
-    expect(snapshot().notices.ticket?.text).toBe("You already rest 3 orders, the most at volume tier 0. Cancel one to place another, or trade up a tier for a higher limit.");
+    expect(snapshot().notices.ticket?.text).toBe("You already have 3 open orders, the most for volume tier 0. Cancel one to place another, or trade more to reach a higher tier.");
     // The orders above spent the tier's burst of requests; the cancels wait for it to refill.
     await new Promise((resolve) => setTimeout(resolve, 3_000));
     for (const resting of snapshot().account?.orders ?? []) {
@@ -123,7 +123,7 @@ describe("a fresh wallet at tier 0", () => {
       await cancelOrder(rig.store, 999_999);
       text = snapshot().notices.orders?.text.startsWith("Requests are coming faster") ? snapshot().notices.orders?.text : undefined;
     }
-    expect(text, `the 429s the node answered: ${JSON.stringify(rig.limited)}`).toBe("Requests are coming faster than volume tier 0 allows, 3 a second. Nothing was recorded. Wait a moment and try again.");
+    expect(text, `the 429s the node answered: ${JSON.stringify(rig.limited)}`).toBe("You're sending requests faster than volume tier 0 allows, which is 3 a second. Nothing was done. Wait a moment and try again.");
     // The tier's own refusal is signed by the enclave, so the client reads the tier and rate from it.
     expect(rig.limited.some((answer) => answer.signed && answer.body.includes('"tier":0'))).toBe(true);
     // The burst refills; the next request is admitted.

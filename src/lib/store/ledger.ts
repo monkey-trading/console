@@ -196,5 +196,5 @@ export class LedgerReads {
 
 /** The text of a failed read for the tab. */
 function describe(error: unknown): string {
-  return error instanceof Error ? error.message : "The node did not answer.";
+  return error instanceof Error ? error.message : "The server didn't respond.";
 }

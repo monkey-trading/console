@@ -19,7 +19,7 @@ const LABEL: Record<Tab, string> = { positions: "Positions", orders: "Orders", h
 
 function Activity() {
   const { feed } = useConsole();
-  if (feed.length === 0) return <p className="px-4 py-6 text-caption text-fg-3">Waiting for the node's stream.</p>;
+  if (feed.length === 0) return <p className="px-4 py-6 text-caption text-fg-3">Waiting for live updates.</p>;
   return (
     <ol>
       {feed.map((line) => (

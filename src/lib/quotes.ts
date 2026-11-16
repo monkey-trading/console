@@ -78,8 +78,8 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
   const none = (problem: string): TicketPrices => ({ bid: null, offer: null, price: null, exactClose: false, toxicityBps: 0, spreadTenths: null, problem, problemIsSize: false });
   const { quote } = input;
   if (quote === null) {
-    if (input.quoteError === null) return none("Waiting for the node's executable quote.");
-    return none(input.quoteError === UNCREDITED ? "The node quotes an account once it has credited it: deposit first." : `The node will not quote this market: ${input.quoteError}.`);
+    if (input.quoteError === null) return none("Waiting for a price.");
+    return none(input.quoteError === UNCREDITED ? "Prices for your account show after your first deposit." : `No price is available for this market: ${input.quoteError}.`);
   }
   if (quote.unavailable !== undefined) return none(describeReject(quote.unavailable));
   // The side that closes the whole position, when the order is that size, prices at the node's exact close quote.
@@ -91,7 +91,7 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
   const bid = exact("sell");
   const mine = side === "buy" ? ask : bid;
   const spreadTenths = ask !== null && bid !== null && input.mark !== null && input.mark > 0n ? tenthBpsOfValue(ask.price - bid.price, input.mark) : null;
-  const problem = mine === null ? "The node would not open an order this large. Try a smaller size." : mine.declined === null ? null : declinedProblem(quote, side, mine.declined, input.limits ?? null);
+  const problem = mine === null ? "This order is too large. Try a smaller size." : mine.declined === null ? null : declinedProblem(quote, side, mine.declined, input.limits ?? null);
   // The node declining for margin or the house's capacity, or having no step this large, is a matter of the size.
   const problemIsSize = mine === null || (mine.declined !== null && (isMarginDecline(mine.declined) || mine.declined.kind === "house_capacity"));
   return { bid: bid?.price ?? null, offer: ask?.price ?? null, price: mine?.price ?? null, exactClose: closingPrice(quote, side, preview.qty) !== null, toxicityBps: quote.toxicity_bps ?? 0, spreadTenths, problem, problemIsSize };
@@ -116,5 +116,5 @@ function declinedProblem(quote: MarketQuote, side: Side, declined: Reject, limit
   const largest = fitting === undefined ? 0n : truncateToStep(fixedFromWire(fitting.qty));
   if (largest <= 0n) return `Not enough equity to open a position here.${leverageReason(limits)}`;
   const text = fixedToWire(largest);
-  return `The largest size your equity opens here is ≈ ${text} ${text === "1" ? "contract" : "contracts"}. Try a smaller size.${leverageReason(limits)}`;
+  return `With your equity, the largest size you can open here is about ${text} ${text === "1" ? "contract" : "contracts"}.${leverageReason(limits)}`;
 }

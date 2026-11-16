@@ -80,14 +80,14 @@ export function ticketLimits(account: AccountModel | null, market: MarketId, mar
 /** The reason a limit or stop order is stopped at the ticket: the account already rests its tier's most. Null for a market order or while there is room. */
 export function orderLimitProblem(limits: TicketLimits | null, resting: boolean): string | null {
   if (limits === null || !resting || limits.orderLimit === null || limits.resting < limits.orderLimit) return null;
-  return `You rest ${limits.resting} orders, the most at volume tier ${limits.tier}. Cancel one to place another, or trade up a tier for a higher limit.`;
+  return `You have ${limits.resting} open orders, the most for volume tier ${limits.tier}. Cancel one to place another, or trade more to reach a higher tier.`;
 }
 
 /** Why the leverage limit applies, for a size the node declines for margin: the tier's limit, named. */
 export function leverageReason(limits: TicketLimits | null): string {
   if (limits === null || limits.leverage === null) return "";
   const leverage = formatLeverage(limits.leverage);
-  return limits.weekendSets ? ` The weekend margin applies here, which allows up to ${leverage}.` : ` Volume tier ${limits.tier} allows up to ${leverage} here.`;
+  return limits.weekendSets ? ` Weekend margin applies here, which allows up to ${leverage} leverage.` : ` Volume tier ${limits.tier} allows up to ${leverage} leverage here.`;
 }
 
 /**
@@ -104,8 +104,8 @@ export function accountPricing(account: AccountModel | null, params: HouseParams
 /** The step to the next tier in words: the counted volume left, how many days a day's cap makes of it, and the fewest more days that can cover it. */
 export function describeNextTier(next: NextTier): string {
   const days = next.daysLeast === 1 ? "one more day" : `${next.daysLeast} more days`;
-  if (next.volumeLeft === 0n) return `Tier ${next.tier} needs trading on at least ${next.daysNeeded} days, each counting up to ${usdWhole(next.dayCap)}.`;
-  return `Tier ${next.tier} needs ${usdWholeUp(next.volumeLeft)} more counted volume, over at least ${days} at the day cap of ${usdWhole(next.dayCap)} (the tier takes at least ${next.daysNeeded} ${next.daysNeeded === 1 ? "day" : "days"} of trading).`;
+  if (next.volumeLeft === 0n) return `Tier ${next.tier} needs trading on at least ${next.daysNeeded} days. Each day counts up to ${usdWhole(next.dayCap)}.`;
+  return `Tier ${next.tier} needs ${usdWholeUp(next.volumeLeft)} more counted volume. Each day counts up to ${usdWhole(next.dayCap)}, so that takes at least ${days} of trading.`;
 }
 
 /** A share of a charge a tier takes off, in bps of it, as the panel states it: `10%`, or `None`. */
@@ -120,10 +120,10 @@ export function describeBoost(bps: number): string {
 
 /** A best-price bound as the panel states it: the notional a market's first band covers, or that the market has one band. */
 export function describeBestPrice(bound: Fixed | null): string {
-  return bound === null ? "Whole size" : `Up to ${usdWhole(bound)}`;
+  return bound === null ? "Any size" : `Up to ${usdWhole(bound)}`;
 }
 
 /** The order limit and request rate as the panel states them; a limit the tier does not name is the node's own. */
 export function describeLimit(value: number | null): string {
-  return value === null ? "Node's default" : String(value);
+  return value === null ? "Standard" : String(value);
 }

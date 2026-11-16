@@ -52,7 +52,7 @@ describe("VolumeTierCard", () => {
     expect(html).toContain("$400,000.00");
     expect(html).toContain("$2,500.00");
     expect(html).toContain("Tier 1 needs $700,000 more counted volume");
-    expect(html).toContain("What each tier brings in BTC-USD");
+    expect(html).toContain("Tier benefits in BTC-USD");
     expect(html).toContain("Up to $500,000");
     expect(html).toContain("Up to $1,000,000");
     expect(html).toContain("Up to 20x");
@@ -61,7 +61,7 @@ describe("VolumeTierCard", () => {
   });
 
   it("names a toxicity tier of zero as none, and an add-on in bps", () => {
-    expect(render({ ...ACCOUNT, toxicity: { tier: 0, addOnBps: 0 } }, PARAMS, VolumeTierCard)).toMatch(/Toxicity add-on<\/dt><dd[^>]*>None</);
+    expect(render({ ...ACCOUNT, toxicity: { tier: 0, addOnBps: 0 } }, PARAMS, VolumeTierCard)).toMatch(/Extra spread<\/dt><dd[^>]*>None</);
     expect(render(ACCOUNT, PARAMS, VolumeTierCard)).toContain("+2 bps on every price");
   });
 
@@ -71,16 +71,16 @@ describe("VolumeTierCard", () => {
     const html = render({ ...ACCOUNT, ...(served === null ? {} : { volume: served }) }, { ...PARAMS, volumeTiers: benefits }, VolumeTierCard);
     expect(html).toMatch(/Base profit fee discount<\/th><td[^>]*>None<\/td><td[^>]*>10%</);
     expect(html).toMatch(/Financing markup discount<\/th><td[^>]*>None<\/td><td[^>]*>5%</);
-    expect(html).toMatch(/Emissions boost<\/th><td[^>]*>1x<\/td><td[^>]*>1.25x</);
+    expect(html).toMatch(/Rewards boost<\/th><td[^>]*>1x<\/td><td[^>]*>1.25x</);
     expect(render(ACCOUNT, PARAMS, VolumeTierCard)).not.toContain("profit fee discount");
   });
 
   it("shows the account's figures without terms until the parameters are read", () => {
     const html = render(ACCOUNT, null, VolumeTierCard);
     expect(html).toContain("Tier 0");
-    expect(html).toContain("parameters are read");
+    expect(html).toContain("Tier details will show once the trading terms load.");
     // The table keeps its rows, with dashes, so the page below does not move when the terms arrive.
-    expect(html).toContain("What each tier brings");
+    expect(html).toContain("Tier benefits");
     expect(html).toContain("Best-price size");
     expect(html).not.toContain("Up to $500,000");
   });
@@ -100,7 +100,7 @@ describe("VolumeTierCard", () => {
     expect(pending).not.toContain("Tier 0");
     // The sentence and the toxicity cell the read brings keep their places, unseen or as dashes.
     expect(pending).toMatch(/aria-hidden="true" class="invisible[^"]*">Tier 1 needs/);
-    expect(pending).toMatch(/Toxicity add-on<\/dt><dd[^>]*>—</);
+    expect(pending).toMatch(/Extra spread<\/dt><dd[^>]*>—</);
     const unsupported = renderWith({ account: { ...ACCOUNT, volume: undefined }, houseParams: PARAMS, pricingCurrent: true, accountRead: true, wallet: { address: "0xabc", label: "w" } });
     expect(unsupported).not.toContain("Volume tier");
   });
@@ -115,7 +115,7 @@ describe("VolumeTierCard", () => {
 
   it("says so at the top tier, and shows nothing for a node without volume tiers or no account", () => {
     const top = decodeVolume({ tier: 1, matured: "2000000", pending: "0", progress: [{ capped: "0", days: 0 }, { capped: "1000000", days: 2 }], best_price_bounds: {} });
-    expect(render({ ...ACCOUNT, ...(top === null ? {} : { volume: top }) }, PARAMS, VolumeTierCard)).toContain("This is the highest tier.");
+    expect(render({ ...ACCOUNT, ...(top === null ? {} : { volume: top }) }, PARAMS, VolumeTierCard)).toContain("You&#x27;re at the highest tier.");
     expect(render({ ...ACCOUNT, volume: undefined }, PARAMS, VolumeTierCard)).not.toContain("Volume tier");
     expect(render(null, PARAMS, VolumeTierCard)).not.toContain("Volume tier");
   });
@@ -124,7 +124,7 @@ describe("VolumeTierCard", () => {
 describe("AccountSummary", () => {
   it("shows what the node's read says is needed to open and may be withdrawn, from V64", () => {
     const html = render(ACCOUNT, PARAMS, AccountSummary);
-    expect(html).toContain("Initial requirement");
+    expect(html).toContain("Initial margin");
     expect(html).toContain("$2,500.00");
     // Free is equity above that requirement; withdrawable is the node's own figure.
     expect(html).toContain("$7,500.00");
@@ -133,7 +133,7 @@ describe("AccountSummary", () => {
 
   it("keeps its five figures before V64", () => {
     const html = render({ ...ACCOUNT, requirements: undefined }, PARAMS, AccountSummary);
-    expect(html).not.toContain("Initial requirement");
+    expect(html).not.toContain("Initial margin");
     expect(html).toContain("$9,000.00");
   });
 });
