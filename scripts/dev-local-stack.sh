@@ -919,7 +919,9 @@ if [[ "$rotation" == 1 ]]; then
       calldata="$(jq -r '.calldata // empty' "$file" 2>/dev/null)" || continue
       if [[ -z "$calldata" || "$calldata" == "${registered_calls[$i]}" ]] || ((now < registration_retry_at[i])); then continue; fi
       key="$(jq -r '.key' "$file")"
-      if send_as "${member_candidates[$i]}" "$schedule" "$calldata"; then
+      # A send whose answer was lost may still have landed: the schedule then lists the key, and refuses it a second time.
+      if send_as "${member_candidates[$i]}" "$schedule" "$calldata" || [[ "$(lower "$(cast call "$schedule" 'promotable(address)(address)' \
+        "${member_candidates[$i]}" --rpc-url "$rpc" 2>/dev/null)")" == "$(lower "$key")" ]]; then
         registered_calls[i]="$calldata"
         echo "$key" >"$work/standby-${member_names[$i]}"
         step "Registered the ${member_names[$i]} engine's standby key $key, which a promotion can make the vault's signer"
@@ -1238,6 +1240,19 @@ if [[ "$launch" == 1 ]]; then
                    $((launch_timelock_delay / 86400)) days), and the start of emissions and staking (the next minute). The house starts with no
                    capital, as at launch: \`dev-local-stack-ctl.sh fund-house\` or clients' losses fill it."
 fi
+withdrawals_line="The engine approves a withdrawal; the next checkpoint (every 1000 commands, within
+                   seconds) is posted to the vault, and the console then claims it on the vault."
+logs_line="Node log           $work/node.log
+Metrics            $metrics_url"
+if [[ "$rotation" == 1 ]]; then
+  withdrawals_line="The engine approves a withdrawal and the next checkpoint (every 1000 commands, within
+                   seconds) is posted to the vault. While the turns rotate, the withdrawal can be claimed
+                   only once the next turn's member has checked the log up to its approval, from the
+                   next boundary; the console then claims it on the vault."
+  logs_line="Engine logs        $work/node.log, $work/second.log and $work/third.log
+Metrics            $metrics_url, http://127.0.0.1:$second_metrics_port/metrics and
+                   http://127.0.0.1:$third_metrics_port/metrics"
+fi
 if [[ "$second_engine" == 1 ]]; then
   rotation_state="rotation on"
   signer_line="$enclave (the first engine's sealed key, installed through the timelock)"
@@ -1257,8 +1272,7 @@ Rotation           Each member of the rotation set runs an engine built with fiv
                    next member in that order, and at each boundary that member's engine takes the keys from
                    the previous one. An engine serves its API only while it holds a turn: if the console does
                    not move to the engine that holds the turn, open that engine's /v1/health and accept its
-                   certificate. A withdrawal can be claimed once the next turn's member has checked the log up
-                   to its approval, from the next boundary.
+                   certificate.
 Relayers           Each engine posts its checkpoints and its log heads (to the LogHeads contract $logheads)
                    through relayers of its own, Anvil accounts 9 and 10, 11 and 12, and 13 and 14, and runs a
                    liveness caller from account 15, 16 or 17.
@@ -1345,16 +1359,14 @@ Setup              Connecting a wallet opens the console's setup popup: the Anvi
 Deposits           Approve the vault and deposit from the console. The node sees a deposit a few
                    blocks (seconds) after it is mined and credits it; a deposit sent straight to the
                    vault before a declaration stays pending until the wallet signs one.
-Withdrawals        The engine approves a withdrawal; the next checkpoint (every 1000 commands, within
-                   seconds) is posted to the vault, and the console then claims it on the vault.
+Withdrawals        $withdrawals_line
 MONKEY             Emissions run from $emissions_start: ten-minute budgets accrue to each period's
                    gross realised losses and show in the console once a losing trade closes; claim
                    them on the MONKEY page, then stake. An epoch that closes with a stake while the
                    house's NAV is above the floor pays the excess to the stakers in USDC.
 
 $two_engines
-Node log           $work/node.log
-Metrics            $metrics_url
+$logs_line
 EOF
 [[ "${KEEP_WORK:-0}" == 1 ]] || echo "The work directory is removed on exit; set KEEP_WORK=1 to keep it."
 

@@ -26,8 +26,9 @@ from stack_toml import dumps  # noqa: E402
 
 def sealed(cfg: dict, data: Path, handover_port: int) -> None:
     """Seals the engine's keys under `data` and offers them to a successor at `handover_port`.
-    Rotation on makes the node follow the registry's elections. The mock TEE seals with a public
-    stand-in, and the successor's TLS check is off because both engines' keys are self-generated."""
+    Rotation on makes the node follow the operator the registry names, by an election or a turn. The
+    mock TEE seals with a public stand-in, and the successor's TLS check is off because every
+    engine's keys are self-generated."""
     cfg["operator"]["rotation_enabled"] = True
     cfg["tee"]["use_published_mock_key"] = False
     cfg["tee"]["sealing"] = {
