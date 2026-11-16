@@ -32,10 +32,10 @@ export function CloseSummary({ shape, close, why, side, places, converts }: { sh
   // A bound shows its figures rounded the way its claim reads: an "at most" price up, an "at least" amount down.
   const price = close === null ? 0n : bound ? roundToPlaces(close.price, places, side === "sell" ? "down" : "up") : close.price;
   const least = (amount: bigint) => formatUsd(bound ? roundToPlaces(amount, 2, "down") : amount);
-  const boundNote = `These are limits, not exact figures. If ${holds}, you close at this price or better and keep at least this much, since the fee rate only falls. If the price moves against you, the order can still fill at a worse price, within your max slippage.`;
+  const boundNote = `These are limits. If ${holds}, you close at this price or better and keep at least this much, as the fee rate can only fall. If the price moves against you, the order can still fill at a worse price, within your max slippage.`;
   const exactNote = `These figures are exact if ${converts ? "the price, exchange rate" : "the price"} and fee rate don't change. If the price moves against you, the order can still fill at a worse price, within your max slippage.`;
-  const boundFee = close === null ? "" : `${formatRate(close.feeBps)} of any profit, ${formatUsd(close.fee)} at this price`;
-  const fee = close === null ? "" : bound ? boundFee : close.realised > 0n ? `${formatRate(close.feeBps)} of the profit, ${formatUsd(close.fee)}` : "none without a profit";
+  const boundFee = close === null ? "" : `${formatRate(close.feeBps)} of profit, ${formatUsd(close.fee)} at this price`;
+  const fee = close === null ? "" : bound ? boundFee : close.realised > 0n ? `${formatRate(close.feeBps)} of profit, ${formatUsd(close.fee)}` : "none without a profit";
   return (
     <div className="mt-4 rounded border border-line-2 px-3 py-3 text-caption">
       <p className="text-label tracking-caps text-fg-3 uppercase">{shape.whole ? "Closes the whole position" : shape.reverses ? "Closes the whole position and opens the other side" : `Closes ${formatFixedPlaces(shape.closed, 6)} of the position`}</p>

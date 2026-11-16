@@ -20,7 +20,7 @@ export function AccountSummary() {
     // From V64 a fill and a withdrawal meet the requirement at the account's tier, which can be above the margin positions hold.
     ...(account?.requirements ? [["Initial margin", usd(requirementOf(account))] as [string, string]] : []),
     ["Free margin", account ? usd(freeCash(account)) : "—"],
-    ["Available to withdraw", account ? usd(withdrawableOf(account)) : "—"],
+    ["Withdrawable now", account ? usd(withdrawableOf(account)) : "—"],
   ];
   return (
     <section aria-label="Account summary" className="overflow-hidden rounded-xl border border-line-2 bg-line">

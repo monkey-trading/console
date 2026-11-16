@@ -69,10 +69,10 @@ describe("VolumeTierCard", () => {
     const benefits: VolumeTierWire[] = TABLE.map((tier, at) => (at === 1 ? { ...tier, fee_discount_bps: 1_000, financing_discount_bps: 500, emissions_boost_bps: 2_500 } : tier));
     const served = decodeVolume({ tier: 0, matured: "0", pending: "0", progress: [{ capped: "0", days: 0 }, { capped: "0", days: 0 }], best_price_bounds: {}, fee_discount_bps: 0, financing_discount_bps: 0, emissions_boost_bps: 0 });
     const html = render({ ...ACCOUNT, ...(served === null ? {} : { volume: served }) }, { ...PARAMS, volumeTiers: benefits }, VolumeTierCard);
-    expect(html).toMatch(/Discount on the lowest profit fee<\/th><td[^>]*>None<\/td><td[^>]*>10%</);
+    expect(html).toMatch(/Base profit fee discount<\/th><td[^>]*>None<\/td><td[^>]*>10%</);
     expect(html).toMatch(/Financing markup discount<\/th><td[^>]*>None<\/td><td[^>]*>5%</);
-    expect(html).toMatch(/MONKEY rewards boost<\/th><td[^>]*>1x<\/td><td[^>]*>1.25x</);
-    expect(render(ACCOUNT, PARAMS, VolumeTierCard)).not.toContain("lowest profit fee");
+    expect(html).toMatch(/Rewards boost<\/th><td[^>]*>1x<\/td><td[^>]*>1.25x</);
+    expect(render(ACCOUNT, PARAMS, VolumeTierCard)).not.toContain("profit fee discount");
   });
 
   it("shows the account's figures without terms until the parameters are read", () => {

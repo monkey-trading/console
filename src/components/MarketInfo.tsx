@@ -54,7 +54,7 @@ export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price
         <dl className="space-y-3">
           <div className={ROW}><dt className="text-fg-3">Market hours</dt><dd className={market.open ? "text-glow" : "text-ember"}>{market.open ? "Open" : "Closed"} · {describeSchedule(market.view.schedule)}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Stress level</dt><dd className={`text-right ${STRESS_TONE[market.stress] ?? ""}`}>{market.stress} · {stressName}{stress !== null ? <span className="block text-fg-3">{stressTerms(stress)}</span> : paramsNote !== null && <span className="block text-fg-3">{paramsNote}</span>}</dd></div>
-          <div className={ROW}><dt className="text-fg-3">Margin rate</dt><dd>{preview.marginRateBps === null ? "—" : `${formatMovePercent(preview.marginRateBps).replace("+", "")} of the position after this order`}</dd></div>
+          <div className={ROW}><dt className="text-fg-3">Margin rate</dt><dd>{preview.marginRateBps === null ? "—" : `${formatMovePercent(preview.marginRateBps).replace("+", "")} of the new position`}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Required margin</dt><dd>{usd(preview.marginAdded)}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Leverage</dt><dd>{preview.impliedLeverage === null ? "—" : `${preview.impliedLeverage}×`}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Quoted price</dt><dd>{price === null ? "—" : formatMark(price, market.places)}</dd></div>
