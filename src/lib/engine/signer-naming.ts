@@ -27,7 +27,7 @@ export class SignerNaming {
 
   /** The highest epoch seen and the key the vault names at it. */
   private named: { epoch: number; address: string } | null = null;
-  /** Enclave addresses a stated signer has put aside: a node that attests one stays refused until the vault names it again at a later epoch. */
+  /** Enclave addresses a stated signer has put aside, the key named at an earlier epoch among them: a node that attests one stays refused until the vault names it again at a later epoch. */
   private readonly superseded = new Set<string>();
 
   /**
@@ -43,6 +43,8 @@ export class SignerNaming {
     const address = claim.address.toLowerCase();
     const conflict = this.named !== null && claim.epoch === this.named.epoch && address !== this.named.address;
     if (this.named === null || claim.epoch > this.named.epoch) {
+      // The key named at the earlier epoch is no longer the vault's, whichever node says so.
+      if (this.named !== null && this.named.address !== address) this.superseded.add(this.named.address);
       this.named = { epoch: claim.epoch, address };
       this.superseded.delete(address);
     }

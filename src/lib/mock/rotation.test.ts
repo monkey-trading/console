@@ -116,4 +116,58 @@ describe("the simulated rotation", () => {
     // The member advertised for tomorrow is the one holding the turn once the boundary has passed.
     expect(after.turn?.candidate).toBe(before.next_turn?.candidate);
   });
+
+  it("keeps each turn's seq, member and place in the history from one day's read to the next, and joins a newest page read after a boundary to an older page read before", async () => {
+    const { client } = createMockNode(SIM_EPOCH_MS);
+    const older = await client.stats.operator({ limit: 5, before: (await client.stats.operator({ limit: 5 })).turns?.next ?? 0 });
+    const early = (await client.stats.operator({ limit: 100 })).turns?.records ?? [];
+    client.tick(client.state.now + DAY_MS);
+    const later = await client.stats.operator({ limit: 100 });
+    const byTurn = new Map((later.turns?.records ?? []).map((record) => [`${record.turn}.${record.position}`, record]));
+    for (const record of early) {
+      const same = byTurn.get(`${record.turn}.${record.position}`);
+      if (same === undefined) continue; // aged out of the window
+      expect([same.assigned_seq, same.candidate, same.reason, same.refused]).toEqual([record.assigned_seq, record.candidate, record.reason, record.refused]);
+    }
+    expect(new Set(later.turns?.records.map((record) => record.assigned_seq)).size).toBe(later.turns?.records.length);
+    // The newest page, read again a day on, ends at a cursor that names the turn the older page began after: no turn between them is missing.
+    const newest = await client.stats.operator({ limit: 5 });
+    const joined = [...(newest.turns?.records ?? []).map((record) => record.turn), ...(older.turns?.records ?? []).map((record) => record.turn)];
+    const turns = [...new Set(joined)];
+    for (const [index, turn] of turns.entries()) if (index > 0) expect(turn, `turn ${turn}`).toBe((turns[index - 1] ?? 0) - 1);
+  });
+
+  it("holds the skip, the promotion and the refusal on the same turns each day", async () => {
+    const { client } = createMockNode(SIM_EPOCH_MS);
+    const marks = async () => ((await client.stats.operator({ limit: 100 })).turns?.records ?? []).filter((record) => record.position > 0).map((record) => [record.turn, record.reason]);
+    const first = await marks();
+    expect(first.length).toBeGreaterThanOrEqual(3);
+    client.tick(client.state.now + DAY_MS);
+    expect(await marks()).toEqual(first);
+  });
+
+  it("keeps a turn's member through an election that takes effect mid-turn, and gives the elected operator the next boundary", async () => {
+    const { client } = createMockNode(SIM_EPOCH_MS);
+    const start = await client.stats.operator();
+    const effectiveAt = start.pending_rotation?.effective_at ?? 0;
+    const challenger = start.last_election?.candidate;
+    // The day before the election, tomorrow's turn is advertised on the incumbent, and the election falls in the middle of the turn after it.
+    client.state.now = effectiveAt - DAY_MS;
+    const before = await client.stats.operator({ limit: 100 });
+    expect(before.next_turn?.candidate).toBe(before.turn?.candidate);
+    expect(before.next_turn?.applies_at).toBeLessThan(effectiveAt);
+    client.state.now = effectiveAt + 1_000;
+    const after = await client.stats.operator({ limit: 100 });
+    expect(after.operator).not.toBe(before.operator);
+    // The turn advertised keeps its member, its time and its place, now as today's turn.
+    expect(after.turn?.turn).toBe(before.next_turn?.turn);
+    expect([after.turn?.candidate, after.turn?.applies_at]).toEqual([before.next_turn?.candidate, before.next_turn?.applies_at]);
+    for (const turn of [before.turn, before.next_turn]) {
+      const kept = after.turns?.records.find((record) => record.turn === turn?.turn && record.position === 0);
+      expect([kept?.candidate, kept?.applies_at]).toEqual([turn?.candidate, turn?.applies_at]);
+    }
+    // The change shows from the next boundary.
+    expect(after.next_turn?.candidate).toBe(challenger);
+    expect(after.next_turn?.applies_at).toBe((after.turn?.applies_at ?? 0) + DAY_MS);
+  });
 });

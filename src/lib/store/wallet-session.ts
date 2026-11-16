@@ -17,7 +17,7 @@ import { NO_SETUP, NO_USDC } from "./state";
 import type { ConsoleStore } from "./store";
 
 /** The state a wallet change clears: everything read or streamed for the account before. */
-export const NO_ACCOUNT = { account: null, eligibility: null, queue: [], history: [], quotes: {}, quoteError: null, quoted: [], authorizations: [], approvals: [], approvalsNext: null, payoutsRead: null, payoutsProblem: null, paid: [], unpaid: [], entitlement: null, emissionsVault: null };
+export const NO_ACCOUNT = { account: null, eligibility: null, queue: [], history: [], quotes: {}, quoteError: null, quoted: [], authorizations: [], approvals: [], approvalsNext: null, payoutsRead: null, payoutChecks: {}, payoutsProblem: null, paid: [], unpaid: [], entitlement: null, emissionsVault: null };
 
 /** The rest a change of connection clears: its key's expiry and refusal, its setup, its wallet's USDC, and a wallet request the old wallet may never answer, so the next connection's buttons are not stuck behind it. */
 export const NO_SESSION = { sessionExpiresAt: 0, sessionRefusal: null, setup: NO_SETUP, walletUsdc: NO_USDC, busy: false, prompt: null, promptAt: null };

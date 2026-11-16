@@ -7,7 +7,7 @@ import { LiveEngineClient } from "./live";
 import type { DeploymentReads, VaultFacts } from "./registry";
 import { releaseName } from "./release-check";
 import { SIGNER_SUPERSEDED } from "./signer-naming";
-import { acceptAll, FakeNode, FakeScheduler, FakeSocket, settle } from "./test-kit";
+import { acceptAll, FakeNode, FakeScheduler, FakeSocket, OPERATOR_CLAIM, settle } from "./test-kit";
 import { vectorResponse } from "./test-vectors";
 
 /** The enclave `acceptAll` reads out of a mock attestation. */
@@ -51,5 +51,42 @@ describe("a stream under a signer the wallet's vault read puts aside", () => {
     expect(events).not.toContainEqual({ type: "checkpoint", seq: 10 });
     expect(events).toContainEqual({ type: "problem", reason: SIGNER_SUPERSEDED });
     expect(socket.closed).toBe(true);
+  });
+});
+
+describe("a stream opened under a key a later epoch replaces", () => {
+  it("delivers nothing more from it once the node's own word names another key at the next epoch", async () => {
+    const node = new FakeNode();
+    const held = { address: ENCLAVE };
+    node.attestation(() => held.address);
+    const verifier = { ...acceptAll, verifyMockAttestation: () => ({ ok: true as const, enclave: { address: held.address, release: null, config: null } }) };
+    const operator = (epoch: number, address: string) => node.signed(OPERATOR_CLAIM, () => ({
+      status: 200, signature: "0x", timeMs: 1, seq: 1,
+      body: JSON.stringify({ operator: ENCLAVE, pending_rotation: null, rotation_enabled: true, last_election: null, enclave: address, signer: { epoch, address } }),
+    }));
+    const sockets: FakeSocket[] = [];
+    const client = new LiveEngineClient({
+      origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: vectorResponse("markets").vault, heartbeatMs: 5_000,
+      loadVerifier: async () => verifier, releases: [], acceptsMock: true, fetch: node.fetch,
+      openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; }, scheduler: new FakeScheduler(), nowMs: () => 1, challenge: () => "ab".repeat(32),
+    });
+    const events: ClientEvent[] = [];
+    client.watch((event) => events.push(event));
+    operator(4, ENCLAVE);
+    expect(await client.verify()).toEqual({ kind: "mock" });
+    client.subscribe(() => {});
+    await settle();
+    const socket = sockets[0];
+    if (socket === undefined) throw new Error("the stream opened no socket");
+    socket.open();
+    socket.receive(frame(0, 9));
+    expect(events).toContainEqual({ type: "checkpoint", seq: 9 });
+    // The node now signs as another enclave, which its own word names at epoch 5; the old key's stream is still open.
+    held.address = OTHER;
+    operator(5, OTHER);
+    expect(await client.verify()).toEqual({ kind: "mock" });
+    socket.receive(frame(1, 10));
+    expect(events).not.toContainEqual({ type: "checkpoint", seq: 10 });
+    expect(events).toContainEqual({ type: "problem", reason: SIGNER_SUPERSEDED });
   });
 });

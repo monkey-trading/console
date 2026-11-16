@@ -4,7 +4,8 @@ import { EngineError, type EngineClient } from "./client";
 import { hostnameOrigin, listedOrigins, type Deploy } from "./deploy";
 import type { Scheduler } from "./live-stream";
 import type { OperatorRoute } from "./stats-types";
-import type { NamedOperator } from "./registry";
+import { RefusedAnswer } from "./trust-errors";
+import type { DeploymentReads, NamedOperator } from "./registry";
 
 /** What the console knows of the node it should talk to; `origin` is the node it talks to now. */
 export type FollowStatus =
@@ -38,13 +39,31 @@ export function soonest(a: number | null, b: number | null): number | null {
   return a === null ? b : b === null ? a : Math.min(a, b);
 }
 
-/** The enclave answered a signed read: an enclave the vault does not name serves only its attestation, and a node that predates the route still signs its 404. */
-export async function signedAnswer(client: EngineClient): Promise<void> {
+/** The enclave answered a signed read, and its route: an enclave the vault does not name serves only its attestation, and a node that predates the route still signs its 404, which answers null. */
+export async function signedAnswer(client: EngineClient): Promise<OperatorRoute | null> {
   try {
-    await client.stats.operator();
+    return await client.stats.operator();
   } catch (error) {
     if (!(error instanceof EngineError && error.status === 404)) throw error;
+    return null;
   }
+}
+
+/** The highest signer a no-wallet visit has read named, by epoch, which no node it moves to may lag behind. */
+export type SignerFloor = { epoch: number; address: string };
+
+/** `floor` raised by the signer a route names, from a refused trial's or from the node in use's. */
+export function raised(floor: SignerFloor | null, route: { signer?: { epoch: number; address: string } }): SignerFloor | null {
+  const named = route.signer;
+  return named !== undefined && (floor === null || named.epoch > floor.epoch) ? { epoch: named.epoch, address: named.address.toLowerCase() } : floor;
+}
+
+/** Why a node whose route is `route` is not taken after a refused node named `floor`: its own word on the signer is older than that, names another key at that epoch, or is absent. */
+export function lagging(floor: SignerFloor | null, route: OperatorRoute | null): string | null {
+  if (floor === null) return null;
+  const named = route?.signer;
+  if (named !== undefined && (named.epoch > floor.epoch || (named.epoch === floor.epoch && named.address.toLowerCase() === floor.address))) return null;
+  return "A node the console tried named a newer signer than this node states, so this node's answers are not taken yet.";
 }
 
 /** How long the wallet may take over one chain read before the check gives up on it, in milliseconds; a wallet asleep must not hold the follower from the next wallet. */
@@ -78,6 +97,8 @@ export interface NodeSaid {
   rotationEnabled: boolean;
   read: boolean;
   turns: readonly SaidTurn[];
+  /** The signer the route says the vault names, which a node refused for it still says. */
+  signer?: { epoch: number; address: string };
 }
 
 export const NOTHING_SAID: NodeSaid = { turnAtMs: null, hostname: null, rotationEnabled: true, read: false, turns: [] };
@@ -86,5 +107,45 @@ export const NOTHING_SAID: NodeSaid = { turnAtMs: null, hostname: null, rotation
 export function nodeSaid(route: OperatorRoute, nowMs: number): NodeSaid {
   const at = route.next_turn?.applies_at;
   const turns = [route.turn, route.next_turn].flatMap((turn) => (turn ? [{ candidate: turn.candidate.toLowerCase(), atMs: turn.applies_at }] : []));
-  return { turnAtMs: at !== undefined && at > nowMs ? at : null, hostname: route.api_hostname?.hostname ?? null, rotationEnabled: route.rotation_enabled, read: true, turns };
+  return { turnAtMs: at !== undefined && at > nowMs ? at : null, hostname: route.api_hostname?.hostname ?? null, rotationEnabled: route.rotation_enabled, read: true, turns, ...(route.signer === undefined ? {} : { signer: route.signer }) };
+}
+
+/** How many nodes past the one in use a visit with no wallet follows in one run: each refused node's signed route names the next. */
+export const MAX_SUCCESSIVE_MOVES = 3;
+
+/** The signed route a refused node answers with: the one `error` carries, or, when the node answered a verdict instead of failing, the one its refusal keeps; null for a node that is not refused. */
+export async function refusedRoute(scheduler: Scheduler, client: EngineClient, error?: unknown): Promise<OperatorRoute | null> {
+  if (error instanceof RefusedAnswer) return error.answer;
+  if (error !== undefined) return null;
+  try {
+    await bounded(scheduler, client.stats.operator({ limit: 1 }));
+    return null;
+  } catch (read) {
+    return read instanceof RefusedAnswer ? read.answer : null;
+  }
+}
+
+/** Where `route` says the operator runs, when it is a node not yet `tried` and within the bound on successive moves; or that the build does not list it. */
+export function successor(deploy: Pick<Deploy, "origin" | "candidateOrigins">, route: OperatorRoute, tried: readonly string[]): { origin: string } | { unlisted: string | null } | null {
+  const hostname = route.api_hostname?.hostname;
+  if (hostname === undefined || tried.length > MAX_SUCCESSIVE_MOVES) return null;
+  const target = operatorTarget(deploy, { hostname, rotationEnabled: route.rotation_enabled });
+  if ("unlisted" in target) return target;
+  return target.origin === null || tried.includes(target.origin) ? null : { origin: target.origin };
+}
+
+export interface FollowerDeps {
+  deploy: Pick<Deploy, "origin" | "candidateOrigins">;
+  /** The node the session starts on. */
+  origin: string;
+  /** The connected wallet's chain reads; null with no wallet that reads a chain. */
+  chain(): DeploymentReads | null;
+  /** A new client for the node at `origin`. */
+  open(origin: string): EngineClient;
+  /** Whether a wallet request is in flight, which a move would orphan. */
+  busy(): boolean;
+  /** Moves the session to `client`, already verified. */
+  adopt(client: EngineClient, origin: string): void;
+  scheduler: Scheduler;
+  nowMs(): number;
 }

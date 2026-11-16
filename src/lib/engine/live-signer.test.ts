@@ -152,6 +152,26 @@ describe("an answer in flight", () => {
     await expect(inFlight).rejects.toThrow(SIGNER_SUPERSEDED);
   });
 
+  it("is discarded when the node now signs as the key a later epoch names, with no wallet to say so", async () => {
+    const held = { address: ENCLAVE };
+    const attests: Verifier = { ...acceptAll, verifyMockAttestation: () => ({ ok: true, enclave: { address: held.address, release: null, config: null } }) };
+    const { live, node, operator, reply, gates } = client(attests);
+    operator({ epoch: 5, address: ENCLAVE });
+    reply("/v1/markets", []);
+    await live.verify();
+    let release: () => void = () => undefined;
+    gates.markets = new Promise<void>((resolve) => { release = resolve; });
+    const inFlight = live.markets();
+    await settle();
+    // The node at the same origin now signs as another enclave, and its own word names that key at the next epoch.
+    held.address = OTHER;
+    node.attestation(() => OTHER);
+    operator({ epoch: 6, address: OTHER }, OTHER);
+    await expect(live.verify()).resolves.toMatchObject({ kind: "mock" });
+    release();
+    await expect(inFlight).rejects.toThrow(SIGNER_SUPERSEDED);
+  });
+
   it("ends an archive scan under a signer the vault stopped naming, on the next frame", async () => {
     const { live, operator, reply, sockets } = client();
     operator({ epoch: 5, address: ENCLAVE });
