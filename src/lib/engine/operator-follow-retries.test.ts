@@ -89,3 +89,21 @@ describe("after a chain read that failed", () => {
     expect(kit.operatorReads.count).toBe(before + 2);
   });
 });
+
+describe("a trial another wallet comes during", () => {
+  it("drops the pause it began, whatever the trial comes to, so the new wallet's read decides", async () => {
+    for (const verdict of [{ kind: "unverified", reason: "not yet" } as const, { kind: "verified", release: "r", config: "c", address: "0xk" } as const]) {
+      const kit = rig();
+      let release = () => {};
+      kit.trial.verify = () => new Promise((resolve) => { release = () => resolve(verdict); });
+      const checking = kit.follower.check();
+      await settle();
+      expect(kit.follower.getSnapshot().kind, verdict.kind).toBe("waiting");
+      kit.held.chain = { ...kit.reads };
+      release();
+      await checking;
+      expect(kit.follower.getSnapshot(), verdict.kind).toEqual({ kind: "pinned", origin: "https://build.example" });
+      expect(kit.adopted, verdict.kind).toEqual([]);
+    }
+  });
+});

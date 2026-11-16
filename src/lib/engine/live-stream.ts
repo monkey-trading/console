@@ -1,6 +1,7 @@
 /** The signed WebSocket stream: verifies each frame in order, tracks staleness, and reconnects at the live end. */
 
 import type { FeedStatus } from "./attestation";
+import { SIGNER_SUPERSEDED } from "./signer-naming";
 import { CLOCK_TOLERANCE_MS } from "./transport";
 import type { NodeTrust } from "./trust";
 import type { Address, MarketId, MarketQuote, SignedWithdrawal, StreamMessage } from "./types";
@@ -166,6 +167,8 @@ export class LiveStream {
       if (frame.n !== expected) return this.fail(`The stream skipped: expected frame ${expected} but received ${frame.n}, so a frame was dropped, repeated or reordered.`);
       const checked = frames.verify(text);
       if (!checked.ok) return this.fail(`A stream frame did not verify: ${checked.reason}.`, signer);
+      // The vault named another signer since this connection opened: its frames are refused, valid as their signatures are.
+      if (this.deps.trust.refuses(signer)) return this.fail(SIGNER_SUPERSEDED);
       const skewMs = frame.time - this.deps.nowMs();
       if (Math.abs(skewMs) > CLOCK_TOLERANCE_MS) {
         this.deps.trust.clockWrong(skewMs);

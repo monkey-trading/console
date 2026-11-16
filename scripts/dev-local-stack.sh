@@ -19,7 +19,8 @@
 # contract and a log-head relayer (Anvil account 10).
 #
 # GOVERNANCE=1, with SECOND_ENGINE=1, sets up parameter votes as the engine's V56 has them: the operator
-# schedule and the vote contract, a third candidate, and the first engine's candidate, the second
+# schedule and the vote contract, a third candidate, a standby key for each candidate that the vault's
+# signer vouches for (a close adopts no member without one), and the first engine's candidate, the second
 # engine's (Anvil account 4) and the third (Anvil account 6) staking 40, 25 and 34 thousand MONKEY, the
 # second delegating 1 thousand of its 25 to the third. The chain's clock moves past the registry's
 # one-day epoch and the set's seven-day notice, so the three are the rotation set in effect, and the
@@ -565,13 +566,34 @@ if [[ "$second_engine" == 1 ]]; then
     # The third candidate's release is a stand-in no engine runs: it only ever votes.
     step_log="$work/votes-setup.log"
     deployed_receiver="$(create --private-key "$vote_deployer_key" src/SeedReceiver.sol:SeedReceiver --constructor-args "$relayer" 1606824023)"
-    deployed_schedule="$(create --private-key "$vote_deployer_key" src/OperatorSchedule.sol:OperatorSchedule --constructor-args "$registry" "$seed_receiver")"
+    # The schedule reads the rotating nodes' LogHeads for its heartbeat rule, which takes the engine's scenario values: 60 s slots,
+    # 30 s tolerance, five misses and 200 blocks, within bounds of (30, 5, 2, 10) and (120, 60, 9, 256), and a take window of
+    # 8 slots within (8, 24): its minimum must exceed the switch budget plus one interval plus a head's inclusion, which the
+    # tolerance bounds, at the rule's shortest interval and longest tolerance. The switch budget is 120 s and Arbitrum's block
+    # time 250 ms. No node here runs a liveness caller, and no turn is drawn, so neither the promotion nor the skip fires.
+    deployed_schedule="$(create --private-key "$vote_deployer_key" src/OperatorSchedule.sol:OperatorSchedule --constructor-args "$registry" "$seed_receiver" \
+      "$logheads" "(60,30,5,200)" "(30,5,2,10)" "(120,60,9,256)" "(8,8,24)" 120 250)"
     deployed_vote="$(create --private-key "$vote_deployer_key" src/ParameterVote.sol:ParameterVote \
       --constructor-args "$schedule" "$vote_normal_window" "$vote_fast_window")"
     [[ "$(lower "$deployed_receiver")" == "$(lower "$seed_receiver")" && "$(lower "$deployed_schedule")" == "$(lower "$schedule")" &&
       "$(lower "$deployed_vote")" == "$(lower "$vote")" ]] || die "the vote's contracts did not deploy where the node config names them"
     register_candidate "$third_candidate" "$third_candidate_key" "$(hex_bytes 7c 48)" "$(hex_bytes 7c 32)" localhost:9 localhost:9
     govern "$registry" "$(cast calldata 'setSchedule(address)' "$schedule")"
+    # A close adopts only candidates holding a standby key the vault's signer vouched for. The published mock key signs each
+    # vouch while the vault still names it, before the first engine's sealed key takes its place. No promotion runs here, so
+    # nothing ever uses these keys: each is the address of a stand-in key, 32 bytes of `$4`.
+    register_standby() {
+      local candidate="$1" release standby expiry digest vouch
+      release="$(cast keccak "${2}${3#0x}")"
+      standby="$(address "$(hex_bytes "$4" 32)")"
+      expiry=$(($(cast block latest --field timestamp --rpc-url "$rpc") + 3600))
+      digest="$(cast call "$schedule" 'vouchDigest(address,address,bytes32,uint64,uint64)(bytes32)' "$candidate" "$standby" "$release" 1 "$expiry" --rpc-url "$rpc")"
+      vouch="$(cast wallet sign --no-hash --private-key "$(hex_bytes 43 32)" "$digest")"
+      send_as "$candidate" "$schedule" 'registerStandby(address,uint64,uint64,bytes)' "$standby" 1 "$expiry" "$vouch"
+    }
+    register_standby "$operator" "$first_digest" "$first_config_hash" 61
+    register_standby "$second_candidate" "$second_digest" "$second_config_hash" 62
+    register_standby "$third_candidate" "$(hex_bytes 7c 48)" "$(hex_bytes 7c 32)" 63
   fi
   govern "$registry" "$(cast calldata 'setRotation(bool)' true)"
   first_release="$(cast keccak "${first_digest}${first_config_hash#0x}")"

@@ -113,6 +113,11 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
     case "admin_applied": return null;
     case "rotation_switched": return null;
     case "operator_elected": return null;
+    case "rotation_set_adopted": return null;
+    case "turn_assigned": return null;
+    case "turn_refused": return null;
+    case "turn_taken": return null;
+    case "turn_taken_rejected": return null;
     // A vote's outcome is the Staking page's Governance tab's to show, not the viewer's activity.
     case "proposal_scheduled": return null;
     case "restriction_applied": return null;

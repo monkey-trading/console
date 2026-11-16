@@ -15,6 +15,7 @@ import { EpochReads } from "@/lib/staking/epoch-reads";
 import { GovernanceReads } from "@/lib/staking/governance-reads";
 import { DistributionHistoryReads } from "@/lib/staking/history-reads";
 import { MemberVoteReads } from "@/lib/staking/member-vote-reads";
+import { TurnHistoryReads } from "@/lib/staking/turn-history-reads";
 import { NO_TABLE_VIEW, operatorsView, type TableViewState } from "@/lib/staking/operator-table";
 import type { ConsoleState } from "@/lib/store/state";
 import { formatStamp } from "@/lib/time";
@@ -89,7 +90,7 @@ function Block({ state, operators, read, editing = NO_EDITING, table = NO_TABLE_
   const governance = new GovernanceReads(store);
   const reads: StakingReads = {
     panel, operators: operatorsReads, epochs: new EpochReads(store), delegations: delegationReads, history: new DistributionHistoryReads(store),
-    governance, memberVotes: new MemberVoteReads(store, operatorsReads, governance, delegationReads),
+    governance, memberVotes: new MemberVoteReads(store, operatorsReads, governance, delegationReads), turns: new TurnHistoryReads(store),
     operatorsSettled: true, delegateEditing: editing, setDelegateEditing: () => undefined, table, setTable: () => undefined, typedSlot, setTypedSlot: () => undefined,
   };
   return createElement(StakingContext.Provider, { value: reads },

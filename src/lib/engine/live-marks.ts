@@ -134,6 +134,7 @@ export class MarkFolder {
  * Error cases:
  * - the first entries: a frame is out of order or does not verify, or the connection fails
  * - a failure or the time budget after entries that yielded no marks
+ * - `dead` holds when the read ends, whatever ended it: "The scan was cancelled."
  */
 export function scanForMarks(deps: ScanDeps, fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>, dead?: () => boolean): Promise<ScannedMark[]> {
   return new Promise((resolve, reject) => {
@@ -152,15 +153,15 @@ export function scanForMarks(deps: ScanDeps, fromSeq: number, budget: ScanBudget
       deps.scheduler.clearTimeout(timer);
       socket.onmessage = socket.onclose = socket.onerror = null;
       socket.close();
-      // A scan that read anything answers with what it kept; an empty read fails, on error or interruption.
-      if (error && (last === null || folder.marks.length === 0)) reject(error);
+      // A scan its caller gave up on answers with nothing, however it ended; one that read anything answers with what it kept; an empty read fails, on error or interruption.
+      if (dead?.()) reject(new Error("The scan was cancelled."));
+      else if (error && (last === null || folder.marks.length === 0)) reject(error);
       else resolve(nearestHead(folder.marks, budget.coverMs));
     };
     const timer = deps.scheduler.setTimeout(() => finish(new Error("scanning the log for the chart's history took too long.")), budget.maxMs);
     socket.onmessage = (event) => {
       if (done) return;
-      // The store stopped or restarted while the read ran: close the socket and let the caller
-      // discard the partial read.
+      // The store stopped or restarted, or the signer was refused, while the read ran: close the socket and answer nothing.
       if (dead?.()) return finish(new Error("The scan was cancelled."));
       const text = typeof event.data === "string" ? event.data : null;
       const frame = text === null ? null : parseSignedFrame(text);

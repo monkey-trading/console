@@ -2,7 +2,8 @@
  * The Staking page's operator table (monkey-trading/console#271, #279): one row per candidate the
  * node's signed `GET /v1/operators` lists, with the role the registry gives it, and the search, sort
  * and paging the table offers, done in memory over the whole list so they hold at hundreds of rows.
- * Roles follow `OperatorRegistry.sol`: the operator in effect (`operatorInEffect`), the candidate a
+ * With the rotation set the node mirrors (monkey-trading/console#280) each row also says whether it is a
+ * member and what share of turns its weight draws. Roles follow `OperatorRegistry.sol`: the operator in effect (`operatorInEffect`), the candidate a
  * pending election or promotion names (`pendingElection`), and the standby the liveness rule
  * promotes (`_standby`).
  */
@@ -13,6 +14,7 @@ import { shareBps } from "../monkey/figures";
 import { shownHostname } from "./hostnames";
 import { ADDRESS } from "./candidate-choice";
 import { proposalsView, type ProposalsView } from "./governance";
+import { operatorCells } from "./operator-cells";
 
 /** `elected` and `promoted` wait on `pendingElection`; `standby` is the one `promote()` would pick now; `unlisted` is a Yours row omitted by a verified list; `unknown` has no list to compare. */
 export type OperatorRole = "active" | "elected" | "promoted" | "standby" | "candidate" | "unlisted" | "unknown";
@@ -37,6 +39,16 @@ export interface OperatorRow {
   endpoint: string | null;
   /** Registrations before this one, which breaks a tie in votes; null where it never registered. */
   registration: number | null;
+  /** Its place in the rotation set in effect (monkey-trading/console#280); null while no set is known. */
+  membership: RowMembership | null;
+}
+
+/** A row's place in the rotation set: whether it is a member, the weight its turns are drawn by, and its expected share of turns. */
+export interface RowMembership {
+  inSet: boolean;
+  /** MONKEY base units delegated to it when the set was adopted; zero outside the set. */
+  weight: bigint;
+  turnShareBps: number;
 }
 
 /** The operator list as the page uses it: amounts as bigints, addresses lowercase, every row's role worked out. */
@@ -57,9 +69,9 @@ export interface OperatorsView {
   proposalsProblem: string | null;
 }
 
-export type SortId = "role" | "votes-desc" | "votes-asc" | "bond-desc" | "bond-asc" | "name-asc" | "name-desc";
+export type SortId = "role" | "votes-desc" | "votes-asc" | "bond-desc" | "bond-asc" | "turns-desc" | "turns-asc" | "name-asc" | "name-desc";
 /** The column a sort orders by, and which way; the role order is the registry's, neither way. */
-export type SortColumn = "role" | "votes" | "bond" | "name";
+export type SortColumn = "role" | "votes" | "bond" | "turns" | "name";
 
 export const SORTS: readonly { value: SortId; label: string; column: SortColumn; direction: "ascending" | "descending" | "other" }[] = [
   { value: "role", label: "Role, then delegated stake", column: "role", direction: "other" },
@@ -67,6 +79,8 @@ export const SORTS: readonly { value: SortId; label: string; column: SortColumn;
   { value: "votes-asc", label: "Delegated stake, least first", column: "votes", direction: "ascending" },
   { value: "bond-desc", label: "Self-bond, most first", column: "bond", direction: "descending" },
   { value: "bond-asc", label: "Self-bond, least first", column: "bond", direction: "ascending" },
+  { value: "turns-desc", label: "Share of turns, most first", column: "turns", direction: "descending" },
+  { value: "turns-asc", label: "Share of turns, least first", column: "turns", direction: "ascending" },
   { value: "name-asc", label: "Hostname, A to Z", column: "name", direction: "ascending" },
   { value: "name-desc", label: "Hostname, Z to A", column: "name", direction: "descending" },
 ];
@@ -136,7 +150,7 @@ export function operatorsView(list: OperatorList): OperatorsView {
     const votes = units(candidate.votes, "votes");
     return {
       address: address(candidate.address), hostname: shownHostname(candidate.api_hostname), registeredHostname: candidate.api_hostname, role: "candidate", listed: true, eligible: candidate.eligible,
-      votes, shareBps: shareBps(votes, totalStaked), bond: units(candidate.self_bond, "a self-bond"), release: candidate.release.toLowerCase(), endpoint: candidate.handover_endpoint, registration: candidate.registration,
+      votes, shareBps: shareBps(votes, totalStaked), bond: units(candidate.self_bond, "a self-bond"), release: candidate.release.toLowerCase(), endpoint: candidate.handover_endpoint, registration: candidate.registration, membership: null,
     };
   });
   const standby = standbyOf(listed, inEffect, list.rotation_enabled && pending === null && !list.pending_promotion);
@@ -149,7 +163,7 @@ export function operatorsView(list: OperatorList): OperatorsView {
   if (!rows.some((row) => row.address === inEffect)) {
     rows.push({
       address: inEffect, hostname: null, registeredHostname: "", role: "active", listed: false, eligible: false, votes: null, shareBps: 0,
-      bond: null, release: list.operator_in_effect.release.toLowerCase(), endpoint: null, registration: null,
+      bond: null, release: list.operator_in_effect.release.toLowerCase(), endpoint: null, registration: null, membership: null,
     });
   }
   let proposals: ProposalsView | null = null;
@@ -162,9 +176,12 @@ export function operatorsView(list: OperatorList): OperatorsView {
   return { block: { number: list.block.number, hash: list.block.hash, timeMs: list.block.time_ms }, rotationEnabled: list.rotation_enabled, totalStaked, inEffect, pending, rows, proposals, proposalsProblem };
 }
 
-/** Whether `row` holds `query` (lowercase, trimmed) in its hostname, address, release or endpoint. */
+/** Whether `row` holds `query` (lowercase, trimmed) in its hostname, address, release or endpoint, or in what its rotation set columns say. */
 function matches(row: OperatorRow, query: string): boolean {
-  return [row.hostname, row.address, row.release, row.endpoint].some((field) => field !== null && field.toLowerCase().includes(query));
+  // Each rotation figure as its cell shows it, so what a staker reads in the weight and share columns is what a search finds.
+  const cells = operatorCells(row);
+  const rotation = row.membership === null ? [] : [cells.membership, cells.setWeight, cells.turnShare];
+  return [row.hostname, row.address, row.release, row.endpoint, ...rotation].some((field) => field !== null && field.toLowerCase().includes(query));
 }
 
 /** Orders two bigints that may be absent, an absent one after every value. */
@@ -193,6 +210,8 @@ function comparator(sort: SortId): (a: OperatorRow, b: OperatorRow) => number {
       case "votes-asc": return byAmount(a.votes, b.votes, false);
       case "bond-desc": return byAmount(a.bond, b.bond, true);
       case "bond-asc": return byAmount(a.bond, b.bond, false);
+      case "turns-desc": return byAmount(a.membership?.weight ?? null, b.membership?.weight ?? null, true);
+      case "turns-asc": return byAmount(a.membership?.weight ?? null, b.membership?.weight ?? null, false);
       case "name-asc": return byName(a.hostname, b.hostname, false);
       case "name-desc": return byName(a.hostname, b.hostname, true);
       default: {
@@ -254,7 +273,7 @@ export function countText(view: TableView, search: string): string {
 
 /** A chain-only row, with membership unknown without a list or unlisted when a verified list omits it. */
 function unlistedRow(address: string, hasList: boolean): OperatorRow {
-  return { address, hostname: null, registeredHostname: "", role: hasList ? "unlisted" : "unknown", listed: false, eligible: false, votes: null, shareBps: 0, bond: null, release: "", endpoint: null, registration: null };
+  return { address, hostname: null, registeredHostname: "", role: hasList ? "unlisted" : "unknown", listed: false, eligible: false, votes: null, shareBps: 0, bond: null, release: "", endpoint: null, registration: null, membership: null };
 }
 
 /**

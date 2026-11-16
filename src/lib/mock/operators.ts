@@ -15,6 +15,7 @@ import type { OperatorRoute } from "../engine/stats-types";
 import { MONKEY_UNIT } from "../format";
 import { mulberry32, SEED } from "../prng";
 import { applyChange, delegatedOf, delegationTo, unstakeTakes } from "../staking/delegations";
+import { mockRotation } from "./rotation";
 import type { MockState } from "./state";
 
 const DAY_MS = 86_400_000;
@@ -109,12 +110,12 @@ export function mockChainReads(state: MockState): DeploymentReads {
   };
 }
 
-/** `GET /v1/operator`: the key in effect and the election as the log mirrors it. */
-export function operatorRoute(state: MockState): OperatorRoute {
+/** `GET /v1/operator`: the key in effect, the election and the daily rotation as the log mirrors them; `params` page the turn history. */
+export function operatorRoute(state: MockState, params: { before?: number; limit?: number } = {}): OperatorRoute {
   const operator = state.operators.adminKey(state.now);
   const { pending } = state.operators.named(state.now);
   const elected = pending === null ? null : { epoch: pending.epoch, candidate: pending.candidate, admin_key: pending.adminKey, effective_at: pending.effectiveAtMs, registry_effective_at: pending.effectiveAtMs };
-  return { operator, pending_rotation: elected === null ? null : { address: elected.admin_key, effective_at: elected.effective_at }, rotation_enabled: true, last_election: elected };
+  return { operator, pending_rotation: elected === null ? null : { address: elected.admin_key, effective_at: elected.effective_at }, rotation_enabled: true, last_election: elected, ...mockRotation(state, params) };
 }
 
 /** What the visitor's accounts delegate to `candidate`, as `Staking.votes` adds them. */

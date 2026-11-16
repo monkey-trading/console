@@ -168,8 +168,12 @@ export class MockState {
   /** The vote contract and what the node mirrors of it, anchored where the node's clock starts. */
   governance: MockGovernance;
 
+  /** Where the rotation's set times are counted from: the node's clock start, which a demo's backstory begins before. */
+  rotationFromMs: number;
+
   /** Starts at `startMs` with every market at its starting index; open per its schedule. */
   constructor(startMs: number) {
+    this.rotationFromMs = startMs;
     this.now = startMs;
     this.monkey = new MockMonkey(startMs);
     this.operators = new MockOperators(startMs);

@@ -8,15 +8,20 @@
  *
  * Chain reads cost the wallet's provider money, so nothing here polls: it reads when a wallet
  * connects, on an election event in the stream, when the feed or the enclave fails, right after a
- * pending election's effective time, soon after a read that failed, waiting longer each time up to the
+ * pending election's effective time or just after the node's next daily turn begins (monkey-trading/console#280), soon after a read that failed, waiting longer each time up to the
  * slow read, and otherwise every five minutes while the tab is visible.
  */
 
 import type { AttestationStatus } from "./attestation";
-import { EngineError, type EngineClient, type Unsubscribe } from "./client";
-import { hostnameOrigin, listedOrigins, type Deploy } from "./deploy";
+import type { EngineClient, Unsubscribe } from "./client";
+import type { Deploy } from "./deploy";
 import type { Scheduler } from "./live-stream";
+import { ROTATION_EVENTS } from "./rotation-events";
+import { NodeWord } from "./operator-follow-node";
+import { bounded, operatorTarget, signedAnswer, soonest, type FollowStatus, type NodeSaid } from "./operator-follow-status";
 import type { DeploymentReads, NamedOperator } from "./registry";
+
+export { operatorTarget, type FollowStatus } from "./operator-follow-status";
 
 /** The slow read, in milliseconds. */
 export const SLOW_READ_MS = 5 * 60_000;
@@ -24,35 +29,6 @@ export const SLOW_READ_MS = 5 * 60_000;
 export const RETRY_MS = 30_000;
 /** How long after a pending election's effective time it is read again, so the chain has passed it, in milliseconds. */
 const AFTER_EFFECT_MS = 5_000;
-/** How long the wallet may take over one chain read before the check gives up on it, in milliseconds; a wallet asleep must not hold the follower from the next wallet. */
-const CHAIN_READ_MS = 30_000;
-
-/** What the console knows of the node it should talk to; `origin` is the node it talks to now. */
-export type FollowStatus =
-  /** No chain read decides: no wallet reads a chain, or the build names no registry. */
-  | { kind: "pinned"; origin: string }
-  /** The node in use is the one the chain names. */
-  | { kind: "following"; origin: string }
-  /** The chain names `target`, which has not verified yet; the node in use stays. */
-  | { kind: "waiting"; origin: string; target: string; reason: string }
-  /** The chain names an operator whose hostname this build does not list; `hostname` is null when it is not even a plain host. */
-  | { kind: "unlisted"; origin: string; hostname: string | null }
-  /** The chain read failed; the node in use stays, and it is tried again. */
-  | { kind: "failed"; origin: string; reason: string };
-
-/**
- * Where the chain's answer says to connect: the named operator's registered origin when the build
- * lists it, or the build's own node when it never registered a hostname. Turning rotation off leaves
- * the settled operator named, so it says nothing about the host. With rotation on, a hostname the
- * build does not list is a console that needs updating; with it off the operator may be the deployment's own.
- */
-export function operatorTarget(deploy: Pick<Deploy, "origin" | "candidateOrigins">, named: NamedOperator): { origin: string | null } | { unlisted: string | null } {
-  if (named.hostname === null) return { origin: deploy.origin };
-  const origin = hostnameOrigin(named.hostname);
-  if (origin !== null && listedOrigins(deploy).includes(origin)) return { origin };
-  if (!named.rotationEnabled) return { origin: deploy.origin };
-  return { unlisted: origin === null ? null : named.hostname.toLowerCase() };
-}
 
 export interface FollowerDeps {
   deploy: Pick<Deploy, "origin" | "candidateOrigins">;
@@ -70,15 +46,6 @@ export interface FollowerDeps {
   nowMs(): number;
 }
 
-/** The enclave answered a signed read: an enclave the vault does not name serves only its attestation, and a node that predates the route still signs its 404. */
-async function signedAnswer(client: EngineClient): Promise<void> {
-  try {
-    await client.stats.operator();
-  } catch (error) {
-    if (!(error instanceof EngineError && error.status === 404)) throw error;
-  }
-}
-
 export class OperatorFollower {
   private state: FollowStatus;
   private origin: string;
@@ -90,8 +57,10 @@ export class OperatorFollower {
   private timer: unknown = null;
   private isHidden: (() => boolean) | null = null;
   private wait = RETRY_MS;
-  /** The pending election's effective time, the one chain event that has a known time. */
+  /** The pending election's effective time, a chain event that has a known time. */
   private effectiveAtMs: number | null = null;
+  /** When the node says its next daily turn begins, another; null when it said none. */
+  private turnAtMs: number | null = null;
   /** The client being tried, kept between attempts so its verifier loads once; dropped when the target changes. */
   private trial: { origin: string; client: EngineClient } | null = null;
   /** The client of the node in use, which a move of the vault's signer judges again. */
@@ -100,8 +69,11 @@ export class OperatorFollower {
   private refused = false;
   /** Whether a timed read was skipped in a hidden tab, and is owed when the tab is seen. */
   private skipped = false;
+  /** What the node in use says of where the operator runs. */
+  private readonly word: NodeWord;
 
   constructor(private readonly deps: FollowerDeps) {
+    this.word = new NodeWord(deps.scheduler, deps.nowMs);
     this.origin = deps.origin;
     this.state = { kind: "pinned", origin: deps.origin };
   }
@@ -143,7 +115,7 @@ export class OperatorFollower {
       if (refused || event.status.kind === "mock" || event.status.kind === "verified" || event.status.kind === "attested") this.refused = refused;
     });
     const stopStream = client.subscribe((message) => {
-      if (message.events.some((event) => event.type === "operator_elected" || event.type === "rotation_switched")) this.poke();
+      if (message.events.some((event) => ROTATION_EVENTS.has(event.type))) this.poke();
     });
     return () => {
       stopEvents();
@@ -188,18 +160,28 @@ export class OperatorFollower {
     return run;
   }
 
+  /** Reads the chain, and beside it the node's word on its next turn, so a node that stalls holds nothing from the chain. */
   private async run(): Promise<void> {
     this.disarm();
+    const node = this.word.read(this.current);
+    try {
+      await this.readChain(node);
+    } finally {
+      this.turnAtMs = (await node).turnAtMs;
+    }
+  }
+
+  private async readChain(node: Promise<NodeSaid>): Promise<void> {
     this.lastCheckAt = this.deps.nowMs();
     const chain = this.deps.chain();
-    if (chain === null) return this.settled({ kind: "pinned", origin: this.origin });
+    if (chain === null) return this.followNode(await node);
     const reason = (error: unknown) => (error instanceof Error ? error.message : "the read failed");
     // First, whatever the registry goes on to answer: a retirement or a promotion's `setSigner` ends
     // the verdict on the node in use whatever comes of the operator's node. A move of the release alone
     // does not: the incumbent holds the vault's signer key and keeps sequencing until its successor has taken it.
     let vaultFailed: string | null = null;
     try {
-      const facts = await this.bounded(chain.vault());
+      const facts = await bounded(this.deps.scheduler, chain.vault());
       if (this.deps.chain() !== chain) return; // another wallet came while this ran; `check` runs again for it
       await this.current?.heedVault(facts, chain);
     } catch (error) {
@@ -207,13 +189,13 @@ export class OperatorFollower {
     }
     let named: NamedOperator | null;
     try {
-      named = await this.bounded(chain.operator());
+      named = await bounded(this.deps.scheduler, chain.operator());
     } catch (error) {
-      if (this.deps.chain() === chain) this.set({ kind: "failed", origin: this.origin, reason: reason(error) });
+      if (this.deps.chain() === chain) this.failed(reason(error));
       return;
     }
     if (this.deps.chain() !== chain) return;
-    if (vaultFailed !== null) return this.set({ kind: "failed", origin: this.origin, reason: vaultFailed });
+    if (vaultFailed !== null) return this.failed(vaultFailed);
     if (named === null) return this.settled({ kind: "pinned", origin: this.origin });
     this.effectiveAtMs = named.pending?.effectiveAtMs ?? null;
     const target = operatorTarget(this.deps.deploy, named);
@@ -225,16 +207,22 @@ export class OperatorFollower {
     this.settled({ kind: "following", origin: this.origin });
   }
 
-  /** `read`, or a rejection once the wallet has had its time. */
-  private bounded<T>(read: Promise<T>): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const timer = this.deps.scheduler.setTimeout(() => reject(new Error("your wallet did not answer in time")), CHAIN_READ_MS);
-      read.then(
-        (value) => { this.deps.scheduler.clearTimeout(timer); resolve(value); },
-        (error: unknown) => { this.deps.scheduler.clearTimeout(timer); reject(error); },
-      );
-    });
+  /**
+   * With no wallet to read a chain, the node's own word chooses among the origins the build lists, as the chain's would: the member its
+   * schedule names for the turn under way, or the operator the registry names. A node that cannot be read says nothing against either.
+   */
+  private async followNode(said: NodeSaid): Promise<void> {
+    if (said.read) await this.word.learn(this.current);
+    if (!said.read && this.state.kind === "waiting") return this.tryNode(this.state.target, null, true);
+    const hostname = this.word.hostname(said, this.deps.nowMs());
+    const target = hostname === null ? { origin: this.origin } : operatorTarget(this.deps.deploy, { hostname, rotationEnabled: said.rotationEnabled });
+    if ("unlisted" in target) return this.settled({ kind: "unlisted", origin: this.origin, hostname: target.unlisted });
+    if (target.origin !== null && target.origin !== this.origin) return this.tryNode(target.origin, null, said.rotationEnabled);
+    this.settled({ kind: "pinned", origin: this.origin });
   }
+
+  /** A read that failed; a handover under way keeps its pause, as the failed read says nothing of whether the successor verifies. */
+  private failed = (reason: string): void => { if (this.state.kind !== "waiting") this.set({ kind: "failed", origin: this.origin, reason }); };
 
   private settled(state: FollowStatus): void {
     this.trial = null;
@@ -246,8 +234,11 @@ export class OperatorFollower {
    * it does the node in use stays; with rotation off that is no change of operator on its way, as
    * governance may have installed a fallback on the deployment's own node, so it is not told as one.
    */
-  private async tryNode(target: string, chain: DeploymentReads, rotationEnabled: boolean): Promise<void> {
-    const waiting = (reason: string) => (rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, reason }) : this.settled({ kind: "following", origin: this.origin }));
+  private async tryNode(target: string, chain: DeploymentReads | null, rotationEnabled: boolean): Promise<void> {
+    const before = this.state; // trading pauses the moment the chain names another node, as its verification takes the time (monkey-trading/console#280)
+    // A trial another wallet came during says nothing for it, failed or not: the pause it began goes, and `check` runs again for the new one.
+    const waiting = (reason: string) => (this.deps.chain() !== chain ? this.set(before) : rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, reason }) : this.settled({ kind: "following", origin: this.origin }));
+    if (rotationEnabled && !(this.state.kind === "waiting" && this.state.target === target)) waiting("The new operator's node is being verified.");
     let client: EngineClient;
     let status: AttestationStatus;
     try {
@@ -256,12 +247,13 @@ export class OperatorFollower {
       await client.readChainThrough(chain);
       status = await client.verify();
       if (status.kind === "unverified") return waiting(status.reason);
-      if (status.kind === "attested") return waiting(status.why);
+      // With no wallet no verdict reads the vault, so an attested node is the best a visit without one can have; it reads, and never signs.
+      if (status.kind === "attested" && chain !== null) return waiting(status.why);
       await signedAnswer(client);
     } catch (error) {
       return waiting(error instanceof Error ? error.message : "The node did not answer.");
     }
-    if (this.deps.chain() !== chain) return; // another wallet came while this ran; `check` runs again for it
+    if (this.deps.chain() !== chain) return this.set(before);
     if (this.deps.busy()) return waiting("A wallet request is in progress; the console moves once it has finished.");
     this.deps.adopt(client, target);
     this.origin = target;
@@ -288,7 +280,8 @@ export class OperatorFollower {
 
   /** What the last read said to wait for: a target coming up, a read that failed or an effective time just past, soon and then slower; the effective time ahead; or the slow read. */
   private nextDelay(): number {
-    const untilEffect = this.effectiveAtMs === null ? null : this.effectiveAtMs - this.deps.nowMs();
+    const changeAt = soonest(this.effectiveAtMs, this.turnAtMs);
+    const untilEffect = changeAt === null ? null : changeAt - this.deps.nowMs();
     if (this.state.kind === "waiting" || this.state.kind === "failed" || (untilEffect !== null && untilEffect <= 0)) {
       const delay = this.wait;
       this.wait = Math.min(this.wait * 2, SLOW_READ_MS);

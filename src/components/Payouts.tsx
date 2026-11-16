@@ -5,6 +5,8 @@
 import { useEffect, useId, useRef } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
+import { checkReadDelay, earliestCheck } from "@/lib/store/payout-checks";
+import { waitingWords } from "@/lib/store/payout-words";
 import { checkPaid, claim, loadApprovals, loadPayouts, payoutsOf, reissue, unreadPayouts, type Payout } from "@/lib/store/payouts";
 import { formatStamp } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
@@ -33,6 +35,25 @@ export function Payouts() {
     void loadApprovals(store);
     void loadPayouts(store);
   }, [store, address, latest, trusted]);
+  // An unsigned approval waits for a log check at a boundary the node names: its payouts are read again just after it, and while the node still names it, so the row never keeps saying a past boundary is next.
+  const checkAt = earliestCheck(payouts);
+  const nowMs = state.now;
+  // Each attempt, failed or partial ones included, changes the generation, so each arms the next.
+  const attempt = state.payoutsGeneration;
+  useEffect(() => {
+    if (checkAt === null || !trusted) return;
+    const load = () => void loadPayouts(store);
+    // The node's clock as it is when the timer is set, so a clock that moves on never sets it again.
+    const timer = setTimeout(() => {
+      // A hidden tab reads once it is seen again, as the other paced reads do.
+      if (document.visibilityState === "hidden") document.addEventListener("visibilitychange", load, { once: true });
+      else load();
+    }, checkReadDelay(checkAt, store.getSnapshot().now));
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", load);
+    };
+  }, [store, checkAt, trusted, attempt]);
   useEffect(() => {
     // The vault's own record says whether it has paid each payout the page can act on, including by a claim made elsewhere before the read.
     if (unread !== "") void checkPaid(store);
@@ -53,7 +74,7 @@ export function Payouts() {
         <p className="mt-3 text-caption text-fg-3">{state.wallet ? "No approved withdrawals yet." : "Connect a wallet to see your withdrawals."}</p>
       ) : (
         <ul className="mt-3 space-y-2">
-          {payouts.map((payout) => <PayoutRow key={payout.nonce} payout={payout} idle={idle} signs={!readOnly.readOnly} describedBy={readOnly.describedBy} problem={state.payoutsProblem} act={act} />)}
+          {payouts.map((payout) => <PayoutRow key={payout.nonce} payout={payout} nowMs={nowMs} idle={idle} signs={!readOnly.readOnly} describedBy={readOnly.describedBy} problem={state.payoutsProblem} act={act} />)}
         </ul>
       )}
       <Notice surface="payouts" />
@@ -65,7 +86,7 @@ export function Payouts() {
 }
 
 /** One approved withdrawal and the actions its status allows; `act` runs one unless another is in flight. */
-function PayoutRow({ payout, idle, signs, describedBy, problem, act }: { payout: Payout; idle: boolean; /** False for a read-only account, which cannot claim or ask for a signature. */ signs: boolean; describedBy: string | undefined; /** Why the node's payouts could not be read, if they could not. */ problem: string | null; act: (run: () => Promise<void>) => void }) {
+function PayoutRow({ payout, nowMs, idle, signs, describedBy, problem, act }: { payout: Payout; /** The node's clock, which says whether a named boundary has passed. */ nowMs: number; idle: boolean; /** False for a read-only account, which cannot claim or ask for a signature. */ signs: boolean; describedBy: string | undefined; /** Why the node's payouts could not be read, if they could not. */ problem: string | null; act: (run: () => Promise<void>) => void }) {
   const { store } = useSession();
   const amount = formatUsdc(payout.amount);
   const { status, nonce } = payout;
@@ -86,12 +107,10 @@ function PayoutRow({ payout, idle, signs, describedBy, problem, act }: { payout:
           <button type="button" aria-disabled={!idle || !signs} aria-describedby={describedBy} onClick={() => signs && act(() => reissue(store, nonce, status.expiresAt))} className={BUTTON}>Ask for a new authorization</button>
         </>
       )}
-      {status.kind === "waiting" && !payout.read && (
+      {status.kind === "waiting" && !payout.read && status.checkAtMs === undefined && (
         <p className="mt-2 text-fg-3">{signs ? "Checking the vault…" : "The vault's record of this withdrawal could not be read for a read-only account."}</p>
       )}
-      {status.kind === "waiting" && payout.read && (
-        <p className="mt-2 text-fg-3">Waiting for the next checkpoint. The node signs the authorization once a checkpoint covering the approval is confirmed on chain, and it arrives here by itself.</p>
-      )}
+      {status.kind === "waiting" && (payout.read || status.checkAtMs !== undefined) && <p className="mt-2 text-fg-3">{waitingWords(status.checkAtMs, nowMs)}</p>}
       {problem !== null && (status.kind === "waiting" || status.kind === "expired") && <p className="mt-2 text-fg-3">{problem}</p>}
     </li>
   );

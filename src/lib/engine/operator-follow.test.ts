@@ -92,6 +92,34 @@ describe("OperatorFollower.check", () => {
     expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, reason: "not the vault's release" });
   });
 
+  it("pauses the moment the chain names another node, while its verification is still running, and leaves the pause by moving once it verifies", async () => {
+    const { follower, trial, adopted } = rig();
+    const states: string[] = [];
+    follower.subscribe(() => states.push(follower.getSnapshot().kind));
+    let verified: (status: typeof trial.verdict) => void = () => undefined;
+    trial.verify = () => new Promise((resolve) => { verified = resolve as typeof verified; });
+    const checking = follower.check();
+    await settle();
+    expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, reason: "The new operator's node is being verified." });
+    expect(adopted).toEqual([]);
+    verified(trial.verdict);
+    await checking;
+    expect(adopted).toEqual([B]);
+    expect(follower.getSnapshot()).toEqual({ kind: "following", origin: B });
+    // Once into waiting and once out of it: one pause for the change.
+    expect(states.filter((kind) => kind === "waiting")).toHaveLength(1);
+  });
+
+  it("does not pause for a node with rotation off, which the chain may name for the deployment's own", async () => {
+    const { follower, trial } = rig({ operator: async () => named({ rotationEnabled: false }) });
+    const states: string[] = [];
+    follower.subscribe(() => states.push(follower.getSnapshot().kind));
+    trial.verify = () => new Promise(() => undefined);
+    void follower.check();
+    await settle();
+    expect(states).not.toContain("waiting");
+  });
+
   it("does not move on a verdict the vault has not judged", async () => {
     const { follower, trial, adopted } = rig();
     trial.verdict = { kind: "attested", release: "r", address: "0xk", why: "the wallet could not read" };

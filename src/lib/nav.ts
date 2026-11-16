@@ -46,12 +46,13 @@ export const SECTIONS: Readonly<Record<"/house" | "/monkey" | "/staking", PageSe
       { href: "/staking/rewards", label: "Rewards" },
       { href: "/staking/epochs", label: "Epochs" },
       { href: "/staking/governance", label: "Governance" },
+      { href: "/staking/rotation", label: "Rotation" },
     ],
   },
 };
 
 /** One of the Staking section's reads, keyed by what it reads. */
-export type StakingRead = "panel" | "operators" | "delegations" | "epochs" | "history" | "governance" | "votes";
+export type StakingRead = "panel" | "operators" | "delegations" | "epochs" | "history" | "governance" | "votes" | "turns";
 
 /**
  * Which of the Staking section's reads each of its tabs starts (monkey-trading/console#308, #281):
@@ -59,13 +60,15 @@ export type StakingRead = "panel" | "operators" | "delegations" | "epochs" | "hi
  * Delegate, Epochs (Epochs names the operator-share recipients) and Governance (the open proposals
  * come with the list), the delegation reads on Delegate and Governance (whose members the account
  * delegates to), the epoch reads on Rewards and Epochs, the history reads on Rewards, and the house
- * state's votes and the members' votes on Governance.
+ * state's votes and the members' votes on Governance, and the operator reads and the older turns on Rotation
+ * (monkey-trading/console#280).
  */
 const STAKING_READS: Readonly<Record<string, readonly StakingRead[]>> = {
   "/staking": ["panel", "operators", "delegations"],
   "/staking/rewards": ["panel", "epochs", "history"],
   "/staking/epochs": ["panel", "operators", "epochs"],
   "/staking/governance": ["operators", "delegations", "governance", "votes"],
+  "/staking/rotation": ["operators", "turns"],
 };
 
 /**

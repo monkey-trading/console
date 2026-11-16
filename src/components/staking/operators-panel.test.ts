@@ -24,7 +24,7 @@ afterAll(stopPanelKit);
 
 describe("the operators card on the Delegate tab", () => {
   it("shows the table with the search, the All and Yours counts, the sort and the registry's final block, and no typed-address way", () => {
-    const html = render({ state: VERIFIED, operators: { route: LOADING, list: ready(view), held: null }, read: chain() });
+    const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: chain() });
     expect(html).toContain("As the registry stood at final block 4,321");
     expect(html.match(/>All 2</g)).toHaveLength(1);
     expect(html.match(/>Yours 1</g)).toHaveLength(1);
@@ -40,19 +40,19 @@ describe("the operators card on the Delegate tab", () => {
   });
 
   it("lets the search field and the sort select shrink to a narrow card, so the toolbar wraps at 320 px and at enlarged text (monkey-trading/console#333)", () => {
-    const html = render({ state: VERIFIED, operators: { route: LOADING, list: ready(view), held: null }, read: chain() });
+    const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: chain() });
     expect(html).toContain('<div class="min-w-[min(14rem,100%)] flex-1 space-y-1"><label');
     expect(html).toMatch(/<div class="min-w-0 max-w-full"><div class="relative"><span id="[^"]*-label" class="block text-caption text-fg-2">Sort by/);
   });
 
   it("renders an open editor from the section's editing context, with its preview's words", () => {
     const editing: DelegateEditing = { ...NO_EDITING, editing: { candidate: ALPHA, mode: "delegate" }, amounts: { [amountKey("delegate", ALPHA)]: "10" } };
-    const html = render({ state: VERIFIED, operators: { route: LOADING, list: ready(view), held: null }, read: chain(), editing });
+    const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: chain(), editing });
     expect(html).toContain("Undelegated 700 MONKEY → 690 MONKEY. Your delegation to alpha.example (0x000000…00a1) 300 MONKEY → 310 MONKEY.");
   });
 
   it("while the node is unverified, names the last list verified, with when, at which block and why, and keeps the rows' Delegate and Move", () => {
-    const html = render({ state: UNVERIFIED, operators: { route: LOADING, list: LOADING, held: { view, verifiedAtMs: VERIFIED_AT } }, read: chain() });
+    const html = render({ state: UNVERIFIED, operators: { route: LOADING, rotation: null, list: LOADING, held: { view, verifiedAtMs: VERIFIED_AT } }, read: chain() });
     expect(html).toContain(`${HELD_LINE} the node is not verified now.`);
     expect(html.match(/Delegate<span class="sr-only"> to /g)).toHaveLength(4);
     expect(html.match(/Move<span class="sr-only"> part of your delegation to alpha/g)).toHaveLength(2);
@@ -63,7 +63,7 @@ describe("the operators card on the Delegate tab", () => {
     const editing = { ...NO_EDITING, editing: { candidate: BRAVO, mode: "delegate" as const } };
     const held = { view, verifiedAtMs: VERIFIED_AT };
     for (const list of [LOADING, { status: "failed" as const, value: null, message: "the node did not answer" }]) {
-      const html = render({ state: VERIFIED, operators: { route: LOADING, list, held }, read: chain(), editing });
+      const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list, held }, read: chain(), editing });
       expect(html).toContain(`${HELD_LINE} the node&#x27;s operator list cannot be read now.`);
       expect(html).toContain("bravo.example");
       expect(html).toContain("Amount to delegate");
@@ -72,7 +72,7 @@ describe("the operators card on the Delegate tab", () => {
   });
 
   it("keeps chain-only rows neutral and actionable while the first verified list loads", () => {
-    const html = render({ state: VERIFIED, operators: { route: LOADING, list: LOADING, held: null }, read: chain() });
+    const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: LOADING, held: null }, read: chain() });
     expect(html).toContain("All —");
     expect(html).not.toContain("Unlisted");
     expect(html).toContain("0x000000…00a1");
@@ -83,13 +83,13 @@ describe("the operators card on the Delegate tab", () => {
 
   it("blames the device clock, not the node, when the two disagree", () => {
     const state = { ...UNVERIFIED, attestation: { kind: "clock" as const, skewMs: 90_000 } };
-    const html = render({ state, operators: { route: LOADING, list: LOADING, held: { view, verifiedAtMs: VERIFIED_AT } }, read: chain() });
+    const html = render({ state, operators: { route: LOADING, rotation: null, list: LOADING, held: { view, verifiedAtMs: VERIFIED_AT } }, read: chain() });
     expect(html).toContain(`${HELD_LINE} your device clock differs from the node&#x27;s signed time.`);
   });
 
   it("with no list held, gates the typed Delegate submit on the address checksum and nonzero value", () => {
     const mixed = "0x52908400098527886E0F7030069857D2E4169EE7";
-    const base = { state: UNVERIFIED, operators: { route: LOADING, list: LOADING, held: null } as OperatorsState, read: chain(false, []) };
+    const base = { state: UNVERIFIED, operators: { route: LOADING, rotation: null, list: LOADING, held: null } as OperatorsState, read: chain(false, []) };
     expect(render(base)).toContain("Delegate to an address");
     expect(render(base)).not.toContain("Search operators");
     const field = (typedTo: string) => render({ ...base, editing: { ...NO_EDITING, typedOpen: true, typedTo, amounts: { [amountKey("delegate", "typed")]: "10" } } });
@@ -107,7 +107,7 @@ describe("the operators card on the Delegate tab", () => {
       { candidate: ALPHA, amount: 300n * MONKEY_UNIT },
       { candidate: BRAVO, amount: 200n * MONKEY_UNIT },
     ]);
-    const html = render({ state: UNVERIFIED, operators: { route: LOADING, list: LOADING, held: null }, read, table: { ...NO_TABLE_VIEW, show: "yours" } });
+    const html = render({ state: UNVERIFIED, operators: { route: LOADING, rotation: null, list: LOADING, held: null }, read, table: { ...NO_TABLE_VIEW, show: "yours" } });
     // No list names them: the Yours rows are the chain's read alone, each named by its address, with Move and Take back.
     expect(html).toContain("All —");
     expect(html).not.toContain("Unlisted");
@@ -125,7 +125,7 @@ describe("the operators card on the Delegate tab", () => {
     let done = () => {};
     const pending = panel.settle(new Promise<void>((resolve) => { done = resolve; }));
     expect(panel.getSnapshot().settling).toBe(true);
-    const html = render({ state: VERIFIED, operators: { route: LOADING, list: ready(view), held: null }, read: chain() });
+    const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: chain() });
     expect(html.match(/aria-disabled="false"[^>]*>Delegate/g)).toHaveLength(4);
     expect(html.match(/aria-disabled="false"[^>]*>Move/g)).toHaveLength(2);
     done();
@@ -133,7 +133,7 @@ describe("the operators card on the Delegate tab", () => {
   });
 
   it("says on the card when the chain's delegation read runs or fails, and not for another account's read", () => {
-    const operators = { route: LOADING, list: LOADING, held: { view, verifiedAtMs: VERIFIED_AT } } as OperatorsState;
+    const operators = { route: LOADING, rotation: null, list: LOADING, held: { view, verifiedAtMs: VERIFIED_AT } } as OperatorsState;
     const loading = render({ state: UNVERIFIED, operators, read: { account: WALLET.address, read: LOADING, settling: false } });
     expect(loading).toContain('class="sr-only">Reading your delegations from the chain…');
     const broken: DelegationsState = { account: WALLET.address, read: { status: "failed", value: chain().read.value, message: "the wallet did not answer" }, settling: true };
@@ -159,7 +159,7 @@ describe("the operators card on the Delegate tab", () => {
       }),
     });
     const op30 = `0x${(30).toString(16).padStart(40, "0")}`;
-    const operators = { route: LOADING, list: ready(many), held: null } as OperatorsState;
+    const operators = { route: LOADING, rotation: null, list: ready(many), held: null } as OperatorsState;
     const page3: TableViewState = { search: "", sort: "role", show: "all", page: 2 };
     const editing: DelegateEditing = { ...NO_EDITING, editing: { candidate: op30, mode: "delegate" }, amounts: { [amountKey("delegate", op30)]: "7" } };
     const read = chain(false, [{ candidate: op30, amount: 700n * MONKEY_UNIT }]);
@@ -178,20 +178,20 @@ describe("the operators card on the Delegate tab", () => {
   });
 
   it("keeps the typed-address editor while it is open, even with the field cleared and the node's list back", () => {
-    const html = render({ state: VERIFIED, operators: { route: LOADING, list: ready(view), held: null }, read: chain(), editing: { ...NO_EDITING, typedOpen: true } });
+    const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: chain(), editing: { ...NO_EDITING, typedOpen: true } });
     expect(html).toContain("Delegate to an address");
     expect(html).toContain("A candidate&#x27;s address");
   });
 
   it("shuts the rows' controls while a landed change's read again is on its way", () => {
-    const html = render({ state: VERIFIED, operators: { route: LOADING, list: ready(view), held: null }, read: chain(true) });
+    const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: chain(true) });
     expect(html.match(/aria-disabled="true"[^>]*>Delegate/g)).toHaveLength(4);
     expect(html.match(/aria-disabled="true"[^>]*>Move/g)).toHaveLength(2);
   });
 
   it("says so, and offers nothing to send, when the build names no staking contract", () => {
     const unavailable: DelegationsState = { account: WALLET.address, read: { status: "unavailable", value: null, message: null }, settling: false };
-    const html = render({ state: VERIFIED, operators: { route: LOADING, list: ready(view), held: null }, read: unavailable });
+    const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: unavailable });
     expect(html).toContain("This build names no staking contract, so delegation is not available here.");
     // The build's own line says it: no read note blames the node for what it never serves.
     expect(html).not.toContain("This node does not serve these figures yet.");
@@ -200,10 +200,10 @@ describe("the operators card on the Delegate tab", () => {
   });
 
   it("tells the visitor to connect a wallet, and offers nothing to send for a read-only account", () => {
-    const visitor = render({ state: { ...VERIFIED, wallet: null }, operators: { route: LOADING, list: ready(view), held: null }, read: { account: null, read: LOADING, settling: false } });
+    const visitor = render({ state: { ...VERIFIED, wallet: null }, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: { account: null, read: LOADING, settling: false } });
     expect(visitor).toContain("Connect a wallet to delegate your stake.");
     expect(visitor).not.toContain("Delegate<span class=\"sr-only\"> to ");
-    const readOnly = render({ state: { ...VERIFIED, wallet: { ...WALLET, readOnly: true } }, operators: { route: LOADING, list: ready(view), held: null }, read: { account: null, read: { status: "unavailable", value: null, message: null }, settling: false } });
+    const readOnly = render({ state: { ...VERIFIED, wallet: { ...WALLET, readOnly: true } }, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: { account: null, read: { status: "unavailable", value: null, message: null }, settling: false } });
     expect(readOnly).toContain("This account is read-only, so its delegations are not read and nothing can be delegated for it.");
   });
 });

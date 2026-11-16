@@ -27,7 +27,10 @@ import { editorOwnsFocusLoss } from "@/lib/staking/delegation-focus";
 import { delegationTo } from "@/lib/staking/delegations";
 import { hostnameListed } from "@/lib/staking/hostnames";
 import { withAddress } from "@/lib/staking/operator-cells";
+import { withMembership } from "@/lib/staking/operator-membership";
 import { countText, MAX_SEARCH, SORTS, tableView, yoursRows, type SortId } from "@/lib/staking/operator-table";
+import { turnLine } from "@/lib/staking/rotation";
+import { TURN_RESERVE } from "@/lib/staking/rotation-words";
 import { formatStamp } from "@/lib/time";
 
 import { useNodeFollow, useSession } from "../ConsoleProvider";
@@ -61,7 +64,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
   const searchId = useId();
   const showId = useId();
   const typedId = useId();
-  const { list: listRead, route, held: heldList } = useSyncExternalStore(operators.subscribe, operators.getSnapshot, operators.getSnapshot);
+  const { list: listRead, route, rotation: schedule, held: heldList } = useSyncExternalStore(operators.subscribe, operators.getSnapshot, operators.getSnapshot);
   const delegationsRead = useSyncExternalStore(delegations.subscribe, delegations.getSnapshot, delegations.getSnapshot);
   const nodeReadable = useConsoleSelect((state) => readBlock(state.attestation, "live") === null);
   const wallet = useConsoleSelect((state) => state.wallet);
@@ -77,7 +80,8 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
   // With no list held — nothing verified yet, or a list the node cannot serve — the Yours rows still
   // render: they are the chain's read alone, no list's.
   const view = source.kind === "current" ? list : source.kind === "held" ? heldList?.view ?? null : null;
-  const rows = useMemo(() => view?.rows ?? [], [view]);
+  // Each row says whether it is in the rotation set in effect, from the node's route as read (monkey-trading/console#280).
+  const rows = useMemo(() => withMembership(view?.rows ?? [], schedule?.set ?? null), [view, schedule]);
   const yours = useMemo(() => (mine === null ? [] : yoursRows(rows, mine.delegations, view !== null)), [mine, rows, view]);
   const { search, sort, page, show } = table;
   const shown = view === null || show === "yours" ? yours : rows;
@@ -115,6 +119,8 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
     <Card id={TITLE_ID} title="Operators">
       <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
         <Row label="Operator in effect">{list === null ? "—" : labelOf(list.inEffect)}</Row>
+        <Row label="Today's turn" reserve={TURN_RESERVE}>{schedule === null ? "—" : turnLine(schedule.turn, nameOf, "No turn is in effect")}</Row>
+        <Row label="Tomorrow's turn" reserve={TURN_RESERVE}>{schedule === null ? "—" : turnLine(schedule.nextTurn, nameOf, "Not drawn yet")}</Row>
         <Row label="Admin key the node applies">{route.value === null ? "—" : <span title={route.value.operator}>{shortHex(route.value.operator)}</span>}</Row>
         <Row label="Rotation">{rotation === null ? "—" : rotation ? "On" : "Off"}</Row>
         <Row label="This console talks to">{node !== null ? "The simulated node" : follow === null ? "—" : hostOf(follow.origin)}</Row>

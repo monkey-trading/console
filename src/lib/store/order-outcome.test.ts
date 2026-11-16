@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { EngineError } from "../engine/client";
 import { markets, setup } from "../engine/live-setup";
 import { SessionKeySigner } from "../engine/session-key";
+import { OPERATOR_CLAIM } from "../engine/test-kit";
 import { NotSentError, UntrustedError } from "../engine/trust";
 import type { EngineEvent, Fill } from "../engine/types";
 import { ACCOUNT } from "../engine/wallet-kit";
@@ -88,7 +89,8 @@ describe("what the user is told of a request that stopped or went unanswered", (
       expect(await run(wrongClock.store)).toBe(false);
       expect(wrongClock.store.getSnapshot().notices[surface]?.text).toBe("Nothing was sent. Your device clock differs from the node's signed time by 60 s. Correct the clock and reload.");
       expect(wrongClock.node.posts).toEqual([]);
-      expect(wrongClock.node.requests).toHaveLength(reads);
+      // The check is tried again before the gate refuses; nothing past it reaches the node.
+      expect(wrongClock.node.requests.slice(reads).map((request) => request.path).filter((path) => path !== "/v1/attestation" && path !== OPERATOR_CLAIM)).toEqual([]);
     }
   });
 

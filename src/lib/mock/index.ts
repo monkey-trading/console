@@ -30,9 +30,10 @@ export function createMockNode(startMs: number, demo = false): MockNode {
     state.emit({ type: "withdraw" }, [{ type: "withdrawal_queued", account: entry.account, amount: fixedToWire(entry.amount), requested_seq: state.seq + 1 }]);
   }
   if (demo) {
-    // The votes are timed from when the node's clock starts, not from the backstory's beginning, and a
-    // restriction holds from when it was logged, so the backstory plays without it.
+    // The votes and the rotation's sets are timed from when the node's clock starts, not from the
+    // backstory's beginning, and a restriction holds from when it was logged, so the backstory plays without it.
     state.governance = new MockGovernance(startMs, state.operators.candidates);
+    state.rotationFromMs = startMs;
     seedMonkeyDemo(state, DEMO_ADDRESS);
     seedDemoAccount(state, startMs);
   }

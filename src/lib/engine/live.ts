@@ -10,7 +10,8 @@ import { decodeHouseState, HouseFold, type HouseState, type HouseStateWire } fro
 import { QueueTotalsWalk } from "./live-queue";
 import { historyPath, readEmissionSchedule } from "./live-ledger";
 import type { EmissionSchedule } from "./emission-schedule";
-import { liveStats } from "./live-stats";
+import { liveStats, readClaim } from "./live-stats";
+import type { OperatorRoute } from "./stats-types";
 import { collateral, plainText, READ_TIMEOUT_MS } from "./live-plain";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
@@ -67,8 +68,8 @@ export class LiveEngineClient implements EngineClient {
   /** The public withdrawal queue's size, walked within a page cap and cached for its TTL. */
   private readonly totalsWalk: QueueTotalsWalk;
   readonly withdrawalTotals: () => Promise<QueueTotals>;
-  /** The dashboard's reads, each over a signed read of its route. */
-  readonly stats = liveStats((path) => this.transport.get(path));
+  private readonly lastRoute: { route: OperatorRoute | null } = { route: null }; // stays with a refusal
+  readonly stats = liveStats((path) => this.transport.get(path), (route) => this.trust.heedOperator(route), this.lastRoute);
   readonly emissions: (address: Address) => Promise<EntitlementProof | null>;
 
   constructor(private readonly deps: LiveDeps) {
@@ -86,6 +87,7 @@ export class LiveEngineClient implements EngineClient {
         this.emit({ type: "attestation", status });
       },
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
+      operatorClaim: (address) => readClaim(() => this.transport.getUnder("/v1/operator?limit=1", address), this.lastRoute),
     });
     this.transport = new SignedTransport({ ...deps, verifier: () => this.verifiers.loaded(), trust: this.trust, challenge, signal: this.signal });
     this.totalsWalk = new QueueTotalsWalk(this.transport, deps.nowMs);
@@ -120,7 +122,7 @@ export class LiveEngineClient implements EngineClient {
   async heedVault(facts: VaultFacts, chain: DeploymentReads): Promise<void> {
     if (!this.vault.uses(chain)) return;
     this.vault.note(facts);
-    if (this.trust.outdatedBy(facts.signer)) await this.trust.verifyAfresh();
+    await this.trust.heedVault(facts.signer);
   }
 
   private readonly signal = (): AbortSignal => this.deps.signal?.() ?? AbortSignal.timeout(READ_TIMEOUT_MS);
@@ -244,8 +246,8 @@ export class LiveEngineClient implements EngineClient {
   }
 
   async scanMarks(fromSeq: number, budget: ScanBudget, rules: Readonly<Record<number, PriceRules>>, sessions: Readonly<Record<number, SessionRule>>, dead?: () => boolean): Promise<ScannedMark[]> {
-    // The backfill reads the signed log only: every mark the console plots derives from an enclave-signed frame.
-    return scanForMarks(this.scanDeps(await this.trust.signer()), fromSeq, budget, rules, sessions, dead);
+    const signer = await this.trust.signer();
+    return scanForMarks(this.scanDeps(signer), fromSeq, budget, rules, sessions, () => dead?.() === true || this.trust.refuses(signer));
   }
 
   /** The deps a signed log scan takes: the stream origin, a verified signer, and a fresh challenge. */

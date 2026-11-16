@@ -12,6 +12,7 @@ import { GovernanceReads } from "@/lib/staking/governance-reads";
 import { NO_TABLE_VIEW } from "@/lib/staking/operator-table";
 import { DistributionHistoryReads } from "@/lib/staking/history-reads";
 import { MemberVoteReads } from "@/lib/staking/member-vote-reads";
+import { TurnHistoryReads } from "@/lib/staking/turn-history-reads";
 import { MonkeyPanel } from "@/lib/monkey/panel";
 import type { NoticeSurface } from "@/lib/store/state";
 
@@ -59,7 +60,7 @@ function Operators() {
   const delegations = new DelegationReads(store);
   const governance = new GovernanceReads(store);
   const reads: StakingReads = {
-    panel: new MonkeyPanel(store, "staking"), operators, epochs: new EpochReads(store), delegations, governance, memberVotes: new MemberVoteReads(store, operators, governance, delegations),
+    panel: new MonkeyPanel(store, "staking"), operators, epochs: new EpochReads(store), delegations, governance, memberVotes: new MemberVoteReads(store, operators, governance, delegations), turns: new TurnHistoryReads(store),
     history: new DistributionHistoryReads(store), operatorsSettled: true, delegateEditing: NO_EDITING, setDelegateEditing: () => undefined,
     table: NO_TABLE_VIEW, setTable: () => undefined, typedSlot: false, setTypedSlot: () => undefined,
   };
@@ -74,7 +75,7 @@ function GovernanceVote() {
   const delegations = new DelegationReads(store);
   const governance = new GovernanceReads(store);
   const reads: StakingReads = {
-    panel: new MonkeyPanel(store, "staking"), operators, epochs: new EpochReads(store), delegations, governance, memberVotes: new MemberVoteReads(store, operators, governance, delegations),
+    panel: new MonkeyPanel(store, "staking"), operators, epochs: new EpochReads(store), delegations, governance, memberVotes: new MemberVoteReads(store, operators, governance, delegations), turns: new TurnHistoryReads(store),
     history: new DistributionHistoryReads(store), operatorsSettled: true, delegateEditing: NO_EDITING, setDelegateEditing: () => undefined,
     table: NO_TABLE_VIEW, setTable: () => undefined, typedSlot: false, setTypedSlot: () => undefined,
   };

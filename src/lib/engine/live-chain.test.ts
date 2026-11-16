@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AttestationStatus } from "./attestation";
 import { LiveEngineClient } from "./live";
-import { dev, markets } from "./live-setup";
+import { dev, markets, vectorSigning } from "./live-setup";
 import type { DeploymentReads, VaultFacts } from "./registry";
 import { releaseName } from "./release-check";
 import { FakeNode, FakeScheduler, FakeSocket, settle } from "./test-kit";
@@ -15,7 +15,7 @@ const DIGEST = `0x${"5a".repeat(48)}` as const;
 const NAMED: VaultFacts = { release: releaseName(DIGEST, `0x${"01".repeat(32)}`), signer: VECTORS.signer };
 
 function rig(devDigests: readonly string[], sockets: FakeSocket[] = []) {
-  const node = new FakeNode();
+  const node = new FakeNode(vectorSigning());
   node.attestation(() => VECTORS.signer);
   const scheduler = new FakeScheduler();
   const clock = { now: markets.time_ms };

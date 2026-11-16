@@ -166,8 +166,8 @@ describe("what makes the follower read sooner", () => {
     return { ...kit, client, stopWatch };
   }
 
-  it("reads on an election or rotation event in the stream, and not on other events", async () => {
-    for (const type of ["operator_elected", "rotation_switched"]) {
+  it("reads on an election, rotation, set or turn event in the stream, and not on other events", async () => {
+    for (const type of ["operator_elected", "rotation_switched", "rotation_set_adopted", "turn_assigned", "turn_refused", "turn_taken"]) {
       const { client, operatorReads } = await watched();
       for (const subscriber of client.subscribers) subscriber(message(type));
       await settle();

@@ -13,7 +13,7 @@ import { LiveEngineClient } from "./live";
 import type { PinnedRelease } from "./manifests";
 import type { VaultFacts } from "./registry";
 import { manifestText, releaseName } from "./release-check";
-import { FakeScheduler } from "./test-kit";
+import { acceptAll, FakeNode, FakeScheduler, OPERATOR_CLAIM, UNCHECKED } from "./test-kit";
 import { loadGlue, readWasm } from "./test-vectors";
 import { CONNECT_TO_CHECK, NodeTrust, NOT_NAMED, NOT_THE_SIGNER, NotSentError } from "./trust";
 import type { Verifier } from "./verifier";
@@ -43,7 +43,8 @@ function realVerifier(seen: (readonly string[])[]): Verifier {
         return { ok: false, reason: String(error) };
       }
     },
-    verifyResponse: () => { throw new Error("no responses in these tests"); },
+    // The one signed answer these tests read is the node's 404 for its word on the vault's signer, which `predatesRoute` makes up.
+    verifyResponse: acceptAll.verifyResponse,
     openFrames: () => { throw new Error("no frames in these tests"); },
   };
 }
@@ -69,6 +70,10 @@ async function judge({ attestation = fixture.attestation, releases = [RELEASE, O
 }
 
 const NAMED: VaultFacts = { release: releaseName(DIGEST, CONFIG), signer: ENCLAVE };
+
+/** The node's answer to the first check's read of its word on the vault's signer, a signed 404 as from a node that predates the route; null for any other read. */
+const predatesRoute = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> | null =>
+  String(input).endsWith(OPERATOR_CLAIM) ? new FakeNode({ ...UNCHECKED, timeMs: () => NOW_MS }).fetch(input, init) : null;
 
 describe("a quote the vault names", () => {
   it("verifies, against the one pinned release the vault's name hashes from", async () => {
@@ -100,7 +105,7 @@ describe("a wallet that answers the vault's read late", () => {
     const scheduler = new FakeScheduler();
     const client = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: ENCLAVE, heartbeatMs: 5_000, loadVerifier: async () => verifier, releases: [RELEASE], acceptsMock: false,
-      fetch: async (input) => new Response(String(input).endsWith("/collateral") ? fixture.collateral : fixture.attestation), openSocket: () => { throw new Error("no stream in these tests"); }, scheduler, nowMs: () => NOW_MS,
+      fetch: async (input, init) => predatesRoute(input, init) ?? new Response(String(input).endsWith("/collateral") ? fixture.collateral : fixture.attestation), openSocket: () => { throw new Error("no stream in these tests"); }, scheduler, nowMs: () => NOW_MS,
     });
     let answer: (facts: VaultFacts) => void = () => {};
     const reads = { vault: () => new Promise<VaultFacts>((resolve) => { answer = resolve; }), operator: async () => null, candidates: async () => null, delegateOf: async () => null };
@@ -125,7 +130,9 @@ describe("a late answer to a check still running", () => {
     const client = new LiveEngineClient({
       origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: ENCLAVE, heartbeatMs: 5_000, loadVerifier: async () => verifier, releases: [RELEASE], acceptsMock: false, scheduler, nowMs: () => NOW_MS,
       openSocket: () => { throw new Error("no stream in these tests"); },
-      fetch: async (input) => {
+      fetch: async (input, init) => {
+        const claim = predatesRoute(input, init);
+        if (claim !== null) return claim;
         if (String(input).endsWith("/collateral")) {
           if (holdCollateral) await new Promise<void>((resolve) => { releaseCollateral = resolve; });
           return new Response(fixture.collateral);
@@ -157,7 +164,7 @@ describe("a signed request to a node the vault has not judged", () => {
       openSocket: () => { throw new Error("no stream in these tests"); },
       fetch: async (input, init) => {
         if (init?.method === "POST" || init?.method === "DELETE") posts.push(String(input));
-        return new Response(String(input).endsWith("/collateral") ? fixture.collateral : fixture.attestation);
+        return predatesRoute(input, init) ?? new Response(String(input).endsWith("/collateral") ? fixture.collateral : fixture.attestation);
       },
     });
     await expect(client.verify()).resolves.toMatchObject({ kind: "attested" });

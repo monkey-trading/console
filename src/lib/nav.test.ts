@@ -98,7 +98,14 @@ describe("isCurrentTab", () => {
       ["/staking/rewards", "Rewards"],
       ["/staking/epochs", "Epochs"],
       ["/staking/governance", "Governance"],
+      ["/staking/rotation", "Rotation"],
     ]);
+  });
+
+  it("marks the Rotation tab on its own route, and the top bar's Staking link there", () => {
+    expect(isCurrentTab("/staking/rotation", "/staking/rotation")).toBe(true);
+    expect(isCurrentTab("/staking/rotation", "/staking")).toBe(false);
+    expect(currentMark("/staking/rotation", "/staking")).toBe("true");
   });
 
   it("marks the Governance tab on its own route, and the top bar's Staking link there", () => {
@@ -121,11 +128,12 @@ describe("isCurrentTab", () => {
 });
 
 describe("readsFor", () => {
-  it("starts the panel's reads on Delegate, Rewards and Epochs, the operators' on Delegate, Epochs and Governance, the delegations' on Delegate and Governance, the epochs' on Rewards and Epochs, the history's on Rewards, and the votes' on Governance", () => {
+  it("starts the panel's reads on Delegate, Rewards and Epochs, the operators' on Delegate, Epochs and Governance, the delegations' on Delegate and Governance, the epochs' on Rewards and Epochs, the history's on Rewards, the votes' on Governance, and the operators' and the older turns' on Rotation", () => {
     expect(readsFor("/staking")).toEqual(["panel", "operators", "delegations"]);
     expect(readsFor("/staking/rewards")).toEqual(["panel", "epochs", "history"]);
     expect(readsFor("/staking/epochs")).toEqual(["panel", "operators", "epochs"]);
     expect(readsFor("/staking/governance")).toEqual(["operators", "delegations", "governance", "votes"]);
+    expect(readsFor("/staking/rotation")).toEqual(["operators", "turns"]);
   });
 
   it("records a table for every tab the section lists", () => {

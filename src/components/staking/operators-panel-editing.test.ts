@@ -19,7 +19,7 @@ afterAll(stopPanelKit);
 describe("the operators card's editors and slot", () => {
   describe("the editors' own submits while the chain's read settles (monkey-trading/console#330)", () => {
     const mixed = "0x52908400098527886E0F7030069857D2E4169EE7";
-    const operators = { route: LOADING, list: ready(view), held: null } as OperatorsState;
+    const operators = { route: LOADING, rotation: null, list: ready(view), held: null } as OperatorsState;
     /** The typed-address editor with a valid destination and 10 typed, and a Take back editor with 10 typed. */
     const typed: DelegateEditing = { ...NO_EDITING, typedOpen: true, typedTo: mixed, amounts: { [amountKey("delegate", "typed")]: "10" } };
     const takeBack: DelegateEditing = { ...NO_EDITING, editing: { candidate: ALPHA, mode: "undelegate" }, amounts: { [amountKey("undelegate", ALPHA)]: "10" } };
@@ -43,10 +43,10 @@ describe("the operators card's editors and slot", () => {
 
   describe("the typed-address way's slot (monkey-trading/console#331)", () => {
     const slot = /<div aria-hidden="true" inert="" class="invisible"><span class="[^"]*inline-block">Delegate to an address<\/span><\/div>/;
-    const current = { route: LOADING, list: ready(view), held: null } as OperatorsState;
+    const current = { route: LOADING, rotation: null, list: ready(view), held: null } as OperatorsState;
 
     it("chain first: offered while the first list loads, and kept as an unseen slot of the same size once the current list withdraws it", () => {
-      const first = render({ state: VERIFIED, operators: { route: LOADING, list: LOADING, held: null }, read: chain() });
+      const first = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: LOADING, held: null }, read: chain() });
       expect(first).toContain("Delegate to an address");
       expect(first).not.toMatch(slot);
       const later = render({ state: VERIFIED, operators: current, read: chain(), typedSlot: true });
@@ -73,7 +73,7 @@ describe("the operators card's editors and slot", () => {
   it("breaks a long candidate name inside the pending-election and liveness-promotion notes, so they never widen a narrow card or enlarged text", () => {
     for (const promoted of [false, true]) {
       const pending = { ...view, pending: { candidate: ALPHA, effectiveAtMs: 1_794_000_000_000, promoted } };
-      const html = render({ state: VERIFIED, operators: { route: LOADING, list: ready(pending), held: null }, read: chain() });
+      const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(pending), held: null }, read: chain() });
       expect(html).toMatch(/<p class="rounded border border-amber\/40 bg-amber\/10 p-3 text-caption leading-relaxed text-amber \[overflow-wrap:anywhere\]">(An election named|A liveness promotion names)/);
     }
   });

@@ -41,6 +41,16 @@ export type EngineEvent =
   | { type: "rotation_switched"; enabled: boolean; election_cancelled: boolean }
   /** An election the operator registry made, mirrored; `admin_key` signs admin commands from `effective_at`. */
   | { type: "operator_elected"; epoch: number; candidate: Address; admin_key: Address; effective_at: number }
+  /** From V51, a rotation set the operator schedule adopted, mirrored; it takes effect on chain at `effective_at`. */
+  | { type: "rotation_set_adopted"; set: number; epoch: number; effective_at: number }
+  /** From V51, a turn the schedule assigned, mirrored; `admin_key` signs from `applies_at`. A skip or a promotion reassigns a turn already drawn. */
+  | { type: "turn_assigned"; turn: number; position: number; reason: "draw" | "skip" | "promotion"; candidate: Address; admin_key: Address; applies_at: number }
+  /** From V51, a turn assignment credited but refused, so the key in effect stays. */
+  | { type: "turn_refused"; turn: number; position: number; cause: "draw" | "skip" | "promotion"; candidate: Address; admin_key: Address; reason: string }
+  /** From V51, the turn's member started sequencing it, in an enclave running `release`. */
+  | { type: "turn_taken"; turn: number; candidate: Address; release: string }
+  /** From V51, a `TurnTaken` the engine refused. */
+  | { type: "turn_taken_rejected"; reason: string }
   /** From V56, a passed normal change mirrored, which applies from `applies_at`. */
   | { type: "proposal_scheduled"; proposal: number; applies_at: number }
   /** From V56, a passed fast-path proposal mirrored and in force as a restriction until `expires_at`. */

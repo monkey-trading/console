@@ -1,7 +1,7 @@
 /** `fetch` to the node with a fresh challenge, answering only with data the attested enclave signed for that request. */
 
 import { EngineError } from "./client";
-import { SignatureError, UntrustedError, type NodeTrust } from "./trust";
+import { SIGNER_SUPERSEDED, SignatureError, UntrustedError, type NodeTrust } from "./trust";
 import { CHALLENGE_HEADER, SEQ_HEADER, SIGNATURE_HEADER, TIME_HEADER } from "./wire";
 import type { Verifier } from "./verifier";
 
@@ -73,6 +73,14 @@ export class SignedTransport {
     return (await this.getSigned(path)).body;
   }
 
+  /**
+   * `GET path`, answered under `signer`, an enclave just verified and not yet trusted, as the check of the node's own word on the
+   * vault's signer needs. The answer is judged by that check, so this one does not refuse a signer put aside.
+   */
+  async getUnder(path: string, signer: string): Promise<unknown> {
+    return (await this.attempt("GET", path, null, signer, false)).body;
+  }
+
   /** `get`, with the node's signed time of the answer. */
   async getSigned(path: string): Promise<SignedAnswer> {
     const signer = await this.deps.trust.signer();
@@ -100,7 +108,7 @@ export class SignedTransport {
     return this.attempt("DELETE", path, JSON.stringify(body), await this.deps.trust.sendingSigner());
   }
 
-  private async attempt(method: "GET" | "POST" | "DELETE", path: string, requestBody: string | null, signer: string): Promise<SignedAnswer> {
+  private async attempt(method: "GET" | "POST" | "DELETE", path: string, requestBody: string | null, signer: string, judged = true): Promise<SignedAnswer> {
     const challenge = this.deps.challenge();
     let response: Response;
     let bytes: Uint8Array;
@@ -123,6 +131,8 @@ export class SignedTransport {
       status: response.status, signature: header(SIGNATURE_HEADER), time: header(TIME_HEADER), seq: header(SEQ_HEADER), echoedChallenge: header(CHALLENGE_HEADER), body: bytes,
     });
     if (!checked.ok) throw new SignatureError(`The node's answer did not verify: ${checked.reason}.`);
+    // The vault named another signer while this request was in flight: an answer from the key it no longer names is discarded, valid as its signature is.
+    if (judged && this.deps.trust.refuses(signer)) throw new UntrustedError(SIGNER_SUPERSEDED);
     const skewMs = checked.response.timeMs - this.deps.nowMs();
     if (Math.abs(skewMs) > CLOCK_TOLERANCE_MS) {
       this.deps.trust.clockWrong(skewMs);
