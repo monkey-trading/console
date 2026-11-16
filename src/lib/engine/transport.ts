@@ -30,11 +30,11 @@ function unsigned(status: number): UntrustedError {
   return new UntrustedError(`The node's answer (HTTP ${status}) was not signed by the attested enclave, so it was discarded.`);
 }
 
-/** The refusal of a verified answer under a key put aside while it was in flight, carrying a 2xx answer's JSON, which can still say what it named of the signer. */
-function superseded(ok: boolean, bytes: Uint8Array): UntrustedError {
-  if (!ok) return new UntrustedError(SIGNER_SUPERSEDED);
+/** The refusal of a verified answer under `signer`, a key put aside while it was in flight, carrying the JSON of a 2xx answer signed within the clock tolerance (`fresh`), which can still say what it named of the signer. */
+function superseded(fresh: boolean, bytes: Uint8Array, signer: string): UntrustedError {
+  if (!fresh) return new UntrustedError(SIGNER_SUPERSEDED);
   try {
-    return new SupersededAnswer(SIGNER_SUPERSEDED, JSON.parse(decoder.decode(bytes)));
+    return new SupersededAnswer(SIGNER_SUPERSEDED, JSON.parse(decoder.decode(bytes)), signer);
   } catch {
     // Not JSON: it names nothing.
     return new UntrustedError(SIGNER_SUPERSEDED);
@@ -143,9 +143,9 @@ export class SignedTransport {
       status: response.status, signature: header(SIGNATURE_HEADER), time: header(TIME_HEADER), seq: header(SEQ_HEADER), echoedChallenge: header(CHALLENGE_HEADER), body: bytes,
     });
     if (!checked.ok) throw new SignatureError(`The node's answer did not verify: ${checked.reason}.`);
-    // The vault named another signer while this request was in flight: an answer from the key it no longer names is discarded, valid as its signature is.
-    if (judged && this.deps.trust.refuses(signer)) throw superseded(response.ok, bytes);
     const skewMs = checked.response.timeMs - this.deps.nowMs();
+    // The vault named another signer while this request was in flight: an answer from the key it no longer names is discarded, valid as its signature is.
+    if (judged && this.deps.trust.refuses(signer)) throw superseded(response.ok && Math.abs(skewMs) <= CLOCK_TOLERANCE_MS, bytes, signer);
     if (Math.abs(skewMs) > CLOCK_TOLERANCE_MS) {
       this.deps.trust.clockWrong(skewMs);
       throw new UntrustedError(`Your device clock differs from the node's signed time by ${Math.round(Math.abs(skewMs) / 1000)} s, so the answer was discarded. Correct the clock and reload.`);

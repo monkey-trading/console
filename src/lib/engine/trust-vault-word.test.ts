@@ -105,6 +105,18 @@ describe("the vault naming another signer than the enclave trusted last", () => 
     expect(trust.refuses(OLD)).toBe(true);
   });
 
+  it("keeps that enclave aside when a word then names it at a later epoch, a floor rise or a late answer's, until a read of the vault names it", async () => {
+    const { node, trust } = await trustedHardware();
+    trust.heedOperator({ enclave: OLD, signer: { epoch: 4, address: OLD } });
+    node.vault = { release: releaseName(DIGEST, CONFIG), signer: NEW };
+    await trust.heedVault(NEW);
+    trust.heedSigner({ epoch: 5, address: OLD });
+    expect(trust.refuses(OLD)).toBe(true);
+    node.vault = { release: releaseName(DIGEST, CONFIG), signer: OLD };
+    await trust.verify();
+    expect([trust.status.kind, trust.refuses(OLD)]).toEqual(["verified", false]);
+  });
+
   it("leaves the enclave it names alone when a check of it fails, and puts nothing aside at a first check", async () => {
     const { node, trust } = await trustedHardware();
     node.collateral = null;

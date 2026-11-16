@@ -141,7 +141,7 @@ export class NodeTrust {
    * it as against the node's own word, while the enclave trusted now keeps the verdict its own check reached, the wallet's vault read included.
    */
   holdSigner(signer: NamedSigner): void {
-    this.naming.judge(null, { signer });
+    this.naming.hold(signer);
   }
 
   /** The highest signer epoch named by this node's signed word or by another node's put to it, with the key named at it; null before one was. */

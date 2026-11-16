@@ -27,9 +27,9 @@ export class RefusedAnswer extends UntrustedError {
   }
 }
 
-/** A signed answer that verified under a key put aside while it was in flight: refused to its caller, while `body`, its JSON, can still say what it named of the vault's signer (monkey-trading/console#377). */
+/** A signed answer that verified under `signer`, a key put aside while it was in flight: refused to its caller, while `body`, its JSON, can still say what it named of the vault's signer (monkey-trading/console#377). */
 export class SupersededAnswer extends UntrustedError {
-  constructor(reason: string, readonly body: unknown) {
+  constructor(reason: string, readonly body: unknown, readonly signer: string) {
     super(reason);
     this.name = "SupersededAnswer";
   }

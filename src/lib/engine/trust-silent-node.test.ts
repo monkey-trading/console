@@ -107,6 +107,8 @@ describe("a node moved to under a signer the visit heard before (monkey-trading/
       held.address = KB;
       vault.facts = { release, signer: KB };
       await trust.verify();
+      // Its own word named KB once, before it stopped stating a signer.
+      trust.heedOperator({ signer: { epoch: 7, address: KB } });
       trust.holdSigner({ epoch: 8, address: KA });
       expect([trust.status.kind, trust.refuses(KB), trust.signerNamed], provider).toEqual([provider === "mock" ? "mock" : "verified", false, { epoch: 8, address: KA }]);
       // The wallet goes, and the enclave answers under KC.

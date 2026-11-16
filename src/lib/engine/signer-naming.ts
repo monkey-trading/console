@@ -36,6 +36,8 @@ export class SignerNaming {
   private named: NamedSigner | null = null;
   /** Enclave addresses a stated signer has put aside, the key named at an earlier epoch among them: a node that attests one stays refused until the vault names it again at a later epoch. */
   private readonly superseded = new Set<string>();
+  /** Those a read of the vault put aside: only a read of the vault that names one takes it back, never a word, which may be older than the read. */
+  private readonly vaultRefused = new Set<string>();
 
   /**
    * Judges `answer`, which `trusted` (the verified enclave, null when none) signed: null when it stands, or the reason it is refused and
@@ -54,7 +56,7 @@ export class SignerNaming {
       // The key named at the earlier epoch is no longer the vault's, whichever node says so.
       if (this.named !== null && this.named.address !== address) this.superseded.add(this.named.address);
       this.named = { epoch: claim.epoch, address };
-      this.superseded.delete(address);
+      if (!this.vaultRefused.has(address)) this.superseded.delete(address);
     }
     const stands = trusted === null || (!conflict && this.named !== null && trusted === this.named.address);
     if (trusted !== null && !stands) this.superseded.add(trusted);
@@ -65,7 +67,8 @@ export class SignerNaming {
   /**
    * Why a node that attested `address` is refused for the signer the vault names, or null: its own signed word on it is read before any
    * other answer is taken, so a node the vault no longer names is refused at the first check, not at the first operator read; an enclave
-   * put aside earlier stays refused unless that word names it again at a later epoch. A node that states none (one that predates the
+   * put aside earlier stays refused unless that word names it again at a later epoch, or, for one a read of the vault put aside, until a
+   * read of the vault names it. A node that states none (one that predates the
    * route, which `operatorClaim` reads as nothing stated, or whose liveness rule does not run) is judged by what other reads have said:
    * it is refused, and put aside, while they name another key at the highest epoch seen, unless this check's own read of the vault named
    * it (`vaultJudged`, monkey-trading/console#376). A word that cannot be read refuses the node: the next answer it is asked for checks it again.
@@ -85,10 +88,22 @@ export class SignerNaming {
     return SIGNER_SUPERSEDED;
   }
 
-  /** The vault itself, read through the wallet, names `signer`: an enclave it does not name is put aside, and the one it does is taken back. */
+  /** The vault itself, read through the wallet, names `signer`: an enclave it does not name is put aside until a read of the vault names it, and the one it does is taken back. */
   vaultSays(enclave: string, signer: string): void {
-    if (enclave === signer) this.superseded.delete(enclave);
-    else this.superseded.add(enclave);
+    if (enclave === signer) {
+      this.superseded.delete(enclave);
+      this.vaultRefused.delete(enclave);
+    } else {
+      this.superseded.add(enclave);
+      this.vaultRefused.add(enclave);
+    }
+  }
+
+  /** Raises the highest epoch seen to `signer`, a word heard before this node was in use, without putting any key aside: later checks are held to it, while the enclave trusted now keeps its verdict (monkey-trading/console#376). */
+  hold(signer: NamedSigner): void {
+    if (this.named !== null && signer.epoch <= this.named.epoch) return;
+    this.named = { epoch: signer.epoch, address: signer.address.toLowerCase() };
+    this.onRaised();
   }
 
   /** The highest epoch seen and the key named at it; null before any. */

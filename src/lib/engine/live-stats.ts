@@ -47,7 +47,8 @@ export function liveStats(get: (path: string) => Promise<unknown>, heedOperator:
         if (error instanceof SupersededAnswer) {
           // Refused, as its key was put aside while it came, but what it names of the signer counts (monkey-trading/console#377); the enclave signed it, so its shape is the engine's.
           const late = error.body as OperatorRoute;
-          if (late.signer !== undefined) heedSigner(late.signer);
+          // As any operator answer, it speaks only for the enclave that signed it.
+          if (late.signer !== undefined && (late.enclave === undefined || late.enclave.toLowerCase() === error.signer)) heedSigner(late.signer);
           throw new RefusedAnswer(error.message, late);
         }
         // A node refused at its check cannot be asked again, but what it last said stays with the refusal: it still says which node the registry names now.
