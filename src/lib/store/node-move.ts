@@ -1,11 +1,12 @@
 /**
  * Moving the session to another node: a fresh store over a fresh client, around the same wallet,
  * session key and setup state, since the connection has not ended. Nothing read from the old node
- * exists in the new store, and work the old store has in flight lands in a store no screen reads and
- * finds its wallet gone, so it sends nothing. A session key survives the move because it is registered
- * in the engine's state, which an elected successor takes with the log; a node that no longer holds it
- * refuses it, and the session-signed path then disconnects the wallet, so reconnecting brings setup
- * back at the key's step.
+ * exists in the new store but the chart's bars, which the new node's marks then extend, and work
+ * the old store has in flight lands in a store no screen reads and finds its wallet gone, so it
+ * sends nothing. A session key survives the move because it is registered in the engine's state,
+ * which an elected successor takes with the log; a node that no longer holds it refuses it, and the
+ * session-signed path then disconnects the wallet, so reconnecting brings setup back at the key's
+ * step.
  */
 
 import type { OperatorFollower } from "../engine/operator-follow";
@@ -46,6 +47,7 @@ export async function moveToNode(old: ConsoleStore, next: ConsoleStore): Promise
   const { sessionExpiresAt, setup } = old.getSnapshot();
   old.movedAway = true;
   next.exit.keeper.carry(old.getSnapshot().exit, old.exit.keeper); // a proof the browser would not keep, or the wallet has not checked, lives only in the page
+  next.barsSeed.carry(old.getSnapshot()); // the chart keeps the verified bars it showed, and the new node's marks merge into them
   old.liveWallet = null;
   old.sessionKey = null;
   old.sessionLogin = null;

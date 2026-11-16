@@ -158,11 +158,16 @@ export function barsFromCandles(candles: readonly Candle[], seconds: number): Ba
  * its high and low are the corrected open set against the extrema the bucket's ticks actually
  * observed (`observedHigh`/`observedLow`), never the synthetic open the stream carried forward —
  * that open may lie outside the range its ticks saw, and a tick extreme can coincide with it.
+ * A fetch that begins after bars `current` already holds, as from a node whose history starts later
+ * (the next operator's server after a move), may cover its first bucket only in part, so that bucket
+ * keeps the open the console saw first.
  */
 export function mergeFetchedBars(fetched: readonly Bar[], current: readonly Bar[], pre: readonly Bar[] | null): Bar[] {
   const last = fetched[fetched.length - 1];
   if (last === undefined) return current.slice(-MAX_BARS);
   const preAt = pre?.find((bar) => bar.time === last.time);
+  const opening = fetched[0];
+  const startsInside = opening !== undefined && current.some((bar) => bar.time < opening.time);
   const liveByTime = new Map<number, Bar>();
   for (const bar of current) if (bar.time <= last.time) liveByTime.set(bar.time, bar);
   const body = fetched.map((bar) => {
@@ -171,6 +176,7 @@ export function mergeFetchedBars(fetched: readonly Bar[], current: readonly Bar[
     if (live === undefined) return bar;
     const wider = {
       ...bar,
+      open: bar === opening && startsInside ? live.open : bar.open,
       high: Math.max(bar.high, live.high),
       low: Math.min(bar.low, live.low),
       observedHigh: Math.max(bar.observedHigh, live.observedHigh),
