@@ -32,9 +32,9 @@
 # ROTATION=1 runs the parameter votes' rotation set with an engine for each member, on a node built with
 # the engine's development-only `short-turns` feature, whose operator turns last five minutes. Anvil
 # starts nine days in the past, so the registry's one-day epoch and the set's seven-day notice pass on the
-# chain's clock before any engine starts; the turn in effect now is drawn for the first engine, and the
-# chain then runs on true time. The first engine seals new keys and the timelock installs its enclave;
-# the second and third start as members, following it. Each member posts through relayers of its own
+# chain's clock before any engine starts, and the chain then runs on true time. The first engine seals new
+# keys and the timelock installs its enclave, and it holds them until the first turn the stack draws, a turn
+# after its log names the set; the second and third start as members, following it. Each member posts through relayers of its own
 # (checkpoints: Anvil accounts 9, 11 and 13; log heads: 10, 12 and 14) and runs a liveness caller (15, 16
 # and 17), and the stack sends each standby key registration a member's node writes, from its candidate.
 # From the first turn the engines accept, a turn after the first engine's log names the set, the stack
@@ -828,7 +828,7 @@ fi
 
 if [[ "$rotation" == 1 ]]; then
   adopt_rotation_set
-  step "Draw the turn in effect now for the first engine, then run the chain on true time"
+  step "Run the chain on true time"
   step_log="$work/turns.log"
   first_of() { awk 'NR == 1 {print $1}'; }
   turn_offset="$(cast call "$schedule" 'boundary(uint64)(uint64)' 0 --rpc-url "$rpc" | first_of)"
@@ -854,25 +854,12 @@ if [[ "$rotation" == 1 ]]; then
       "$(cast call "$seed_receiver" 'seedEpoch(uint64)(uint64)' "$1" --rpc-url "$rpc" | first_of)" "$2"
   }
   drawn_candidate() { cast call "$schedule" 'turnOf(uint64)((address,uint16,uint8,uint32,uint64,uint64,bytes32,address))' "$1" --rpc-url "$rpc" | tr -d '(' | cut -d, -f1; }
-  # The turn in effect on true time, with at least a minute of it left.
-  now="$(date +%s)"
-  first_turn=$(((now - turn_offset) / turn_secs))
-  if (($(boundary_of $((first_turn + 1))) < now + 60)); then
-    echo "    Waiting $(($(boundary_of $((first_turn + 1))) + 5 - now)) s for the next turn, as this one ends within a minute"
-    sleep $(($(boundary_of $((first_turn + 1))) + 5 - now))
-    first_turn=$((first_turn + 1))
-  fi
-  seed="$(seed_for "$first_turn" "$operator")" || die "no seed draws turn $first_turn for the first engine"
-  mine_at $(($(boundary_of "$first_turn") - turn_secs - 10))
-  relay_seed "$first_turn" "$seed"
-  mine_at $(($(boundary_of "$first_turn") - turn_secs))
-  send "$schedule" 'draw(uint64)' "$first_turn" --private-key "$payer_key"
-  [[ "$(lower "$(drawn_candidate "$first_turn")")" == "$(lower "$operator")" ]] || die "turn $first_turn was not drawn for the first engine"
+  # No turn is drawn yet: the first engine's log names the set only once it runs, and it accepts a turn only a turn
+  # after that. The first engine holds the key the timelock installed until the first turn the stack draws below.
   mine_at "$(date +%s)"
-  # A turn names the operator from its boundary: the vault's release is the turn's, in the turn's generation.
   poll 30 folded || die "the vault does not name the first engine's release at a finalized block on true time"
 
-  # The members' engines, by index: the first engine, which holds the first turn, then the second and the third.
+  # The members' engines, by index: the first engine, which holds the installed key until the first turn, then the second and the third.
   member_names=(first second third)
   member_candidates=("$operator" "$second_candidate" "$third_candidate")
   member_dirs=("$work" "$work/second" "$work/third")
@@ -1267,7 +1254,7 @@ if [[ "$second_engine" == 1 ]]; then
   if [[ "$rotation" == 1 ]]; then
     two_engines="
 Rotation           Each member of the rotation set runs an engine built with five-minute turns, a development
-                   option. The first engine ($api) holds turn $first_turn, which began at $(stamp "$(boundary_of "$first_turn")"),
+                   option. The first engine ($api) holds the key the timelock installed until the first turn,
                    and the second ($second_api) and the third ($third_api) follow it.
                    The stack draws each turn from turn $next_turn, which begins at $(stamp "$(boundary_of "$next_turn")"), for the
                    next member in that order, and at each boundary that member's engine takes the keys from
