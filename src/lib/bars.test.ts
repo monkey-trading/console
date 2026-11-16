@@ -125,6 +125,15 @@ describe("mergeFetchedBars", () => {
     expect(mergeFetchedBars(fetched, current, [lastFetched])).toEqual([bar(0, 100, 110, 90, 105), bar(60, 105, 120, 100, 118), bar(120, 118, 130, 115, 116)]);
   });
 
+  it("keeps every bar held before a fetch that begins later, and the open the console saw first in the fetch's first bucket", () => {
+    // Bars held from the last node's server; the next one's history begins partway through bucket 60.
+    const held = [bar(0, 90, 95, 88, 94), bar(60, 94, 99, 93, 97)];
+    const fetched = [bar(60, 98, 101, 98, 100), bar(120, 100, 102, 99, 101)];
+    expect(mergeFetchedBars(fetched, held, held)).toEqual([bar(0, 90, 95, 88, 94), bar(60, 94, 101, 93, 100), bar(120, 100, 102, 99, 101)]);
+    // A fetch that reaches back past everything held keeps its own open.
+    expect(mergeFetchedBars([bar(0, 89, 95, 88, 94), ...fetched], held, held)[0]).toEqual(bar(0, 89, 95, 88, 94));
+  });
+
   it("keeps the stream's extremes when the shared bucket gained no ticks during the fetch", () => {
     const stale = bar(60, 100, 120, 80, 100); // the stream's bar: a spike the sampled marks missed
     const lastFetched = bar(60, 100, 110, 90, 108); // the same bucket, closed later in the log

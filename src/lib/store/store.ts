@@ -158,7 +158,7 @@ export class ConsoleStore {
     this.barsSeed.reset();
     this.deps.drive?.(nowMs);
     const unfollow = followSessionKey(this);
-    this.patch({ now: nowMs, bars: seedAllBars(this.snapshot.markets, nowMs, this.deps.history) });
+    this.patch({ now: nowMs, bars: { ...seedAllBars(this.snapshot.markets, nowMs, this.deps.history), ...this.barsSeed.carried } });
     this.unwatch = this.deps.client.watch((event) => this.onClientEvent(event));
     this.unsubscribe = this.deps.client.subscribe((message) => this.onMessage(message));
     void this.checkNode();

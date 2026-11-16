@@ -3,7 +3,8 @@
  * the stream-built series, with the stream's ticks that arrived during the fetch merged back in
  * and the stream keeping the series current from then on. A node that 404s the endpoint is an
  * older node: the archive scan seeds the chart instead, asked for through the store's
- * `historyScan` dependency.
+ * `historyScan` dependency. A move to another node's store carries the bars already shown, which the
+ * new node's marks merge into rather than replace (monkey-trading/console#426).
  */
 
 import { mergeFetchedBars, TIMEFRAMES, type Bar, type TimeframeId } from "../bars";
@@ -11,6 +12,7 @@ import { EngineError } from "../engine/client";
 import { fetchBarsHistory, windowSecondsFor } from "../engine/marks-fetch";
 import type { MarketId } from "../engine/types";
 import { HISTORY_UNAVAILABLE } from "./bars-scan";
+import type { ConsoleState } from "./state";
 import type { ConsoleStore } from "./store";
 import { awaitsTrust } from "./signing";
 
@@ -30,8 +32,16 @@ export class BarsSeed {
   private unavailable = false;
   /** Whether the archive-scan fallback has started; a false start (no log head yet) is asked again. */
   private scanAsked = false;
+  /** The bars a move to this store's node brought from the last node's store, which every start keeps. */
+  carried: ConsoleState["bars"] = {};
 
   constructor(private readonly store: ConsoleStore) {}
+
+  /** Keeps the bars the last node's store showed, and where they came from, so a move to this node keeps the chart's history. */
+  carry({ bars, barProvenance }: Pick<ConsoleState, "bars" | "barProvenance">): void {
+    this.carried = bars;
+    this.store.patch({ bars: { ...this.store.getSnapshot().bars, ...bars }, barProvenance });
+  }
 
   /**
    * Seeds (market, timeframe)'s bars from the marks endpoint. Runs only for a signature-checking
@@ -92,8 +102,11 @@ export class BarsSeed {
       // `fromEntries` loses the key type; the keys are exactly the timeframes `TIMEFRAMES` lists.
       const nextPer = Object.fromEntries(TIMEFRAMES.map((tf) => [tf.id, tf.id === timeframe ? series : (per?.[tf.id] ?? [])])) as Record<TimeframeId, Bar[]>;
       const bars = { ...before, [marketId]: nextPer };
-      const barProvenance = fetched.provenance === null ? this.store.getSnapshot().barProvenance
-        : { ...this.store.getSnapshot().barProvenance, [marketId]: { ...this.store.getSnapshot().barProvenance[marketId], [timeframe]: fetched.provenance } };
+      // A series that holds provider-seeded bars, as one carried from the last node may, says so whatever the new marks came from.
+      const held = this.store.getSnapshot().barProvenance[marketId]?.[timeframe];
+      const provenance = held === "seeded_from_provider" ? held : fetched.provenance;
+      const barProvenance = provenance === null ? this.store.getSnapshot().barProvenance
+        : { ...this.store.getSnapshot().barProvenance, [marketId]: { ...this.store.getSnapshot().barProvenance[marketId], [timeframe]: provenance } };
       this.seeded.add(key);
       this.store.patch({ bars, barProvenance });
       if (key === `${this.store.getSnapshot().selected}:${this.store.getSnapshot().timeframe}`) this.store.clearNotice("chart");
