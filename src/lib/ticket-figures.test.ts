@@ -96,7 +96,7 @@ describe("the close summary's state", () => {
     const shown = ticketFigures(state(market, true), market, order("1"));
     expect([shown.closing?.whole, shown.close === null, shown.closeWithheld]).toEqual([false, false, null]);
     const unread = ticketFigures(state(market, true, { pricingCurrent: false, houseStateStatus: "failed" }), market, order("1"));
-    expect([unread.closing?.closed, unread.close, unread.closeWithheld]).toEqual([q("1"), null, "The trading terms have changed, and the new terms could not be loaded. The page will try again automatically."]);
+    expect([unread.closing?.closed, unread.close, unread.closeWithheld]).toEqual([q("1"), null, "The trading terms have changed, and the new terms could not be loaded. The app will try again automatically."]);
     // With no quote yet the figures are withheld too, and still say so.
     const unquoted = ticketFigures(state(market, true, { quotes: {} }), market, order("1"));
     expect([unquoted.closing === null, unquoted.close, typeof unquoted.closeWithheld]).toEqual([false, null, "string"]);
@@ -164,10 +164,10 @@ describe("the house state's terms on the trading surfaces", () => {
     const at = (extra: Partial<ConsoleState>) => { const s = state(market, true, extra); return [currentParams(s) === null ? null : "params", houseTermsNote(s)]; };
     expect(at({})).toEqual(["params", null]);
     expect(at({ houseParams: null, pricingCurrent: false, houseStateStatus: "pending" })).toEqual([null, null]);
-    expect(at({ houseParams: null, pricingCurrent: false, houseStateStatus: "failed" })).toEqual([null, "The trading terms could not be loaded. The page will try again automatically."]);
+    expect(at({ houseParams: null, pricingCurrent: false, houseStateStatus: "failed" })).toEqual([null, "The trading terms could not be loaded. The app will try again automatically."]);
     expect(at({ houseParams: null, pricingCurrent: false, houseStateStatus: "unavailable" })).toEqual([null, "This server does not publish its trading terms."]);
     expect(at({ pricingCurrent: false, houseStateStatus: "read" })).toEqual([null, "The trading terms have changed. The new terms are loading."]);
-    expect(at({ pricingCurrent: false, houseStateStatus: "failed" })).toEqual([null, "The trading terms have changed, and the new terms could not be loaded. The page will try again automatically."]);
+    expect(at({ pricingCurrent: false, houseStateStatus: "failed" })).toEqual([null, "The trading terms have changed, and the new terms could not be loaded. The app will try again automatically."]);
   });
 });
 
@@ -229,7 +229,7 @@ describe("the account's volume tier at the ticket", () => {
     expect(refused.preview.problems).toContain("Insufficient margin. Your equity does not cover the margin this order requires. Volume tier 0 allows leverage of up to 20x in this market.");
     const weekend = { ...market, view: { ...market.view, weekend_margin: { weekend_margin_bps: 750, from: 0, close: 7_200_000, reopen: 1e13 } } };
     const held = ticketFigures(state(weekend, false, { account: poor, houseParams: params, now: 1_000 }), weekend, { ...order("3"), side: "buy" });
-    expect(held.preview.problems).toContain("Insufficient margin. Your equity does not cover the margin this order requires. The higher weekend margin applies in this market, which allows leverage of up to 20x.");
+    expect(held.preview.problems).toContain("Insufficient margin. Your equity does not cover the margin this order requires. The higher weekend margin applies in this market, so the maximum leverage is 20x.");
   });
 
   it("gives the account's own spread bands, its first band ending at its best-price size, and the listed ones before the table is read", async () => {

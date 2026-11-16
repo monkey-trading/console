@@ -22,7 +22,7 @@ describe("tradingPaused", () => {
   it("names an operator on an unlisted node, after a handover and before the market's own states", () => {
     const state = tradingPaused({ ...live, unlisted: true, open: false, priced: false, reduceOnly: true });
     expect(state?.cause).toBe("unlisted");
-    expect(state?.text).toBe("A new operator is taking over the trading server, but this version of the console does not support the new server, so trading has been suspended. Trading will resume once the console has been updated.");
+    expect(state?.text).toBe("A new operator is taking over the trading server, but this version of the app does not support the new server, so trading has been suspended. Trading will resume once the app has been updated.");
     expect(state?.closesAllowed).toBe(true);
     expect(tradingPaused({ ...live, unlisted: true, handover: true })?.cause).toBe("handover");
   });

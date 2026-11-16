@@ -13,6 +13,8 @@ import { useConsole } from "./ConsoleProvider";
 
 const CELL = "px-2 py-2 text-left align-top text-data sm:px-3";
 const DASH = "—";
+/** A tier's reward boost in the table, "None" for no boost as the discounts beside it read. */
+const boostCell = (bps: number) => (bps === 0 ? "None" : describeBoost(bps));
 /** As long as the step to the next tier usually reads, so the sentence it stands for takes its lines. */
 const PLACEHOLDER_STEP = "To reach tier 1, you need a further $000,000 of counted volume. Each day counts for up to $000,000, so reaching it will take at least 2 more days of trading.";
 
@@ -49,10 +51,10 @@ export function VolumeTierCard() {
         <div><dt className="text-fg-3">Counted volume, last 30 days</dt><dd className="mt-0.5 text-data text-fg">{volume === undefined ? DASH : formatUsd(volume.matured)}</dd></div>
         <div><dt className="text-fg-3">Pending</dt><dd className="mt-0.5 text-data text-fg">{volume === undefined ? DASH : formatUsd(volume.pending)}</dd></div>
         {(toxicity !== undefined || standing === null) && (
-          <div className="col-span-2 sm:col-span-1"><dt className="text-fg-3">Extra spread</dt><dd className="mt-0.5 text-data text-fg">{toxicity === undefined ? DASH : toxicity.tier > 0 ? `+${toxicity.addOnBps} ${toxicity.addOnBps === 1 ? "bp" : "bps"} on every price` : "None"}</dd></div>
+          <div className="col-span-2 sm:col-span-1"><dt className="text-fg-3">Extra spread</dt><dd className="mt-0.5 text-data text-fg">{toxicity === undefined ? DASH : toxicity.tier > 0 ? `+${toxicity.addOnBps} ${toxicity.addOnBps === 1 ? "bp" : "bps"} on every trade` : "None"}</dd></div>
         )}
       </dl>
-      <p className="mt-2 text-label leading-relaxed text-fg-3">Opening a position counts towards your volume once it has been held for one minute, and closing it counts as well. A position closed within a minute counts nothing. Pending volume has not been counted yet, and only counted volume moves you up a tier.</p>
+      <p className="mt-2 text-label leading-relaxed text-fg-3">The value of a position you open counts towards your volume once the position has been held for one minute, and the value you close counts as well. A position opened and closed within one minute does not count at all. Volume shown as pending is still waiting for that minute to pass, and only counted volume moves you up a tier.</p>
       {standing !== null && standing.table === null && <p className="mt-3 text-label text-fg-3">Tier details will be shown once the trading terms have loaded.</p>}
       {next !== null && <p className="mt-3 text-caption text-fg-2">{describeNextTier(next)}</p>}
       {/* The sentence the read brings holds its place, unseen, while the account is read. */}
@@ -78,7 +80,7 @@ export function VolumeTierCard() {
               <>
                 <Row label="Base profit fee discount" now={cell((b) => describeDiscount(b.feeDiscountBps), "now")} next={nextColumn ? cell((b) => describeDiscount(b.feeDiscountBps), "next") : null} />
                 <Row label="Financing markup discount" now={cell((b) => describeDiscount(b.financingDiscountBps), "now")} next={nextColumn ? cell((b) => describeDiscount(b.financingDiscountBps), "next") : null} />
-                <Row label="Rewards boost" now={cell((b) => describeBoost(b.emissionsBoostBps), "now")} next={nextColumn ? cell((b) => describeBoost(b.emissionsBoostBps), "next") : null} />
+                <Row label="Reward boost" now={cell((b) => boostCell(b.emissionsBoostBps), "now")} next={nextColumn ? cell((b) => boostCell(b.emissionsBoostBps), "next") : null} />
               </>
             )}
           </tbody>

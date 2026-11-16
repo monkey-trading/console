@@ -71,12 +71,15 @@ async function attempt(store: ConsoleStore, epoch: number, markets: readonly Mar
   }
 }
 
+/** What the chart says when its history could not be had, by a scan or a fetch; the reason is not the trader's to act on. */
+export const HISTORY_UNAVAILABLE = "The price history for this chart could not be loaded, so the chart shows only the prices received since this page was opened.";
+
 /** Says on the chart that a scan spent its retries; development also logs the reason where the owner can see it. */
 function report(store: ConsoleStore, error: unknown): void {
   if (awaitsTrust(error)) return;
   const reason = error instanceof Error ? error.message : String(error);
   if (process.env.NODE_ENV === "development") console.error(`The chart history scan failed: ${reason}`, error);
-  store.notify("chart", `Chart history is unavailable: ${reason.replace(/\.$/, "")}. The chart shows the prices received since this page opened.`);
+  store.notify("chart", HISTORY_UNAVAILABLE);
 }
 
 /**

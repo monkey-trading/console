@@ -37,8 +37,8 @@ function never(value: never): never {
 
 /** The visible line for a schedule that could not be had, or null when it was. */
 export function scheduleNotice(status: LedgerState["scheduleStatus"]): string | null {
-  if (status === "unavailable") return "This server does not publish its MONKEY reward schedule, so the MONKEY column shows — for each loss.";
-  if (status === "failed") return "The MONKEY reward schedule could not be loaded, so the MONKEY column shows — for each loss. Reopen this tab to try again.";
+  if (status === "unavailable") return "This server does not publish its MONKEY reward schedule, so the MONKEY earned by each loss cannot be shown.";
+  if (status === "failed") return "The MONKEY reward schedule could not be loaded, so the MONKEY earned by each loss cannot be shown. Reopen this tab to try again.";
   return null;
 }
 

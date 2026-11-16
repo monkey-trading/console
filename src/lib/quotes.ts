@@ -79,7 +79,7 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
   const { quote } = input;
   if (quote === null) {
     if (input.quoteError === null) return none("Waiting for a live price for this market.");
-    return none(input.quoteError === UNCREDITED ? "Live prices for your account will be shown once your first deposit has been credited." : `No price is available for this market: ${input.quoteError}.`);
+    return none(input.quoteError === UNCREDITED ? "Live prices for your account will be shown once your first deposit has been credited." : "No live price is currently available for this market. Please reload the page to try again.");
   }
   if (quote.unavailable !== undefined) return none(describeReject(quote.unavailable));
   // The side that closes the whole position, when the order is that size, prices at the node's exact close quote.

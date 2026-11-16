@@ -67,7 +67,7 @@ export function OrdersView() {
         <button type="button" disabled={busy || readOnly.readOnly} className={`${confirming ? ARMED : BUTTON} w-full lg:w-auto`} aria-describedby={readOnly.describedBy} onClick={cancelEverything} onKeyDown={holdsDown}>
           {confirming ? `Confirm: cancel ${count} ${noun}` : `Cancel all (${count})`}
         </button>
-        <p role="status" className="sr-only">{confirming ? `Press again within five seconds to cancel ${count} ${noun}.` : ""}</p>
+        <p role="status" className="sr-only">{confirming ? `Press again within ${CONFIRM_MS / 1000} seconds to cancel ${count} working ${noun}.` : ""}</p>
         <Notice surface="orders" />
       </div>
       <ul className="lg:hidden">

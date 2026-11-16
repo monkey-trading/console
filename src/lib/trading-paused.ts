@@ -34,7 +34,7 @@ export function tradingPaused(input: {
     return { cause: "handover", text: "A new operator is taking over the trading server, so trading has been suspended. Trading will resume once the new operator's server has been verified.", closesAllowed: true };
   }
   if (input.unlisted) {
-    return { cause: "unlisted", text: "A new operator is taking over the trading server, but this version of the console does not support the new server, so trading has been suspended. Trading will resume once the console has been updated.", closesAllowed: true };
+    return { cause: "unlisted", text: "A new operator is taking over the trading server, but this version of the app does not support the new server, so trading has been suspended. Trading will resume once the app has been updated.", closesAllowed: true };
   }
   if (!input.open) {
     return { cause: "closed", text: input.scheduleWords === null ? "This market is currently closed." : `This market is currently closed. Its trading hours are ${input.scheduleWords}.`, closesAllowed: true };

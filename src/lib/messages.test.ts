@@ -15,7 +15,7 @@ describe("order-limit and rate refusals", () => {
   });
 
   it("says a 429 for the tier's request rate recorded nothing", () => {
-    expect(describeTierRate({ tier: 0, requestsPerSecond: 2 })).toBe("Your request was not processed. You are sending requests faster than volume tier 0 allows, which is 2 per second. Please wait a moment and try again.");
+    expect(describeTierRate({ tier: 0, requestsPerSecond: 2 })).toBe("Your request was not processed. You are sending requests faster than volume tier 0 allows, which is 2 per second. Wait a moment and try again.");
   });
 });
 
@@ -25,9 +25,15 @@ describe("describeReject", () => {
     expect(describeReject({ kind: "too_many_session_keys", max: 100 })).toBe("This account has added too many session keys in a short time. One more can be added each hour.");
   });
 
+  it("says what a stale request, an unpayable withdrawal and a far expiry mean for the trader, and what to do", () => {
+    expect(describeReject({ kind: "invalid_nonce", expected: 4 })).toBe("Another request from your account was processed first, so this request was not accepted. Check your orders and positions, then try again.");
+    expect(describeReject({ kind: "payout_unavailable" })).toBe("Withdrawals cannot be processed at the moment, and your balance has not been debited. Try again later.");
+    expect(describeReject({ kind: "expiry_too_far", latest: 1 })).toBe("The request was rejected because its expiry time was too far ahead of the server's time. Check that your device clock is correct, then try again.");
+  });
+
   it("names the numbers a slippage and a margin refusal carry", () => {
     expect(describeReject({ kind: "slippage", quoted: "100", live: "101", slippage_bps: 100 })).toBe(
-      "Your order was not filled, because the price moved 100 bps against you, from 100 to 101, which is more than your maximum slippage allows. Please try again at the current price.",
+      "Your order was not filled. The price moved 100 bps against you, from 100 to 101, which is more than your maximum slippage allows. Please try again at the current price.",
     );
     expect(describeReject({ kind: "insufficient_margin", equity: "1000", required: "2500.5" })).toBe("Insufficient margin. This order requires $2,500.50 of margin, and your equity is $1,000.00.");
     expect(describeReject({ kind: "insufficient_funds", available: "12" })).toBe("Insufficient funds. You can withdraw up to $12.00 at the moment.");
@@ -105,6 +111,6 @@ describe("describeReject for an invalid order", () => {
     expect(describeReject({ kind: "invalid_order", reason: "spread at this size reaches the price" })).toBe("This order is too large to be priced. Please try a smaller order size.");
     expect(describeReject({ kind: "invalid_order", reason: "qty out of range" })).toBe("The order size is outside the range the server accepts.");
     expect(describeReject({ kind: "invalid_order", reason: "price out of range" })).toBe("The order price is outside the range the server accepts.");
-    expect(describeReject({ kind: "invalid_order", reason: "market named twice" })).toBe("This order cannot be placed: market named twice.");
+    expect(describeReject({ kind: "invalid_order", reason: "market named twice" })).toBe("This order cannot be placed. Market named twice.");
   });
 });

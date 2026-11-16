@@ -57,12 +57,12 @@ describe("VolumeTierCard", () => {
     expect(html).toContain("Up to $1,000,000");
     expect(html).toContain("Up to 20x");
     expect(html).toContain("Up to 50x");
-    expect(html).toContain("+2 bps on every price");
+    expect(html).toContain("+2 bps on every trade");
   });
 
   it("names a toxicity tier of zero as none, and an add-on in bps", () => {
     expect(render({ ...ACCOUNT, toxicity: { tier: 0, addOnBps: 0 } }, PARAMS, VolumeTierCard)).toMatch(/Extra spread<\/dt><dd[^>]*>None</);
-    expect(render(ACCOUNT, PARAMS, VolumeTierCard)).toContain("+2 bps on every price");
+    expect(render(ACCOUNT, PARAMS, VolumeTierCard)).toContain("+2 bps on every trade");
   });
 
   it("shows what each tier takes off the profit fee and financing and adds to emissions from V68, and no rows from a node that predates it", () => {
@@ -71,7 +71,7 @@ describe("VolumeTierCard", () => {
     const html = render({ ...ACCOUNT, ...(served === null ? {} : { volume: served }) }, { ...PARAMS, volumeTiers: benefits }, VolumeTierCard);
     expect(html).toMatch(/Base profit fee discount<\/th><td[^>]*>None<\/td><td[^>]*>10%</);
     expect(html).toMatch(/Financing markup discount<\/th><td[^>]*>None<\/td><td[^>]*>5%</);
-    expect(html).toMatch(/Rewards boost<\/th><td[^>]*>1x<\/td><td[^>]*>1.25x</);
+    expect(html).toMatch(/Reward boost<\/th><td[^>]*>None<\/td><td[^>]*>1.25x</);
     expect(render(ACCOUNT, PARAMS, VolumeTierCard)).not.toContain("profit fee discount");
   });
 

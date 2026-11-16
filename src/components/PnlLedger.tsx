@@ -46,7 +46,7 @@ export function PnlLedger() {
   const full = atBound(ledger.data);
   const { blank, status } = ledgerHeader(ledger, items.length, totals, more, full);
   const rowFor = (item: (typeof items)[number]) => ({ item, symbol: names.get(item.row.market)?.symbol ?? `market ${item.row.market}`, places: names.get(item.row.market)?.places ?? 2, scheduleStatus: ledger.scheduleStatus });
-  const empty = !ready ? (ledger.status === "failed" ? "Your realised results could not be loaded." : "Loading your realised results…") : more ? "No realised profit or loss has been loaded yet. Select Load more to see older results." : "You have no realised profit or loss yet. Closed positions, close-outs and cash paid in lieu after a stock split will be listed here.";
+  const empty = !ready ? (ledger.status === "failed" ? "Your realised results could not be loaded." : "Loading your realised results…") : more ? "The results loaded so far include no realised profit or loss. Select Load more to see older results." : "You have no realised profit or loss yet. Closed positions, close-outs and cash paid in lieu after a stock split will be listed here.";
 
   return (
     <div>

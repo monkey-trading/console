@@ -35,7 +35,7 @@ export function describeReverifying(): { lead: string; rest: string } {
 export function describeReject(reject: Reject): string {
   switch (reject.kind) {
     case "access":
-      return reject.reason === "eligibility_required" ? "Your eligibility has not been declared. Please sign the eligibility declaration first." : reject.reason === "already_attested" ? "Your eligibility declaration has already been recorded." : "This service is not available in your region.";
+      return reject.reason === "eligibility_required" ? "Your eligibility has not been declared. Sign the eligibility declaration to continue." : reject.reason === "already_attested" ? "Your eligibility declaration has already been recorded." : "This service is not available in your region.";
     case "market_closed": return "This market is closed.";
     case "reduce_only": return "This market is currently accepting only orders that reduce an existing position.";
     case "no_price": return "No live price is currently available for this market.";
@@ -44,7 +44,7 @@ export function describeReject(reject: Reject): string {
     case "invalid_order": return describeInvalidOrder(reject.reason);
     case "invalid_amount": return "Enter an amount above zero.";
     case "slippage":
-      return `Your order was not filled, because the price moved ${reject.slippage_bps} bps against you, from ${decimals(reject.quoted, 5)} to ${decimals(reject.live, 5)}, which is more than your maximum slippage allows. Please try again at the current price.`;
+      return `Your order was not filled. The price moved ${reject.slippage_bps} bps against you, from ${decimals(reject.quoted, 5)} to ${decimals(reject.live, 5)}, which is more than your maximum slippage allows. Please try again at the current price.`;
     case "insufficient_margin": return `Insufficient margin. This order requires ${usd(reject.required)} of margin, and your equity is ${usd(reject.equity)}.`;
     case "weekend_margin": return `Insufficient margin. The higher weekend margin applies in this market, so this order requires ${usd(reject.required)} of margin, and your equity is ${usd(reject.equity)}.`;
     case "insufficient_funds": return `Insufficient funds. You can withdraw up to ${usd(reject.available)} at the moment.`;
@@ -52,15 +52,15 @@ export function describeReject(reject: Reject): string {
     case "too_many_orders": return `Working order limit reached. Your account can have up to ${reject.max} working orders at a time. Cancel a working order to place a new one.`;
     case "tier_order_limit": return `Working order limit reached. Volume tier ${reject.tier} allows up to ${reject.max} working orders at a time. Cancel a working order to place a new one, or trade more to reach a higher tier.`;
     case "close_spread_ceiling": return `This order cannot reverse the position in a single trade, because its spread would exceed the market's maximum closing spread of ${reject.ceiling_bps} bps. Close the position first, then open a new position on the other side.`;
-    case "invalid_signature": return "The request's signature was not accepted. Please try again.";
-    case "missing_signature": return "The request was not signed. Please sign it and try again.";
-    case "invalid_nonce": return "The request was received out of order. Please try again.";
-    case "payout_unavailable": return "Withdrawals cannot be paid yet. Please try again later.";
-    case "session_key_scope": return "This browser's session key can only place and cancel orders and cannot move funds. Please sign this request with your wallet.";
+    case "invalid_signature": return "The request's signature was not accepted. Try again.";
+    case "missing_signature": return "The request was not signed. Sign the request and try again.";
+    case "invalid_nonce": return "Another request from your account was processed first, so this request was not accepted. Check your orders and positions, then try again.";
+    case "payout_unavailable": return "Withdrawals cannot be processed at the moment, and your balance has not been debited. Try again later.";
+    case "session_key_scope": return "This browser's session key can only place and cancel orders and cannot move funds. Sign this request with your wallet instead.";
     case "invalid_session_key": return "The server did not accept this browser's session key.";
     case "session_key_unsupported": return "This server does not support session keys yet.";
-    case "expired": return "The request expired before it reached the server. Please try again.";
-    case "expiry_too_far": return "The request's expiry time was too far in the future. Please try again.";
+    case "expired": return "The request expired before it reached the server. Try again.";
+    case "expiry_too_far": return "The request was rejected because its expiry time was too far ahead of the server's time. Check that your device clock is correct, then try again.";
     case "too_many_session_keys": return reject.max === MAX_SESSION_KEYS_PER_ACCOUNT ? "This account already has the maximum number of session keys." : "This account has added too many session keys in a short time. One more can be added each hour.";
     case "batch_unsupported": return "This server does not yet support cancelling or closing everything in a single request.";
   }
@@ -71,19 +71,19 @@ export function describeReject(reject: Reject): string {
 /**
  * An invalid order's reason as a sentence: the engine's reasons for the minimum, for a spread that reaches the price, and for
  * a size or price outside its input range in plain words (`execution/mod.rs`, `execution/validation.rs`), and any other as the
- * node words it.
+ * node words it, as a sentence of its own.
  */
 function describeInvalidOrder(reason: string): string {
   if (reason.startsWith("below minimum order notional") || reason.startsWith("below the minimum order")) return "This order is below the market's minimum order value.";
   if (reason === "spread at this size reaches the price") return "This order is too large to be priced. Please try a smaller order size.";
   if (reason === "qty out of range") return "The order size is outside the range the server accepts.";
   if (reason === "price out of range") return "The order price is outside the range the server accepts.";
-  return `This order cannot be placed: ${reason}.`;
+  return `This order cannot be placed. ${reason.charAt(0).toUpperCase()}${reason.slice(1).replace(/\.$/, "")}.`;
 }
 
 /** What a 429 that names the account's volume tier says: how fast it may send, and that nothing was recorded. */
 export function describeTierRate(limit: TierRateLimit): string {
-  return `Your request was not processed. You are sending requests faster than volume tier ${limit.tier} allows, which is ${limit.requestsPerSecond} per second. Please wait a moment and try again.`;
+  return `Your request was not processed. You are sending requests faster than volume tier ${limit.tier} allows, which is ${limit.requestsPerSecond} per second. Wait a moment and try again.`;
 }
 
 /** A short line for the activity log, or null for an event the log does not show. */

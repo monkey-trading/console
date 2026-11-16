@@ -173,7 +173,7 @@ export function DealTicket() {
                 <button key={bps} type="button" aria-pressed={slippage === bps} onClick={() => setSlippage(bps)} className={`min-h-11 rounded border py-2 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow ${slippage === bps ? "border-glow bg-glow/10 text-glow" : "border-line-2 text-fg-2"}`}>{bps} bps</button>
               ))}
             </div>
-            <p className="mt-2 text-label leading-relaxed text-fg-3">{kind === "market" ? "In a fast-moving market, the execution price of a market order may be worse than the price quoted on screen. Restricting the maximum slippage means orders that would fill at an adverse price are rejected." : "Limit and stop orders are executed at the prevailing market price once triggered, so the maximum slippage does not apply to them."}</p>
+            <p className="mt-2 text-label leading-relaxed text-fg-3">{kind === "market" ? "In a fast-moving market, the execution price of a market order may be worse than the price quoted on screen. Restricting the maximum slippage means orders that would fill at an adverse price are rejected." : "The maximum slippage applies only to market orders. A limit order is filled only at its limit price or better, and a stop order is executed at the prevailing market price once its trigger price is reached."}</p>
           </fieldset>
         </details>
         <button type="submit" aria-disabled={!canPlace && setup !== "needed"} className={`mt-4 min-h-12 w-full rounded border py-3 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 ${side === "buy" ? "border-glow bg-glow/10 text-glow hover:bg-glow/20" : "border-ember bg-ember/10 text-ember hover:bg-ember/20"}`}>
@@ -187,13 +187,13 @@ export function DealTicket() {
           {!gate && shownProblems.map((p) => <p key={p}>{p}{p === NO_FUNDS && <> <FundingLink /></>}</p>)}
         </div>
       </form>
-      <MarketInfo market={market} spreadTiers={spreadTiers} ownBands={ownBands} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={terms?.stressLevels[market.stress] ?? null} notice={terms === null ? null : (state.listingNotices[market.id] ?? null)} paramsNote={houseTermsNote(state)} />
+      <MarketInfo market={market} spreadTiers={spreadTiers} ownBands={ownBands} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={terms?.stressLevels[market.stress] ?? null} closeoutBps={terms?.closeoutLevelBps ?? null} notice={terms === null ? null : (state.listingNotices[market.id] ?? null)} paramsNote={houseTermsNote(state)} />
     </>
   );
 }
 
-/** The spread line under the prices: the executable spread for the size, and the toxicity add-on on each price, named extra spread, when there is one. */
+/** The spread line under the prices: the executable spread for the size, and the account's toxicity add-on, named extra spread, when there is one. */
 function spreadLine(spreadTenths: number | null, live: boolean, toxicityBps: number) {
   if (spreadTenths === null) return "No price is available for this order size yet.";
-  return <>{live ? "Your spread" : "The spread"} for this order size is <span className="text-fg-2">{formatTenthPercent(spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(spreadTenths)})</span>{toxicityBps > 0 && <>, including an extra spread of <span className="text-fg-2">{toxicityBps} {toxicityBps === 1 ? "bp" : "bps"}</span> on each price</>}.</>;
+  return <>{live ? "Your spread" : "The spread"} for this order size is <span className="text-fg-2">{formatTenthPercent(spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(spreadTenths)})</span>{toxicityBps > 0 && <>, including an extra spread of <span className="text-fg-2">{toxicityBps} {toxicityBps === 1 ? "bp" : "bps"}</span> that applies to your account</>}.</>;
 }

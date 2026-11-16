@@ -1,11 +1,11 @@
 /** The ticket's "Market info" section: hours, stress, the spread bands and any pending listing change, margin, price terms and the house's room. */
 
 import type { ListingNotice, Side, SpreadTier, StressLevel } from "@/lib/engine/types";
+import { spokenRate } from "@/lib/fee-words";
 import { bpsOf, formatUsd, type Fixed } from "@/lib/fixed";
 import { formatMovePercent } from "@/lib/format";
 import type { MarketModel } from "@/lib/models";
 import { formatMark } from "@/lib/price-format";
-import { CLOSE_OUT_BPS } from "@/lib/pricing";
 import { describeSchedule } from "@/lib/schedule";
 import { bandRows, describeNotice, formatMultiplier, spreadRate } from "@/lib/spread-bands";
 import { STRESS_NAMES, STRESS_TONE } from "@/lib/stress";
@@ -25,6 +25,12 @@ function UseBar({ bps }: { bps: number }) {
   );
 }
 
+/** When positions are closed out, at the close-out level the trading terms set, or in words while they are not read. */
+export function describeCloseout(closeoutBps: number | null): string {
+  if (closeoutBps === null) return "If your equity falls below the close-out level, which is a share of your margin requirement, your positions are closed out.";
+  return `If your equity falls below ${spokenRate(closeoutBps)} of your margin requirement, your positions are closed out.`;
+}
+
 /** What the market's stress level adds now: the size spread's multiplier and the spread it adds to every fill. */
 function stressTerms(level: StressLevel): string {
   const minimum = level.min_spread_bps > 0 ? `, plus ${level.min_spread_bps} ${level.min_spread_bps === 1 ? "bp" : "bps"} on every trade` : "";
@@ -34,10 +40,10 @@ function stressTerms(level: StressLevel): string {
 /**
  * `price` is the price a market order on `side` would be sent at, with the worst price `slippageBps`
  * allows; null shows neither. `stress` is the market's level's terms from the node's parameters, and
- * `notice` its pending listing notice; null when the node has given neither or they are not current.
+ * `notice` its pending listing notice, and `closeoutBps` the close-out level; null when the node has given none or they are not current.
  * `paramsNote` says why they are missing: a read failed, the node serves none, or a change is unread.
  */
-export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price, slippageBps, stress, notice, paramsNote }: { market: MarketModel; spreadTiers: readonly SpreadTier[]; ownBands: boolean; preview: TicketPreview; side: Side; price: Fixed | null; slippageBps: number; stress: StressLevel | null; notice: ListingNotice | null; paramsNote: string | null }) {
+export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price, slippageBps, stress, closeoutBps, notice, paramsNote }: { market: MarketModel; spreadTiers: readonly SpreadTier[]; ownBands: boolean; preview: TicketPreview; side: Side; price: Fixed | null; slippageBps: number; stress: StressLevel | null; closeoutBps: number | null; notice: ListingNotice | null; paramsNote: string | null }) {
   const worst = price === null ? null : side === "buy" ? price + bpsOf(price, slippageBps) : price - bpsOf(price, slippageBps);
   const useBps = preview.marginUseBps;
   const filled = preview.houseCap > 0n ? Math.min(8, Math.ceil(Number((preview.markNotional * 8n) / preview.houseCap) || 0)) : 0;
@@ -65,7 +71,7 @@ export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price
           <dl className="mt-2 space-y-1">
             {bands.map((band) => <div key={band.span} className={ROW}><dt className="text-fg-3">{band.span}</dt><dd>{band.rate}</dd></div>)}
           </dl>
-          <p className="mt-2 text-label leading-relaxed text-fg-3">Each trade pays these spread rates on the portion of the position that it opens or closes.{stress !== null && stress.size_spread_multiplier_bps !== 10_000 ? ` At the current stress level, the rates are multiplied by ${formatMultiplier(stress.size_spread_multiplier_bps)}.` : ""}</p>
+          <p className="mt-2 text-label leading-relaxed text-fg-3">Each trade is charged the spread shown for each portion of the position that it opens or closes.{stress !== null && stress.size_spread_multiplier_bps !== 10_000 ? ` At the current stress level, these spreads are multiplied by ${formatMultiplier(stress.size_spread_multiplier_bps)}.` : ""}</p>
           {changes.map((line) => <p key={line} className="mt-2 text-label leading-relaxed text-amber">{line}</p>)}
         </div>
         <div>
@@ -77,12 +83,12 @@ export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price
           <div aria-hidden="true" className="mt-2 flex h-1.5 gap-1">
             {Array.from({ length: 8 }, (_, segment) => <span key={segment} className={`flex-1 rounded-sm ${segment < filled ? "bg-glow/70" : "bg-line-2"}`} />)}
           </div>
-          <p className="mt-2 text-label leading-relaxed text-fg-3">The house limits its net exposure in {market.symbol} to {usd(preview.houseCap)}, across all clients&apos; positions. The bar shows your order&apos;s size as a share of that limit. An order that would take the house&apos;s exposure beyond the limit is rejected, even if the order alone is smaller than the limit.</p>
+          <p className="mt-2 text-label leading-relaxed text-fg-3">The house limits its net exposure in {market.symbol} to {usd(preview.houseCap)}, across all traders&apos; positions. The bar shows your order&apos;s size as a share of that limit. An order that would take the house&apos;s exposure beyond the limit is rejected, even if the order alone is smaller than the limit.</p>
         </div>
         <dl className="space-y-3 border-t border-line pt-4 text-label leading-relaxed text-fg-3">
           <div><dt className="text-fg-2">Reference</dt><dd>The reference price combines live prices from the exchanges and data providers that this market uses into a single price.</dd></div>
           <div><dt className="text-fg-2">Execution</dt><dd>Orders are executed at the reference price plus or minus the spread. The spread depends on the size of your position, the market&apos;s stress level and any extra spread applied to your account.</dd></div>
-          <div><dt className="text-fg-2">Risk</dt><dd>Spreads widen when the market is under stress. If your equity falls below {CLOSE_OUT_BPS / 100}% of your margin, your positions are closed out.</dd></div>
+          <div><dt className="text-fg-2">Risk</dt><dd>Spreads widen when the market is under stress. {describeCloseout(closeoutBps)}</dd></div>
         </dl>
       </div>
     </details>

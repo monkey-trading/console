@@ -61,11 +61,11 @@ export function currentParams(state: ConsoleState): HouseParams | null {
 export function houseTermsNote(state: ConsoleState): string | null {
   const status = state.houseStateStatus;
   if (state.houseParams === null) {
-    if (status === "failed") return "The trading terms could not be loaded. The page will try again automatically.";
+    if (status === "failed") return "The trading terms could not be loaded. The app will try again automatically.";
     return status === "unavailable" ? "This server does not publish its trading terms." : null;
   }
   if (state.pricingCurrent) return null;
-  return status === "failed" ? "The trading terms have changed, and the new terms could not be loaded. The page will try again automatically." : "The trading terms have changed. The new terms are loading.";
+  return status === "failed" ? "The trading terms have changed, and the new terms could not be loaded. The app will try again automatically." : "The trading terms have changed. The new terms are loading.";
 }
 
 /**

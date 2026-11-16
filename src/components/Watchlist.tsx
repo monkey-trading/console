@@ -2,16 +2,29 @@
 
 /** The left pane: every listed market with its mark, move, and whether it is open. */
 
+import type { AssetClass } from "@/lib/engine/types";
 import { formatMark } from "@/lib/price-format";
 import { formatMovePercent } from "@/lib/format";
 import { moveBps } from "@/lib/fixed";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 
+/** Each asset class as the list's note names its markets, in the order it names them. */
+const CLASS_WORDS: [AssetClass, string][] = [["crypto", "crypto"], ["fx", "FX"], ["index", "index"], ["commodity", "commodity"], ["equity", "share"]];
+
+/** The note under the list, naming the kinds of market it holds, or null for an empty list. */
+export function describeListing(classes: readonly AssetClass[]): string | null {
+  const words = CLASS_WORDS.filter(([kind]) => classes.includes(kind)).map(([, word]) => word);
+  const last = words.pop();
+  if (last === undefined) return null;
+  return `This list covers ${words.length === 0 ? last : `${words.join(", ")} and ${last}`} markets.`;
+}
+
 /** `onPick` runs after a market is chosen, so the phone can move on to its chart. */
 export function Watchlist({ onPick }: { onPick?: () => void }) {
   const { markets, selected } = useConsole();
   const { store } = useSession();
+  const listing = describeListing(markets.map((m) => m.view.asset_class));
   return (
     <div className="lg:h-full lg:border-r lg:border-line">
       <h2 className="border-b border-line px-4 py-3 text-label tracking-caps text-fg-3 uppercase">Global watchlist</h2>
@@ -45,7 +58,7 @@ export function Watchlist({ onPick }: { onPick?: () => void }) {
           );
         })}
       </ul>
-      <p className="hidden px-4 py-5 text-label leading-relaxed text-fg-3 lg:block">Crypto, FX, an index<br />and gold.</p>
+      {listing !== null && <p className="hidden px-4 py-5 text-label leading-relaxed text-fg-3 lg:block">{listing}</p>}
     </div>
   );
 }

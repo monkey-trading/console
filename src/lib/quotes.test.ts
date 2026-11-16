@@ -69,7 +69,7 @@ describe("ticketPrices", () => {
   it("says why a live order has no price: no quote yet, an account not yet credited, no market price, too large, or declined", () => {
     expect(live("1", "buy", null)).toEqual({ bid: null, offer: null, price: null, exactClose: false, toxicityBps: 0, spreadTenths: null, problem: "Waiting for a live price for this market.", problemIsSize: false });
     expect(live("1", "buy", null, UNCREDITED).problem).toBe("Live prices for your account will be shown once your first deposit has been credited.");
-    expect(live("1", "buy", null, "unknown market 9").problem).toBe("No price is available for this market: unknown market 9.");
+    expect(live("1", "buy", null, "unknown market 9").problem).toBe("No live price is currently available for this market. Please reload the page to try again.");
     expect(live("1", "buy", { ...QUOTE, unavailable: { kind: "market_closed" }, ask: [], bid: [] })).toMatchObject({ price: null, problem: "This market is closed.", problemIsSize: false });
     expect(live("6", "sell")).toMatchObject({ price: null, offer: f("100.5"), problem: "This order is too large to be priced. Please try a smaller order size.", problemIsSize: true });
     expect(live("6", "buy")).toMatchObject({ price: f("100.5"), problem: "Insufficient margin for this order size. With your current equity, the largest order you can place is approximately 5 contracts.", problemIsSize: true });
@@ -139,7 +139,7 @@ describe("the toxicity add-on and the tier's leverage in a live quote", () => {
     const ladder: MarketQuote = { ...QUOTE, ask: [{ qty: "2", price: "100.1" }, { qty: "30", price: "100.5", declined: weekend }] };
     const result = ticketPrices({ live: true, quote: ladder, quoteError: null, preview: preview("29"), side: "buy", mark: f("100"), limits });
     expect(result.problemIsSize).toBe(true);
-    expect(result.problem).toBe("Insufficient margin for this order size. With your current equity, the largest order you can place is approximately 2 contracts. The higher weekend margin applies in this market, which allows leverage of up to 13x.");
+    expect(result.problem).toBe("Insufficient margin for this order size. With your current equity, the largest order you can place is approximately 2 contracts. The higher weekend margin applies in this market, so the maximum leverage is 13x.");
   });
 
   it("explains a margin decline with the leverage the account's tier allows in the market", () => {

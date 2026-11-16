@@ -64,7 +64,7 @@ export function describeNextFallShort(fee: FeeNow, baseBps: number | null, now: 
 }
 
 /** A rate in bps as a person says it, with no trailing zeros: `10000` is `100%`, `950` is `9.5%`. */
-function spokenRate(bps: number): string {
+export function spokenRate(bps: number): string {
   const part = bps % 100;
   return `${Math.trunc(bps / 100)}${part === 0 ? "" : `.${String(part).padStart(2, "0").replace(/0+$/, "")}`}%`;
 }

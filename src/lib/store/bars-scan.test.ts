@@ -55,7 +55,7 @@ describe("the chart's history scan", () => {
     expect(store.getSnapshot().bars[1]?.["1m"]).toHaveLength(2);
   });
 
-  it("says the reason once the retries are spent, and does not scan again on later reads", async () => {
+  it("says the history could not be loaded once the retries are spent, naming no internal reason, and does not scan again on later reads", async () => {
     const client = new FakeClient();
     client.headSeq = 500_000;
     let attempts = 0;
@@ -66,7 +66,7 @@ describe("the chart's history scan", () => {
     await flush();
     expect(attempts).toBe(3);
     expect(waits).toEqual([3_000, 3_000]);
-    expect(store.getSnapshot().notices.chart).toMatchObject({ tone: "error", text: expect.stringContaining("Chart history is unavailable: The node's archive answered HTTP 503.") });
+    expect(store.getSnapshot().notices.chart).toMatchObject({ tone: "error", text: "The price history for this chart could not be loaded, so the chart shows only the prices received since this page was opened." });
     await store.refresh(false);
     await flush();
     expect(attempts).toBe(3);

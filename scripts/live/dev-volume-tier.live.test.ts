@@ -123,7 +123,7 @@ describe("a fresh wallet at tier 0", () => {
       await cancelOrder(rig.store, 999_999);
       text = snapshot().notices.orders?.text.startsWith("Requests are coming faster") ? snapshot().notices.orders?.text : undefined;
     }
-    expect(text, `the 429s the node answered: ${JSON.stringify(rig.limited)}`).toBe("Your request was not processed. You are sending requests faster than volume tier 0 allows, which is 3 per second. Please wait a moment and try again.");
+    expect(text, `the 429s the node answered: ${JSON.stringify(rig.limited)}`).toBe("Your request was not processed. You are sending requests faster than volume tier 0 allows, which is 3 per second. Wait a moment and try again.");
     // The tier's own refusal is signed by the enclave, so the client reads the tier and rate from it.
     expect(rig.limited.some((answer) => answer.signed && answer.body.includes('"tier":0'))).toBe(true);
     // The burst refills; the next request is admitted.

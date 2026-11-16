@@ -35,7 +35,7 @@ describe("the ticket while the operator moves", () => {
   it("pauses on a handover and on an operator whose node the build does not list, each in its own words", () => {
     expect(render({ kind: "waiting", origin: "https://a.test", target: "https://b.test", reason: "r" })).toContain("A new operator is taking over the trading server, so trading has been suspended. Trading will resume once the new operator&#x27;s server has been verified.");
     const unlisted = render({ kind: "unlisted", origin: "https://a.test", hostname: "c.test" });
-    expect(unlisted).toContain("A new operator is taking over the trading server, but this version of the console does not support the new server, so trading has been suspended. Trading will resume once the console has been updated.");
+    expect(unlisted).toContain("A new operator is taking over the trading server, but this version of the app does not support the new server, so trading has been suspended. Trading will resume once the app has been updated.");
   });
 
   it("does not pause on a node followed or pinned", () => {

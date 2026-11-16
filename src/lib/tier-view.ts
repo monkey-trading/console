@@ -87,7 +87,7 @@ export function orderLimitProblem(limits: TicketLimits | null, resting: boolean)
 export function leverageReason(limits: TicketLimits | null): string {
   if (limits === null || limits.leverage === null) return "";
   const leverage = formatLeverage(limits.leverage);
-  return limits.weekendSets ? ` The higher weekend margin applies in this market, which allows leverage of up to ${leverage}.` : ` Volume tier ${limits.tier} allows leverage of up to ${leverage} in this market.`;
+  return limits.weekendSets ? ` The higher weekend margin applies in this market, so the maximum leverage is ${leverage}.` : ` Volume tier ${limits.tier} allows leverage of up to ${leverage} in this market.`;
 }
 
 /**

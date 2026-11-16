@@ -81,7 +81,7 @@ describe("a weekend margin that applies now", () => {
 
   it("names the weekend margin, not the tier, as what sets the leverage when it is above the tier's floor", () => {
     const set = (floorBps: number | null, weekendBps: number) => leverageReason(ticketLimits(account(), 1, { floorBps, weekendBps }));
-    expect(set(500, 750)).toBe(" The higher weekend margin applies in this market, which allows leverage of up to 20x.");
+    expect(set(500, 750)).toBe(" The higher weekend margin applies in this market, so the maximum leverage is 20x.");
     expect(set(500, 300)).toBe(" Volume tier 0 allows leverage of up to 20x in this market.");
     expect(set(500, 0)).toBe(" Volume tier 0 allows leverage of up to 20x in this market.");
     // With the tier table unread the floor is unknown, and a weekend margin that applies is what is named.

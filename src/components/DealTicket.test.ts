@@ -75,7 +75,7 @@ describe("the spread bands in Market info", () => {
 describe("the toxicity add-on", () => {
   it("names the add-on the signed quote carries beside the executable spread as extra spread, and none when it is zero", () => {
     // Market info's own words name the add-on in general; the label is the figure beside the spread.
-    expect(render(0, 2)).toMatch(/including an extra spread of <span[^>]*>2 bps<\/span> on each price/);
+    expect(render(0, 2)).toMatch(/including an extra spread of <span[^>]*>2 bps<\/span> that applies to your account\./);
   });
 
   it("reserves the add-on's wrapped height, an unseen copy carrying it, so the footprint is the same with and without one", () => {
@@ -83,8 +83,8 @@ describe("the toxicity add-on", () => {
     const without = line(render(0, 0));
     const withAddOn = line(render(0, 2));
     // The hidden copy states the add-on in both, and is not read out.
-    expect(without).toMatch(/<span aria-hidden="true" class="invisible[^"]*">.*an extra spread of .* on each price/);
-    expect(withAddOn).toMatch(/<span aria-hidden="true" class="invisible[^"]*">.*an extra spread of .* on each price/);
+    expect(without).toMatch(/<span aria-hidden="true" class="invisible[^"]*">.*an extra spread of .* that applies to your account/);
+    expect(withAddOn).toMatch(/<span aria-hidden="true" class="invisible[^"]*">.*an extra spread of .* that applies to your account/);
     expect(without.replace(/<span aria-hidden.*$/, "")).not.toContain("extra spread");
   });
 });

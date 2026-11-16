@@ -218,7 +218,7 @@ describe("the race for the shared key's nonce", () => {
     orders.b.client.answer = () => lost;
     await placeOrder(orders.b.store, { market: 1, side: "buy", qty: fixedFromWire("0.5"), kind: { kind: "market", quoted: fixedFromInt(100_000), slippageBps: 10 }, reduceOnly: false });
     expect(orders.b.client.posted.filter((p) => p.route === "order")).toHaveLength(1);
-    expect(orders.b.store.getSnapshot().notices.ticket?.text).toBe("The request was received out of order. Please try again.");
+    expect(orders.b.store.getSnapshot().notices.ticket?.text).toBe("Another request from your account was processed first, so this request was not accepted. Check your orders and positions, then try again.");
   });
 
   it("reports an order and never sends it again, since a copy may have run, and stays connected", async () => {

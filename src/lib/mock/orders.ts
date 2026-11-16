@@ -112,7 +112,7 @@ export function orderEvents(state: MockState, req: OrderRequest, account: Accoun
   const { tier, terms } = tierOfAccount(state, account);
   if (terms?.maxRestingOrders != null) {
     if (account.orders.size >= terms.maxRestingOrders) return rejected(req, { kind: "tier_order_limit", tier, max: terms.maxRestingOrders });
-  } else if (account.orders.size >= MAX_RESTING) return rejected(req, { kind: "invalid_order", reason: `at most ${MAX_RESTING} resting orders` });
+  } else if (account.orders.size >= MAX_RESTING) return rejected(req, { kind: "invalid_order", reason: `your account already has the maximum of ${MAX_RESTING} working orders` });
   // A resting order is admitted while its market is closed; it cannot trigger until the market trades.
   account.orders.set(orderId, { order_id: orderId, client_id: req.client_id, market: req.market, side: req.side, qty: req.qty, kind: req.kind, reduce_only: req.reduce_only ?? false });
   // A newly accepted order that is already executable fills at once, as the engine checks it on insertion.

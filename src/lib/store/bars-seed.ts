@@ -10,6 +10,7 @@ import { mergeFetchedBars, TIMEFRAMES, type Bar, type TimeframeId } from "../bar
 import { EngineError } from "../engine/client";
 import { fetchBarsHistory, windowSecondsFor } from "../engine/marks-fetch";
 import type { MarketId } from "../engine/types";
+import { HISTORY_UNAVAILABLE } from "./bars-scan";
 import type { ConsoleStore } from "./store";
 import { awaitsTrust } from "./signing";
 
@@ -109,8 +110,7 @@ export class BarsSeed {
       if (attempt >= SEED_ATTEMPTS && !this.seeded.has(key) && !this.reported.has(key)) {
         this.reported.add(key);
         this.seeded.add(key);
-        const reason = error instanceof Error ? error.message : "The node did not answer.";
-        this.store.notify("chart", `Chart history is unavailable: ${reason.replace(/\.$/, "")}. The chart shows the prices received since this page opened.`);
+        this.store.notify("chart", HISTORY_UNAVAILABLE);
       }
     } finally {
       // A stale request never clears the flag a newer cycle set for the same series.

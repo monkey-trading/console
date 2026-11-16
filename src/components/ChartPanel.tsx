@@ -53,7 +53,7 @@ export function ChartPanel() {
           <p className="mt-1 text-2xl tracking-tight lg:mt-2">
             <span aria-hidden="true">{whole}<span className="text-fg-3">{decimals}</span></span>{" "}
             <span aria-hidden="true" className={`text-caption ${change < 0 ? "text-ember" : "text-glow"}`}>{formatMovePercent(change)}</span>
-            <span className="sr-only">{market.symbol} index price {shown === "—" ? "unavailable" : shown}</span>
+            <span className="sr-only">{market.symbol} reference price {shown === "—" ? "unavailable" : shown}</span>
           </p>
         </div>
         <div role="group" aria-label="Timeframe" className="grid w-full grid-cols-5 gap-1 sm:w-auto lg:flex">
