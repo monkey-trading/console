@@ -80,7 +80,7 @@ export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price
           <p className="mt-2 text-label leading-relaxed text-fg-3">This market's limit is {usd(preview.houseCap)}, net across all traders' positions in {market.symbol}. If your order would take the market past its limit, it's refused.</p>
         </div>
         <dl className="space-y-3 border-t border-line pt-4 text-label leading-relaxed text-fg-3">
-          <div><dt className="text-fg-2">Reference</dt><dd>The median of prices from several exchanges and data providers.</dd></div>
+          <div><dt className="text-fg-2">Reference</dt><dd>Live prices from the exchanges and data providers this market uses, combined into one price.</dd></div>
           <div><dt className="text-fg-2">Execution</dt><dd>You trade at the reference price plus or minus the spread. The spread depends on your position size, market stress and any extra spread on your account.</dd></div>
           <div><dt className="text-fg-2">Risk</dt><dd>Spreads widen when the market is under stress. Your positions are closed out when your equity falls below {CLOSE_OUT_BPS / 100}% of your margin.</dd></div>
         </dl>
