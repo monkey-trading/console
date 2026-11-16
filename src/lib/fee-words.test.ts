@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { describeNextFall, describeSchedule, formatCurveHold, formatHold, positionFee } from "./fee-words";
+import { describeNextFall, describeNextFallShort, describeSchedule, formatCurveHold, formatHold, positionFee } from "./fee-words";
 import { LAUNCH_CURVE } from "./holding-fee";
 
 const TERMS = { profitFeeBps: 1_000, profitFeeCurve: LAUNCH_CURVE };
@@ -44,6 +44,22 @@ describe("describeNextFall", () => {
     };
     expect([at(OPENED + 4_000), at(OPENED + 9_500), at(OPENED + 60_000), at(OPENED + 900_000)]).toEqual(["Falls in 6s", "Falling to 10.00% in 14m 50s", "Falling to 10.00% in 14m 00s", "Base rate"]);
     expect(describeNextFall({ holdMs: 60_000, feeBps: 6_421, fallsAt: OPENED + 60_005, baseAt: null }, null, OPENED + 60_000)).toBe("Falling");
+  });
+});
+
+describe("describeNextFallShort", () => {
+  it("names the base's time in at most 16 characters, and agrees with the sentence where it has nothing shorter", () => {
+    const fee = (now: number) => positionFee({ openedAt: OPENED, feeBps: 0, fallsAt: null }, TERMS, now);
+    const at = (now: number) => {
+      const found = fee(now);
+      if (found === null) throw new Error("no fee");
+      return describeNextFallShort(found, 1_000, now);
+    };
+    const shown = [at(OPENED + 4_000), at(OPENED + 9_500), at(OPENED + 60_000), at(OPENED + 900_000)];
+    expect(shown).toEqual(["Falls in 6s", "Base in 14m 50s", "Base in 14m 00s", "Base rate"]);
+    for (const text of shown) expect(text.length).toBeLessThanOrEqual(16);
+    expect(describeNextFallShort({ holdMs: 60_000, feeBps: 6_421, fallsAt: OPENED + 60_005, baseAt: null }, null, OPENED + 60_000)).toBe("Falling");
+    expect(describeNextFallShort({ holdMs: 0, feeBps: 6_421, fallsAt: OPENED + 29 * 86_400_000 + 23 * 3_600_000, baseAt: null }, 1_000, OPENED)).toBe("Falls in 29d 23h");
   });
 });
 

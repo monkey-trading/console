@@ -15,6 +15,12 @@ describe("planning a close all", () => {
     expect(plan.leftOut).toEqual([{ symbol: "ETH-USD", why: "no closing price yet" }]);
   });
 
+  it("tells a position the node quotes only once its market is selected apart from one with no price yet", () => {
+    const plan = planCloseAll([row(1, "BTC-USD", { quoted: null, select: true }), row(2, "ETH-USD", { quoted: null, select: false })]);
+    expect(plan.leftOut).toEqual([{ symbol: "BTC-USD", why: "select it for its closing price" }, { symbol: "ETH-USD", why: "no closing price yet" }]);
+    expect(describeLeftOut(plan.leftOut)).toBe("Close all leaves out BTC-USD (select it for its closing price), ETH-USD (no closing price yet).");
+  });
+
   it("leaves out a position in a closed market, even with a quote, as its Close button is disabled", () => {
     const plan = planCloseAll([row(1, "BTC-USD", { open: false })]);
     expect(plan.targets).toEqual([]);

@@ -57,6 +57,12 @@ export function describeNextFall(fee: FeeNow, baseBps: number | null, now: numbe
   return `Falling to ${formatRate(baseBps)} in ${formatHold(fee.baseAt - now)}`;
 }
 
+/** `describeNextFall` for the table's cell, which has room for 16 characters: "Base in 14m 00s" where the sentence names the base rate it falls to. */
+export function describeNextFallShort(fee: FeeNow, baseBps: number | null, now: number): string {
+  if (fee.fallsAt === null || fee.fallsAt - now >= 1_000 || fee.baseAt === null || baseBps === null) return describeNextFall(fee, baseBps, now);
+  return `Base in ${formatHold(fee.baseAt - now)}`;
+}
+
 /** The schedule as a sentence: the full fee's hold, the hold at which the base takes over, and the base. */
 export function describeSchedule(terms: FeeTerms): string {
   const curve = terms.profitFeeCurve;

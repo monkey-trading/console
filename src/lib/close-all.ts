@@ -11,6 +11,8 @@ export interface CloseRow {
   /** Whether the market is open to trade now. */
   open: boolean;
   quoted: Fixed | null;
+  /** Whether the node quotes no price for this market until it is selected (it quotes at most four at once). */
+  select?: boolean;
 }
 
 /** A position to close and the price its own Close button quotes. */
@@ -19,10 +21,10 @@ export interface CloseTarget {
   quoted: Fixed;
 }
 
-/** A position Close all leaves out: its market is closed, or no closing price has reached the console for it. */
+/** A position Close all leaves out: its market is closed, no closing price has reached the console for it, or none comes until the market is selected. */
 export interface LeftOut {
   symbol: string;
-  why: "market closed" | "no closing price yet";
+  why: "market closed" | "no closing price yet" | "select it for its closing price";
 }
 
 /** The positions to send, in the order the rows list them, and those left out, which the page names. */
@@ -31,7 +33,7 @@ export function planCloseAll(rows: readonly CloseRow[]): { targets: CloseTarget[
   const leftOut: LeftOut[] = [];
   for (const row of rows) {
     if (!row.open) leftOut.push({ symbol: row.symbol, why: "market closed" });
-    else if (row.quoted === null) leftOut.push({ symbol: row.symbol, why: "no closing price yet" });
+    else if (row.quoted === null) leftOut.push({ symbol: row.symbol, why: row.select === true ? "select it for its closing price" : "no closing price yet" });
     else targets.push({ market: row.market, quoted: row.quoted });
   }
   return { targets, leftOut };

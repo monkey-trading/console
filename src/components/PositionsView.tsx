@@ -1,12 +1,15 @@
 "use client";
 
-/** Open positions with their profit and loss at the closing price, hold, profit fee and what a close keeps, a Close button each and a Close all above them: a table of one row each from 1024 px, cards below. */
+/**
+ * Open positions with their profit and loss at the closing price, hold, profit fee and what a close keeps, a Close button each and a Close all above them: a table of one row each from 1024 px, cards below.
+ * A row's cells hold two lines each, so the table is 713 px wide at its longest figures and fits the 740 px centre pane of a 1280 px screen with its Close button in view.
+ */
 
 import { useEffect, useId } from "react";
 
 import { CONFIRM_MIN_GAP_MS, CONFIRM_MS } from "@/lib/confirm-window";
 import { describeLeftOut, planCloseAll, pressBatch, targetsKey } from "@/lib/close-all";
-import { describeNextFall, describeSchedule, formatHold } from "@/lib/fee-words";
+import { describeNextFall, describeNextFallShort, describeSchedule, formatHold } from "@/lib/fee-words";
 import { formatRate } from "@/lib/format";
 import { describeDetails, describeNoClose, describeNoPrice, describePnl, type CloseGaps } from "@/lib/pnl-words";
 import { stressTermsAt } from "@/lib/pricing";
@@ -29,19 +32,23 @@ import { Term } from "./house/Panel";
 import { useConfirmWindow } from "./use-confirm-window";
 import { usePrefs } from "./use-prefs";
 
-const TH = "whitespace-nowrap px-2 py-3 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
-/** A body cell: one line, so a row's height never depends on its figures. */
-const TD = "whitespace-nowrap px-2 py-4";
+const TH = "whitespace-nowrap px-1.5 py-2 text-left align-bottom text-label font-normal tracking-caps text-fg-3 uppercase";
+/** A body cell: at most two lines, each always mounted, so a row's height never depends on its figures. */
+const TD = "whitespace-nowrap px-1.5 py-1.5";
+/** A cell's second line: it keeps its line when it holds nothing. */
+const SUB = "block min-h-lh text-label text-fg-3";
 /**
- * A figure column's width, so a withheld figure ("—") and a shown one take the same room: the longest figure it holds below $1,000,000,
- * with its sign and its bound mark ("≥ -$123,456.78" is 14 characters), in the cell's own font, plus the cell's padding.
+ * A column's width, so a withheld figure ("—") and a shown one take the same room: the longest value it holds, in the cell's own font,
+ * plus the cell's padding (0.75rem). P&L: the longest figure below $1,000,000 with its sign and bound mark ("≥ -$123,456.78" is 14 characters
+ * in Close now, "≤ $123,456.78" 13 in Fee (USD)); the profit fee's second line: "Falls in 14m 00s" or "Falls in 29d 23h", 16 characters at the label size.
  */
 const PNL_W = "min-w-[12ch]";
-const FEE_W = "min-w-[calc(13ch+1rem)]";
-const CLOSE_W = "min-w-[calc(14ch+1rem)]";
-/** The hold's: its longest value, "23h 59m" or "29d 23h", is seven characters. */
-const HELD_W = "min-w-[calc(7ch+1rem)]";
+const FEE_W = "min-w-[calc(13ch+0.75rem)]";
+const CLOSE_W = "min-w-[calc(14ch+0.75rem)]";
+const RATE_W = "min-w-[16ch]";
 const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
+/** The table's Close button sits under its figure, with the gap a second line would take. */
+const CELL_BUTTON = `${BUTTON} mt-1`;
 /** The button while it waits for its second press: the hover colours, held. */
 const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 
@@ -87,6 +94,7 @@ export function PositionsView() {
     // The rate a close pays now runs on the node's clock; before V55 a close pays the base.
     const fee = positionFeeNow(snapshot, p);
     const falls = fee === null ? null : describeNextFall(fee, feeTerms?.profitFeeBps ?? null, now);
+    const fallsShort = fee === null ? null : describeNextFallShort(fee, feeTerms?.profitFeeBps ?? null, now);
     const feeBps = fee?.feeBps ?? feeTerms?.profitFeeBps ?? null;
     const quoted = signatures === "checked"
       ? (quote === undefined ? null : closingPrice(quote, side, qty))
@@ -128,6 +136,7 @@ export function PositionsView() {
       hold: fee === null ? "—" : formatHold(fee.holdMs),
       fee: feeBps === null ? "—" : formatRate(feeBps),
       falls,
+      fallsShort,
       // A bound's figure rounds down, the way "at least" reads.
       proceeds: closeNow === null ? "—" : closeNow.exact ? formatUsd(closeNow.net) : `≥ ${formatUsd(roundToPlaces(closeNow.net, 2, "down"))}`,
       loss: pnl !== null && pnl < 0n,
@@ -141,7 +150,7 @@ export function PositionsView() {
     };
   });
   // Close all sends what each Close button would: its market and its quote, under the same bound.
-  const { targets, leftOut } = planCloseAll(rows.map((r) => ({ market: r.key, symbol: r.symbol, open: r.open, quoted: r.quoted })));
+  const { targets, leftOut } = planCloseAll(rows.map((r) => ({ market: r.key, symbol: r.symbol, open: r.open, quoted: r.quoted, select: r.unquoted })));
   const count = targets.length;
   const leftOutNote = describeLeftOut(leftOut);
   const confirming = armed && count > 0;
@@ -187,12 +196,12 @@ export function PositionsView() {
               <div><dt className="text-label text-fg-3">Mark</dt><dd>{r.mark}</dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Close-out" tip={CLOSEOUT_TIP} /></dt><dd>{r.closeout}</dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Held" tip={HOLD_TIP} /></dt><dd>{r.hold}</dd></div>
-              <div><dt className="text-label text-fg-3"><Term label="Profit fee" tip={feeTip} /></dt><dd>{r.fee}{r.falls !== null && <span className="block text-label text-fg-3">{r.falls}</span>}</dd></div>
+              <div><dt className="text-label text-fg-3"><Term label="Profit fee" tip={feeTip} /></dt><dd>{r.fee}<span className={SUB}>{r.falls}</span></dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Fee (USD)" tip={FEE_USD_TIP} /></dt><dd>{r.feeUsd}<span aria-hidden={!r.noFee} className={`block text-label ${r.noFee ? "text-fg-3" : "invisible"}`}>{NO_FEE_NOTE}</span></dd></div>
-              <div><dt className="text-label text-fg-3"><Term label="Close now" tip={CLOSE_TIP} /></dt><dd>{r.proceeds}{r.noClose !== null && <span className="block text-label text-fg-3">{r.noClose}</span>}</dd></div>
+              <div><dt className="text-label text-fg-3"><Term label="Close now" tip={CLOSE_TIP} /></dt><dd>{r.proceeds}</dd></div>
             </dl>
             <button type="button" disabled={!r.closable} className={`${BUTTON} mt-3 w-full`} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-            {r.unquoted && <p className="mt-2 text-label text-fg-3">Select {r.symbol} to get its closing price.</p>}
+            <p aria-hidden={!r.unquoted} className={`mt-2 text-label ${r.unquoted ? "text-fg-3" : "invisible"}`}>Select {r.symbol} to get its closing price.</p>
           </li>
         ))}
       </ul>
@@ -200,35 +209,36 @@ export function PositionsView() {
         <table className="w-full min-w-max text-caption">
           <thead>
             <tr className="border-b border-line">
-              <th className={TH}>Market</th><th className={TH}>Side</th><th className={TH}>Size</th><th className={TH}>Entry</th><th className={TH}>Mark</th>
-              <th className={TH}><Term label="Close-out" tip={CLOSEOUT_TIP} /></th><th className={TH}><Term label="P&L" tip={PNL_TIP} /></th><th className={TH}><Term label="Held" tip={HOLD_TIP} /></th>
+              <th className={TH}><span className="block">Market</span><span className="block">Side</span></th>
+              <th className={TH}><span className="block">Size</span><span className="block"><Term label="Held" tip={HOLD_TIP} /></span></th>
+              <th className={TH}><span className="block">Entry</span><span className="block">Mark</span></th>
+              <th className={TH}><Term label="Close-out" tip={CLOSEOUT_TIP} /></th><th className={TH}><Term label="P&L" tip={PNL_TIP} /></th>
               <th className={TH}><Term label="Profit fee" tip={feeTip} /></th><th className={TH}><Term label="Fee (USD)" tip={FEE_USD_TIP} /></th><th className={TH}><Term label="Close now" tip={CLOSE_TIP} /></th>
-              <th className={TH}><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.key} className="border-b border-line last:border-b-0">
-                <td className={`${TD} text-fg`}>{r.symbol}</td>
-                <td className={`${TD} ${r.long ? "text-glow" : "text-ember"}`}>{r.long ? "Long" : "Short"}</td>
-                <td className={TD}>{r.size}</td>
-                <td className={TD}>{r.entry}</td>
-                <td className={TD}>{r.mark}</td>
+                <td className={TD}><span className="block text-fg">{r.symbol}</span><span className={`block min-h-lh text-label ${r.long ? "text-glow" : "text-ember"}`}>{r.long ? "Long" : "Short"}</span></td>
+                <td className={TD}><span className="block">{r.size}</span><span className={SUB}><span className="sr-only">Held </span>{r.hold}</span></td>
+                <td className={TD}><span className="block">{r.entry}</span><span className={SUB}><span className="sr-only">Mark </span>{r.mark}</span></td>
                 <td className={TD}>{r.closeout}</td>
                 <td className={`${TD} ${r.loss ? "text-ember" : "text-glow"}`}>
-                  <span className={`inline-block ${PNL_W}`}>{r.pnl}</span>
-                  <span className="ml-2 text-label text-fg-3"><Term label="Details" tip={r.details} /></span>
+                  <span className={`block ${PNL_W}`}>{r.pnl}</span>
+                  <span className={SUB}><Term label="Details" tip={r.details} /></span>
                 </td>
-                <td className={`${TD} ${HELD_W}`}>{r.hold}</td>
                 <td className={TD}>
-                  <span className="inline-block min-w-[8ch]">{r.fee}</span>
-                  <span className="inline-block min-w-[29ch] text-label text-fg-3">{r.falls}</span>
+                  <span className="block min-w-[8ch]">{r.fee}</span>
+                  <span className={`${SUB} ${RATE_W}`}>
+                    <span aria-hidden="true">{r.fallsShort}</span>
+                    {r.falls !== null && <span className="sr-only">{r.falls}</span>}
+                  </span>
                 </td>
                 <td className={`${TD} ${FEE_W}`}>{r.feeUsd}</td>
-                <td className={`${TD} ${CLOSE_W}`}>{r.proceeds}</td>
-                <td className={`${TD} text-right`}>
-                  <button type="button" disabled={!r.closable} className={BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-                                  </td>
+                <td className={`${TD} ${CLOSE_W}`}>
+                  <span className="block">{r.proceeds}</span>
+                  <button type="button" disabled={!r.closable} className={CELL_BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
+                </td>
               </tr>
             ))}
           </tbody>
