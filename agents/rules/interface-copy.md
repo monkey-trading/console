@@ -4,59 +4,75 @@ Load before writing or reviewing any text a trader reads in the app: labels, too
 errors, empty states, buttons, page and section intros, and `aria-label`s. This covers text built in
 code too, such as a message assembled from figures in `src/lib/`.
 
-**Rule**: write the way a good broker's support desk talks to a customer: plainly, briefly, and
-only about what matters to the trader.
+**Rule**: write as an experienced broker writes help text for its clients. Explain in complete,
+professional sentences, using the standard terms of trading.
 
-The owner's standard:
+## The owner's standard
+
+> Before: "A market order won't fill if the price is worse than the one you saw by more than this.
+> If a market's own limit is lower, that limit applies."
+>
+> After: "In a fast-moving market, the execution price of a market order may be worse than the price
+> quoted on screen. Restricting the maximum slippage means orders that would fill at an adverse
+> price are rejected."
 
 > Before: "The profit fee rate a close of this position pays on a gain now. A realised gain pays
 > 100.00% on a close within 10 s of the position's open, falling with the hold to 10.00% from
 > 15 min on."
 >
-> After: "This is the fee rate paid on a winning trade. The fee decays over time, starting at 100% on
-> a newly opened position and falling to 10% for positions held for 15 minutes or more."
+> After: "This is the fee rate paid on a winning trade. The fee decays over time, starting at 100%
+> on a newly opened position and falling to 10% for positions held for 15 minutes or more."
 
 ## How to write it
 
-- **Say what it is or what happened, then what to do.** Open a tooltip with what the thing is
-  ("This is…"). Open an error with what went wrong, then the next step, if there is one.
-- **Use everyday words, short sentences, and verbs.** Write "closing this position", not "a close of
-  this position". Write "a winning trade", not "a realised gain". Keep to one idea per sentence and
-  at most three sentences per tooltip.
-- **Use trading words a retail trader already knows:** position, order, price, profit, loss, fee,
-  margin, leverage, deposit, withdraw, balance.
-- **Keep what changes a trader's decision, and drop the rest.** The owner's version keeps 100%, 10%
-  and 15 minutes. It drops the 10-second detail, because no trader acts on it.
-- **Write numbers in sentences as a person says them:** 100%, 10%, 15 minutes, 2 hours. Table
+- **Explanatory text** (tooltips, notices, errors, empty states, and the descriptive text under a
+  setting or section) is written in full sentences that flow:
+  - Give the context first, then what the setting, figure or event means, then its consequence for
+    the trader.
+  - Use the standard terms a trader expects: execution price, slippage, adverse price, spread,
+    margin, equity, exposure, close-out level, working orders, realised and unrealised profit or
+    loss.
+  - Write formally: "does not", "cannot", "you would", never "won't", "can't" or "you'd".
+  - Name things. Never write "this" for something the sentence has not named, and never write "the
+    one you saw" or "by more than this".
+  - Stay brief. Write the two or three sentences the reader needs, not padding.
+- **Labels, titles, column headers, buttons and tight spaces** stay concise, as noun phrases or
+  short imperatives ("Max slippage", "Close all", "Time held"). Use the same proper terms, never
+  clipped engine shorthand.
+- **Errors and refusals** say what happened, then why, then what to do, in that order, for example
+  "Insufficient margin. This order requires {required} of margin, and your equity is {equity}."
+- **Numbers in sentences** read as a person says them: 100%, 10%, 15 minutes, ten minutes. Table
   cells and figures keep their own precision and formats.
-- **Address the trader as "you".** Never speak as "we" or "I". The system has no single company
-  voice, because its operators rotate.
-- **Stay accurate.** Plain doesn't mean vague. Every figure and condition you keep must still come
-  from the same source in code, and must still be true.
+- **Address the trader as "you".** Never speak as "we" or "I".
+- **Stay accurate.** Every figure and condition must still come from the same source in code and be
+  true. Keep what changes a trader's decision, and drop internal detail that does not.
 
 ## Never show
 
 - **Engine internals:** protocol versions (`V55`), seqs, stamps, stream frames, "reads", bounds,
   parameters, NAV formulas, "the node serves…", "in force", or a field name.
-- **Chains of internal reasons.** Say "Prices are delayed, so trading is paused" rather than which
-  check failed on which answer.
-- **Legalistic or hedged phrasing:** "save that", "unless and until", "for the avoidance of doubt",
-  or stacked conditions. Keep any required risk or status notice: shorten its wording, keep its
-  meaning, and add no new legal text.
+- **Chains of internal reasons.** Say "Live prices are not currently updating, so trading has been
+  suspended", not which check failed on which answer.
+- **Clipped, telegraphic phrasing:** sentence fragments in explanatory text, stacked conditionals,
+  or wording compressed to save words at the cost of reading well.
+- **Legalistic phrasing.** Keep any required risk or status notice's meaning, and add no new legal
+  text.
 
 ## Words to use
 
 | Instead of | Write |
 |---|---|
-| the node, the node's | the server, or rephrase without it |
-| enclave, attestation, attested | verified, verification ("the server's verification") |
-| a close; realised gain or loss | closing a position; profit or loss, a winning or losing trade |
-| the house cannot take more | this market is at its limit |
+| the node, the node's | the server, the trading server |
+| enclave, attestation, attested | verified, verification |
+| a close; realised gain or loss | closing a position; realised profit or loss, a winning or losing trade |
+| the house cannot take more | the house has reached its exposure limit in this market |
+| resting orders | working orders |
+| slippage bound | maximum slippage |
 | epoch | staking period |
 | period (MONKEY emissions) | reward period |
 | signer, signer key | signing key |
-| the vault | the vault (on first mention in a view: "the on-chain vault that holds deposits") |
-| session key | session key (on first mention in a view: "a key in this browser that places orders without a wallet prompt") |
+| checkpoint | snapshot |
+| session key | session key (on first mention in a view: "a key held in this browser that places orders without a wallet prompt") |
 
 Product names stay as they are: MONKEY, USDC, Monkey Trading.
 
@@ -64,11 +80,17 @@ Product names stay as they are: MONKEY, USDC, Monkey Trading.
 
 | Before | After |
 |---|---|
-| The enclave changed or an answer failed its check. Reads wait and signing is paused until it passes; the stream keeps showing the frames it has already verified. | The server couldn't be verified, so trading is paused until it is. Prices shown are the last verified ones. |
-| This period allocated nothing to the account. A period allocates nothing when the loss was written off, when debt from an earlier write-off is being paid down first, or when the account's cash was negative at the period's close. | You earned no MONKEY this period. This happens when a loss was written off, when an earlier write-off is still being repaid, or when your balance was negative at the end of the period. |
-| Withdrawals the vault could not pay at once wait here and are paid in the order they were asked, each up to the collateral the vault holds. | Withdrawals that can't be paid straight away wait here. They're paid in the order they were requested, as funds become available. |
-| The node is still loading its record of your payouts after a restart. | Your payout history is still loading. |
-| The house cannot take more in this market. Try a smaller size. | This market is at its limit. Try a smaller size. |
+| The size the ticket starts with. Your last size is remembered for each market, and raised to the market's minimum if that has gone up. | The order size the deal ticket opens with. The ticket remembers the last size you traded in each market, and raises it to the market's minimum order size if that minimum has since increased. |
+| When on, you press the button again within 3 seconds to confirm. When off, one press sends it. | When enabled, Cancel all and Close all must be pressed a second time within 3 seconds before the instruction is sent. When disabled, a single press sends it immediately. |
+| Shows your entry price and open orders on the chart. The close-out price always shows. | Displays your entry price and the levels of your working orders on the chart. The close-out level is always displayed. |
+| Saved in this browser only. They set how the deal ticket starts. Anything you've already chosen or typed on the ticket stays as it is. | These preferences are stored in this browser only and set the defaults of the deal ticket. Changing them does not alter an order you are already preparing. |
+| This is your profit or loss if you close the whole position now, before the profit fee. It uses the price you'd close at (the bid for a long, the offer for a short), so the spread is already included. | The profit or loss you would realise by closing the entire position now, before the profit fee. It is calculated at the price at which the position would close (the bid for a long position, the offer for a short), so the spread is already taken into account. |
+| This is how long you've held the position, which sets its profit fee. Adding to the position shortens this time, weighted by the size you add. | The length of time the position has been open, which determines its profit fee rate. Adding to a position reduces its holding time in proportion to the size added. Reducing a position leaves it unchanged. |
+| This is the price at which your account would be closed out, with your other positions at their current prices. Margin is shared, and your largest losing position is closed first… | The price at which your account would be closed out, assuming your other positions remain at their current prices. Because margin is shared across your account, your largest losing position is closed first, and that may not be this one. |
+| Not enough margin: your equity is {equity} and you need {required}. | Insufficient margin. This order requires {required} of margin, and your equity is {equity}. |
+| This market is at its limit. Try a smaller size. | The house has reached its exposure limit in this market. Please try a smaller order size. |
+| Prices aren't updating, so trading is paused. It resumes once the connection to the server recovers. | Live prices are not currently updating, so trading has been suspended. Trading will resume automatically once the price feed recovers. |
+| You haven't earned any MONKEY yet. Every 10 minutes, a set amount of MONKEY is shared between the traders who made a loss, in proportion to their losses. | You have not yet earned any MONKEY. Every ten minutes, a fixed amount of MONKEY is distributed among the traders who realised a loss in that period, in proportion to the size of their losses. |
 
 ## Tests and issues
 
@@ -76,5 +98,6 @@ Product names stay as they are: MONKEY, USDC, Monkey Trading.
 - Wording quoted in an issue or acceptance criterion describes what the text must say. It is not
   the wording to ship. Write it to this rule.
 
-Why: the console is the product's public face. Text written the way the engine's code reads makes
-traders decode it, and makes the product look machine-written.
+Why: the console is the product's public face, read by traders who expect the clarity and register
+of an established broker. Text written in the engine's vocabulary, or compressed into fragments,
+reads as machine-written.
