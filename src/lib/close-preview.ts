@@ -81,15 +81,19 @@ export function closeShape(held: Fixed, side: Side, qty: Fixed): CloseShape | nu
   return { closed: minFixed(qty, absFixed(held)), whole: qty === absFixed(held), reverses: qty > absFixed(held) };
 }
 
+/** The realised result in USD of closing `closed` units of `held` (entry `entry`) at `price`, rounded down as the engine books it: `(price - entry) * sign(held)` over the units, then to USD. */
+export function realisedAt(held: Fixed, entry: Fixed, closed: Fixed, price: Fixed, toUsdDown: (amount: Fixed) => Fixed): Fixed {
+  const move = held > ZERO ? price - entry : entry - price;
+  return toUsdDown(mulRounded(move, closed, "down"));
+}
+
 /** The preview of an order's close, or null for an order that closes nothing: no position, or one on the order's own side. */
 export function previewClose(order: CloseOrder): ClosePreview | null {
   const { held } = order;
   const shape = closeShape(held, order.side, order.qty);
   if (shape === null) return null;
   const { closed } = shape;
-  // `(price - entry) * sign(held)` over the units closed, rounded down, then to USD rounded down.
-  const move = held > ZERO ? order.price - order.entry : order.entry - order.price;
-  const realised = order.toUsdDown(mulRounded(move, closed, "down"));
+  const realised = realisedAt(held, order.entry, closed, order.price, order.toUsdDown);
   const fee = profitFee(realised, order.feeBps);
   const rateHolds = order.fallsAt === null || order.fallsAt - order.now >= RATE_HOLD_MS;
   return { ...shape, price: order.price, realised, feeBps: order.feeBps, fee, net: realised - fee, exact: order.exactPrice && rateHolds };

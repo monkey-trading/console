@@ -13,10 +13,11 @@ import { stressTermsAt } from "@/lib/pricing";
 import { formatCloseout, formatMark } from "@/lib/price-format";
 import { absFixed, formatFixedPlaces, formatUsd } from "@/lib/fixed";
 import { roundToPlaces } from "@/lib/fixed-rounding";
+import { realisedAt } from "@/lib/close-preview";
 import { closingPrice } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
 import { closeAll } from "@/lib/store/batch-actions";
-import { previewTicket, unrealisedPnl } from "@/lib/ticket";
+import { previewTicket, unrealisedPnl, usdConverter } from "@/lib/ticket";
 import { accountFeeTerms, currentParams, positionClose, positionFeeNow } from "@/lib/ticket-figures";
 import { accountPricing } from "@/lib/tier-view";
 
@@ -31,8 +32,13 @@ import { usePrefs } from "./use-prefs";
 const TH = "whitespace-nowrap px-2 py-3 text-left text-label font-normal tracking-caps text-fg-3 uppercase";
 /** A body cell: one line, so a row's height never depends on its figures. */
 const TD = "whitespace-nowrap px-2 py-4";
-/** A figure column's least width, so a withheld figure ("—") and a shown one take the same room. */
-const FIG = "min-w-[10ch]";
+/**
+ * A figure column's width, so a withheld figure ("—") and a shown one take the same room: the longest figure it holds below $1,000,000,
+ * with its sign and its bound mark ("≥ -$123,456.78" is 14 characters), in the cell's own font, plus the cell's padding.
+ */
+const PNL_W = "min-w-[calc(12ch+1rem)]";
+const FEE_W = "min-w-[calc(13ch+1rem)]";
+const CLOSE_W = "min-w-[calc(14ch+1rem)]";
 const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 /** The button while it waits for its second press: the hover colours, held. */
 const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
@@ -41,10 +47,12 @@ const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-g
 const CLOSEOUT_TIP = "Where this market must reach for your account to fall below its close-out level, with your other positions held at their marks. Margin is shared, and the largest losing position closes first, which may be another. Due: already below it. None: no price in the node's range reaches it.";
 
 /** What the P&L column means, shared by the table's head and the phone rows' labels. */
-const PNL_TIP = "What closing the whole position now realises, before the profit fee: at the node's closing price for the position's size (the bid for a long, the offer for a short), not at the mark, so it already counts the exit spread. Hover the figure for the gain at the mark.";
+const PNL_TIP = "What closing the whole position now realises, before the profit fee: at the node's closing price for the position's size (the bid for a long, the offer for a short), not at the mark, so it already counts the exit spread. Point at or focus the figure for the result at the mark.";
 
 /** What the hold, fee and close columns mean, shared by the table's head and the phone rows' labels. */
 const HOLD_TIP = "How long the position has been held, from its open time: an add moves the open time to the size-weighted average of now and the open time, counting the units already held as no older than the fee curve's end (15 minutes at launch); a reduction leaves it.";
+const NO_FEE_NOTE = "No profit fee on this close";
+const NO_FEE = `${NO_FEE_NOTE}: it realises a loss or nothing.`;
 const FEE_USD_TIP = "The profit fee closing the whole position now pays, in USD: the fee rate on a realised gain, and nothing on a close that realises a loss or nothing.";
 const CLOSE_TIP = "What closing the whole position now moves your cash by: the realised result at the node's closing price, less the profit fee. Exact while the price, the fee rate and, for a market quoted in another currency, the FX rate hold; a figure after ≥ is the least a close keeps while the price and the FX rate hold and the fee rate falls.";
 
@@ -83,8 +91,12 @@ export function PositionsView() {
       : market === undefined ? null : (previewTicket({ market, side, qty, slippageBps: CLOSE_SLIPPAGE_BPS, account, houseNav: house.nav, stress: stressTermsAt(terms?.stressLevels, market.stress), closeFeeBps: feeBps ?? undefined, ...accountPricing(account, terms, market.view) }).quote?.price ?? null);
     // The node's whole-close quote is exact, as is the mock's own price, which its fill uses.
     const { close: closeNow, why: withheld } = positionClose(snapshot, market, p, quoted);
-    // The P&L is what the close realises at its price; a close that has none shows none, and the figure at the mark stays in its explanation.
-    const pnl = closeNow === null ? null : closeNow.realised;
+    // The P&L is what the close realises at its price, whatever the fee's terms: a close that has no price shows none, and the figure at the mark stays in its explanation.
+    const toUsdDown = market === undefined || known === null ? null : usdConverter(market.view, known, "down");
+    const pnl = market?.open === true && quoted !== null && toUsdDown !== null ? realisedAt(p.qty, p.entry, qty, quoted, toUsdDown) : null;
+    const noPrice = market?.open === true ? "No closing price has reached the console yet." : "The market is closed, so it has no closing price.";
+    // Why the fee and what a close keeps are withheld: the house state's reason, else the missing price, else the unread rate.
+    const noClose = withheld ?? (quoted === null ? noPrice : "The profit fee rate has not been read yet.");
     const noFee = closeNow !== null && closeNow.fee === 0n && closeNow.realised <= 0n;
     const slippageBps = Math.min(CLOSE_SLIPPAGE_BPS, market?.view.max_slippage_bps ?? CLOSE_SLIPPAGE_BPS);
     const close = (event: { currentTarget: HTMLElement }) => {
@@ -100,8 +112,11 @@ export function PositionsView() {
       entry: formatMark(p.entry, places),
       mark: known === null ? "—" : formatMark(known, places),
       pnl: pnl === null ? "—" : formatUsd(pnl),
-      pnlTip: describePnl(atMark === null ? null : formatUsd(atMark), pnl === null ? (withheld ?? (market?.open === true ? "No closing price has reached the console yet." : "The market is closed, so it has no closing price.")) : null),
-      feeUsd: closeNow === null ? "—" : closeNow.exact || closeNow.fee === 0n ? formatUsd(closeNow.fee) : `≤ ${formatUsd(closeNow.fee)}`,
+      pnlTip: describePnl(atMark === null ? null : formatUsd(atMark), pnl === null ? noPrice : null),
+      // A fee that may still change is an upper bound, rounded up the way "at most" reads.
+      feeUsd: closeNow === null ? "—" : closeNow.exact || closeNow.fee === 0n ? formatUsd(closeNow.fee) : `≤ ${formatUsd(roundToPlaces(closeNow.fee, 2, "up"))}`,
+      feeUsdTip: closeNow === null ? noClose : closeNow.fee === 0n && closeNow.realised <= 0n ? NO_FEE : FEE_USD_TIP,
+      closeTip: closeNow === null ? noClose : CLOSE_TIP,
       noFee,
       closeout: formatCloseout(p.closeout, places),
       hold: fee === null ? "—" : formatHold(fee.holdMs),
@@ -125,8 +140,6 @@ export function PositionsView() {
   // Close all sends what each Close button would: its market and its quote, under the same bound.
   const { targets, leftOut } = planCloseAll(rows.map((r) => ({ market: r.key, symbol: r.symbol, open: r.open, quoted: r.quoted })));
   const count = targets.length;
-  // A reason a figure is withheld is the node's or the house state's, the same for every row it covers: said once, above the table.
-  const reasons = [...new Set(rows.flatMap((r) => (r.withheld === null ? [] : [r.withheld])))];
   const leftOutNote = describeLeftOut(leftOut);
   const confirming = armed && count > 0;
   // The window confirms the list it was armed for: when the markets Close all would send change, it closes and the next press arms again.
@@ -172,7 +185,7 @@ export function PositionsView() {
               <div><dt className="text-label text-fg-3"><Term label="Close-out" tip={CLOSEOUT_TIP} /></dt><dd>{r.closeout}</dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Held" tip={HOLD_TIP} /></dt><dd>{r.hold}</dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Profit fee" tip={feeTip} /></dt><dd>{r.fee}{r.falls !== null && <span className="block text-label text-fg-3">{r.falls}</span>}</dd></div>
-              <div><dt className="text-label text-fg-3"><Term label="Fee (USD)" tip={FEE_USD_TIP} /></dt><dd>{r.feeUsd}{r.noFee && <span className="block text-label text-fg-3">No profit fee on this close</span>}</dd></div>
+              <div><dt className="text-label text-fg-3"><Term label="Fee (USD)" tip={FEE_USD_TIP} /></dt><dd>{r.feeUsd}<span aria-hidden={!r.noFee} className={`block text-label ${r.noFee ? "text-fg-3" : "invisible"}`}>{NO_FEE_NOTE}</span></dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Close now" tip={CLOSE_TIP} /></dt><dd>{r.proceeds}{r.withheld !== null && <span className="block text-label text-fg-3">{r.withheld}</span>}</dd></div>
             </dl>
             <button type="button" disabled={!r.closable} className={`${BUTTON} mt-3 w-full`} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
@@ -180,7 +193,6 @@ export function PositionsView() {
           </li>
         ))}
       </ul>
-      {reasons.map((why) => <p key={why} className="hidden border-b border-line px-4 py-2 text-label text-fg-3 lg:block">{why}</p>)}
       <div role="region" aria-label="Open positions" tabIndex={0} className="relative hidden overflow-x-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow lg:block">
         <table className="w-full min-w-max text-caption">
           <thead>
@@ -200,14 +212,14 @@ export function PositionsView() {
                 <td className={TD}>{r.entry}</td>
                 <td className={TD}>{r.mark}</td>
                 <td className={TD}>{r.closeout}</td>
-                <td className={`${TD} ${FIG} ${r.loss ? "text-ember" : "text-glow"}`}><Term label={r.pnl} tip={r.pnlTip} /></td>
+                <td className={`${TD} ${PNL_W} ${r.loss ? "text-ember" : "text-glow"}`}><Term label={r.pnl} tip={r.pnlTip} /></td>
                 <td className={TD}>{r.hold}</td>
-                <td className={TD}>{r.falls === null ? r.fee : <Term label={r.fee} tip={r.feeTip} />}</td>
-                <td className={`${TD} ${FIG}`}>{r.noFee ? <Term label={r.feeUsd} tip="No profit fee on this close: it realises a loss or nothing." /> : r.feeUsd}</td>
-                <td className={`${TD} ${FIG}`}>{r.proceeds}</td>
+                <td className={TD}><Term label={r.fee} tip={r.feeTip} /></td>
+                <td className={`${TD} ${FEE_W}`}><Term label={r.feeUsd} tip={r.feeUsdTip} /></td>
+                <td className={`${TD} ${CLOSE_W}`}><Term label={r.proceeds} tip={r.closeTip} /></td>
                 <td className={`${TD} text-right`}>
                   <button type="button" disabled={!r.closable} className={BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-                  {r.unquoted && <p className="mt-1 text-label text-fg-3">Select {r.symbol} to get its closing price.</p>}
+                  {r.unquoted && <p className="mt-1 ml-auto w-40 whitespace-normal text-label text-fg-3">Select {r.symbol} to get its closing price.</p>}
                 </td>
               </tr>
             ))}
