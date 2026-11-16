@@ -3,6 +3,8 @@
 Load before writing anything a person reads: answers, PR titles and bodies, commit messages,
 review comments and replies, issues, and docs.
 
+Text a trader reads in the app follows [interface-copy](interface-copy.md) instead.
+
 **Rule**: Lead with the point, give the reader the context they lack, and cut everything else.
 
 - Bottom line first; detail follows only when it helps or is asked for.
