@@ -16,7 +16,7 @@ import { offChain } from "./wallet-chain";
 export const REQUEST_TTL_MS = 120_000;
 
 /** The sentinel an abandoned action throws when its connection ends between a wait and the send. */
-export const DISCONNECTED = new Error("Your wallet disconnected before the request was sent.");
+export const DISCONNECTED = new Error("Your wallet disconnected before the request could be sent.");
 
 /** A refusal shown to the user, never thrown past an action. */
 export type Outcome = { ok: true; result: ActionResult } | { ok: false };
@@ -26,12 +26,12 @@ export function usableWallet(store: ConsoleStore, action: string, surface: Notic
   const wallet = store.liveWallet;
   const state = store.getSnapshot();
   if (!wallet) {
-    store.notify(surface, "Connect a wallet first.");
+    store.notify(surface, "Connect a wallet to continue.");
     return null;
   }
   const blocked = signBlock(state.attestation, state.stream, state.wallet?.readOnly === true);
   if (blocked !== null) {
-    store.notify(surface, `You can't ${action} right now because ${blocked}.`);
+    store.notify(surface, `You cannot ${action} at the moment because ${blocked}.`);
     return null;
   }
   return wallet;
@@ -100,7 +100,7 @@ export async function signed(
       // The connection may have ended while the nonce read waited: its wallet is not asked.
       if (store.liveWallet !== wallet) throw DISCONNECTED;
       const typed = build({ nonce, expiresAt }, wallet.address);
-      const signature = await prompting(store, wallet, surface, `Confirm in your wallet: ${summary}.`, () => wallet.sign({ summary, typed }));
+      const signature = await prompting(store, wallet, surface, `Confirm the request in your wallet to ${summary}.`, () => wallet.sign({ summary, typed }));
       // Or while the wallet asked: nothing goes out for a connection that ended.
       if (store.liveWallet !== wallet) throw DISCONNECTED;
       sent = true;
@@ -110,7 +110,7 @@ export async function signed(
       return { ok: true, result: await attempt(next_nonce) };
     } catch (error) {
       if (!(error instanceof EngineError) || error.reject?.kind !== "invalid_nonce") throw error;
-      if (onNonceTaken === "report") throw new EngineError(error.status, "Another request from this account was handled first, so this one wasn't accepted. If you sent it twice, it may have gone through: check your positions, orders, withdrawals and history before trying again.");
+      if (onNonceTaken === "report") throw new EngineError(error.status, "Another request from your account was processed first, so this request was not accepted. If you sent the same request twice, it may already have been executed, so check your positions, orders, withdrawals and history before you try again.");
       return { ok: true, result: await attempt(error.reject.expected) };
     }
   } catch (error) {
@@ -128,7 +128,7 @@ export async function signed(
 }
 
 /** What the console adds for a request that went out with no answer it can judge. */
-export const MAY_HAVE_RUN = " It may have gone through. Check your positions, orders, withdrawals and history before trying again.";
+export const MAY_HAVE_RUN = " The request may still have been executed, so check your positions, orders, withdrawals and history before you try again.";
 
 /** Whether a failed request left the page: it was handed to `send`, and the last gate inside that did not stop it. */
 export const wentOut = (handedToSend: boolean, error: unknown): boolean => handedToSend && !(error instanceof NotSentError);
@@ -141,9 +141,9 @@ export function mayHaveRun(error: unknown): boolean {
 /** What the console says an unexpected error was, naming the node's refusal when it carried one. */
 export function errorText(error: unknown): string {
   // The node limits how fast new wallets are set up, and answers 429 to the ones over it: nothing was recorded, so trying again later is the whole answer.
-  if (error instanceof EngineError && error.status === 429) return error.tierLimit === null ? "Too many requests right now. Try again later." : describeTierRate(error.tierLimit);
+  if (error instanceof EngineError && error.status === 429) return error.tierLimit === null ? "Too many requests have been sent from your account in a short time. Please try again later." : describeTierRate(error.tierLimit);
   if (error instanceof EngineError) return error.reject ? describeReject(error.reject) : error.message;
-  return error instanceof Error ? error.message : "Something went wrong.";
+  return error instanceof Error ? error.message : "An unexpected error occurred.";
 }
 
 /**

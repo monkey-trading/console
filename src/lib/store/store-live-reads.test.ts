@@ -21,9 +21,9 @@ describe("a read-only account", () => {
     client.listener?.({ type: "feed", status: "live" });
     expect(store.getSnapshot().wallet?.readOnly).toBe(true);
     await cancelOrder(store, 1);
-    expect(store.getSnapshot().notices.orders?.text).toBe("You can't sign right now because this account is read-only, so it can't sign anything.");
+    expect(store.getSnapshot().notices.orders?.text).toBe("You cannot sign at the moment because you are viewing this account in read-only mode.");
     await deposit(store, 10n);
-    expect(store.getSnapshot().notices.deposit?.text).toBe("You can't deposit right now because this account is read-only, so it can't sign anything.");
+    expect(store.getSnapshot().notices.deposit?.text).toBe("You cannot deposit at the moment because you are viewing this account in read-only mode.");
     expect(nonces).toBe(0);
   });
 });
@@ -31,7 +31,7 @@ describe("a read-only account", () => {
 describe("a node outage at load", () => {
   it("is not reported again by the account read that waits on the same trust check", async () => {
     const { client, store } = setup();
-    client.eligibility = async () => { throw new UntrustedError("The server hasn't been verified yet."); };
+    client.eligibility = async () => { throw new UntrustedError("The server has not yet been verified."); };
     store.start(0);
     await settle();
     await connectWallet(store, "watch", true);
@@ -40,9 +40,9 @@ describe("a node outage at load", () => {
 
   it("still reports a wallet that fails to connect for another reason", async () => {
     const { client, store } = setup();
-    client.eligibility = async () => { throw new Error("The server didn't respond."); };
+    client.eligibility = async () => { throw new Error("The server did not respond."); };
     await connectWallet(store, "watch", true);
-    expect(store.getSnapshot().notices).toMatchObject({ accountRead: { tone: "error", text: expect.stringContaining("The server didn't respond.") } });
+    expect(store.getSnapshot().notices).toMatchObject({ accountRead: { tone: "error", text: expect.stringContaining("The server did not respond.") } });
   });
 });
 

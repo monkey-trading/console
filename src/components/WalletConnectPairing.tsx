@@ -11,7 +11,7 @@ import { qrPath } from "@/lib/qr";
 import { useSession } from "./ConsoleProvider";
 
 const ACTION = "flex min-h-11 items-center justify-center rounded border px-4 py-2.5 text-caption focus-visible:outline-2 focus-visible:outline-glow";
-const NOT_COPIED = "Couldn't copy the link. Scan the code or open the link instead.";
+const NOT_COPIED = "The link could not be copied. Scan the code or open the link instead.";
 
 /** Shows the pairing dialog in a build with WalletConnect; renders nothing in one without. */
 export function WalletConnectPairing() {
@@ -38,7 +38,7 @@ function PairingDialog({ connector }: { connector: WalletConnectConnector }) {
     // `clipboard` is missing outside a secure context, whatever the DOM types say.
     const clipboard: Clipboard | undefined = navigator.clipboard;
     if (clipboard === undefined) report(NOT_COPIED);
-    else clipboard.writeText(link).then(() => report("Link copied."), () => report(NOT_COPIED));
+    else clipboard.writeText(link).then(() => report("The link has been copied."), () => report(NOT_COPIED));
   };
   const status = uri === null ? (open ? "Preparing a pairing link…" : "") : copied?.uri === uri ? copied.text : "The pairing link is ready.";
   return (
@@ -56,7 +56,7 @@ function PairingDialog({ connector }: { connector: WalletConnectConnector }) {
         <button type="button" onClick={connector.cancel} className="min-h-11 rounded border border-line-2 px-4 py-1.5 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Cancel</button>
       </div>
       <div className="space-y-4 p-4">
-        <p className="text-caption leading-relaxed text-fg-2">Scan the code with a wallet app, or open the link in a wallet app on this device. Your wallet then asks you to approve the connection.</p>
+        <p className="text-caption leading-relaxed text-fg-2">Scan the code with a wallet app, or open the link in a wallet app on this device. Your wallet will then ask you to approve the connection.</p>
         <p role="status" className="text-caption text-fg">{status}</p>
         {uri !== null && (
           <>
@@ -68,7 +68,7 @@ function PairingDialog({ connector }: { connector: WalletConnectConnector }) {
           </>
         )}
         <p className="text-label leading-relaxed text-fg-3">
-          Pairing runs through WalletConnect&apos;s relay and Verify service, which a third party runs. It passes encrypted messages between this page and your wallet, tells your wallet this site&apos;s domain, and sees your IP address.{" "}
+          The pairing runs through WalletConnect&apos;s relay and Verify service, which are operated by a third party. The relay passes encrypted messages between this page and your wallet, the Verify service confirms this site&apos;s domain to your wallet, and both services can see your IP address.{" "}
           <a href="/notices" target="_blank" rel="noopener noreferrer" className="text-fg-2 underline focus-visible:outline-2 focus-visible:outline-glow">Privacy and notices<span className="sr-only"> (opens in a new tab)</span></a>
         </p>
       </div>
@@ -82,7 +82,7 @@ function QrCode({ uri }: { uri: string }) {
   return (
     <svg
       role="img"
-      aria-label="QR code for the pairing link. Scan it with a wallet app, or use the buttons below for the same link."
+      aria-label="QR code for the pairing link. Scan it with a wallet app, or use the buttons below, which open or copy the same link."
       viewBox={`0 0 ${size} ${size}`}
       shapeRendering="crispEdges"
       className="mx-auto block aspect-square w-full max-w-60 rounded bg-fg"

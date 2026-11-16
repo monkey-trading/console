@@ -16,8 +16,8 @@ const DIGEST = `0x${"1d".repeat(48)}` as const;
 const RELEASE: PinnedRelease = { name: "test-release", launchDigest: DIGEST, policy: "0x30000", minimumTcb: { bootLoader: 3, tee: 0, snp: 8, microcode: 115 } };
 const NAMED: VaultFacts = { release: releaseName(DIGEST, CONFIG), signer: ENCLAVE };
 const HARDWARE = JSON.stringify({ provider: "sev_snp", config_sha256: CONFIG });
-const READ_FAILED = "Your wallet couldn't check this server against the vault: no answer";
-const CLOCK = "Your device clock is 60 seconds off the server's time. Correct it and reload the page.";
+const READ_FAILED = "Your wallet could not check the server against the vault: no answer";
+const CLOCK = "Your device clock differs from the server's time by 60 seconds. Correct the clock and reload the page.";
 
 /** A hardware quote that verifies, so the vault's read alone decides the verdict; the mock path is the real verifier's. */
 const verifier: Verifier = { ...dev, verifyAttestation: () => ({ ok: true, enclave: { address: ENCLAVE, release: RELEASE.name, config: "attested" } }) };
@@ -45,7 +45,7 @@ async function refuses(trust: NodeTrust, reason: string) {
   const outcome = await gate(trust);
   expect(outcome).toBeInstanceOf(NotSentError);
   expect(outcome).not.toBeInstanceOf(UntrustedError);
-  expect(outcome).toMatchObject({ message: `Nothing was sent. ${reason}` });
+  expect(outcome).toMatchObject({ message: `Your request was not sent. ${reason}` });
 }
 
 describe("the verdicts the last gate passes", () => {
@@ -134,8 +134,8 @@ describe("a signed action a live client's gate stops", () => {
     const { node, client } = setup({ nowMs: markets.time_ms + 60_000 });
     // The first check's own read of the node's word on the vault's signer is the answer that shows it.
     await expect(client.markets()).rejects.toThrow(CLOCK);
-    await expect(client.placeOrder(order)).rejects.toThrow(`Nothing was sent. ${CLOCK}`);
-    await expect(client.revokeSessionKey(revocation)).rejects.toThrow(`Nothing was sent. ${CLOCK}`);
+    await expect(client.placeOrder(order)).rejects.toThrow(`Your request was not sent. ${CLOCK}`);
+    await expect(client.revokeSessionKey(revocation)).rejects.toThrow(`Your request was not sent. ${CLOCK}`);
     expect(node.posts).toEqual([]);
     expect(node.requests.map((request) => request.path).filter((path) => path !== "/v1/attestation" && path !== OPERATOR_CLAIM)).toEqual([]);
   });

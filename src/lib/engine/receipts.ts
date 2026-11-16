@@ -8,11 +8,11 @@
 export type StuckVerdict = null | { moved: true } | { moved: false; why: string };
 
 /** What a transaction the console moved past is told: the wallet's next send mines. */
-export const MOVED_PAST = "Your wallet had a leftover transaction from an earlier test chain, and it was skipped on this local chain. Send your transaction again.";
+export const MOVED_PAST = "Your wallet had a leftover transaction from an earlier test chain, which has now been skipped on the local chain. Please send your transaction again.";
 
 /** What a transaction stuck behind a nonce left from an earlier chain is told when the console could not move past it, and `why`. */
 export function staleNonceText(why: string): string {
-  return `Your wallet has leftover transactions from an earlier test chain, so this one is stuck behind them. They couldn't be skipped because ${why}. Clear your wallet's activity data for this network, then try again.`;
+  return `Your wallet has leftover transactions from an earlier test chain, so your new transaction is held behind them. They could not be skipped because ${why}. Clear your wallet's activity data for this network, then try again.`;
 }
 
 /** How often, and how many times, a transaction's receipt is polled. */
@@ -30,13 +30,13 @@ const RECEIPT_POLLS = 180;
  * - it stays pending through every poll, or is stuck behind a nonce from an earlier chain, moved past or not
  */
 export async function waitMined(receiptOf: (hash: string) => Promise<unknown>, hash: string, action: string, wait: (ms: number) => Promise<void>, stuck?: () => Promise<StuckVerdict>): Promise<void> {
-  const unconfirmed = (why: string) => new Error(`Your transaction to ${action} was sent (${hash}) but ${why}. Check it in your wallet before trying again.`);
+  const unconfirmed = (why: string) => new Error(`Your transaction to ${action} was sent (${hash}), but ${why}. Check the transaction in your wallet before you try again.`);
   for (let poll = 0; poll < RECEIPT_POLLS; poll++) {
     let receipt: unknown;
     try {
       receipt = await receiptOf(hash);
     } catch (error) {
-      throw unconfirmed(`its status couldn't be checked: ${error instanceof Error ? error.message : String(error)}`);
+      throw unconfirmed(`its status could not be checked: ${error instanceof Error ? error.message : String(error)}`);
     }
     // No receipt yet is null; a mined one carries its status.
     const status = typeof receipt === "object" && receipt !== null && "status" in receipt ? receipt.status : undefined;
@@ -48,5 +48,5 @@ export async function waitMined(receiptOf: (hash: string) => Promise<unknown>, h
     if (verdict !== null) throw new Error(verdict.moved ? MOVED_PAST : staleNonceText(verdict.why));
     await wait(RECEIPT_POLL_MS);
   }
-  throw unconfirmed("it isn't confirmed yet");
+  throw unconfirmed("it has not yet been confirmed");
 }

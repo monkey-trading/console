@@ -12,7 +12,7 @@ export function WithdrawalQueue() {
     <section aria-labelledby="queue-title" className="p-4">
       <h4 id="queue-title" className="text-label tracking-caps text-fg-3 uppercase">Withdrawal queue</h4>
       {queue.length === 0 ? (
-        <p className="mt-3 text-caption text-fg-3">{wallet ? "No withdrawals are waiting." : "Connect a wallet to see your place in the queue."}</p>
+        <p className="mt-3 text-caption text-fg-3">{wallet ? "You have no withdrawals waiting in the queue." : "Connect a wallet to see your place in the queue."}</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {queue.map((request) => (

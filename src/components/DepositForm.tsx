@@ -42,14 +42,14 @@ export function DepositForm({ embedded = false }: { embedded?: boolean }) {
       {title}
       {!watching && (
         <p className={`${embedded ? "" : "mt-3 "}flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-fg-2`}>
-          {walletUsdc.read.status === "unread" && "Reading your wallet's USDC…"}
+          {walletUsdc.read.status === "unread" && "Reading your wallet's USDC balance…"}
           {held !== null && <>
             <span>Wallet: <span className="text-fg">{formatFixedPlaces(held, 2)} USDC</span> on {chain}</span>
             <button type="button" onClick={() => setAmount(plainUsdc(held))} className={LINK}>Max</button>
           </>}
-          {walletUsdc.read.status === "wrong_chain" && `Your wallet is on ${chainName(walletUsdc.read.chainId)}. Switch it to ${chain} to see its USDC.`}
+          {walletUsdc.read.status === "wrong_chain" && `Your wallet is connected to ${chainName(walletUsdc.read.chainId)}. Switch it to ${chain} to see its USDC balance.`}
           {walletUsdc.read.status === "failed" && <>
-            <span>Couldn&apos;t read your wallet&apos;s USDC balance.</span>
+            <span>Your wallet&apos;s USDC balance could not be read.</span>
             <button type="button" onClick={() => void readWalletUsdc(store, true)} className={LINK}>Try again</button>
           </>}
         </p>
@@ -60,12 +60,12 @@ export function DepositForm({ embedded = false }: { embedded?: boolean }) {
           <input {...AMOUNT_INPUT} id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} aria-describedby={`${id}-hint`} className={INPUT} />
           <button type="submit" aria-disabled={!wallet || !valid || busy || gate.blocked} aria-describedby={gate.describedBy} className={SUBMIT}>Deposit</button>
         </div>
-        <p id={`${id}-hint`} className="mt-2 text-label leading-relaxed text-fg-3">Deposit 10 to 1,000,000,000 USDC. Your wallet may ask you to approve the amount first. Your balance goes up once the deposit is credited, and you can withdraw it once it&apos;s final.</p>
+        <p id={`${id}-hint`} className="mt-2 text-label leading-relaxed text-fg-3">Deposits must be between 10 and 1,000,000,000 USDC, and your wallet may first ask you to approve the amount. The deposit is added to your balance once it has been credited, and it can be withdrawn once the transaction is final on chain.</p>
         {gate.note}
         <Notice surface={surface} />
-        {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet first.</p>}
-        {wallet && over && held !== null && <p className="mt-2 text-label text-ember">That&apos;s more than the {formatFixedPlaces(held, 2)} USDC your wallet holds on {chain}.</p>}
-        {wallet && !over && amount.trim() !== "" && !valid && <p className="mt-2 text-label text-ember">Enter an amount from 10 to 1,000,000,000 USDC, with at most 6 decimal places.</p>}
+        {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet to make a deposit.</p>}
+        {wallet && over && held !== null && <p className="mt-2 text-label text-ember">The amount exceeds the {formatFixedPlaces(held, 2)} USDC that your wallet holds on {chain}.</p>}
+        {wallet && !over && amount.trim() !== "" && !valid && <p className="mt-2 text-label text-ember">Enter an amount between 10 and 1,000,000,000 USDC, with no more than 6 decimal places.</p>}
       </form>
     </section>
   );

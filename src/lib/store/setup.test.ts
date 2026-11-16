@@ -165,11 +165,11 @@ describe("what closes it", () => {
     expect(await attestEligibility(store, "professional")).toBe(false);
     expect(store.getSnapshot().blocked).toBeNull();
     expect(setupVisible(store.getSnapshot())).toBe(true);
-    expect(store.getSnapshot().notices.setup).toMatchObject({ tone: "error", text: "Too many requests right now. Try again later." });
+    expect(store.getSnapshot().notices.setup).toMatchObject({ tone: "error", text: "Too many requests have been sent from your account in a short time. Please try again later." });
     // The same answer to the browser's authorization is told the same way.
     client.answer = () => { throw new EngineError(429, "rate limited"); };
     expect(await authorizeBrowser(store, "setup")).toBe(false);
-    expect(store.getSnapshot().notices.setup?.text).toBe("Too many requests right now. Try again later.");
+    expect(store.getSnapshot().notices.setup?.text).toBe("Too many requests have been sent from your account in a short time. Please try again later.");
   });
 
   it("stays on the step when a signature is declined, and says why", async () => {

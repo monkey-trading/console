@@ -40,13 +40,13 @@ export function WithdrawForm() {
           <input {...AMOUNT_INPUT} id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} className={INPUT} />
           <button type="submit" aria-disabled={!wallet || !valid || busy || gate.blocked} aria-describedby={gate.describedBy} className={SUBMIT}>Request withdrawal</button>
         </div>
-        <p className="mt-2 text-label leading-relaxed text-fg-3">The amount leaves your balance as soon as you request it. Requests are paid in order as funds become available, and anything not paid straight away waits in the withdrawal queue.</p>
+        <p className="mt-2 text-label leading-relaxed text-fg-3">The amount is deducted from your balance as soon as you request the withdrawal. Withdrawals are paid in the order in which they were requested as funds become available, and any amount that cannot be paid immediately waits in the withdrawal queue.</p>
         {gate.note}
         <Notice surface="withdraw" />
-        {account && account.unfinalised > 0n && <p className="mt-2 text-label text-fg-3">${formatFixedPlaces(account.unfinalised, 2)} of your balance is locked until its deposit is final.</p>}
-        {amount.trim() !== "" && value === null && <p className="mt-2 text-label text-ember">Enter the amount in digits with a decimal point if needed, such as 1250.50.</p>}
-        {value !== null && value < MIN_WITHDRAWAL && <p className="mt-2 text-label text-ember">The smallest withdrawal is 10 USDC.</p>}
-        {value !== null && value > max && <p className="mt-2 text-label text-ember">You can withdraw up to ${formatFixedPlaces(max, 2)}{cause === "margin" ? " while your positions use margin." : cause === "unfinal" ? " until your latest deposit is final." : "."}</p>}
+        {account && account.unfinalised > 0n && <p className="mt-2 text-label text-fg-3">${formatFixedPlaces(account.unfinalised, 2)} of your balance cannot be withdrawn until the deposit that funded it is final on chain.</p>}
+        {amount.trim() !== "" && value === null && <p className="mt-2 text-label text-ember">Enter the amount in digits, using a decimal point if needed, for example 1250.50.</p>}
+        {value !== null && value < MIN_WITHDRAWAL && <p className="mt-2 text-label text-ember">The minimum withdrawal is 10 USDC.</p>}
+        {value !== null && value > max && <p className="mt-2 text-label text-ember">You can withdraw at most ${formatFixedPlaces(max, 2)}{cause === "margin" ? " while your open positions require margin." : cause === "unfinal" ? " until your latest deposit is final on chain." : "."}</p>}
       </form>
     </section>
   );

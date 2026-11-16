@@ -93,8 +93,8 @@ describe("with the vault not read", () => {
   });
 
   it("says why when the wallet could not read the vault, and never counts that as the vault's word", async () => {
-    const { status } = await judge({ vault: new Error("your wallet is on chain 1, not chain 31337") });
-    expect(status).toEqual({ kind: "attested", release: "test-release-v1", address: ENCLAVE, why: "Your wallet couldn't check this server against the vault: your wallet is on chain 1, not chain 31337" });
+    const { status } = await judge({ vault: new Error("your wallet is connected to chain 1, not chain 31337") });
+    expect(status).toEqual({ kind: "attested", release: "test-release-v1", address: ENCLAVE, why: "Your wallet could not check the server against the vault: your wallet is connected to chain 1, not chain 31337" });
   });
 });
 
@@ -169,7 +169,7 @@ describe("a signed request to a node the vault has not judged", () => {
     });
     await expect(client.verify()).resolves.toMatchObject({ kind: "attested" });
     const order = { account: ENCLAVE } as unknown as Parameters<typeof client.placeOrder>[0]; // never read: the gate comes first
-    await expect(client.placeOrder(order)).rejects.toThrow(`Nothing was sent. ${CONNECT_TO_CHECK}`);
+    await expect(client.placeOrder(order)).rejects.toThrow(`Your request was not sent. ${CONNECT_TO_CHECK}`);
     await expect(client.revokeSessionKey(order as unknown as Parameters<typeof client.revokeSessionKey>[0])).rejects.toBeInstanceOf(NotSentError);
     expect(posts).toEqual([]);
   });
@@ -251,7 +251,7 @@ describe("what a hostile node, candidate or RPC gets", () => {
     expect(seen).toEqual([]);
     // With no vault read, the guard alone stands between that text and the manifests.
     const unread = await judge({ attestation: hostile });
-    expect(unread.status).toEqual({ kind: "unverified", reason: "This server's verification data is incomplete, so it can't be verified." });
+    expect(unread.status).toEqual({ kind: "unverified", reason: "The server's verification data is incomplete, so the server cannot be verified." });
     expect(unread.seen).toEqual([]);
   });
 

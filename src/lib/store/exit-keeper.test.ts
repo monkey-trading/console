@@ -61,27 +61,27 @@ describe("ExitKeeper", () => {
     });
 
     it("a node read that fails, which another read of the vault alone does not repeat", async () => {
-      kit.client.exitError = new EngineError(0, "The server didn't respond.");
+      kit.client.exitError = new EngineError(0, "The server did not respond.");
       await kit.store.exit.refresh();
       expect(record()?.proof.seq).toBe(100);
-      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "node-failed", reason: "The server didn't respond." });
+      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "node-failed", reason: "The server did not respond." });
       const reads = kit.client.exitReads;
       await kit.store.exit.refresh();
       expect(kit.client.exitReads).toBe(reads);
     });
 
     it("an answer that does not verify, as a node read that fails", async () => {
-      kit.client.exitError = new UntrustedError("The server hasn't been verified yet.");
+      kit.client.exitError = new UntrustedError("The server has not yet been verified.");
       await kit.store.exit.refresh();
-      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "node-failed", reason: "The server hasn't been verified yet." });
+      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "node-failed", reason: "The server has not yet been verified." });
     });
 
     it("a wallet that cannot check it, which the next read of the vault tries again with no new signature", async () => {
       kit.client.exitAnswer = fullProof(200);
-      kit.exit.checkError = new Error("Your wallet didn't respond in time.");
+      kit.exit.checkError = new Error("Your wallet did not respond in time.");
       await kit.store.exit.refresh();
       expect(record()?.proof.seq).toBe(100);
-      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "wallet-failed", reason: "Your wallet didn't respond in time." });
+      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "wallet-failed", reason: "Your wallet did not respond in time." });
       const reads = kit.client.exitReads;
       // Trading goes on: each change to the account must not cost the node another signature.
       kit.store.patch({ account: { balance: 2_000n, unfinalised: 0n, equity: 2_000n, margin: 0n, positions: [], orders: [] } });
@@ -107,12 +107,12 @@ describe("ExitKeeper", () => {
     });
 
     it("a vault read that fails, which reads the node for nothing", async () => {
-      kit.exit.factsError = new Error("your wallet is on chain 1, not chain 31337");
+      kit.exit.factsError = new Error("your wallet is connected to chain 1, not chain 31337");
       const reads = kit.client.exitReads;
       await kit.store.exit.refresh();
       expect(kit.client.exitReads).toBe(reads);
       expect(record()?.proof.seq).toBe(100);
-      expect(kit.store.getSnapshot().exit.vaultProblem).toBe("your wallet is on chain 1, not chain 31337");
+      expect(kit.store.getSnapshot().exit.vaultProblem).toBe("your wallet is connected to chain 1, not chain 31337");
     });
 
     it("the node's 404 before its first checkpoint under the exit", async () => {
@@ -192,7 +192,7 @@ describe("ExitKeeper", () => {
       await next.connect();
       const { record, storageProblem } = next.store.getSnapshot().exit;
       expect(record?.proof.seq).toBe(100);
-      expect(storageProblem).toBe("this browser's storage wouldn't save it: the quota is exceeded");
+      expect(storageProblem).toBe("this browser's storage would not save it: the quota is exceeded");
     });
 
     it("brings nothing for another account", async () => {
@@ -206,7 +206,7 @@ describe("ExitKeeper", () => {
 
   describe("how long it has been without a proof", () => {
     it("marks when the page first had none at the vault's root, and clears it once it does", async () => {
-      kit.client.exitError = new EngineError(0, "The server didn't respond.");
+      kit.client.exitError = new EngineError(0, "The server did not respond.");
       kit.exit.vault = factsAt(100, { chainNow: 5_000 });
       await kit.connect();
       expect(kit.store.getSnapshot().exit.missingSince).toBe(5_000);
@@ -224,7 +224,7 @@ describe("ExitKeeper", () => {
   describe("the node gone", () => {
     it("keeps the saved proof and says so, asking the node nothing", async () => {
       writeStoredExit(() => kit.storage, { ...SCOPE, proof: parsed(100), checkpointAt: 900, accountClaim: 1n, distributionOwed: 0n, paidApprovals: [] });
-      await kit.attach({ attestation: { kind: "unverified", reason: "The server didn't respond." }, stream: "stale" });
+      await kit.attach({ attestation: { kind: "unverified", reason: "The server did not respond." }, stream: "stale" });
       kit.exit.vault = factsAt(200);
       await kit.store.exit.refresh();
       expect(kit.client.exitReads).toBe(0);
@@ -233,7 +233,7 @@ describe("ExitKeeper", () => {
     });
 
     it("reads the node once when it comes back", async () => {
-      await kit.attach({ attestation: { kind: "unverified", reason: "The server didn't respond." }, stream: "stale", accountRead: true, account: { balance: 1_000n, unfinalised: 0n, equity: 1_000n, margin: 0n, positions: [], orders: [] } });
+      await kit.attach({ attestation: { kind: "unverified", reason: "The server did not respond." }, stream: "stale", accountRead: true, account: { balance: 1_000n, unfinalised: 0n, equity: 1_000n, margin: 0n, positions: [], orders: [] } });
       expect(kit.client.exitReads).toBe(0);
       kit.store.patch({ attestation: { kind: "mock" }, stream: "live" });
       await settle();

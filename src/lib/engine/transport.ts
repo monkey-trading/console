@@ -27,7 +27,7 @@ const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
 function unsigned(status: number): UntrustedError {
-  return new UntrustedError(`The server's reply (HTTP ${status}) wasn't signed by the verified server, so it was ignored.`);
+  return new UntrustedError(`The server's response (HTTP ${status}) was not signed by the verified server, so it was rejected.`);
 }
 
 /** The refusal of a verified answer under `signer`, a key put aside while it was in flight, carrying the JSON of a 2xx answer signed within the clock tolerance (`fresh`), which can still say what it named of the signer. */
@@ -134,7 +134,7 @@ export class SignedTransport {
       });
       bytes = new Uint8Array(await response.arrayBuffer());
     } catch (cause) {
-      throw new EngineError(0, "The server didn't respond.", null, { cause });
+      throw new EngineError(0, "The server did not respond.", null, { cause });
     }
     const header = (name: string) => response.headers.get(name);
     if (header(SIGNATURE_HEADER) === null) throw unsigned(response.status);
@@ -142,13 +142,13 @@ export class SignedTransport {
       signer, chainId: this.deps.chainId, vault: this.deps.vault, challenge, method, pathAndQuery: path, requestBody: requestBody === null ? new Uint8Array() : encoder.encode(requestBody),
       status: response.status, signature: header(SIGNATURE_HEADER), time: header(TIME_HEADER), seq: header(SEQ_HEADER), echoedChallenge: header(CHALLENGE_HEADER), body: bytes,
     });
-    if (!checked.ok) throw new SignatureError(`The server's reply failed its check: ${checked.reason}.`);
+    if (!checked.ok) throw new SignatureError(`The server's response failed verification: ${checked.reason}.`);
     const skewMs = checked.response.timeMs - this.deps.nowMs();
     // The vault named another signer while this request was in flight: an answer from the key it no longer names is discarded, valid as its signature is.
     if (judged && this.deps.trust.refuses(signer)) throw superseded(this.deps.trust.whyRefused(signer), response.ok && Math.abs(skewMs) <= CLOCK_TOLERANCE_MS, bytes, signer);
     if (Math.abs(skewMs) > CLOCK_TOLERANCE_MS) {
       this.deps.trust.clockWrong(skewMs);
-      throw new UntrustedError(`Your device clock is ${Math.round(Math.abs(skewMs) / 1000)} seconds off the server's time, so the reply was ignored. Correct it and reload the page.`);
+      throw new UntrustedError(`Your device clock differs from the server's time by ${Math.round(Math.abs(skewMs) / 1000)} seconds, so the server's response was rejected. Correct the clock and reload the page.`);
     }
     this.deps.trust.clockRight();
     const text = decoder.decode(bytes);
@@ -157,7 +157,7 @@ export class SignedTransport {
     try {
       body = JSON.parse(text);
     } catch (cause) {
-      throw new UntrustedError("The server's reply couldn't be read.", { cause });
+      throw new UntrustedError("The server's response could not be read.", { cause });
     }
     const seq = header(SEQ_HEADER) === null ? NaN : Number(header(SEQ_HEADER));
     return { body, timeMs: checked.response.timeMs, seq: Number.isSafeInteger(seq) ? seq : null };

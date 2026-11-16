@@ -34,17 +34,17 @@ export class InjectedConnector implements WalletConnector {
    */
   async connect(): Promise<Wallet> {
     const raw = this.provider();
-    if (raw === undefined) throw new Error("No browser wallet was found. Install one, such as MetaMask or Rabby, or use WalletConnect.");
+    if (raw === undefined) throw new Error("No browser wallet was found. Install a browser wallet, such as MetaMask or Rabby, or connect with WalletConnect.");
     if (this.queued?.raw !== raw) this.queued = { raw, asked: serialized(raw) };
     const queued = this.queued;
     let accounts: unknown;
     try {
       accounts = await queued.asked.request({ method: "eth_requestAccounts" });
     } catch (error) {
-      throw new Error("Your browser wallet didn't share an account.", { cause: error });
+      throw new Error("Your browser wallet did not share an account with this app.", { cause: error });
     }
     const first: unknown = Array.isArray(accounts) ? accounts[0] : undefined;
-    if (typeof first !== "string" || !ADDRESS.test(first)) throw new Error("Your browser wallet didn't share an account.");
+    if (typeof first !== "string" || !ADDRESS.test(first)) throw new Error("Your browser wallet did not share an account with this app.");
     const wallet = this.walletFor(queued, first.toLowerCase());
     await wallet.ensureChain();
     return wallet;

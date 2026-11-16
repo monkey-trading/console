@@ -109,7 +109,7 @@ describe("ProviderExit with a wallet that does not answer", () => {
     const provider: Eip1193Provider = { request: (args) => (asked++ === 0 ? never : chain.request(args)) };
     const queued = serialized(provider);
     const exit = new ProviderExit(ACCOUNT, CHAIN, queued, async () => "0xhash");
-    const refused = expect(exit.facts()).rejects.toThrow("didn't respond in time");
+    const refused = expect(exit.facts()).rejects.toThrow("did not respond in time");
     const behind = queued.request({ method: "eth_chainId" });
     await vi.advanceTimersByTimeAsync(30_000);
     await refused;
@@ -120,7 +120,7 @@ describe("ProviderExit with a wallet that does not answer", () => {
     expect(isRevert({ code: -32603, message: "Internal JSON-RPC error.", data: { code: 3, message: "execution reverted" } })).toBe(true);
     expect(isRevert({ code: -32603, message: "Internal JSON-RPC error.", data: { originalError: { code: 3, message: "reverted" } } })).toBe(true);
     expect(isRevert({ code: -32603, message: "Internal JSON-RPC error.", data: { code: -32000, message: "header not found" } })).toBe(false);
-    expect(isRevert(new Error("Your wallet didn't respond in time."))).toBe(false);
+    expect(isRevert(new Error("Your wallet did not respond in time."))).toBe(false);
   });
 
   it("gives up the wallet's receipt check before a send, so the action ends and the queue goes on", async () => {
@@ -128,7 +128,7 @@ describe("ProviderExit with a wallet that does not answer", () => {
     const chain = new Chain();
     const provider: Eip1193Provider = { request: (args) => (args.method === "eth_getTransactionReceipt" ? never : chain.request(args)) };
     const wallet = new ProviderWallet(ACCOUNT, "Test", provider, CHAIN, { wait: async () => undefined });
-    const sending = expect(wallet.exit.send({ kind: "claim" })).rejects.toThrow("didn't respond in time");
+    const sending = expect(wallet.exit.send({ kind: "claim" })).rejects.toThrow("did not respond in time");
     await vi.advanceTimersByTimeAsync(30_000);
     await sending;
   });
@@ -137,7 +137,7 @@ describe("ProviderExit with a wallet that does not answer", () => {
     vi.useFakeTimers();
     const chain = new Chain();
     const provider: Eip1193Provider = { request: (args) => (args.method === "eth_chainId" ? never : chain.request(args)) };
-    const checking = expect(new ProviderWallet(ACCOUNT, "Test", provider, CHAIN, { wait: async () => undefined }).ensureChain()).rejects.toThrow("didn't respond in time");
+    const checking = expect(new ProviderWallet(ACCOUNT, "Test", provider, CHAIN, { wait: async () => undefined }).ensureChain()).rejects.toThrow("did not respond in time");
     await vi.advanceTimersByTimeAsync(30_000);
     await checking;
   });

@@ -36,7 +36,7 @@ describe("signed reads", () => {
 
   it("rejects a recorded response replayed under another challenge", async () => {
     const { client } = setup({ challenge: vectorResponse("replayed under another challenge").challenge });
-    await expect(client.markets()).rejects.toThrow("failed its check");
+    await expect(client.markets()).rejects.toThrow("failed verification");
   });
 
   it("rejects an answer signed by a key other than the attested address", async () => {
@@ -48,14 +48,14 @@ describe("signed reads", () => {
   it("rejects an answer signed for another chain than the build pins", async () => {
     const { client } = setup({ chainId: 1 });
     // The first check's read of the node's own word on the vault's signer is the first answer refused.
-    await expect(client.verify()).resolves.toMatchObject({ kind: "unverified", reason: expect.stringContaining("failed its check") });
-    await expect(client.markets()).rejects.toThrow("failed its check");
+    await expect(client.verify()).resolves.toMatchObject({ kind: "unverified", reason: expect.stringContaining("failed verification") });
+    await expect(client.markets()).rejects.toThrow("failed verification");
   });
 
   it("rejects an answer with no signature, whatever its status", async () => {
     const { node, client } = setup();
     node.routes.set("/v1/markets", () => new Response("[]", { status: 200 }));
-    await expect(client.markets()).rejects.toThrow("wasn't signed");
+    await expect(client.markets()).rejects.toThrow("was not signed");
     node.routes.set("/v1/markets", () => new Response('{"error":"rate limited"}', { status: 429 }));
     await expect(client.markets()).rejects.toThrow("HTTP 429");
   });
@@ -87,8 +87,8 @@ describe("what the build trusts", () => {
   it("refuses a mock attestation in a production build, with the message, and its verifier has no mock entry point", async () => {
     const { client } = setup({ acceptsMock: false, verifier: production });
     expect(production.verifyMockAttestation).toBeUndefined();
-    await expect(client.verify()).resolves.toEqual({ kind: "unverified", reason: "This server is a test server that can't be verified, so this version of the app won't use it." });
-    await expect(client.markets()).rejects.toThrow("test server that can't be verified");
+    await expect(client.verify()).resolves.toEqual({ kind: "unverified", reason: "The server is a test server that cannot be verified, so this version of the app does not connect to it." });
+    await expect(client.markets()).rejects.toThrow("test server that cannot be verified");
   });
 
   it("never lets a mock quote pass the hardware check", () => {

@@ -55,7 +55,7 @@ describe("ExitKeeper, with the node's answer ahead of the vault", () => {
   it("is saved though the node has gone by then", async () => {
     await kit.connect();
     kit.client.exitError = new Error("the node is gone");
-    kit.store.patch({ attestation: { kind: "unverified", reason: "The server didn't respond." }, stream: "stale" });
+    kit.store.patch({ attestation: { kind: "unverified", reason: "The server did not respond." }, stream: "stale" });
     await settle();
     kit.exit.vault = factsAt(200);
     await kit.store.exit.refresh();
@@ -147,9 +147,9 @@ describe("the exit proof at a fast cadence, with the wallet's read behind the no
     const { said, finalSeq } = await run(kit);
     expect(said.flatMap((entry) => entry.tones).every((tone) => tone === "calm")).toBe(true);
     expect(said.filter((entry) => entry.notice !== null)).toEqual([]);
-    expect(said.flatMap((entry) => entry.lines).filter((line) => /refuse|doesn't have/.test(line))).toEqual([]);
-    const shapes = new Set(said.filter((entry) => entry.lines.some((line) => line.startsWith("Saved"))).flatMap((entry) => entry.lines).map(shape));
-    expect([...shapes]).toEqual(["Saved in this browser: snapshot N, posted a while ago. It covers 5,083 USDC, and a deposit still pending."]);
+    expect(said.flatMap((entry) => entry.lines).filter((line) => /refuse|has not yet received/.test(line))).toEqual([]);
+    const shapes = new Set(said.filter((entry) => entry.lines.some((line) => line.startsWith("A proof for snapshot"))).flatMap((entry) => entry.lines).map(shape));
+    expect([...shapes]).toEqual(["A proof for snapshot N, posted a while ago, is saved in this browser. The proof covers 5,083 USDC and a deposit still pending."]);
     const saved = kit.store.getSnapshot().exit.record?.proof.seq ?? 0;
     expect(saved).toBeGreaterThanOrEqual(finalSeq - 2_000);
     expect(kit.client.exitReads).toBeLessThanOrEqual(CHECKPOINTS + 1);

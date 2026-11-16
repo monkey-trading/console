@@ -138,7 +138,7 @@ describe("mintFromAnvil", () => {
     await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, reverted.post, waits().wait)).rejects.toThrow("Creating the test USDC failed.");
     const never = stub({ eth_accounts: { result: [ANVIL_0] }, eth_sendTransaction: { result: TX }, eth_getTransactionReceipt: { result: null } });
     const { paused, wait } = waits();
-    await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, never.post, wait)).rejects.toThrow("The test USDC wasn't confirmed in time.");
+    await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, never.post, wait)).rejects.toThrow("The test USDC was not confirmed in time.");
     expect(never.bodies).toHaveLength(32); // eth_accounts, eth_sendTransaction, then 30 reads
     expect(paused).toHaveLength(29);
   });

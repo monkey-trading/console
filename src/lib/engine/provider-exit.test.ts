@@ -40,7 +40,7 @@ describe("ProviderExit", () => {
     });
     it("refuses a wallet on another chain, not asking it to move", async () => {
       chain.chainId = 1;
-      await expect(exit.facts()).rejects.toThrow("your wallet is on chain 1, not chain 31337");
+      await expect(exit.facts()).rejects.toThrow("your wallet is connected to chain 1, not chain 31337");
       expect(chain.asked).toEqual([]);
     });
     it("rejects when a read fails", async () => {
@@ -55,18 +55,18 @@ describe("ProviderExit", () => {
       expect(chain.asked.filter((name) => /^proves|accountClaim/.test(name))).toEqual(["provesTerms", "accountClaim", "provesApproval", "provesQueued", "provesDistribution", "provesPending"]);
     });
     it.each([
-      ["provesTerms", "the vault's snapshot doesn't confirm its exit terms"],
-      ["provesApproval", "the vault's snapshot doesn't confirm its withdrawal 1"],
-      ["provesQueued", "the vault's snapshot doesn't confirm its queued withdrawal 95"],
-      ["provesDistribution", "the vault's snapshot doesn't confirm its distribution"],
-      ["provesPending", "the vault's snapshot doesn't confirm its pending deposit 2"],
+      ["provesTerms", "the vault's snapshot does not confirm its exit terms"],
+      ["provesApproval", "the vault's snapshot does not confirm its withdrawal 1"],
+      ["provesQueued", "the vault's snapshot does not confirm its queued withdrawal 95"],
+      ["provesDistribution", "the vault's snapshot does not confirm its distribution"],
+      ["provesPending", "the vault's snapshot does not confirm its pending deposit 2"],
     ])("refuses when %s says no", async (name, reason) => {
       chain.proves[name] = false;
       expect(await exit.check(proof, rootAt(100))).toEqual({ ok: false, reason });
     });
     it("refuses when accountClaim reverts", async () => {
       chain.reverts.add("accountClaim");
-      expect(await exit.check(proof, rootAt(100))).toEqual({ ok: false, reason: "the vault's snapshot doesn't confirm its balance and positions" });
+      expect(await exit.check(proof, rootAt(100))).toEqual({ ok: false, reason: "the vault's snapshot does not confirm its balance and positions" });
     });
     it("rejects, and does not call it a refusal, when the wallet is what failed", async () => {
       chain.fails.add("accountClaim");
@@ -128,7 +128,7 @@ describe("ProviderExit", () => {
     });
     it("rejects a wallet that moved chain before the answer is taken", async () => {
       chain.chainId = 1;
-      await expect(exit.check(proof, rootAt(100))).rejects.toThrow("your wallet is on chain 1");
+      await expect(exit.check(proof, rootAt(100))).rejects.toThrow("your wallet is connected to chain 1");
     });
   });
 

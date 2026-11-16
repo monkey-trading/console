@@ -90,7 +90,7 @@ export class MockEngineClient implements EngineClient {
     const attestation = await this.attestation();
     return checkAttestation(attestation, true) ?? {
       kind: "unverified",
-      reason: "The demo can't verify a server on secure hardware: it doesn't check hardware certificates or software versions.",
+      reason: "The demo cannot verify a server running on secure hardware, because it does not check hardware certificates or software releases.",
     };
   }
 

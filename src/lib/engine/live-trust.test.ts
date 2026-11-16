@@ -74,7 +74,7 @@ describe("a node whose attestation cannot be judged", () => {
     const { node, client } = setup({ verifier: dated });
     hardware(node);
     node.routes.set("/v1/attestation/collateral", () => new Response("{}"));
-    await expect(client.verify()).resolves.toEqual({ kind: "unverified", reason: "certificate VCEK is outside its validity period. If your device clock is wrong, correct it and reload the page." });
+    await expect(client.verify()).resolves.toEqual({ kind: "unverified", reason: "certificate VCEK is outside its validity period. If your device clock is incorrect, correct it and reload the page." });
     const other: Verifier = { ...acceptAll, verifyAttestation: () => ({ ok: false, reason: "chain root is not a pinned vendor root" }) };
     const second = setup({ verifier: other });
     hardware(second.node);
@@ -86,7 +86,7 @@ describe("a node whose attestation cannot be judged", () => {
     const { node, client } = setup();
     hardware(node);
     node.routes.set("/v1/attestation/collateral", () => new Response("", { status: 500 }));
-    await expect(client.verify()).resolves.toMatchObject({ kind: "unverified", reason: "The server didn't send the certificates needed to verify it (HTTP 500)." });
+    await expect(client.verify()).resolves.toMatchObject({ kind: "unverified", reason: "The server did not send the certificates needed to verify it (HTTP 500)." });
   });
 });
 
@@ -104,7 +104,7 @@ describe("a verifier that never loads", () => {
     const first = client.verify();
     await settle();
     scheduler.advance(20_000);
-    await expect(first).resolves.toEqual({ kind: "unverified", reason: "The server check took too long to load." });
+    await expect(first).resolves.toEqual({ kind: "unverified", reason: "The verification software took too long to load." });
     await expect(client.verify()).resolves.toEqual({ kind: "mock" });
     expect(loads).toBe(2);
   });
@@ -131,7 +131,7 @@ describe("a stalled node", () => {
     });
     const read = client.markets();
     deadline.abort();
-    await expect(read).rejects.toMatchObject({ name: "EngineError", status: 0, message: "The server didn't respond." });
+    await expect(read).rejects.toMatchObject({ name: "EngineError", status: 0, message: "The server did not respond." });
   });
 });
 

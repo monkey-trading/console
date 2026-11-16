@@ -36,6 +36,18 @@ export function formatSpan(ms: number): string {
   return hours % 24 === 0 ? `${Math.floor(hours / 24)} d` : `${Math.floor(hours / 24)} d ${hours % 24} h`;
 }
 
+/** A span as a sentence says it, truncated as `formatSpan`: "less than a minute", "5 minutes", "3 hours and 12 minutes" or "2 days and 4 hours". */
+export function formatSpanWords(ms: number): string {
+  const count = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"}`;
+  const minutes = Math.floor(Math.max(ms, 0) / 60_000);
+  if (minutes < 1) return "less than a minute";
+  if (minutes < 60) return count(minutes, "minute");
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return minutes % 60 === 0 ? count(hours, "hour") : `${count(hours, "hour")} and ${count(minutes % 60, "minute")}`;
+  const days = Math.floor(hours / 24);
+  return hours % 24 === 0 ? count(days, "day") : `${count(days, "day")} and ${count(hours % 24, "hour")}`;
+}
+
 /** `2026-10-28 15:04`, in UTC: with the year, for lists that reach back past one. */
 export function formatStampWithYear(ms: number): string {
   return new Date(ms).toISOString().slice(0, 16).replace("T", " ");

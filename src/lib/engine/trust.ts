@@ -16,9 +16,9 @@ const RECHECK_COOLDOWN_MS = 30_000;
 /** The messages the verifier gives when a certificate or list is outside its dates, which a wrong device clock also causes. */
 const DATE_FAILURE = /validity period|not yet valid|is expired/;
 /** What the console says when a quote is not for the release the vault names. */
-export const NOT_NAMED = "This server isn't running the software version the vault expects, or this version of the app doesn't know that version yet and needs updating.";
+export const NOT_NAMED = "The server is not running the software release that the vault expects, or this version of the app does not yet recognise that release and needs to be updated.";
 /** What the console says when the quote's enclave is not the one the vault pays out on. */
-export const NOT_THE_SIGNER = "This server's signing key isn't the one the vault uses.";
+export const NOT_THE_SIGNER = "The server's signing key does not match the signing key that the vault uses.";
 export { CONNECT_TO_CHECK } from "./trust-errors";
 import { CONNECT_TO_CHECK } from "./trust-errors";
 
@@ -60,7 +60,7 @@ export class NodeTrust {
    */
   async signer(): Promise<string> {
     if (this.signerAddress === null || this.verifying !== null) await this.verify();
-    if (this.signerAddress === null) throw new UntrustedError(sendRefusal(this.current) ?? "The server hasn't been verified yet.");
+    if (this.signerAddress === null) throw new UntrustedError(sendRefusal(this.current) ?? "The server has not yet been verified.");
     return this.signerAddress;
   }
 
@@ -78,7 +78,7 @@ export class NodeTrust {
       // A check queued behind the one `signer` waited for may have started as it resumed: its verdict, not the last one's, decides.
       while (this.verifying !== null) signer = await this.signer();
     } catch (error) {
-      throw new NotSentError(error instanceof Error ? error.message : "The server hasn't been verified yet.", { cause: error });
+      throw new NotSentError(error instanceof Error ? error.message : "The server has not yet been verified.", { cause: error });
     }
     const refused = sendRefusal(this.current);
     if (refused !== null) throw new NotSentError(refused);
@@ -239,7 +239,7 @@ export class NodeTrust {
     if (this.deps.devDigests.length === 0) return { judged: false };
     const vault = await readVault(this.deps.vaultFacts());
     if (vault.kind === "none") return { judged: false };
-    if (vault.kind === "failed") return { refused: `Your wallet couldn't check this server against the vault: ${vault.reason}`, vaultLifts: true };
+    if (vault.kind === "failed") return { refused: `Your wallet could not check the server against the vault: ${vault.reason}`, vaultLifts: true };
     this.vaultNames(vault.facts.signer);
     const digests = this.deps.devDigests.map((digest) => ({ launchDigest: digest as Hex })); // deploy.ts checked each is 0x hex
     if (!isConfigHash(configHash) || digestNamed(digests, vault.facts.release, configHash) === null) return { refused: NOT_NAMED };
@@ -270,17 +270,17 @@ export class NodeTrust {
         return this.setStatus({ kind: "mock" });
       }
       // The node's own text until the verifier binds it to the quote: checked first, so it cannot add a line to a manifest.
-      if (!isConfigHash(configHash)) return this.setStatus({ kind: "unverified", reason: "This server's verification data is incomplete, so it can't be verified." });
+      if (!isConfigHash(configHash)) return this.setStatus({ kind: "unverified", reason: "The server's verification data is incomplete, so the server cannot be verified." });
       const vault = await readVault(this.deps.vaultFacts());
       const heard = vault.kind === "read" ? this.vaultNames(vault.facts.signer) : 0;
       const pinned = vault.kind === "read" ? digestNamed(this.deps.releases, vault.facts.release, configHash) : null;
       if (vault.kind === "read" && pinned === null) return this.setStatus({ kind: "unverified", reason: NOT_NAMED });
       const manifests = (pinned === null ? this.deps.releases : [pinned]).map((release) => manifestText(release, configHash));
       const collateral = await this.deps.collateral();
-      if (collateral === null) return this.setStatus({ kind: "unverified", reason: "This server didn't provide the certificates needed to verify it." });
+      if (collateral === null) return this.setStatus({ kind: "unverified", reason: "The server did not provide the certificates needed to verify it." });
       const verdict = verifier.verifyAttestation({ attestation: text, manifests, collateral, nowMs: this.deps.nowMs() });
       if (!verdict.ok) {
-        const hint = DATE_FAILURE.test(verdict.reason) ? ". If your device clock is wrong, correct it and reload the page." : "";
+        const hint = DATE_FAILURE.test(verdict.reason) ? ". If your device clock is incorrect, correct it and reload the page." : "";
         return this.setStatus({ kind: "unverified", reason: verdict.reason + hint });
       }
       const address = verdict.enclave.address.toLowerCase();
@@ -292,9 +292,9 @@ export class NodeTrust {
       if (superseded !== null) return this.refused(superseded, earlier);
       this.trust(address, true);
       if (vault.kind === "read") this.setStatus({ kind: "verified", release: release ?? "", config: config ?? "", address });
-      else this.setStatus({ kind: "attested", release: release ?? "", address, why: vault.kind === "none" ? CONNECT_TO_CHECK : `Your wallet couldn't check this server against the vault: ${vault.reason}` });
+      else this.setStatus({ kind: "attested", release: release ?? "", address, why: vault.kind === "none" ? CONNECT_TO_CHECK : `Your wallet could not check the server against the vault: ${vault.reason}` });
     } catch (error) {
-      this.setStatus({ kind: "unverified", reason: error instanceof Error ? error.message : "This server's verification data couldn't be read." });
+      this.setStatus({ kind: "unverified", reason: error instanceof Error ? error.message : "The server's verification data could not be read." });
     }
   }
 }

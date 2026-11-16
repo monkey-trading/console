@@ -22,7 +22,7 @@ export const BALANCE_CALL_MS = 8_000;
  * - the build names no USDC token, the wallet does not answer within `BALANCE_CALL_MS`, or it answers unreadably
  */
 export async function usdcBalanceRead(address: Address, chain: WalletChain, provider: Eip1193Provider): Promise<UsdcBalance> {
-  if (chain.usdc === null) throw new Error("This version of the app has no USDC token set.");
+  if (chain.usdc === null) throw new Error("This version of the app has no USDC token configured.");
   const current = Number(await withinMs(provider, { method: "eth_chainId" }, BALANCE_CALL_MS));
   if (current !== chain.chainId) return { kind: "wrong_chain", chainId: current };
   const data = encodeFunctionData({ abi: BALANCE_OF, functionName: "balanceOf", args: [hexOf(address)] });

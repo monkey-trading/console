@@ -141,7 +141,7 @@ describe("MonkeyPanel wallet reads", () => {
     await flush();
     const next = panel.refreshWallet(true);
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(panel.getSnapshot().wallet.position).toMatchObject({ status: "failed", message: "Your wallet didn't respond in time." });
+    expect(panel.getSnapshot().wallet.position).toMatchObject({ status: "failed", message: "Your wallet did not respond in time." });
     // What it held before stays on screen, and the provider is still busy: the next read has not started.
     expect(panel.getSnapshot().wallet.position.value?.staked).toBe(12_000n * MONKEY_UNIT);
     expect(calls).toBe(1);

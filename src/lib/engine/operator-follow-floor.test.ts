@@ -16,7 +16,7 @@ const KC = "0x00000000000000000000000000000000000000c1";
 const ROUTE = { operator: KA, pending_rotation: null, rotation_enabled: true, last_election: null };
 /** A route that says the registry names `hostname` and the vault names `signer`. */
 const route = (hostname: string | null, signer: NamedSigner) => ({ ...ROUTE, ...(hostname === null ? {} : { api_hostname: { hostname, block: 1, block_hash: "0x" } }), signer });
-const silent = async (): Promise<never> => { throw new EngineError(0, "The server didn't respond."); };
+const silent = async (): Promise<never> => { throw new EngineError(0, "The server did not respond."); };
 const LAGS = { kind: "waiting", target: C, reason: expect.stringContaining("newer signing key") };
 
 /** A follower with no wallet over the node in use, whose route names `hostname` under epoch 5's key, and the listed nodes B and C. */
@@ -55,7 +55,7 @@ describe("the signer floor a visit holds each node to (monkey-trading/console#37
     expect(kit.follower.getSnapshot()).toMatchObject(LAGS);
   });
 
-  it("counts the route it reads from a node that failed its check but answered, and the word a node's check read before it stopped answering", async () => {
+  it("counts the route it reads from a node that failed verification but answered, and the word a node's check read before it stopped answering", async () => {
     for (const read of ["refusedRoute", "check"] as const) {
       const kit = visit("b.example");
       if (read === "refusedRoute") {

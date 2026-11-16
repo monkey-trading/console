@@ -40,20 +40,20 @@ function liveConnected(options: { nowMs?: number } = {}) {
 }
 
 describe("what the user is told of a request that stopped or went unanswered", () => {
-  const stopped = "Nothing was sent. Connect a wallet to finish checking this server against the vault. You can trade and move funds once the check passes.";
+  const stopped = "Your request was not sent. Connect a wallet to complete the verification, in which your wallet checks the server against the on-chain vault that holds deposits. You can trade and move funds once that check passes.";
 
   it("says plainly that nothing went out when the last gate stopped it, on the session-signed and the wallet-signed path, and reads nothing again", async () => {
     const { client, store } = await keyed();
     client.answer = (posted) => {
       if (posted.route === "session_key") return new ActionClient().answer(posted);
-      throw new NotSentError(stopped.replace("Nothing was sent. ", ""));
+      throw new NotSentError(stopped.replace("Your request was not sent. ", ""));
     };
     const reads = client.marketReads;
     expect(await send(store)).toBe(false);
     expect(store.getSnapshot().notices.ticket?.text).toBe(stopped);
     expect(client.marketReads).toBe(reads);
     const unkeyed = await connected();
-    unkeyed.client.answer = () => { throw new NotSentError(stopped.replace("Nothing was sent. ", "")); };
+    unkeyed.client.answer = () => { throw new NotSentError(stopped.replace("Your request was not sent. ", "")); };
     unkeyed.store.patch({ sessionRefusal: { kind: "too_many_session_keys", max: 10 } });
     const unkeyedReads = unkeyed.client.marketReads;
     expect(await send(unkeyed.store)).toBe(false);
@@ -65,7 +65,7 @@ describe("what the user is told of a request that stopped or went unanswered", (
     const { client, store, wallet } = await connected();
     client.answer = () => {
       store.liveWallet = { ...wallet, address: "0x00000000000000000000000000000000000000bb" };
-      throw new NotSentError("The server hasn't been verified yet.");
+      throw new NotSentError("The server has not yet been verified.");
     };
     store.patch({ sessionRefusal: { kind: "too_many_session_keys", max: 10 } });
     await send(store);
@@ -79,7 +79,7 @@ describe("what the user is told of a request that stopped or went unanswered", (
       const verdict = await failed.client.verify();
       if (verdict.kind !== "unverified") throw new Error("the attestation route fails");
       expect(await run(failed.store)).toBe(false);
-      expect(failed.store.getSnapshot().notices[surface]?.text).toBe(`Nothing was sent. ${verdict.reason}`);
+      expect(failed.store.getSnapshot().notices[surface]?.text).toBe(`Your request was not sent. ${verdict.reason}`);
       expect(failed.node.posts).toEqual([]);
       expect(failed.node.requests.filter((request) => request.path === "/v1/markets")).toEqual([]);
 
@@ -87,7 +87,7 @@ describe("what the user is told of a request that stopped or went unanswered", (
       await expect(wrongClock.client.markets()).rejects.toBeInstanceOf(UntrustedError);
       const reads = wrongClock.node.requests.length;
       expect(await run(wrongClock.store)).toBe(false);
-      expect(wrongClock.store.getSnapshot().notices[surface]?.text).toBe("Nothing was sent. Your device clock is 60 seconds off the server's time. Correct it and reload the page.");
+      expect(wrongClock.store.getSnapshot().notices[surface]?.text).toBe("Your request was not sent. Your device clock differs from the server's time by 60 seconds. Correct the clock and reload the page.");
       expect(wrongClock.node.posts).toEqual([]);
       // The check is tried again before the gate refuses; nothing past it reaches the node.
       expect(wrongClock.node.requests.slice(reads).map((request) => request.path).filter((path) => path !== "/v1/attestation" && path !== OPERATOR_CLAIM)).toEqual([]);
@@ -137,7 +137,7 @@ describe("what placeOrder reports", () => {
     const { client, store } = await keyed();
     client.answer = answer([CANCELLED]);
     expect(await send(store)).toBe(false);
-    expect(store.getSnapshot().notices.ticket).toMatchObject({ tone: "error", text: "Your order couldn't be filled, so it was cancelled." });
+    expect(store.getSnapshot().notices.ticket).toMatchObject({ tone: "error", text: "Your order could not be filled, so it has been cancelled." });
   });
 
   it("is false for a request the node refused", async () => {

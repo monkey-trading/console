@@ -93,7 +93,7 @@ describe("the live client's queue totals", () => {
     // The backoff wait rejects with its own marker, not a fresh failure, so a caller can keep the
     // original failure latched instead of alternating the two messages.
     await expect(live.withdrawalTotals()).rejects.toBeInstanceOf(QueueTotalsRetrying);
-    await expect(live.withdrawalTotals()).rejects.toThrow("Trying again shortly");
+    await expect(live.withdrawalTotals()).rejects.toThrow("The app will try again shortly");
     expect(walked()).toBe(3);
     // Past the backoff the next read walks again.
     now = 63_000;

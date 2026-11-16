@@ -96,7 +96,7 @@ export async function mintFromAnvil(rpcUrl: string, usdc: Address, to: Address, 
     }
     if (read < RECEIPT_READS) await wait(RECEIPT_WAIT_MS);
   }
-  throw new Error("The test USDC wasn't confirmed in time.");
+  throw new Error("The test USDC was not confirmed in time.");
 }
 
 /** `n` as a `0x` quantity, as JSON-RPC encodes it. */

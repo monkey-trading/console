@@ -14,12 +14,12 @@ describe("exitView, of a saved proof this connection's verifier has not accepted
   const unchecked = { ...NO_EXIT, vault: OPEN, record: recordAt(100), claims: NO_CLAIMS };
 
   it("says it is saved and unchecked, and draws nothing from it", () => {
-    expect(text(unchecked)).toMatch(/Saved in this browser: snapshot 100, posted [^.]* ago\. Your wallet hasn't checked it against the vault yet\./);
-    expect(text(unchecked)).not.toMatch(/It covers|nothing left/);
-    expect(text({ ...unchecked, ...acceptedState(recordAt(100)) })).toMatch(/It covers/);
+    expect(text(unchecked)).toMatch(/A proof for snapshot 100, posted [^.]* ago, is saved in this browser\. Your wallet has not yet checked the proof against the vault\./);
+    expect(text(unchecked)).not.toMatch(/The proof covers|nothing left/);
+    expect(text({ ...unchecked, ...acceptedState(recordAt(100)) })).toMatch(/The proof covers/);
   });
   it("does not take a record the verifier accepted for one that has replaced it", () => {
-    expect(text({ ...unchecked, checked: recordAt(100) })).not.toMatch(/It covers/);
+    expect(text({ ...unchecked, checked: recordAt(100) })).not.toMatch(/The proof covers/);
     expect(exitView({ ...unchecked, vault: factsAt(200, { exitStartedAt: 5_000, chainNow: 6_000 }), ...acceptedState(recordAt(100)) }, WALLET).refunds).toEqual([]);
   });
   it("offers no registration and no refund from it, but those that need no proof stay", () => {
@@ -32,7 +32,7 @@ describe("exitView, of a saved proof this connection's verifier has not accepted
   it("tells every page once the failure has lasted, and not before", () => {
     const failing = { ...NO_EXIT, vault: factsAt(100), record: recordAt(100), attempt: { kind: "wallet-failed", reason: "no answer" } as const };
     expect(exitView({ ...failing, checkFailures: 4 }, WALLET).notice).toBeNull();
-    expect(exitView({ ...failing, checkFailures: 5 }, WALLET).notice).toEqual({ tone: "warn", text: "Your wallet couldn't check your exit proof against the vault." });
+    expect(exitView({ ...failing, checkFailures: 5 }, WALLET).notice).toEqual({ tone: "warn", text: "Your wallet could not check your exit proof against the vault." });
     expect(exitView({ ...failing, ...acceptedState(recordAt(100)), checkFailures: 5 }, WALLET).notice).toBeNull();
     expect(exitView({ ...failing, vault: factsAt(200), checkFailures: 5 }, WALLET).notice).toBeNull();
   });
@@ -43,11 +43,11 @@ describe("exitView, of a pending deposit the vault's record disagrees with", () 
   it("does not offer its refund, says why, and keeps the proof's other figures", () => {
     const view = exitView(exit, WALLET);
     expect(view.refunds).toEqual([]);
-    expect(view.lines).toContainEqual({ tone: "warn", text: "Deposit 2 doesn't match the vault's record, so the vault would refuse its refund. The proof stays saved." });
-    expect(text(exit)).toMatch(/It covers 5,083 USDC\./);
+    expect(view.lines).toContainEqual({ tone: "warn", text: "Deposit 2 does not match the vault's record, so the vault would refuse its refund. The proof remains saved." });
+    expect(text(exit)).toMatch(/The proof covers 5,083 USDC\./);
   });
   it("names each of several", () => {
-    expect(text({ ...exit, claims: { ...NO_CLAIMS, mismatched: [2, 3] } })).toMatch(/Deposits 2, 3 don't match the vault's record, so the vault would refuse their refunds\./);
+    expect(text({ ...exit, claims: { ...NO_CLAIMS, mismatched: [2, 3] } })).toMatch(/Deposits 2, 3 do not match the vault's record, so the vault would refuse their refunds\./);
   });
 });
 

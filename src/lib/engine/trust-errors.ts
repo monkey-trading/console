@@ -6,7 +6,7 @@ import type { OperatorRoute } from "./stats-types";
 /** A signed request stopped before it left the page, because the node may not be signed for: unlike a request that went out, it cannot have run. */
 export class NotSentError extends Error {
   constructor(reason: string, options?: ErrorOptions) {
-    super(`Nothing was sent. ${reason}`, options);
+    super(`Your request was not sent. ${reason}`, options);
     this.name = "NotSentError";
   }
 }
@@ -44,7 +44,7 @@ export class SignatureError extends UntrustedError {
 }
 
 /** Why a quote that verified is not trusted to sign for: no wallet has read the vault. */
-export const CONNECT_TO_CHECK = "Connect a wallet to finish checking this server against the vault. You can trade and move funds once the check passes.";
+export const CONNECT_TO_CHECK = "Connect a wallet to complete the verification, in which your wallet checks the server against the on-chain vault that holds deposits. You can trade and move funds once that check passes.";
 
 /** Why a signed request may not leave under `status`, as a sentence, or null when it may: only a verdict that read the vault, or a dev build's mock, signs. */
 export function sendRefusal(status: AttestationStatus): string | null {
@@ -57,10 +57,10 @@ export function sendRefusal(status: AttestationStatus): string | null {
     case "unverified":
       return status.reason;
     case "clock":
-      return `Your device clock is ${Math.round(Math.abs(status.skewMs) / 1000)} seconds off the server's time. Correct it and reload the page.`;
+      return `Your device clock differs from the server's time by ${Math.round(Math.abs(status.skewMs) / 1000)} seconds. Correct the clock and reload the page.`;
     case "checking":
     case "reverifying":
-      return "The server hasn't been verified yet.";
+      return "The server has not yet been verified.";
     default: {
       const unhandled: never = status;
       throw new Error(`Unknown attestation status: ${String(unhandled)}`);

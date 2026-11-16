@@ -19,7 +19,7 @@ describe("ExitKeeper, with a node behind the vault", () => {
     await kit.connect();
     expect(kit.client.exitReads).toBe(1);
     expect(exit().attempt).toEqual({ kind: "node-behind", nodeSeq: 50 });
-    expect(exitView(exit(), { address: ACCOUNT }).lines.map((line) => line.text)).toContain("The server is behind the vault: its newest snapshot is 50. Trying again automatically.");
+    expect(exitView(exit(), { address: ACCOUNT }).lines.map((line) => line.text)).toContain("The server is behind the vault, as its newest snapshot is 50. The app will try again automatically.");
   });
   it("asks again at each read of the vault, once each, though the vault has not moved", async () => {
     await kit.connect();

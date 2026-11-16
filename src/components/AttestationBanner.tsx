@@ -22,7 +22,7 @@ export function AttestationBanner() {
       <NodeLine />
       {stream === "stale" && attestation.kind !== "unverified" && (
         <div role="alert" className={BAD}>
-          <strong className="font-medium">Prices aren&apos;t updating, so trading is paused.</strong> It resumes once the connection to the server recovers.{notices.feed !== undefined && <> Last problem: {notices.feed.text}</>}
+          <strong className="font-medium">Live prices are not currently updating, so trading has been suspended.</strong> Trading will resume automatically once the price feed recovers.{notices.feed !== undefined && <> The most recent error was: {notices.feed.text}</>}
         </div>
       )}
     </section>
@@ -38,11 +38,11 @@ function NodeLine() {
     case "following":
       return null;
     case "failed":
-      return <div role="status" className={WARN}><strong className="font-medium">Couldn&apos;t check which server is current.</strong> Staying on {new URL(follow.origin).host} and trying again: {follow.reason}<CheckAgain /></div>;
+      return <div role="status" className={WARN}><strong className="font-medium">The current trading server could not be confirmed.</strong> You remain connected to {new URL(follow.origin).host}, and the check will be repeated automatically. The most recent error was: {follow.reason}<CheckAgain /></div>;
     case "unlisted":
-      return <div role="alert" className={BAD}><strong className="font-medium">This app needs updating.</strong> {follow.hostname === null ? "The current server hasn't registered a web address" : `The current server is at ${follow.hostname}, which this version of the app doesn't know`}, so the app won&apos;t connect to it.</div>;
+      return <div role="alert" className={BAD}><strong className="font-medium">This version of the app needs to be updated.</strong> {follow.hostname === null ? "The current trading server has not registered a web address" : `The current trading server is at ${follow.hostname}, which this version of the app does not recognise`}, so the app does not connect to it.</div>;
     case "waiting":
-      return <div role="status" className={WARN}><strong className="font-medium">The server is changing.</strong> You&apos;ll stay on {new URL(follow.origin).host} until {new URL(follow.target).host} is verified: {follow.reason}</div>;
+      return <div role="status" className={WARN}><strong className="font-medium">The trading server is changing.</strong> You will remain connected to {new URL(follow.origin).host} until {new URL(follow.target).host} has been verified. {follow.reason}</div>;
     default:
       return follow satisfies never;
   }
@@ -67,20 +67,20 @@ function Status({ attestation, signatures }: { attestation: ReturnType<typeof us
     case "verified":
       return (
         <div role="status" className={`${LINE} border-line text-fg-3`}>
-          <strong className="font-medium text-glow">Server verified.</strong> Release {attestation.release}, signing key <span title={attestation.address}>{shortHex(attestation.address)}</span>.
+          <strong className="font-medium text-glow">Server verified.</strong> The server is running release {attestation.release} with signing key <span title={attestation.address}>{shortHex(attestation.address)}</span>.
         </div>
       );
     case "attested":
       return (
         <div role="status" className={WARN}>
-          <strong className="font-medium">Server&apos;s code verified.</strong> Release {attestation.release}, signing key <span title={attestation.address}>{shortHex(attestation.address)}</span>. {attestation.why}
+          <strong className="font-medium">Server software verified.</strong> The server is running release {attestation.release} with signing key <span title={attestation.address}>{shortHex(attestation.address)}</span>. {attestation.why}
           {attestation.why !== CONNECT_TO_CHECK && <CheckAgain />}
         </div>
       );
     case "clock":
-      return <div role="alert" className={BAD}><strong className="font-medium">Your device clock is wrong.</strong> It&apos;s {Math.round(Math.abs(attestation.skewMs) / 1000)} seconds off the server&apos;s time. Correct it and reload the page. Until then, what&apos;s on screen won&apos;t update.</div>;
+      return <div role="alert" className={BAD}><strong className="font-medium">Your device clock is incorrect.</strong> It differs from the server&apos;s time by {Math.round(Math.abs(attestation.skewMs) / 1000)} seconds. Prices and account figures on screen will not update until you correct the clock and reload the page.</div>;
     case "unverified":
-      return <div role="alert" className={BAD}><strong className="font-medium">The server couldn&apos;t be verified, so you can&apos;t trade or move funds.</strong> {attestation.reason}</div>;
+      return <div role="alert" className={BAD}><strong className="font-medium">The server could not be verified, so trading and transfers of funds are disabled.</strong> {attestation.reason}</div>;
     default:
       return attestation satisfies never;
   }

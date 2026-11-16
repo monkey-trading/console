@@ -66,7 +66,7 @@ describe("a visit with no wallet to read a chain (monkey-trading/console#280)", 
     await follower.check();
     expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B });
     // The outgoing node has handed over and stopped.
-    current.signedRead = async () => { throw new EngineError(0, "The server didn't respond."); };
+    current.signedRead = async () => { throw new EngineError(0, "The server did not respond."); };
     await follower.check();
     expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B });
     trial.verdict = VERIFIED;
@@ -149,7 +149,7 @@ describe("a node the visit with no wallet moved to that is promoted past (monkey
     // B is promoted past, and the node in use stops.
     clients[B].verdict = refused.verdict;
     clients[B].signedRead = refused.signedRead;
-    current.signedRead = async () => { throw new EngineError(0, "The server didn't respond."); };
+    current.signedRead = async () => { throw new EngineError(0, "The server did not respond."); };
     await follower.check();
     expect(adopted).toEqual([C]);
   });
@@ -174,7 +174,7 @@ describe("a node the visit with no wallet moved to that is promoted past (monkey
       if (index < lagging.length) {
         expect(follower.getSnapshot(), String(index)).toMatchObject({ kind: "waiting", target: C, reason: expect.stringContaining("newer signing key") });
         // The node in use stops, and what the refused node named still counts at the next check.
-        current.signedRead = async () => { throw new EngineError(0, "The server didn't respond."); };
+        current.signedRead = async () => { throw new EngineError(0, "The server did not respond."); };
         await follower.check();
       }
       expect(adopted, String(index)).toEqual(index < lagging.length ? [] : [C]);
@@ -225,7 +225,7 @@ describe("a daily turn with no wallet to read a chain (monkey-trading/console#28
     await follower.check();
     expect(follower.getSnapshot()).toEqual({ kind: "pinned", origin: BUILD });
     advance(61_000);
-    current.signedRead = async () => { throw new EngineError(0, "The server didn't respond."); };
+    current.signedRead = async () => { throw new EngineError(0, "The server did not respond."); };
     await follower.check();
     expect(adopted).toEqual([B]);
   });
@@ -241,7 +241,7 @@ describe("a daily turn with no wallet to read a chain (monkey-trading/console#28
 
   it("goes by the route's own hostname when the node's operator list cannot be read", async () => {
     const { follower, adopted, current, advance } = turnAhead(60_000);
-    current.operatorList = async () => { throw new EngineError(0, "The server didn't respond."); };
+    current.operatorList = async () => { throw new EngineError(0, "The server did not respond."); };
     await follower.check();
     advance(61_000);
     await follower.check();

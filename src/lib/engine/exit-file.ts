@@ -57,7 +57,7 @@ export interface StoredExit {
   problem: string | null;
 }
 
-const reasonOf = (error: unknown): string => (error instanceof Error ? error.message : "the browser didn't allow it");
+const reasonOf = (error: unknown): string => (error instanceof Error ? error.message : "the browser did not allow it");
 
 /** The better of the proof in storage and the one in the page: the one at the vault's latest root, else the later. */
 export function preferredRecord(stored: ExitRecord | null, held: ExitRecord | null, latestRoot: string | null): ExitRecord | null {
@@ -85,7 +85,7 @@ function parseJson(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch (cause) {
-    throw new ExitProofError(`it isn't JSON (${reasonOf(cause)})`);
+    throw new ExitProofError(`it is not a JSON file (${reasonOf(cause)})`);
   }
 }
 
@@ -98,24 +98,24 @@ const isObject = (value: unknown): value is Record<string, unknown> => typeof va
  * - it is too long, not JSON, not either shape, or its proof does not read: `ExitProofError`
  */
 export function parseExitFile(text: string): ExitFile {
-  if (text.length > MAX_EXIT_FILE_BYTES) throw new ExitProofError("it's too large to be an exit proof");
+  if (text.length > MAX_EXIT_FILE_BYTES) throw new ExitProofError("it is too large to be an exit proof");
   const value = parseJson(text);
-  if (!isObject(value)) throw new ExitProofError("it isn't an exit proof");
+  if (!isObject(value)) throw new ExitProofError("it is not an exit proof");
   if (value.kind === FILE_KIND) {
-    if (value.version !== FILE_VERSION) throw new ExitProofError(`it's in format version ${String(value.version)}, and this app reads version ${FILE_VERSION}`);
+    if (value.version !== FILE_VERSION) throw new ExitProofError(`it is in format version ${String(value.version)}, and this app reads version ${FILE_VERSION}`);
     const proof = parseExitProof(value.proof);
     const named = exitProofAccount(proof);
     const account = typeof value.account === "string" ? value.account.toLowerCase() : null;
-    if (named !== null && named !== account) throw new ExitProofError("the account it names doesn't match its proof");
+    if (named !== null && named !== account) throw new ExitProofError("the account it names does not match its proof");
     return { proof, account, chainId: typeof value.chain_id === "number" ? value.chain_id : null, vault: typeof value.vault === "string" ? value.vault.toLowerCase() : null };
   }
   // `engine exit-proof`'s `ExitBundle`: its calls beside the proof they carry. For the house it holds no account's proof.
   if (Array.isArray(value.calls) && "account" in value) {
-    if (value.account === null) throw new ExitProofError("it's the house's exit file, which has no account's proof");
+    if (value.account === null) throw new ExitProofError("it is the house's exit file, which contains no account's proof");
     const proof = parseExitProof(value.account);
     return { proof, account: exitProofAccount(proof), chainId: null, vault: null };
   }
-  throw new ExitProofError("it isn't an exit proof");
+  throw new ExitProofError("it is not an exit proof");
 }
 
 /** Where `scope`'s record is kept. */
@@ -124,11 +124,11 @@ export const exitStorageKey = (scope: ExitScope): string => `${STORAGE_PREFIX}.$
 /** A value in storage as a record of `scope`; anything else is refused with `ExitProofError`. */
 function recordFrom(text: string, scope: ExitScope): ExitRecord {
   const file = parseExitFile(text);
-  if (file.account !== scope.account || file.chainId !== scope.chainId || file.vault !== scope.vault) throw new ExitProofError("it's for a different account or vault");
+  if (file.account !== scope.account || file.chainId !== scope.chainId || file.vault !== scope.vault) throw new ExitProofError("it is for a different account or vault");
   // A file's own shape: `parseExitFile` read `kind` as this format's, whose writer gave these fields.
   const { checkpoint_at: checkpointAt, account_claim: accountClaim, distribution_owed: distributionOwed, paid_approvals: paidApprovals } = JSON.parse(text) as Record<string, unknown>;
-  if (typeof checkpointAt !== "number" || !Number.isSafeInteger(checkpointAt) || typeof accountClaim !== "string" || !/^\d+$/.test(accountClaim) || typeof distributionOwed !== "string" || !/^\d+$/.test(distributionOwed)) throw new ExitProofError("its saved figures can't be read");
-  if (!Array.isArray(paidApprovals) || !paidApprovals.every((nonce) => Number.isSafeInteger(nonce))) throw new ExitProofError("its saved figures can't be read");
+  if (typeof checkpointAt !== "number" || !Number.isSafeInteger(checkpointAt) || typeof accountClaim !== "string" || !/^\d+$/.test(accountClaim) || typeof distributionOwed !== "string" || !/^\d+$/.test(distributionOwed)) throw new ExitProofError("its saved figures cannot be read");
+  if (!Array.isArray(paidApprovals) || !paidApprovals.every((nonce) => Number.isSafeInteger(nonce))) throw new ExitProofError("its saved figures cannot be read");
   // Each was just checked as an integer.
   return { ...scope, proof: file.proof, checkpointAt, accountClaim: BigInt(accountClaim), distributionOwed: BigInt(distributionOwed), paidApprovals: paidApprovals as number[] };
 }
@@ -138,15 +138,15 @@ export function readStoredExit(storage: () => ExitStorage | null, scope: ExitSco
   let text: string | null;
   try {
     const store = storage();
-    if (store === null) return { record: null, problem: "this browser's storage isn't available" };
+    if (store === null) return { record: null, problem: "this browser's storage is not available" };
     text = store.getItem(exitStorageKey(scope));
   } catch (error) {
-    return { record: null, problem: `this browser's storage isn't available: ${reasonOf(error)}` };
+    return { record: null, problem: `this browser's storage is not available: ${reasonOf(error)}` };
   }
   try {
     return { record: text === null ? null : recordFrom(text, scope), problem: null };
   } catch (error) {
-    return { record: null, problem: `the proof saved in this browser couldn't be read: ${reasonOf(error)}` };
+    return { record: null, problem: `the proof saved in this browser could not be read: ${reasonOf(error)}` };
   }
 }
 
@@ -154,11 +154,11 @@ export function readStoredExit(storage: () => ExitStorage | null, scope: ExitSco
 export function writeStoredExit(storage: () => ExitStorage | null, record: ExitRecord): string | null {
   try {
     const store = storage();
-    if (store === null) return "this browser's storage isn't available";
+    if (store === null) return "this browser's storage is not available";
     store.setItem(exitStorageKey(record), exitFileText(record));
     return null;
   } catch (error) {
-    return `this browser's storage wouldn't save it: ${reasonOf(error)}`;
+    return `this browser's storage would not save it: ${reasonOf(error)}`;
   }
 }
 

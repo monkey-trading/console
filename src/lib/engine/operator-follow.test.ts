@@ -100,7 +100,7 @@ describe("OperatorFollower.check", () => {
     trial.verify = () => new Promise((resolve) => { verified = resolve as typeof verified; });
     const checking = follower.check();
     await settle();
-    expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, reason: "The check is under way." });
+    expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, reason: "The verification is in progress." });
     expect(adopted).toEqual([]);
     verified(trial.verdict);
     await checking;
@@ -148,17 +148,17 @@ describe("OperatorFollower.check", () => {
     held.busy = true;
     await follower.check();
     expect(adopted).toEqual([]);
-    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", reason: expect.stringContaining("wallet request") });
+    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", reason: expect.stringContaining("waiting for your wallet") });
     held.busy = false;
     await follower.check();
     expect(adopted).toEqual([B]);
   });
 
   it("keeps the node in use when the chain read fails, and says so", async () => {
-    const { follower, adopted } = rig({ operator: async () => { throw new Error("your wallet is on chain 1"); } });
+    const { follower, adopted } = rig({ operator: async () => { throw new Error("your wallet is connected to chain 1"); } });
     await follower.check();
     expect(adopted).toEqual([]);
-    expect(follower.getSnapshot()).toEqual({ kind: "failed", origin: BUILD, reason: "your wallet is on chain 1" });
+    expect(follower.getSnapshot()).toEqual({ kind: "failed", origin: BUILD, reason: "your wallet is connected to chain 1" });
   });
 
   it("gives up on a wallet that does not answer, so a later wallet is still followed", async () => {
@@ -170,7 +170,7 @@ describe("OperatorFollower.check", () => {
     expect(follower.getSnapshot().kind).toBe("pinned");
     scheduler.advance(1);
     await stuck;
-    expect(follower.getSnapshot()).toEqual({ kind: "failed", origin: BUILD, reason: "your wallet didn't respond in time" });
+    expect(follower.getSnapshot()).toEqual({ kind: "failed", origin: BUILD, reason: "your wallet did not respond in time" });
     setOperator(async () => named());
     await follower.check();
     expect(operatorReads.count).toBe(2);

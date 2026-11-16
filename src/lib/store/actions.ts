@@ -101,7 +101,7 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
     return true;
   } catch (error) {
     // A node that cannot be trusted is reported by the attestation banner and the stream, once; the account read waiting on the same check does not repeat it.
-    if (!store.noteAccess(error) && !(error instanceof UntrustedError)) store.notify("wallet", error instanceof Error ? error.message : "Your wallet didn't connect.");
+    if (!store.noteAccess(error) && !(error instanceof UntrustedError)) store.notify("wallet", error instanceof Error ? error.message : "Your wallet did not connect.");
     if (!store.getSnapshot().wallet) store.liveWallet = null;
     return false;
   }
@@ -132,7 +132,7 @@ export async function deposit(store: ConsoleStore, amount: Fixed, surface: Notic
   const shown = formatUsdc(amount);
   store.patch({ busy: true });
   try {
-    await prompting(store, wallet, surface, `Confirm in your wallet: deposit ${shown} to the vault. Your wallet may ask you to approve USDC first.`, (progress) => wallet.deposit(amount, progress));
+    await prompting(store, wallet, surface, `Confirm the request in your wallet to deposit ${shown} to the vault. Your wallet may first ask you to approve the amount of USDC.`, (progress) => wallet.deposit(amount, progress));
     noteDeposit(store, amount);
     noteSentDeposit(store, amount);
     void readWalletUsdc(store, true);
@@ -156,11 +156,11 @@ export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy, surface
   store.clearNotice(surface);
   const wallet = store.liveWallet;
   if (wallet === null) {
-    store.notify(surface, "Connect a wallet first.");
+    store.notify(surface, "Connect a wallet to use the faucet.");
     return false;
   }
   if (wallet.readOnly === true) {
-    store.notify(surface, "You're viewing this account read-only, so the faucet can't fund it.");
+    store.notify(surface, "You are viewing this account in read-only mode, so the faucet cannot fund it.");
     return false;
   }
   const { rpcUrl, usdc } = deploy;
@@ -173,15 +173,15 @@ export async function fundWithAnvil(store: ConsoleStore, deploy: Deploy, surface
     const gas = await topUpGas(rpcUrl, wallet.address, postJsonRpc);
     if (!gas.ok) {
       if (store.liveWallet === wallet) store.notify(surface, gas.notAnvil
-        ? `The faucet only works on a local test chain, and this one isn't (${gas.detail}).`
-        : `The faucet couldn't add gas to your wallet: ${gas.detail}.`);
+        ? `The faucet works only on a local test chain, and the connected chain is not one (${gas.detail}).`
+        : `The faucet could not add gas to your wallet: ${gas.detail}.`);
       return false;
     }
     const minted = await mintFromAnvil(rpcUrl, usdc, wallet.address, FAUCET_USDC, postJsonRpc);
     if (!minted.ok) {
       if (store.liveWallet === wallet) store.notify(surface, minted.notAnvil
-        ? `The faucet only works on a local test chain, and this one isn't (${minted.detail}).`
-        : `The faucet couldn't create test USDC: ${minted.detail}.`);
+        ? `The faucet works only on a local test chain, and the connected chain is not one (${minted.detail}).`
+        : `The faucet could not create test USDC: ${minted.detail}.`);
       return false;
     }
     void readWalletUsdc(store, true);
@@ -217,8 +217,8 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams, surfa
       ? { kind: "market", quoted: fixedToWire(params.kind.quoted), max_slippage_bps: params.kind.slippageBps }
       : { kind: params.kind.kind, price: fixedToWire(params.kind.price) };
   const order = { client_id: store.id(), market: market.id, side: params.side, qty, kind, reduce_only: params.reduceOnly };
-  const at = params.kind.kind === "market" ? `at ${formatFixedPlaces(params.kind.quoted, market.places)}, up to ${params.kind.slippageBps} bps worse` : `${params.kind.kind} at ${formatFixedPlaces(params.kind.price, market.places)}`;
-  const summary = `${params.side} ${qty} ${market.symbol} ${at}${params.reduceOnly ? ", reduce only" : ""}`;
+  const at = params.kind.kind === "market" ? `at ${formatFixedPlaces(params.kind.quoted, market.places)} with a maximum slippage of ${params.kind.slippageBps} bps` : `with a ${params.kind.kind} order at ${formatFixedPlaces(params.kind.price, market.places)}`;
+  const summary = `${params.side} ${qty} ${market.symbol} ${at}${params.reduceOnly ? " (reduce only)" : ""}`;
   const out = await sessionSigned(store, surface, summary, (t, account) => orderTypedData(domainOf(store), { ...order, account }, t), (auth, wallet) =>
     store.deps.client.placeOrder({ ...order, account: wallet.address, auth }), "report",
   );
@@ -227,7 +227,7 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams, surfa
   const filled = out.result.events.some((e) => e.type === "fill");
   const cancelled = out.result.events.some((e) => e.type === "order_cancelled");
   if (rejected && rejected.type === "order_rejected") store.notify(surface, describeReject(rejected.reason));
-  else if (!filled && cancelled) store.notify(surface, "Your order couldn't be filled, so it was cancelled.");
+  else if (!filled && cancelled) store.notify(surface, "Your order could not be filled, so it has been cancelled.");
   await store.refresh(true);
   return rejected === undefined && (filled || !cancelled);
 }

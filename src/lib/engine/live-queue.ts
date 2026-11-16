@@ -18,7 +18,7 @@ const TOTALS_RETRY_AFTER_FAILURE_MS = 30_000;
  */
 export class QueueTotalsRetrying extends Error {
   constructor() {
-    super("Couldn't load the withdrawal queue. Trying again shortly.");
+    super("The withdrawal queue could not be loaded. The app will try again shortly.");
   }
 }
 

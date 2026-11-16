@@ -139,7 +139,7 @@ export class LiveStream {
     try {
       signer = await this.deps.trust.signer();
     } catch (error) {
-      if (generation === this.generation) this.fail(error instanceof Error ? error.message : "The server hasn't been verified yet.");
+      if (generation === this.generation) this.fail(error instanceof Error ? error.message : "The server has not yet been verified.");
       return;
     }
     if (generation !== this.generation || this.stopped) return;
@@ -162,19 +162,19 @@ export class LiveStream {
       if (generation !== this.generation) return;
       const text = typeof event.data === "string" ? event.data : null;
       const frame = text === null ? null : parseSignedFrame(text);
-      if (text === null || frame === null) return this.fail("The server sent an unsigned update.");
-      if (frame.n !== expected) return this.fail(`An update from the server was missed, repeated or out of order (expected ${expected}, got ${frame.n}).`);
+      if (text === null || frame === null) return this.fail("The server sent an update that was not signed.");
+      if (frame.n !== expected) return this.fail(`An update from the server was missed, repeated or received out of order (update ${frame.n} arrived when update ${expected} was expected).`);
       const checked = frames.verify(text);
-      if (!checked.ok) return this.fail(`An update from the server failed its check: ${checked.reason}.`, signer);
+      if (!checked.ok) return this.fail(`An update from the server failed verification: ${checked.reason}.`, signer);
       // The vault named another signer since this connection opened: its frames are refused, valid as their signatures are.
       if (this.deps.trust.refuses(signer)) return this.fail(this.deps.trust.whyRefused(signer));
       const skewMs = frame.time - this.deps.nowMs();
       if (Math.abs(skewMs) > CLOCK_TOLERANCE_MS) {
         this.deps.trust.clockWrong(skewMs);
-        return this.fail("Your device clock is wrong, so live updates stopped.");
+        return this.fail("Your device clock is incorrect, so live updates have stopped.");
       }
       const message = parseFrameMessage(checked.msg);
-      if (message === null) return this.fail("The server sent an update this version of the app doesn't understand.");
+      if (message === null) return this.fail("The server sent an update that this version of the app does not recognise.");
       expected++;
       this.backoff = RECONNECT_MIN_MS;
       this.reported = false;
@@ -196,7 +196,7 @@ export class LiveStream {
       }
     };
     socket.onclose = () => {
-      if (generation === this.generation) this.fail("The connection to the server closed.");
+      if (generation === this.generation) this.fail("The connection to the server was closed.");
     };
     socket.onerror = () => {
       if (generation === this.generation) this.fail("The connection to the server failed.");
@@ -207,7 +207,7 @@ export class LiveStream {
   private armWatchdog(generation: number): void {
     if (this.watchdog !== null) this.deps.scheduler.clearTimeout(this.watchdog);
     this.watchdog = this.deps.scheduler.setTimeout(() => {
-      if (generation === this.generation) this.fail("The server stopped sending updates.");
+      if (generation === this.generation) this.fail("The server has stopped sending updates.");
     }, this.deps.heartbeatMs * STALE_AFTER_INTERVALS);
   }
 

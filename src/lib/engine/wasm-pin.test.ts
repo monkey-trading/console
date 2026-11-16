@@ -32,6 +32,6 @@ describe("the pinned verifier", () => {
   it("will not run a .wasm that is not the pinned one", async () => {
     const altered = new Uint8Array(await readWasm());
     altered[altered.length - 1] = (altered[altered.length - 1] ?? 0) ^ 1;
-    await expect(loadVerifier({ allowMock: false, fetchWasm: async () => altered, loadGlue })).rejects.toThrow("doesn't match this version of the app");
+    await expect(loadVerifier({ allowMock: false, fetchWasm: async () => altered, loadGlue })).rejects.toThrow("does not match this version of the app");
   });
 });

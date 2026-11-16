@@ -26,7 +26,7 @@ describe("storing the key", () => {
     const storage = memoryStorage();
     const { client, store } = await tab(storage);
     await connectWallet(store, "injected");
-    client.answer = () => { throw new EngineError(0, "The server didn't respond."); };
+    client.answer = () => { throw new EngineError(0, "The server did not respond."); };
     await authorizeBrowser(store, "setup");
     expect(storage.held.has(NAME)).toBe(false); // a registration whose answer never came
     client.answer = () => ({ seq: 1, events: [{ type: "session_key_rejected", account: ACCOUNT, session_key: "0x0", reason: { kind: "too_many_session_keys", max: 10 } }] });
@@ -130,7 +130,7 @@ describe("leaving", () => {
     expect(storage.held.has(NAME)).toBe(false);
     await settle();
     expect(signatures(provider)).toHaveLength(1); // the registration's alone: the declined revocation never reached the provider
-    expect(store.getSnapshot().notices.wallet).toMatchObject({ text: "The trading session wasn't revoked. It will expire by itself." });
+    expect(store.getSnapshot().notices.wallet).toMatchObject({ text: "The trading session for this browser was not revoked, but it will expire automatically." });
   });
 
   it("revokes a key adopted from storage through a WalletConnect pairing before it ends that pairing", async () => {

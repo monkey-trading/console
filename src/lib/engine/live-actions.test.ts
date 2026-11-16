@@ -96,7 +96,7 @@ describe("signed actions", () => {
   it("refuses a 2xx action answer that is not a list of events", async () => {
     const { client, reply } = accepting();
     reply("/v1/withdrawals", 200, { status: "queued" });
-    await expect(client.withdraw({} as never)).rejects.toThrow("reply to your request couldn't be read");
+    await expect(client.withdraw({} as never)).rejects.toThrow("response to your request could not be read");
   });
 
   it("posts a reissue to the payout's route and reads the nonce with the node's signed time", async () => {

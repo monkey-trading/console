@@ -51,10 +51,10 @@ describe("ExitKeeper, and what it spares the node", () => {
     });
 
     it("does not say it holds nothing when the node could not say about a distribution", async () => {
-      kit.client.distributionError = new EngineError(0, "The server didn't respond.");
+      kit.client.distributionError = new EngineError(0, "The server did not respond.");
       await kit.connect(0n);
       expect(kit.store.getSnapshot().exit.nothing).toBe(false);
-      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "node-failed", reason: "The server didn't respond." });
+      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "node-failed", reason: "The server did not respond." });
     });
 
     it("counts a queued withdrawal in its history, which one page of the queue can miss", async () => {

@@ -7,7 +7,7 @@ import { B, named, rig } from "./operator-follow-kit";
 import { settle } from "./test-kit";
 
 describe("after a chain read that failed", () => {
-  const failing = async () => { throw new Error("your wallet didn't respond in time"); };
+  const failing = async () => { throw new Error("your wallet did not respond in time"); };
 
   it("tries again sooner than the slow read, waiting twice as long each time up to it, and at the slow pace once one answers", async () => {
     const kit = rig({ operator: failing });
@@ -44,7 +44,7 @@ describe("after a chain read that failed", () => {
     kit.reads.vault = failing;
     kit.follower.start(() => false);
     await kit.follower.check();
-    expect(kit.follower.getSnapshot()).toMatchObject({ kind: "failed", reason: "your wallet didn't respond in time" });
+    expect(kit.follower.getSnapshot()).toMatchObject({ kind: "failed", reason: "your wallet did not respond in time" });
     const before = kit.operatorReads.count;
     kit.advance(RETRY_MS);
     await settle();

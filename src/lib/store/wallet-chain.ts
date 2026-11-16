@@ -9,5 +9,5 @@ export function offChain(store: ConsoleStore): string | null {
   return away === null ? null : chainAway(away, store.deps.client.deployment.chainId);
 }
 
-/** `Your wallet is on Ethereum, not Anvil. Switch it back to Anvil to continue.` */
-export const chainAway = (away: number, want: number | null): string => `Your wallet is on ${chainName(away)}, not ${chainName(want)}. Switch it back to ${chainName(want)} to continue.`;
+/** `Your wallet is connected to Ethereum, not Anvil. Switch it back to Anvil to continue.` */
+export const chainAway = (away: number, want: number | null): string => `Your wallet is connected to ${chainName(away)}, not ${chainName(want)}. Switch it back to ${chainName(want)} to continue.`;

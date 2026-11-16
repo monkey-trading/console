@@ -51,7 +51,7 @@ describe("signing", () => {
     expect(normaliseSignature(`${body}00`)).toBe(`${body}1b`);
     expect(normaliseSignature(`${body}01`)).toBe(`${body}1c`);
     expect(normaliseSignature(`${body}1c`)).toBe(`${body}1c`);
-    expect(() => normaliseSignature(`${body}02`)).toThrow("a signature this app can't read");
+    expect(() => normaliseSignature(`${body}02`)).toThrow("a signature that this app cannot read");
     expect(() => normaliseSignature(`${body}1b00`)).toThrow("wrong length");
   });
 });
@@ -68,7 +68,7 @@ describe("the chain", () => {
     const { provider, wallet: w } = wallet(unknown);
     await w.ensureChain();
     expect(firstParam(provider.calls.find((c) => c.method === "wallet_addEthereumChain"))).toMatchObject({ chainId: "0x7a69", rpcUrls: ["http://127.0.0.1:8545/"] });
-    await expect(wallet(unknown, { ...CHAIN, add: null }).wallet.ensureChain()).rejects.toThrow("couldn't switch to chain 31337");
+    await expect(wallet(unknown, { ...CHAIN, add: null }).wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337");
   });
 
   it("offers to add the chain when a wallet answers an unknown chain as a -32603 server error", async () => {
@@ -80,16 +80,16 @@ describe("the chain", () => {
     expect(provider.chainId).toBe(31337);
     // A server error that names nothing about a chain is a refusal, not an unknown chain.
     const other = { fail: { wallet_switchEthereumChain: { code: -32603, message: "internal error" } }, chainId: 1 };
-    await expect(wallet(other).wallet.ensureChain()).rejects.toThrow("couldn't switch to chain 31337: internal error");
+    await expect(wallet(other).wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337: internal error");
     // A server error that names a chain without reporting it unknown is a refusal, not an unknown chain.
     const unavailable = { fail: { wallet_switchEthereumChain: { code: -32603, message: "Chain RPC is unavailable" } }, chainId: 1 };
     const tried = wallet(unavailable);
-    await expect(tried.wallet.ensureChain()).rejects.toThrow("couldn't switch to chain 31337: Chain RPC is unavailable");
+    await expect(tried.wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337: Chain RPC is unavailable");
     expect(tried.provider.calls.some((c) => c.method === "wallet_addEthereumChain")).toBe(false);
     // A generic failure that says neither is a refusal, not an unknown chain.
     const generic = { fail: { wallet_switchEthereumChain: { code: -32603, message: "Unknown error" } }, chainId: 1 };
     const genericTried = wallet(generic);
-    await expect(genericTried.wallet.ensureChain()).rejects.toThrow("couldn't switch to chain 31337: Unknown error");
+    await expect(genericTried.wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337: Unknown error");
     expect(genericTried.provider.calls.some((c) => c.method === "wallet_addEthereumChain")).toBe(false);
   });
 
@@ -97,7 +97,7 @@ describe("the chain", () => {
     const provider = new StubProvider({ chainId: 1 });
     provider.request = async ({ method }) => (method === "eth_chainId" ? "0x1" : null);
     const w = new ProviderWallet(ACCOUNT, "Test wallet", provider, CHAIN, { wait: async () => {} });
-    await expect(w.ensureChain()).rejects.toThrow("Your wallet is on chain 1. Switch it to chain 31337");
+    await expect(w.ensureChain()).rejects.toThrow("Your wallet is connected to chain 1. Switch it to chain 31337");
   });
 });
 
@@ -132,8 +132,8 @@ describe("deposits", () => {
     const heard: string[] = [];
     await w.deposit(fixedFromInt(10), (waitingFor) => heard.push(waitingFor));
     expect(heard).toEqual([
-      "Confirm in your wallet: approve the vault.", "Waiting for your transaction to approve the vault to go through.",
-      "Confirm in your wallet: deposit.", "Waiting for your transaction to deposit to go through.",
+      "Confirm the request in your wallet to approve the vault.", "Waiting for your transaction to approve the vault to be confirmed on chain.",
+      "Confirm the request in your wallet to deposit.", "Waiting for your transaction to deposit to be confirmed on chain.",
     ]);
   });
 
@@ -146,14 +146,14 @@ describe("deposits", () => {
   it("refuses an amount the wallet does not hold, or finer than a USDC base unit, before sending anything", async () => {
     const { provider, wallet: w } = wallet({ balance: 999_999_999n });
     await expect(w.deposit(fixedFromInt(1_000))).rejects.toThrow("less USDC");
-    await expect(w.deposit(1n)).rejects.toThrow("at most 6 decimal places");
-    await expect(wallet({}, { ...CHAIN, usdc: null }).wallet.deposit(fixedFromInt(10))).rejects.toThrow("no USDC token set");
+    await expect(w.deposit(1n)).rejects.toThrow("no more than 6 decimal places");
+    await expect(wallet({}, { ...CHAIN, usdc: null }).wallet.deposit(fixedFromInt(10))).rejects.toThrow("no USDC token is configured");
     expect(provider.sent).toEqual([]);
   });
 
   it("sends nothing to a wallet that cannot return receipts, and says a sent transaction is unconfirmed when its receipt cannot be read", async () => {
     const noReceipts = wallet({ balance: 5_000_000_000n, allowance: 5_000_000_000n, fail: { eth_getTransactionReceipt: { code: -32601, message: "method not allowed" } } });
-    await expect(noReceipts.wallet.deposit(fixedFromInt(10))).rejects.toThrow("Your wallet couldn't check transactions, so it wasn't asked to deposit: method not allowed");
+    await expect(noReceipts.wallet.deposit(fixedFromInt(10))).rejects.toThrow("Your wallet could not check transactions, so it was not asked to deposit: method not allowed");
     expect(noReceipts.provider.sent).toEqual([]);
     const { provider, wallet: w } = wallet({ balance: 5_000_000_000n, allowance: 5_000_000_000n });
     const request = provider.request.bind(provider);
@@ -161,7 +161,7 @@ describe("deposits", () => {
       if (args.method === "eth_getTransactionReceipt" && provider.sent.length > 0) throw new Error("relay closed");
       return request(args);
     };
-    await expect(w.deposit(fixedFromInt(10))).rejects.toThrow(/^Your transaction to deposit was sent \(0x0+1\) but its status couldn't be checked: relay closed\. Check it in your wallet before trying again\.$/);
+    await expect(w.deposit(fixedFromInt(10))).rejects.toThrow(/^Your transaction to deposit was sent \(0x0+1\), but its status could not be checked: relay closed\. Check the transaction in your wallet before you try again\.$/);
   });
 
   it("polls a pending receipt, waiting between polls, until the transaction is mined", async () => {
@@ -177,7 +177,7 @@ describe("deposits", () => {
     const provider = new StubProvider({ balance: 5_000_000_000n, allowance: 5_000_000_000n, pendingReceipts: Number.POSITIVE_INFINITY });
     let waits = 0;
     const w = new ProviderWallet(ACCOUNT, "Test wallet", provider, CHAIN, { wait: async () => void (waits += 1) });
-    await expect(w.deposit(fixedFromInt(10))).rejects.toThrow(/^Your transaction to deposit was sent \(0x0+1\) but it isn't confirmed yet\. Check it in your wallet before trying again\.$/);
+    await expect(w.deposit(fixedFromInt(10))).rejects.toThrow(/^Your transaction to deposit was sent \(0x0+1\), but it has not yet been confirmed\. Check the transaction in your wallet before you try again\.$/);
     expect(waits).toBe(180);
   });
 
@@ -211,7 +211,7 @@ describe("claims", () => {
     const { provider, wallet: w } = wallet();
     await expect(w.claim({ ...signed, account: USDC })).rejects.toThrow("a different account or app");
     await expect(w.claim({ ...signed, vault: USDC })).rejects.toThrow("a different account or app");
-    await expect(w.claim({ ...signed, authorization: undefined })).rejects.toThrow("isn't ready to claim yet");
+    await expect(w.claim({ ...signed, authorization: undefined })).rejects.toThrow("is not yet ready to be claimed");
     expect(provider.sent).toEqual([]);
   });
 
@@ -226,7 +226,7 @@ describe("claims", () => {
     expect(await wallet({ paid: true }).wallet.claimed(3)).toBe(true);
     expect(await wallet({ paid: false }).wallet.claimed(3)).toBe(false);
     const elsewhere = wallet({ paid: true, chainId: 1 });
-    await expect(elsewhere.wallet.claimed(3)).rejects.toThrow("your wallet is on chain 1, not chain 31337");
+    await expect(elsewhere.wallet.claimed(3)).rejects.toThrow("your wallet is connected to chain 1, not chain 31337");
     expect(elsewhere.provider.calls.map((c) => c.method)).toEqual(["eth_chainId"]);
   });
 
@@ -285,6 +285,6 @@ describe("InjectedConnector", () => {
   it("says how to get a wallet when the page has none, and fails when the wallet shares no account", async () => {
     await expect(new InjectedConnector(() => undefined, CHAIN, { wait: async () => {} }).connect()).rejects.toThrow("No browser wallet was found");
     const declining = new StubProvider({ fail: { eth_requestAccounts: { code: 4001, message: "User rejected" } } });
-    await expect(new InjectedConnector(() => declining, CHAIN, { wait: async () => {} }).connect()).rejects.toThrow("didn't share an account");
+    await expect(new InjectedConnector(() => declining, CHAIN, { wait: async () => {} }).connect()).rejects.toThrow("did not share an account");
   });
 });

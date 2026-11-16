@@ -26,7 +26,7 @@ export async function loadVerifier(deps: LoadDeps): Promise<Verifier> {
   const bytes = await deps.fetchWasm();
   const actual = toHex(await crypto.subtle.digest("SHA-256", bytes));
   const expected = deps.sha256 ?? pin.sha256;
-  if (actual !== expected) throw new Error(`The server check's code doesn't match this version of the app (${actual.slice(0, 12)}… instead of ${expected.slice(0, 12)}…), so it wasn't run.`);
+  if (actual !== expected) throw new Error(`The verification software does not match this version of the app (${actual.slice(0, 12)}… instead of ${expected.slice(0, 12)}…), so it was not run.`);
   const glue = await deps.loadGlue();
   await glue.default({ module_or_path: bytes });
   return createWasmVerifier(glue, deps.allowMock);

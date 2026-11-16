@@ -14,7 +14,7 @@ import { installKey } from "./session";
 import type { ConsoleStore } from "./store";
 
 /** What the console tells the user once the screens have remounted on the new store, so the log that announces it exists first. The move adopted only after the node's attestation verified, so the notice says so. */
-export const moveNotice = (host: string): string => `Switched to the current server, ${host}, after verifying it.`;
+export const moveNotice = (host: string): string => `You have been moved to the current trading server, ${host}, after it was verified.`;
 
 /**
  * Posts the move notice at most once per move, and holds a dismissal for the move it was made on:
@@ -80,7 +80,7 @@ export async function recheckNode(store: ConsoleStore, follower: Pick<OperatorFo
   try {
     await store.liveWallet?.ensureChain?.();
   } catch (error) {
-    store.notify("node", error instanceof Error ? error.message : "Your wallet is still on another chain.");
+    store.notify("node", error instanceof Error ? error.message : "Your wallet is still connected to a different chain.");
     return;
   }
   await store.deps.client.verify();
