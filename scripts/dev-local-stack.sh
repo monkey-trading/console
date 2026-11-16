@@ -744,14 +744,15 @@ if [[ "$second_engine" == 1 ]]; then
     take_window="(8,8,24)"
     switch_budget=20
     if [[ "$rotation" == 1 ]]; then
-      # With ROTATION=1, the engine's short-turns scenario's: 30 s slots, 20 s tolerance, seven misses and 10 blocks, and a take
-      # window of 4 slots within (4, 8) under a 20 s switch budget, since its maximum must also fit in a turn (8 x 30 s within
-      # 300 s). Seven misses against four slots leave (7 - 4) x 30 s = 90 s, past the budget and the 20 s tolerance, as the
-      # same rule requires. Each engine runs a liveness caller, so a turn whose member takes nothing is skipped to the next
-      # member, and an operator that stops is replaced by a promotion.
-      liveness_rule="(30,20,7,10)"
+      # With ROTATION=1, the engine's short-turns scenario's: 30 s slots, 20 s tolerance, five misses and 10 blocks, and a take
+      # window of 4 slots within (4, 8) under a 5 s switch budget, since its maximum must also fit in a turn (8 x 30 s within
+      # 300 s). Five misses against four slots leave (5 - 4) x 30 s = 30 s, past the budget plus the 20 s tolerance, as the
+      # same rule requires; more misses would put `stop-operator`'s promotion window past a turn. Each engine runs a liveness
+      # caller, so a turn whose member takes nothing is skipped to the next member, and an operator that stops is replaced
+      # by a promotion.
+      liveness_rule="(30,20,5,10)"
       take_window="(4,4,8)"
-      switch_budget=20
+      switch_budget=5
     fi
     deployed_schedule="$(create --private-key "$vote_deployer_key" src/OperatorSchedule.sol:OperatorSchedule --constructor-args "$registry" "$seed_receiver" \
       "$logheads" "$liveness_rule" "(30,5,2,10)" "(120,60,9,256)" "$take_window" "$switch_budget" 250)"
