@@ -13,7 +13,7 @@ import { TurnHistoryReads } from "@/lib/staking/turn-history-reads";
 import type { ConsoleState } from "@/lib/store/state";
 import { NO_EDITING } from "@/lib/staking/delegation-form";
 import { NO_TABLE_VIEW } from "@/lib/staking/operator-table";
-import { formatStampWithYear } from "@/lib/time";
+import { formatStamp } from "@/lib/time";
 
 import { ConsoleProvider, useSession } from "../ConsoleProvider";
 import { StakingContext, type StakingReads } from "../StakingSection";
@@ -37,12 +37,14 @@ const ROUTE: OperatorRoute = {
   turn: { turn: 9, position: 0, reason: "draw", set: 3, candidate: ALPHA, admin_key: KEY(1), applies_at: NOW - 3_600_000, taken: true },
   next_turn: { turn: 10, position: 0, reason: "draw", set: 3, candidate: BRAVO, admin_key: KEY(2), applies_at: NOW + 23 * 3_600_000, taken: false },
   turns: {
-    records: [record(10, { candidate: BRAVO, admin_key: KEY(2), taken_seq: null, taken_ms: null, release: null, applies_at: NOW + 23 * 3_600_000 }), record(9), record(8, { position: 1, reason: "skip", candidate: BRAVO, admin_key: KEY(2) }), record(7, { refused: "no set names its key", applies_at: null, taken_seq: null, taken_ms: null, release: null, reason: "promotion" })],
+    records: [record(10, { candidate: BRAVO, admin_key: KEY(2), taken_seq: null, taken_ms: null, release: null, applies_at: NOW + 23 * 3_600_000 }), record(9), record(8, { position: 1, reason: "skip", candidate: BRAVO, admin_key: KEY(2), applies_at: NOW - 25 * 3_600_000, taken_ms: NOW - 25 * 3_600_000 + 20_000 }), record(7, { refused: "no set names its key", applies_at: null, taken_seq: null, taken_ms: null, release: null, reason: "promotion" })],
     next: 70, truncated: false, retained_from_seq: 10,
   },
 };
 const loaded = (route: OperatorRoute = ROUTE, list = view): OperatorsState => ({ route: ready(route), rotation: rotationView(route), list: ready(list), held: null });
 const KEPT = "The operator already running the trading server stays in place.";
+/** The tab's cards from `title` to the next card's title, or to the tab's closing note. */
+const card = (html: string, title: string, next = "The trading server is run in turns") => html.slice(html.indexOf(title), html.indexOf(next, html.indexOf(title)));
 
 function Tab({ state, operators }: { state: Partial<ConsoleState>; operators: OperatorsState }) {
   const { store } = useSession();
@@ -81,23 +83,40 @@ describe("the Rotation tab", () => {
     expect(html).not.toContain("Today&#x27;s turn");
   });
 
-  it("lists the history by start time, newest first, with a skip, a promotion and a refusal in plain words, apart under Reassigned and refused turns", () => {
+  it("lays out the groups, the turn history and the reassigned and refused turns in that order in one grid", () => {
     const html = tab(loaded());
-    const moves = html.slice(html.indexOf("Reassigned and refused turns"), html.indexOf("Turn history"));
+    const grid = html.slice(html.indexOf('<div class="grid items-start gap-4 xl:grid-cols-2">'));
+    const order = ["Current operator group", "Next operator group", "Turn history", "Reassigned and refused turns", "The trading server is run in turns"].map((title) => grid.indexOf(title));
+    expect(order.every((at, i) => at > 0 && (i === 0 || at > (order[i - 1] ?? 0)))).toBe(true);
+  });
+
+  it("shows who ran the trading server from each takeover until the next, the latest until now, with the upcoming turn apart", () => {
+    const history = card(tab(loaded()), "Turn history", "Reassigned and refused turns");
+    const upcoming = history.slice(history.indexOf("Upcoming"));
+    expect(upcoming).toMatch(new RegExp(`${formatStamp(NOW + 23 * 3_600_000)}.*bravo\\.example.*Draw.*Scheduled`));
+    const periods = history.slice(history.indexOf("Each operator that ran the trading server"), history.indexOf("Upcoming"));
+    expect(periods).toMatch(new RegExp(`${formatStamp(NOW - 3_000_000)}.*Now.*alpha\\.example.*Operator key 0x000000…0001.*Scheduled hand-over`));
+    expect(periods).toMatch(new RegExp(`${formatStamp(NOW - 25 * 3_600_000 + 20_000)}.*${formatStamp(NOW - 3_000_000)}.*bravo\\.example.*Skip`));
+    expect(periods.indexOf("alpha.example")).toBeLessThan(periods.indexOf("bravo.example"));
+    expect(history).toContain("Load older");
+  });
+
+  it("lists a skip, a promotion and a refusal in plain words under Reassigned and refused turns", () => {
+    const moves = card(tab(loaded()), "Reassigned and refused turns");
     expect(moves).toContain("Skip");
     expect(moves).toContain("Promotion");
     expect(moves).toContain(`Refused. The operator assigned the turn could not take over. ${KEPT}`);
     expect(moves.match(/Started at/g)).toHaveLength(1);
-    const history = html.slice(html.indexOf("Turn history"));
-    expect(history.indexOf(formatStampWithYear(NOW + 23 * 3_600_000))).toBeLessThan(history.indexOf(formatStampWithYear(NOW - 3_600_000)));
-    expect(history).toContain("Load older");
   });
 
   it("shows a refused short turn by its start time with the engine's notice reason in plain words, never its turn number or position", () => {
     const SHORT = Date.UTC(2026, 10, 16, 21, 50);
     const refused = record(5_982_886, { position: 1, assigned_ms: SHORT - 240_000, applies_at: null, refused: `set 1 was logged at ${SHORT - 120_000}, less than one turn before the turn applies at ${SHORT}`, taken_seq: null, taken_ms: null, release: null });
-    const html = tab(loaded({ ...ROUTE, turns: { records: [refused], next: null, truncated: false, retained_from_seq: null } }));
-    const moves = html.slice(html.indexOf("Reassigned and refused turns"), html.indexOf("Turn history"));
+    const before = record(5_982_885, { assigned_ms: SHORT - 600_000, applies_at: SHORT - 300_000, taken_ms: SHORT - 290_000 });
+    const html = tab(loaded({ ...ROUTE, turns: { records: [refused, before], next: null, truncated: false, retained_from_seq: null } }));
+    // The operator that kept running the server through it says so in its period.
+    expect(card(html, "Turn history", "Reassigned and refused turns")).toContain("The operator continued to run the trading server through the turn due at 16 Nov 21:50:00 UTC, which was refused.");
+    const moves = card(html, "Reassigned and refused turns");
     expect(moves).toContain("2026-11-16 21:50");
     expect(moves).toContain(`Refused. An operator must be announced at least one turn before its turn begins, and the operator assigned the turn was announced later than that. ${KEPT}`);
     expect(moves).not.toMatch(/5982886|position/);
@@ -119,7 +138,8 @@ describe("the Rotation tab", () => {
     expect(html).toContain("The next group of operators has not yet been chosen. It will be chosen when the current election is closed, which has been due since");
     expect(html).toContain("No turn in progress");
     expect(html).toContain("Not yet drawn");
-    expect(html).toContain("No turns have taken place yet.");
+    expect(html).toContain("No upcoming turn has been drawn yet.");
+    expect(html).toContain("No operator has taken over a turn yet.");
   });
 
   it("shows a dash for each figure and a reading line before the first read lands, and hides its figures while the node is not trusted", () => {
@@ -127,7 +147,7 @@ describe("the Rotation tab", () => {
     expect(pending).toContain("Loading the rotation…");
     // The cards are there from the first paint, so nothing moves when the read lands, and none claims an empty history.
     expect(pending).toContain("Turn history");
-    expect(pending).not.toContain("No turns have taken place yet.");
+    expect(pending).not.toMatch(/No operator has taken over a turn yet|No upcoming turn has been drawn yet/);
     const untrusted = tab(loaded(), { ...VERIFIED, attestation: { kind: "unverified", reason: "no" } });
     expect(untrusted).toContain('class="mt-4 hidden gap-4"');
   });

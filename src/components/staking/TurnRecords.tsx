@@ -26,7 +26,7 @@ export interface Names {
 export function TurnRecords({ records, caption, empty, nameOf }: { records: readonly TurnRecord[]; caption: string; empty: string } & Names) {
   return (
     <div role="region" aria-label={caption} tabIndex={0} className="-mx-1 h-72 overflow-auto outline-none focus-visible:outline-2 focus-visible:outline-glow">
-      {records.length === 0 ? <p className={`${NOTE} px-1`}>{empty}</p> : <table className="w-full min-w-[40rem] text-label sm:text-caption">
+      {records.length === 0 ? <p className={`${NOTE} px-1`}>{empty}</p> : <table className="w-full min-w-[34rem] text-label sm:text-caption">
         <caption className="sr-only">{caption} Times are UTC.</caption>
         <thead className="sticky top-0 bg-ink-1">
           <tr>

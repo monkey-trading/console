@@ -11,7 +11,7 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 function record(seq: number): TurnRecord {
-  return { turn: seq, position: 0, reason: "draw", candidate: "0x00000000000000000000000000000000000000a1", appliesAtMs: seq, refused: null, assignedSeq: seq, assignedMs: seq, takenMs: null };
+  return { turn: seq, position: 0, reason: "draw", candidate: "0x00000000000000000000000000000000000000a1", adminKey: "0x00000000000000000000000000000000000000a1", appliesAtMs: seq, refused: null, assignedSeq: seq, assignedMs: seq, takenMs: null };
 }
 const page = (seqs: number[], next: number | null) => ({ records: seqs.map(record), next, truncated: false });
 
