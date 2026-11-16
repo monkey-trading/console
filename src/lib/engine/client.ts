@@ -9,6 +9,7 @@ import type { ScanBudget, ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import type { QuoteRequest } from "./live-stream";
 import type { DeploymentReads, VaultFacts } from "./registry";
+import type { ServerRead } from "./status-types";
 import type { SignerFloor } from "./signer-naming";
 import type { StatsReads } from "./stats-types";
 import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
@@ -65,7 +66,9 @@ export type ClientEvent =
   /** The node refused the quote request, such as for an account it has never credited. */
   | { type: "quote_error"; error: string }
   /** A signed withdrawal authorization the stream carried, for any account. */
-  | { type: "withdrawal"; withdrawal: SignedWithdrawal };
+  | { type: "withdrawal"; withdrawal: SignedWithdrawal }
+  /** What the server says of its own operating state, or null when nothing current is known (monkey-trading/console#398). */
+  | { type: "server"; server: ServerRead | null };
 
 /**
  * Whether a client checks the signatures on the node's answers: `checked` for a live client, `none`

@@ -15,6 +15,7 @@ import type { OperatorRoute } from "./stats-types";
 import { collateral, plainText, READ_TIMEOUT_MS } from "./live-plain";
 import { scanForMarks, type ScanBudget, type ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
+import { StatusWatch } from "./live-status";
 import { LiveStream, type QuoteRequest, type Scheduler, type Socket } from "./live-stream";
 import { VaultReads, VerifierLoader } from "./live-verifier";
 import { SignedTransport } from "./transport";
@@ -58,6 +59,7 @@ export class LiveEngineClient implements EngineClient {
   private readonly listeners = new Set<(event: ClientEvent) => void>();
   private readonly subscribers = new Set<(message: StreamMessage) => void>();
   private stream: LiveStream | null = null;
+  private readonly status: StatusWatch; // the server's operating state, from the stream and from reads while it is down
   /** The quotes the page wants, kept for a stream opened later. */
   private quoteRequest: QuoteRequest | null = null;
   /** The log head seq of the last signed answer that named one; null before the first. */
@@ -94,6 +96,8 @@ export class LiveEngineClient implements EngineClient {
       operatorClaim: (address) => readClaim(() => this.transport.getUnder("/v1/operator?limit=1", address), this.lastRoute),
     });
     this.transport = new SignedTransport({ ...deps, verifier: () => this.verifiers.loaded(), trust: this.trust, challenge, signal: this.signal });
+    const trusted = () => ["mock", "verified", "attested"].includes(this.trust.status.kind);
+    this.status = new StatusWatch({ read: () => this.transport.get("/v1/status"), scheduler: deps.scheduler, report: (server) => this.emit({ type: "server", server }), trusted });
     this.totalsWalk = new QueueTotalsWalk(this.transport, deps.nowMs);
     this.withdrawalTotals = () => this.totalsWalk.totals();
     this.emissions = (address) =>
@@ -273,7 +277,9 @@ export class LiveEngineClient implements EngineClient {
         onWithdrawal: (withdrawal) => this.emit({ type: "withdrawal", withdrawal }),
         onCheckpoint: (checkpoint) => { this.houseFold.foldCheckpoint(checkpoint); this.emit({ type: "checkpoint", seq: checkpoint.seq }); },
         onProblem: (reason) => this.emit({ type: "problem", reason }),
+        statusFrames: () => this.status.frames(), onStatus: (status) => this.status.frame(status),
         onFeed: (status: FeedStatus, time?: number) => {
+          this.status.feed(status);
           this.emit(time === undefined ? { type: "feed", status } : { type: "feed", status, time });
         },
       });
@@ -285,6 +291,7 @@ export class LiveEngineClient implements EngineClient {
       this.subscribers.delete(onMessage);
       if (this.subscribers.size === 0) {
         this.stream?.stop();
+        this.status.stop();
         this.stream = null;
       }
     };

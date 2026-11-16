@@ -117,7 +117,7 @@ describe("quotes and authorizations on the stream", () => {
     const sockets: FakeSocket[] = [];
     const { client } = accepting(sockets);
     const seen: unknown[] = [];
-    client.watch((event) => { if (event.type !== "feed" && event.type !== "attestation") seen.push(event); });
+    client.watch((event) => { if (event.type !== "feed" && event.type !== "attestation" && event.type !== "server") seen.push(event); });
     client.quotes({ account: ACCOUNT, markets: [1, 2] });
     client.subscribe(() => {});
     await settle();

@@ -45,6 +45,11 @@ describe("applyFeedEvent", () => {
     expect(applyFeedEvent(state, { type: "withdrawal", withdrawal: signed(1, 200, OTHER) })).toBeNull();
     expect(applyFeedEvent(state, { type: "withdrawal", withdrawal: { ...signed(3, 100), authorization: undefined } })).toBeNull();
   });
+
+  it("keeps what the server last said of its state, with or without a wallet, and forgets it when nothing current is known", () => {
+    expect(applyFeedEvent({ ...base(), wallet: null }, { type: "server", server: { kind: "unsigned" } })).toEqual({ server: { kind: "unsigned" } });
+    expect(applyFeedEvent({ ...base(), server: { kind: "unreachable" } }, { type: "server", server: null })).toEqual({ server: null });
+  });
 });
 
 describe("keepLatest", () => {

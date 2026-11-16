@@ -1,8 +1,9 @@
 "use client";
 
-/** Compact lines saying what the console found when it checked the node, and what it cannot vouch for. */
+/** Compact lines saying what the console found when it checked the node, what it cannot vouch for, and what the server says is wrong. */
 
 import { asSentence, shortHex } from "@/lib/format";
+import { serverLine } from "@/lib/server-status";
 import { CONNECT_TO_CHECK } from "@/lib/engine/trust-errors";
 import { describeMockAttestation, describeReverifying } from "@/lib/messages";
 
@@ -15,14 +16,16 @@ const WARN = `${LINE} border-amber/40 bg-amber/10 text-amber`;
 const BAD = `${LINE} border-ember/50 bg-ember/10 text-ember`;
 
 export function AttestationBanner() {
-  const { attestation, stream, signatures, notices } = useConsole();
+  const { attestation, stream, server, signatures, notices } = useConsole();
+  // A node that failed its check says so above, and nothing it said is shown.
+  const line = attestation.kind === "unverified" ? null : serverLine(stream, server, notices.feed?.text ?? null);
   return (
     <section aria-label="Server verification">
       <Status attestation={attestation} signatures={signatures} />
       <NodeLine />
-      {stream === "stale" && attestation.kind !== "unverified" && (
-        <div role="alert" className={BAD}>
-          <strong className="font-medium">Live prices are not currently updating, so trading has been suspended.</strong> Trading will resume automatically once the price feed recovers.{notices.feed !== undefined && <> {asSentence(notices.feed.text)}</>}
+      {line !== null && (
+        <div role={line.role} className={line.role === "alert" ? BAD : WARN}>
+          <strong className="font-medium">{line.lead}</strong> {line.rest}
         </div>
       )}
     </section>

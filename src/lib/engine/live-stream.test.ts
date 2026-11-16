@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { FeedStatus } from "./attestation";
 import { LiveStream, STALE_AFTER_INTERVALS } from "./live-stream";
 import { acceptAll, FakeScheduler, FakeSocket, mockAttestation, settle } from "./test-kit";
+import type { ServerStatus } from "./status-types";
 import { NodeTrust } from "./trust";
 import type { StreamMessage } from "./types";
 import type { FrameConnection, Verifier } from "./verifier";
@@ -18,13 +19,14 @@ beforeAll(async () => {
 });
 const OTHER = "0x00000000000000000000000000000000000000aa";
 
-function setup(options: { address?: () => string; clockMs?: number; accept?: boolean } = {}) {
+function setup(options: { address?: () => string; clockMs?: number; accept?: boolean; status?: boolean } = {}) {
   const scheduler = new FakeScheduler();
   const sockets: FakeSocket[] = [];
   const messages: StreamMessage[] = [];
   const feeds: FeedStatus[] = [];
   const feedTimes: (number | undefined)[] = [];
   const problems: string[] = [];
+  const statuses: ServerStatus[] = [];
   const opened: FrameConnection[] = [];
   // The vectors were opened with `after` first in the query; the client's own path is checked below, and the real verifier checks the vector's.
   const verifier: Verifier = options.accept
@@ -41,8 +43,9 @@ function setup(options: { address?: () => string; clockMs?: number; accept?: boo
     onMessage: (m) => messages.push(m), onFeed: (f, time) => { feeds.push(f); feedTimes.push(time); }, onProblem: (p) => problems.push(p),
     // Quotes, checkpoints and authorizations are tested through the live client in live-actions.test.ts.
     onQuote: () => {}, onQuoteError: () => {}, onWithdrawal: () => {}, onCheckpoint: () => {},
+    statusFrames: async () => options.status === true, onStatus: (s) => statuses.push(s),
   });
-  return { stream, sockets, messages, feeds, feedTimes, problems, scheduler, opened };
+  return { stream, sockets, messages, feeds, feedTimes, problems, statuses, scheduler, opened };
 }
 
 const send = (socket: FakeSocket | undefined, ...indexes: number[]) => {
@@ -205,6 +208,16 @@ describe("a stale feed", () => {
     t.scheduler.advance(1);
     await settle();
     expect(t.sockets).toHaveLength(3);
+  });
+
+  it("asks for status frames only when the node serves them, and delivers each status frame", async () => {
+    const t = await started({ accept: true, status: true });
+    expect(t.sockets[0]?.url).toBe(`wss://node.test/v1/stream?signed=1&status=1&challenge=${connection.challenge}`);
+    const status = { as_of_ms: 1, takes_orders: true, holds: [], trusted_time: { state: "starting" }, venues: [], unpriced_markets: [] };
+    t.sockets[0]?.receive(JSON.stringify({ v: 1, n: 0, time: connection.frames[0]?.time, msg: JSON.stringify({ type: "status", ...status }), sig: "0x00" }));
+    expect(t.statuses).toEqual([{ type: "status", ...status }]);
+    expect(t.feeds).toEqual(["live"]);
+    expect(t.sockets[0]?.closed).toBe(false);
   });
 
   it("opens nothing when stopped while a recheck is pending", async () => {

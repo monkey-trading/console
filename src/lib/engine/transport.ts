@@ -2,7 +2,7 @@
 
 import { EngineError } from "./client";
 import { SignatureError, UntrustedError, type NodeTrust } from "./trust";
-import { SupersededAnswer } from "./trust-errors";
+import { SupersededAnswer, UnsignedAnswer } from "./trust-errors";
 import { CHALLENGE_HEADER, SEQ_HEADER, SIGNATURE_HEADER, TIME_HEADER } from "./wire";
 import type { Verifier } from "./verifier";
 
@@ -26,8 +26,8 @@ export interface TransportDeps {
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
-function unsigned(status: number): UntrustedError {
-  return new UntrustedError(`The server's response (HTTP ${status}) was not signed by the verified server, so it was rejected.`);
+function unsigned(status: number): UnsignedAnswer {
+  return new UnsignedAnswer(`The server's response (HTTP ${status}) was not signed by the verified server, so it was rejected.`);
 }
 
 /** The refusal of a verified answer under `signer`, a key put aside while it was in flight, carrying the JSON of a 2xx answer signed within the clock tolerance (`fresh`), which can still say what it named of the signer. */
