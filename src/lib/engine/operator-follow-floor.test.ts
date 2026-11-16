@@ -114,6 +114,20 @@ describe("the signer floor a visit holds each node to (monkey-trading/console#37
     expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B, reason: expect.stringContaining("newer signer") });
   });
 
+  it("holds a node it moves to with a wallet, whose route states no signer, to the floor, and no node it leaves waiting (monkey-trading/console#376)", async () => {
+    const kit = walletVisit();
+    kit.current.signedRead = async () => route(null, { epoch: 8, address: KA });
+    kit.nodeB.verdict = { kind: "verified", release: "r", config: "c", address: KB };
+    kit.nodeB.signedRead = async () => ({ ...ROUTE });
+    // A wallet request in progress holds the move back.
+    kit.held.busy = true;
+    await kit.follower.check();
+    expect([kit.adopted, kit.nodeB.held]).toEqual([[], []]);
+    kit.held.busy = false;
+    await kit.follower.check();
+    expect([kit.adopted, kit.nodeB.held]).toEqual([[B], [{ epoch: 8, address: KA }]]);
+  });
+
   it("takes a node whose route states no signer when the wallet's read of the vault judged it, and only then", async () => {
     for (const verdict of [{ kind: "verified", release: "r", config: "c", address: KB }, { kind: "mock" }] as const) {
       const kit = walletVisit();
@@ -220,7 +234,7 @@ describe("a read that ends after the follower stopped waiting on its client (mon
   it("raises the floor from the node moved away from, and puts it to the node moved to at once", async () => {
     const kit = visit("b.example");
     kit.nodeB.signedRead = async () => route(null, { epoch: 8, address: KB });
-    // A check of the node in use reads its word, which is slow to come, while B is tried.
+    // Another read of the node in use's word, as a page makes, is slow to come while B is tried.
     const late = slowRead(kit.current);
     await kit.follower.check();
     expect(kit.adopted).toEqual([B]);

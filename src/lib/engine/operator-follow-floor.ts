@@ -6,10 +6,13 @@
 
 import type { EngineClient } from "./client";
 import { lagging, raised, type SignerFloor } from "./operator-follow-status";
+import type { NamedSigner } from "./signer-naming";
 import type { OperatorRoute } from "./stats-types";
 
 export class SignerFloorWatch {
   private floor: SignerFloor | null = null;
+  /** The word that last moved the floor, at its epoch. */
+  private word: Readonly<NamedSigner> | null = null;
   /** Each client heard, for the rest of the visit: a node moved away from, or a trial dropped, still ends the reads it began. */
   private readonly clients = new WeakSet<EngineClient>();
 
@@ -28,6 +31,14 @@ export class SignerFloorWatch {
     this.heard(client);
   }
 
+  /**
+   * `client` is the node in use from now: the floor is held to it, so a check of a new key on a node that states no signer is judged
+   * against the floor, while the enclave its own check judged keeps its verdict (monkey-trading/console#376).
+   */
+  inUse(client: EngineClient): void {
+    if (this.word !== null) client.holdSigner(this.word);
+  }
+
   /** Why a node whose route is `route` is not taken under the floor (`lagging`), or null. */
   lags(route: OperatorRoute | null, vaultRead: boolean): string | null {
     return lagging(this.floor, route, vaultRead);
@@ -39,6 +50,7 @@ export class SignerFloorWatch {
     const floor = raised(this.floor, named);
     if (named === null || floor === this.floor) return;
     this.floor = floor;
+    this.word = named;
     const current = this.current();
     // The node in use judged its own word as it read it.
     if (current !== client) current?.heedSigner(named);

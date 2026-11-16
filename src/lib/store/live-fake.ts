@@ -119,6 +119,7 @@ export class FakeClient implements EngineClient {
   async heedVault() {}
   signerNamed() { return null; }
   heedSigner() {}
+  holdSigner() {}
   async nonce() { return { next_nonce: 0 }; }
   /** The declaration the eligibility read answers with, and how many times it and the withdrawal queue were read. */
   declared: EligibilityClass | null = null;

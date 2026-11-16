@@ -1,7 +1,8 @@
-/** `GET /v1/house/state`: the house's latest parameters and checkpoint, the pending listing notices, the parameter votes the log holds, and what keeps the first two current between reads. */
+/** `GET /v1/house/state` and its read: the house's latest parameters and checkpoint, the pending listing notices, the parameter votes the log holds, and what keeps the first two current between reads. */
 
 import { fixedFromWire } from "../fixed";
 import type { HouseParams } from "../house";
+import { EngineError } from "./client";
 import type { GovernanceWire } from "./governance-types";
 import type { ListingNotice, ListingNotices, SetParams } from "./types";
 import type { CheckpointEntry } from "./wire";
@@ -93,4 +94,19 @@ export class HouseFold {
     this.paramsAt = at;
     this.paramsHead = head;
   }
+}
+
+/** The house's latest parameters and checkpoint from one signed read of the route through `get`, folded into `fold`; null from a node that predates the route. */
+export async function readHouseState(get: () => Promise<unknown>, fold: HouseFold): Promise<HouseState | null> {
+  let wire: HouseStateWire;
+  try {
+    // The attested enclave signed the body, so its shape is the engine's.
+    wire = (await get()) as HouseStateWire;
+  } catch (error) {
+    if (error instanceof EngineError && error.status === 404) return null;
+    throw error;
+  }
+  const read = decodeHouseState(wire);
+  fold.foldRead(read);
+  return { seq: read.seq, ...fold.current(), listingNotices: read.listingNotices, governance: read.governance };
 }

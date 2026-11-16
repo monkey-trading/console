@@ -36,6 +36,9 @@ export class TrialClient {
   heard: NamedSigner[] = [];
   signerNamed = () => this.naming.highest;
   heedSigner = (signer: NamedSigner) => { this.heard.push(signer); this.naming.judge(null, { signer }); };
+  /** Each signer the follower held this client to when it became the node in use, oldest first. */
+  held: NamedSigner[] = [];
+  holdSigner = (signer: NamedSigner) => { this.held.push(signer); this.naming.judge(null, { signer }); };
   watch(listener: (event: ClientEvent) => void) { this.watchers.add(listener); return () => { this.watchers.delete(listener); }; }
   subscribe(onMessage: (message: StreamMessage) => void) { this.subscribers.add(onMessage); return () => { this.subscribers.delete(onMessage); }; }
   private async operatorRead(): Promise<unknown> {

@@ -67,8 +67,8 @@ export class SignerNaming {
    * other answer is taken, so a node the vault no longer names is refused at the first check, not at the first operator read; an enclave
    * put aside earlier stays refused unless that word names it again at a later epoch. A node that states none (one that predates the
    * route, which `operatorClaim` reads as nothing stated, or whose liveness rule does not run) is judged by what other reads have said:
-   * it is refused while they name another key at the highest epoch seen, unless this check's own read of the vault named it
-   * (`vaultJudged`, monkey-trading/console#376). A word that cannot be read refuses the node: the next answer it is asked for checks it again.
+   * it is refused, and put aside, while they name another key at the highest epoch seen, unless this check's own read of the vault named
+   * it (`vaultJudged`, monkey-trading/console#376). A word that cannot be read refuses the node: the next answer it is asked for checks it again.
    */
   async refusal(address: string, vaultJudged: boolean): Promise<string | null> {
     let claim: OperatorClaim;
@@ -78,8 +78,11 @@ export class SignerNaming {
       return `${SIGNER_UNREAD} ${error instanceof Error ? error.message : "The read failed."}`;
     }
     const refused = this.judge(address, claim)?.reason ?? (this.refuses(address) ? SIGNER_SUPERSEDED : null);
-    if (refused !== null || claim.signer !== undefined || vaultJudged) return refused;
-    return this.named !== null && this.named.address !== address ? SIGNER_SUPERSEDED : null;
+    const unnamed = claim.signer === undefined && !vaultJudged && this.named !== null && this.named.address !== address;
+    if (refused !== null || !unnamed) return refused;
+    // An answer or a scan still in flight under it is refused too.
+    this.superseded.add(address);
+    return SIGNER_SUPERSEDED;
   }
 
   /** The vault itself, read through the wallet, names `signer`: an enclave it does not name is put aside, and the one it does is taken back. */

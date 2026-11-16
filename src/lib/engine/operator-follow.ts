@@ -255,6 +255,7 @@ export class OperatorFollower {
     this.deps.adopt(client, target);
     // In use from now, before the provider watches it: a check the floor's refusal of the old node starts reads this one.
     this.current = client;
+    this.floor.inUse(client);
     this.origin = target;
     this.settled({ kind: "following", origin: target });
   }

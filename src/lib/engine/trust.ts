@@ -136,6 +136,14 @@ export class NodeTrust {
     this.judged({ signer });
   }
 
+  /**
+   * The highest signer the visit heard before this node was in use (monkey-trading/console#376): later checks of the node are judged against
+   * it as against the node's own word, while the enclave trusted now keeps the verdict its own check reached, the wallet's vault read included.
+   */
+  holdSigner(signer: NamedSigner): void {
+    this.naming.judge(null, { signer });
+  }
+
   /** The highest signer epoch named by this node's signed word or by another node's put to it, with the key named at it; null before one was. */
   get signerNamed(): Readonly<NamedSigner> | null {
     return this.naming.highest;
