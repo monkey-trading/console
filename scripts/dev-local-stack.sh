@@ -567,10 +567,12 @@ if [[ "$second_engine" == 1 ]]; then
     step_log="$work/votes-setup.log"
     deployed_receiver="$(create --private-key "$vote_deployer_key" src/SeedReceiver.sol:SeedReceiver --constructor-args "$relayer" 1606824023)"
     # The schedule reads the rotating nodes' LogHeads for its heartbeat rule, which takes the engine's scenario values: 60 s slots,
-    # 30 s tolerance, five misses and 200 blocks, within bounds of (30, 5, 2, 10) and (120, 60, 9, 256), a 120 s switch budget and
-    # Arbitrum's 250 ms block time. No node here runs a liveness caller, and no turn is drawn, so the rule never fires.
+    # 30 s tolerance, five misses and 200 blocks, within bounds of (30, 5, 2, 10) and (120, 60, 9, 256), and a take window of
+    # 8 slots within (8, 24): its minimum must exceed the switch budget plus one interval plus a head's inclusion, which the
+    # tolerance bounds, at the rule's shortest interval and longest tolerance. The switch budget is 120 s and Arbitrum's block
+    # time 250 ms. No node here runs a liveness caller, and no turn is drawn, so neither the promotion nor the skip fires.
     deployed_schedule="$(create --private-key "$vote_deployer_key" src/OperatorSchedule.sol:OperatorSchedule --constructor-args "$registry" "$seed_receiver" \
-      "$logheads" "(60,30,5,200)" "(30,5,2,10)" "(120,60,9,256)" 120 250)"
+      "$logheads" "(60,30,5,200)" "(30,5,2,10)" "(120,60,9,256)" "(8,8,24)" 120 250)"
     deployed_vote="$(create --private-key "$vote_deployer_key" src/ParameterVote.sol:ParameterVote \
       --constructor-args "$schedule" "$vote_normal_window" "$vote_fast_window")"
     [[ "$(lower "$deployed_receiver")" == "$(lower "$seed_receiver")" && "$(lower "$deployed_schedule")" == "$(lower "$schedule")" &&
