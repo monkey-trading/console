@@ -56,6 +56,7 @@ describe("as the wallet changes around it", () => {
     wallet.sign = () => new Promise<string>((resolve) => { proceed = resolve; });
     const declaring = attestEligibility(store, "professional");
     await settle();
+    expect(store.getSnapshot().prompt).toBe('Confirm the request in your wallet to sign the declaration "I attest that I am a professional client".');
     const notices = store.getSnapshot().notices;
     disconnectWallet(store);
     expect(setupVisible(store.getSnapshot())).toBe(false);

@@ -111,7 +111,7 @@ export async function connectWallet(store: ConsoleStore, optionId: string, quiet
 /** Signs and sends the declaration, then reads the account again, so what comes next sees it. True when this connection's declaration was recorded. */
 export async function attestEligibility(store: ConsoleStore, cls: EligibilityClass): Promise<boolean> {
   const wallet = store.liveWallet;
-  const out = await signed(store, "setup", `sign the declaration "${STATEMENTS[cls]}"`, (t, account) => eligibilityTypedData(domainOf(store), account, cls, t), (auth, wallet) =>
+  const out = await signed(store, "setup", `sign the declaration "${STATEMENTS[cls].replace(/\.$/, "")}"`, (t, account) => eligibilityTypedData(domainOf(store), account, cls, t), (auth, wallet) =>
     store.deps.client.attestEligibility({ account: wallet.address, class: cls, auth }), "sign-again",
   );
   if (!out.ok) return false;
