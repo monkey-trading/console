@@ -76,6 +76,36 @@ describe("SignerNaming", () => {
     expect(new SignerNaming().judge(OLD, { enclave: OLD })).toBeNull();
     expect(new SignerNaming().judge(null, { signer: { epoch: 1, address: NEW } })).toBeNull();
   });
+
+  it("keeps a key a read of the vault put aside refused when a word names it at a later epoch, until a read of the vault names it", () => {
+    const naming = new SignerNaming();
+    naming.judge(OLD, { signer: { epoch: 4, address: OLD } });
+    naming.vaultSays(OLD, NEW);
+    naming.judge(null, { signer: { epoch: 5, address: OLD } });
+    expect([naming.highest, naming.refuses(OLD)]).toEqual([{ epoch: 5, address: OLD }, true]);
+    naming.vaultSays(OLD, OLD);
+    expect(naming.refuses(OLD)).toBe(false);
+  });
+
+  it("holds a word heard before the node was in use without putting any key aside, and only when it is the highest (monkey-trading/console#376)", () => {
+    const naming = new SignerNaming();
+    naming.judge(NEW, { signer: { epoch: 7, address: NEW } });
+    naming.hold({ epoch: 8, address: OLD.toUpperCase().replace("0X", "0x") });
+    naming.hold({ epoch: 6, address: NEW });
+    expect([naming.highest, naming.refuses(NEW), naming.refuses(OLD)]).toEqual([{ epoch: 8, address: OLD }, false, false]);
+  });
+
+  it("tells each rise of the highest epoch once the judgement that raised it is settled, and nothing else (monkey-trading/console#377)", () => {
+    const THIRD = "0x00000000000000000000000000000000000000cc";
+    const told: { epoch: number | undefined; trustedRefused: boolean }[] = [];
+    const naming: SignerNaming = new SignerNaming(undefined, () => { told.push({ epoch: naming.highest?.epoch, trustedRefused: naming.refuses(THIRD) }); });
+    naming.judge(null, { signer: { epoch: 4, address: OLD } });
+    naming.judge(null, { signer: { epoch: 4, address: OLD } });
+    naming.judge(null, { signer: { epoch: 3, address: NEW } });
+    naming.judge(OLD, { enclave: NEW, signer: { epoch: 9, address: NEW } });
+    naming.judge(THIRD, { signer: { epoch: 5, address: NEW } });
+    expect(told).toEqual([{ epoch: 4, trustedRefused: false }, { epoch: 5, trustedRefused: true }]);
+  });
 });
 
 /** A trust the verifier of which names the address a test sets. */

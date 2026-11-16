@@ -67,6 +67,7 @@ export class ActionClient implements EngineClient {
   async heedVault() {}
   signerNamed() { return null; }
   heedSigner() {}
+  holdSigner() {}
   /** Whether the account read answers as a credited account; false answers the node's 404. */
   credited = false;
   /** What the credited account holds; a test sets it and reads the account again. */

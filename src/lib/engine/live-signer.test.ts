@@ -13,13 +13,15 @@ import type { Verifier } from "./verifier";
 /** The enclave `acceptAll` reads out of a mock attestation. */
 const ENCLAVE = "0x0000000000000000000000000000000000000001";
 const OTHER = "0x00000000000000000000000000000000000000bb";
+const THIRD = "0x00000000000000000000000000000000000000cc";
 
 function client(verifier: Verifier = acceptAll) {
   const node = new FakeNode();
   node.attestation(() => ENCLAVE);
-  const gates: { markets: Promise<void> | null } = { markets: null };
+  const gates: { markets: Promise<void> | null; operator: Promise<void> | null } = { markets: null, operator: null };
   const fetchThrough: typeof fetch = async (input, init) => {
     if (String(input).endsWith("/v1/markets") && gates.markets !== null) await gates.markets;
+    if (String(input).endsWith("/v1/operator") && gates.operator !== null) await gates.operator;
     return node.fetch(input, init);
   };
   const sockets: FakeSocket[] = [];
@@ -196,6 +198,47 @@ describe("an answer in flight", () => {
       const refused = await live.stats.operator({ limit: 1 }).catch((error: unknown) => error);
       expect(refused).toBeInstanceOf(RefusedAnswer);
       expect((refused as RefusedAnswer).answer).toMatchObject({ api_hostname: { hostname: "b.example" } });
+    }
+  });
+});
+
+describe("the highest signer the client has heard named (monkey-trading/console#377)", () => {
+  it("is reported through watch as it rises, from the first check, a later read or a signer put to the client, with the new signer readable, and not otherwise", async () => {
+    const { live, operator } = client();
+    const told: (number | undefined)[] = [];
+    live.watch((event) => { if (event.type === "signer") told.push(live.signerNamed()?.epoch); });
+    operator({ epoch: 5, address: ENCLAVE });
+    await live.verify();
+    await live.stats.operator({ limit: 1 });
+    operator({ epoch: 6, address: ENCLAVE });
+    await live.stats.operator({ limit: 1 });
+    live.heedSigner({ epoch: 6, address: ENCLAVE });
+    live.heedSigner({ epoch: 7, address: OTHER });
+    expect(told).toEqual([5, 6, 7]);
+  });
+
+  it("counts what an operator answer names that lands after its enclave was put aside, fresh and for its own enclave, and still refuses the answer", async () => {
+    const lands = [
+      { answer: "fresh, its own enclave", enclave: ENCLAVE, timeMs: 1, named: { epoch: 9, address: THIRD } },
+      { answer: "naming another enclave", enclave: OTHER, timeMs: 1, named: { epoch: 8, address: OTHER } },
+      { answer: "signed 31 s off the device clock", enclave: ENCLAVE, timeMs: 31_002, named: { epoch: 8, address: OTHER } },
+    ];
+    for (const { answer, enclave, timeMs, named } of lands) {
+      const { node, live, operator, gates } = client();
+      operator({ epoch: 5, address: ENCLAVE });
+      await live.verify();
+      let release = () => {};
+      gates.operator = new Promise<void>((resolve) => { release = resolve; });
+      const body = { operator: ENCLAVE, pending_rotation: null, rotation_enabled: true, last_election: null, enclave, signer: { epoch: 9, address: THIRD } };
+      node.signed("/v1/operator", () => ({ status: 200, body: JSON.stringify(body), signature: "0x", timeMs, seq: 1 }));
+      // A page's read of the route is in flight when another node's word puts the enclave aside.
+      const late = live.stats.operator();
+      await settle();
+      live.heedSigner({ epoch: 8, address: OTHER });
+      release();
+      const refused = await late.then(() => null, (error: unknown) => error);
+      expect(refused, answer).toBeInstanceOf(RefusedAnswer);
+      expect(live.signerNamed(), answer).toEqual(named);
     }
   });
 });

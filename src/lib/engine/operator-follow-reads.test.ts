@@ -239,10 +239,13 @@ describe("what makes the follower read sooner", () => {
     expect(operatorReads.count).toBe(2);
   });
 
-  it("hears nothing from a client it stopped watching", async () => {
+  it("reads on nothing a client it stopped watching reports, and keeps only the signer floor's ear on it (monkey-trading/console#377)", async () => {
     const { client, stopWatch, operatorReads } = await watched();
     stopWatch();
-    expect(client.watchers.size + client.subscribers.size).toBe(0);
+    expect([client.watchers.size, client.subscribers.size]).toEqual([1, 0]);
+    const events: ClientEvent[] = [{ type: "feed", status: "stale" }, { type: "enclave" }, { type: "attestation", status: { kind: "unverified", reason: "refused" } }];
+    for (const watcher of client.watchers) for (const event of events) watcher(event);
+    await settle();
     expect(operatorReads.count).toBe(0);
   });
 });

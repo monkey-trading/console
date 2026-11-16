@@ -27,6 +27,14 @@ export class RefusedAnswer extends UntrustedError {
   }
 }
 
+/** A signed answer that verified under `signer`, a key put aside while it was in flight: refused to its caller, while `body`, its JSON, can still say what it named of the vault's signer (monkey-trading/console#377). */
+export class SupersededAnswer extends UntrustedError {
+  constructor(reason: string, readonly body: unknown, readonly signer: string) {
+    super(reason);
+    this.name = "SupersededAnswer";
+  }
+}
+
 /** An answer whose signature does not verify under the trusted address: a forgery, a replay, or a restarted enclave. */
 export class SignatureError extends UntrustedError {
   constructor(reason: string) {

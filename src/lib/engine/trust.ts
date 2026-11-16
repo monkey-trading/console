@@ -47,7 +47,7 @@ export class NodeTrust {
   /** The signer the node says the vault names (monkey-trading/console#280). */
   private readonly naming: SignerNaming;
 
-  constructor(private readonly deps: TrustDeps) { this.naming = new SignerNaming(deps.operatorClaim); }
+  constructor(private readonly deps: TrustDeps) { this.naming = new SignerNaming(deps.operatorClaim, () => deps.onSignerNamed?.()); }
 
   get status(): AttestationStatus {
     return this.current;
@@ -136,6 +136,14 @@ export class NodeTrust {
     this.judged({ signer });
   }
 
+  /**
+   * The highest signer the visit heard before this node was in use (monkey-trading/console#376): later checks of the node are judged against
+   * it as against the node's own word, while the enclave trusted now keeps the verdict its own check reached, the wallet's vault read included.
+   */
+  holdSigner(signer: NamedSigner): void {
+    this.naming.hold(signer);
+  }
+
   /** The highest signer epoch named by this node's signed word or by another node's put to it, with the key named at it; null before one was. */
   get signerNamed(): Readonly<NamedSigner> | null {
     return this.naming.highest;
@@ -219,20 +227,20 @@ export class NodeTrust {
   refuses = (signer: string): boolean => this.naming.refuses(signer);
 
   /**
-   * Why a dev build refuses its mock node, or null. With stand-in digests named, the mock node passes
+   * Why a dev build refuses its mock node, or whether the vault judged it. With stand-in digests named, the mock node passes
    * the same two checks a hardware quote does once a wallet can read the vault; a mock quote proves
    * no enclave, so this exercises the path and vouches for nothing.
    */
-  private async mockRefusal(configHash: unknown, address: string): Promise<string | null> {
-    if (this.deps.devDigests.length === 0) return null;
+  private async mockRefusal(configHash: unknown, address: string): Promise<{ refused: string } | { judged: boolean }> {
+    if (this.deps.devDigests.length === 0) return { judged: false };
     const vault = await readVault(this.deps.vaultFacts());
-    if (vault.kind === "none") return null;
-    if (vault.kind === "failed") return `Your wallet could not read the vault's current release: ${vault.reason}`;
+    if (vault.kind === "none") return { judged: false };
+    if (vault.kind === "failed") return { refused: `Your wallet could not read the vault's current release: ${vault.reason}` };
     this.vaultNames(vault.facts.signer);
     const digests = this.deps.devDigests.map((digest) => ({ launchDigest: digest as Hex })); // deploy.ts checked each is 0x hex
-    if (!isConfigHash(configHash) || digestNamed(digests, vault.facts.release, configHash) === null) return NOT_NAMED;
+    if (!isConfigHash(configHash) || digestNamed(digests, vault.facts.release, configHash) === null) return { refused: NOT_NAMED };
     this.naming.vaultSays(address, vault.facts.signer);
-    return address === vault.facts.signer ? null : NOT_THE_SIGNER;
+    return address === vault.facts.signer ? { judged: true } : { refused: NOT_THE_SIGNER };
   }
 
   private async run(): Promise<void> {
@@ -250,9 +258,9 @@ export class NodeTrust {
         const mock = verifier.verifyMockAttestation(text);
         if (!mock.ok) return this.setStatus({ kind: "unverified", reason: mock.reason });
         const address = mock.enclave.address.toLowerCase();
-        const refused = await this.mockRefusal(configHash, address);
-        if (refused !== null) return this.setStatus({ kind: "unverified", reason: refused });
-        const superseded = await this.naming.refusal(address);
+        const byVault = await this.mockRefusal(configHash, address);
+        if ("refused" in byVault) return this.setStatus({ kind: "unverified", reason: byVault.refused });
+        const superseded = await this.naming.refusal(address, byVault.judged);
         if (superseded !== null) return this.refused(superseded, earlier);
         this.trust(address, this.deps.devDigests.length > 0);
         return this.setStatus({ kind: "mock" });
@@ -276,7 +284,7 @@ export class NodeTrust {
       // A newer read of the vault, taken while this check waited on the node, decides over this one's.
       if (vault.kind === "read" && heard === this.vaultHeard) this.naming.vaultSays(address, vault.facts.signer);
       if (vault.kind === "read" && address !== vault.facts.signer) return this.setStatus({ kind: "unverified", reason: NOT_THE_SIGNER });
-      const superseded = await this.naming.refusal(address);
+      const superseded = await this.naming.refusal(address, vault.kind === "read");
       if (superseded !== null) return this.refused(superseded, earlier);
       this.trust(address, true);
       if (vault.kind === "read") this.setStatus({ kind: "verified", release: release ?? "", config: config ?? "", address });

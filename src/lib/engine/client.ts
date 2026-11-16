@@ -54,6 +54,8 @@ export type ClientEvent =
   | { type: "feed"; status: FeedStatus; time?: number }
   /** The node's answers now come from another enclave address than before. */
   | { type: "enclave" }
+  /** The highest signer `signerNamed` gives has risen, as a read that named it ended or a signer was put to the client (monkey-trading/console#377). */
+  | { type: "signer" }
   /** Why the stream was dropped, written for the user. */
   | { type: "problem"; reason: string }
   /** A signed checkpoint the stream carried: the vault is about to be posted its root. */
@@ -106,6 +108,11 @@ export interface EngineClient {
    * so that enclave loses its verdict, read-only or not, and its answers and stream are refused, if the key named at the highest epoch is not it.
    */
   heedSigner(signer: NamedSigner): void;
+  /**
+   * The highest signer the visit heard before this client's node was in use: a live client judges the node's later checks against it as against
+   * the node's own word, and leaves the enclave it trusts now, which its own check judged, its verdict.
+   */
+  holdSigner(signer: NamedSigner): void;
   /** Reports each change of attestation status and of the feed. */
   watch(listener: (event: ClientEvent) => void): Unsubscribe;
   markets(): Promise<MarketView[]>;

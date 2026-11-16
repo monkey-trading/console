@@ -6,7 +6,7 @@ import type { DeploymentReads, VaultFacts } from "./registry";
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks, type Unsubscribe } from "./client";
 import type { EntitlementProof } from "./emissions";
 import { setParamsOf, type QueueTotals } from "../house";
-import { decodeHouseState, HouseFold, type HouseState, type HouseStateWire } from "./house-state";
+import { HouseFold, readHouseState, type HouseState } from "./house-state";
 import { QueueTotalsWalk } from "./live-queue";
 import { historyPath, readEmissionSchedule } from "./live-ledger";
 import type { EmissionSchedule } from "./emission-schedule";
@@ -69,9 +69,10 @@ export class LiveEngineClient implements EngineClient {
   private readonly totalsWalk: QueueTotalsWalk;
   readonly withdrawalTotals: () => Promise<QueueTotals>;
   private readonly lastRoute: { route: OperatorRoute | null } = { route: null }; // stays with a refusal
-  readonly stats = liveStats((path) => this.transport.get(path), (route) => this.trust.heedOperator(route), this.lastRoute);
+  readonly stats = liveStats((path) => this.transport.get(path), (route) => this.trust.heedOperator(route), this.lastRoute, (signer) => this.trust.heedSigner(signer));
   readonly signerNamed: EngineClient["signerNamed"] = () => this.trust.signerNamed;
   readonly heedSigner: EngineClient["heedSigner"] = (signer) => this.trust.heedSigner(signer);
+  readonly holdSigner: EngineClient["holdSigner"] = (signer) => this.trust.holdSigner(signer);
   readonly emissions: (address: Address) => Promise<EntitlementProof | null>;
 
   constructor(private readonly deps: LiveDeps) {
@@ -89,6 +90,7 @@ export class LiveEngineClient implements EngineClient {
         this.emit({ type: "attestation", status });
       },
       onEnclaveChanged: () => this.emit({ type: "enclave" }),
+      onSignerNamed: () => this.emit({ type: "signer" }),
       operatorClaim: (address) => readClaim(() => this.transport.getUnder("/v1/operator?limit=1", address), this.lastRoute),
     });
     this.transport = new SignedTransport({ ...deps, verifier: () => this.verifiers.loaded(), trust: this.trust, challenge, signal: this.signal });
@@ -151,18 +153,8 @@ export class LiveEngineClient implements EngineClient {
   }
 
   /** The house's latest parameters and checkpoint in one signed read; null from a node that predates the route. */
-  async houseState(): Promise<HouseState | null> {
-    let wire: HouseStateWire;
-    try {
-      // The attested enclave signed the body, so its shape is the engine's.
-      wire = (await this.transport.get("/v1/house/state")) as HouseStateWire;
-    } catch (error) {
-      if (error instanceof EngineError && error.status === 404) return null;
-      throw error;
-    }
-    const read = decodeHouseState(wire);
-    this.houseFold.foldRead(read);
-    return { seq: read.seq, ...this.houseFold.current(), listingNotices: read.listingNotices, governance: read.governance };
+  houseState(): Promise<HouseState | null> {
+    return readHouseState(() => this.transport.get("/v1/house/state"), this.houseFold);
   }
 
   async account(address: Address): Promise<AccountView> {

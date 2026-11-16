@@ -30,12 +30,15 @@ export class TrialClient {
   /** The node's signed `/v1/operators`, of which the follower reads each candidate's registered hostname. */
   operatorList: () => Promise<unknown> = async () => ({ candidates: [] });
   stats = { operator: () => this.operatorRead(), operators: () => this.operatorList() };
-  /** The signer every route read named, a refused one's included, as a live client's naming keeps it. */
-  readonly naming = new SignerNaming();
+  /** The signer every route read named, a refused one's included, as a live client's naming keeps it, and reports each rise of through `watch`. */
+  readonly naming = new SignerNaming(undefined, () => { for (const watcher of this.watchers) watcher({ type: "signer" }); });
   /** Each signer the follower put to this client, oldest first. */
   heard: NamedSigner[] = [];
   signerNamed = () => this.naming.highest;
   heedSigner = (signer: NamedSigner) => { this.heard.push(signer); this.naming.judge(null, { signer }); };
+  /** Each signer the follower held this client to when it became the node in use, oldest first. */
+  held: NamedSigner[] = [];
+  holdSigner = (signer: NamedSigner) => { this.held.push(signer); this.naming.judge(null, { signer }); };
   watch(listener: (event: ClientEvent) => void) { this.watchers.add(listener); return () => { this.watchers.delete(listener); }; }
   subscribe(onMessage: (message: StreamMessage) => void) { this.subscribers.add(onMessage); return () => { this.subscribers.delete(onMessage); }; }
   private async operatorRead(): Promise<unknown> {

@@ -99,6 +99,7 @@ export class MockEngineClient implements EngineClient {
   async heedVault(): Promise<void> {}
   signerNamed(): null { return null; }
   heedSigner(): void {}
+  holdSigner(): void {}
 
   /** The mock's trust and feed never change, so there is nothing to report. */
   watch(): Unsubscribe {
