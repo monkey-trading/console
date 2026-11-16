@@ -9,7 +9,7 @@ import type { ScanBudget, ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import type { QuoteRequest } from "./live-stream";
 import type { DeploymentReads, VaultFacts } from "./registry";
-import type { NamedSigner } from "./signer-naming";
+import type { SignerFloor } from "./signer-naming";
 import type { StatsReads } from "./stats-types";
 import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
@@ -54,7 +54,7 @@ export type ClientEvent =
   | { type: "feed"; status: FeedStatus; time?: number }
   /** The node's answers now come from another enclave address than before. */
   | { type: "enclave" }
-  /** The highest signer `signerNamed` gives has risen, as a read that named it ended or a signer was put to the client (monkey-trading/console#377). */
+  /** The highest signer `signerNamed` gives has risen, or a second key was named at its epoch, as a read that named it ended or a signer was put to the client (monkey-trading/console#377, #381). */
   | { type: "signer" }
   /** Why the stream was dropped, written for the user. */
   | { type: "problem"; reason: string }
@@ -101,18 +101,18 @@ export interface EngineClient {
    * any wallet but the one it reads through now is dropped.
    */
   heedVault(facts: VaultFacts, chain: DeploymentReads): Promise<void>;
-  /** The highest signer epoch named by the node's signed `GET /v1/operator` answers or by a signer put to the client, with the key named at it; null before one was, and always null from the mock. */
-  signerNamed(): Readonly<NamedSigner> | null;
+  /** The highest signer epoch named by the node's signed `GET /v1/operator` answers or by a signer put to the client, with the key named at it, none once two were; null before one was, and always null from the mock. */
+  signerNamed(): Readonly<SignerFloor> | null;
   /**
-   * Another node's signed word names `signer` at its epoch: a live client judges the enclave it trusts as it judges the node's own word,
+   * Another node's signed word names `signer` at its epoch, or two keys at it: a live client judges the enclave it trusts as it judges the node's own word,
    * so that enclave loses its verdict, read-only or not, and its answers and stream are refused, if the key named at the highest epoch is not it.
    */
-  heedSigner(signer: NamedSigner): void;
+  heedSigner(signer: Readonly<SignerFloor>): void;
   /**
-   * The highest signer the visit heard before this client's node was in use: a live client judges the node's later checks against it as against
-   * the node's own word, and leaves the enclave it trusts now, which its own check judged, its verdict.
+   * The highest signer the visit heard before this client's node was in use, or two keys at its epoch: a live client judges the node's later checks
+   * against it as against the node's own word, and leaves the enclave it trusts now, which its own check judged, its verdict.
    */
-  holdSigner(signer: NamedSigner): void;
+  holdSigner(floor: Readonly<SignerFloor>): void;
   /** Reports each change of attestation status and of the feed. */
   watch(listener: (event: ClientEvent) => void): Unsubscribe;
   markets(): Promise<MarketView[]>;

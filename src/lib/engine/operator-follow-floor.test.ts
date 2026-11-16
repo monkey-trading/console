@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { EngineError, type EngineClient } from "./client";
-import { B, rig, TrialClient } from "./operator-follow-kit";
+import { B, named, rig, TrialClient } from "./operator-follow-kit";
 import type { NamedSigner } from "./signer-naming";
 import { settle } from "./test-kit";
 import { RefusedAnswer } from "./trust-errors";
@@ -128,6 +128,24 @@ describe("the signer floor a visit holds each node to (monkey-trading/console#37
     expect([kit.adopted, kit.nodeB.held]).toEqual([[B], [{ epoch: 8, address: KA }]]);
   });
 
+  it("holds a node it moves to with a wallet to both keys two nodes named at the floor's epoch, in either order (monkey-trading/console#381)", async () => {
+    for (const [first, second] of [[KA, KB], [KB, KA]] as const) {
+      const clients = { [B]: new TrialClient(), [C]: new TrialClient() };
+      const kit = rig({ clients, operator: async () => named({ hostname: "c.example:8443" }) });
+      const current = new TrialClient();
+      current.signedRead = async () => route(null, { epoch: 8, address: first });
+      kit.follower.watch(current as unknown as EngineClient); // the follower uses only what TrialClient has
+      // The chain names C, whose check reads its word naming the other key at that epoch, and leaves it waiting.
+      clients[C].verify = async () => { clients[C].naming.judge(null, { signer: { epoch: 8, address: second } }); return { kind: "unverified", reason: "still taking the keys" }; };
+      await kit.follower.check();
+      // Then B, whose route states no signer and whose enclave the wallet's read of the vault judged.
+      kit.setOperator(async () => named());
+      clients[B].signedRead = async () => ({ ...ROUTE });
+      await kit.follower.check();
+      expect([kit.adopted, clients[B].held, clients[B].signerNamed()], first).toEqual([[B], [{ epoch: 8, address: null }], { epoch: 8, address: null }]);
+    }
+  });
+
   it("takes a node whose route states no signer when the wallet's read of the vault judged it, and only then", async () => {
     for (const verdict of [{ kind: "verified", release: "r", config: "c", address: KB }, { kind: "mock" }] as const) {
       const kit = walletVisit();
@@ -217,6 +235,19 @@ describe("the node in use under a later signer another node names (monkey-tradin
     expect(kit.adopted).toEqual([C]);
     expect(kit.current.heard).toEqual([{ epoch: 7, address: KC }]);
     expect(kit.follower.getSnapshot()).toEqual({ kind: "pinned", origin: C });
+  });
+});
+
+describe("two keys a trial's own word named at one epoch (monkey-trading/console#381)", () => {
+  it("puts them to the node in use, which then refuses the key it held at that epoch", async () => {
+    const kit = visit("b.example");
+    let says = KA;
+    kit.nodeB.verify = async () => { kit.nodeB.naming.judge(null, { signer: { epoch: 8, address: says } }); return { kind: "unverified", reason: "still taking the keys" }; };
+    await kit.follower.check();
+    // B's enclave restarts, and its next check names another key at that epoch.
+    says = KB;
+    await kit.follower.check();
+    expect([kit.current.heard, kit.current.naming.refuses(KA)]).toEqual([[{ epoch: 8, address: KA }, { epoch: 8, address: null }], true]);
   });
 });
 

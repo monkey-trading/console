@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import type { AttestationStatus } from "./attestation";
 import { LiveEngineClient } from "./live";
 import { SIGNER_SUPERSEDED, SIGNER_UNREAD } from "./signer-naming";
 import { acceptAll, FakeNode, FakeScheduler, FakeSocket, OPERATOR_CLAIM, settle } from "./test-kit";
@@ -174,6 +175,51 @@ describe("an answer in flight", () => {
     await expect(inFlight).rejects.toThrow(SIGNER_SUPERSEDED);
   });
 
+  it("is discarded when the node now signs as another key named at the same epoch, and once a later epoch names that key (monkey-trading/console#381)", async () => {
+    for (const lands of ["at the same epoch", "at the later epoch"] as const) {
+      const held = { address: ENCLAVE };
+      const attests: Verifier = { ...acceptAll, verifyMockAttestation: () => ({ ok: true, enclave: { address: held.address, release: null, config: null } }) };
+      const { live, node, operator, reply, gates } = client(attests);
+      operator({ epoch: 5, address: ENCLAVE });
+      reply("/v1/markets", []);
+      await live.verify();
+      let release: () => void = () => undefined;
+      gates.markets = new Promise<void>((resolve) => { release = resolve; });
+      const inFlight = live.markets();
+      await settle();
+      // The node at the same origin now signs as another enclave, whose word names that key at the epoch the first was named at.
+      held.address = OTHER;
+      node.attestation(() => OTHER);
+      operator({ epoch: 5, address: OTHER }, OTHER);
+      await expect(live.verify(), lands).resolves.toEqual({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+      if (lands === "at the later epoch") {
+        operator({ epoch: 6, address: OTHER }, OTHER);
+        await expect(live.verify(), lands).resolves.toMatchObject({ kind: "mock" });
+      }
+      release();
+      await expect(inFlight, lands).rejects.toThrow(SIGNER_SUPERSEDED);
+    }
+  });
+
+  it("is discarded, and the verdict ends, when two keys named at its epoch are put to the client (monkey-trading/console#381)", async () => {
+    const { live, operator, reply, gates } = client();
+    operator({ epoch: 5, address: ENCLAVE });
+    reply("/v1/markets", []);
+    await live.verify();
+    const statuses: AttestationStatus[] = [];
+    live.watch((event) => { if (event.type === "attestation") statuses.push(event.status); });
+    let release: () => void = () => undefined;
+    gates.markets = new Promise<void>((resolve) => { release = resolve; });
+    const inFlight = live.markets();
+    await settle();
+    live.heedSigner({ epoch: 5, address: null });
+    expect(statuses).toEqual([{ kind: "unverified", reason: SIGNER_SUPERSEDED }]);
+    release();
+    await expect(inFlight).rejects.toThrow(SIGNER_SUPERSEDED);
+    // The node's own word still names its key at that epoch, which no word now takes.
+    await expect(live.verify()).resolves.toEqual({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+  });
+
   it("ends an archive scan under a signer the vault stopped naming, on the next frame", async () => {
     const { live, operator, reply, sockets } = client();
     operator({ epoch: 5, address: ENCLAVE });
@@ -217,20 +263,26 @@ describe("the highest signer the client has heard named (monkey-trading/console#
     expect(told).toEqual([5, 6, 7]);
   });
 
-  it("counts what an operator answer names that lands after its enclave was put aside, fresh and for its own enclave, and still refuses the answer", async () => {
+  it("counts what an operator answer names that lands after its enclave was put aside, fresh, a 2xx and for its own enclave, and refuses it with its route when it can be read and the route read before otherwise", async () => {
+    const lateRoute = (enclave: string | null) => ({ operator: ENCLAVE, pending_rotation: null, rotation_enabled: true, last_election: null, ...(enclave === null ? {} : { enclave }), signer: { epoch: 9, address: THIRD } });
+    const firstRoute = { operator: ENCLAVE, pending_rotation: null, rotation_enabled: true, last_election: null, enclave: ENCLAVE, signer: { epoch: 5, address: ENCLAVE } };
+    const counted = { epoch: 9, address: THIRD };
+    const uncounted = { epoch: 8, address: OTHER };
     const lands = [
-      { answer: "fresh, its own enclave", enclave: ENCLAVE, timeMs: 1, named: { epoch: 9, address: THIRD } },
-      { answer: "naming another enclave", enclave: OTHER, timeMs: 1, named: { epoch: 8, address: OTHER } },
-      { answer: "signed 31 s off the device clock", enclave: ENCLAVE, timeMs: 31_002, named: { epoch: 8, address: OTHER } },
+      { answer: "fresh, its own enclave", status: 200, body: JSON.stringify(lateRoute(ENCLAVE)), timeMs: 1, named: counted, carries: lateRoute(ENCLAVE) },
+      { answer: "fresh, naming no enclave", status: 200, body: JSON.stringify(lateRoute(null)), timeMs: 1, named: counted, carries: lateRoute(null) },
+      { answer: "naming another enclave", status: 200, body: JSON.stringify(lateRoute(OTHER)), timeMs: 1, named: uncounted, carries: lateRoute(OTHER) },
+      { answer: "signed 31 s off the device clock", status: 200, body: JSON.stringify(lateRoute(ENCLAVE)), timeMs: 31_002, named: uncounted, carries: firstRoute },
+      { answer: "a signed 404", status: 404, body: JSON.stringify({ error: "not found", ...lateRoute(ENCLAVE) }), timeMs: 1, named: uncounted, carries: firstRoute },
+      { answer: "fresh, not JSON", status: 200, body: "not json", timeMs: 1, named: uncounted, carries: firstRoute },
     ];
-    for (const { answer, enclave, timeMs, named } of lands) {
+    for (const { answer, status, body, timeMs, named, carries } of lands) {
       const { node, live, operator, gates } = client();
       operator({ epoch: 5, address: ENCLAVE });
       await live.verify();
       let release = () => {};
       gates.operator = new Promise<void>((resolve) => { release = resolve; });
-      const body = { operator: ENCLAVE, pending_rotation: null, rotation_enabled: true, last_election: null, enclave, signer: { epoch: 9, address: THIRD } };
-      node.signed("/v1/operator", () => ({ status: 200, body: JSON.stringify(body), signature: "0x", timeMs, seq: 1 }));
+      node.signed("/v1/operator", () => ({ status, body, signature: "0x", timeMs, seq: 1 }));
       // A page's read of the route is in flight when another node's word puts the enclave aside.
       const late = live.stats.operator();
       await settle();
@@ -238,7 +290,7 @@ describe("the highest signer the client has heard named (monkey-trading/console#
       release();
       const refused = await late.then(() => null, (error: unknown) => error);
       expect(refused, answer).toBeInstanceOf(RefusedAnswer);
-      expect(live.signerNamed(), answer).toEqual(named);
+      expect([live.signerNamed(), (refused as RefusedAnswer).answer], answer).toEqual([named, carries]); // a RefusedAnswer, as asserted above
     }
   });
 });
