@@ -10,7 +10,7 @@ const text = (exit: ExitState) => exitView(exit, WALLET).lines.map((line) => lin
 describe("exitView, after an action", () => {
   it("gives no figure from the proof once the vault holds a registration, as registering spends an approval's nonce", () => {
     const record = { ...recordAt(100), paidApprovals: [1], proof: { ...recordAt(100).proof, pending_deposits: [] } };
-    expect(text({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(record), claims: { ...NO_CLAIMS, accountRegistered: true, exitClaim: 5n } })).toMatch(/posted [^.]* ago, is saved in this browser\.$/);
+    expect(text({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(record), claims: { ...NO_CLAIMS, accountRegistered: true, exitClaim: 5n } })).toMatch(/recorded [^.]* ago, is saved in this browser\.$/);
     expect(text({ ...NO_EXIT, vault: factsAt(100), ...acceptedState(recordAt(100)), claims: { ...NO_CLAIMS, exitClaim: 5n } })).toMatch(/ago, is saved in this browser\. The proof covers a deposit still pending\.$/);
   });
   it("does not count an approval the vault shows used, once it is paid and nothing is left registered", () => {
@@ -19,7 +19,7 @@ describe("exitView, after an action", () => {
   });
   it("says a read that failed even of an account known to hold nothing", () => {
     const exit = { ...NO_EXIT, vault: factsAt(100), nothing: true };
-    expect(text({ ...exit, attempt: { kind: "wallet-failed", reason: "no answer" } })).toMatch(/could not check the proof: no answer\. The app will try again automatically\.$/);
+    expect(text({ ...exit, attempt: { kind: "wallet-failed", reason: "no answer" } })).toMatch(/could not check the proof\. No answer\. The app will try again automatically\.$/);
     expect(text({ ...exit, attempt: { kind: "node-failed", reason: "no answer" } })).toMatch(/The app will try again automatically\.$/);
     expect(text({ ...exit, attempt: { kind: "node-ahead", nodeSeq: 300 } })).not.toMatch(/node-ahead|doesn't have/);
   });

@@ -10,6 +10,7 @@
 import { encodeFunctionData, parseAbi, type Hex } from "viem";
 
 import type { Fixed } from "../fixed";
+import { asSentence } from "../format";
 import { USDC_UNIT } from "../vault";
 import type { Address } from "./types";
 
@@ -48,7 +49,7 @@ export type GasTopUp = { ok: true; toppedUp: boolean } | { ok: false; notAnvil: 
  */
 export async function topUpGas(rpcUrl: string, address: Address, post: JsonRpcPost): Promise<GasTopUp> {
   const balance = await rpc(post, rpcUrl, rpcBody("eth_getBalance", [address, "latest"]));
-  if (typeof balance !== "string" || !/^0x[0-9a-fA-F]+$/.test(balance)) throw new Error(`The chain's RPC answered eth_getBalance with ${String(balance)}.`);
+  if (typeof balance !== "string" || !/^0x[0-9a-fA-F]+$/.test(balance)) throw new Error("The local test chain returned an unexpected response. Please try again.");
   if (BigInt(balance) >= FAUCET_GAS_WEI) return { ok: true, toppedUp: false };
   const set = await rpcAllow(post, rpcUrl, rpcBody("anvil_setBalance", [address, toQuantity(FAUCET_GAS_WEI)]));
   if (set.error !== null) {
@@ -87,7 +88,7 @@ export async function mintFromAnvil(rpcUrl: string, usdc: Address, to: Address, 
   const sent = await rpcAllow(post, rpcUrl, rpcBody("eth_sendTransaction", [{ from, to: usdc, data }]));
   if (sent.error !== null) return { ok: false, notAnvil: sent.error.code === METHOD_NOT_FOUND, detail: sent.error.message };
   const hash = sent.result;
-  if (typeof hash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error(`The chain's RPC answered eth_sendTransaction with ${String(hash)}.`);
+  if (typeof hash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error("The local test chain returned an unexpected response. Please try again.");
   for (let read = 1; read <= RECEIPT_READS; read += 1) {
     const receipt = await rpc(post, rpcUrl, rpcBody("eth_getTransactionReceipt", [hash]));
     if (typeof receipt === "object" && receipt !== null && "status" in receipt) {
@@ -116,7 +117,7 @@ function rpcError(body: unknown): { code: number; message: string } | null {
 /** The answer's `result`; the error shape, when there is one, becomes an exception. Error cases: the answer is not a JSON-RPC response. */
 export async function rpc(post: JsonRpcPost, url: string, body: unknown): Promise<unknown> {
   const out = await rpcAllow(post, url, body);
-  if (out.error !== null) throw new Error(`The chain's RPC answered with ${out.error.code}: ${out.error.message}.`);
+  if (out.error !== null) throw new Error(`The local test chain returned an error. ${asSentence(out.error.message)} Please try again.`);
   return out.result;
 }
 
@@ -124,16 +125,16 @@ export async function rpc(post: JsonRpcPost, url: string, body: unknown): Promis
 export async function rpcAllow(post: JsonRpcPost, url: string, body: unknown): Promise<{ result: unknown; error: { code: number; message: string } | null }> {
   const response = await post(url, body);
   if (typeof response !== "object" || response === null || (!("result" in response) && !("error" in response))) {
-    throw new Error(`The chain's RPC answered without a result: ${String(response)}.`);
+    throw new Error("The local test chain returned an unexpected response. Please try again.");
   }
   const error = rpcError(response);
-  if ("error" in response && error === null) throw new Error(`The chain's RPC answered with a malformed error: ${String(response)}.`);
+  if ("error" in response && error === null) throw new Error("The local test chain returned an unexpected response. Please try again.");
   return { result: "result" in response ? response.result : null, error };
 }
 
 /** POSTs one JSON-RPC request to the pinned RPC and resolves with the decoded body. Error cases: the RPC answers not-OK. */
 export const postJsonRpc: JsonRpcPost = async (url, body) => {
   const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  if (!response.ok) throw new Error(`the chain's RPC answered HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`the local test chain returned HTTP status ${response.status}`);
   return response.json() as Promise<unknown>;
 };

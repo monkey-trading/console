@@ -55,3 +55,9 @@ export function formatMovePercent(bps: number): string {
   const text = formatPercentBps(Math.abs(Math.trunc(bps)));
   return bps > 0 ? `+${text}` : bps < 0 ? `−${text}` : text;
 }
+
+/** A reason, such as an error's message, as a sentence of its own: its first letter capitalised and one closing full stop. */
+export function asSentence(reason: string): string {
+  const text = reason.trim().replace(/\.+$/, "");
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
+}

@@ -2,7 +2,7 @@
 
 /** Compact lines saying what the console found when it checked the node, and what it cannot vouch for. */
 
-import { shortHex } from "@/lib/format";
+import { asSentence, shortHex } from "@/lib/format";
 import { CONNECT_TO_CHECK } from "@/lib/engine/trust-errors";
 import { describeMockAttestation, describeReverifying } from "@/lib/messages";
 
@@ -22,7 +22,7 @@ export function AttestationBanner() {
       <NodeLine />
       {stream === "stale" && attestation.kind !== "unverified" && (
         <div role="alert" className={BAD}>
-          <strong className="font-medium">Live prices are not currently updating, so trading has been suspended.</strong> Trading will resume automatically once the price feed recovers.{notices.feed !== undefined && <> The most recent error was: {notices.feed.text}</>}
+          <strong className="font-medium">Live prices are not currently updating, so trading has been suspended.</strong> Trading will resume automatically once the price feed recovers.{notices.feed !== undefined && <> {asSentence(notices.feed.text)}</>}
         </div>
       )}
     </section>
@@ -38,11 +38,11 @@ function NodeLine() {
     case "following":
       return null;
     case "failed":
-      return <div role="status" className={WARN}><strong className="font-medium">The current trading server could not be confirmed.</strong> You remain connected to {new URL(follow.origin).host}, and the check will be repeated automatically. The most recent error was: {follow.reason}<CheckAgain /></div>;
+      return <div role="status" className={WARN}><strong className="font-medium">The app could not confirm which trading server is currently operating.</strong> You remain connected to {new URL(follow.origin).host}, and the app will check again automatically. {asSentence(follow.reason)}<CheckAgain /></div>;
     case "unlisted":
-      return <div role="alert" className={BAD}><strong className="font-medium">This version of the app needs to be updated.</strong> {follow.hostname === null ? "The current trading server has not registered a web address" : `The current trading server is at ${follow.hostname}, which this version of the app does not recognise`}, so the app does not connect to it.</div>;
+      return <div role="alert" className={BAD}><strong className="font-medium">This version of the app needs to be updated.</strong> {follow.hostname === null ? "The current trading server has not registered a web address" : `The current trading server is at ${follow.hostname}, which this version of the app does not recognise`}, so the app cannot connect to it.</div>;
     case "waiting":
-      return <div role="status" className={WARN}><strong className="font-medium">The trading server is changing.</strong> You will remain connected to {new URL(follow.origin).host} until {new URL(follow.target).host} has been verified. {follow.reason}</div>;
+      return <div role="status" className={WARN}><strong className="font-medium">A new operator is taking over the trading server.</strong> You will remain connected to {new URL(follow.origin).host} until {new URL(follow.target).host} has been verified. {follow.reason}</div>;
     default:
       return follow satisfies never;
   }
@@ -80,7 +80,7 @@ function Status({ attestation, signatures }: { attestation: ReturnType<typeof us
     case "clock":
       return <div role="alert" className={BAD}><strong className="font-medium">Your device clock is incorrect.</strong> It differs from the server&apos;s time by {Math.round(Math.abs(attestation.skewMs) / 1000)} seconds. Prices and account figures on screen will not update until you correct the clock and reload the page.</div>;
     case "unverified":
-      return <div role="alert" className={BAD}><strong className="font-medium">The server could not be verified, so trading and transfers of funds are disabled.</strong> {attestation.reason}</div>;
+      return <div role="alert" className={BAD}><strong className="font-medium">The trading server could not be verified, so trading and transfers of funds have been suspended.</strong> {attestation.reason}</div>;
     default:
       return attestation satisfies never;
   }

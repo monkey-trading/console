@@ -72,7 +72,7 @@ describe("a signed stream", () => {
     send(t.sockets[0], 0, 2);
     expect(t.messages).toEqual([]);
     expect(t.sockets[0]?.closed).toBe(true);
-    expect(t.problems[0]).toContain("update 2 arrived when update 1 was expected");
+    expect(t.problems[0]).toContain("missed, repeated or received out of order");
     expect(t.feeds.at(-1)).toBe("stale");
   });
 

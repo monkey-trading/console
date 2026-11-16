@@ -28,7 +28,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
       <h2 id="blocked-title" ref={title} tabIndex={-1} className="mt-3 text-lg tracking-tight outline-none">This service is not available in your location</h2>
       <p className="mt-4 text-data leading-relaxed text-fg-2">{REASON[blocked]}</p>
       <p className="mt-4 text-caption leading-relaxed text-fg-3">
-        Availability is determined by the location from which you are connecting. Orders, withdrawals and eligibility declarations sent from your location are refused, and deposits sent directly to the vault are checked against the sending address. The app cannot override the restriction.
+        Availability is based on the location you are connecting from. Orders, withdrawals and eligibility declarations sent from your location are rejected, and deposits sent directly to the vault are checked against the sending address. The app cannot override the restriction.
       </p>
     </section>
   );

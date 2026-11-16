@@ -88,7 +88,7 @@ describe("importing a file, with no node", () => {
     it("refuses another account's proof, and says whose", () => keeps(exitFileText({ ...recordAt(100), account: OTHER, proof: fullProof(100, OTHER) }), /it is for account 0x3c44cd…93bc. Connect that account's wallet to import it/));
     it("refuses another deployment's, by its chain", () => keeps(exitFileText({ ...recordAt(100), chainId: 1 }), /it is for a different vault \(chain 1/));
     it("refuses another deployment's, by its vault", () => keeps(exitFileText({ ...recordAt(100), vault: OTHER }), /it is for a different vault/));
-    it("refuses a proof at an older root, which the vault would never take", () => keeps(FILE(50), /it is for snapshot 50, but the vault's latest snapshot is 100, so the vault would refuse a claim based on it/));
+    it("refuses a proof at an older root, which the vault would never take", () => keeps(FILE(50), /it is for snapshot 50, but the vault's latest snapshot is 100, so the vault would reject a claim based on it/));
 
     it("refuses one the verifier refuses, keeping what is saved", () => keeps(FILE(100), /the vault's check rejected it: the vault's snapshot does not confirm its exit terms/, () => {
       exit.verdict = () => ({ ok: false, reason: "the vault's snapshot does not confirm its exit terms" });
@@ -144,7 +144,7 @@ describe("importing a file, with no node", () => {
     it("refuses a file whose seq is not the vault's for that root", async () => {
       const renamed = JSON.stringify(JSON.parse(FILE(100))).replaceAll(`"seq":100`, `"seq":9000`);
       await importExitFile(store, renamed);
-      expect(refused()?.text).toMatch(/the vault's check rejected it: it names snapshot 9000 but matches snapshot 100/);
+      expect(refused()?.text).toMatch(/the vault's check rejected it: it is labelled as snapshot 9000, but its contents match snapshot 100/);
       expect(store.getSnapshot().exit.record).toBeNull();
     });
 

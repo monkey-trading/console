@@ -120,7 +120,7 @@ describe("fundWithAnvil", () => {
     const { store } = await connected();
     expect(await fundWithAnvil(store, parseDeploy(LIVE_DEV))).toBe(false);
     expect(methods(bodies)).toEqual(["eth_getBalance"]);
-    expect(store.getSnapshot().notices).toMatchObject({ faucet: { tone: "error", text: "The chain's RPC answered with -32000: missing trie node." } });
+    expect(store.getSnapshot().notices).toMatchObject({ faucet: { tone: "error", text: "The local test chain returned an error. Missing trie node. Please try again." } });
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
   });
 

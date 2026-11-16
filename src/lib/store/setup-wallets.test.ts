@@ -119,7 +119,7 @@ describe("as the wallet changes around it", () => {
     await connectWallet(store, "other", false, OTHER);
     finish(walletError({ code: -32000, message: "the transaction reverted" }, "deposit"));
     await failing;
-    expect(store.getSnapshot().notices.deposit?.text).toBe("Your wallet could not deposit: the transaction reverted");
+    expect(store.getSnapshot().notices.deposit?.text).toBe("Your wallet could not deposit. The transaction reverted.");
   });
 
   it("reports nothing when the old wallet declines after its connection ended, and leaves the next wallet's request alone", async () => {

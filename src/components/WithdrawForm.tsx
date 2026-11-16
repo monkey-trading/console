@@ -40,7 +40,7 @@ export function WithdrawForm() {
           <input {...AMOUNT_INPUT} id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} className={INPUT} />
           <button type="submit" aria-disabled={!wallet || !valid || busy || gate.blocked} aria-describedby={gate.describedBy} className={SUBMIT}>Request withdrawal</button>
         </div>
-        <p className="mt-2 text-label leading-relaxed text-fg-3">The amount is deducted from your balance as soon as you request the withdrawal. Withdrawals are paid in the order in which they were requested as funds become available, and any amount that cannot be paid immediately waits in the withdrawal queue.</p>
+        <p className="mt-2 text-label leading-relaxed text-fg-3">The amount is deducted from your balance as soon as you request the withdrawal. Withdrawals are paid in the order they were requested as funds become available, and any amount that cannot be paid immediately waits in the withdrawal queue.</p>
         {gate.note}
         <Notice surface="withdraw" />
         {account && account.unfinalised > 0n && <p className="mt-2 text-label text-fg-3">${formatFixedPlaces(account.unfinalised, 2)} of your balance cannot be withdrawn until the deposit that funded it is final on chain.</p>}

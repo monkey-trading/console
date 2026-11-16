@@ -6,9 +6,10 @@
  * so none of it needs the node, and it asks nothing of the attestation banner above it.
  */
 
+import { asSentence } from "@/lib/format";
 import { claimVaultExit, refundExitDeposit, registerExitClaims, startVaultExit } from "@/lib/store/exit-actions";
 import { readingProof } from "@/lib/store/exit-state";
-import { clause, stepKey, stepLabel, type ExitView } from "@/lib/store/exit-view";
+import { stepKey, stepLabel, type ExitView } from "@/lib/store/exit-view";
 import { formatUsdc, USDC_UNIT } from "@/lib/vault";
 
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -35,12 +36,12 @@ export function ExitClaim({ view, settled }: { view: ExitView; settled: () => vo
           <button type="button" aria-disabled={held} onClick={unless(() => registerExitClaims(store))} className={BUTTON}>Register ({view.register.length === 1 ? "one transaction" : `${view.register.length} transactions`})</button>
         </div>
       )}
-      {(phase === "open" || phase === "closed") && exit.claimsProblem !== null && <p role="status" className="text-caption text-fg-2">Your wallet could not check what the vault holds for you: {clause(exit.claimsProblem)}. The app will try again automatically.</p>}
+      {(phase === "open" || phase === "closed") && exit.claimsProblem !== null && <p role="status" className="text-caption text-fg-2">Your wallet could not check what the vault holds for you. {asSentence(exit.claimsProblem)} The app will try again automatically.</p>}
       {(phase === "open" || phase === "closed") && registered !== null && (
         <div className="space-y-2">
           <h4 className={STEP}>{phase === "open" ? "Step 2: receive payment" : "Receive payment"}</h4>
           <p className="text-caption leading-relaxed text-fg-2">
-            {exit.paid !== null ? `The vault has paid ${usdc(exit.paid)} to your wallet.` : exit.claimed ? "The vault has paid your claim." : registered > 0n ? `You have registered claims of ${usdc(registered)}. ${phase === "open" ? "The vault pays registered claims once the claim window closes, and if it cannot pay every claim in full, it shares its funds in proportion." : "The vault can pay registered claims now, and if it cannot pay every claim in full, it shares its funds in proportion."}` : phase === "open" ? "You have not registered a claim yet." : "No claim is registered for this account, or the vault has already paid it."}
+            {exit.paid !== null ? `The vault has paid ${usdc(exit.paid)} to your wallet.` : exit.claimed ? "The vault has paid your claim." : registered > 0n ? `You have registered claims of ${usdc(registered)}. ${phase === "open" ? "The vault pays registered claims once the claim window closes, and if it cannot pay every claim in full, it pays each claim in proportion to its size." : "The vault can pay registered claims now, and if it cannot pay every claim in full, it pays each claim in proportion to its size."}` : phase === "open" ? "You have not registered a claim yet." : "No claim is registered for this account, or the vault has already paid it."}
           </p>
           {view.canClaim && <button type="button" aria-disabled={held} onClick={unless(() => claimVaultExit(store))} className={BUTTON}>Claim from the vault</button>}
         </div>

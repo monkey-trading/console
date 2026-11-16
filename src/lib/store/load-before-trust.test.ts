@@ -32,6 +32,6 @@ describe("reads that meet a node not yet verified", () => {
     const { client, store } = await connected();
     client.history = async () => { throw new Error("The server returned an error (HTTP 500)."); };
     await loadApprovals(store);
-    expect(store.getSnapshot().notices.payoutReads?.text).toBe("Your approved withdrawals could not be loaded: The server returned an error (HTTP 500).");
+    expect(store.getSnapshot().notices.payoutReads?.text).toBe("Your approved withdrawals could not be loaded. The server returned an error (HTTP 500).");
   });
 });

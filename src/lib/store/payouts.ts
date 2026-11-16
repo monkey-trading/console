@@ -8,6 +8,7 @@ import { EngineError } from "../engine/client";
 import { reissueTypedData } from "../engine/eip712";
 import type { HistoryEvent, PayoutEntry, SignedWithdrawal, WithdrawalAuthorization } from "../engine/types";
 import { fixedFromWire, type Fixed } from "../fixed";
+import { asSentence } from "../format";
 import { formatUsdc } from "../vault";
 import { abandoned, awaitsTrust, domainOf, errorText, notBusy, prompting, usableWallet } from "./signing";
 import { authorizationFor, keepLatest } from "./funds";
@@ -24,7 +25,7 @@ const PAYOUTS_LIMIT = 200;
 /** The most pages of payouts read, so a node that keeps answering with more cannot keep the page reading. */
 const PAYOUT_PAGES = 20;
 /** What a row says a failed read will do next: reads happen on triggers; the one timer is the read after a named log check (`payout-checks.ts`). */
-const READ_AGAIN = "The app checks again automatically when a records check is due, when your next withdrawal is approved, or when you reload the page.";
+const READ_AGAIN = "The app checks again automatically when the next check of the server's records is due, when your next withdrawal is approved, or when you reload the page.";
 /** Paid payouts shown beside the unpaid ones, newest first. */
 const PAID_SHOWN = 5;
 
@@ -121,7 +122,7 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
   } catch (error) {
     // Reads that ask before the node is trusted are asked again once it is, which the banner says; they are not a failure of the list.
     if (awaitsTrust(error)) return;
-    if (store.getSnapshot().wallet?.address === address) store.notify("payoutReads", `Your approved withdrawals could not be loaded: ${errorText(error)}`);
+    if (store.getSnapshot().wallet?.address === address) store.notify("payoutReads", `Your approved withdrawals could not be loaded. ${asSentence(errorText(error))}`);
   }
 }
 
@@ -163,7 +164,7 @@ export async function loadPayouts(store: ConsoleStore): Promise<void> {
       return signed ? keepLatest(held, withdrawal) : held;
     }, [...from]);
     const authorizations = withListed(state.authorizations);
-    const problem = !loaded ? "Your payout history is still loading." : after !== undefined ? "You have more payouts than can be shown on this page." : null;
+    const problem = !loaded ? "Your approved withdrawals are still loading." : after !== undefined ? "You have more approved withdrawals than can be shown on this page." : null;
     store.patch({
       authorizations,
       payoutsRead: problem === null && seq !== null ? { seq, listed: entries.map((e) => e.nonce) } : state.payoutsRead,
@@ -174,7 +175,7 @@ export async function loadPayouts(store: ConsoleStore): Promise<void> {
   } catch (error) {
     if (!current()) return;
     // A node that predates the route has no list to read; its rows wait for the stream, as they do between checkpoints. A node not verified yet is the banner's to say, and the read runs again once it is.
-    store.patch({ payoutsProblem: (error instanceof EngineError && error.status === 404) || awaitsTrust(error) ? null : `Your payouts could not be loaded: ${errorText(error)} ${READ_AGAIN}` });
+    store.patch({ payoutsProblem: (error instanceof EngineError && error.status === 404) || awaitsTrust(error) ? null : `Your approved withdrawals could not be loaded. ${asSentence(errorText(error))} ${READ_AGAIN}` });
   }
 }
 
@@ -212,7 +213,7 @@ export async function checkPaid(store: ConsoleStore): Promise<void> {
     }
     if (current()) store.clearNotice("payoutVault");
   } catch (error) {
-    if (current() && !awaitsTrust(error)) store.notify("payoutVault", `The vault's payment records could not be checked: ${errorText(error)}`);
+    if (current() && !awaitsTrust(error)) store.notify("payoutVault", `The vault's payment records could not be checked. ${asSentence(errorText(error))}`);
   } finally {
     if (store.paidCheck === wallet) store.paidCheck = null;
   }

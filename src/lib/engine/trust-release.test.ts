@@ -94,7 +94,7 @@ describe("with the vault not read", () => {
 
   it("says why when the wallet could not read the vault, and never counts that as the vault's word", async () => {
     const { status } = await judge({ vault: new Error("your wallet is connected to chain 1, not chain 31337") });
-    expect(status).toEqual({ kind: "attested", release: "test-release-v1", address: ENCLAVE, why: "Your wallet could not check the server against the vault: your wallet is connected to chain 1, not chain 31337" });
+    expect(status).toEqual({ kind: "attested", release: "test-release-v1", address: ENCLAVE, why: "Your wallet could not check the server against the vault. Your wallet is connected to chain 1, not chain 31337." });
   });
 });
 

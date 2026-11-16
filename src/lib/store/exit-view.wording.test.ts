@@ -80,7 +80,7 @@ describe("the notice, once the claim window has closed", () => {
 });
 
 describe("a distribution, in the exit", () => {
-  const SENTENCE = "Staking distributions are paid only from the funds that remain after client claims have been paid.";
+  const SENTENCE = "Staking distributions are paid only from the funds that remain after traders' claims have been paid.";
   it.each<[string, Partial<ExitState>]>([
     ["a proof that holds one owed", { ...acceptedState(recordOf({ distribution: true })), claims: NO_CLAIMS }],
     ["a record that holds one registered, with no proof", { claims: { ...NO_CLAIMS, exitDistributionClaim: 1n } }],

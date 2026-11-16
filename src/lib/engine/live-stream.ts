@@ -163,7 +163,7 @@ export class LiveStream {
       const text = typeof event.data === "string" ? event.data : null;
       const frame = text === null ? null : parseSignedFrame(text);
       if (text === null || frame === null) return this.fail("The server sent an update that was not signed.");
-      if (frame.n !== expected) return this.fail(`An update from the server was missed, repeated or received out of order (update ${frame.n} arrived when update ${expected} was expected).`);
+      if (frame.n !== expected) return this.fail("An update from the server was missed, repeated or received out of order.");
       const checked = frames.verify(text);
       if (!checked.ok) return this.fail(`An update from the server failed verification: ${checked.reason}.`, signer);
       // The vault named another signer since this connection opened: its frames are refused, valid as their signatures are.

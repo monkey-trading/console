@@ -19,11 +19,11 @@ export function WithdrawalQueue() {
             <li key={request.requested_seq} className="rounded border border-line-2 px-3 py-3 text-caption">
               <p className="flex justify-between gap-2">
                 <span className="text-fg">Position {request.position}</span>
-                <span className="text-fg-2">{request.position === 1 ? "Next to be paid" : `${request.position - 1} ahead`}</span>
+                <span className="text-fg-2">{request.position === 1 ? "Next to be paid" : `${request.position - 1} ${request.position === 2 ? "request" : "requests"} ahead of yours`}</span>
               </p>
               <p className="mt-2 flex justify-between gap-2 text-fg-3">
                 <span>Requested ${formatFixedPlaces(fixedFromWire(request.amount), 2)}</span>
-                <span className="text-fg-2">${formatFixedPlaces(fixedFromWire(request.remaining), 2)} left to pay</span>
+                <span className="text-fg-2">${formatFixedPlaces(fixedFromWire(request.remaining), 2)} remains to be paid</span>
               </p>
             </li>
           ))}

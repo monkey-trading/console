@@ -1,5 +1,6 @@
 /** What a node that cannot be trusted raises, apart from the check itself, so a screen can tell the refusals apart without loading the verifier. */
 
+import { asSentence } from "../format";
 import type { AttestationStatus } from "./attestation";
 import type { OperatorRoute } from "./stats-types";
 
@@ -44,7 +45,10 @@ export class SignatureError extends UntrustedError {
 }
 
 /** Why a quote that verified is not trusted to sign for: no wallet has read the vault. */
-export const CONNECT_TO_CHECK = "Connect a wallet to complete the verification, in which your wallet checks the server against the on-chain vault that holds deposits. You can trade and move funds once that check passes.";
+export const CONNECT_TO_CHECK = "Connect a wallet to complete verification. Your wallet will check the server against the on-chain vault that holds deposits, and you can trade and move funds once that check succeeds.";
+
+/** Why a wallet's read of the vault could not judge the server, with `reason` as a sentence of its own. */
+export const vaultUnchecked = (reason: string): string => `Your wallet could not check the server against the vault. ${asSentence(reason)}`;
 
 /** Why a signed request may not leave under `status`, as a sentence, or null when it may: only a verdict that read the vault, or a dev build's mock, signs. */
 export function sendRefusal(status: AttestationStatus): string | null {

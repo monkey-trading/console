@@ -1,5 +1,7 @@
 /** Waiting for a sent transaction: polling its receipt through the provider until the chain mines it. */
 
+import { asSentence } from "../format";
+
 /**
  * A dev build's word on a transaction that has not mined: null while it is not stuck; else whether
  * the console moved the account past its nonce, left from an earlier chain, or why it could not
@@ -30,13 +32,13 @@ const RECEIPT_POLLS = 180;
  * - it stays pending through every poll, or is stuck behind a nonce from an earlier chain, moved past or not
  */
 export async function waitMined(receiptOf: (hash: string) => Promise<unknown>, hash: string, action: string, wait: (ms: number) => Promise<void>, stuck?: () => Promise<StuckVerdict>): Promise<void> {
-  const unconfirmed = (why: string) => new Error(`Your transaction to ${action} was sent (${hash}), but ${why}. Check the transaction in your wallet before you try again.`);
+  const unconfirmed = (why: string, detail?: string) => new Error(`Your transaction to ${action} was sent (${hash}), but ${why}.${detail === undefined ? "" : ` ${asSentence(detail)}`} Check the transaction in your wallet before you try again.`);
   for (let poll = 0; poll < RECEIPT_POLLS; poll++) {
     let receipt: unknown;
     try {
       receipt = await receiptOf(hash);
     } catch (error) {
-      throw unconfirmed(`its status could not be checked: ${error instanceof Error ? error.message : String(error)}`);
+      throw unconfirmed("its status could not be checked", error instanceof Error ? error.message : String(error));
     }
     // No receipt yet is null; a mined one carries its status.
     const status = typeof receipt === "object" && receipt !== null && "status" in receipt ? receipt.status : undefined;

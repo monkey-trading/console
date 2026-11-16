@@ -37,7 +37,7 @@ import { VoteControl } from "./staking/VoteControl";
 import { StakingContext, type StakingReads } from "./StakingSection";
 import { WithdrawForm } from "./WithdrawForm";
 
-const TEXT = "a message the trader must read";
+const TEXT = "A message the trader must read.";
 
 /** Puts a message on `surface` as the page first renders, so the screens after it find it in the store. */
 function Seed({ surface, tone, stale }: { surface: NoticeSurface; tone: "error" | "info"; stale?: boolean }) {

@@ -6,7 +6,7 @@ const BOUNDARY = Date.UTC(2026, 10, 15, 22, 30, 0);
 
 describe("waitingWords", () => {
   it("names the check's boundary in UTC while it is ahead", () => {
-    expect(waitingWords(BOUNDARY, BOUNDARY - 60_000)).toMatch(/^The withdrawal is waiting for the next check of the server's records, which is due at 15 Nov 22:30:00 UTC\. .*another server has checked its records/);
+    expect(waitingWords(BOUNDARY, BOUNDARY - 60_000)).toMatch(/^The withdrawal is waiting for the next check of the server's records, which is due at 15 Nov 22:30:00 UTC\. .*another operator's server has independently checked the records/);
   });
 
   it("says a boundary already past is a check that has not completed, not the next one", () => {
@@ -17,7 +17,7 @@ describe("waitingWords", () => {
 
   it("speaks of the checkpoint alone when the node names no check", () => {
     const words = waitingWords(undefined, BOUNDARY);
-    expect(words).toMatch(/^The withdrawal is waiting for the server's next snapshot to be posted to the vault\./);
+    expect(words).toMatch(/^You can claim the withdrawal here once the vault has recorded the next snapshot\.$/);
     expect(words).not.toContain("check of the server's records");
   });
 

@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import { asSentence } from "@/lib/format";
 import { SessionList, type SessionListStatus } from "@/lib/store/session-list";
 
 import { useConsoleValue, useSession } from "./ConsoleProvider";
@@ -16,7 +17,7 @@ function noticeFor(status: SessionListStatus): string | null {
     case "no-wallet": return "Connect a wallet to see which browsers are authorized to trade on your account.";
     case "waiting": return `Your sessions cannot be loaded at the moment because ${status.why}.`;
     case "loading": return "Loading sessions…";
-    case "failed": return `Your sessions could not be loaded: ${status.message}`;
+    case "failed": return `Your sessions could not be loaded. ${asSentence(status.message)} The app will try again automatically.`;
     case "ready": return null;
     default: return status satisfies never;
   }

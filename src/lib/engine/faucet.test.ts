@@ -84,12 +84,12 @@ describe("topUpGas", () => {
 
   it("throws when the balance answer is not hex", async () => {
     const post: JsonRpcPost = async () => ({ result: "0xzz" });
-    await expect(topUpGas(RPC, ACCOUNT, post)).rejects.toThrow("answered eth_getBalance");
+    await expect(topUpGas(RPC, ACCOUNT, post)).rejects.toThrow("returned an unexpected response");
   });
 
   it("throws when the RPC answer is not a JSON-RPC response", async () => {
     const post: JsonRpcPost = async () => "not json";
-    await expect(topUpGas(RPC, ACCOUNT, post)).rejects.toThrow("without a result");
+    await expect(topUpGas(RPC, ACCOUNT, post)).rejects.toThrow("returned an unexpected response");
   });
 
   it("throws when the RPC's error member is not a well-formed JSON-RPC error, rather than reading it as success", async () => {
@@ -97,7 +97,7 @@ describe("topUpGas", () => {
       (body as { method?: unknown }).method === "eth_getBalance"
         ? { result: "0x0" }
         : { error: { code: "-32601", message: "method missing" } };
-    await expect(topUpGas(RPC, ACCOUNT, post)).rejects.toThrow("malformed error");
+    await expect(topUpGas(RPC, ACCOUNT, post)).rejects.toThrow("returned an unexpected response");
   });
 });
 
@@ -155,7 +155,7 @@ describe("mintFromAnvil", () => {
 
   it("throws on a send answer that is not a transaction hash, and refuses an amount that is not a positive whole base unit", async () => {
     const odd = stub({ eth_accounts: { result: [ANVIL_0] }, eth_sendTransaction: { result: "0x1234" } });
-    await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, odd.post)).rejects.toThrow("The chain's RPC answered eth_sendTransaction with 0x1234.");
+    await expect(mintFromAnvil(RPC, USDC, ACCOUNT, FAUCET_USDC, odd.post)).rejects.toThrow("The local test chain returned an unexpected response. Please try again.");
     const none = stub({});
     for (const amount of [0n, -FAUCET_USDC, FAUCET_USDC + 1n]) {
       await expect(mintFromAnvil(RPC, USDC, ACCOUNT, amount, none.post)).rejects.toThrow("The faucet can only add a positive, whole amount of USDC.");

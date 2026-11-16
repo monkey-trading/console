@@ -80,16 +80,16 @@ describe("the chain", () => {
     expect(provider.chainId).toBe(31337);
     // A server error that names nothing about a chain is a refusal, not an unknown chain.
     const other = { fail: { wallet_switchEthereumChain: { code: -32603, message: "internal error" } }, chainId: 1 };
-    await expect(wallet(other).wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337: internal error");
+    await expect(wallet(other).wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337. Internal error.");
     // A server error that names a chain without reporting it unknown is a refusal, not an unknown chain.
     const unavailable = { fail: { wallet_switchEthereumChain: { code: -32603, message: "Chain RPC is unavailable" } }, chainId: 1 };
     const tried = wallet(unavailable);
-    await expect(tried.wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337: Chain RPC is unavailable");
+    await expect(tried.wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337. Chain RPC is unavailable.");
     expect(tried.provider.calls.some((c) => c.method === "wallet_addEthereumChain")).toBe(false);
     // A generic failure that says neither is a refusal, not an unknown chain.
     const generic = { fail: { wallet_switchEthereumChain: { code: -32603, message: "Unknown error" } }, chainId: 1 };
     const genericTried = wallet(generic);
-    await expect(genericTried.wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337: Unknown error");
+    await expect(genericTried.wallet.ensureChain()).rejects.toThrow("could not switch to chain 31337. Unknown error.");
     expect(genericTried.provider.calls.some((c) => c.method === "wallet_addEthereumChain")).toBe(false);
   });
 
@@ -153,7 +153,7 @@ describe("deposits", () => {
 
   it("sends nothing to a wallet that cannot return receipts, and says a sent transaction is unconfirmed when its receipt cannot be read", async () => {
     const noReceipts = wallet({ balance: 5_000_000_000n, allowance: 5_000_000_000n, fail: { eth_getTransactionReceipt: { code: -32601, message: "method not allowed" } } });
-    await expect(noReceipts.wallet.deposit(fixedFromInt(10))).rejects.toThrow("Your wallet could not check transactions, so it was not asked to deposit: method not allowed");
+    await expect(noReceipts.wallet.deposit(fixedFromInt(10))).rejects.toThrow("Your wallet could not check transactions, so it was not asked to deposit. Method not allowed.");
     expect(noReceipts.provider.sent).toEqual([]);
     const { provider, wallet: w } = wallet({ balance: 5_000_000_000n, allowance: 5_000_000_000n });
     const request = provider.request.bind(provider);
@@ -161,7 +161,7 @@ describe("deposits", () => {
       if (args.method === "eth_getTransactionReceipt" && provider.sent.length > 0) throw new Error("relay closed");
       return request(args);
     };
-    await expect(w.deposit(fixedFromInt(10))).rejects.toThrow(/^Your transaction to deposit was sent \(0x0+1\), but its status could not be checked: relay closed\. Check the transaction in your wallet before you try again\.$/);
+    await expect(w.deposit(fixedFromInt(10))).rejects.toThrow(/^Your transaction to deposit was sent \(0x0+1\), but its status could not be checked\. Relay closed\. Check the transaction in your wallet before you try again\.$/);
   });
 
   it("polls a pending receipt, waiting between polls, until the transaction is mined", async () => {
@@ -218,7 +218,7 @@ describe("claims", () => {
   it("says in plain words that the vault refused an expired authorization, with no request data", async () => {
     const { wallet: w } = wallet({ fail: { eth_sendTransaction: { code: 3, message: "Execution reverted with reason: custom error 0x41b7af92. Request Arguments: from: 0xabc data: 0x52be0833" } } });
     const error = await w.claim(signed).catch((e: unknown) => e);
-    expect((error as Error).message).toContain("24-hour authorization has passed");
+    expect((error as Error).message).toContain("24-hour approval for this withdrawal has expired");
     expect((error as Error).message).not.toMatch(/0x|Request Arguments/);
   });
 

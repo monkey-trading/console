@@ -16,7 +16,7 @@ const DIGEST = `0x${"1d".repeat(48)}` as const;
 const RELEASE: PinnedRelease = { name: "test-release", launchDigest: DIGEST, policy: "0x30000", minimumTcb: { bootLoader: 3, tee: 0, snp: 8, microcode: 115 } };
 const NAMED: VaultFacts = { release: releaseName(DIGEST, CONFIG), signer: ENCLAVE };
 const HARDWARE = JSON.stringify({ provider: "sev_snp", config_sha256: CONFIG });
-const READ_FAILED = "Your wallet could not check the server against the vault: no answer";
+const READ_FAILED = "Your wallet could not check the server against the vault. No answer.";
 const CLOCK = "Your device clock differs from the server's time by 60 seconds. Correct the clock and reload the page.";
 
 /** A hardware quote that verifies, so the vault's read alone decides the verdict; the mock path is the real verifier's. */

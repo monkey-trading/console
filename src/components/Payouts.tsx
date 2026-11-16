@@ -103,7 +103,7 @@ function PayoutRow({ payout, nowMs, idle, signs, describedBy, problem, act }: { 
       )}
       {status.kind === "expired" && (
         <>
-          <p className="mt-2 text-fg-3">The withdrawal could be claimed until {formatStamp(status.expiresAt * 1000)} UTC{payout.read ? ", but it was not claimed" : ""}. You can renew the claim to request a new approval from the server.</p>
+          <p className="mt-2 text-fg-3">The approval for this withdrawal expired at {formatStamp(status.expiresAt * 1000)} UTC{payout.read ? " before it was claimed" : ""}. Select Renew the claim to request a new approval from the server.</p>
           <button type="button" aria-disabled={!idle || !signs} aria-describedby={describedBy} onClick={() => signs && act(() => reissue(store, nonce, status.expiresAt))} className={BUTTON}>Renew the claim</button>
         </>
       )}

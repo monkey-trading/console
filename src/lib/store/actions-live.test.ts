@@ -182,7 +182,7 @@ describe("a wallet change", () => {
     wallet.disconnect = async () => { throw new Error("offline"); };
     disconnectWallet(store);
     await settle();
-    expect(store.getSnapshot().notices.wallet?.text).toBe("Your wallet's session could not be closed: offline");
+    expect(store.getSnapshot().notices.wallet?.text).toBe("Your wallet's session could not be closed. Offline.");
   });
 
   it("offers to add the deployment's USDC once connected, and says nothing whether the wallet adds it or declines", async () => {

@@ -4,6 +4,7 @@
  * no telemetry, and loads only when the user picks WalletConnect or a stored choice reconnects (#82).
  */
 
+import { asSentence } from "../format";
 import { WALLETCONNECT_RELAY } from "./deploy";
 import { ProviderWallet, type Eip1193Provider, type ProviderWalletDeps, type WalletChain } from "./provider-wallet";
 import type { Wallet, WalletConnector } from "./wallet";
@@ -114,7 +115,7 @@ export class WalletConnectConnector implements WalletConnector {
       // A session this connector left, because the user disconnected in the console or closed a pairing as the wallet approved it.
       this.live = null;
       await provider.disconnect().catch((cause: unknown) => {
-        throw new Error(`WalletConnect could not end the previous session: ${detail(cause)}`, { cause });
+        throw new Error(`WalletConnect could not end the previous session. ${asSentence(detail(cause))}`, { cause });
       });
       attempt.check();
     }
@@ -135,7 +136,7 @@ export class WalletConnectConnector implements WalletConnector {
     } catch (cause) {
       // A declined or expired pairing leaves nothing to keep the relay socket open for; a cancelled one closed it already.
       if (this.attempt === attempt) await this.close(provider);
-      throw new Error(`Your wallet did not connect through WalletConnect: ${detail(cause)}`, { cause });
+      throw new Error(`Your wallet did not connect through WalletConnect. ${asSentence(detail(cause))}`, { cause });
     } finally {
       provider.off("display_uri", onUri);
     }

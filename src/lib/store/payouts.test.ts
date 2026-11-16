@@ -34,7 +34,7 @@ describe("approvals and paid payouts", () => {
     expect(store.getSnapshot().notices).toEqual({});
     vi.spyOn(client, "history").mockRejectedValueOnce(new EngineError(500, "boom"));
     await loadApprovals(store);
-    expect(store.getSnapshot().notices.payoutReads).toMatchObject({ tone: "error", text: "Your approved withdrawals could not be loaded: boom" });
+    expect(store.getSnapshot().notices.payoutReads).toMatchObject({ tone: "error", text: "Your approved withdrawals could not be loaded. Boom." });
     await loadApprovals(store);
     expect(store.getSnapshot().notices.payoutReads).toBeUndefined();
   });
@@ -74,7 +74,7 @@ describe("approvals and paid payouts", () => {
     await checkPaid(elsewhere.store);
     expect(elsewhere.store.getSnapshot()).toMatchObject({ paid: [], unpaid: [] });
     expect(payoutsOf(elsewhere.store.getSnapshot())[0]?.read).toBe(false);
-    expect(elsewhere.store.getSnapshot().notices.payoutVault).toMatchObject({ tone: "error", text: "The vault's payment records could not be checked: your wallet is connected to chain 1, not chain 31337" });
+    expect(elsewhere.store.getSnapshot().notices.payoutVault).toMatchObject({ tone: "error", text: "The vault's payment records could not be checked. Your wallet is connected to chain 1, not chain 31337." });
   });
 
   it("reads each payout once in one run at a time, however often the page asks again, including one that arrives during the run", async () => {

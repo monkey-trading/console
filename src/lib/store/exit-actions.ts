@@ -71,7 +71,7 @@ export async function importExitFile(store: ConsoleStore, text: string): Promise
         return now !== null && exitPhase(now) === "due" ? finish({ ok: true, text: "The file shows no holdings for this account, but the vault accepts it, so it can be used to start the exit." }) : refuse("it shows nothing for this account");
       }
       case "holds-less": return refuse("it covers less than the proof already saved for that snapshot");
-      case "other-root": return refuse(`it is for snapshot ${outcome.proofSeq}, but the vault's latest snapshot is ${outcome.vaultSeq}, so the vault would refuse a claim based on it`);
+      case "other-root": return refuse(`it is for snapshot ${outcome.proofSeq}, but the vault's latest snapshot is ${outcome.vaultSeq}, so the vault would reject a claim based on it`);
       case "refused": return refuse(`the vault's check rejected it: ${outcome.reason}`);
       default: return outcome satisfies never;
     }

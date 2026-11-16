@@ -10,6 +10,7 @@ import { loadSessionKey, readStoredKey, removeSessionKey, sessionKeyName, sweepS
 import type { StreamMessage } from "../engine/types";
 import type { Wallet } from "../engine/wallet";
 import { clearChoice, clearChoiceIf, type WalletChoice } from "../engine/wallet-persist";
+import { asSentence } from "../format";
 import { errorText } from "./signing";
 import { installKey, keyScope, liveSessionKey, revokeSession } from "./session";
 import { revokeClears } from "../setup-steps";
@@ -31,7 +32,7 @@ export const WALLET_LEFT = "Your wallet no longer shares an account with this si
 
 /** Ends a wallet's connection in the background, telling the user if that fails. */
 export function release(store: ConsoleStore, wallet: Wallet | null): void {
-  wallet?.disconnect?.().catch((error: unknown) => store.notify("wallet", `Your wallet's session could not be closed: ${errorText(error)}`));
+  wallet?.disconnect?.().catch((error: unknown) => store.notify("wallet", `Your wallet's session could not be closed. ${asSentence(errorText(error))}`));
 }
 
 /**

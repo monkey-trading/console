@@ -97,7 +97,7 @@ export class VerifierLoader {
 
   /** The loaded verifier; the trust check that precedes every use has loaded it. */
   loaded(): Verifier {
-    if (this.held === null) throw new Error("The verification software was used before it had loaded.");
+    if (this.held === null) throw new Error("The verification software had not finished loading. Please reload the page.");
     return this.held;
   }
 }

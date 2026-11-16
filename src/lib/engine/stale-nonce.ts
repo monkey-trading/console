@@ -51,7 +51,7 @@ export async function movePastNonce(rpcUrl: string, post: JsonRpcPost, hash: str
     if (why !== null) return { moved: false, why };
     const refused = (step: string, error: { code: number; message: string }) => ({
       moved: false as const,
-      why: error.code === METHOD_NOT_FOUND ? "the chain is not a local test chain" : `the chain refused to ${step}: ${error.message.replace(/\.+$/, "")}`,
+      why: error.code === METHOD_NOT_FOUND ? "the chain is not a local test chain" : `the chain rejected the request to ${step} (${error.message.replace(/\.+$/, "")})`,
     });
     const dropped = await rpcAllow(post, rpcUrl, rpcBody("anvil_dropTransaction", [hash]));
     if (dropped.error !== null) return refused("drop them", dropped.error);
@@ -59,7 +59,7 @@ export async function movePastNonce(rpcUrl: string, post: JsonRpcPost, hash: str
     if (set.error !== null) return refused("skip past them", set.error);
     return { moved: true };
   } catch (error) {
-    return { moved: false, why: `the chain did not respond: ${error instanceof Error ? error.message.replace(/\.+$/, "") : String(error)}` };
+    return { moved: false, why: `the chain did not respond (${error instanceof Error ? error.message.replace(/\.+$/, "") : String(error)})` };
   }
 }
 

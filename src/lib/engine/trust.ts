@@ -20,7 +20,7 @@ export const NOT_NAMED = "The server is not running the software release that th
 /** What the console says when the quote's enclave is not the one the vault pays out on. */
 export const NOT_THE_SIGNER = "The server's signing key does not match the signing key that the vault uses.";
 export { CONNECT_TO_CHECK } from "./trust-errors";
-import { CONNECT_TO_CHECK } from "./trust-errors";
+import { CONNECT_TO_CHECK, vaultUnchecked } from "./trust-errors";
 
 /**
  * Holds the verified enclave address. The first caller verifies the node's attestation and every
@@ -239,7 +239,7 @@ export class NodeTrust {
     if (this.deps.devDigests.length === 0) return { judged: false };
     const vault = await readVault(this.deps.vaultFacts());
     if (vault.kind === "none") return { judged: false };
-    if (vault.kind === "failed") return { refused: `Your wallet could not check the server against the vault: ${vault.reason}`, vaultLifts: true };
+    if (vault.kind === "failed") return { refused: vaultUnchecked(vault.reason), vaultLifts: true };
     this.vaultNames(vault.facts.signer);
     const digests = this.deps.devDigests.map((digest) => ({ launchDigest: digest as Hex })); // deploy.ts checked each is 0x hex
     if (!isConfigHash(configHash) || digestNamed(digests, vault.facts.release, configHash) === null) return { refused: NOT_NAMED };
@@ -292,7 +292,7 @@ export class NodeTrust {
       if (superseded !== null) return this.refused(superseded, earlier);
       this.trust(address, true);
       if (vault.kind === "read") this.setStatus({ kind: "verified", release: release ?? "", config: config ?? "", address });
-      else this.setStatus({ kind: "attested", release: release ?? "", address, why: vault.kind === "none" ? CONNECT_TO_CHECK : `Your wallet could not check the server against the vault: ${vault.reason}` });
+      else this.setStatus({ kind: "attested", release: release ?? "", address, why: vault.kind === "none" ? CONNECT_TO_CHECK : vaultUnchecked(vault.reason) });
     } catch (error) {
       this.setStatus({ kind: "unverified", reason: error instanceof Error ? error.message : "The server's verification data could not be read." });
     }

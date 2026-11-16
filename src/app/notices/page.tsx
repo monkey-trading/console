@@ -49,17 +49,17 @@ export default function Page() {
           each time you place an order. The preferences never leave your browser. Unlike the wallet choice and the
           session key, they remain after you disconnect, until you clear this site&apos;s data. The Settings page
           lists your active sessions from the server&apos;s public record of session keys. That record holds each
-          key&apos;s address, start time and expiry, and nothing about the browser or the network from which the
-          key was authorized.
+          key&apos;s address, start time and expiry, and nothing about the browser or the network the key was
+          authorized from.
         </p>
         <p className={P}>
           While your account holds anything in the vault, or the vault&apos;s latest snapshot omits a deposit that
           may be yours, the app keeps a copy of your latest exit proof in your browser&apos;s storage, one for
           each account, chain and vault. The exit proof records your balance, positions, withdrawals, staking
-          distribution and pending deposits at the vault&apos;s latest snapshot, together with the time at which
-          that snapshot was posted. The app obtains the proof from the server, and a proof for the vault&apos;s
-          last snapshot allows you to claim from the vault if the server is no longer available. To check the
-          proof, the app sends it through your wallet to your wallet&apos;s chain provider, as a query of the
+          distribution and pending deposits at the vault&apos;s latest snapshot, together with the time the vault
+          recorded that snapshot. The app obtains the proof from the server, and a proof for the vault&apos;s last
+          snapshot allows you to claim from the vault if the server is no longer available. To check the proof,
+          the app sends it through your wallet to your wallet&apos;s chain provider, as a query of the
           vault&apos;s verifier, and a claim that you register publishes it on chain. The proof is sent nowhere
           else unless you export it to a file. It remains after you disconnect, until a later proof replaces it,
           the server shows that your account holds nothing, the vault rejects it, or you clear this site&apos;s
@@ -70,16 +70,16 @@ export default function Page() {
           Your activity in the app leaves your browser only for the party that needs it. Your account&apos;s
           address, your signed orders, cancellations, withdrawals and eligibility declaration, the session
           key&apos;s address with its signed registration and revocation, and the requests that load your account
-          are sent to the server for which this app is built. Once the chain data that your wallet reads names
-          another operator, those requests go to that operator&apos;s server instead, which this version of the
-          app must list. Deposits, delegation, claims and the chain queries made around them, including queries of
-          the operator registry and the vault, and the query of the USDC your wallet holds, go to the chain
-          through your own wallet.
+          are sent to the server this app is built for. When the operator registry on chain names a new operator,
+          those requests are sent to the new operator&apos;s server instead, provided that this version of the app
+          recognises it. Deposits, delegations and claims, together with the chain queries needed to prepare them
+          (including queries of the operator registry, the vault and your wallet&apos;s USDC balance), go to the
+          chain through your own wallet.
         </p>
         <p className={P}>
           A test version of the app, built for a local server, may show a test faucet that tops up your
           wallet&apos;s gas and creates test USDC for it. Those requests go from the page directly to the local
-          chain address for which that version is built, and no other requests do.
+          chain address that version is built for, and no other requests do.
         </p>
         <p className={P}>
           If you connect a wallet app with WalletConnect, the pairing and every request between this page and your
@@ -109,7 +109,7 @@ export default function Page() {
           copyright © TradingView, Inc., under the Apache License, Version 2.0.
         </p>
         <p className={P}>
-          The console itself is licensed under the Apache License, Version 2.0.
+          The app itself is licensed under the Apache License, Version 2.0.
         </p>
       </section>
     </main>

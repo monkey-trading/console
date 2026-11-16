@@ -1,5 +1,7 @@
 /** How a wallet's refusals read: the error codes it answers with and the messages written for the user. */
 
+import { asSentence } from "../format";
+
 /** EIP-1193's codes for a request the user rejected and for an account or method the user has not authorised, and EIP-3085's for a chain the wallet does not know. */
 const USER_REJECTED = 4001;
 const UNAUTHORIZED = 4100;
@@ -17,7 +19,7 @@ export function walletError(error: unknown, action: string): Error {
   if (errorCode(error) === USER_REJECTED) return new Error(`You declined to ${action} in your wallet.`, { cause: error });
   if (errorCode(error) === UNAUTHORIZED) return new Error(UNAUTHORIZED_ACCOUNT, { cause: error });
   const detail = error instanceof Error ? error.message : typeof error === "object" && error !== null && "message" in error ? String(error.message) : String(error);
-  return new Error(`Your wallet could not ${action}: ${detail}`, { cause: error });
+  return new Error(`Your wallet could not ${action}. ${asSentence(detail)}`, { cause: error });
 }
 
 /** Whether an error from `walletError` is the user's own refusal, as opposed to a request that failed. */

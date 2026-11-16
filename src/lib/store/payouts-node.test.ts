@@ -153,7 +153,7 @@ describe("the node's payouts", () => {
     expect(client.payoutsReads).toHaveLength(20);
     expect(store.getSnapshot().payoutsRead).toBeNull();
     expect(payoutsOf(store.getSnapshot())[0]?.status.kind).toBe("waiting");
-    expect(store.getSnapshot().payoutsProblem).toContain("more payouts than can be shown on this page");
+    expect(store.getSnapshot().payoutsProblem).toContain("more approved withdrawals than can be shown on this page");
   });
 
   it("shows waiting with no message and no notice when the node predates the route, and keeps what the stream delivered", async () => {
@@ -172,7 +172,7 @@ describe("the node's payouts", () => {
     store.patch({ approvals: [approved(1, 40)] });
     client.payoutsError = new EngineError(0, "The server did not respond.");
     await loadPayouts(store);
-    expect(store.getSnapshot().payoutsProblem).toBe("Your payouts could not be loaded: The server did not respond. The app checks again automatically when a records check is due, when your next withdrawal is approved, or when you reload the page.");
+    expect(store.getSnapshot().payoutsProblem).toBe("Your approved withdrawals could not be loaded. The server did not respond. The app checks again automatically when the next check of the server's records is due, when your next withdrawal is approved, or when you reload the page.");
     expect(store.getSnapshot().notices).toEqual({});
     expect(payoutsOf(store.getSnapshot())[0]?.status.kind).toBe("waiting");
     client.payoutsError = null;

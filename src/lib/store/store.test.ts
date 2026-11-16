@@ -188,8 +188,15 @@ describe("what the store refuses or hides", () => {
     const me = store.getSnapshot().wallet?.address ?? "";
     node.client.state.emit({ type: "tick" }, [{ type: "order_cancelled", account: me, order_id: 7, reason: "unfillable" }]);
     expect(store.getSnapshot().notices.account?.text).toContain("could not be filled, so it has been cancelled");
+    const params = store.getSnapshot().houseParams;
+    if (params === null) throw new Error("the demo reads its trading terms at load");
+    store.patch({ houseParams: { ...params, closeoutLevelBps: 3_750 } });
     node.client.state.emit({ type: "tick" }, [{ type: "close_out", account: me, equity: "1", margin: "10" }]);
-    expect(store.getSnapshot().notices.account?.text).toContain("closed out");
+    expect(store.getSnapshot().notices.account?.text).toBe("Your positions were closed out because your equity fell below the close-out level of 37.5% of your margin requirement. They were closed at the market price, and the details are shown in History.");
+    // With no trading terms read, the notice names the level without a figure.
+    store.patch({ houseParams: null });
+    node.client.state.emit({ type: "tick" }, [{ type: "close_out", account: me, equity: "1", margin: "10" }]);
+    expect(store.getSnapshot().notices.account?.text).toMatch(/^Your positions were closed out because your equity fell below the close-out level\. They were closed/);
     // Another account's close-out or cancelled order is not the user's news.
     const before = store.getSnapshot().notices.account;
     node.client.state.emit({ type: "tick" }, [{ type: "close_out", account: "0x2222222222222222222222222222222222222222", equity: "1", margin: "10" }]);

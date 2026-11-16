@@ -177,7 +177,7 @@ export class MockControls {
   /** A deposit the mock wallet itself sends: the wallet pays it out of what it holds, as the real one does. */
   walletDeposit(address: string, amount: Fixed): void {
     const held = this.walletUsdc(address);
-    if (amount > held) throw new Error("Your wallet holds less USDC than that.");
+    if (amount > held) throw new Error("Your wallet holds less USDC than the amount entered.");
     this.deposit(address, amount);
     this.held.set(address.toLowerCase(), held - amount);
   }

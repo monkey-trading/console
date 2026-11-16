@@ -87,8 +87,8 @@ describe("movePastNonce", () => {
     await expect(movePastNonce(RPC, lacking.post, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain is not a local test chain" });
     expect(lacking.calls.map(([method]) => method)).toEqual(["web3_clientVersion", "anvil_dropTransaction"]);
     const refusing = stub({ web3_clientVersion: { result: "anvil/v1.4.3" }, anvil_dropTransaction: { result: HASH }, anvil_setNonce: { error: { code: -32603, message: "nonce too low." } } });
-    await expect(movePastNonce(RPC, refusing.post, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain refused to skip past them: nonce too low" });
-    await expect(movePastNonce(RPC, async () => { throw new Error("the chain's RPC answered HTTP 502"); }, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain did not respond: the chain's RPC answered HTTP 502" });
+    await expect(movePastNonce(RPC, refusing.post, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain rejected the request to skip past them (nonce too low)" });
+    await expect(movePastNonce(RPC, async () => { throw new Error("the chain's RPC answered HTTP 502"); }, HASH, ACCOUNT, 33n)).resolves.toEqual({ moved: false, why: "the chain did not respond (the chain's RPC answered HTTP 502)" });
   });
 });
 

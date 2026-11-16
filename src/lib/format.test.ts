@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { formatMonkey, formatMonkeyFigure, formatMovePercent, formatRate, groupThousands, MONKEY_UNIT, shortHex } from "./format";
+import { asSentence, formatMonkey, formatMonkeyFigure, formatMovePercent, formatRate, groupThousands, MONKEY_UNIT, shortHex } from "./format";
 
 describe("format", () => {
   it("shortens long hex and leaves short hex alone", () => {
@@ -69,5 +69,11 @@ describe("formatMonkeyFigure", () => {
     expect(formatMonkeyFigure(1n)).toBe("<0.0001");
     expect(formatMonkeyFigure(MONKEY_UNIT / 10_000n - 1n)).toBe("<0.0001");
     expect(formatMonkeyFigure(MONKEY_UNIT / 10_000n)).toBe("0.0001");
+  });
+
+  it("reads a reason as a sentence of its own", () => {
+    expect(asSentence("your wallet is on chain 1, not chain 31337")).toBe("Your wallet is on chain 1, not chain 31337.");
+    expect(asSentence("The server did not respond...")).toBe("The server did not respond.");
+    expect(asSentence(" MONKEY is not available ")).toBe("MONKEY is not available.");
   });
 });

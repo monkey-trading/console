@@ -27,14 +27,14 @@ describe("the panel, while checkpoints keep arriving", () => {
     expect(view(exit).notice).toBeNull();
   });
   it("says plainly which checkpoint the proof is from, with what it proves", () => {
-    expect(view(behind).lines).toEqual([{ tone: "calm", text: "A proof for snapshot 100, posted less than a minute ago, is saved in this browser. The proof covers 5,083 USDC and a deposit still pending." }]);
+    expect(view(behind).lines).toEqual([{ tone: "calm", text: "A proof for snapshot 100, which the vault recorded less than a minute ago, is saved in this browser. The proof covers 5,083 USDC and a deposit still pending." }]);
   });
   it("says the same of a proof at the vault's latest as of one a checkpoint behind, so nothing flips as they land", () => {
     const at = { ...NO_EXIT, vault: vaultAt(26, 100), ...acceptedState(recordAt(100, POSTED - 13)) };
     expect(text(at)).toBe(text({ ...behind, attempt: AHEAD }));
   });
   it("draws no figure from a proof no verifier has accepted in this connection", () => {
-    expect(text({ ...NO_EXIT, vault: vaultAt(), record: recordAt(100, POSTED - 13) })).toBe("A proof for snapshot 100, posted less than a minute ago, is saved in this browser.");
+    expect(text({ ...NO_EXIT, vault: vaultAt(), record: recordAt(100, POSTED - 13) })).toBe("A proof for snapshot 100, which the vault recorded less than a minute ago, is saved in this browser.");
   });
   it("takes no alarm from an old proof the first checkpoint after a quiet spell has only just left behind", () => {
     const quiet = { ...NO_EXIT, vault: vaultAt(), record: recordAt(100, POSTED - 86_400), attempt: AHEAD };
@@ -50,7 +50,7 @@ describe("the panel, once being behind has lasted", () => {
     expect(view(lasting).lines[0]?.tone).toBe("warn");
   });
   it("says for how long, and what it means", () => {
-    expect(text(lasting)).toMatch(/Your saved proof is for snapshot 100, posted 1 hour ago\. The proof has been behind the vault's latest snapshot, 200, for more than 1 hour, so the vault would refuse a claim based on it if the server stopped now\./);
+    expect(text(lasting)).toMatch(/Your saved proof is for snapshot 100, which the vault recorded 1 hour ago\. The proof has been behind the vault's latest snapshot, 200, for more than 1 hour, so the vault would reject a claim based on it if the server stopped now\./);
     expect(view(lasting).notice).toEqual({ tone: "warn", text: "Your exit proof is 1 hour old and does not reflect the vault's latest snapshot." });
   });
   it("holds through the node's reads, so it does not flip with them", () => {
@@ -59,7 +59,7 @@ describe("the panel, once being behind has lasted", () => {
   });
   it("warns when a vault has taken no checkpoint for that long though the node has gone on", () => {
     const stalled = { ...behind, vault: vaultAt(BEHIND_NOTICE_SECONDS), attempt: AHEAD };
-    expect(text(stalled)).toMatch(/The server's proof is for snapshot 300, which the vault has not yet received\. The proof is held and will be saved once the vault receives that snapshot\./);
+    expect(text(stalled)).toMatch(/The server's proof is for snapshot 300, which the vault has not yet recorded\. The proof is held and will be saved once the vault has recorded that snapshot\./);
     expect(view(stalled).lines.map((line) => line.tone)).toEqual(["warn", "warn"]);
     expect(view({ ...stalled, vault: vaultAt(BEHIND_NOTICE_SECONDS - 1) }).lines.map((line) => line.tone)).toEqual(["calm"]);
   });
@@ -76,11 +76,11 @@ describe("the panel, when the vault takes no more checkpoints", () => {
   it.each<[string, typeof started]>([["once the exit has started", started], ["once the exit is due", due]])("warns at once of a proof not at its root, %s", (_name, vault) => {
     const exit = { ...behind, vault };
     const line = view(exit).lines.find((held) => held.text.startsWith("Your saved proof"));
-    expect(line).toEqual({ tone: "warn", text: expect.stringMatching(/The vault's latest snapshot is 200, so the vault would refuse a claim based on the saved proof\.$/) });
+    expect(line).toEqual({ tone: "warn", text: expect.stringMatching(/The vault's latest snapshot is 200, so the vault would reject a claim based on the saved proof\.$/) });
     expect(view(exit).rebuild).not.toBeNull();
   });
   it("says of the node's answer that nothing more is coming", () => {
-    expect(text({ ...behind, vault: started, attempt: AHEAD })).toMatch(/which the vault has not yet received\. The vault no longer accepts new snapshots\./);
+    expect(text({ ...behind, vault: started, attempt: AHEAD })).toMatch(/which the vault has not yet recorded\. The vault no longer accepts new snapshots\./);
   });
 });
 
@@ -91,6 +91,6 @@ describe("failures, which are not the ordinary gap", () => {
     ["the node away", { kind: "node-away", reason: "x" }],
     ["a refused proof", { kind: "refused", reason: "x" }],
   ])("still say so at once, for %s", (_name, attempt) => {
-    expect(text({ ...behind, attempt })).toMatch(/x\./);
+    expect(text({ ...behind, attempt })).toMatch(/X\./);
   });
 });

@@ -7,7 +7,7 @@ import { formatStamp } from "../time";
  * check has not completed; without one, the checkpoint alone. `nowMs` is the node's clock.
  */
 export function waitingWords(checkAtMs: number | undefined, nowMs: number): string {
-  if (checkAtMs === undefined) return "The withdrawal is waiting for the server's next snapshot to be posted to the vault. Once the snapshot has been confirmed on chain, you can claim the withdrawal here.";
+  if (checkAtMs === undefined) return "You can claim the withdrawal here once the vault has recorded the next snapshot.";
   const when = nowMs > 0 && checkAtMs <= nowMs ? `The withdrawal is waiting for a check of the server's records that was due at ${formatStamp(checkAtMs)} UTC and has not yet been completed` : `The withdrawal is waiting for the next check of the server's records, which is due at ${formatStamp(checkAtMs)} UTC`;
-  return `${when}. Once the server's next snapshot has been confirmed on chain and another server has checked its records, you can claim the withdrawal here.`;
+  return `${when}. You can claim the withdrawal here once the vault has recorded the next snapshot and another operator's server has independently checked the records.`;
 }

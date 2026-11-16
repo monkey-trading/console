@@ -111,7 +111,7 @@ describe("ExitKeeper, and what a browser keeps", () => {
       await kit.attach({ attestation: { kind: "unverified", reason: "gone" }, stream: "stale" });
       const { record, attempt } = kit.store.getSnapshot().exit;
       expect(record).toBeNull();
-      expect(attempt).toEqual({ kind: "saved-refused", reason: "it names snapshot 9000 but matches snapshot 100" });
+      expect(attempt).toEqual({ kind: "saved-refused", reason: "it is labelled as snapshot 9000, but its contents match snapshot 100" });
       expect(kit.exit.checks).toEqual([]);
     });
 

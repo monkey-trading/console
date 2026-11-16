@@ -60,7 +60,7 @@ export function DepositForm({ embedded = false }: { embedded?: boolean }) {
           <input {...AMOUNT_INPUT} id={id} value={amount} inputMode="decimal" maxLength={24} onChange={(event) => setAmount(event.target.value)} aria-describedby={`${id}-hint`} className={INPUT} />
           <button type="submit" aria-disabled={!wallet || !valid || busy || gate.blocked} aria-describedby={gate.describedBy} className={SUBMIT}>Deposit</button>
         </div>
-        <p id={`${id}-hint`} className="mt-2 text-label leading-relaxed text-fg-3">Deposits must be between 10 and 1,000,000,000 USDC, and your wallet may first ask you to approve the amount. The deposit is added to your balance once it has been credited, and it can be withdrawn once the transaction is final on chain.</p>
+        <p id={`${id}-hint`} className="mt-2 text-label leading-relaxed text-fg-3">Deposits must be between 10 and 1,000,000,000 USDC, and your wallet may first ask you to approve the amount. A deposit is credited to your balance a few blocks after the transaction is confirmed, and it can be withdrawn once the transaction is final on chain.</p>
         {gate.note}
         <Notice surface={surface} />
         {!wallet && <p className="mt-2 text-label text-fg-3">Connect a wallet to make a deposit.</p>}

@@ -3,6 +3,7 @@
 import { carryAccrued } from "../engine/claim-standing";
 import { EngineError } from "../engine/client";
 import { UntrustedError } from "../engine/trust-errors";
+import { asSentence } from "../format";
 import { decodeAccount } from "../models";
 import { emptyHistoryKey, NOT_CREDITED_MS, uncreditedKey, UNTIL_EVENT } from "./quiet-reads";
 import { decideSetup } from "./setup";
@@ -60,7 +61,7 @@ export async function loadAccount(store: ConsoleStore, withHistory: boolean): Pr
     // Lost trust is reported once by the attestation check itself; the account read that waited on the same check stays silent.
     if (error instanceof UntrustedError || store.noteAccess(error)) return;
     // Said where the account's figures would be; the next read, on the stream's next event, tries again. A failure that repeats keeps the one message.
-    const message = `Your account could not be loaded: ${(error instanceof Error ? error.message : "the server did not respond").replace(/\.$/, "")}. The app will try again automatically.`;
+    const message = `Your account could not be loaded. ${asSentence(error instanceof Error ? error.message : "the server did not respond")} The app will try again automatically.`;
     if (store.getSnapshot().notices.accountRead?.text !== message) store.notify("accountRead", message);
   }
 }

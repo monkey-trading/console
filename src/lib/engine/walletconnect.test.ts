@@ -65,7 +65,7 @@ describe("WalletConnectConnector.connect", () => {
     const connecting = connector.connect();
     await fake.called.promise;
     fake.pending.reject({ code: 5000, message: "User rejected." });
-    await expect(connecting).rejects.toThrow("Your wallet did not connect through WalletConnect: User rejected.");
+    await expect(connecting).rejects.toThrow("Your wallet did not connect through WalletConnect. User rejected.");
     // Nothing is left for the relay socket to carry, so it closes.
     expect([fake.cleanups.length, fake.closes]).toEqual([1, 1]);
   });
@@ -142,7 +142,7 @@ describe("the WalletConnect wallet", () => {
     expect(await wallet.claimed?.(3)).toBe(true);
     // A balance and an allowance of nothing; the approval is not sent, since the session cannot return its receipt.
     fake.answers = [`0x${"f".repeat(64)}`, `0x${"0".repeat(64)}`];
-    await expect(wallet.deposit(10_000_000_000n)).rejects.toThrow("could not check transactions, so it was not asked to approve the vault: Your wallet does not allow eth_getTransactionReceipt through WalletConnect");
+    await expect(wallet.deposit(10_000_000_000n)).rejects.toThrow("could not check transactions, so it was not asked to approve the vault. Your wallet does not allow eth_getTransactionReceipt through WalletConnect");
     expect(fake.requests.map((r) => [r.method, r.chain])).toEqual([
       ["eth_call", "eip155:31337"],
       ["eth_call", "eip155:31337"],

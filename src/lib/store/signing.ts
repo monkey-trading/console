@@ -143,7 +143,7 @@ export function errorText(error: unknown): string {
   // The node limits how fast new wallets are set up, and answers 429 to the ones over it: nothing was recorded, so trying again later is the whole answer.
   if (error instanceof EngineError && error.status === 429) return error.tierLimit === null ? "Too many requests have been sent from your account in a short time. Please try again later." : describeTierRate(error.tierLimit);
   if (error instanceof EngineError) return error.reject ? describeReject(error.reject) : error.message;
-  return error instanceof Error ? error.message : "An unexpected error occurred.";
+  return error instanceof Error ? error.message : "An unexpected error occurred. Please try again.";
 }
 
 /**

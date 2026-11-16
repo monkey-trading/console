@@ -208,7 +208,7 @@ export class ProviderWallet implements Wallet {
     const owner = hexOf(this.address);
     const vault = hexOf(this.chain.vault);
     const balance = await this.read(usdc, encodeFunctionData({ abi: ERC20, functionName: "balanceOf", args: [owner] }), "balanceOf");
-    if (balance < units) throw new Error("Your wallet holds less USDC than that.");
+    if (balance < units) throw new Error("Your wallet holds less USDC than the amount entered.");
     const allowance = await this.read(usdc, encodeFunctionData({ abi: ERC20, functionName: "allowance", args: [owner, vault] }), "allowance");
     if (allowance < units) await this.send(usdc, encodeFunctionData({ abi: ERC20, functionName: "approve", args: [vault, units] }), "approve the vault", progress);
     return this.send(this.chain.vault, encodeFunctionData({ abi: VAULT, functionName: "deposit", args: [units] }), "deposit", progress);
