@@ -1,6 +1,7 @@
 /** The signed WebSocket stream: verifies each frame in order, tracks staleness, and reconnects at the live end. */
 
 import type { FeedStatus } from "./attestation";
+import type { ServerStatus } from "./status-types";
 import { CLOCK_TOLERANCE_MS } from "./transport";
 import type { NodeTrust } from "./trust";
 import type { Address, MarketId, MarketQuote, SignedWithdrawal, StreamMessage } from "./types";
@@ -48,6 +49,10 @@ export interface StreamDeps {
   onWithdrawal(withdrawal: SignedWithdrawal): void;
   /** A signed checkpoint the stream carried: the state root the enclave committed at `seq`. */
   onCheckpoint(checkpoint: CheckpointEntry): void;
+  /** Whether a connection asks for the server's operating state, once the node is trusted: false for a node that predates it, which refuses the query. Never rejects. */
+  statusFrames(): Promise<boolean>;
+  /** The server's operating state, when a connection opens and each time it changes. */
+  onStatus(status: ServerStatus): void;
   /** `time` is the signed time of the frame that made the feed live. */
   onFeed(status: FeedStatus, time?: number): void;
   /** Why a connection was dropped, for the log of what the user is told. */
@@ -142,10 +147,11 @@ export class LiveStream {
       if (generation === this.generation) this.fail(error instanceof Error ? error.message : "The server has not yet been verified.");
       return;
     }
+    const status = await this.deps.statusFrames();
     if (generation !== this.generation || this.stopped) return;
     const challenge = this.deps.challenge();
     // Every connection starts at the live end of the log; the store reads what an outage missed.
-    const path = `/v1/stream?signed=1&challenge=${challenge}`;
+    const path = `/v1/stream?signed=1${status ? "&status=1" : ""}&challenge=${challenge}`;
     const frames = this.deps.verifier().openFrames({ signer, chainId: this.deps.chainId, vault: this.deps.vault, challenge, pathAndQuery: path });
     let expected = 0;
     const socket = this.deps.openSocket(this.deps.origin + path);
@@ -185,6 +191,7 @@ export class LiveStream {
       else if (message.type === "quote") this.deps.onQuote(message);
       else if (message.type === "withdrawal") this.deps.onWithdrawal(message);
       else if (message.type === "checkpoint") this.deps.onCheckpoint(message);
+      else if (message.type === "status") this.deps.onStatus(message);
       else if (message.type === "quote_error") {
         this.deps.onQuoteError(message.error);
         if (this.sent !== null) {

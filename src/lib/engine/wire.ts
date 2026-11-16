@@ -1,5 +1,6 @@
 /** The node's signed-answer wire format: header names, the challenge, and the stream envelope (engine-wire). */
 
+import type { ServerStatus } from "./status-types";
 import type { MarketQuote, SignedWithdrawal, StreamMessage } from "./types";
 
 export const CHALLENGE_HEADER = "X-Engine-Challenge";
@@ -67,9 +68,12 @@ export interface CheckpointEntry {
   root: string;
 }
 
-export type FrameMessage = StreamMessage | Heartbeat | MarketQuote | QuoteError | WithdrawalEntry | CheckpointEntry;
+/** The server's operating state, sent on a `status=1` connection when it opens and each time it changes. */
+export type StatusFrame = ServerStatus & { type: "status" };
 
-/** Reads a verified frame's message: a log entry, a heartbeat, or a quote; null for any other shape. */
+export type FrameMessage = StreamMessage | Heartbeat | MarketQuote | QuoteError | WithdrawalEntry | CheckpointEntry | StatusFrame;
+
+/** Reads a verified frame's message: a log entry, a heartbeat, a quote, or the server's status; null for any other shape. */
 export function parseFrameMessage(msg: string): FrameMessage | null {
   let value: unknown;
   try {
@@ -88,6 +92,6 @@ export function parseFrameMessage(msg: string): FrameMessage | null {
     return typeof error === "string" ? { type, error } : null;
   }
   // The enclave signed these, so past their tag their shape is the engine's.
-  if (type === "command" || type === "quote" || type === "withdrawal" || type === "checkpoint") return value as FrameMessage;
+  if (type === "command" || type === "quote" || type === "withdrawal" || type === "checkpoint" || type === "status") return value as FrameMessage;
   return null;
 }

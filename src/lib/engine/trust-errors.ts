@@ -20,6 +20,14 @@ export class UntrustedError extends Error {
   }
 }
 
+/** An answer with no signature: the node signs nothing while it cannot bound its own clock, so whatever answered cannot currently be verified. */
+export class UnsignedAnswer extends UntrustedError {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "UnsignedAnswer";
+  }
+}
+
 /** A signed answer that verified but that the console refuses to take as the node's word on the vault's signer; `answer` is what it said, which can still say where the operator now runs. */
 export class RefusedAnswer extends UntrustedError {
   constructor(reason: string, readonly answer: OperatorRoute) {
