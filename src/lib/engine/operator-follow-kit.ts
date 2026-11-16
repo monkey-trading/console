@@ -4,7 +4,7 @@ import type { AttestationStatus } from "./attestation";
 import type { ClientEvent, EngineClient } from "./client";
 import { OperatorFollower } from "./operator-follow";
 import type { DeploymentReads, NamedOperator, VaultFacts } from "./registry";
-import { SignerNaming, type NamedSigner, type OperatorClaim } from "./signer-naming";
+import { SignerNaming, type OperatorClaim, type SignerFloor } from "./signer-naming";
 import { FakeScheduler } from "./test-kit";
 import { RefusedAnswer } from "./trust-errors";
 import type { StreamMessage } from "./types";
@@ -33,12 +33,12 @@ export class TrialClient {
   /** The signer every route read named, a refused one's included, as a live client's naming keeps it, and reports each rise of through `watch`. */
   readonly naming = new SignerNaming(undefined, () => { for (const watcher of this.watchers) watcher({ type: "signer" }); });
   /** Each signer the follower put to this client, oldest first. */
-  heard: NamedSigner[] = [];
+  heard: SignerFloor[] = [];
   signerNamed = () => this.naming.highest;
-  heedSigner = (signer: NamedSigner) => { this.heard.push(signer); this.naming.judge(null, { signer }); };
+  heedSigner = (signer: SignerFloor) => { this.heard.push(signer); this.naming.judge(null, { signer }); };
   /** Each signer the follower held this client to when it became the node in use, oldest first. */
-  held: NamedSigner[] = [];
-  holdSigner = (signer: NamedSigner) => { this.held.push(signer); this.naming.judge(null, { signer }); };
+  held: SignerFloor[] = [];
+  holdSigner = (floor: SignerFloor) => { this.held.push(floor); this.naming.hold(floor); };
   watch(listener: (event: ClientEvent) => void) { this.watchers.add(listener); return () => { this.watchers.delete(listener); }; }
   subscribe(onMessage: (message: StreamMessage) => void) { this.subscribers.add(onMessage); return () => { this.subscribers.delete(onMessage); }; }
   private async operatorRead(): Promise<unknown> {

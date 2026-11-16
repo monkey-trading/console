@@ -6,7 +6,7 @@ import type { Scheduler } from "./live-stream";
 import type { OperatorRoute } from "./stats-types";
 import { RefusedAnswer } from "./trust-errors";
 import type { DeploymentReads, NamedOperator } from "./registry";
-import type { NamedSigner } from "./signer-naming";
+import type { SignerFloor } from "./signer-naming";
 
 /** What the console knows of the node it should talk to; `origin` is the node it talks to now. */
 export type FollowStatus =
@@ -50,20 +50,10 @@ export async function signedAnswer(client: EngineClient): Promise<OperatorRoute 
   }
 }
 
-/** The highest signer a visit has read named, by epoch, which no node it moves to may lag behind; `address` is null once two keys were named at that epoch. */
-export type SignerFloor = { epoch: number; address: string | null };
-
-/** `floor` raised by `named`, the highest signer a client's signed routes named: to it at a later epoch, to no key at the same epoch naming another, whichever was read first; `floor` itself otherwise. */
-export function raised(floor: SignerFloor | null, named: Readonly<NamedSigner> | null): SignerFloor | null {
-  if (named === null) return floor;
-  const address = named.address.toLowerCase();
-  if (floor === null || named.epoch > floor.epoch) return { epoch: named.epoch, address };
-  return named.epoch === floor.epoch && floor.address !== null && address !== floor.address ? { epoch: floor.epoch, address: null } : floor;
-}
-
 /**
- * Why a node whose route is `route` is not taken under `floor`: its own word on the signer is older than that, names another key at that
- * epoch or one two keys were named at, or is absent while no read of the vault (`vaultRead`) judged the node, as it does one that states none.
+ * Why a node whose route is `route` is not taken under `floor`, the highest signer the visit has read named: its own word on the signer is
+ * older than that, names another key at that epoch or one two keys were named at, or is absent while no read of the vault (`vaultRead`)
+ * judged the node, as it does one that states none.
  */
 export function lagging(floor: SignerFloor | null, route: OperatorRoute | null, vaultRead: boolean): string | null {
   if (floor === null) return null;

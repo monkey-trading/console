@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { dev } from "./live-setup";
 import { liveStats } from "./live-stats";
-import { SignerNaming, SIGNER_SUPERSEDED } from "./signer-naming";
+import { SignerNaming, SIGNER_SUPERSEDED, SIGNER_UNREAD, type OperatorClaim, type SignerFloor } from "./signer-naming";
 import type { OperatorRoute } from "./stats-types";
 import { NodeTrust, UntrustedError } from "./trust";
 import type { Verifier } from "./verifier";
@@ -105,6 +105,49 @@ describe("SignerNaming", () => {
     naming.judge(OLD, { enclave: NEW, signer: { epoch: 9, address: NEW } });
     naming.judge(THIRD, { signer: { epoch: 5, address: NEW } });
     expect(told).toEqual([{ epoch: 4, trustedRefused: false }, { epoch: 5, trustedRefused: true }]);
+  });
+
+  it("names no key at an epoch two keys were named at, however the second came, tells it, and refuses each key there until a later epoch names one (monkey-trading/console#381)", async () => {
+    const THIRD = "0x00000000000000000000000000000000000000cc";
+    const seconds: { way: string; second: (naming: SignerNaming) => void }[] = [
+      { way: "the node's own word", second: (naming) => naming.judge(OLD, { signer: { epoch: 4, address: NEW } }) },
+      { way: "a word put to it", second: (naming) => naming.judge(null, { signer: { epoch: 4, address: NEW } }) },
+      { way: "a word held to it", second: (naming) => naming.hold({ epoch: 4, address: NEW }) },
+      { way: "a floor of two keys held to it", second: (naming) => naming.hold({ epoch: 4, address: null }) },
+    ];
+    for (const { way, second } of seconds) {
+      const told: (Readonly<SignerFloor> | null)[] = [];
+      const naming: SignerNaming = new SignerNaming(async () => ({}), () => told.push(naming.highest));
+      naming.judge(null, { signer: { epoch: 4, address: OLD } });
+      second(naming);
+      naming.judge(null, { signer: { epoch: 3, address: OLD } });
+      expect(told, way).toEqual([{ epoch: 4, address: OLD }, { epoch: 4, address: null }]);
+      expect(naming.judge(OLD, { signer: { epoch: 4, address: OLD } }), way).toEqual({ reason: SIGNER_SUPERSEDED, supersede: true });
+      // A node that states no signer: refused with no read of the vault, taken when this check's own read named it.
+      await expect(naming.refusal(NEW, false), way).resolves.toEqual({ reason: SIGNER_SUPERSEDED, unread: true });
+      await expect(naming.refusal(THIRD, true), way).resolves.toBeNull();
+      naming.judge(null, { signer: { epoch: 5, address: NEW } });
+      expect([naming.highest, await naming.refusal(NEW, false)], way).toEqual([{ epoch: 5, address: NEW }, null]);
+    }
+  });
+
+  it("marks a refusal no read of the vault was there to lift, and only that (monkey-trading/console#379)", async () => {
+    const said: { claim: OperatorClaim | Error } = { claim: {} };
+    const refusals: { refusal: string; set: (naming: SignerNaming) => void; claim: OperatorClaim | Error; vaultJudged: boolean; unread: boolean | null }[] = [
+      { refusal: "another key named at the highest epoch", set: (naming) => naming.hold({ epoch: 4, address: OLD }), claim: {}, vaultJudged: false, unread: true },
+      { refusal: "put aside by a read of the vault", set: (naming) => naming.vaultSays(NEW, OLD), claim: {}, vaultJudged: false, unread: true },
+      { refusal: "put aside, with a read that named it at a check a newer read overtook", set: (naming) => naming.vaultSays(NEW, OLD), claim: {}, vaultJudged: true, unread: false },
+      { refusal: "its own word names another key", set: () => undefined, claim: { signer: { epoch: 4, address: OLD } }, vaultJudged: false, unread: false },
+      { refusal: "its word cannot be read", set: () => undefined, claim: new Error("Failed to fetch"), vaultJudged: false, unread: false },
+      { refusal: "none: nothing names another key", set: () => undefined, claim: {}, vaultJudged: false, unread: null },
+    ];
+    for (const { refusal, set, claim, vaultJudged, unread } of refusals) {
+      const naming = new SignerNaming(async () => { if (said.claim instanceof Error) throw said.claim; return said.claim; });
+      set(naming);
+      said.claim = claim;
+      const reason = claim instanceof Error ? expect.stringContaining(SIGNER_UNREAD) : SIGNER_SUPERSEDED;
+      await expect(naming.refusal(NEW, vaultJudged), refusal).resolves.toEqual(unread === null ? null : { reason, unread });
+    }
   });
 });
 
