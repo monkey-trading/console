@@ -29,7 +29,15 @@ function visit(hostname: string) {
   return { ...kit, current, nodeB: clients[B], nodeC: clients[C] };
 }
 
-describe("the signer floor a visit with no wallet holds each node to (monkey-trading/console#373)", () => {
+/** A follower with a wallet whose chain names B, over a node in use whose route names nothing. */
+function walletVisit() {
+  const kit = rig();
+  const current = new TrialClient();
+  kit.follower.watch(current as unknown as EngineClient); // the follower uses only what TrialClient has
+  return { ...kit, current, nodeB: kit.trial };
+}
+
+describe("the signer floor a visit holds each node to (monkey-trading/console#373)", () => {
   it("does not take an older signer at another node once the node it moved to, which named a later one, stops answering", async () => {
     const kit = visit("build.example");
     // The node in use's schedule leads through B now to C a minute on.
@@ -84,6 +92,28 @@ describe("the signer floor a visit with no wallet holds each node to (monkey-tra
     expect(kit.follower.getSnapshot()).toMatchObject(LAGS);
   });
 
+  it("takes no node at an epoch two nodes named different keys at, and puts the second word to the node in use", async () => {
+    const kit = visit("b.example");
+    kit.current.signedRead = async () => route("b.example", { epoch: 7, address: KA });
+    await kit.follower.check(); // B states no signer yet, so the floor is the node in use's word
+    expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B });
+    kit.nodeB.signedRead = async () => route(null, { epoch: 7, address: KB });
+    await kit.follower.check();
+    expect(kit.adopted).toEqual([]);
+    expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B, reason: expect.stringContaining("newer signer") });
+    expect(kit.current.heard).toEqual([{ epoch: 7, address: KA }, { epoch: 7, address: KB }]);
+  });
+
+  it("holds a node moved to with a wallet to it too", async () => {
+    const kit = walletVisit();
+    kit.current.signedRead = async () => route(null, { epoch: 8, address: KA });
+    // B verifies against the wallet's read, while its own word is older than the node in use's.
+    kit.nodeB.signedRead = async () => route(null, { epoch: 7, address: KB });
+    await kit.follower.check();
+    expect(kit.adopted).toEqual([]);
+    expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B, reason: expect.stringContaining("newer signer") });
+  });
+
   it("counts what another of the page's reads of the node in use named before it stopped answering", async () => {
     const kit = visit("c.example:8443");
     kit.nodeC.verdict = { kind: "unverified", reason: "still taking the keys" };
@@ -120,15 +150,32 @@ describe("the node in use under a later signer another node names (monkey-tradin
     expect(kit.current.heard).toEqual([{ epoch: 7, address: KC }]);
   });
 
+  it("puts to the node in use what each read of a trial named as that read ends, before the next one settles", async () => {
+    const pending = (): Promise<never> => new Promise(() => {});
+    for (const step of ["check, then its signed answer", "refused check, then its route read again", "a wallet's check, then the next"] as const) {
+      const kit = step === "a wallet's check, then the next" ? walletVisit() : visit("b.example");
+      const trial = kit.nodeB;
+      const names = (address: string) => { trial.naming.judge(null, { signer: { epoch: 8, address } }); };
+      if (step === "check, then its signed answer") trial.verify = async () => { names(KB); return trial.verdict; };
+      if (step === "refused check, then its route read again") trial.verify = async () => { names(KC); return { kind: "unverified", reason: "The vault names another signer" }; };
+      if (step === "a wallet's check, then the next") {
+        trial.readChainThrough = async () => { names(KB); };
+        trial.verify = pending;
+      }
+      trial.signedRead = pending;
+      void kit.follower.check();
+      await settle();
+      expect(kit.current.heard, step).toEqual([{ epoch: 8, address: step === "refused check, then its route read again" ? KC : KB }]);
+    }
+  });
+
   it("puts to the node in use, with a wallet too, what the check of a node left waiting read", async () => {
-    const kit = rig();
-    const current = new TrialClient();
-    kit.follower.watch(current as unknown as EngineClient); // the follower uses only what TrialClient has
-    // The wallet's read of the vault fails for the trial, which its own word names at epoch 8.
-    kit.trial.verify = async () => { kit.trial.naming.judge(null, { signer: { epoch: 8, address: KB } }); return { kind: "attested", release: "r", address: KB, why: "the vault could not be read" }; };
+    const kit = walletVisit();
+    // The wallet's read of the vault fails for B, which its own word names at epoch 8.
+    kit.nodeB.verify = async () => { kit.nodeB.naming.judge(null, { signer: { epoch: 8, address: KB } }); return { kind: "attested", release: "r", address: KB, why: "the vault could not be read" }; };
     await kit.follower.check();
     expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B });
-    expect(current.heard).toEqual([{ epoch: 8, address: KB }]);
+    expect(kit.current.heard).toEqual([{ epoch: 8, address: KB }]);
   });
 
   it("reads the node it moved to on the check the old node's refusal starts, not the old node", async () => {
