@@ -49,10 +49,10 @@ describe("MockGovernance", () => {
 
   it("refuses a vote as the contract does", () => {
     const mock = governance();
-    expect(() => mock.castVote(99, A, START)).toThrow("There's no proposal with this number");
+    expect(() => mock.castVote(99, A, START)).toThrow("There is no proposal with this number");
     expect(() => mock.castVote(5, C, START)).toThrow("already passed");
     expect(() => mock.castVote(8, B, START + DAY)).toThrow("Voting on this proposal has closed");
-    expect(() => mock.castVote(8, E, START)).toThrow("can't vote on this proposal");
+    expect(() => mock.castVote(8, E, START)).toThrow("is not eligible to vote on this proposal");
     expect(() => mock.castVote(8, A, START)).toThrow("already voted on this proposal");
   });
 

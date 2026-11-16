@@ -47,7 +47,7 @@ describe("delegation changes", () => {
     if (first === undefined) throw new Error("the mock lists no candidate");
     const held = node.client.state.monkey.staked.get(DEMO_ADDRESS.toLowerCase()) ?? 0n;
     expect(await changeDelegation(panel, new OperatorReads(store), new DelegationReads(store), { kind: "delegate", to: first.address, toLabel: "first", amount: held + MONKEY_UNIT })).toBe(false);
-    expect(store.getSnapshot().notices.operator?.text).toBe("Your undelegated stake is less than that.");
+    expect(store.getSnapshot().notices.operator?.text).toBe("Your undelegated stake is less than the amount entered.");
     expect(store.getSnapshot().busy).toBe(false);
     stop();
   });

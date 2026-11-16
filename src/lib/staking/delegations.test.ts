@@ -77,13 +77,13 @@ describe("unstakeWords", () => {
   const label = (address: string) => (address === A ? "alpha.example" : "bravo.example");
 
   it("says an unstake within the undelegated stake changes no delegation", () => {
-    expect(unstakeWords(1_000n * M, [{ candidate: A, amount: 500n * M }], 400n * M, label)).toBe("This takes 400 MONKEY from your undelegated stake, so your delegations don't change.");
+    expect(unstakeWords(1_000n * M, [{ candidate: A, amount: 500n * M }], 400n * M, label)).toBe("This unstake draws 400 MONKEY from your undelegated stake, so your delegations do not change.");
   });
 
   it("names each delegation a larger one reduces, and by how much, after all of the undelegated stake", () => {
     const delegations = [{ candidate: A, amount: 200n * M }, { candidate: B, amount: 200n * M }];
-    expect(unstakeWords(1_000n * M, delegations, 700n * M, label)).toBe("This takes all 600 MONKEY of your undelegated stake, then 50 MONKEY from your delegation to alpha.example and 50 MONKEY from your delegation to bravo.example.");
-    expect(unstakeWords(400n * M, delegations, 100n * M, label)).toBe("This takes 50 MONKEY from your delegation to alpha.example and 50 MONKEY from your delegation to bravo.example.");
+    expect(unstakeWords(1_000n * M, delegations, 700n * M, label)).toBe("This unstake draws all 600 MONKEY of your undelegated stake, and then 50 MONKEY from your delegation to alpha.example and 50 MONKEY from your delegation to bravo.example.");
+    expect(unstakeWords(400n * M, delegations, 100n * M, label)).toBe("This unstake draws 50 MONKEY from your delegation to alpha.example and 50 MONKEY from your delegation to bravo.example.");
   });
 
   it("says nothing for an amount the stake does not cover", () => {
@@ -94,8 +94,8 @@ describe("unstakeWords", () => {
 
 describe("the delegation forms' words", () => {
   it("say what delegating, moving and taking back an amount would change, before the wallet is asked", () => {
-    expect(delegateWords(1_000n * M, 0n, 300n * M, "alpha.example")).toBe("Undelegated 1,000 MONKEY → 700 MONKEY. Your delegation to alpha.example 0 MONKEY → 300 MONKEY.");
-    expect(moveWords({ label: "alpha.example", held: 300n * M }, { label: "bravo.example", held: 200n * M }, 100n * M, 500n * M)).toBe("Your delegation to alpha.example 300 MONKEY → 200 MONKEY, and to bravo.example 200 MONKEY → 300 MONKEY. Your undelegated stake stays 500 MONKEY.");
-    expect(takeBackWords(300n * M, 500n * M, 100n * M, "bravo.example")).toBe("Your delegation to bravo.example 300 MONKEY → 200 MONKEY. Undelegated 500 MONKEY → 600 MONKEY.");
+    expect(delegateWords(1_000n * M, 0n, 300n * M, "alpha.example")).toBe("Your undelegated stake would change from 1,000 MONKEY to 700 MONKEY, and your delegation to alpha.example from 0 MONKEY to 300 MONKEY.");
+    expect(moveWords({ label: "alpha.example", held: 300n * M }, { label: "bravo.example", held: 200n * M }, 100n * M, 500n * M)).toBe("Your delegation to alpha.example would change from 300 MONKEY to 200 MONKEY, and your delegation to bravo.example from 200 MONKEY to 300 MONKEY. Your undelegated stake would remain 500 MONKEY.");
+    expect(takeBackWords(300n * M, 500n * M, 100n * M, "bravo.example")).toBe("Your delegation to bravo.example would change from 300 MONKEY to 200 MONKEY, and your undelegated stake from 500 MONKEY to 600 MONKEY.");
   });
 });

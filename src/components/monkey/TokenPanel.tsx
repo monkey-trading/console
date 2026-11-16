@@ -31,7 +31,7 @@ export function TokenPanel() {
         <AddressRow label="Staking contract" address={deploy.staking ?? contracts?.staking ?? null} />
       </dl>
       <ReadNote read={overview} quiet />
-      <p className={NOTE}>Share staked is the MONKEY staked as a share of all MONKEY earned so far.</p>
+      <p className={NOTE}>Share staked is the amount of MONKEY staked as a percentage of all MONKEY earned to date.</p>
     </Card>
   );
 }

@@ -92,7 +92,7 @@ describe("ProviderStaking.position", () => {
   });
 
   it("refuses to read while the wallet is on another chain", async () => {
-    await expect(rig({ ...WORLD, chainId: 1 }).staking.position()).rejects.toThrow("on chain 1, not chain 31337");
+    await expect(rig({ ...WORLD, chainId: 1 }).staking.position()).rejects.toThrow("connected to chain 1, not chain 31337");
   });
 
   it("still reads the vault's payments and checkpoint and the wallet's balance when the build names no staking contract", async () => {
@@ -136,20 +136,20 @@ describe("ProviderStaking.delegations", () => {
     const moving = rig({ ...WORLD, delegated: 40n, delegations }, CHAIN, TOKEN, (call, world) => {
       if (call === "stakes") world.staked += 1n;
     });
-    await expect(moving.staking.delegations()).rejects.toThrow("Your stake kept changing");
+    await expect(moving.staking.delegations()).rejects.toThrow("Your stake changed several times");
   });
 
   it("refuses an answer when the wallet changed chain during the read", async () => {
     const { staking } = rig({ ...WORLD, delegated: 40n, delegations }, CHAIN, TOKEN, (call, world) => {
       if (call === "delegationsOf") world.chainId = 1;
     });
-    await expect(staking.delegations()).rejects.toThrow("on chain 1, not chain 31337");
+    await expect(staking.delegations()).rejects.toThrow("connected to chain 1, not chain 31337");
   });
 
   it("refuses delegations that do not add up to the delegated stake, or pass the stake, which only a lying RPC answers, and a wallet on another chain", async () => {
-    await expect(rig({ ...WORLD, delegated: 39n, delegations }).staking.delegations()).rejects.toThrow("don't add up");
-    await expect(rig({ ...WORLD, staked: 39n, delegated: 40n, delegations }).staking.delegations()).rejects.toThrow("don't add up");
-    await expect(rig({ ...WORLD, chainId: 1, delegated: 40n, delegations }).staking.delegations()).rejects.toThrow("on chain 1, not chain 31337");
+    await expect(rig({ ...WORLD, delegated: 39n, delegations }).staking.delegations()).rejects.toThrow("do not add up");
+    await expect(rig({ ...WORLD, staked: 39n, delegated: 40n, delegations }).staking.delegations()).rejects.toThrow("do not add up");
+    await expect(rig({ ...WORLD, chainId: 1, delegated: 40n, delegations }).staking.delegations()).rejects.toThrow("connected to chain 1, not chain 31337");
   });
 });
 
@@ -168,11 +168,11 @@ describe("ProviderStaking transactions", () => {
 
   it("refuses a zero amount, a move to the same candidate, and any change when the build names no staking contract, sending nothing", async () => {
     const { staking, sent } = rig(WORLD);
-    await expect(staking.delegate(CANDIDATE, 0n)).rejects.toThrow("more than zero");
-    await expect(staking.undelegate(CANDIDATE, 0n)).rejects.toThrow("more than zero");
-    await expect(staking.redelegate(CANDIDATE, CANDIDATE.toUpperCase().replace("0X", "0x"), 5n)).rejects.toThrow("to the same candidate");
+    await expect(staking.delegate(CANDIDATE, 0n)).rejects.toThrow("greater than zero");
+    await expect(staking.undelegate(CANDIDATE, 0n)).rejects.toThrow("greater than zero");
+    await expect(staking.redelegate(CANDIDATE, CANDIDATE.toUpperCase().replace("0X", "0x"), 5n)).rejects.toThrow("the candidate it is already delegated to");
     expect(sent).toEqual([]);
-    await expect(rig(WORLD, { ...CHAIN, staking: null }).staking.delegate(CANDIDATE, 5n)).rejects.toThrow("Staking isn't available here");
+    await expect(rig(WORLD, { ...CHAIN, staking: null }).staking.delegate(CANDIDATE, 5n)).rejects.toThrow("Staking is not currently available");
   });
 
   it("approves the staking contract for the amount before staking when the allowance is short", async () => {
@@ -191,21 +191,21 @@ describe("ProviderStaking transactions", () => {
 
   it("refuses to stake, or unstake, when the build names no staking contract", async () => {
     const { staking, sent } = rig(WORLD, { ...CHAIN, staking: null });
-    await expect(staking.stake(1n)).rejects.toThrow("Staking isn't available here");
-    await expect(staking.startUnstake(1n)).rejects.toThrow("Staking isn't available here");
+    await expect(staking.stake(1n)).rejects.toThrow("Staking is not currently available");
+    await expect(staking.startUnstake(1n)).rejects.toThrow("Staking is not currently available");
     expect(sent).toEqual([]);
   });
 
   it("refuses to stake while the vault has no token", async () => {
     const { staking, sent } = rig(WORLD, CHAIN, "0x0000000000000000000000000000000000000000");
-    await expect(staking.stake(1n)).rejects.toThrow("The MONKEY token isn't available yet");
+    await expect(staking.stake(1n)).rejects.toThrow("The MONKEY token is not yet available");
     expect(sent).toEqual([]);
   });
 
   it("refuses to stake more than the wallet holds, and nothing", async () => {
     const { staking, sent } = rig(WORLD);
     await expect(staking.stake(501n)).rejects.toThrow("less MONKEY");
-    await expect(staking.stake(0n)).rejects.toThrow("more than zero");
+    await expect(staking.stake(0n)).rejects.toThrow("greater than zero");
     expect(sent).toEqual([]);
   });
 

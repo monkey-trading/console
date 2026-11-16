@@ -44,7 +44,7 @@ const IDLE: HistoryState = { account: null, data: emptyHistory(), status: "idle"
 
 /** The text of a failed read for the card. */
 function describe(error: unknown): string {
-  return error instanceof Error ? error.message : "The server didn't respond.";
+  return error instanceof Error ? error.message : "The server did not respond.";
 }
 
 export class DistributionHistoryReads {

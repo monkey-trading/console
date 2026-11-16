@@ -160,7 +160,7 @@ export class HouseStats {
         this.set(entry, { status: "waiting", data: had, stale: had !== null, error: null });
       } else {
         backoffMs = Math.min(MAX_BACKOFF_MS, Math.max(entry.spec.everyMs, MIN_EVERY_MS) * 2 ** Math.min(entry.failures, 6));
-        const message = error instanceof Error ? error.message : "The server didn't respond.";
+        const message = error instanceof Error ? error.message : "The server did not respond.";
         this.set(entry, { status: had === null ? "failed" : "ready", data: had, stale: had !== null, error: message });
       }
     } finally {

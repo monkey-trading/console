@@ -23,7 +23,7 @@ export function StakingEpochs() {
         <DistributionPanel />
         <EpochHistory epochs={epochs} labelOf={labelOf} />
       </div>
-      <DashboardLink href="/dashboard#staking">See the history of distributions on the Dashboard</DashboardLink>
+      <DashboardLink href="/dashboard#staking">View the history of distributions on the Dashboard</DashboardLink>
     </div>
   );
 }

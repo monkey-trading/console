@@ -67,7 +67,7 @@ describe("the cards while the page load's wallet is not settled", () => {
     const html = render(Emissions, unsettled, "monkey");
     expect(html).toContain("Loading your MONKEY…");
     expect(held(html)).toBe(1);
-    expect(render(Emissions, { wallet: null, walletDecided: true }, "monkey")).toContain("Connect a wallet to see the MONKEY you&#x27;ve earned.");
+    expect(render(Emissions, { wallet: null, walletDecided: true }, "monkey")).toContain("Connect a wallet to see the MONKEY you have earned.");
   });
 });
 
@@ -100,11 +100,11 @@ describe("the cards while a connected wallet's first reads run", () => {
     expect(watched).toContain("Earned");
     expect(held(watched)).toBe(0);
     // It says plainly that the claimed amount needs a wallet, never checking it for ever (#288).
-    expect(watched).toContain("How much has been claimed shows only with a connected wallet, so it isn&#x27;t shown for a read-only account.");
-    expect(watched).not.toContain("Checking how much you&#x27;ve claimed");
+    expect(watched).toContain("The amount you have claimed can be checked only through a connected wallet, so it is not shown while you are viewing this account in read-only mode.");
+    expect(watched).not.toContain("Checking how much you have claimed");
     const connected = render(Emissions, { wallet: WALLET, walletDecided: true, accountRead: true, entitlement, emissionsVault: null }, "monkey");
     expect(held(connected)).toBe(1);
-    expect(connected).toContain("Checking how much you&#x27;ve claimed…");
+    expect(connected).toContain("Checking how much you have claimed…");
   });
 
   it("holds the emissions card's layout while the account or its closed periods are read", () => {
@@ -133,6 +133,6 @@ describe("the cards while the node's totals are read", () => {
     const html = render(Chart, {});
     expect(html).toContain("Loading chart…");
     expect(html).toMatch(/aria-hidden="true" class="invisible"/);
-    expect(html).toContain("&quot;All&quot; shows up to the last 1,998 days");
+    expect(html).toContain("The &quot;All&quot; range shows up to the last 1,998 days");
   });
 });

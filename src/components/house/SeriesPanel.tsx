@@ -41,9 +41,9 @@ export interface LineSpec {
 }
 
 /** What the footnote says of a sampled line. The answers carry the time of the last scan but not how often the node scans, so it says periodic. */
-const ALL = `"All" shows up to the last ${groupThousands(ALL_WINDOW_DAYS)} days.`;
+const ALL = `The "All" range shows up to the last ${groupThousands(ALL_WINDOW_DAYS)} days.`;
 
-const SAMPLED = "These figures come from regular snapshots of all accounts, so a position opened and closed between two snapshots doesn't show.";
+const SAMPLED = "These figures are calculated across all accounts at regular intervals, so a position opened and closed between two calculations does not appear.";
 
 interface Props {
   title: string;
@@ -108,7 +108,7 @@ function SeriesPanelView({ title, tip, lines, markets, range: driven, currents, 
         })}
       </p>
       {unavailable ? (
-        <Quiet>History isn&apos;t available from this server yet, so there&apos;s no chart.</Quiet>
+        <Quiet>Historical data is not yet available from this trading server, so no chart can be shown.</Quiet>
       ) : (
         <>
           <div className="relative flex min-h-52 flex-1 flex-col">

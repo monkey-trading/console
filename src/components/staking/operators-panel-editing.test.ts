@@ -74,7 +74,7 @@ describe("the operators card's editors and slot", () => {
     for (const promoted of [false, true]) {
       const pending = { ...view, pending: { candidate: ALPHA, effectiveAtMs: 1_794_000_000_000, promoted } };
       const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(pending), held: null }, read: chain() });
-      expect(html).toMatch(/<p class="rounded border border-amber\/40 bg-amber\/10 p-3 text-caption leading-relaxed text-amber \[overflow-wrap:anywhere\]">alpha\.example \(0x000000…00a1\) (won the election|is taking over)/);
+      expect(html).toMatch(/<p class="rounded border border-amber\/40 bg-amber\/10 p-3 text-caption leading-relaxed text-amber \[overflow-wrap:anywhere\]">alpha\.example \(0x000000…00a1\) (has won the election|is taking over as operator)/);
     }
   });
 });

@@ -175,7 +175,7 @@ describe("claimEmissions", () => {
     client.emissions = original;
     client.entitlement = null;
     await claimEmissions(store);
-    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "There's no MONKEY to claim for this account right now." });
+    expect(store.getSnapshot().notices.emissions).toMatchObject({ tone: "info", text: "There is currently no MONKEY to claim for this account." });
   });
 
   it("refuses a claim without a wallet or with a proof for another account, and sends nothing", async () => {
@@ -184,12 +184,12 @@ describe("claimEmissions", () => {
     bare.store.patch({ entitlement: proof(5n * MONKEY_UNIT), emissionsVault: { claimed: 0n, latestSeq: 40 } });
     bare.store.liveWallet = null;
     await claimEmissions(bare.store);
-    expect(bare.store.getSnapshot().notices.emissions).toMatchObject({ tone: "error", text: "Connect a wallet first." });
+    expect(bare.store.getSnapshot().notices.emissions).toMatchObject({ tone: "error", text: "Connect a wallet to continue." });
     const other = await connected();
     other.client.entitlement = { ...proof(5n * MONKEY_UNIT), account: "0x00000000000000000000000000000000000000aa" };
     other.provider.vault.latestSeq = 40;
     await claimEmissions(other.store);
-    expect(other.store.getSnapshot().notices.emissions).toMatchObject({ tone: "error", text: "This MONKEY is for another account." });
+    expect(other.store.getSnapshot().notices.emissions).toMatchObject({ tone: "error", text: "This MONKEY belongs to another account, so it cannot be claimed from this wallet." });
     expect(other.provider.sent).toHaveLength(0);
   });
 

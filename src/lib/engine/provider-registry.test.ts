@@ -74,7 +74,7 @@ describe("a wallet that moves chain during a read", () => {
       const { provider } = rig();
       let asked = 0;
       const moving: Eip1193Provider = { request: async (args) => (args.method === "eth_chainId" && ++asked > 1 ? "0x1" : provider.request(args)) };
-      await expect(read(new ProviderDeployment(CHAIN, moving)), name).rejects.toThrow("on chain 1, not chain 31337");
+      await expect(read(new ProviderDeployment(CHAIN, moving)), name).rejects.toThrow("connected to chain 1, not chain 31337");
     }
   });
 });
@@ -115,7 +115,7 @@ describe("ProviderDeployment.vault", () => {
   });
 
   it("refuses to read on another chain, whose vault at this address is not the deployment's", async () => {
-    await expect(rig({ chainId: 1 }).reads.vault()).rejects.toThrow("on chain 1, not chain 31337");
+    await expect(rig({ chainId: 1 }).reads.vault()).rejects.toThrow("connected to chain 1, not chain 31337");
   });
 
   it("fails rather than answer from a contract that returns nothing", async () => {

@@ -34,23 +34,23 @@ export function PositionMap({ className }: { className?: string }) {
   return (
     <Panel
       title="Position map"
-      tip="This shows traders' positions in this market by how much each is up or down. Shorts are on the left, longs on the right, profits at the top and losses at the bottom. Bar length shows the total position size."
+      tip="Traders' positions in the selected market, grouped by their unrealised profit or loss. Short positions are on the left and long positions on the right, with profits at the top and losses at the bottom. The length of each bar shows the total size of the positions in that group."
       className={className}
       controls={<Pick label="Position map market" value={market ?? 0} options={markets.map((m) => ({ value: m.id, label: m.label }))} onChange={setPicked} />}
     >
       {feed.status === "failed" ? (
-        <Quiet>{feedProblem(feed, "positions by profit")}</Quiet>
+        <Quiet>{feedProblem(feed, "positions by profit and loss")}</Quiet>
       ) : feed.status === "unavailable" && view === null ? (
-        <Quiet>Positions by profit aren&apos;t available from this server yet.</Quiet>
+        <Quiet>Positions by profit and loss are not yet available from this trading server.</Quiet>
       ) : feed.status === "waiting" && view === null ? (
-        <Quiet>The map appears after the server&apos;s first update of all accounts.</Quiet>
+        <Quiet>The map will appear once the trading server has completed its first calculation across all accounts.</Quiet>
       ) : rows.length === 0 ? (
         <Quiet>{feed.status === "loading" ? "Loading…" : "No positions are open in this market."}</Quiet>
       ) : (
         <>
           <div className="flex justify-between text-label tracking-caps text-fg-3 uppercase">
-            <Term label="Short" tip="These are traders' short positions. They profit when the price falls." />
-            <Term label="Long" tip="These are traders' long positions. They profit when the price rises." />
+            <Term label="Short" tip="Traders' short positions, which profit when the price falls." />
+            <Term label="Long" tip="Traders' long positions, which profit when the price rises." />
           </div>
           <div className="relative">
           <ul aria-hidden="true" className="flex flex-col gap-px">
@@ -69,7 +69,7 @@ export function PositionMap({ className }: { className?: string }) {
             rows={rows.map((row) => ({ key: row.label, head: row.label, cells: [`${formatCompactUsd(row.short)}, ${row.shortCount} positions`, `${formatCompactUsd(row.long)}, ${row.longCount} positions`] }))}
           />
           </div>
-          <p className="text-label text-fg-3">Profits at the top, losses at the bottom. Shows positions as of the last update only.{feedProblem(feed, "positions by profit") === null ? "" : ` ${feedProblem(feed, "positions by profit")}`}</p>
+          <p className="text-label text-fg-3">Profits are shown at the top and losses at the bottom. The map shows positions as at the most recent update only.{feedProblem(feed, "positions by profit and loss") === null ? "" : ` ${feedProblem(feed, "positions by profit and loss")}`}</p>
         </>
       )}
     </Panel>

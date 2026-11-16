@@ -61,3 +61,8 @@ export function asSentence(reason: string): string {
   const text = reason.trim().replace(/\.+$/, "");
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }
+
+/** An error in reading order: what happened, then its reason as a sentence where there is one, then what happens next. */
+export function failureText(happened: string, reason?: string | null, next?: string): string {
+  return [happened, reason?.trim() ? asSentence(reason) : "", next ?? ""].filter((part) => part !== "").join(" ");
+}

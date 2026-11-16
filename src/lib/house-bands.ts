@@ -86,9 +86,9 @@ export function emptyMapNote(view: PositionsView, rangeBps: number): string | nu
   if (view.mark === null || bandsWithin(closeoutBands(view), fixedToNumber(fixedFromWire(view.mark)), rangeBps).length > 0) return null;
   const head = `No positions close out within ±${rangeBps / 100}% of the current price.`;
   const reach = farthestBandBps(view);
-  if (reach !== null) return `${head} Choose a wider range to see the nearest ones.`;
+  if (reach !== null) return `${head} Choose a wider price range to see the nearest close-out levels.`;
   const beyond = usdOf(view.beyond_range);
-  return beyond > 0 ? `${head} ${formatCompactUsd(beyond)} closes out further than ±${view.closeout_range_bps / 100}% from the price.` : head;
+  return beyond > 0 ? `${head} Positions totalling ${formatCompactUsd(beyond)} would close out more than ±${view.closeout_range_bps / 100}% from the current price.` : head;
 }
 
 /** A band's colour weight from 0 to 1: the square root of its share of the heaviest, so small bands still show. */

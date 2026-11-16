@@ -25,7 +25,7 @@ describe("monkeyFigureRows", () => {
     const rows = monkeyFigureRows(viewWith());
     expect(rows.map((row) => row.label)).toEqual(["Earned so far", "Staked", "USDC distributed"]);
     expect(rows[0]?.value).toBe(formatMonkey(5n * UNIT));
-    expect(rows[0]?.tip).toContain("created only when it's claimed");
+    expect(rows[0]?.tip).toContain("created only when it is claimed");
   });
 
   it("reads the stake and reward totals from their own fields", () => {

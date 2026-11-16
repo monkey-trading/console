@@ -50,7 +50,7 @@ const TITLE_ID = "operators-title";
 const FIELD = "min-h-11 w-full rounded border border-edge bg-ink px-2 py-2 text-data text-fg placeholder:text-fg-3 hover:border-glow focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0";
 
 /** Why the list in hand is not the node's current one, as the held list's note ends. */
-const WHY: Record<NoList, string> = { unverified: "the server isn't verified right now", clock: "your device clock is wrong", unread: "the operator list can't be loaded right now" };
+const WHY: Record<NoList, string> = { unverified: "the trading server is not currently verified", clock: "your device clock is incorrect", unread: "the current operator list cannot be loaded" };
 
 /** The host of an `https://` origin. */
 const hostOf = (origin: string) => new URL(origin).host;
@@ -127,22 +127,22 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
       </dl>
       {pending !== null && (
         <p className="rounded border border-amber/40 bg-amber/10 p-3 text-caption leading-relaxed text-amber [overflow-wrap:anywhere]">
-          {pending.promoted ? `${withAddress(labelOf(pending.candidate), pending.candidate)} is taking over because the operator stopped responding. Its release is in use now, and its operator key` : `${withAddress(labelOf(pending.candidate), pending.candidate)} won the election. Its operator key`} takes effect at {formatStamp(pending.effectiveAtMs)} UTC{nowMs > 0 && pending.effectiveAtMs > nowMs ? `, in ${spokenLongCountdown(pending.effectiveAtMs, nowMs)}` : ""}.
+          {pending.promoted ? `${withAddress(labelOf(pending.candidate), pending.candidate)} is taking over as operator because the current operator stopped responding. Its release is already in use, and its operator key` : `${withAddress(labelOf(pending.candidate), pending.candidate)} has won the election. Its operator key`} takes effect at {formatStamp(pending.effectiveAtMs)} UTC{nowMs > 0 && pending.effectiveAtMs > nowMs ? `, in ${spokenLongCountdown(pending.effectiveAtMs, nowMs)}` : ""}.
         </p>
       )}
       {mirrored !== null && (
         <p className="rounded border border-amber/40 bg-amber/10 p-3 text-caption leading-relaxed text-amber [overflow-wrap:anywhere]">
-          The server has recorded the election of {withAddress(labelOf(mirrored.candidate), mirrored.candidate)}. Its operator key takes effect at {formatStamp(mirrored.effectiveAtMs)} UTC, in {spokenLongCountdown(mirrored.effectiveAtMs, nowMs)}.
+          The trading server has recorded the election of {withAddress(labelOf(mirrored.candidate), mirrored.candidate)}. Its operator key takes effect at {formatStamp(mirrored.effectiveAtMs)} UTC, in {spokenLongCountdown(mirrored.effectiveAtMs, nowMs)}.
         </p>
       )}
-      <ReadNote read={route} loading={nodeReadable ? "Loading figures…" : "Figures appear once the server is verified."} quiet />
+      <ReadNote read={route} loading={nodeReadable ? "Loading figures…" : "Figures will appear once the trading server has been verified."} quiet />
       {wallet === null && decided && <p className={NOTE}>Connect a wallet to delegate your stake.</p>}
-      {wallet?.readOnly === true && <p className={NOTE}>This account is read-only, so its delegations aren&apos;t shown and nothing can be delegated for it.</p>}
+      {wallet?.readOnly === true && <p className={NOTE}>You are viewing this account in read-only mode, so its delegations are not shown and no stake can be delegated from it.</p>}
       {wallet !== null && wallet.readOnly !== true && mine === null && delegationsRead.read.status === "unavailable" && (
-        <p className={NOTE}>Delegation isn&apos;t available here.</p>
+        <p className={NOTE}>Delegation is not currently available.</p>
       )}
       {source.kind === "held" && (
-        <p className={NOTE}>Showing the operator list last verified at {formatStamp(source.verifiedAtMs)} UTC (confirmed block {groupThousands(BigInt(source.block))}), because {WHY[source.why]}.</p>
+        <p className={NOTE}>This is the operator list as last verified at {formatStamp(source.verifiedAtMs)} UTC (confirmed block {groupThousands(BigInt(source.block))}), shown because {WHY[source.why]}.</p>
       )}
       {wallet !== null && wallet.readOnly !== true && delegationsRead.account === wallet.address && (delegationsRead.read.status === "loading" || delegationsRead.read.status === "failed") && (
         <ReadNote read={delegationsRead.read} loading="Loading your delegations…" quiet />
@@ -208,7 +208,7 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
             </nav>
           )}
           {/* After the rows, where it arrives with the list: the toolbar and the chain's rows already shown above never move for it. */}
-          {view !== null && <p className={NOTE}>As of confirmed block {groupThousands(BigInt(view.block.number))}, at {formatStamp(view.block.timeMs)} UTC. This list updates automatically, and a new delegation shows once its block is confirmed.</p>}
+          {view !== null && <p className={NOTE}>This list is as at confirmed block {groupThousands(BigInt(view.block.number))}, recorded at {formatStamp(view.block.timeMs)} UTC. It updates automatically, and a new delegation appears once the block containing it has been confirmed.</p>}
         </>
       )}
       {/* Beside the table, and there with no wallet too: a change's outcome outlives the connection that sent it. */}
@@ -216,12 +216,12 @@ export function OperatorsPanel({ operators, delegations }: { operators: Operator
       {/* Not painted while the first list is on its way: the rows it brings land above these notes, and what is shown never moves for them. */}
       {source.kind !== "loading" && (
         <>
-          <p className={NOTE}>You can delegate any part of your stake to listed candidates, and move it or take it back at any time. Delegations count at the next election. Undelegated stake doesn&apos;t vote, and neither does stake you&apos;re unstaking. Delegating doesn&apos;t change your USDC distributions, and you don&apos;t share in an operator&apos;s rewards.</p>
-          {unreachable.size > 0 && <p className={NOTE}>Needs an app update: this version of the app can&apos;t connect to that operator&apos;s server, so you&apos;d need an update if it were elected.</p>}
-          <p className={NOTE}>The standby is the candidate that takes over if the vault goes too long without an update from the server. This applies while rotation is on and no election is pending. The release is the exact server software and settings an operator runs.</p>
+          <p className={NOTE}>You may delegate any part of your stake to listed candidates, and move a delegation or take it back at any time. Delegations are counted at the next election. Undelegated stake does not carry a vote, and neither does stake that you are unstaking. Delegating does not change your USDC distributions, and you do not share in an operator&apos;s rewards.</p>
+          {unreachable.size > 0 && <p className={NOTE}>An operator marked as needing an app update runs server software that this version of the app cannot connect to. If that operator were elected, you would need an updated version of the app to connect to its server.</p>}
+          <p className={NOTE}>The standby is the candidate that takes over as operator if the vault goes too long without receiving an update from the trading server. This applies while operator rotation is active and no election is pending. An operator&apos;s release is the exact server software and configuration that it runs.</p>
         </>
       )}
-      <ReadNote read={listRead} loading={nodeReadable ? "Loading the operator list…" : "The operator list appears once the server is verified."} />
+      <ReadNote read={listRead} loading={nodeReadable ? "Loading the operator list…" : "The operator list will appear once the trading server has been verified."} />
     </Card>
   );
 }

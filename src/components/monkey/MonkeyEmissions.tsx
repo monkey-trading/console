@@ -19,7 +19,7 @@ export function MonkeyEmissions() {
         <ClaimPanel />
         <TokenPanel />
         <div className="col-span-full">
-          <DashboardLink href="/dashboard#monkey">See the history of MONKEY earned and staked on the Dashboard</DashboardLink>
+          <DashboardLink href="/dashboard#monkey">View the history of the MONKEY earned and staked on the Dashboard</DashboardLink>
         </div>
       </div>
     </div>

@@ -4,7 +4,7 @@
 
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
-import { groupThousands } from "@/lib/format";
+import { failureText, groupThousands } from "@/lib/format";
 import { ALL_WINDOW_DAYS } from "@/lib/house-series";
 import type { ChartFeed } from "@/lib/monkey/feed";
 import { latestText } from "@/lib/monkey/figures";
@@ -39,14 +39,14 @@ interface Props {
 
 const NO_MARKS: readonly number[] = [];
 
-const ALL_LINE = `"All" shows up to the last ${groupThousands(ALL_WINDOW_DAYS)} days.`;
+const ALL_LINE = `The "All" range shows up to the last ${groupThousands(ALL_WINDOW_DAYS)} days.`;
 
 /** Where the node's record for this chart begins, and why it might not reach further back. */
 function beginsText(begins: number | null, fromGenesis: boolean, retained: number | null): string {
-  if (begins === null) return "There's no data for this chart yet.";
-  const parts = [`Data begins ${formatStamp(begins)} UTC`];
-  if (!fromGenesis) parts.push("when the server last restarted from a backup, so earlier history isn't available");
-  if (retained !== null) parts.push(`but only data from ${formatStamp(retained)} UTC on is kept`);
+  if (begins === null) return "There is no data for this chart yet.";
+  const parts = [`The data begins at ${formatStamp(begins)} UTC`];
+  if (!fromGenesis) parts.push("when the trading server was last restored from a backup, so earlier history is not available");
+  if (retained !== null) parts.push(`but only data from ${formatStamp(retained)} UTC onwards is retained`);
   return `${parts.join(", ")}.`;
 }
 
@@ -82,10 +82,10 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
       )}
       <div className="mt-2">
         {read.status === "unavailable" ? (
-          <p className={`${NOTE} flex items-center ${CHART_HEIGHT}`}>This chart isn&apos;t available from this server yet.</p>
+          <p className={`${NOTE} flex items-center ${CHART_HEIGHT}`}>This chart is not yet available from this trading server.</p>
         ) : data === null ? (
           read.status === "failed" ? (
-            <p role="status" className={`flex flex-wrap content-center items-center gap-2 text-caption text-amber ${CHART_HEIGHT}`}>Couldn&apos;t load this chart: {(read.message ?? "unknown error").replace(/\.+$/, "")}. <button type="button" onClick={() => void feed.load().then(() => focusHeading(id))} className="min-h-6 rounded border border-line-2 px-2 text-fg-2 hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Try again</button></p>
+            <p role="status" className={`flex flex-wrap content-center items-center gap-2 text-caption text-amber ${CHART_HEIGHT}`}>{failureText("This chart could not be loaded.", read.message)} <button type="button" onClick={() => void feed.load().then(() => focusHeading(id))} className="min-h-6 rounded border border-line-2 px-2 text-fg-2 hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Try again</button></p>
           ) : <p className={`${NOTE} flex items-center ${CHART_HEIGHT}`}>Loading chart…</p>
         ) : (
           <ChartCanvas kind={kind} lines={lines} data={data} format={format} marks={marks} label={`${title} chart`} />
@@ -106,17 +106,17 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
           <p className={`${NOTE} mt-1`}>{beginsText(data.begins_ms, data.from_genesis, data.retained_from_ms)}</p>
           {/* Under loaded data the line describes that data's window, which lags the requested one while a change loads or after it fails; a change to All holds the line's place unseen. */}
           {data.timeframe === "all" ? <p className={`${NOTE} mt-1`}>{ALL_LINE}</p> : (timeframe ?? held) === "all" && <p aria-hidden="true" className={`${NOTE} invisible mt-1`}>{ALL_LINE}</p>}
-          {data.lines[lines[0]?.metric ?? ""]?.length === 0 && <p className={NOTE}>No data in this time range.</p>}
+          {data.lines[lines[0]?.metric ?? ""]?.length === 0 && <p className={NOTE}>There is no data in this time range.</p>}
           <RecentTable title={title} lines={lines} data={data} format={format} />
         </>
       )}
       {data !== null && read.status === "failed" && (
         <p role="status" className="mt-1 text-caption text-amber">
-          Couldn&apos;t load {frameOf(timeframe ?? held).label}: {(read.message ?? "unknown error").replace(/\.+$/, "")}. Showing {frameOf(data.timeframe).label} instead.{" "}
+          {failureText(`The ${frameOf(timeframe ?? held).label} view could not be loaded.`, read.message, `The ${frameOf(data.timeframe).label} view is shown instead.`)}{" "}
           <button type="button" onClick={() => void feed.load().then(() => focusHeading(id))} className="min-h-6 rounded border border-line-2 px-2 text-fg-2 hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Try again</button>
         </p>
       )}
-      {data !== null && read.status === "ready" && read.message !== null && <p role="status" className="mt-1 text-caption text-amber">Couldn&apos;t refresh the chart: {read.message.replace(/\.+$/, "")}.</p>}
+      {data !== null && read.status === "ready" && read.message !== null && <p role="status" className="mt-1 text-caption text-amber">{failureText("The chart could not be refreshed.", read.message)}</p>}
       {footer}
     </section>
   );

@@ -47,7 +47,7 @@ export function emissionsPosition(entitlement: EntitlementProof | null, vault: {
 const CLAIM_PROOF_ATTEMPTS = 3;
 
 /** What a claim says when the vault has not accepted the checkpoint of the node's proof. */
-export const WAITING_ON_VAULT = "You can claim this after the vault's next update.";
+export const WAITING_ON_VAULT = "This amount can be claimed once the vault has recorded the next snapshot.";
 
 /**
  * Reads the vault's record of the connected account's MONKEY through the wallet's chain provider:
@@ -80,11 +80,11 @@ export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> 
 export async function claimEmissions(store: ConsoleStore): Promise<void> {
   store.clearNotice("emissions");
   const wallet = store.liveWallet;
-  if (!wallet) return store.notify("emissions", "Connect a wallet first.");
+  if (!wallet) return store.notify("emissions", "Connect a wallet to continue.");
   // Bound to the wallet: calling the method without a receiver unbinds `this` in the provider wallet.
   const claim = wallet.claimEmissions?.bind(wallet);
   const readRecord = wallet.emissionsClaimed?.bind(wallet);
-  if (claim === undefined || readRecord === undefined) return store.notify("emissions", "This wallet can't claim MONKEY.");
+  if (claim === undefined || readRecord === undefined) return store.notify("emissions", "This wallet cannot send transactions, so it cannot claim MONKEY.");
   store.patch({ busy: true });
   // Set once the mint has landed: the token offer is made after the claim has finished, so a caller that queues the claim holds the wallet until the offer has been answered too.
   let offered: Wallet | null = null;
@@ -97,14 +97,14 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
       const [record, proof] = await Promise.all([readRecord(), store.deps.client.emissions(wallet.address)]);
       if (store.liveWallet !== wallet) return; // the wallet changed while the reads ran; its claim is not this one's
       store.patch({ entitlement: proof === null ? null : carryAccrued(store.getSnapshot().entitlement, proof), emissionsVault: record });
-      if (proof === null) return store.notify("emissions", "There's no MONKEY to claim for this account right now.", "info");
+      if (proof === null) return store.notify("emissions", "There is currently no MONKEY to claim for this account.", "info");
       if (checkpointOf(proof, record.latestSeq) === "posted") {
         const due = BigInt(proof.entitled) - record.claimed;
         if (due <= 0n) return; // the card already says all of it is claimed
         // Checked last: the verdict may have ended while the reads above waited on the wallet.
         if (usableWallet(store, "claim MONKEY", "emissions") === null) return;
         const amount = formatMonkey(due);
-        await prompting(store, wallet, "emissions", `Confirm in your wallet: claim ${amount} from the vault.`, (progress) => claim(proof, progress));
+        await prompting(store, wallet, "emissions", `Confirm the request in your wallet to claim ${amount} from the vault.`, (progress) => claim(proof, progress));
         offered = wallet;
         break;
       }

@@ -57,12 +57,12 @@ export function PnlCurve({ className }: { className?: string }) {
   return (
     <Panel
       title="House P&L at ±1%"
-      tip="This is the house's profit or loss if the price moved up to 1% either way, before any positions are closed out. When traders are net long, the house loses if the price rises."
+      tip="The house's estimated profit or loss if the price moved by up to 1% in either direction, before any positions are closed out. When traders are net long, the house incurs a loss if the price rises."
       className={className}
       controls={<Pick label="House P&L market" value={market ?? 0} options={markets.map((m) => ({ value: m.id, label: m.label }))} onChange={setPicked} />}
     >
       {curve === null || first === undefined || last === undefined ? (
-        <Quiet>This market&apos;s net exposure isn&apos;t available yet.</Quiet>
+        <Quiet>The net exposure for this market is not yet available.</Quiet>
       ) : (
         <>
           <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-labelledby={`${id}-t`} className="h-auto w-full">
@@ -84,7 +84,7 @@ export function PnlCurve({ className }: { className?: string }) {
             <span className={`min-w-0 [overflow-wrap:anywhere] ${first.usd < 0 ? "text-ember" : "text-glow"}`}>{formatCompactUsd(first.usd)}</span>
             <span className={`min-w-0 text-right [overflow-wrap:anywhere] ${last.usd < 0 ? "text-ember" : "text-glow"}`}>{formatCompactUsd(last.usd)}</span>
           </p>
-          <p className="text-label text-fg-3">Estimated from net exposure, before any close-outs.</p>
+          <p className="text-label text-fg-3">This estimate is based on the house&apos;s net exposure and does not account for close-outs.</p>
         </>
       )}
     </Panel>

@@ -22,7 +22,7 @@ const MAP_BARS = 120;
 /** The node's clock; a series window is anchored to it, never to the device's. */
 function nodeNow(store: ConsoleStore): number {
   const { now } = store.getSnapshot();
-  if (now === 0) throw new Error("The server's time isn't known yet.");
+  if (now === 0) throw new Error("The server's time is not yet known.");
   return now;
 }
 

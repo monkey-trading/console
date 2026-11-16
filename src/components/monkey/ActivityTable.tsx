@@ -68,7 +68,7 @@ export function ActivityTable() {
       ) : page === null ? (
         <ReadNote read={activity} loading="Loading recent activity…" />
       ) : page.entries.length === 0 ? (
-        <p className={NOTE}>No MONKEY activity yet.</p>
+        <p className={NOTE}>There has been no MONKEY activity yet.</p>
       ) : (
         <div className="-mx-1">
           <table className="w-full table-fixed text-label sm:text-caption">
@@ -88,7 +88,7 @@ export function ActivityTable() {
         </div>
       )}
       {page !== null && <ReadNote read={activity} />}
-      {page !== null && page.truncated && <p className={NOTE}>Only the most recent activity is kept.</p>}
+      {page !== null && page.truncated && <p className={NOTE}>Only the most recent activity is retained.</p>}
     </Card>
   );
 }

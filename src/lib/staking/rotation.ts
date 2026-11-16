@@ -94,7 +94,7 @@ function address(text: unknown): string {
  * - it is not a safe non-negative integer
  */
 function count(value: unknown, what: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new Error(`The server sent a rotation with ${what} that isn't a whole number.`);
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new Error(`The server sent a rotation with ${what} that is not a whole number.`);
   return value;
 }
 
@@ -105,7 +105,7 @@ function count(value: unknown, what: string): number {
  */
 function reason(value: unknown): TurnReason {
   const found = REASONS.find((known) => known === value);
-  if (found === undefined) throw new Error("The server sent a turn with a reason this app doesn't recognise.");
+  if (found === undefined) throw new Error("The server sent a turn with a reason this app does not recognise.");
   return found;
 }
 
@@ -190,8 +190,8 @@ export function isReassignment(record: TurnRecord): boolean {
 /** What a turn's reason says in words. */
 export const REASON_WORDS: Record<TurnReason, string> = {
   draw: "Draw: chosen in the day's draw",
-  skip: "Skip: the operator before it didn't start the turn in time",
-  promotion: "Promotion: took over from an operator that stopped responding",
+  skip: "Skip: the previously assigned operator did not start the turn in time",
+  promotion: "Promotion: took over from an operator that had stopped responding",
 };
 /** The reason's one word, for a table's cell. */
 export const REASON_CELL: Record<TurnReason, string> = { draw: "Draw", skip: "Skip", promotion: "Promotion" };
@@ -209,5 +209,5 @@ export function turnLine(turn: Turn | null, name: (address: string) => string, n
   if (turn === null) return none;
   const why = turn.reason === "draw" ? "" : turn.reason === "skip" ? ", after a skip" : ", after a promotion";
   const from = `from ${formatStamp(turn.appliesAtMs)} UTC`;
-  return `${name(turn.candidate)}${why}, ${from}${turn.taken ? "" : ", not started yet"}`;
+  return `${name(turn.candidate)}${why}, ${from}${turn.taken ? "" : ", not yet started"}`;
 }

@@ -8,7 +8,7 @@
 
 import { useSyncExternalStore } from "react";
 
-import { groupThousands } from "@/lib/format";
+import { failureText, groupThousands } from "@/lib/format";
 import { usdcFixed } from "@/lib/monkey/figures";
 import { emptyHistoryText, epochsLeftOut, hasOperatorShare, MAX_EPOCHS, moreRemain, shownRows } from "@/lib/staking/distribution-history";
 import type { DistributionHistoryReads } from "@/lib/staking/history-reads";
@@ -43,12 +43,11 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
   const operator = hasOperatorShare(rows);
   const more = mine && state.status === "ready" && moreRemain(state.data);
   const bounded = mine && epochsLeftOut(state.data);
-  const error = (state.error ?? "unknown error").replace(/\.+$/, "");
   // The first read's failure, the newest pages' second read's, or Load more's: one status line that changes its words, so each is announced.
   const problem = !mine ? ""
-    : state.status === "failed" ? `Couldn't load your distributions: ${error}. Trying again automatically.`
-      : state.recheckError !== null ? `Couldn't check for new staking periods: ${state.recheckError.replace(/\.+$/, "")}. Trying again automatically.`
-        : state.error !== null ? `Couldn't load older periods: ${error}.` : "";
+    : state.status === "failed" ? failureText("Your distributions could not be loaded.", state.error, "The app will try again automatically.")
+      : state.recheckError !== null ? failureText("Newly ended staking periods could not be checked.", state.recheckError, "The app will try again automatically.")
+        : state.error !== null ? failureText("Older staking periods could not be loaded.", state.error) : "";
   const loadMore = () => {
     if (state.more) return;
     void history.loadMore().then(() => {
@@ -91,7 +90,7 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
       )}
       {more && <button type="button" aria-disabled={state.more} onClick={loadMore} className={LOAD}>{state.more ? "Loading" : "Load more"}<span className="sr-only"> periods</span></button>}
       <p role="status" className="text-caption leading-relaxed text-amber empty:hidden">{problem}</p>
-      {bounded && <p className={NOTE}>Only the newest {groupThousands(MAX_EPOCHS)} staking periods are kept here.</p>}
+      {bounded && <p className={NOTE}>Only the most recent {groupThousands(MAX_EPOCHS)} staking periods are retained in this list.</p>}
     </Card>
   );
 }

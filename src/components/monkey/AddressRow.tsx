@@ -38,7 +38,7 @@ export function AddressRow({ label, address }: { label: string; address: string 
           <button type="button" onClick={copy} className="min-h-6 rounded border border-line-2 px-1.5 text-label text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">
             Copy<span className="sr-only"> {label} address</span>
           </button>
-          <span role="status" className="sr-only">{selectable ? "Couldn't copy. The full address is shown below to select." : copied ? `${label} address copied` : ""}</span>
+          <span role="status" className="sr-only">{selectable ? "The address could not be copied. The full address is shown below so that you can select it." : copied ? `${label} address copied` : ""}</span>
           {copied && <span aria-hidden="true" className="text-label text-glow">Copied</span>}
         </span>
       )}

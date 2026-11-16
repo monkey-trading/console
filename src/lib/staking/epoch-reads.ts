@@ -83,7 +83,7 @@ export function checkedPage(page: DistributionEpochsPage): DistributionEpochsPag
 }
 
 /** The text of a failed read for the card. */
-const describe = (error: unknown): string => (error instanceof Error ? error.message : "The server didn't respond.");
+const describe = (error: unknown): string => (error instanceof Error ? error.message : "The server did not respond.");
 
 export class EpochReads {
   private state: EpochsState = IDLE;

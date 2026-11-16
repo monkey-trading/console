@@ -74,14 +74,14 @@ describe("the simulated registry", () => {
     const { controls, state } = node();
     const alpha = state.operators.candidates[0]?.address ?? "";
     expect(() => controls.moveDelegation(ME, null, alpha, 500_001n * MONKEY_UNIT)).toThrow("undelegated stake is less");
-    expect(() => controls.moveDelegation(ME, alpha, null, 1n)).toThrow("delegation there is less");
-    expect(() => controls.moveDelegation(ME, null, alpha, 0n)).toThrow("more than zero");
-    expect(() => controls.moveDelegation(ME, null, "0x0000000000000000000000000000000000000000", 1n)).toThrow("not the zero address");
+    expect(() => controls.moveDelegation(ME, alpha, null, 1n)).toThrow("delegation to that candidate is less");
+    expect(() => controls.moveDelegation(ME, null, alpha, 0n)).toThrow("greater than zero");
+    expect(() => controls.moveDelegation(ME, null, "0x0000000000000000000000000000000000000000", 1n)).toThrow("rather than the zero address");
     controls.moveDelegation(ME, null, "0x00000000000000000000000000000000000000ff", 1n);
     expect(controls.stakeDelegations(ME)).toMatchObject({ delegated: 1n, delegations: [{ candidate: "0x00000000000000000000000000000000000000ff", amount: 1n }] });
     controls.moveDelegation(ME, "0x00000000000000000000000000000000000000ff", null, 1n);
     controls.moveDelegation(ME, null, alpha, 5n);
-    expect(() => controls.moveDelegation(ME, alpha, alpha, 1n)).toThrow("to the same candidate");
+    expect(() => controls.moveDelegation(ME, alpha, alpha, 1n)).toThrow("the candidate it is already delegated to");
   });
 
   it("forgets a reset account's delegations", () => {
