@@ -9,6 +9,7 @@ import type { ScanBudget, ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import type { QuoteRequest } from "./live-stream";
 import type { DeploymentReads, VaultFacts } from "./registry";
+import type { NamedSigner } from "./signer-naming";
 import type { StatsReads } from "./stats-types";
 import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
@@ -98,6 +99,13 @@ export interface EngineClient {
    * any wallet but the one it reads through now is dropped.
    */
   heedVault(facts: VaultFacts, chain: DeploymentReads): Promise<void>;
+  /** The highest signer epoch named by the node's signed `GET /v1/operator` answers or by a signer put to the client, with the key named at it; null before one was, and always null from the mock. */
+  signerNamed(): Readonly<NamedSigner> | null;
+  /**
+   * Another node's signed word names `signer` at its epoch: a live client judges the enclave it trusts as it judges the node's own word,
+   * so that enclave loses its verdict, read-only or not, and its answers and stream are refused, if the key named at the highest epoch is not it.
+   */
+  heedSigner(signer: NamedSigner): void;
   /** Reports each change of attestation status and of the feed. */
   watch(listener: (event: ClientEvent) => void): Unsubscribe;
   markets(): Promise<MarketView[]>;

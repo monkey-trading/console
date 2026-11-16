@@ -3,15 +3,22 @@
  * monkey-trading/engine#595): the signer epoch and the key. The highest epoch seen decides, so a node
  * that lags behind a promotion cannot pass as the signer the vault named before it, and the outgoing
  * operator's answers are refused once a node this client has read has said the vault names another
- * key. Each client keeps its own, so a node the console moves to starts from its own first check.
+ * key. Each client keeps its own, so a node the console moves to starts from its own first check; the
+ * operator follower puts to the client in use the highest signer other nodes' words named.
  */
+
+/** A signer epoch and the key the vault names at it. */
+export interface NamedSigner {
+  epoch: number;
+  address: string;
+}
 
 /** What the node says of itself and the vault in `GET /v1/operator`. */
 export interface OperatorClaim {
   /** The node's own enclave address. */
   enclave?: string;
   /** The vault's signer epoch and the key it names. */
-  signer?: { epoch: number; address: string };
+  signer?: NamedSigner;
 }
 
 /** What the console says when the vault names a signer other than the enclave the node answers with. */
@@ -26,7 +33,7 @@ export class SignerNaming {
   constructor(private readonly operatorClaim?: (address: string) => Promise<OperatorClaim>) {}
 
   /** The highest epoch seen and the key the vault names at it. */
-  private named: { epoch: number; address: string } | null = null;
+  private named: NamedSigner | null = null;
   /** Enclave addresses a stated signer has put aside, the key named at an earlier epoch among them: a node that attests one stays refused until the vault names it again at a later epoch. */
   private readonly superseded = new Set<string>();
 
@@ -75,6 +82,11 @@ export class SignerNaming {
   vaultSays(enclave: string, signer: string): void {
     if (enclave === signer) this.superseded.delete(enclave);
     else this.superseded.add(enclave);
+  }
+
+  /** The highest epoch seen and the key named at it; null before any. */
+  get highest(): Readonly<NamedSigner> | null {
+    return this.named;
   }
 
   /** Whether `enclave` has been put aside by a stated signer. */
