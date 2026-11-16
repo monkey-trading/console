@@ -31,18 +31,18 @@ export type SignerWord = { enclave?: string; signer?: Readonly<SignerFloor> };
 export type SignerRefusal = { reason: string; vaultLifts: boolean };
 
 /** What the console says when the vault names a signer other than the enclave the node answers with. */
-export const SIGNER_SUPERSEDED = "The vault names another signer than this node's enclave, so the node's answers are refused.";
+export const SIGNER_SUPERSEDED = "The on-chain vault now uses a different signing key than this server, so its answers are refused. This clears only if the server switches to that key.";
 /** What the console says when two keys were named as the vault's signer at the highest epoch seen: every key at it is refused, waiting helps only once a later epoch names one (monkey-trading/console#387). */
-export const SIGNER_CONFLICT = "Two keys were named as the vault's signer at its current epoch, so this node's answers are refused until a later epoch names one.";
+export const SIGNER_CONFLICT = "Two signing keys are listed as current, so this server's answers are refused. Waiting helps: this clears once a later key change names just one.";
 /** What the console says when a node that states no signer has no read of the vault naming its enclave yet: a read of the vault lifts it (monkey-trading/console#387). */
-export const SIGNER_AWAITING_VAULT = "This node states no signer and the vault has not been read for its enclave yet, so its answers are refused until it is.";
+export const SIGNER_AWAITING_VAULT = "This server doesn't say which signing key it uses, and the vault hasn't been checked for it yet. This clears once the vault is checked, which connecting a wallet does.";
 /** What the console says when the node's own word on the signer the vault names could not be read, before the read's failure. */
 export const SIGNER_UNREAD = "The node's word on the signer the vault names could not be read, so its answers are not taken yet.";
 /** The refusal reasons above as the clause a control names ("The console cannot sign now: ..."), keyed by the reason (monkey-trading/console#387). */
 const SIGNER_CLAUSES = new Map<string, string>([
-  [SIGNER_SUPERSEDED, "the vault names another signer than this node's enclave"],
-  [SIGNER_CONFLICT, "two keys are named as the vault's signer at its current epoch, so the node is held until a later epoch names one"],
-  [SIGNER_AWAITING_VAULT, "the node states no signer and the vault has not been read for its enclave yet"],
+  [SIGNER_SUPERSEDED, "the vault now uses a different signing key than this server"],
+  [SIGNER_CONFLICT, "two signing keys are listed as current, until a later key change names one"],
+  [SIGNER_AWAITING_VAULT, "the vault hasn't been checked for this server's signing key yet"],
 ]);
 
 /** The clause a control names for a refusal `reason`, or null when the reason is not one of these. */
