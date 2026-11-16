@@ -1,4 +1,4 @@
-/** When the payouts are read again for the log checks they wait on (monkey-trading/console#280): figures update by themselves, so a boundary that passes is followed by a read. */
+/** The log checks the payouts wait on (monkey-trading/console#280): which checks each answer leaves standing, and when the payouts are read again, since figures update by themselves and a boundary that passes is followed by a read. */
 
 import type { PayoutEntry, SignedWithdrawal } from "../engine/types";
 import type { Payout } from "./payouts";

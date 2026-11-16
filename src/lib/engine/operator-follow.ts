@@ -46,7 +46,7 @@ export class OperatorFollower {
   private trial: { origin: string; client: EngineClient } | null = null;
   /** The client of the node in use, which a move of the vault's signer judges again. */
   private current: EngineClient | null = null;
-  /** With no wallet, the highest signer a refused node's route named. */
+  /** With no wallet, the highest signer any route this visit read named, the node in use's included, refused or not. */
   private floor: SignerFloor | null = null;
   /** Whether the node in use has lost its verdict. */
   private refused = false;
@@ -195,6 +195,7 @@ export class OperatorFollower {
    * schedule names for the turn under way, or the operator the registry names. A node that cannot be read says nothing against either.
    */
   private async followNode(said: NodeSaid): Promise<void> {
+    this.floor = raised(this.floor, said);
     if (said.read) await this.word.learn(this.current);
     if (!said.read && this.state.kind === "waiting") return this.tryNode(this.state.target, null, true);
     const hostname = this.word.hostname(said, this.deps.nowMs());

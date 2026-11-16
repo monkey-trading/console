@@ -84,6 +84,22 @@ describe("a visit with no wallet to read a chain (monkey-trading/console#280)", 
     expect(kit.adopted).toEqual([B]);
   });
 
+  it("does not move to a node whose own word on the signer is older than the one the node in use named, refused or not", async () => {
+    const X = "0x00000000000000000000000000000000000000d1";
+    const route = { ...ROUTE, api_hostname: { hostname: "b.example", block: 1, block_hash: "0x" }, signer: { epoch: 7, address: X } };
+    for (const refused of [true, false]) {
+      for (const [theirs, adopts] of [[{ epoch: 6, address: X }, false], [{ epoch: 7, address: "0x00000000000000000000000000000000000000d2" }, false], [undefined, false], [{ epoch: 7, address: X }, true], [{ epoch: 8, address: "0x00000000000000000000000000000000000000d3" }, true]] as const) {
+        const kit = rig({ reads: null });
+        const current = new TrialClient();
+        current.signedRead = async () => { if (refused) throw new RefusedAnswer("The vault names another signer", route); return route; };
+        kit.follower.watch(current as unknown as EngineClient); // the follower uses only what TrialClient has
+        kit.trial.signedRead = async () => ({ ...ROUTE, ...(theirs === undefined ? {} : { signer: theirs }) });
+        await kit.follower.check();
+        expect(kit.adopted, `${refused} ${JSON.stringify(theirs)}`).toEqual(adopts ? [B] : []);
+      }
+    }
+  });
+
   it("moves to the node a refused node says the registry names, though it still names its own turn, after a promotion", async () => {
     const kit = rig({ reads: null });
     const current = new TrialClient();
@@ -156,7 +172,7 @@ describe("a node the visit with no wallet moved to that is promoted past (monkey
       clients[C].signedRead = async () => ({ ...ROUTE, ...(signer === undefined ? {} : { signer }) });
       await follower.check();
       if (index < lagging.length) {
-        expect(follower.getSnapshot(), String(index)).toMatchObject({ kind: "waiting", target: C, reason: expect.stringContaining("later signer") });
+        expect(follower.getSnapshot(), String(index)).toMatchObject({ kind: "waiting", target: C, reason: expect.stringContaining("newer signer") });
         // The node in use stops, and what the refused node named still counts at the next check.
         current.signedRead = async () => { throw new EngineError(0, "The node did not answer."); };
         await follower.check();

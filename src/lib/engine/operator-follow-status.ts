@@ -49,11 +49,11 @@ export async function signedAnswer(client: EngineClient): Promise<OperatorRoute 
   }
 }
 
-/** The signer a refused node's signed route named: the highest epoch seen, which no node a no-wallet visit moves to may lag behind. */
+/** The highest signer a no-wallet visit has read named, by epoch, which no node it moves to may lag behind. */
 export type SignerFloor = { epoch: number; address: string };
 
-/** `floor` raised by what `route` names. */
-export function raised(floor: SignerFloor | null, route: OperatorRoute): SignerFloor | null {
+/** `floor` raised by the signer a route names, from a refused trial's or from the node in use's. */
+export function raised(floor: SignerFloor | null, route: { signer?: { epoch: number; address: string } }): SignerFloor | null {
   const named = route.signer;
   return named !== undefined && (floor === null || named.epoch > floor.epoch) ? { epoch: named.epoch, address: named.address.toLowerCase() } : floor;
 }
@@ -63,7 +63,7 @@ export function lagging(floor: SignerFloor | null, route: OperatorRoute | null):
   if (floor === null) return null;
   const named = route?.signer;
   if (named !== undefined && (named.epoch > floor.epoch || (named.epoch === floor.epoch && named.address.toLowerCase() === floor.address))) return null;
-  return "A node the console moved from named a later signer than this node does, so this node's answers are not taken yet.";
+  return "A node the console tried named a newer signer than this node states, so this node's answers are not taken yet.";
 }
 
 /** How long the wallet may take over one chain read before the check gives up on it, in milliseconds; a wallet asleep must not hold the follower from the next wallet. */
@@ -97,6 +97,8 @@ export interface NodeSaid {
   rotationEnabled: boolean;
   read: boolean;
   turns: readonly SaidTurn[];
+  /** The signer the route says the vault names, which a node refused for it still says. */
+  signer?: { epoch: number; address: string };
 }
 
 export const NOTHING_SAID: NodeSaid = { turnAtMs: null, hostname: null, rotationEnabled: true, read: false, turns: [] };
@@ -105,7 +107,7 @@ export const NOTHING_SAID: NodeSaid = { turnAtMs: null, hostname: null, rotation
 export function nodeSaid(route: OperatorRoute, nowMs: number): NodeSaid {
   const at = route.next_turn?.applies_at;
   const turns = [route.turn, route.next_turn].flatMap((turn) => (turn ? [{ candidate: turn.candidate.toLowerCase(), atMs: turn.applies_at }] : []));
-  return { turnAtMs: at !== undefined && at > nowMs ? at : null, hostname: route.api_hostname?.hostname ?? null, rotationEnabled: route.rotation_enabled, read: true, turns };
+  return { turnAtMs: at !== undefined && at > nowMs ? at : null, hostname: route.api_hostname?.hostname ?? null, rotationEnabled: route.rotation_enabled, read: true, turns, ...(route.signer === undefined ? {} : { signer: route.signer }) };
 }
 
 /** How many nodes past the one in use a visit with no wallet follows in one run: each refused node's signed route names the next. */
