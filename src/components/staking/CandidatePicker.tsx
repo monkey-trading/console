@@ -49,7 +49,7 @@ export function CandidatePicker({ label, options, value, onChange, source, typed
           {/* Cleared, the list's choice applies again; typed, it holds even once the node's list is back. */}
           <input id={id} value={typed} maxLength={44} spellCheck={false} autoComplete="off" placeholder="0x…" aria-invalid={wrong} aria-describedby={`${id}-note`} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onChange={(event) => onTyped(event.target.value)} className={FIELD} />
           <p id={`${id}-note`} className={wrong ? "text-caption text-amber" : NOTE}>
-            {wrong ? "Enter a valid address: 0x followed by 40 characters, with capitals exactly as given. " : ""}This address isn&apos;t checked against the operator list, and staking accepts any address, so make sure it&apos;s a candidate&apos;s.
+            {wrong ? "Please enter a valid address: 0x followed by 40 hexadecimal characters, with capital letters exactly as given. " : ""}This address is not checked against the operator list, and the staking contract accepts any address, so please make sure that it is a candidate&apos;s address.
           </p>
         </>
       )}

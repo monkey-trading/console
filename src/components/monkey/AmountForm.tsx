@@ -61,7 +61,7 @@ export function AmountForm(props: AmountFormProps) {
     else if (field !== undefined) panel.setDraft(field, next);
   };
   const amount = parseMonkeyAmount(text);
-  const problem = text.trim() === "" ? null : amount === null ? "Enter an amount of MONKEY with up to 18 decimal places." : amount > max ? `That's more than ${maxLabel}.` : null;
+  const problem = text.trim() === "" ? null : amount === null ? "Enter an amount of MONKEY with up to 18 decimal places." : amount > max ? `The amount entered exceeds ${maxLabel}.` : null;
   const ok = amount !== null && problem === null && !disabled;
   return (
     <form

@@ -17,25 +17,25 @@ function listed(parts: readonly string[]): string {
 export function unstakeWords(staked: bigint, delegations: readonly Delegation[], amount: bigint, labelOf: (address: string) => string): string | null {
   if (amount <= 0n || amount > staked) return null;
   const { fromUndelegated, reductions } = unstakeTakes(staked, delegations, amount);
-  if (reductions.length === 0) return `This takes ${formatMonkey(amount)} from your undelegated stake, so your delegations don't change.`;
+  if (reductions.length === 0) return `This unstake draws ${formatMonkey(amount)} from your undelegated stake, so your delegations do not change.`;
   const cuts = listed(reductions.map((reduction) => `${formatMonkey(reduction.amount)} from your delegation to ${labelOf(reduction.candidate)}`));
-  return fromUndelegated > 0n ? `This takes all ${formatMonkey(fromUndelegated)} of your undelegated stake, then ${cuts}.` : `This takes ${cuts}.`;
+  return fromUndelegated > 0n ? `This unstake draws all ${formatMonkey(fromUndelegated)} of your undelegated stake, and then ${cuts}.` : `This unstake draws ${cuts}.`;
 }
 
-/** `before → after` in MONKEY. */
-const change = (before: bigint, after: bigint) => `${formatMonkey(before)} → ${formatMonkey(after)}`;
+/** `from before to after` in MONKEY. */
+const change = (before: bigint, after: bigint) => `from ${formatMonkey(before)} to ${formatMonkey(after)}`;
 
 /** What delegating `amount` to `label` changes: the undelegated stake and the delegation there. */
 export function delegateWords(undelegated: bigint, held: bigint, amount: bigint, label: string): string {
-  return `Undelegated ${change(undelegated, undelegated - amount)}. Your delegation to ${label} ${change(held, held + amount)}.`;
+  return `Your undelegated stake would change ${change(undelegated, undelegated - amount)}, and your delegation to ${label} ${change(held, held + amount)}.`;
 }
 
 /** What moving `amount` from the delegation `from` holds to the one `to` holds changes; the undelegated stake stays. */
 export function moveWords(from: { label: string; held: bigint }, to: { label: string; held: bigint }, amount: bigint, undelegated: bigint): string {
-  return `Your delegation to ${from.label} ${change(from.held, from.held - amount)}, and to ${to.label} ${change(to.held, to.held + amount)}. Your undelegated stake stays ${formatMonkey(undelegated)}.`;
+  return `Your delegation to ${from.label} would change ${change(from.held, from.held - amount)}, and your delegation to ${to.label} ${change(to.held, to.held + amount)}. Your undelegated stake would remain ${formatMonkey(undelegated)}.`;
 }
 
 /** What taking `amount` back from the delegation to `label` changes. */
 export function takeBackWords(held: bigint, undelegated: bigint, amount: bigint, label: string): string {
-  return `Your delegation to ${label} ${change(held, held - amount)}. Undelegated ${change(undelegated, undelegated + amount)}.`;
+  return `Your delegation to ${label} would change ${change(held, held - amount)}, and your undelegated stake ${change(undelegated, undelegated + amount)}.`;
 }

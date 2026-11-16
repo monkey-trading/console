@@ -93,7 +93,7 @@ export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf:
         {gone !== "" && <p role="status" className={`${NOTE} px-1 pb-1`}>{gone}</p>}
         {state.epochs.length > 0 ? (
           <table className="w-full min-w-[36rem] text-label sm:text-caption">
-            <caption className="sr-only">Each past staking period, newest first: when it ended, the house value against the reserve, what went to stakers, and who received the operator&apos;s share. Times are UTC.</caption>
+            <caption className="sr-only">Each past staking period, newest first, showing when it ended, the house value against its reserve, the amount distributed to stakers and the recipient of the operator&apos;s share. Times are UTC.</caption>
             <Head />
             <tbody>
               {state.epochs.map((close) => (
@@ -139,7 +139,7 @@ export function EpochHistory({ epochs, labelOf }: { epochs: EpochReads; labelOf:
       )}
       <p role="status" className="text-caption leading-relaxed text-amber empty:hidden">{problem}</p>
       {covered !== null ? <p className={NOTE}>{covered}</p> : <p aria-hidden="true" className={`${NOTE} invisible`}>{"\u00a0"}</p>}
-      <p className={NOTE}>Each period&apos;s distribution works as the Distribution card describes. The operator&apos;s fifth, paid while rotation is on, is shown in the last column.</p>
+      <p className={NOTE}>Each period&apos;s distribution is calculated as described on the Distribution card. The operator&apos;s one-fifth share, which is paid while operator rotation is active, is shown in the last column.</p>
     </Card>
   );
 }

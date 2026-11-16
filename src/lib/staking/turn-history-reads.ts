@@ -122,7 +122,7 @@ export class TurnHistoryReads {
       this.set({ older: { records: [...base.records, ...page.records], anchor: base.anchor, next: page.next, truncated: page.truncated }, reading: false, error: null });
     } catch (error) {
       if (ticket !== this.ticket) return;
-      this.set({ older: continuing ? held : NO_OLDER, reading: false, error: error instanceof Error ? error.message : "unknown error" });
+      this.set({ older: continuing ? held : NO_OLDER, reading: false, error: error instanceof Error ? error.message : "No reason was given." });
     }
   }
 }

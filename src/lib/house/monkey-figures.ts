@@ -19,17 +19,17 @@ export function monkeyFigureRows(monkey: MonkeyView | null): MonkeyFigureRow[] {
   return [
     {
       label: "Earned so far",
-      tip: "This is all the MONKEY traders have earned so far. MONKEY is created only when it's claimed, so this isn't the token's supply.",
+      tip: "The total MONKEY that traders have earned to date. MONKEY is created only when it is claimed, so this figure is not the same as the token's supply.",
       value: text(monkey?.emissions?.allocated, formatMonkey),
     },
     {
       label: "Staked",
-      tip: "This is the MONKEY locked in staking.",
+      tip: "The total MONKEY currently locked in staking.",
       value: text(monkey?.staking?.total_staked, formatMonkey),
     },
     {
       label: "USDC distributed",
-      tip: "This is all the USDC distributed so far. Stakers share it, and while rotation is on, a fifth of each distribution goes to the operator.",
+      tip: "The total USDC distributed to date. Each distribution is shared among stakers, and while operator rotation is active, one fifth of it is paid to the operator.",
       value: text(monkey?.distribution?.distributed_usdc_units, formatUsdc),
     },
   ];

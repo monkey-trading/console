@@ -1,5 +1,6 @@
 /** What a dashboard panel says when its feed is not simply ready: one calm line, written for the reader. */
 
+import { asSentence } from "../format";
 import type { FeedState } from "./house-stats";
 
 /**
@@ -8,9 +9,9 @@ import type { FeedState } from "./house-stats";
  * answered before and then failed or stopped being served keeps its figures and says they are old.
  */
 export function feedProblem(feed: FeedState<unknown>, what: string): string | null {
-  if (feed.status === "failed") return `Couldn't load ${what}${feed.error === null ? "" : `: ${feed.error.replace(/\.+$/, "")}`}. Trying again automatically.`;
+  if (feed.status === "failed") return `The page could not load ${what}.${feed.error === null ? "" : ` ${asSentence(feed.error)}`} The page will try again automatically.`;
   if (!feed.stale) return null;
-  if (feed.error !== null) return `Couldn't refresh ${what}, so this may be out of date.`;
-  if (feed.status === "waiting") return `The server is updating ${what}, so this may be out of date.`;
-  return `The server has stopped sending ${what}, so this may be out of date.`;
+  if (feed.error !== null) return `The page could not refresh ${what}, so the information shown may be out of date.`;
+  if (feed.status === "waiting") return `The trading server is recalculating ${what}, so the information shown may be out of date.`;
+  return `The trading server has stopped providing ${what}, so the information shown may be out of date.`;
 }

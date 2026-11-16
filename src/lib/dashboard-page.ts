@@ -1,5 +1,6 @@
 /** What the Dashboard page decides beyond its charts (monkey-trading/console#310): the section a URL hash names, and the line the House section is held with until the node's first signed answers land and while they have gone stale, as the House page does. */
 
+import { asSentence } from "./format";
 import type { Read } from "./monkey/figures";
 
 /** The ids of the Dashboard's three sections; its in-page links target them, and a #hash load scrolls to one once the page is trusted. */
@@ -34,16 +35,16 @@ export function isPlainClick(click: ClickKeys): boolean {
 export function houseGateLine({ trusted, ready, fresh, simulated }: { trusted: boolean; ready: boolean; fresh: boolean; simulated: boolean }): string | null {
   if (!trusted) return null;
   if (!ready) return simulated ? "Loading the demo figures…" : "Loading figures…";
-  if (!fresh) return "Figures have stopped updating, so they may be out of date.";
+  if (!fresh) return "The figures have stopped updating, so they may be out of date.";
   return null;
 }
 
 /** A failed or unavailable MONKEY overview must qualify each chart that uses its floor or schedule. */
 export function overviewProblem(read: Read<unknown>, what: string): string | null {
-  if (read.status === "unavailable") return `This server doesn't provide ${what} yet.`;
+  if (read.status === "unavailable") return `This trading server does not yet provide ${what}.`;
   if (read.status !== "failed") return null;
-  const reason = read.message === null ? "" : `: ${read.message.replace(/\.+$/, "")}`;
+  const reason = read.message === null ? "" : ` ${asSentence(read.message)}`;
   return read.value === null
-    ? `Couldn't load ${what}${reason}. Trying again automatically.`
-    : `Couldn't refresh ${what}${reason}, so this may be out of date.`;
+    ? `The page could not load ${what}.${reason} The page will try again automatically.`
+    : `The page could not refresh ${what}.${reason} The information shown may be out of date.`;
 }

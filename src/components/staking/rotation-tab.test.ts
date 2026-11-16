@@ -59,11 +59,11 @@ describe("the Rotation tab", () => {
   it("lists the set in effect with each member's weight and share of turns, and the next set with its time", () => {
     const html = tab(loaded());
     expect(html).toContain("Current rotation");
-    expect(html).toContain("Rotation 3, chosen at election 41, with 2 operators. Running since");
+    expect(html).toContain("Rotation 3 was chosen at election 41 and has 2 operators. It has been running since");
     expect(html).toContain("70.00%");
     expect(html).toContain("30.00%");
     expect(html).toContain("700 MONKEY");
-    expect(html).toContain("Rotation 4, chosen at election 42, with 2 operators. Starts at");
+    expect(html).toContain("Rotation 4 was chosen at election 42 and has 2 operators. It starts at");
     expect(html).toContain("in 3 days.");
   });
 
@@ -71,7 +71,7 @@ describe("the Rotation tab", () => {
     const html = tab(loaded());
     expect(html).toContain("Today&#x27;s turn");
     expect(html).toMatch(/Today&#x27;s turn<\/dt>.*?alpha\.example[^<]*, from [^<]*UTC<\/span>/);
-    expect(html).toMatch(/Tomorrow&#x27;s turn<\/dt>.*?bravo\.example[^<]*, from [^<]*UTC, not started yet<\/span>/);
+    expect(html).toMatch(/Tomorrow&#x27;s turn<\/dt>.*?bravo\.example[^<]*, from [^<]*UTC, not yet started<\/span>/);
   });
 
   it("lists the history newest first, with a skip, a promotion and a refusal with the engine's reason, apart under Skips and promotions", () => {
@@ -79,7 +79,7 @@ describe("the Rotation tab", () => {
     const moves = html.slice(html.indexOf("Skips and promotions"), html.indexOf("Turn history"));
     expect(moves).toContain("Skip");
     expect(moves).toContain("Promotion");
-    expect(moves).toContain("Refused: no set names its key. The current operator carried on.");
+    expect(moves).toContain("Refused: no set names its key. The current operator continued.");
     expect(moves.match(/Started at/g)).toHaveLength(1);
     const history = html.slice(html.indexOf("Turn history"));
     expect(history.indexOf("tabular-nums\">10<")).toBeLessThan(history.indexOf("tabular-nums\">9<"));
@@ -91,9 +91,9 @@ describe("the Rotation tab", () => {
     const html = tab(loaded(end));
     expect(html).not.toMatch(/<button[^>]*>(Load older|Loading)/);
     expect(html).toMatch(/<span aria-hidden="true" class="[^"]*\binvisible\b[^"]*">Load older<\/span>/);
-    expect(html).toMatch(/<p class="(?![^"]*\binvisible\b)[^"]*">Only the most recent turns are kept/);
+    expect(html).toMatch(/<p class="(?![^"]*\binvisible\b)[^"]*">Only the most recent turns are retained/);
     const whole = tab(loaded({ ...end, turns: { ...end.turns, truncated: false } }));
-    expect(whole).toMatch(/<p aria-hidden="true" class="[^"]*\binvisible\b[^"]*">Only the most recent turns are kept/);
+    expect(whole).toMatch(/<p aria-hidden="true" class="[^"]*\binvisible\b[^"]*">Only the most recent turns are retained/);
   });
 
   it("says no set is in effect, and no later one, from a node that mirrors none", () => {
@@ -102,7 +102,7 @@ describe("the Rotation tab", () => {
     expect(html).toContain("No next rotation has been chosen yet.");
     expect(html).toContain("No one has today&#x27;s turn");
     expect(html).toContain("Not drawn yet");
-    expect(html).toContain("No turns yet.");
+    expect(html).toContain("No turns have taken place yet.");
   });
 
   it("shows a dash for each figure and a reading line before the first read lands, and hides its figures while the node is not trusted", () => {
@@ -110,7 +110,7 @@ describe("the Rotation tab", () => {
     expect(pending).toContain("Loading the rotation…");
     // The cards are there from the first paint, so nothing moves when the read lands, and none claims an empty history.
     expect(pending).toContain("Turn history");
-    expect(pending).not.toContain("No turns yet.");
+    expect(pending).not.toContain("No turns have taken place yet.");
     const untrusted = tab(loaded(), { ...VERIFIED, attestation: { kind: "unverified", reason: "no" } });
     expect(untrusted).toContain('class="mt-4 hidden gap-4"');
   });
@@ -120,7 +120,7 @@ describe("the Rotation tab without a rotation", () => {
   it("says the rotation is not read, rather than that it is being read, from a node that does not serve it or whose read failed", () => {
     for (const route of [{ status: "unavailable" as const, value: null, message: null }, { status: "failed" as const, value: null, message: "the node is busy" }]) {
       const html = tab({ route, rotation: null, list: LOADING, held: null });
-      expect(html).toContain("The rotation couldn&#x27;t be loaded.");
+      expect(html).toContain("The rotation could not be loaded.");
       expect(html).not.toContain("Loading the rotation…");
     }
   });
@@ -130,7 +130,7 @@ describe("the operators card's turns", () => {
   it("shows today's and tomorrow's turns beside the operator in effect, and dashes before the route is read", () => {
     const html = renderOperators({ state: VERIFIED, operators: loaded(), read: chain() });
     expect(html).toMatch(/Today&#x27;s turn<\/dt>.*?alpha\.example[^<]*, from /);
-    expect(html).toMatch(/Tomorrow&#x27;s turn<\/dt>.*?bravo\.example[^<]*, not started yet/);
+    expect(html).toMatch(/Tomorrow&#x27;s turn<\/dt>.*?bravo\.example[^<]*, not yet started/);
     const before = renderOperators({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: chain() });
     expect(before).toMatch(/Today&#x27;s turn<\/dt>.*?justify-self-end">—<\/span>/);
   });

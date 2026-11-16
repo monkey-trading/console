@@ -16,12 +16,12 @@ import { SeriesPanel, type LineSpec } from "./SeriesPanel";
 import { useFeed, useSelected } from "./use-feed";
 import { useMarketOptions } from "./use-markets";
 
-const NAV_LINES: readonly LineSpec[] = [{ id: "nav", metric: "nav", label: "House value", tip: "This is what the house is worth now: its cash plus its profit or loss on traders' open positions.", tone: "glow", area: true }];
+const NAV_LINES: readonly LineSpec[] = [{ id: "nav", metric: "nav", label: "House value", tip: "The current value of the house: its cash balance plus its profit or loss on traders' open positions.", tone: "glow", area: true }];
 const EXPOSURE_LINES: readonly LineSpec[] = [
-  { id: "long", metric: "long", label: "Long", tip: "This is the total size of traders' long positions in this market. They profit when the price rises, and the house loses.", tone: "glow", nonNegative: true, sampled: true },
-  { id: "short", metric: "short", label: "Short", tip: "This is the total size of traders' short positions in this market. They profit when the price falls.", tone: "ember", nonNegative: true, sampled: true },
+  { id: "long", metric: "long", label: "Long", tip: "The total size of traders' long positions in this market. A long position profits when the price rises, and the house, as counterparty, incurs the corresponding loss.", tone: "glow", nonNegative: true, sampled: true },
+  { id: "short", metric: "short", label: "Short", tip: "The total size of traders' short positions in this market. A short position profits when the price falls, and the house, as counterparty, incurs the corresponding loss.", tone: "ember", nonNegative: true, sampled: true },
 ];
-const QUEUE_LINES: readonly LineSpec[] = [{ id: "queue", metric: "withdrawal_queue", label: "Queued", tip: "This is what's still owed to traders in the withdrawal queue.", tone: "amber", area: true, nonNegative: true }];
+const QUEUE_LINES: readonly LineSpec[] = [{ id: "queue", metric: "withdrawal_queue", label: "Queued", tip: "The amount still owed to traders whose withdrawal requests are waiting in the queue.", tone: "amber", area: true, nonNegative: true }];
 
 const selectNav = (s: ConsoleState) => ({ nav: fixedToNumber(s.house.nav) });
 // The headline is the walked total only while the walk was complete, steady and its last read succeeded; otherwise the chart's own last bucket stands in.
@@ -43,7 +43,7 @@ export function NavChart({ range, className, floor, pending }: { range?: RangeId
   return (
     <SeriesPanel
       title="House value"
-      tip="This is what the house is worth: its cash plus its profit or loss on traders' open positions at current prices. The shaded area is below the reserve, and stakers are paid only from value above it."
+      tip="The value of the house over time: its cash balance plus its profit or loss on traders' open positions at current prices. The shaded area lies below the house's reserve, and distributions to stakers are paid only from value above the reserve."
       lines={NAV_LINES}
       markets={null}
       range={range}
@@ -62,7 +62,7 @@ export function ExposureChart({ range, className, pending }: { range?: RangeId; 
   return (
     <SeriesPanel
       title="House exposure"
-      tip="This is the total size of traders' long and short positions in this market, in dollars. The house takes the other side of both."
+      tip="The total size of traders' long and short positions in the selected market, in US dollars. The house is the counterparty to both sides."
       lines={EXPOSURE_LINES}
       markets={markets}
       range={range}
@@ -83,7 +83,7 @@ export function QueueChart({ range, className, walked = true, pending }: { range
   return (
     <SeriesPanel
       title="Withdrawal queue"
-      tip="This is the total waiting in the withdrawal queue: requests that couldn't be paid straight away."
+      tip="The total amount waiting in the withdrawal queue, made up of withdrawal requests that could not be paid immediately."
       lines={QUEUE_LINES}
       markets={null}
       range={range}

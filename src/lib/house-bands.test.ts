@@ -129,11 +129,11 @@ describe("emptyMapNote", () => {
 
   it("says what lies beyond the node's range when nothing is in range", () => {
     const note = emptyMapNote(view({ beyond_range: counts("1500", "0") }), 500);
-    expect(note).toBe("No positions close out within ±5% of the current price. $1.50K closes out further than ±20% from the price.");
+    expect(note).toBe("No positions close out within ±5% of the current price. Positions totalling $1.50K would close out more than ±20% from the current price.");
   });
 
   it("points to a wider range when bands lie outside the chosen one", () => {
-    expect(emptyMapNote(view({ closeout: [bucket(-1900, -1800)] }), 500)).toBe("No positions close out within ±5% of the current price. Choose a wider range to see the nearest ones.");
+    expect(emptyMapNote(view({ closeout: [bucket(-1900, -1800)] }), 500)).toBe("No positions close out within ±5% of the current price. Choose a wider price range to see the nearest close-out levels.");
   });
 
   it("says only that nothing is in range when the node reports nothing beyond it either", () => {

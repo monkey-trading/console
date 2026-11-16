@@ -81,7 +81,7 @@ export function CloseoutMap({ className }: { className?: string }) {
   const rangeOptions = useMemo(() => offeredRanges(view?.closeout_range_bps ?? UNKNOWN_NODE_RANGE_BPS).map((bps) => ({ value: bps, label: `±${bps / 100}%` })), [view?.closeout_range_bps]);
   const symbol = markets.find((m) => m.id === market)?.label ?? "";
   // A node that has not priced the market yet gives no mark to place the bands around.
-  const emptyNote = view === null ? null : mark === null ? `There's no price for ${symbol} yet, so the map can't be drawn.` : emptyMapNote(view, effectiveBps);
+  const emptyNote = view === null ? null : mark === null ? `There is no price for ${symbol} yet, so the map cannot be drawn.` : emptyMapNote(view, effectiveBps);
   const maxUsd = useMemo(() => Math.max(0, ...bands.map(bandUsd)), [bands]);
   const candleBars = candles.data?.bars;
   const places = useSelected(useCallback((state) => state.markets.find((m) => m.id === market)?.places ?? placesOf(mark ?? 1), [market, mark]));
@@ -160,20 +160,20 @@ export function CloseoutMap({ className }: { className?: string }) {
     ? null
     : `${formatPrice(hover.fromPrice, places)} to ${formatPrice(hover.toPrice, places)}: long ${formatCompactUsd(hover.longUsd)} (${hover.longCount}), short ${formatCompactUsd(hover.shortUsd)} (${hover.shortCount})`;
   const message = positions.status === "unavailable" && view === null
-    ? "The close-out map isn't available from this server yet."
+    ? "The close-out map is not yet available from this trading server."
     : positions.status === "waiting" && view === null
-      ? "The map appears after the server's first update of all accounts."
+      ? "The map will appear once the trading server has completed its first calculation across all accounts."
       : positions.status === "failed" ? feedProblem(positions, "the close-out map") : null;
   const candleBegin = candleBars?.[0];
-  const provenance = candles.data?.provenance === "seeded_from_provider" ? "with earlier prices from a data provider" : candles.data?.provenance === "log_derived" ? "from the server's own price record" : null;
+  const provenance = candles.data?.provenance === "seeded_from_provider" ? "with earlier prices supplied by a market data provider" : candles.data?.provenance === "log_derived" ? "taken from the server's own price record" : null;
   const candleNote = candles.status === "unavailable" && candles.data === null
-    ? "Price history isn't available, so no candles are shown."
-    : candleBegin === undefined ? null : `Candles begin ${formatStamp(candleBegin.time * 1000)} UTC${provenance === null ? "" : `, ${provenance}`}${candles.data?.complete === false ? ", and the history for this window is incomplete" : ""}.`;
+    ? "Price history is not available, so no candles are shown."
+    : candleBegin === undefined ? null : `The candles begin at ${formatStamp(candleBegin.time * 1000)} UTC${provenance === null ? "" : `, ${provenance}`}${candles.data?.complete === false ? ", and the price history for this period is incomplete" : ""}.`;
   const problems = [message === null ? feedProblem(positions, "the close-out bands") : null, feedProblem(candles, "the candles")].filter((line) => line !== null);
   return (
     <Panel
       title="Close-out map"
-      tip="This shows where traders' positions would be closed out. Each band is a price range, shaded by the size of positions closed out if the price reaches it. Longs close out below the current price, shorts above it."
+      tip="The price levels at which traders' positions would be closed out. Each band covers a price range, and its shading shows the total size of the positions that would be closed out if the price reached that range. Long positions close out below the current price, and short positions above it."
       className={className}
       controls={
         <>
@@ -190,7 +190,7 @@ export function CloseoutMap({ className }: { className?: string }) {
       <div className="relative min-h-80 flex-1">
         <div ref={host} role="group" aria-label={`${symbol} close-out map: price candles with bands showing where positions close out`} className="absolute inset-0 max-lg:[&_a]:after:absolute max-lg:[&_a]:after:-inset-3.5 max-lg:[&_a]:after:content-['']" />
         {message !== null && <div className="absolute inset-0 z-10 flex bg-ink-1"><Quiet>{message}</Quiet></div>}
-        {failed && <p role="alert" className="absolute inset-0 z-10 flex items-center justify-center text-caption text-ember">The chart couldn&apos;t load. Reload the page to try again.</p>}
+        {failed && <p role="alert" className="absolute inset-0 z-10 flex items-center justify-center text-caption text-ember">The chart could not be loaded. Please reload the page to try again.</p>}
         <DataTable
           summary="Close-out bands as a table"
           caption={`All ${bands.length} close-out bands within ${effectiveBps / 100}% of the current ${symbol} price, lowest price first`}
@@ -200,12 +200,12 @@ export function CloseoutMap({ className }: { className?: string }) {
       </div>
       {emptyNote !== null && <p className="text-label text-fg-2">{emptyNote}</p>}
       <p className="sr-only">
-        {view === null || mark === null ? "" : bands.length === 0 ? "" : `${bands.length} close-out bands within ${effectiveBps / 100}% of the current price. The largest holds ${formatCompactUsd(maxUsd)}.`}
+        {view === null || mark === null ? "" : bands.length === 0 ? "" : `There are ${bands.length} close-out bands within ${effectiveBps / 100}% of the current price. The largest contains positions totalling ${formatCompactUsd(maxUsd)}.`}
       </p>
       {view !== null && (
         <p className="text-label text-fg-3">
-          Due to close out now: long {side(view.due_now.long_usd, view.due_now.long_count)}, short {side(view.due_now.short_usd, view.due_now.short_count)}. Further than ±{view.closeout_range_bps / 100}% from the price: long {side(view.beyond_range.long_usd, view.beyond_range.long_count)}, short {side(view.beyond_range.short_usd, view.beyond_range.short_count)}.
-          {" "}{mark === null ? `Positions as of ${formatClock(view.snapshot_ms)} UTC.` : `Bands show positions as of ${formatClock(view.snapshot_ms)} UTC. They don't change along the time axis.`}
+          Positions due to be closed out now: long {side(view.due_now.long_usd, view.due_now.long_count)}, short {side(view.due_now.short_usd, view.due_now.short_count)}. Positions that would close out more than ±{view.closeout_range_bps / 100}% from the current price: long {side(view.beyond_range.long_usd, view.beyond_range.long_count)}, short {side(view.beyond_range.short_usd, view.beyond_range.short_count)}.
+          {" "}{mark === null ? `Positions are shown as at ${formatClock(view.snapshot_ms)} UTC.` : `The bands show positions as at ${formatClock(view.snapshot_ms)} UTC and do not change along the time axis.`}
           {candleNote !== null && ` ${candleNote}`}
         </p>
       )}

@@ -105,7 +105,7 @@ const UNITS = /^\d+$/;
  * - it is not one
  */
 function units(text: string, what: string): bigint {
-  if (!UNITS.test(text)) throw new Error(`The server's operator list has ${what} that isn't a whole amount.`);
+  if (!UNITS.test(text)) throw new Error(`The server's operator list has ${what} that is not a whole amount.`);
   return BigInt(text);
 }
 
@@ -266,9 +266,9 @@ export function countText(view: TableView, search: string): string {
   const first = view.page * PAGE_SIZE + 1;
   const last = first + view.rows.length - 1;
   const range = first === last ? `${first}` : `${first}–${last}`;
-  if (search.slice(0, MAX_SEARCH).trim() === "") return view.total === 0 ? "No operators." : `Showing ${range} of ${view.total} ${noun}.`;
-  if (view.matched === 0) return "No operators match.";
-  return `${view.matched} of ${view.total} ${noun} ${view.matched === 1 ? "matches" : "match"}; showing ${range}.`;
+  if (search.slice(0, MAX_SEARCH).trim() === "") return view.total === 0 ? "There are no operators." : `Showing ${range} of ${view.total} ${noun}.`;
+  if (view.matched === 0) return "No operators match your search.";
+  return `${view.matched} of ${view.total} ${noun} ${view.matched === 1 ? "matches" : "match"} your search. Showing ${range}.`;
 }
 
 /** A chain-only row, with membership unknown without a list or unlisted when a verified list omits it. */

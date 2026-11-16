@@ -14,11 +14,11 @@ describe("coverText", () => {
   });
 
   it("names the oldest epoch held once the record dropped older ones, ahead of where it begins", () => {
-    expect(coverText({ ...whole, from_genesis: false, begins_ms: 5_000, truncated: true, retained_from_epoch: 40 })).toBe("Only recent staking periods are kept, from period 40 on.");
+    expect(coverText({ ...whole, from_genesis: false, begins_ms: 5_000, truncated: true, retained_from_epoch: 40 })).toBe("Only recent staking periods are retained, from period 40 onwards.");
   });
 
   it("names when a record that starts after genesis begins", () => {
-    expect(coverText({ ...whole, from_genesis: false, begins_ms: 1_793_000_000_000 })).toBe(`This list starts at ${formatStamp(1_793_000_000_000)} UTC. Earlier staking periods aren't shown.`);
+    expect(coverText({ ...whole, from_genesis: false, begins_ms: 1_793_000_000_000 })).toBe(`This list begins at ${formatStamp(1_793_000_000_000)} UTC, and earlier staking periods are not shown.`);
     expect(coverText({ ...whole, from_genesis: false, begins_ms: null })).toBeNull();
   });
 });
@@ -29,8 +29,8 @@ describe("problemText", () => {
   });
 
   it("says a failed check for new closes ahead of a failed Load more, without doubling the full stop", () => {
-    expect(problemText({ status: "ready", error: "The node did not answer.", moreError: "gone" })).toBe("Couldn't check for newly ended periods: The node did not answer. Trying again automatically.");
-    expect(problemText({ status: "ready", error: null, moreError: "The node did not answer." })).toBe("Couldn't load older periods: The node did not answer.");
+    expect(problemText({ status: "ready", error: "The node did not answer.", moreError: "gone" })).toBe("The page could not check for newly ended staking periods. The node did not answer. It will try again automatically.");
+    expect(problemText({ status: "ready", error: null, moreError: "The node did not answer." })).toBe("Older staking periods could not be loaded. The node did not answer.");
     expect(problemText({ status: "ready", error: null, moreError: null })).toBe("");
   });
 });
@@ -38,7 +38,7 @@ describe("problemText", () => {
 describe("unavailableText", () => {
   it("says the list is no longer updated only where the node stopped serving the route with epochs held", () => {
     const held = [close(2), close(1)];
-    expect(unavailableText({ status: "unavailable", epochs: held })).toBe("This server has stopped providing past staking periods, so this list no longer updates.");
+    expect(unavailableText({ status: "unavailable", epochs: held })).toBe("This trading server has stopped providing past staking periods, so this list is no longer updated.");
     expect(unavailableText({ status: "unavailable", epochs: [] })).toBe("");
     expect(unavailableText({ status: "ready", epochs: held })).toBe("");
   });

@@ -14,11 +14,11 @@ const FLOOR_NONE = "None";
 
 /** What each column means, shared by the table's heads and the stacked labels so the two cannot drift. */
 const TIPS = {
-  share: "This is the share of the house value that sets the market's limit.",
-  floor: "This is the lowest the market's limit can be, in dollars, whatever the house value.",
-  cap: "This is the most net exposure the house takes in the market: the share of the house value, or the minimum if that's higher.",
-  exposure: "This is the house's net exposure in the market as of the last update: traders' longs minus their shorts.",
-  used: "This is net exposure as a share of the limit.",
+  share: "The percentage of the house value that sets the market's exposure limit.",
+  floor: "The lowest that the market's exposure limit can be, in US dollars, whatever the house value.",
+  cap: "The maximum net exposure the house will take in the market: its percentage of the house value, or the minimum if that is higher.",
+  exposure: "The house's net exposure in the market as at the most recent update: traders' long positions minus their short positions.",
+  used: "The house's net exposure as a percentage of the market's exposure limit.",
 } as const;
 
 /** One market's cap terms and, from the node's scan, the house's net exposure in it. */
@@ -47,7 +47,7 @@ export function HouseCaps({ rows, nav }: { rows: readonly CapRow[]; nav: Fixed }
     const used = row.net === null ? null : utilBps(absFixed(row.net), cap);
     return { id: row.id, symbol: row.symbol, share: formatRate(row.bps), floor: row.floor === undefined ? FLOOR_NONE : formatUsd(floor), cap: formatUsd(cap), exposure: row.net === null ? "—" : formatUsd(absFixed(row.net)), used: used === null ? "—" : formatRate(used) };
   });
-  const caption = "Each market's exposure limit: its share of the house value, its dollar minimum, the limit those give at the current house value, and the house's net exposure against it.";
+  const caption = "Each market's exposure limit, showing its percentage of the house value, its dollar minimum, the resulting limit at the current house value and the house's net exposure against that limit.";
   return (
     <>
       <div className="hidden sm:block">

@@ -30,7 +30,7 @@ describe("houseGateLine", () => {
   });
 
   it("says the figures may be behind after a refresh has failed", () => {
-    expect(houseGateLine({ trusted: true, ready: true, fresh: false, simulated: false })).toBe("Figures have stopped updating, so they may be out of date.");
+    expect(houseGateLine({ trusted: true, ready: true, fresh: false, simulated: false })).toBe("The figures have stopped updating, so they may be out of date.");
   });
 
   it("holds nothing once the figures are ready and fresh, and never overrides the not-trusted line", () => {
@@ -41,9 +41,9 @@ describe("houseGateLine", () => {
 
 describe("overviewProblem", () => {
   it.each(["the liquidity floor", "the reward schedule"])("qualifies %s for first failures, held failures and unavailable routes", (what) => {
-    expect(overviewProblem({ status: "failed", value: null, message: "Timed out." }, what)).toBe(`Couldn't load ${what}: Timed out. Trying again automatically.`);
-    expect(overviewProblem({ status: "failed", value: {}, message: null }, what)).toBe(`Couldn't refresh ${what}, so this may be out of date.`);
-    expect(overviewProblem({ status: "unavailable", value: null, message: null }, what)).toBe(`This server doesn't provide ${what} yet.`);
+    expect(overviewProblem({ status: "failed", value: null, message: "Timed out." }, what)).toBe(`The page could not load ${what}. Timed out. The page will try again automatically.`);
+    expect(overviewProblem({ status: "failed", value: {}, message: null }, what)).toBe(`The page could not refresh ${what}. The information shown may be out of date.`);
+    expect(overviewProblem({ status: "unavailable", value: null, message: null }, what)).toBe(`This trading server does not yet provide ${what}.`);
     expect(overviewProblem({ status: "ready", value: {}, message: null }, what)).toBeNull();
     expect(overviewProblem({ status: "loading", value: null, message: null }, what)).toBeNull();
   });

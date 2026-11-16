@@ -180,6 +180,6 @@ export function hasOperatorShare(rows: readonly EpochRow[]): boolean {
  * distributed, the line says the history no longer holds it, never that none was distributed.
  */
 export function emptyHistoryText(entitled: bigint | null): string {
-  if (entitled !== null && entitled > 0n) return "The staking periods that distributed USDC to you are no longer in the server's history, which is kept for a limited time. The USDC distributions card shows your total.";
-  return "No staking period in the server's history has distributed USDC to you. At the end of each period, the house distributes what it holds above its reserve. While rotation is on, a fifth goes to the operator, and the rest is shared between stakers in proportion to their stake.";
+  if (entitled !== null && entitled > 0n) return "The staking periods in which USDC was distributed to you are no longer in the trading server's history, which is retained for a limited time only. Your total is shown on the USDC distributions card.";
+  return "No staking period in the trading server's history has distributed USDC to you. At the end of each staking period, the house distributes the amount by which its value exceeds its reserve. While operator rotation is active, one fifth of that amount is paid to the operator, and the remainder is shared among stakers in proportion to their stake.";
 }

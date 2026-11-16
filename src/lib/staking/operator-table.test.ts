@@ -79,9 +79,9 @@ describe("operatorsView", () => {
   });
 
   it("refuses a malformed amount or address, or more candidates than the registry holds", () => {
-    expect(() => operatorsView(list([candidate(1, { votes: "1e3" })]))).toThrow("isn't a whole amount");
-    expect(() => operatorsView(list([candidate(1, { self_bond: "-1" })]))).toThrow("isn't a whole amount");
-    expect(() => operatorsView(list([candidate(1)], undefined, { total_staked: "" }))).toThrow("isn't a whole amount");
+    expect(() => operatorsView(list([candidate(1, { votes: "1e3" })]))).toThrow("is not a whole amount");
+    expect(() => operatorsView(list([candidate(1, { self_bond: "-1" })]))).toThrow("is not a whole amount");
+    expect(() => operatorsView(list([candidate(1)], undefined, { total_staked: "" }))).toThrow("is not a whole amount");
     expect(() => operatorsView(list([candidate(1, { address: "0x12" })]))).toThrow("has an invalid address");
     expect(() => operatorsView(list(Array.from({ length: 101 }, (_, i) => candidate(i + 1))))).toThrow("more candidates than allowed");
   });
@@ -192,11 +192,11 @@ describe("countText", () => {
   it("says which rows a page shows of all of them, and of those a search kept", () => {
     expect(countText(tableView(rows, "", "role", 0), "")).toBe("Showing 1–25 of 60 operators.");
     expect(countText(tableView(rows, "", "role", 2), "")).toBe("Showing 51–60 of 60 operators.");
-    expect(countText(tableView(rows, "op-1", "role", 0), "op-1")).toBe("11 of 60 operators match; showing 1–11.");
-    expect(countText(tableView(rows, "op-27.", "role", 0), "op-27.")).toBe("1 of 60 operators matches; showing 1.");
-    expect(countText(tableView(rows, "nothing", "role", 0), "nothing")).toBe("No operators match.");
+    expect(countText(tableView(rows, "op-1", "role", 0), "op-1")).toBe("11 of 60 operators match your search. Showing 1–11.");
+    expect(countText(tableView(rows, "op-27.", "role", 0), "op-27.")).toBe("1 of 60 operators matches your search. Showing 1.");
+    expect(countText(tableView(rows, "nothing", "role", 0), "nothing")).toBe("No operators match your search.");
     expect(countText(tableView(rows.slice(0, 1), "", "role", 0), "  ")).toBe("Showing 1 of 1 operator.");
-    expect(countText(tableView([], "", "role", 0), "")).toBe("No operators.");
+    expect(countText(tableView([], "", "role", 0), "")).toBe("There are no operators.");
   });
 });
 

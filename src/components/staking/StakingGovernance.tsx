@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
+import { asSentence } from "@/lib/format";
 import { accountReadsSettled } from "@/lib/staking/delegation-reads";
 import { awayLabelShown, focusAfterLeaving, focusLeftCards, governanceGate, stillOpen, type Tally } from "@/lib/staking/governance";
 import { commandDetails, commandTitle, failureLine, lifetimeText, limitDetails, limitTitle, listingsKey, listingsOf, walletLine, type InForce } from "@/lib/staking/governance-words";
@@ -125,24 +126,24 @@ export function StakingGovernance() {
     // The figures are hidden, not unmounted, while the node is not trusted, as on the other tabs.
     <div className={`mt-4 ${trusted ? "grid" : "hidden"} gap-4`}>
       {/* Mounted before any vote, so a vote that lands is read out wherever its proposal now sits. */}
-      <p role="status" className="sr-only">{votes.landed === null ? "" : `Your yes vote on proposal ${votes.landed} went through.`}</p>
+      <p role="status" className="sr-only">{votes.landed === null ? "" : `Your yes vote on proposal ${votes.landed} has been recorded.`}</p>
       <p className={`${NOTE} max-w-prose`}>
-        Operators in the rotation vote with the stake they had when the rotation was chosen. A proposal passes once more than two thirds of that stake votes yes, so not voting counts against it.
-        A standard change takes effect 7 days after the server records it, so traders can act first.
-        A fast change takes effect at once, but it can only reduce risk, and it ends {ttl === null ? "after a set time" : `after ${lifetimeText(ttl)}`} unless another vote renews it.
+        Operators in the current rotation vote on proposed changes with the stake they held when the rotation was chosen. A proposal passes once more than two thirds of that stake has voted yes, so an abstention has the same effect as a vote against.
+        A standard change takes effect seven days after the trading server records it, which gives traders time to act before it applies.
+        A fast change takes effect immediately, but it can only reduce risk, and it expires {ttl === null ? "after a set time" : `after ${lifetimeText(ttl)}`} unless another vote renews it.
       </p>
       {!readable && <p className={NOTE}>{walletLine(wallet, readable)}</p>}
       {/* Said only from a read that succeeded: a failed one is not an empty list. */}
-      {readable && settled && chain.read.status === "ready" && delegated.length === 0 && <p className={NOTE}>You don&apos;t delegate to any operator in the rotation, so there are no votes to show.</p>}
+      {readable && settled && chain.read.status === "ready" && delegated.length === 0 && <p className={NOTE}>You have not delegated stake to any operator in the rotation, so there are no votes to show.</p>}
       {!settled ? (
         <p className={NOTE}>{gate === "wallet" ? "Loading votes from your wallet…" : "Loading proposals…"}</p>
       ) : (
         <div ref={grid} className="grid items-start gap-4 xl:grid-cols-2">
           <Card id="open-proposals-title" title="Open proposals" aside={list.value === null ? undefined : <span className="text-label text-fg-3">As of block {list.value.block.number}</span>}>
             <ReadNote read={list} />
-            {list.value !== null && proposals === null && <p className={NOTE}>Voting isn&apos;t set up on this server.</p>}
-            {list.value?.proposalsProblem != null && <p role="status" className="text-caption leading-relaxed text-amber">The open proposals from the server couldn&apos;t be checked: {list.value.proposalsProblem}</p>}
-            {proposals?.unavailable === true && <p role="status" className="text-caption leading-relaxed text-amber">The server couldn&apos;t load the open proposals. Trying again shortly.</p>}
+            {list.value !== null && proposals === null && <p className={NOTE}>Voting is not configured on this trading server.</p>}
+            {list.value?.proposalsProblem != null && <p role="status" className="text-caption leading-relaxed text-amber">The open proposals sent by the trading server could not be checked. {asSentence(list.value.proposalsProblem)}</p>}
+            {proposals?.unavailable === true && <p role="status" className="text-caption leading-relaxed text-amber">The trading server could not load the open proposals. The page will try again shortly.</p>}
             {proposals !== null && !proposals.unavailable && (
               <Items empty="No proposals are open for voting.">
                 {open.map((proposal) => {
@@ -152,7 +153,7 @@ export function StakingGovernance() {
                     <ProposalItem
                       key={proposal.id} id={proposal.id} headingId={headingId} fast={proposal.fast} stage="open" title={commandTitle(proposal.command, inForce)} details={commandDetails(proposal.command, inForce)}
                       tally={proposal.tally} command={proposal.command} members={membersOf(target)}
-                      wait={{ label: "Voting closes", atMs: proposal.closesAtMs, reached: "Voting has closed. This proposal leaves the list shortly", onReached: () => void operators.refresh() }}
+                      wait={{ label: "Voting closes", atMs: proposal.closesAtMs, reached: "Voting has closed, and this proposal will be removed from the list shortly", onReached: () => void operators.refresh() }}
                       vote={account === null ? null : (
                         <VoteControl
                           vote={proposals.vote} id={proposal.id} standing={standing(votes.facts, target, account)} weight={weightIn(votes.facts, target, account)}
@@ -164,7 +165,7 @@ export function StakingGovernance() {
                 })}
               </Items>
             )}
-            {proposals?.truncated === true && <p className={NOTE}>Only the newest proposals are shown. Older ones may still be open.</p>}
+            {proposals?.truncated === true && <p className={NOTE}>Only the most recent proposals are shown, and older proposals may still be open.</p>}
             {/* A vote's request or refusal keeps a place once its proposal has left the list. */}
             {awayLabelShown(votes.votingOn, open.map((proposal) => proposal.id), speaks) && (
               <div>
@@ -177,7 +178,7 @@ export function StakingGovernance() {
             <Card id="waiting-changes-title" title="Passed, waiting to take effect">
               <ReadNote read={held} />
               {view !== null && (
-                <Items empty="No passed changes are waiting.">
+                <Items empty="No passed changes are waiting to take effect.">
                   {view.waiting.map((change) => (
                     <ProposalItem
                       key={change.id} id={change.id} headingId={`proposal-waiting-${change.id}`} fast={false} stage="waiting" title={commandTitle(change.command, inForce)} details={commandDetails(change.command, inForce)}

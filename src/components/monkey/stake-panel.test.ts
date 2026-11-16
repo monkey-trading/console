@@ -45,7 +45,7 @@ describe("the Staking page's unstake", () => {
 
     const fresh = render(ready(chain));
     expect(unstakeButton(fresh)).toContain('aria-disabled="false"');
-    expect(fresh).toContain("This takes 1 MONKEY from your delegation to alpha.example (0x000000…00a1).");
+    expect(fresh).toContain("This unstake draws 1 MONKEY from your delegation to alpha.example (0x000000…00a1).");
     // The stake's split as the chain tells it: all of it delegated to one candidate, none abstaining.
     expect(fresh).toContain("12,000 MONKEY to 1 candidate");
     expect(fresh).not.toContain("(not voting)");
@@ -55,12 +55,12 @@ describe("the Staking page's unstake", () => {
     // A landed change whose read again has not: the delegations held may be the ones before it.
     const settling = render(ready(chain), true);
     expect(unstakeButton(settling)).toContain('aria-disabled="true"');
-    expect(settling).not.toContain("This takes");
+    expect(settling).not.toContain("This unstake draws");
     expect(unstakeButton(render(LOADING))).toContain('aria-disabled="true"');
     // A later read that failed keeps the figures it had, which no landed change has outdated, and says why.
     const broken = render(failed(new Error("your wallet is on chain 1, not chain 31337"), chain));
     expect(unstakeButton(broken)).toContain('aria-disabled="false"');
-    expect(broken).toContain("your wallet is on chain 1, not chain 31337");
+    expect(broken).toContain("Your wallet is on chain 1, not chain 31337.");
     expect(unstakeButton(render(failed<StakeDelegations>(new Error("your wallet is on chain 1, not chain 31337"), null)))).toContain('aria-disabled="true"');
     stop();
   });

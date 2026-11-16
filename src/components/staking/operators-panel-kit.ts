@@ -30,7 +30,7 @@ export const ALPHA = "0x00000000000000000000000000000000000000a1";
 export const BRAVO = "0x00000000000000000000000000000000000000b2";
 export const RELEASE = `0x${"ab".repeat(32)}`;
 export const VERIFIED_AT = 1_793_000_000_000;
-export const HELD_LINE = `Showing the operator list last verified at ${formatStamp(VERIFIED_AT)} UTC (confirmed block 4,321), because`;
+export const HELD_LINE = `This is the operator list as last verified at ${formatStamp(VERIFIED_AT)} UTC (confirmed block 4,321), shown because`;
 
 /** A list the node once served: two candidates, read at block 4,321. */
 export const view = operatorsView({

@@ -44,7 +44,7 @@ describe("the page's transactions", () => {
   it("reports a refusal as an error and changes nothing", async () => {
     const { store, panel, stop } = await setup();
     expect(await stakeMonkey(panel, 29_000n * MONKEY_UNIT)).toBe(false);
-    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "error", text: "Your wallet holds less MONKEY than that." });
+    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "error", text: "Your wallet holds less MONKEY than the amount entered." });
     expect(panel.getSnapshot().wallet.position.value?.staked).toBe(12_000n * MONKEY_UNIT);
     stop();
   });
@@ -181,7 +181,7 @@ describe("the page's transactions", () => {
     const claims = vi.spyOn(node.controls, "claimDistribution");
     expect(await claimDistribution(panel)).toBe(false);
     expect(claims).not.toHaveBeenCalled();
-    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: "Your wallet changed, so nothing was sent." });
+    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: "Your connected wallet changed, so the request was not sent." });
     stop();
   });
 
@@ -191,7 +191,7 @@ describe("the page's transactions", () => {
     const claims = vi.spyOn(node.controls, "claimDistribution");
     expect(await claimDistribution(panel)).toBe(false);
     expect(claims).not.toHaveBeenCalled();
-    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: "There's no distribution to claim for this account right now." });
+    expect(store.getSnapshot().notices.distribution).toMatchObject({ tone: "info", text: "There is currently no distribution to claim for this account." });
     stop();
   });
 
@@ -201,7 +201,7 @@ describe("the page's transactions", () => {
     if (wallet === null) throw new Error("the wallet connected");
     store.liveWallet = { address: wallet.address, label: "Read-only", readOnly: true, sign: wallet.sign, deposit: wallet.deposit, claim: wallet.claim };
     expect(await stakeMonkey(panel, MONKEY_UNIT)).toBe(false);
-    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "error", text: "This wallet can't send transactions." });
+    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "error", text: "This wallet cannot send transactions." });
     stop();
   });
 
@@ -230,7 +230,7 @@ describe("the page's transactions", () => {
     expect(await staked).toBe(false);
     expect(held.stakes).toBe(0);
     expect(store.getSnapshot()).toMatchObject({ busy: true, prompt: "Confirm in your wallet: deposit." });
-    expect(store.getSnapshot().notices.stake).toMatchObject({ text: "Another request is in progress, so nothing was sent." });
+    expect(store.getSnapshot().notices.stake).toMatchObject({ text: "Another request is already in progress, so this request was not sent." });
     stop();
   });
 
@@ -245,7 +245,7 @@ describe("the page's transactions", () => {
     held.release();
     expect(await staked).toBe(false);
     expect(held.stakes).toBe(0);
-    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "info", text: "Your wallet changed, so nothing was sent." });
+    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "info", text: "Your connected wallet changed, so the request was not sent." });
     stop();
   });
 
@@ -257,7 +257,7 @@ describe("the page's transactions", () => {
     const first = stakeMonkey(panel, MONKEY_UNIT);
     await flush();
     expect(await stakeMonkey(panel, MONKEY_UNIT)).toBe(false);
-    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "info", text: "Your wallet is still waiting on an earlier request." });
+    expect(store.getSnapshot().notices.stake).toMatchObject({ tone: "info", text: "Your wallet is still handling an earlier request, so this request was not sent." });
     held.release();
     expect(await first).toBe(true);
     expect(held.stakes).toBe(1);

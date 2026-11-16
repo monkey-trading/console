@@ -14,12 +14,12 @@ describe("feedProblem", () => {
   });
 
   it("says a feed that never answered has nothing to show, with the reason", () => {
-    expect(feedProblem(state({ status: "failed", data: null, error: "the node stalled" }), "positions")).toBe("Couldn't load positions: the node stalled. Trying again automatically.");
+    expect(feedProblem(state({ status: "failed", data: null, error: "the node stalled" }), "positions")).toBe("The page could not load positions. The node stalled. The page will try again automatically.");
   });
 
   it("says retained figures may be behind after a failed read, or are the last answered once the node stops serving them", () => {
-    expect(feedProblem(state({ stale: true, error: "x" }), "MONKEY totals")).toBe("Couldn't refresh MONKEY totals, so this may be out of date.");
-    expect(feedProblem(state({ status: "unavailable", stale: true }), "MONKEY totals")).toBe("The server has stopped sending MONKEY totals, so this may be out of date.");
-    expect(feedProblem(state({ status: "waiting", stale: true }), "positions")).toBe("The server is updating positions, so this may be out of date.");
+    expect(feedProblem(state({ stale: true, error: "x" }), "MONKEY totals")).toBe("The page could not refresh MONKEY totals, so the information shown may be out of date.");
+    expect(feedProblem(state({ status: "unavailable", stale: true }), "MONKEY totals")).toBe("The trading server has stopped providing MONKEY totals, so the information shown may be out of date.");
+    expect(feedProblem(state({ status: "waiting", stale: true }), "positions")).toBe("The trading server is recalculating positions, so the information shown may be out of date.");
   });
 });

@@ -134,9 +134,9 @@ export function queueMarks(positions: readonly number[], waiting: number, segmen
  */
 export function queueCaveats(totals: QueueTotals, failed: boolean): string[] {
   return [
-    !totals.complete ? "Only part of the queue has been counted, so the real figures may be higher." : null,
+    !totals.complete ? "Only part of the queue has been counted, so the actual figures may be higher." : null,
     totals.complete && !totals.stable ? "The queue changed while it was being counted, so these figures are approximate." : null,
-    failed ? "Couldn't refresh the queue, so these figures may be out of date." : null,
+    failed ? "The withdrawal queue could not be refreshed, so these figures may be out of date." : null,
   ].filter((line) => line !== null);
 }
 

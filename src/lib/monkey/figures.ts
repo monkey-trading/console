@@ -26,7 +26,7 @@ export function ready<T>(value: T): Read<T> {
 /** What a failed read shows: a node that predates the route (404) is calmly unavailable, anything else is a failure with its message, and the last answer stays. */
 export function failed<T>(error: unknown, held: T | null): Read<T> {
   if (error instanceof EngineError && error.status === 404) return { status: "unavailable", value: null, message: null };
-  return { status: "failed", value: held, message: error instanceof Error ? error.message : "unknown error" };
+  return { status: "failed", value: held, message: error instanceof Error ? error.message : "No reason was given." };
 }
 
 /** `part` as a share of `total` in basis points, truncated and never over 100%; zero when `total` is not positive. */

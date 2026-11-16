@@ -60,7 +60,7 @@ export class ProviderStaking implements StakingWallet {
   ) {}
 
   private staking(): string {
-    if (this.chain.staking === undefined || this.chain.staking === null) throw new Error("Staking isn't available here.");
+    if (this.chain.staking === undefined || this.chain.staking === null) throw new Error("Staking is not currently available.");
     return this.chain.staking;
   }
 
@@ -135,30 +135,30 @@ export class ProviderStaking implements StakingWallet {
       const held = decodeFunctionResult({ abi: STAKING, functionName: "delegationsOf", data: await this.call(staking, encodeFunctionData({ abi: STAKING, functionName: "delegationsOf", args: [owner] })) });
       if ((await stakes()) !== staked || (await delegatedStake()) !== delegated) continue;
       const delegations = held.map((delegation) => ({ candidate: delegation.candidate.toLowerCase(), amount: delegation.amount }));
-      if (delegations.reduce((sum, delegation) => sum + delegation.amount, 0n) !== delegated || delegated > staked) throw new Error("Your delegations on chain don't add up to your delegated stake.");
+      if (delegations.reduce((sum, delegation) => sum + delegation.amount, 0n) !== delegated || delegated > staked) throw new Error("Your delegations recorded on chain do not add up to your delegated stake.");
       await onChain();
       return { staked, delegated, delegations };
     }
-    throw new Error("Your stake kept changing while it loaded. Trying again shortly.");
+    throw new Error("Your stake changed repeatedly while it was being loaded.");
   }
 
   async stake(amount: bigint, progress: Progress = () => undefined): Promise<string> {
-    if (amount <= 0n) throw new Error("The amount must be more than zero.");
+    if (amount <= 0n) throw new Error("The amount must be greater than zero.");
     const staking = this.staking();
     await this.transport.ensureChain();
     const owner = hexOf(this.address);
     const spender = hexOf(staking);
     const token = await this.tokenAddress();
-    if (token === null) throw new Error("The MONKEY token isn't available yet.");
+    if (token === null) throw new Error("The MONKEY token is not yet available.");
     const balance = decodeFunctionResult({ abi: ERC20, functionName: "balanceOf", data: await this.call(token, encodeFunctionData({ abi: ERC20, functionName: "balanceOf", args: [owner] })) });
-    if (balance < amount) throw new Error("Your wallet holds less MONKEY than that.");
+    if (balance < amount) throw new Error("Your wallet holds less MONKEY than the amount entered.");
     const allowance = decodeFunctionResult({ abi: ERC20, functionName: "allowance", data: await this.call(token, encodeFunctionData({ abi: ERC20, functionName: "allowance", args: [owner, spender] })) });
     if (allowance < amount) await this.transport.send(token, encodeFunctionData({ abi: ERC20, functionName: "approve", args: [spender, amount] }), "approve the staking contract", progress);
     return this.transport.send(staking, encodeFunctionData({ abi: STAKING, functionName: "stake", args: [amount] }), "stake MONKEY", progress);
   }
 
   async startUnstake(amount: bigint, progress: Progress = () => undefined): Promise<string> {
-    if (amount <= 0n) throw new Error("The amount must be more than zero.");
+    if (amount <= 0n) throw new Error("The amount must be greater than zero.");
     return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "startUnstake", args: [amount] }), "start the unstake", progress);
   }
 
@@ -167,27 +167,27 @@ export class ProviderStaking implements StakingWallet {
   }
 
   async delegate(candidate: string, amount: bigint, progress: Progress = () => undefined): Promise<string> {
-    if (amount <= 0n) throw new Error("The amount must be more than zero.");
+    if (amount <= 0n) throw new Error("The amount must be greater than zero.");
     return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "delegate", args: [hexOf(candidate), amount] }), "delegate your stake", progress);
   }
 
   async undelegate(candidate: string, amount: bigint, progress: Progress = () => undefined): Promise<string> {
-    if (amount <= 0n) throw new Error("The amount must be more than zero.");
+    if (amount <= 0n) throw new Error("The amount must be greater than zero.");
     return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "undelegate", args: [hexOf(candidate), amount] }), "take back your delegation", progress);
   }
 
   async redelegate(from: string, to: string, amount: bigint, progress: Progress = () => undefined): Promise<string> {
-    if (amount <= 0n) throw new Error("The amount must be more than zero.");
-    if (from.toLowerCase() === to.toLowerCase()) throw new Error("You can't move a delegation to the same candidate.");
+    if (amount <= 0n) throw new Error("The amount must be greater than zero.");
+    if (from.toLowerCase() === to.toLowerCase()) throw new Error("A delegation cannot be moved to the candidate it is already delegated to.");
     return this.transport.send(this.staking(), encodeFunctionData({ abi: STAKING, functionName: "redelegate", args: [hexOf(from), hexOf(to), amount] }), "move your delegation", progress);
   }
 
   /** Claims at the checkpoint the proof's `seq` names. The proof names this account: the node signed it for the account's own route. */
   async claimDistribution(proof: DistributionProof, progress: Progress = () => undefined): Promise<string> {
-    if (proof.account.toLowerCase() !== this.address.toLowerCase()) throw new Error("This distribution is for another account.");
+    if (proof.account.toLowerCase() !== this.address.toLowerCase()) throw new Error("This distribution belongs to another account, so it cannot be claimed from this wallet.");
     // `BigInt` throws on a malformed string; the enclave signed this shape for the account's route.
     const entitled = BigInt(proof.entitled);
-    if (entitled <= 0n) throw new Error("There's no distribution to claim.");
+    if (entitled <= 0n) throw new Error("There is no distribution to claim.");
     const data = encodeFunctionData({ abi: VAULT, functionName: "claimDistribution", args: [hexOf(this.address), entitled, BigInt(proof.seq), proof.siblings.map(hexOf)] });
     return this.transport.send(this.chain.vault, data, "claim your USDC distribution", progress).catch((error: unknown) => {
       throw claimFailure(error);

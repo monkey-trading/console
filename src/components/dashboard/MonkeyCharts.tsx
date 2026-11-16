@@ -22,7 +22,7 @@ const SUPPLY_LINES: readonly LineSpec[] = [
 const FOOTER = "mt-1 text-caption leading-relaxed text-fg-3";
 
 /** The budget line's wording, which the placeholder held while the overview is read shares, so it wraps as the loaded line will. */
-const budgetLine = (budget: string, haltAt: string | null) => `Each reward period shares out ${budget}${haltAt === null ? "" : `, until it halves at ${haltAt} UTC`}. Past halvings are marked.`;
+const budgetLine = (budget: string, haltAt: string | null) => `Each reward period distributes ${budget} in total${haltAt === null ? "" : `, until the amount halves at ${haltAt} UTC`}. Past halvings are marked on the chart.`;
 
 /** The two MONKEY charts; the page's range drives their window. */
 export function MonkeyCharts({ range }: { range: DashboardRangeId }) {
@@ -43,7 +43,7 @@ export function MonkeyCharts({ range }: { range: DashboardRangeId }) {
     <>
       <ChartCard
         id="dash-per-loss" title="MONKEY per $1 of loss" feed={panel.feed("perLoss")} kind="steps" lines={PER_LOSS_LINES} format={perUsdFigure} marks={marks} timeframe={range}
-        caption="Shown by reward period. Each period's MONKEY is shared between traders in proportion to their losses, so the rate is high when little was lost."
+        caption="The MONKEY earned for each US dollar of realised loss, shown by reward period. Each period's MONKEY is shared among traders in proportion to their realised losses, so the rate is higher when total losses in the period were small."
         footer={<>
           {problem !== null && <p className={FOOTER}>{problem}</p>}
           {emissions !== null && <p className={FOOTER}>{budgetLine(monkeyText(emissions.current_budget), emissions.next_halving_ms === null ? null : formatStamp(emissions.next_halving_ms))}</p>}

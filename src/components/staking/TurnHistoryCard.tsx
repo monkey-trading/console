@@ -2,6 +2,7 @@
 
 /** The Rotation tab's turn history card (monkey-trading/console#280): every turn assigned, newest first, with older turns on "Load older". */
 
+import { asSentence } from "@/lib/format";
 import type { TurnRecord } from "@/lib/staking/rotation";
 
 import { Card } from "../monkey/Card";
@@ -26,17 +27,17 @@ export function TurnHistoryCard({ records, empty, more, truncated, reading, erro
   const dropped = more === false && truncated && records.length > 0;
   return (
     <Card id="rotation-history-title" title="Turn history">
-      <TurnRecords records={records} caption="Every turn, newest first: the operator, why it was chosen, when its turn starts and whether it started." empty={empty} nameOf={nameOf} />
+      <TurnRecords records={records} caption="Every turn, newest first, showing the operator, how it was chosen, when its turn starts and whether it has started." empty={empty} nameOf={nameOf} />
       {more === true ? (
         <button type="button" aria-disabled={reading} onClick={() => { if (!reading) onMore(); }} className={TOGGLE}>
           {reading ? "Loading" : "Load older"}<span className="sr-only"> turns</span>
         </button>
       ) : <span aria-hidden="true" className={`${TOGGLE} inline-block invisible`}>Load older</span>}
       {/* Both lines stay mounted, so a change of their text is announced: the failure of an older read, and how many turns are shown once one lands. */}
-      <p role="status" className="text-caption leading-relaxed text-amber empty:hidden">{error === null ? null : `Couldn't load older turns: ${error.replace(/\.+$/, "")}.`}</p>
+      <p role="status" className="text-caption leading-relaxed text-amber empty:hidden">{error === null ? null : `Older turns could not be loaded. ${asSentence(error)}`}</p>
       <p role="status" className="sr-only">{records.length > 0 ? `${records.length} ${records.length === 1 ? "turn" : "turns"} shown.` : ""}</p>
       {/* The note's line is held whether or not it shows, as the button's is. */}
-      <p aria-hidden={dropped ? undefined : true} className={dropped ? NOTE : `${NOTE} invisible`}>Only the most recent turns are kept.</p>
+      <p aria-hidden={dropped ? undefined : true} className={dropped ? NOTE : `${NOTE} invisible`}>Only the most recent turns are retained.</p>
     </Card>
   );
 }

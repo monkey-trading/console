@@ -4,7 +4,7 @@
 
 import { useId } from "react";
 
-import { formatMonkey } from "@/lib/format";
+import { asSentence, formatMonkey } from "@/lib/format";
 import type { Pending, PendingEmission } from "@/lib/monkey/pending";
 import { emissionsPosition } from "@/lib/store/emissions";
 import { describeBoost } from "@/lib/tier-view";
@@ -35,7 +35,7 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
   // The page's last read of the vault's record, for the account it names.
   const record = state.wallet !== null && figures.address === state.wallet.address ? figures.record : null;
   // The read's own reason; a generic one only for an error that carries none.
-  const recordProblem = record?.status === "failed" ? (record.message || "unknown error").replace(/\.+$/, "") : null;
+  const recordProblem = record?.status === "failed" ? asSentence(record.message || "No reason was given") : null;
   const act = () => {
     if (state.busy) return;
     void claim().then(() => focusHeading("monkey-title"));
@@ -68,25 +68,25 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
           {buttonSlot}
         </div>
       ) : !state.wallet ? (
-        <p className="mt-3 text-caption text-fg-3">Connect a wallet to see the MONKEY you&apos;ve earned.</p>
+        <p className="mt-3 text-caption text-fg-3">Connect a wallet to see the MONKEY you have earned.</p>
       ) : proof === null ? (
         pending.kind === "awaiting" ? (
-          <p role="status" className="mt-3 text-caption text-fg-3">You made a loss in reward period {pending.period}, which has ended. Any MONKEY you earned then can be claimed after the vault&apos;s next update. This page checks automatically.</p>
+          <p role="status" className="mt-3 text-caption text-fg-3">You realised a loss in reward period {pending.period}, which has now ended. Any MONKEY you earned in that period can be claimed once the vault has recorded the next snapshot. This page checks for it automatically.</p>
         ) : (
-          <p className="mt-3 text-caption text-fg-3">You haven&apos;t earned any MONKEY yet. Every 10 minutes, a set amount of MONKEY is shared between the traders who made a loss, in proportion to their losses.</p>
+          <p className="mt-3 text-caption text-fg-3">You have not yet earned any MONKEY. Every ten minutes, a fixed amount of MONKEY is distributed among the traders who realised a loss in that period, in proportion to the size of their losses.</p>
         )
       ) : (
         <div className="mt-3 text-caption">
           <p className="flex justify-between gap-2"><span className="text-fg">Earned</span><span className="text-fg-2">{accrued}</span></p>
           {position.claimed !== null ? (
-            <p className="mt-2 text-fg-3">You&apos;ve claimed {formatMonkey(position.claimed)} of {accrued} earned.</p>
+            <p className="mt-2 text-fg-3">You have claimed {formatMonkey(position.claimed)} of the {accrued} you have earned.</p>
           ) : state.wallet.readOnly === true ? (
             // The console reads the chain only through a connected wallet, and a watched account has none (#288).
-            <p className="mt-2 text-fg-3">How much has been claimed shows only with a connected wallet, so it isn&apos;t shown for a read-only account.</p>
+            <p className="mt-2 text-fg-3">The amount claimed can only be read through a connected wallet, so it is not shown for a read-only account.</p>
           ) : (
             // One status line that changes its words, so a failure is announced.
             <p role="status" className={`mt-2 ${recordProblem === null ? "text-fg-3" : "text-amber"}`}>
-              {recordProblem === null ? "Checking how much you've claimed…" : `Couldn't check how much you've claimed: ${recordProblem}. Trying again automatically.`}
+              {recordProblem === null ? "Checking how much you have claimed…" : `The amount you have claimed could not be checked. ${recordProblem} The page will try again automatically.`}
             </p>
           )}
           {recordPending && buttonSlot}
@@ -98,13 +98,13 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
             </>
           )}
           {position.awaiting > 0n && (
-            <p className="mt-2 text-fg-3">{formatMonkey(position.awaiting)} of this can be claimed after the vault&apos;s next update.</p>
+            <p className="mt-2 text-fg-3">{formatMonkey(position.awaiting)} of this amount can be claimed once the vault has recorded the next snapshot.</p>
           )}
           {position.claimed !== null && position.checkpoint === "waiting" && position.accrued > position.claimed && (
-            <p className="mt-2 text-fg-3">You can claim this after the vault&apos;s next update. This page checks automatically.</p>
+            <p className="mt-2 text-fg-3">The rest of your MONKEY can be claimed once the vault has recorded the next snapshot. This page checks for it automatically.</p>
           )}
           {position.claimed !== null && position.checkpoint === "posted" && position.claimable === 0n && position.accrued > 0n && (
-            <p className="mt-2 text-fg-3">You&apos;ve claimed all the MONKEY you&apos;ve earned.</p>
+            <p className="mt-2 text-fg-3">You have claimed all the MONKEY you have earned.</p>
           )}
         </div>
       )}

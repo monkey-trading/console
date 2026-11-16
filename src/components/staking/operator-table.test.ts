@@ -106,7 +106,7 @@ describe("the row editors", () => {
 
   it("says what a Delegate amount would change before the wallet is asked", () => {
     const html = render(view.rows, open(ALPHA, "delegate", "10"));
-    expect(html).toContain("Undelegated 700 MONKEY → 690 MONKEY. Your delegation to alpha.example (0x000000…00a1) 300 MONKEY → 310 MONKEY.");
+    expect(html).toContain("Your undelegated stake would change from 700 MONKEY to 690 MONKEY, and your delegation to alpha.example (0x000000…00a1) from 300 MONKEY to 310 MONKEY.");
   });
 
   it("chooses a Move's destination from the listed candidates other than its row, and says what the move changes", () => {
@@ -114,7 +114,7 @@ describe("the row editors", () => {
     const html = render(view.rows, chosen);
     expect(html).toContain("Move to");
     expect(html.match(/<span class="truncate">bravo\.example \(0x000000…00b2\)<\/span>/g)).toHaveLength(2);
-    expect(html).toContain("Your delegation to alpha.example (0x000000…00a1) 300 MONKEY → 200 MONKEY, and to bravo.example (0x000000…00b2) 0 MONKEY → 100 MONKEY. Your undelegated stake stays 700 MONKEY.");
+    expect(html).toContain("Your delegation to alpha.example (0x000000…00a1) would change from 300 MONKEY to 200 MONKEY, and your delegation to bravo.example (0x000000…00b2) from 0 MONKEY to 100 MONKEY. Your undelegated stake would remain 700 MONKEY.");
   });
 
   it("chooses nothing where the chosen destination is the row itself", () => {
@@ -127,12 +127,12 @@ describe("the row editors", () => {
     const editing = { ...open(ALPHA, "move"), typedMove: "0x1234" };
     const html = render(view.rows, editing, { source: { kind: "held", verifiedAtMs: 1_793_000_000_000, block: 4_321, why: "unverified" } });
     expect(html).toContain("Or a candidate&#x27;s address");
-    expect(html).toContain("This address isn&#x27;t checked against the operator list");
+    expect(html).toContain("This address is not checked against the operator list");
   });
 
   it("says what a Take back would change, from the delegation and the undelegated stake", () => {
     const html = render(view.rows, open(ALPHA, "undelegate", "100"));
-    expect(html).toContain("Your delegation to alpha.example (0x000000…00a1) 300 MONKEY → 200 MONKEY. Undelegated 700 MONKEY → 800 MONKEY.");
+    expect(html).toContain("Your delegation to alpha.example (0x000000…00a1) would change from 300 MONKEY to 200 MONKEY, and your undelegated stake from 700 MONKEY to 800 MONKEY.");
   });
 
   it("does not carry what another row's editor holds: opening a row starts it with no amount and no destination", () => {

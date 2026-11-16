@@ -46,7 +46,7 @@ export function StakingRotation() {
   const history = useMemo(() => (rotation === null ? null : joinHistory(rotation.history, pages.older)), [rotation, pages.older]);
   const signer = rotation?.signer ?? null;
   // Before a first read lands the cards say they are reading; a node that cannot give the rotation says so instead.
-  const unread = route.status === "loading" ? "Loading the rotation…" : "The rotation couldn't be loaded.";
+  const unread = route.status === "loading" ? "Loading the rotation…" : "The rotation could not be loaded.";
   const rotationOn = list.value?.rotationEnabled ?? route.value?.rotation_enabled ?? null;
   return (
     <div className={`mt-4 ${trusted ? "grid" : "hidden"} gap-4`}>
@@ -64,7 +64,7 @@ export function StakingRotation() {
       {/* Both cards are there from the first paint, each in a viewport of one height, so nothing moves when the first read lands. */}
       <Reassignments records={history?.records ?? []} empty={rotation === null ? unread : "None of the turns shown was skipped, promoted or refused."} nameOf={labelOf} />
       <TurnHistoryCard
-        records={history?.records ?? []} empty={rotation === null ? unread : "No turns yet."} more={history === null ? null : history.next !== null} truncated={history?.truncated ?? false} reading={pages.reading} error={pages.error}
+        records={history?.records ?? []} empty={rotation === null ? unread : "No turns have taken place yet."} more={history === null ? null : history.next !== null} truncated={history?.truncated ?? false} reading={pages.reading} error={pages.error}
         onMore={() => {
           if (rotation === null) return;
           // The last page removes the button that has focus: focus goes to the card's heading, as on the other history cards.
@@ -72,7 +72,7 @@ export function StakingRotation() {
         }}
         nameOf={labelOf}
       />
-      <p className={NOTE}>Each rotation is a group of operators chosen at an election, each weighted by the stake delegated to it then. Each day one is drawn at random, by weight, to run the server, so an operator&apos;s expected share of turns is its share of the weight. Turns change at 22:30 UTC, and this app connects to the new operator&apos;s server once it&apos;s verified.</p>
+      <p className={NOTE}>Each rotation is a group of operators chosen at an election, with each operator weighted by the stake delegated to it at that time. Each day, one operator is drawn at random, in proportion to its weight, to run the trading server, so an operator&apos;s expected share of turns equals its share of the total weight. Turns change at 22:30 UTC, and this app connects to the new operator&apos;s server once that server has been verified.</p>
     </div>
   );
 }

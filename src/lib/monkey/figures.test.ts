@@ -103,7 +103,7 @@ describe("failed", () => {
   });
   it("keeps the last answer through another failure", () => {
     expect(failed(new EngineError(500, "boom"), 5)).toEqual({ status: "failed", value: 5, message: "boom" });
-    expect(failed("odd", null).message).toBe("unknown error");
+    expect(failed("odd", null).message).toBe("No reason was given.");
   });
 });
 

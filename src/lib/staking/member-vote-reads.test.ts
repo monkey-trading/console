@@ -176,7 +176,7 @@ describe("castVote", () => {
     const { votes, operators, panel, store, stop } = await tab({ member: true });
     const vote = operators.getSnapshot().list.value?.proposals?.vote ?? "";
     await expect(castVote(panel, operators, votes, vote, 5)).resolves.toBe(false);
-    expect(store.getSnapshot().notices.governance).toMatchObject({ tone: "error", text: "This proposal has already passed, so it takes no more votes. Nothing was sent." });
+    expect(store.getSnapshot().notices.governance).toMatchObject({ tone: "error", text: "This proposal has already passed and accepts no further votes, so the vote was not sent." });
     expect(votes.getSnapshot().votingOn).toBe(5);
     stop();
   });
@@ -190,7 +190,7 @@ describe("castVote", () => {
     const first = castVote(panel, operators, votes, vote, 7);
     const second = castVote(panel, operators, votes, vote, 8);
     await expect(second).resolves.toBe(false);
-    expect(store.getSnapshot().notices.governance?.text).toBe("Your wallet is still waiting on an earlier request.");
+    expect(store.getSnapshot().notices.governance?.text).toBe("Your wallet is still handling an earlier request, so this request was not sent.");
     expect(votes.getSnapshot().votingOn).toBe(7);
     held.release();
     await expect(first).resolves.toBe(true);

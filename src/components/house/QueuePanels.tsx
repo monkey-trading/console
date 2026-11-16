@@ -21,16 +21,16 @@ const amount = (value: Fixed | null): string => (value === null ? "None" : forma
 export function QueueStats() {
   const { totals, failed } = useSelected(selectQueue);
   return (
-    <Panel title="Withdrawal queue" tip="Withdrawals that can't be paid straight away wait here. They're paid in the order they were requested, as funds become available.">
+    <Panel title="Withdrawal queue" tip="Withdrawals that cannot be paid immediately wait in this queue. They are paid in the order in which they were requested, as funds become available.">
       {totals === null ? (
-        <Quiet>{failed ? "Couldn't load the queue. Trying again automatically." : "Loading the queue…"}</Quiet>
+        <Quiet>{failed ? "The withdrawal queue could not be loaded. The page will try again automatically." : "Loading the withdrawal queue…"}</Quiet>
       ) : (
         <>
           <dl className="space-y-1">
-            <Row label="Queue total" tip="This is the total still owed to everyone waiting, in dollars." value={formatUsd(totals.remaining)} tone={totals.remaining > 0n ? "ember" : "fg"} />
-            <Row label="Requests waiting" tip="This is the number of withdrawal requests waiting." value={String(totals.count)} />
-            <Row label="Largest request" tip="This is the most still owed on any one request." value={amount(totals.largest)} />
-            <Row label="Next to be paid" tip="This is what's still owed on the request at the front of the queue. It's paid first when funds are available." value={amount(totals.head)} />
+            <Row label="Queue total" tip="The total amount still owed to everyone waiting in the queue, in US dollars." value={formatUsd(totals.remaining)} tone={totals.remaining > 0n ? "ember" : "fg"} />
+            <Row label="Requests waiting" tip="The number of withdrawal requests waiting in the queue." value={String(totals.count)} />
+            <Row label="Largest request" tip="The largest amount still owed on any single request." value={amount(totals.largest)} />
+            <Row label="Next to be paid" tip="The amount still owed on the request at the front of the queue. This request is paid first when funds become available." value={amount(totals.head)} />
           </dl>
           {queueCaveats(totals, failed).map((line) => <p key={line} className="text-label text-fg-3">{line}</p>)}
         </>
@@ -47,17 +47,17 @@ export function QueuePlace() {
   const waiting = exact && count !== null ? Math.max(count, ...queue.map((request) => request.position)) : null;
   const marks = waiting === null ? new Set<number>() : queueMarks(queue.map((request) => request.position), waiting, SEGMENTS);
   return (
-    <Panel title="Your place" tip="This is where your withdrawal requests are in the queue.">
+    <Panel title="Your place" tip="The position of your withdrawal requests in the queue.">
       {wallet === null ? (
         <Quiet>Connect a wallet to see your place in the queue.</Quiet>
       ) : !read ? (
         <Quiet>Loading your place in the queue…</Quiet>
       ) : first === undefined ? (
-        <Quiet>You have no withdrawal waiting.</Quiet>
+        <Quiet>You have no withdrawals waiting in the queue.</Quiet>
       ) : (
         <>
           <p className="text-lead text-fg tabular-nums">#{first.position}{waiting !== null && <span className="text-caption text-fg-3"> of {waiting}</span>}</p>
-          <p className="text-caption text-fg-2">{first.position === 1 ? "Next to be paid" : `${first.position - 1} ahead of you`}. {formatUsd(fixedFromWire(first.remaining))} left to pay.</p>
+          <p className="text-caption text-fg-2">{first.position === 1 ? "Your request is next to be paid" : `${first.position - 1} ${first.position === 2 ? "request is" : "requests are"} ahead of yours`}. {formatUsd(fixedFromWire(first.remaining))} remains to be paid.</p>
           {waiting !== null && (
             <>
               <ol aria-hidden="true" className="flex h-2 gap-px">

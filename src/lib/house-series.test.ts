@@ -83,7 +83,7 @@ describe("where a chart's data begins", () => {
 
   it("is the record's start from genesis, and says so", () => {
     expect(beginsOf(data({ begins_ms: 5 }))).toEqual({ ms: 5, reason: "genesis" });
-    expect(beginsText(data({ begins_ms: 5 }), stamp)).toBe("Data begins t5 UTC, when the server started.");
+    expect(beginsText(data({ begins_ms: 5 }), stamp)).toBe("Data begins t5 UTC, when the trading server first started.");
   });
 
   it("holds a footnote's place with the sentence a record from the server's start gives, so it wraps as the read one will", () => {
@@ -91,18 +91,18 @@ describe("where a chart's data begins", () => {
   });
 
   it("says the history after a snapshot recovery is partial", () => {
-    expect(beginsText(data({ begins_ms: 5, from_genesis: false }), stamp)).toContain("when the server last restarted from a backup");
+    expect(beginsText(data({ begins_ms: 5, from_genesis: false }), stamp)).toContain("when the trading server was last restored from a backup");
   });
 
   it("is the retention edge when the node has pruned past the record's start, never claimed as the first command", () => {
     expect(beginsOf(data({ begins_ms: 5, retained_from_ms: 9 }))).toEqual({ ms: 9, reason: "retention" });
-    expect(beginsText(data({ begins_ms: 5, retained_from_ms: 9 }), stamp)).toBe("Data begins t9 UTC, the oldest the server keeps at this level of detail.");
+    expect(beginsText(data({ begins_ms: 5, retained_from_ms: 9 }), stamp)).toBe("Data begins t9 UTC, the earliest point the server retains at this level of detail.");
     expect(beginsOf(data({ begins_ms: 9, retained_from_ms: 5 }))?.reason).toBe("genesis");
   });
 
   it("says nothing was recorded when the node names no beginning", () => {
-    expect(beginsText(data({ begins_ms: null }), stamp)).toBe("There's no data for this chart yet.");
-    expect(beginsText(null, stamp)).toBe("There's no data for this chart yet.");
+    expect(beginsText(data({ begins_ms: null }), stamp)).toBe("There is no data for this chart yet.");
+    expect(beginsText(null, stamp)).toBe("There is no data for this chart yet.");
   });
 });
 

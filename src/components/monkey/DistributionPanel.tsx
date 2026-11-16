@@ -31,10 +31,10 @@ export function DistributionPanel() {
             <Row label="Last distribution">{distribution === null ? "—" : lastClosed === null ? "None yet" : `${formatAgo(lastClosed, nowMs)}${last === null ? "" : `, ${formatUsdc(usdcFixed(BigInt(last.allocated_usdc_units)))}`}`}</Row>
             <Row label="Next distribution">{distribution === null ? "—" : `${formatStamp(distribution.next_close_ms)} UTC, in ${formatDuration(distribution.next_close_ms - nowMs)}`}</Row>
           </dl>
-          <p className={NOTE}>At the end of each staking period, the house distributes what it holds above its reserve. While rotation is on, a fifth goes to the operator. The rest is shared between stakers in proportion to their stake.</p>
+          <p className={NOTE}>At the end of each staking period, the house distributes the amount by which its value exceeds its reserve. While operator rotation is active, one fifth of that amount is paid to the operator. The remainder is shared among stakers in proportion to their stake.</p>
         </>
       )}
-      {distribution === null && overview.status === "ready" && <p className={NOTE}>Distributions haven&apos;t started on this server yet.</p>}
+      {distribution === null && overview.status === "ready" && <p className={NOTE}>Distributions have not yet started on this trading server.</p>}
       <ReadNote read={overview} quiet />
     </Card>
   );

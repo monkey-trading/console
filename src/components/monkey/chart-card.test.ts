@@ -15,9 +15,9 @@ import type { TimeframeId } from "@/lib/monkey/timeframes";
 
 import { ChartCard } from "./ChartCard";
 
-const ALL_LINE = "&quot;All&quot; shows up to the last 1,998 days";
+const ALL_LINE = "The &quot;All&quot; range shows up to the last 1,998 days";
 /** The All line as a visible paragraph, not the unseen one that holds its place. */
-const SHOWN_ALL = /<p class="(?![^"]*\binvisible\b)[^"]*">&quot;All&quot; shows/;
+const SHOWN_ALL = /<p class="(?![^"]*\binvisible\b)[^"]*">The &quot;All&quot; range shows/;
 
 const page = (query: SeriesQuery): SeriesPage => ({
   metric: query.metric, market: null, resolution: query.resolution, kind: "flow", unit: "usdc_base_units", begins_ms: 100, begins_seq: 0, from_genesis: true, retained_from_ms: null,
@@ -59,7 +59,7 @@ describe("ChartCard's window line", () => {
     expect(feed.getSnapshot()).toMatchObject({ timeframe: "7d", read: { status: "failed" } });
     const html = card(feed, "7d");
     expect(html).toContain(ALL_LINE);
-    expect(html).toContain("Showing All instead.");
+    expect(html).toContain("The All view is shown instead.");
   });
 
   it("drops the All line beside the 7D data it holds while a change to All fails, and leaves a loading card's held place to describe the request", async () => {
@@ -68,10 +68,10 @@ describe("ChartCard's window line", () => {
     control.fail = true;
     await feed.setTimeframe("all");
     const html = card(feed, "all");
-    expect(html).toContain("Showing 7D instead.");
+    expect(html).toContain("The 7D view is shown instead.");
     // The line is not shown beside 7D data: only its unseen place is held, for the All the card asked for.
     expect(html).not.toMatch(SHOWN_ALL);
-    expect(html).toMatch(/aria-hidden="true" class="[^"]*\binvisible\b[^"]*">&quot;All&quot; shows/);
+    expect(html).toMatch(/aria-hidden="true" class="[^"]*\binvisible\b[^"]*">The &quot;All&quot; range shows/);
     // With nothing held, the placeholder keeps the loaded height, so it describes the window asked for.
     expect(card(feedOn("all").feed, "all")).toContain(ALL_LINE);
   });

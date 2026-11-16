@@ -101,9 +101,9 @@ export function DashboardPage() {
         <div className="mx-auto flex w-full max-w-[120rem] flex-col gap-4 p-4 sm:p-6">
           <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <h2 className="text-lead tracking-caps text-glow uppercase">Dashboard</h2>
-            <p className="text-caption text-fg-3">The history of the house&apos;s value, exposure and withdrawal queue, the MONKEY earned and staked, and the USDC distributed to stakers. One range setting controls every chart.</p>
+            <p className="text-caption text-fg-3">This page charts the history of the house&apos;s value, its exposure and the withdrawal queue, together with the MONKEY earned and staked and the USDC distributed to stakers. A single range setting controls every chart.</p>
           </header>
-          {!trusted && <p className="text-data text-fg-2">Figures appear once the server is verified and connected.</p>}
+          {!trusted && <p className="text-data text-fg-2">Figures will appear once the trading server has been verified and connected.</p>}
           {/* The charts are hidden, not unmounted, while the node is not trusted, so no figure from before a gap in the feed shows. */}
           <div hidden={!trusted} className="flex flex-col gap-6">
             <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">

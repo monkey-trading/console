@@ -25,7 +25,7 @@ afterAll(stopPanelKit);
 describe("the operators card on the Delegate tab", () => {
   it("shows the table with the search, the All and Yours counts, the sort and the registry's final block, and no typed-address way", () => {
     const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: chain() });
-    expect(html).toContain("As of confirmed block 4,321");
+    expect(html).toContain("This list is as at confirmed block 4,321");
     expect(html.match(/>All 2</g)).toHaveLength(1);
     expect(html.match(/>Yours 1</g)).toHaveLength(1);
     expect(html).toContain('aria-pressed="true"');
@@ -48,12 +48,12 @@ describe("the operators card on the Delegate tab", () => {
   it("renders an open editor from the section's editing context, with its preview's words", () => {
     const editing: DelegateEditing = { ...NO_EDITING, editing: { candidate: ALPHA, mode: "delegate" }, amounts: { [amountKey("delegate", ALPHA)]: "10" } };
     const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: chain(), editing });
-    expect(html).toContain("Undelegated 700 MONKEY → 690 MONKEY. Your delegation to alpha.example (0x000000…00a1) 300 MONKEY → 310 MONKEY.");
+    expect(html).toContain("Your undelegated stake would change from 700 MONKEY to 690 MONKEY, and your delegation to alpha.example (0x000000…00a1) from 300 MONKEY to 310 MONKEY.");
   });
 
   it("while the node is unverified, names the last list verified, with when, at which block and why, and keeps the rows' Delegate and Move", () => {
     const html = render({ state: UNVERIFIED, operators: { route: LOADING, rotation: null, list: LOADING, held: { view, verifiedAtMs: VERIFIED_AT } }, read: chain() });
-    expect(html).toContain(`${HELD_LINE} the server isn&#x27;t verified right now.`);
+    expect(html).toContain(`${HELD_LINE} the trading server is not currently verified.`);
     expect(html.match(/Delegate<span class="sr-only"> to /g)).toHaveLength(4);
     expect(html.match(/Move<span class="sr-only"> part of your delegation to alpha/g)).toHaveLength(2);
     expect(html).toContain("Delegate to an address");
@@ -64,7 +64,7 @@ describe("the operators card on the Delegate tab", () => {
     const held = { view, verifiedAtMs: VERIFIED_AT };
     for (const list of [LOADING, { status: "failed" as const, value: null, message: "the node did not answer" }]) {
       const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list, held }, read: chain(), editing });
-      expect(html).toContain(`${HELD_LINE} the operator list can&#x27;t be loaded right now.`);
+      expect(html).toContain(`${HELD_LINE} the current operator list cannot be loaded.`);
       expect(html).toContain("bravo.example");
       expect(html).toContain("Amount to delegate");
       expect(html).toContain('aria-expanded="true"');
@@ -84,7 +84,7 @@ describe("the operators card on the Delegate tab", () => {
   it("blames the device clock, not the node, when the two disagree", () => {
     const state = { ...UNVERIFIED, attestation: { kind: "clock" as const, skewMs: 90_000 } };
     const html = render({ state, operators: { route: LOADING, rotation: null, list: LOADING, held: { view, verifiedAtMs: VERIFIED_AT } }, read: chain() });
-    expect(html).toContain(`${HELD_LINE} your device clock is wrong.`);
+    expect(html).toContain(`${HELD_LINE} your device&#x27;s clock is incorrect.`);
   });
 
   it("with no list held, gates the typed Delegate submit on the address checksum and nonzero value", () => {
@@ -94,9 +94,9 @@ describe("the operators card on the Delegate tab", () => {
     expect(render(base)).not.toContain("Search operators");
     const field = (typedTo: string) => render({ ...base, editing: { ...NO_EDITING, typedOpen: true, typedTo, amounts: { [amountKey("delegate", "typed")]: "10" } } });
     expect(field("")).toContain("A candidate&#x27;s address");
-    expect(field(mixed.replace("E7", "e7"))).toContain("Enter a valid address: 0x followed by 40 characters, with capitals exactly as given.");
-    expect(field("0x0000000000000000000000000000000000000000")).toContain("Enter a valid address");
-    expect(field(mixed)).not.toContain("Enter a valid address");
+    expect(field(mixed.replace("E7", "e7"))).toContain("Please enter a valid address: 0x followed by 40 hexadecimal characters, with capital letters exactly as given.");
+    expect(field("0x0000000000000000000000000000000000000000")).toContain("Please enter a valid address");
+    expect(field(mixed)).not.toContain("Please enter a valid address");
     expect(field(mixed.replace("E7", "e7"))).toMatch(/type="submit" aria-disabled="true"[^>]*>Delegate/);
     expect(field("0x0000000000000000000000000000000000000000")).toMatch(/type="submit" aria-disabled="true"[^>]*>Delegate/);
     expect(field(mixed)).toMatch(/type="submit" aria-disabled="false"[^>]*>Delegate/);
@@ -138,10 +138,10 @@ describe("the operators card on the Delegate tab", () => {
     expect(loading).toContain('class="sr-only">Loading your delegations…');
     const broken: DelegationsState = { account: WALLET.address, read: { status: "failed", value: chain().read.value, message: "the wallet did not answer" }, settling: true };
     const failed = render({ state: UNVERIFIED, operators, read: broken });
-    expect(failed).toContain("Couldn&#x27;t load these figures: the wallet did not answer. Trying again automatically.");
+    expect(failed).toContain("These figures could not be loaded. The wallet did not answer. The page will try again automatically.");
     expect(failed).toContain("300 MONKEY");
     // Another account's read is not this account's line.
-    expect(render({ state: UNVERIFIED, operators, read: { ...broken, account: BRAVO } })).not.toContain("Couldn&#x27;t load");
+    expect(render({ state: UNVERIFIED, operators, read: { ...broken, account: BRAVO } })).not.toContain("could not be loaded");
   });
 
   it("renders the page-3 and Yours-only editors supplied by the section context", () => {
@@ -165,7 +165,7 @@ describe("the operators card on the Delegate tab", () => {
     const read = chain(false, [{ candidate: op30, amount: 700n * MONKEY_UNIT }]);
     const back = render({ state: VERIFIED, operators, read, editing, table: page3 });
     expect(back).toContain("Showing 26–30 of 30 operators.");
-    expect(back).toContain("Undelegated 300 MONKEY → 293 MONKEY. Your delegation to op-30.example (0x000000…001e) 700 MONKEY → 707 MONKEY.");
+    expect(back).toContain("Your undelegated stake would change from 300 MONKEY to 293 MONKEY, and your delegation to op-30.example (0x000000…001e) from 700 MONKEY to 707 MONKEY.");
     // The same for an editor on a Yours-only row: a delegation to an address the list does not name.
     const stranger = "0x00000000000000000000000000000000000000ff";
     const yoursOnly = chain(false, [{ candidate: stranger, amount: 300n * MONKEY_UNIT }]);
@@ -192,9 +192,9 @@ describe("the operators card on the Delegate tab", () => {
   it("says so, and offers nothing to send, when the build names no staking contract", () => {
     const unavailable: DelegationsState = { account: WALLET.address, read: { status: "unavailable", value: null, message: null }, settling: false };
     const html = render({ state: VERIFIED, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: unavailable });
-    expect(html).toContain("Delegation isn&#x27;t available here.");
+    expect(html).toContain("Delegation is not currently available.");
     // The build's own line says it: no read note blames the node for what it never serves.
-    expect(html).not.toContain("These figures aren't available from this server yet.");
+    expect(html).not.toContain("These figures are not yet available from this trading server.");
     expect(html).not.toContain("Delegate<span class=\"sr-only\"> to ");
     expect(html).not.toContain("Delegate to an address");
   });
@@ -204,6 +204,6 @@ describe("the operators card on the Delegate tab", () => {
     expect(visitor).toContain("Connect a wallet to delegate your stake.");
     expect(visitor).not.toContain("Delegate<span class=\"sr-only\"> to ");
     const readOnly = render({ state: { ...VERIFIED, wallet: { ...WALLET, readOnly: true } }, operators: { route: LOADING, rotation: null, list: ready(view), held: null }, read: { account: null, read: { status: "unavailable", value: null, message: null }, settling: false } });
-    expect(readOnly).toContain("This account is read-only, so its delegations aren&#x27;t shown and nothing can be delegated for it.");
+    expect(readOnly).toContain("This account is read-only, so its delegations are not shown and no stake can be delegated from it.");
   });
 });

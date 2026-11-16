@@ -157,7 +157,7 @@ export function OperatorTable(props: Props) {
       </ul>
       <div role="region" aria-label="Operators table" tabIndex={0} className="hidden overflow-x-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow lg:block">
         <table className="w-full min-w-[80rem] text-caption">
-          <caption className="sr-only">Listed operators, with each one&apos;s role, delegated stake and share of all stake, own stake, whether it&apos;s in the rotation with its weight and share of turns there, release, handover address, and what you&apos;ve delegated to it. Amounts are in MONKEY.</caption>
+          <caption className="sr-only">The listed operators, showing each operator&apos;s role, delegated stake and share of all stake, own stake, whether it is in the rotation together with its weight and share of turns, its release, its handover address and the amount you have delegated to it. Amounts are in MONKEY.</caption>
           <thead>
             <tr className="border-b border-line">
               <th scope="col" aria-sort={ariaSort("name", sort)} className={TH}>Operator</th>
