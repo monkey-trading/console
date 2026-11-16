@@ -1,6 +1,6 @@
 /** What the Dashboard page decides beyond its charts (monkey-trading/console#310): the section a URL hash names, and the line the House section is held with until the node's first signed answers land and while they have gone stale, as the House page does. */
 
-import { asSentence, errorText } from "./format";
+import { asSentence, failureText } from "./format";
 import type { Read } from "./monkey/figures";
 
 /** The ids of the Dashboard's three sections; its in-page links target them, and a #hash load scrolls to one once the page is trusted. */
@@ -44,6 +44,6 @@ export function overviewProblem(read: Read<unknown>, what: string): string | nul
   if (read.status === "unavailable") return `This trading server does not yet provide ${what}.`;
   if (read.status !== "failed") return null;
   return read.value === null
-    ? errorText(asSentence(`${what} could not be loaded`), read.message, "The app will try again automatically.")
-    : errorText(asSentence(`${what} could not be refreshed`), read.message, "The information shown may be out of date.");
+    ? failureText(asSentence(`${what} could not be loaded`), read.message, "The app will try again automatically.")
+    : failureText(asSentence(`${what} could not be refreshed`), read.message, "The information shown may be out of date.");
 }

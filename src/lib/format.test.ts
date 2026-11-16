@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { asSentence, errorText, formatMonkey, formatMonkeyFigure, formatMovePercent, formatRate, groupThousands, MONKEY_UNIT, shortHex } from "./format";
+import { asSentence, failureText, formatMonkey, formatMonkeyFigure, formatMovePercent, formatRate, groupThousands, MONKEY_UNIT, shortHex } from "./format";
 
 describe("format", () => {
   it("shortens long hex and leaves short hex alone", () => {
@@ -78,8 +78,8 @@ describe("formatMonkeyFigure", () => {
   });
 
   it("writes an error as what happened, its reason where there is one, and what happens next", () => {
-    expect(errorText("The chart could not be loaded.", "the server did not respond", "The app will try again automatically.")).toBe("The chart could not be loaded. The server did not respond. The app will try again automatically.");
-    expect(errorText("The chart could not be loaded.", "", "The app will try again automatically.")).toBe("The chart could not be loaded. The app will try again automatically.");
-    expect(errorText("The chart could not be loaded.", null)).toBe("The chart could not be loaded.");
+    expect(failureText("The chart could not be loaded.", "the server did not respond", "The app will try again automatically.")).toBe("The chart could not be loaded. The server did not respond. The app will try again automatically.");
+    expect(failureText("The chart could not be loaded.", "", "The app will try again automatically.")).toBe("The chart could not be loaded. The app will try again automatically.");
+    expect(failureText("The chart could not be loaded.", null)).toBe("The chart could not be loaded.");
   });
 });

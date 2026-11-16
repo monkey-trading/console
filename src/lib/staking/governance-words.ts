@@ -8,7 +8,7 @@
 import type { AdminCommandWire, GovernanceWire } from "../engine/governance-types";
 import type { MarketView, SpreadTier, Tier } from "../engine/types";
 import { formatUsd, parseFixed } from "../fixed";
-import { asSentence, errorText, formatMonkey, formatRate, MONKEY_UNIT } from "../format";
+import { asSentence, failureText, formatMonkey, formatRate, MONKEY_UNIT } from "../format";
 import type { HouseParams } from "../house";
 import { formatTenthBps, tenthBpsOf } from "../spread-bands";
 import { formatStampWithYear } from "../time";
@@ -214,5 +214,5 @@ export function walletLine(wallet: { readOnly?: boolean } | null, reads: boolean
 
 /** A failed wallet read of `what`, in one sentence, with the wallet's own words and their full stop trimmed. */
 export function failureLine(what: string, message: string | null): string {
-  return errorText(asSentence(`${what} could not be loaded from your wallet`), message, "The app will try again shortly.");
+  return failureText(asSentence(`${what} could not be loaded from your wallet`), message, "The app will try again shortly.");
 }

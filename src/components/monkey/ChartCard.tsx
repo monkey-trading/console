@@ -4,7 +4,7 @@
 
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
-import { errorText, groupThousands } from "@/lib/format";
+import { failureText, groupThousands } from "@/lib/format";
 import { ALL_WINDOW_DAYS } from "@/lib/house-series";
 import type { ChartFeed } from "@/lib/monkey/feed";
 import { latestText } from "@/lib/monkey/figures";
@@ -85,7 +85,7 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
           <p className={`${NOTE} flex items-center ${CHART_HEIGHT}`}>This chart is not yet available from this trading server.</p>
         ) : data === null ? (
           read.status === "failed" ? (
-            <p role="status" className={`flex flex-wrap content-center items-center gap-2 text-caption text-amber ${CHART_HEIGHT}`}>{errorText("This chart could not be loaded.", read.message)} <button type="button" onClick={() => void feed.load().then(() => focusHeading(id))} className="min-h-6 rounded border border-line-2 px-2 text-fg-2 hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Try again</button></p>
+            <p role="status" className={`flex flex-wrap content-center items-center gap-2 text-caption text-amber ${CHART_HEIGHT}`}>{failureText("This chart could not be loaded.", read.message)} <button type="button" onClick={() => void feed.load().then(() => focusHeading(id))} className="min-h-6 rounded border border-line-2 px-2 text-fg-2 hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Try again</button></p>
           ) : <p className={`${NOTE} flex items-center ${CHART_HEIGHT}`}>Loading chart…</p>
         ) : (
           <ChartCanvas kind={kind} lines={lines} data={data} format={format} marks={marks} label={`${title} chart`} />
@@ -112,11 +112,11 @@ export function ChartCard({ id, title, feed, kind, lines, format, marks = NO_MAR
       )}
       {data !== null && read.status === "failed" && (
         <p role="status" className="mt-1 text-caption text-amber">
-          {errorText(`The ${frameOf(timeframe ?? held).label} view could not be loaded.`, read.message, `The ${frameOf(data.timeframe).label} view is shown instead.`)}{" "}
+          {failureText(`The ${frameOf(timeframe ?? held).label} view could not be loaded.`, read.message, `The ${frameOf(data.timeframe).label} view is shown instead.`)}{" "}
           <button type="button" onClick={() => void feed.load().then(() => focusHeading(id))} className="min-h-6 rounded border border-line-2 px-2 text-fg-2 hover:text-glow focus-visible:outline-2 focus-visible:outline-glow">Try again</button>
         </p>
       )}
-      {data !== null && read.status === "ready" && read.message !== null && <p role="status" className="mt-1 text-caption text-amber">{errorText("The chart could not be refreshed.", read.message)}</p>}
+      {data !== null && read.status === "ready" && read.message !== null && <p role="status" className="mt-1 text-caption text-amber">{failureText("The chart could not be refreshed.", read.message)}</p>}
       {footer}
     </section>
   );

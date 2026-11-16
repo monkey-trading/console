@@ -4,7 +4,7 @@
 
 import { useId } from "react";
 
-import { errorText, formatMonkey } from "@/lib/format";
+import { failureText, formatMonkey } from "@/lib/format";
 import type { Pending, PendingEmission } from "@/lib/monkey/pending";
 import { emissionsPosition } from "@/lib/store/emissions";
 import { describeBoost } from "@/lib/tier-view";
@@ -86,7 +86,7 @@ export function EmissionsCard({ claim, pending = { kind: "none" } }: { claim: ()
           ) : (
             // One status line that changes its words, so a failure is announced.
             <p role="status" className={`mt-2 ${recordProblem === null ? "text-fg-3" : "text-amber"}`}>
-              {recordProblem === null ? "Checking how much you have claimed…" : errorText("The amount you have claimed could not be checked.", recordProblem, "The app will try again automatically.")}
+              {recordProblem === null ? "Checking how much you have claimed…" : failureText("The amount you have claimed could not be checked.", recordProblem, "The app will try again automatically.")}
             </p>
           )}
           {recordPending && buttonSlot}

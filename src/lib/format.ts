@@ -63,6 +63,6 @@ export function asSentence(reason: string): string {
 }
 
 /** An error in reading order: what happened, then its reason as a sentence where there is one, then what happens next. */
-export function errorText(happened: string, reason?: string | null, next?: string): string {
+export function failureText(happened: string, reason?: string | null, next?: string): string {
   return [happened, reason?.trim() ? asSentence(reason) : "", next ?? ""].filter((part) => part !== "").join(" ");
 }

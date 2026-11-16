@@ -8,7 +8,7 @@
 
 import { useSyncExternalStore } from "react";
 
-import { errorText, groupThousands } from "@/lib/format";
+import { failureText, groupThousands } from "@/lib/format";
 import { usdcFixed } from "@/lib/monkey/figures";
 import { emptyHistoryText, epochsLeftOut, hasOperatorShare, MAX_EPOCHS, moreRemain, shownRows } from "@/lib/staking/distribution-history";
 import type { DistributionHistoryReads } from "@/lib/staking/history-reads";
@@ -45,9 +45,9 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
   const bounded = mine && epochsLeftOut(state.data);
   // The first read's failure, the newest pages' second read's, or Load more's: one status line that changes its words, so each is announced.
   const problem = !mine ? ""
-    : state.status === "failed" ? errorText("Your distributions could not be loaded.", state.error, "The app will try again automatically.")
-      : state.recheckError !== null ? errorText("Newly ended staking periods could not be checked.", state.recheckError, "The app will try again automatically.")
-        : state.error !== null ? errorText("Older staking periods could not be loaded.", state.error) : "";
+    : state.status === "failed" ? failureText("Your distributions could not be loaded.", state.error, "The app will try again automatically.")
+      : state.recheckError !== null ? failureText("Newly ended staking periods could not be checked.", state.recheckError, "The app will try again automatically.")
+        : state.error !== null ? failureText("Older staking periods could not be loaded.", state.error) : "";
   const loadMore = () => {
     if (state.more) return;
     void history.loadMore().then(() => {
