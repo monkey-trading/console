@@ -13,7 +13,7 @@ matches the current action.
 
 ## Structure
 
-- **src/app/** — the App Router: `layout.tsx` (fonts through `next/font`, the `metadata` and
+- **src/app/** — the App Router: `layout.tsx` (Geist Mono self-hosted through `next/font/local` from `fonts/`, with its OFL licence, the `metadata` and
   `viewport` exports, and the robots meta tag), `robots.ts` (disallow all) with its test, `restricted/page.tsx` (the static page the edge geo-block rewrites a restricted country's requests to), `notices/page.tsx` (the static privacy and third-party notices — including the stored wallet connection choice, session key, trading preferences and exit proof — which the risk line and the WalletConnect dialog link to), `(console)/` (the route group whose layout holds the provider and shell, and the trading, House, MONKEY, Funding and Settings screens), `globals.css` (Tailwind
   CSS 4 `@theme` tokens shared with the website's design language, and the reduced-motion rule),
   and the icons.
