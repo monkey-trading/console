@@ -43,6 +43,25 @@ describe("the node's payouts", () => {
     ]);
   });
 
+  it("keeps the check an answer names while the node is still loading, without taking an approval it omits as paid, and replaces it by the next complete answer", async () => {
+    const { client, store } = await connected();
+    store.patch({ now: NOW_MS, approvals: [approved(6, 100), approved(5, 90), approved(4, 80)] });
+    client.payoutsPage = page([{ nonce: 5, check: { turn: 9, boundary_ms: NOW_MS + 60_000 } }], { loaded: false });
+    await loadPayouts(store);
+    const state = store.getSnapshot();
+    expect(state.payoutsRead).toBeNull();
+    expect(state.payoutsProblem).toContain("still loading");
+    // The row names its boundary, and an approval the answer omits is still waiting, not paid.
+    expect(payoutsOf(state).map((p) => [p.nonce, p.status])).toEqual([[6, { kind: "waiting" }], [5, { kind: "waiting", checkAtMs: NOW_MS + 60_000 }], [4, { kind: "waiting" }]]);
+    // A check held for an approval a later incomplete answer omits stays; one it lists without a check goes.
+    client.payoutsPage = page([{ nonce: 6, check: { turn: 9, boundary_ms: NOW_MS + 90_000 } }], { loaded: false });
+    await loadPayouts(store);
+    expect(payoutsOf(store.getSnapshot()).map((p) => p.status)).toEqual([{ kind: "waiting", checkAtMs: NOW_MS + 90_000 }, { kind: "waiting", checkAtMs: NOW_MS + 60_000 }, { kind: "waiting" }]);
+    client.payoutsPage = page([{ nonce: 5 }, { nonce: 6 }]);
+    await loadPayouts(store);
+    expect(payoutsOf(store.getSnapshot()).map((p) => [p.nonce, p.status])).toEqual([[6, { kind: "waiting" }], [5, { kind: "waiting" }], [4, { kind: "paid" }]]);
+  });
+
   it("offers a claim beside a named check only for an unexpired authorization later than every one held when the node named it", async () => {
     const at = (epoch: number, expiresAt: number): SignedWithdrawal => {
       const base = signed(5, expiresAt);

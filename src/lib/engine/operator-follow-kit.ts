@@ -32,7 +32,7 @@ export class TrialClient {
   subscribe(onMessage: (message: StreamMessage) => void) { this.subscribers.add(onMessage); return () => { this.subscribers.delete(onMessage); }; }
 }
 
-export function rig(options: { reads?: DeploymentReads | null; operator?: () => Promise<NamedOperator | null> } = {}) {
+export function rig(options: { reads?: DeploymentReads | null; operator?: () => Promise<NamedOperator | null>; clients?: Record<string, TrialClient>; deploy?: typeof DEPLOY } = {}) {
   const scheduler = new FakeScheduler();
   let now = 1_000_000;
   let answer = options.operator ?? (async () => named());
@@ -43,8 +43,8 @@ export function rig(options: { reads?: DeploymentReads | null; operator?: () => 
   const adopted: string[] = [];
   const trial = new TrialClient();
   const follower = new OperatorFollower({
-    deploy: DEPLOY, origin: BUILD, chain: () => held.chain, busy: () => held.busy, scheduler, nowMs: () => now,
-    open: (origin) => { opened.push({ origin, client: trial }); return trial as unknown as EngineClient; }, // the follower uses only what TrialClient has
+    deploy: options.deploy ?? DEPLOY, origin: BUILD, chain: () => held.chain, busy: () => held.busy, scheduler, nowMs: () => now,
+    open: (origin) => { const client = options.clients?.[origin] ?? trial; opened.push({ origin, client }); return client as unknown as EngineClient; }, // the follower uses only what TrialClient has
     adopt: (_client, origin) => { adopted.push(origin); },
   });
   return { follower, scheduler, trial, opened, adopted, reads, held, operatorReads, setOperator: (next: () => Promise<NamedOperator | null>) => { answer = next; }, advance: (ms: number) => { now += ms; scheduler.advance(ms); } };

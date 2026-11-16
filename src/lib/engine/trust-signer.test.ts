@@ -29,6 +29,18 @@ describe("SignerNaming", () => {
     expect(naming.refuses(OLD)).toBe(true);
   });
 
+  it("refuses the key named at an earlier epoch when a later epoch names another, whichever of them signed", () => {
+    const naming = new SignerNaming();
+    naming.judge(OLD, { signer: { epoch: 4, address: OLD } });
+    expect(naming.judge(NEW, { signer: { epoch: 5, address: NEW } })).toBeNull();
+    expect(naming.refuses(OLD)).toBe(true);
+    expect(naming.refuses(NEW)).toBe(false);
+    const unsigned = new SignerNaming();
+    unsigned.judge(null, { signer: { epoch: 4, address: OLD } });
+    unsigned.judge(null, { signer: { epoch: 5, address: NEW } });
+    expect(unsigned.refuses(OLD)).toBe(true);
+  });
+
   it("refuses a node that lags behind a promotion: it names an earlier epoch's key, after a later epoch named another", () => {
     const naming = new SignerNaming();
     naming.judge(NEW, { signer: { epoch: 5, address: NEW } });

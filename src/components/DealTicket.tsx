@@ -59,6 +59,7 @@ export function DealTicket() {
   // price, or reduce-only. A node the console does not trust is the gate below, which comes first.
   const paused = tradingPaused({
     handover: follow?.kind === "waiting",
+    unlisted: follow?.kind === "unlisted",
     open: market.open,
     scheduleWords: market.open ? null : describeSchedule(market.view.schedule),
     priced: market.mark !== null,

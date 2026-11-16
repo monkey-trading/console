@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { EngineError, type EngineClient } from "./client";
-import { B, BUILD, rig, TrialClient, VERIFIED } from "./operator-follow-kit";
+import { B, BUILD, DEPLOY, rig, TrialClient, VERIFIED } from "./operator-follow-kit";
 import { RefusedAnswer } from "./trust-errors";
 
 /** The fields every operator route carries. */
@@ -97,6 +97,77 @@ describe("a visit with no wallet to read a chain (monkey-trading/console#280)", 
     current.signedRead = async () => { throw new RefusedAnswer("The vault names another signer", { ...ROUTE, api_hostname: { hostname: "b.example", block: 2, block_hash: "0x" }, turn: own }); };
     await kit.follower.check();
     expect(kit.adopted).toEqual([B]);
+  });
+});
+
+describe("a node the visit with no wallet moved to that is promoted past (monkey-trading/console#371)", () => {
+  const C = "https://c.example:8443";
+  const names = (hostname: string) => ({ ...ROUTE, api_hostname: { hostname, block: 1, block_hash: "0x" } });
+  const refusedNaming = (hostname: string) => { const client = new TrialClient(); client.verdict = { kind: "unverified", reason: "The vault names another signer" }; client.signedRead = async () => { throw new RefusedAnswer("The vault names another signer", names(hostname)); }; return client; };
+  /** The build's node names B; B, promoted past, names `onward`; C verifies. */
+  function chain(onward: string) {
+    const clients = { [B]: refusedNaming(onward), [C]: new TrialClient() };
+    const kit = rig({ reads: null, clients });
+    const current = new TrialClient();
+    current.signedRead = async () => ({ ...ROUTE, api_hostname: { hostname: "b.example", block: 1, block_hash: "0x" } });
+    kit.follower.watch(current as unknown as EngineClient); // the follower uses only what TrialClient has
+    return { ...kit, current, clients };
+  }
+
+  it("moves on to the node its signed route names, though the node in use still names it, without taking the refused client", async () => {
+    const { follower, adopted, opened } = chain("c.example:8443");
+    await follower.check();
+    expect(opened.map((entry) => entry.origin)).toEqual([B, C]);
+    expect(adopted).toEqual([C]);
+    expect(follower.getSnapshot()).toEqual({ kind: "following", origin: C });
+  });
+
+  it("finds the successor on the next check when the node in use has stopped answering and B was promoted past in between", async () => {
+    const { follower, adopted, current, clients } = chain("c.example:8443");
+    const refused = clients[B];
+    // B first answers its check with nothing to say against it, but does not verify yet.
+    clients[B] = new TrialClient();
+    clients[B].verdict = { kind: "unverified", reason: "the new operator is still taking the keys" };
+    await follower.check();
+    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", target: B });
+    // B is promoted past, and the node in use stops.
+    clients[B].verdict = refused.verdict;
+    clients[B].signedRead = refused.signedRead;
+    current.signedRead = async () => { throw new EngineError(0, "The node did not answer."); };
+    await follower.check();
+    expect(adopted).toEqual([C]);
+  });
+
+  it("keeps the pause on the refused node when the route it names does not verify either, and tries again", async () => {
+    const { follower, adopted, clients } = chain("c.example:8443");
+    clients[C].verdict = { kind: "unverified", reason: "still taking the keys" };
+    await follower.check();
+    expect(adopted).toEqual([]);
+    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", target: C, reason: "still taking the keys" });
+  });
+
+  it("says the console needs updating when the route names a node the build does not list, and never goes in a circle or past the bound", async () => {
+    const unlisted = chain("other.example");
+    await unlisted.follower.check();
+    expect(unlisted.follower.getSnapshot()).toEqual({ kind: "unlisted", origin: BUILD, hostname: "other.example" });
+    expect(unlisted.adopted).toEqual([]);
+    // B names C and C names B: each is tried once.
+    const circle = chain("c.example:8443");
+    circle.clients[C].verdict = { kind: "unverified", reason: "refused" };
+    circle.clients[C].signedRead = async () => { throw new RefusedAnswer("refused", names("b.example")); };
+    await circle.follower.check();
+    expect(circle.opened.map((entry) => entry.origin)).toEqual([B, C]);
+    expect(circle.follower.getSnapshot()).toMatchObject({ kind: "waiting", target: C });
+    // A line of nodes longer than the bound stops after it.
+    const origins = ["https://n1.example", "https://n2.example", "https://n3.example", "https://n4.example", "https://n5.example"];
+    const clients = Object.fromEntries(origins.map((origin, index) => [origin, refusedNaming(`${origins[index + 1]?.slice(8) ?? "n6.example"}`)]));
+    const kit = rig({ reads: null, clients, deploy: { origin: BUILD, candidateOrigins: [...DEPLOY.candidateOrigins, ...origins] } });
+    const current = new TrialClient();
+    current.signedRead = async () => names("n1.example");
+    kit.follower.watch(current as unknown as EngineClient); // the follower uses only what TrialClient has
+    await kit.follower.check();
+    expect(kit.opened.map((entry) => entry.origin)).toEqual(origins.slice(0, 3));
+    expect(kit.adopted).toEqual([]);
   });
 });
 

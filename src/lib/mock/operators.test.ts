@@ -103,7 +103,8 @@ describe("the simulated registry", () => {
     expect(named).toMatchObject({ candidate: pending.candidate, adminKey: pending.adminKey, sinceMs: pending.effectiveAtMs, hostname: "bravo.operators.example", pending: null });
     const after = await client.stats.operator();
     expect(after).toMatchObject({ operator: pending.adminKey, pending_rotation: null, rotation_enabled: true, last_election: null });
-    // The turn in effect follows the operator in effect, so the card never names two operators.
-    expect(after.turn?.candidate).toBe(pending.candidate);
+    // The turn under way keeps the member it began with; the elected operator holds the next one.
+    expect(after.turn?.candidate).not.toBe(pending.candidate);
+    expect(after.next_turn?.candidate).toBe(pending.candidate);
   });
 });

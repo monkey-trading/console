@@ -11,6 +11,7 @@ import { fixedFromWire, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
 import { abandoned, awaitsTrust, domainOf, errorText, notBusy, prompting, usableWallet } from "./signing";
 import { authorizationFor, keepLatest } from "./funds";
+import { checksKept, checksOf } from "./payout-checks";
 import type { ConsoleState, PayoutCheck } from "./state";
 import type { ConsoleStore } from "./store";
 
@@ -60,7 +61,7 @@ function statusOf(state: ConsoleState, nonce: number, approvedSeq: number, nowSe
   if (state.paid.includes(nonce) || paidByNode(state, nonce, approvedSeq)) return { kind: "paid" };
   const signed = authorizationFor(state, nonce);
   const held = signed?.authorization?.expires_at ?? 0;
-  const check = state.payoutsRead?.checks?.[nonce];
+  const check = state.payoutChecks[nonce];
   // The node names a check only while no usable authorization exists: the one held when it named it (an expired one, or one of an earlier signer epoch) waits on the check for its replacement, and only a later, unexpired one decides.
   if (check !== undefined && !(held > nowSeconds && laterThan(signed?.authorization, check.held))) return { kind: "waiting", checkAtMs: check.atMs };
   if (signed === null || held === 0) return { kind: "waiting" };
@@ -125,20 +126,6 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
 }
 
 /**
- * The check each approval the node names a log check for waits on, with the authorization `held` when it named it: only a well-formed time
- * counts, so a bad answer leaves the row's plain wait. A later authorization overrides it where the status is worked out.
- */
-function checksOf(entries: readonly PayoutEntry[], held: readonly SignedWithdrawal[]): Record<number, PayoutCheck> {
-  const checks: Record<number, PayoutCheck> = {};
-  for (const { nonce, check } of entries) {
-    if (check === undefined || !Number.isSafeInteger(check.boundary_ms) || check.boundary_ms <= 0) continue;
-    const authorization = held.find((w) => w.nonce === nonce)?.authorization;
-    checks[nonce] = { atMs: check.boundary_ms, held: authorization === undefined ? null : { epoch: authorization.signer_epoch, expiresAt: authorization.expires_at } };
-  }
-  return checks;
-}
-
-/**
  * Reads the node's unpaid approvals of the connected account, page by page, and takes each
  * authorization from the answer. An answer for a wallet or a read that a later one overtook is
  * dropped. A nonce is paid only once a complete, loaded answer omits it: a failed or partial read
@@ -179,7 +166,9 @@ export async function loadPayouts(store: ConsoleStore): Promise<void> {
     const problem = !loaded ? "The node is still loading its record of your payouts after a restart." : after !== undefined ? "The node's list of your payouts is longer than this page reads." : null;
     store.patch({
       authorizations,
-      payoutsRead: problem === null && seq !== null ? { seq, listed: entries.map((e) => e.nonce), checks: checksOf(entries, withListed(heldBefore)) } : state.payoutsRead,
+      payoutsRead: problem === null && seq !== null ? { seq, listed: entries.map((e) => e.nonce) } : state.payoutsRead,
+      // A boundary the node names stands whether or not the answer is complete; only a complete one also says which approvals it leaves out.
+      payoutChecks: checksKept(state.payoutChecks, entries, checksOf(entries, withListed(heldBefore)), problem === null),
       payoutsProblem: problem === null ? null : `${problem} ${READ_AGAIN}`,
     });
   } catch (error) {

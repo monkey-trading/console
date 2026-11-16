@@ -72,6 +72,8 @@ export class MockOperators {
   readonly candidates: readonly MockCandidate[] = mockCandidates();
   private sinceMs: number;
   private inEffect: MockCandidate;
+  /** The operator an election replaced, once it has taken effect, so the turns before it still name it. */
+  private former: MockCandidate | null = null;
   private next: { candidate: MockCandidate; epoch: number; effectiveAtMs: number } | null;
 
   constructor(startMs: number) {
@@ -86,6 +88,7 @@ export class MockOperators {
   private settle(now: number): void {
     if (this.next === null || now < this.next.effectiveAtMs) return;
     this.sinceMs = this.next.effectiveAtMs;
+    this.former = this.inEffect;
     this.inEffect = this.next.candidate;
     this.next = null;
   }
@@ -94,6 +97,14 @@ export class MockOperators {
     this.settle(now);
     const pending: PendingElection | null = this.next === null ? null : { epoch: this.next.epoch, candidate: this.next.candidate.address, adminKey: this.next.candidate.adminKey, effectiveAtMs: this.next.effectiveAtMs, promoted: false };
     return { rotationEnabled: true, candidate: this.inEffect.address, adminKey: this.inEffect.adminKey, sinceMs: this.sinceMs, hostname: this.inEffect.hostname, pending };
+  }
+
+  /** The operator in effect at `ms`, as read at `now`: an election applies from its own time, whenever it is read. */
+  holderAt(now: number, ms: number): MockCandidate {
+    this.settle(now);
+    if (this.next !== null && ms >= this.next.effectiveAtMs) return this.next.candidate;
+    if (this.former !== null && ms < this.sinceMs) return this.former;
+    return this.inEffect;
   }
 
   adminKey(now: number): string {

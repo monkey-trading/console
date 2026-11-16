@@ -4,6 +4,7 @@ import { EngineError, type EngineClient } from "./client";
 import { hostnameOrigin, listedOrigins, type Deploy } from "./deploy";
 import type { Scheduler } from "./live-stream";
 import type { OperatorRoute } from "./stats-types";
+import { RefusedAnswer } from "./trust-errors";
 import type { NamedOperator } from "./registry";
 
 /** What the console knows of the node it should talk to; `origin` is the node it talks to now. */
@@ -87,4 +88,28 @@ export function nodeSaid(route: OperatorRoute, nowMs: number): NodeSaid {
   const at = route.next_turn?.applies_at;
   const turns = [route.turn, route.next_turn].flatMap((turn) => (turn ? [{ candidate: turn.candidate.toLowerCase(), atMs: turn.applies_at }] : []));
   return { turnAtMs: at !== undefined && at > nowMs ? at : null, hostname: route.api_hostname?.hostname ?? null, rotationEnabled: route.rotation_enabled, read: true, turns };
+}
+
+/** How many nodes past the one in use a visit with no wallet follows in one run: each refused node's signed route names the next. */
+export const MAX_SUCCESSIVE_MOVES = 3;
+
+/** The signed route a refused node answers with: the one `error` carries, or, when the node answered a verdict instead of failing, the one its refusal keeps; null for a node that is not refused. */
+export async function refusedRoute(scheduler: Scheduler, client: EngineClient, error?: unknown): Promise<OperatorRoute | null> {
+  if (error instanceof RefusedAnswer) return error.answer;
+  if (error !== undefined) return null;
+  try {
+    await bounded(scheduler, client.stats.operator({ limit: 1 }));
+    return null;
+  } catch (read) {
+    return read instanceof RefusedAnswer ? read.answer : null;
+  }
+}
+
+/** Where `route` says the operator runs, when it is a node not yet `tried` and within the bound on successive moves; or that the build does not list it. */
+export function successor(deploy: Pick<Deploy, "origin" | "candidateOrigins">, route: OperatorRoute, tried: readonly string[]): { origin: string } | { unlisted: string | null } | null {
+  const hostname = route.api_hostname?.hostname;
+  if (hostname === undefined || tried.length > MAX_SUCCESSIVE_MOVES) return null;
+  const target = operatorTarget(deploy, { hostname, rotationEnabled: route.rotation_enabled });
+  if ("unlisted" in target) return target;
+  return target.origin === null || tried.includes(target.origin) ? null : { origin: target.origin };
 }

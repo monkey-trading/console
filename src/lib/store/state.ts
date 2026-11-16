@@ -51,8 +51,6 @@ export interface PayoutsRead {
   seq: number;
   /** The nonces of the unpaid approvals the list held. */
   listed: number[];
-  /** For each approval waiting on a log check (monkey-trading/console#280), the check; absent when none waits. */
-  checks?: Record<number, PayoutCheck>;
 }
 
 /** A log check an approval's next signature waits for (monkey-trading/console#280). */
@@ -183,6 +181,8 @@ export interface ConsoleState {
   approvalsNext: string | null;
   /** The node's latest complete list of the account's unpaid approvals; null until a read of it finished loaded. */
   payoutsRead: PayoutsRead | null;
+  /** For each approval waiting on a log check (monkey-trading/console#280), the check the node's latest answer named, complete and loaded or not; absent when none waits. */
+  payoutChecks: Record<number, PayoutCheck>;
   /** Why the last read of the node's payouts did not finish, written for the user; null when it did or the node has no such route. */
   payoutsProblem: string | null;
   /** Counts reads of the node's payouts, so an answer a later read has overtaken is dropped. */
@@ -278,6 +278,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     approvals: [],
     approvalsNext: null,
     payoutsRead: null,
+    payoutChecks: {},
     payoutsProblem: null,
     payoutsGeneration: 0,
     approvalsGeneration: 0,

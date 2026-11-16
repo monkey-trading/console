@@ -12,13 +12,12 @@
  * slow read, and otherwise every five minutes while the tab is visible.
  */
 
-import type { AttestationStatus } from "./attestation";
 import type { EngineClient, Unsubscribe } from "./client";
 import type { Deploy } from "./deploy";
 import type { Scheduler } from "./live-stream";
 import { ROTATION_EVENTS } from "./rotation-events";
 import { NodeWord } from "./operator-follow-node";
-import { bounded, operatorTarget, signedAnswer, soonest, type FollowStatus, type NodeSaid } from "./operator-follow-status";
+import { bounded, operatorTarget, refusedRoute, signedAnswer, soonest, successor, type FollowStatus, type NodeSaid } from "./operator-follow-status";
 import type { DeploymentReads, NamedOperator } from "./registry";
 
 export { operatorTarget, type FollowStatus } from "./operator-follow-status";
@@ -234,24 +233,32 @@ export class OperatorFollower {
    * it does the node in use stays; with rotation off that is no change of operator on its way, as
    * governance may have installed a fallback on the deployment's own node, so it is not told as one.
    */
-  private async tryNode(target: string, chain: DeploymentReads | null, rotationEnabled: boolean): Promise<void> {
+  private async tryNode(target: string, chain: DeploymentReads | null, rotationEnabled: boolean, tried: readonly string[] = [this.origin]): Promise<void> {
     const before = this.state; // trading pauses the moment the chain names another node, as its verification takes the time (monkey-trading/console#280)
     // A trial another wallet came during says nothing for it, failed or not: the pause it began goes, and `check` runs again for the new one.
     const waiting = (reason: string) => (this.deps.chain() !== chain ? this.set(before) : rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, reason }) : this.settled({ kind: "following", origin: this.origin }));
     if (rotationEnabled && !(this.state.kind === "waiting" && this.state.target === target)) waiting("The new operator's node is being verified.");
-    let client: EngineClient;
-    let status: AttestationStatus;
+    let client: EngineClient | null = null;
+    // A node refused for the signer the vault names still says, in its signed route, where the registry now runs the operator; with no wallet that is the only word on it,
+    // so the next node is the one it names, among the origins the build lists. The refused client and its turns are never taken, and the moves in one run are bounded.
+    const failed = async (reason: string, error?: unknown): Promise<void> => {
+      const route = chain === null && client !== null ? await refusedRoute(this.deps.scheduler, client, error) : null;
+      const next = route === null || this.deps.chain() !== chain ? null : successor(this.deps.deploy, route, [...tried, target]);
+      if (next === null) return waiting(reason);
+      if ("unlisted" in next) return this.settled({ kind: "unlisted", origin: this.origin, hostname: next.unlisted });
+      return this.tryNode(next.origin, chain, route?.rotation_enabled ?? rotationEnabled, [...tried, target]);
+    };
     try {
       if (this.trial?.origin !== target) this.trial = { origin: target, client: this.deps.open(target) };
       ({ client } = this.trial);
       await client.readChainThrough(chain);
-      status = await client.verify();
-      if (status.kind === "unverified") return waiting(status.reason);
+      const status = await client.verify();
+      if (status.kind === "unverified") return failed(status.reason);
       // With no wallet no verdict reads the vault, so an attested node is the best a visit without one can have; it reads, and never signs.
       if (status.kind === "attested" && chain !== null) return waiting(status.why);
       await signedAnswer(client);
     } catch (error) {
-      return waiting(error instanceof Error ? error.message : "The node did not answer.");
+      return failed(error instanceof Error ? error.message : "The node did not answer.", error);
     }
     if (this.deps.chain() !== chain) return this.set(before);
     if (this.deps.busy()) return waiting("A wallet request is in progress; the console moves once it has finished.");
