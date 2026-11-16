@@ -2,6 +2,7 @@
 
 import { EngineError } from "./client";
 import { SIGNER_SUPERSEDED, SignatureError, UntrustedError, type NodeTrust } from "./trust";
+import { SupersededAnswer } from "./trust-errors";
 import { CHALLENGE_HEADER, SEQ_HEADER, SIGNATURE_HEADER, TIME_HEADER } from "./wire";
 import type { Verifier } from "./verifier";
 
@@ -27,6 +28,17 @@ const encoder = new TextEncoder();
 
 function unsigned(status: number): UntrustedError {
   return new UntrustedError(`The node's answer (HTTP ${status}) was not signed by the attested enclave, so it was discarded.`);
+}
+
+/** The refusal of a verified answer under a key put aside while it was in flight, carrying a 2xx answer's JSON, which can still say what it named of the signer. */
+function superseded(ok: boolean, bytes: Uint8Array): UntrustedError {
+  if (!ok) return new UntrustedError(SIGNER_SUPERSEDED);
+  try {
+    return new SupersededAnswer(SIGNER_SUPERSEDED, JSON.parse(decoder.decode(bytes)));
+  } catch {
+    // Not JSON: it names nothing.
+    return new UntrustedError(SIGNER_SUPERSEDED);
+  }
 }
 
 /** The error a signed non-2xx answer stands for. */
@@ -132,7 +144,7 @@ export class SignedTransport {
     });
     if (!checked.ok) throw new SignatureError(`The node's answer did not verify: ${checked.reason}.`);
     // The vault named another signer while this request was in flight: an answer from the key it no longer names is discarded, valid as its signature is.
-    if (judged && this.deps.trust.refuses(signer)) throw new UntrustedError(SIGNER_SUPERSEDED);
+    if (judged && this.deps.trust.refuses(signer)) throw superseded(response.ok, bytes);
     const skewMs = checked.response.timeMs - this.deps.nowMs();
     if (Math.abs(skewMs) > CLOCK_TOLERANCE_MS) {
       this.deps.trust.clockWrong(skewMs);

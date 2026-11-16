@@ -69,7 +69,7 @@ export class LiveEngineClient implements EngineClient {
   private readonly totalsWalk: QueueTotalsWalk;
   readonly withdrawalTotals: () => Promise<QueueTotals>;
   private readonly lastRoute: { route: OperatorRoute | null } = { route: null }; // stays with a refusal
-  readonly stats = liveStats((path) => this.transport.get(path), (route) => this.trust.heedOperator(route), this.lastRoute);
+  readonly stats = liveStats((path) => this.transport.get(path), (route) => this.trust.heedOperator(route), this.lastRoute, (signer) => this.trust.heedSigner(signer));
   readonly signerNamed: EngineClient["signerNamed"] = () => this.trust.signerNamed;
   readonly heedSigner: EngineClient["heedSigner"] = (signer) => this.trust.heedSigner(signer);
   readonly holdSigner: EngineClient["holdSigner"] = (signer) => this.trust.holdSigner(signer);

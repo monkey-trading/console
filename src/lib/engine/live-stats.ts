@@ -1,13 +1,16 @@
 /** The dashboard routes over a signed read: the House, MONKEY and Staking pages' positions, series and totals. */
 
 import { EngineError } from "./client";
-import { RefusedAnswer, UntrustedError } from "./trust-errors";
-import type { OperatorClaim } from "./signer-naming";
+import { RefusedAnswer, SupersededAnswer, UntrustedError } from "./trust-errors";
+import type { NamedSigner, OperatorClaim } from "./signer-naming";
 import type { DistributionEpochsPage, OperatorList } from "./staking-reads";
 import type { ActivityPage, DistributionProof, MonkeyView, OperatorRoute, PositionsView, SeriesPage, SeriesQuery, StatsReads } from "./stats-types";
 
-/** Reads the routes through `get` (`seen` keeps the last operator route read), which answers only what the attested enclave signed for that request; `heedOperator` judges the signer the operator route names. */
-export function liveStats(get: (path: string) => Promise<unknown>, heedOperator: (route: OperatorRoute) => void = () => undefined, seen: { route: OperatorRoute | null } = { route: null }): StatsReads {
+/**
+ * Reads the routes through `get` (`seen` keeps the last operator route read), which answers only what the attested enclave signed for that
+ * request; `heedOperator` judges the signer the operator route names, and `heedSigner` the signer named by one that came under a key put aside.
+ */
+export function liveStats(get: (path: string) => Promise<unknown>, heedOperator: (route: OperatorRoute) => void = () => undefined, seen: { route: OperatorRoute | null } = { route: null }, heedSigner: (signer: NamedSigner) => void = () => undefined): StatsReads {
   // The enclave signs each answer, so its shape is the engine's.
   return {
     positions: async (market) => (await get(`/v1/house/positions?${new URLSearchParams({ market: String(market) })}`)) as PositionsView,
@@ -41,6 +44,12 @@ export function liveStats(get: (path: string) => Promise<unknown>, heedOperator:
       try {
         route = (await get(`/v1/operator${text === "" ? "" : `?${text}`}`)) as OperatorRoute;
       } catch (error) {
+        if (error instanceof SupersededAnswer) {
+          // Refused, as its key was put aside while it came, but what it names of the signer counts (monkey-trading/console#377); the enclave signed it, so its shape is the engine's.
+          const late = error.body as OperatorRoute;
+          if (late.signer !== undefined) heedSigner(late.signer);
+          throw new RefusedAnswer(error.message, late);
+        }
         // A node refused at its check cannot be asked again, but what it last said stays with the refusal: it still says which node the registry names now.
         throw error instanceof UntrustedError && !(error instanceof RefusedAnswer) && seen.route !== null ? new RefusedAnswer(error.message, seen.route) : error;
       }

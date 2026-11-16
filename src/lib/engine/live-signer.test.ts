@@ -13,13 +13,15 @@ import type { Verifier } from "./verifier";
 /** The enclave `acceptAll` reads out of a mock attestation. */
 const ENCLAVE = "0x0000000000000000000000000000000000000001";
 const OTHER = "0x00000000000000000000000000000000000000bb";
+const THIRD = "0x00000000000000000000000000000000000000cc";
 
 function client(verifier: Verifier = acceptAll) {
   const node = new FakeNode();
   node.attestation(() => ENCLAVE);
-  const gates: { markets: Promise<void> | null } = { markets: null };
+  const gates: { markets: Promise<void> | null; operator: Promise<void> | null } = { markets: null, operator: null };
   const fetchThrough: typeof fetch = async (input, init) => {
     if (String(input).endsWith("/v1/markets") && gates.markets !== null) await gates.markets;
+    if (String(input).endsWith("/v1/operator") && gates.operator !== null) await gates.operator;
     return node.fetch(input, init);
   };
   const sockets: FakeSocket[] = [];
@@ -213,5 +215,23 @@ describe("the highest signer the client has heard named (monkey-trading/console#
     live.heedSigner({ epoch: 6, address: ENCLAVE });
     live.heedSigner({ epoch: 7, address: OTHER });
     expect(told).toEqual([5, 6, 7]);
+  });
+
+  it("counts what an operator answer names that lands after its enclave was put aside, and still refuses the answer", async () => {
+    const { live, reply, operator, gates } = client();
+    operator({ epoch: 5, address: ENCLAVE });
+    await live.verify();
+    let release = () => {};
+    gates.operator = new Promise<void>((resolve) => { release = resolve; });
+    reply("/v1/operator", { operator: ENCLAVE, pending_rotation: null, rotation_enabled: true, last_election: null, enclave: ENCLAVE, signer: { epoch: 9, address: THIRD } });
+    // A page's read of the route is in flight when another node's word puts the enclave aside.
+    const late = live.stats.operator();
+    await settle();
+    live.heedSigner({ epoch: 8, address: OTHER });
+    release();
+    const refused = await late.then(() => null, (error: unknown) => error);
+    expect(refused).toBeInstanceOf(RefusedAnswer);
+    expect(refused instanceof RefusedAnswer ? refused.answer.signer : null).toEqual({ epoch: 9, address: THIRD });
+    expect(live.signerNamed()).toEqual({ epoch: 9, address: THIRD });
   });
 });
