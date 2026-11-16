@@ -13,7 +13,7 @@ const STEP = q("0.000001");
 function belowMinimum(market: MarketModel, size: string): boolean {
   const qty = q(size);
   const { problems } = previewTicket({ market, side: "buy", qty, slippageBps: 10, account: account(1_000_000), houseNav: NAV });
-  return problems.some((p) => p.startsWith("Minimum order"));
+  return problems.some((p) => p.startsWith("The minimum order value"));
 }
 
 describe("startingSize", () => {

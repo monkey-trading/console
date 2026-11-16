@@ -4,8 +4,8 @@ export type PausedCause = "handover" | "unlisted" | "closed" | "price" | "reduce
 
 export type PausedState = {
   cause: PausedCause;
-  /** Completes "Trading is paused: …". */
-  why: string;
+  /** What the deal ticket says, in full sentences: why trading is paused and what will end it. */
+  text: string;
   /** Closing positions stays open under this state. */
   closesAllowed: boolean;
 };
@@ -31,19 +31,19 @@ export function tradingPaused(input: {
   reduceOnly: boolean;
 }): PausedState | null {
   if (input.handover) {
-    return { cause: "handover", why: "a new operator is taking over, and trading resumes once their server is verified", closesAllowed: true };
+    return { cause: "handover", text: "A new operator is taking over the trading server, so trading has been suspended. Trading will resume once the new operator's server has been verified.", closesAllowed: true };
   }
   if (input.unlisted) {
-    return { cause: "unlisted", why: "the new operator's server isn't supported by this version of the console, so it needs an update", closesAllowed: true };
+    return { cause: "unlisted", text: "A new operator is taking over the trading server, but this version of the console does not support the new server, so trading has been suspended. Trading will resume once the console has been updated.", closesAllowed: true };
   }
   if (!input.open) {
-    return { cause: "closed", why: input.scheduleWords === null ? "the market is closed" : `the market is closed (${input.scheduleWords})`, closesAllowed: true };
+    return { cause: "closed", text: input.scheduleWords === null ? "This market is currently closed." : `This market is currently closed. Its trading hours are ${input.scheduleWords}.`, closesAllowed: true };
   }
   if (!input.priced) {
-    return { cause: "price", why: "there's no live price for this market right now", closesAllowed: true };
+    return { cause: "price", text: "No live price is currently available for this market, so trading has been suspended. Trading will resume automatically once a live price is available again.", closesAllowed: true };
   }
   if (input.reduceOnly) {
-    return { cause: "reduce_only", why: "this market only accepts orders that reduce a position, so you can still close", closesAllowed: true };
+    return { cause: "reduce_only", text: "This market is currently accepting only orders that reduce an existing position. You can still close your position from the Positions tab.", closesAllowed: true };
   }
   return null;
 }

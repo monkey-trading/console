@@ -19,15 +19,15 @@ const usd = (wire: string) => formatUsd(fixedFromWire(wire));
 /** What the console says when it accepts a mock attestation: the in-browser simulation, or a development node it did not verify. */
 export function describeMockAttestation(signatures: "checked" | "none"): { lead: string; rest: string } {
   return signatures === "none"
-    ? { lead: "Demo mode.", rest: "This is a simulation running in your browser. Prices, trades and funds aren't real." }
-    : { lead: "Test server.", rest: "This server can't be verified, so it's for testing only. Prices, trades and funds aren't real." };
+    ? { lead: "Demo mode.", rest: "This is a simulation running in your browser. Prices, trades and funds are not real." }
+    : { lead: "Test server.", rest: "This server cannot be verified, so it is suitable for testing only. Prices, trades and funds are not real." };
 }
 
 /** What the banner says while the node is verified again: only what the client does. */
 export function describeReverifying(): { lead: string; rest: string } {
   return {
-    lead: "Checking the server again.",
-    rest: "The server couldn't be verified, so trading is paused until it is. Prices shown are the last verified ones.",
+    lead: "Verifying the server again.",
+    rest: "The trading server could not be verified, so trading has been suspended until verification succeeds. The prices shown are the last verified prices.",
   };
 }
 
@@ -35,52 +35,55 @@ export function describeReverifying(): { lead: string; rest: string } {
 export function describeReject(reject: Reject): string {
   switch (reject.kind) {
     case "access":
-      return reject.reason === "eligibility_required" ? "Sign the eligibility declaration first." : reject.reason === "already_attested" ? "Your eligibility is already recorded." : "This service isn't available in your region.";
+      return reject.reason === "eligibility_required" ? "Your eligibility has not been declared. Please sign the eligibility declaration first." : reject.reason === "already_attested" ? "Your eligibility declaration has already been recorded." : "This service is not available in your region.";
     case "market_closed": return "This market is closed.";
-    case "reduce_only": return "This market only accepts orders that reduce a position.";
-    case "no_price": return "This market has no price right now.";
-    case "unknown_market": return "This market isn't listed.";
-    case "unknown_order": return "That order is no longer open.";
+    case "reduce_only": return "This market is currently accepting only orders that reduce an existing position.";
+    case "no_price": return "No live price is currently available for this market.";
+    case "unknown_market": return "This market is not listed.";
+    case "unknown_order": return "This order is no longer working. It may already have been filled or cancelled.";
     case "invalid_order": return describeInvalidOrder(reject.reason);
     case "invalid_amount": return "Enter an amount above zero.";
     case "slippage":
-      return `The price moved ${reject.slippage_bps} bps against you (from ${decimals(reject.quoted, 5)} to ${decimals(reject.live, 5)}), more than your max slippage. Your order didn't fill.`;
-    case "insufficient_margin": return `Not enough margin: your equity is ${usd(reject.equity)} and you need ${usd(reject.required)}.`;
-    case "weekend_margin": return `Not enough margin while the higher weekend margin applies: your equity is ${usd(reject.equity)} and you need ${usd(reject.required)}.`;
-    case "insufficient_funds": return `You can withdraw up to ${usd(reject.available)} now.`;
-    case "house_capacity": return "This market is at its limit. Try a smaller size.";
-    case "too_many_orders": return `You already have ${reject.max} open orders, the most allowed. Cancel one to place another.`;
-    case "tier_order_limit": return `You already have ${reject.max} open orders, the most for volume tier ${reject.tier}. Cancel one to place another, or trade more to reach a higher tier.`;
-    case "close_spread_ceiling": return `Reversing this position in one order would cost more than the ${reject.ceiling_bps} bps maximum spread. Close it first, then open the other side.`;
-    case "invalid_signature": return "The signature wasn't accepted.";
-    case "missing_signature": return "The request wasn't signed.";
-    case "invalid_nonce": return "The request was out of order. Try again.";
-    case "payout_unavailable": return "Withdrawals can't be paid yet.";
-    case "session_key_scope": return "A session key can only trade, not move funds. Sign this with your wallet.";
-    case "invalid_session_key": return "The server didn't accept this session key.";
-    case "session_key_unsupported": return "This server doesn't support session keys yet.";
-    case "expired": return "The request expired before it arrived. Try again.";
-    case "expiry_too_far": return "The request's expiry was too far ahead.";
-    case "too_many_session_keys": return reject.max === MAX_SESSION_KEYS_PER_ACCOUNT ? "This account already has the most session keys allowed." : "This account has added session keys too quickly. You can add one more each hour.";
-    case "batch_unsupported": return "This server can't cancel or close everything in one go yet.";
+      return `Your order was not filled, because the price moved ${reject.slippage_bps} bps against you, from ${decimals(reject.quoted, 5)} to ${decimals(reject.live, 5)}, which is more than your maximum slippage allows. Please try again at the current price.`;
+    case "insufficient_margin": return `Insufficient margin. This order requires ${usd(reject.required)} of margin, and your equity is ${usd(reject.equity)}.`;
+    case "weekend_margin": return `Insufficient margin. The higher weekend margin applies in this market, so this order requires ${usd(reject.required)} of margin, and your equity is ${usd(reject.equity)}.`;
+    case "insufficient_funds": return `Insufficient funds. You can withdraw up to ${usd(reject.available)} at the moment.`;
+    case "house_capacity": return "The house has reached its exposure limit in this market. Please try a smaller order size.";
+    case "too_many_orders": return `Working order limit reached. Your account can have up to ${reject.max} working orders at a time. Cancel a working order to place a new one.`;
+    case "tier_order_limit": return `Working order limit reached. Volume tier ${reject.tier} allows up to ${reject.max} working orders at a time. Cancel a working order to place a new one, or trade more to reach a higher tier.`;
+    case "close_spread_ceiling": return `This order cannot reverse the position in a single trade, because its spread would exceed the market's maximum closing spread of ${reject.ceiling_bps} bps. Close the position first, then open a new position on the other side.`;
+    case "invalid_signature": return "The request's signature was not accepted. Please try again.";
+    case "missing_signature": return "The request was not signed. Please sign it and try again.";
+    case "invalid_nonce": return "The request was received out of order. Please try again.";
+    case "payout_unavailable": return "Withdrawals cannot be paid yet. Please try again later.";
+    case "session_key_scope": return "This browser's session key can only place and cancel orders and cannot move funds. Please sign this request with your wallet.";
+    case "invalid_session_key": return "The server did not accept this browser's session key.";
+    case "session_key_unsupported": return "This server does not support session keys yet.";
+    case "expired": return "The request expired before it reached the server. Please try again.";
+    case "expiry_too_far": return "The request's expiry time was too far in the future. Please try again.";
+    case "too_many_session_keys": return reject.max === MAX_SESSION_KEYS_PER_ACCOUNT ? "This account already has the maximum number of session keys." : "This account has added too many session keys in a short time. One more can be added each hour.";
+    case "batch_unsupported": return "This server does not yet support cancelling or closing everything in a single request.";
   }
   // A refusal the engine adds later must get a case above; until then the user still sees that one happened.
   return unnamed(reject);
 }
 
 /**
- * An invalid order's reason as a sentence: the engine's reasons for the minimum and for a spread that reaches the price in
- * plain words (`execution/mod.rs`, `execution/validation.rs`), and any other as the node words it.
+ * An invalid order's reason as a sentence: the engine's reasons for the minimum, for a spread that reaches the price, and for
+ * a size or price outside its input range in plain words (`execution/mod.rs`, `execution/validation.rs`), and any other as the
+ * node words it.
  */
 function describeInvalidOrder(reason: string): string {
-  if (reason.startsWith("below minimum order notional") || reason.startsWith("below the minimum order")) return "This order is below the market's minimum order size.";
-  if (reason === "spread at this size reaches the price") return "This order is too large to price. Try a smaller size.";
-  return `This order can't be placed: ${reason}.`;
+  if (reason.startsWith("below minimum order notional") || reason.startsWith("below the minimum order")) return "This order is below the market's minimum order value.";
+  if (reason === "spread at this size reaches the price") return "This order is too large to be priced. Please try a smaller order size.";
+  if (reason === "qty out of range") return "The order size is outside the range the server accepts.";
+  if (reason === "price out of range") return "The order price is outside the range the server accepts.";
+  return `This order cannot be placed: ${reason}.`;
 }
 
 /** What a 429 that names the account's volume tier says: how fast it may send, and that nothing was recorded. */
 export function describeTierRate(limit: TierRateLimit): string {
-  return `You're sending requests faster than volume tier ${limit.tier} allows, which is ${limit.requestsPerSecond} a second. Nothing was done. Wait a moment and try again.`;
+  return `Your request was not processed. You are sending requests faster than volume tier ${limit.tier} allows, which is ${limit.requestsPerSecond} per second. Please wait a moment and try again.`;
 }
 
 /** A short line for the activity log, or null for an event the log does not show. */
@@ -88,27 +91,27 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
   switch (event.type) {
     // The engine's sign: a positive amount is what the account pays.
     case "financing": return `Financing ${fixedFromWire(event.amount) > 0n ? "charged" : "credited"}: ${usd(event.amount.replace("-", ""))} on ${symbolOf(event.market)}`;
-    case "bad_debt": return `Loss beyond your balance written off: ${usd(event.amount)}`;
-    case "eligibility_rejected": return `Eligibility refused: ${describeReject(event.reason)}`;
-    case "market_opened": return `${symbolOf(event.market)} opened`;
-    case "market_closed": return `${symbolOf(event.market)} closed`;
-    case "stress_changed": return `${symbolOf(event.market)} stress level ${event.level}`;
+    case "bad_debt": return `Loss in excess of your balance written off: ${usd(event.amount)}`;
+    case "eligibility_rejected": return `Eligibility rejected: ${describeReject(event.reason)}`;
+    case "market_opened": return `${symbolOf(event.market)} market opened`;
+    case "market_closed": return `${symbolOf(event.market)} market closed`;
+    case "stress_changed": return `${symbolOf(event.market)} stress level changed to ${event.level}`;
     case "fill": {
       // The spread paid exactly, in tenths of a bp of the index: `spread_bps` truncates to whole bps.
       const index = fixedFromWire(event.index);
       const spread = formatTenthBps(tenthBpsOfValue(absFixed(fixedFromWire(event.price) - index), index));
-      const closed = event.hold_ms === undefined || event.profit_fee_bps === undefined ? "" : `, held ${formatHold(event.hold_ms)}, fee ${formatRate(event.profit_fee_bps)} of profit`;
-      return `${event.liquidation ? "Close-out " : ""}${event.side} ${decimals(event.qty, 6)} ${symbolOf(event.market)} at ${decimals(event.price, 5)} (spread ${spread}${closed})`;
+      const closed = event.hold_ms === undefined || event.profit_fee_bps === undefined ? "" : `, held ${formatHold(event.hold_ms)}, profit fee ${formatRate(event.profit_fee_bps)}`;
+      return `${event.liquidation ? "Close-out: " : ""}${event.side === "buy" ? "Bought" : "Sold"} ${decimals(event.qty, 6)} ${symbolOf(event.market)} at ${decimals(event.price, 5)} (spread ${spread}${closed})`;
     }
     case "close_out": return "Account closed out";
     case "deposited": return `Deposit credited: ${usd(event.amount)}`;
     case "withdrawal_approved": return `Withdrawal approved: ${usd(event.amount)}`;
     case "withdrawal_queued": return `Withdrawal queued: ${usd(event.amount)}`;
-    case "withdrawal_queue_updated": return `Withdrawal queue updated: ${usd(event.remaining)} still to pay`;
+    case "withdrawal_queue_updated": return `Withdrawal queue updated: ${usd(event.remaining)} still to be paid`;
     case "eligibility_attested": return `Eligibility declared (${event.class.replace("_", " ")})`;
-    case "order_cancelled": return event.reason === "client" ? `Order ${event.order_id} cancelled` : `Order ${event.order_id} could not fill and was cancelled`;
-    case "order_rejected": return `Order refused: ${describeReject(event.reason)}`;
-    case "withdrawal_rejected": return `Withdrawal refused: ${describeReject(event.reason)}`;
+    case "order_cancelled": return event.reason === "client" ? `Order ${event.order_id} cancelled` : `Order ${event.order_id} could not be filled and was cancelled`;
+    case "order_rejected": return `Order rejected: ${describeReject(event.reason)}`;
+    case "withdrawal_rejected": return `Withdrawal rejected: ${describeReject(event.reason)}`;
     case "emission_allocated": return `MONKEY earned: ${formatMonkey(BigInt(event.amount))} (reward period ${event.period})`;
     // Period housekeeping names no account; the allocations above are the viewer's lines.
     case "emission_period_closed": return null;
@@ -151,7 +154,7 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
 /** The text for a refusal the switch above does not name. `never` makes a new member of `Reject` a type error there. */
 function unnamed(reject: never): string {
   void reject;
-  return "The server refused the request.";
+  return "The server rejected the request.";
 }
 
 /** The log line for an event the switch above does not name; see `unnamed`. */

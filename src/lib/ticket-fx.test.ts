@@ -15,14 +15,14 @@ describe("previewTicket for a market quoted in another currency", () => {
     expect(previewTicket({ ...base, market: eur, qty: q("0.19") }).problems).toEqual([]);
     const short = previewTicket({ ...base, market: eur, qty: q("0.18") });
     expect(short.notional).toBe(q("99"));
-    expect(short.problems).toContain("Minimum order is 100 USD.");
+    expect(short.problems).toContain("The minimum order value in this market is 100 USD.");
     // A euro worth 0.9 dollars makes the same 100 EUR only 90 USD.
-    expect(previewTicket({ ...base, market: await quotedIn("eur", 500, "0.9"), qty: q("0.2") }).problems).toContain("Minimum order is 100 USD.");
+    expect(previewTicket({ ...base, market: await quotedIn("eur", 500, "0.9"), qty: q("0.2") }).problems).toContain("The minimum order value in this market is 100 USD.");
     expect(previewTicket({ ...base, market: await quotedIn("gbp", 500, "1.25"), qty: q("0.16") }).notional).toBe(fixedFromInt(100));
     // The engine truncates the conversion: 90.909090909 x 1.1 is 99.9999999999 exactly, so $99.999999999, under the minimum, where rounding up would admit it.
     const inexact = previewTicket({ ...base, market: await quotedIn("eur", "90.909090909", "1.1"), qty: q("1") });
     expect(inexact.notional).toBe(q("99.999999999"));
-    expect(inexact.problems).toContain("Minimum order is 100 USD.");
+    expect(inexact.problems).toContain("The minimum order value in this market is 100 USD.");
     expect(previewTicket({ ...base, market: await quotedIn("eur", "90.909090910", "1.1"), qty: q("1") }).problems).toEqual([]);
   });
 
@@ -31,15 +31,15 @@ describe("previewTicket for a market quoted in another currency", () => {
     // 1 contract at 30,000 yen, with the dollar at 150 yen, is $200.
     const nikkei = await quotedIn("jpy", 30_000, "150");
     expect(previewTicket({ ...base, market: nikkei, qty: q("1") }).notional).toBe(fixedFromInt(200));
-    expect(previewTicket({ ...base, market: nikkei, qty: q("0.49") }).problems).toContain("Minimum order is 100 USD.");
+    expect(previewTicket({ ...base, market: nikkei, qty: q("0.49") }).problems).toContain("The minimum order value in this market is 100 USD.");
     // Dividing truncates too: 149.999999999 / 1.5 is 99.9999999993..., so $99.999999999, under the minimum, where rounding up would admit it.
     const inexact = previewTicket({ ...base, market: await quotedIn("jpy", "149.999999999", "1.5"), qty: q("1") });
     expect(inexact.notional).toBe(q("99.999999999"));
-    expect(inexact.problems).toContain("Minimum order is 100 USD.");
+    expect(inexact.problems).toContain("The minimum order value in this market is 100 USD.");
     // The dollar against the yen lists itself as its FX market: a contract is a dollar whatever the rate.
     const pair = await quotedIn("jpy", 150, "150", 9);
     expect(previewTicket({ ...base, market: pair, qty: q("100") }).notional).toBe(fixedFromInt(100));
-    expect(previewTicket({ ...base, market: pair, qty: q("99.999999") }).problems).toContain("Minimum order is 100 USD.");
+    expect(previewTicket({ ...base, market: pair, qty: q("99.999999") }).problems).toContain("The minimum order value in this market is 100 USD.");
     // A resting order on the pair converts at its trigger price, not at the mark.
     const resting = previewTicket({ ...base, market: pair, qty: q("100"), resting: true, triggerPrice: fixedFromInt(200) });
     expect(resting.notional).toBe(fixedFromInt(100));
@@ -77,7 +77,7 @@ describe("previewTicket for a market quoted in another currency", () => {
     expect(ten.spreadTenths).toBe(sameInUsd.spreadTenths);
     // The spread this fill pays comes off equity in USD: $41 covers the $40 margin of ten contracts plus a spread of well under a dollar, though the spread is dozens of yen.
     expect(previewTicket({ ...base, market: nikkei, qty: q("10"), account: account(41) }).problems).toEqual([]);
-    expect(previewTicket({ ...base, market: nikkei, qty: q("10"), account: account(40) }).problems).toContain("Not enough equity to cover the margin for this order.");
+    expect(previewTicket({ ...base, market: nikkei, qty: q("10"), account: account(40) }).problems).toContain("Insufficient margin. Your equity does not cover the margin this order requires.");
     // A euro market converts by multiplying.
     expect(previewTicket({ ...base, market: await quotedIn("eur", 500, "1.1"), qty: q("2") }).markNotional).toBe(fixedFromInt(1_100));
   });

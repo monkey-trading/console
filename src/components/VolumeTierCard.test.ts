@@ -51,7 +51,7 @@ describe("VolumeTierCard", () => {
     expect(html).toContain("Tier 0");
     expect(html).toContain("$400,000.00");
     expect(html).toContain("$2,500.00");
-    expect(html).toContain("Tier 1 needs $700,000 more counted volume");
+    expect(html).toContain("To reach tier 1, you need a further $700,000 of counted volume");
     expect(html).toContain("Tier benefits in BTC-USD");
     expect(html).toContain("Up to $500,000");
     expect(html).toContain("Up to $1,000,000");
@@ -78,7 +78,7 @@ describe("VolumeTierCard", () => {
   it("shows the account's figures without terms until the parameters are read", () => {
     const html = render(ACCOUNT, null, VolumeTierCard);
     expect(html).toContain("Tier 0");
-    expect(html).toContain("Tier details will show once the trading terms load.");
+    expect(html).toContain("Tier details will be shown once the trading terms have loaded.");
     // The table keeps its rows, with dashes, so the page below does not move when the terms arrive.
     expect(html).toContain("Tier benefits");
     expect(html).toContain("Best-price size");
@@ -99,7 +99,7 @@ describe("VolumeTierCard", () => {
     expect(pending).toContain("Best-price size");
     expect(pending).not.toContain("Tier 0");
     // The sentence and the toxicity cell the read brings keep their places, unseen or as dashes.
-    expect(pending).toMatch(/aria-hidden="true" class="invisible[^"]*">Tier 1 needs/);
+    expect(pending).toMatch(/aria-hidden="true" class="invisible[^"]*">To reach tier 1, you need/);
     expect(pending).toMatch(/Extra spread<\/dt><dd[^>]*>—</);
     const unsupported = renderWith({ account: { ...ACCOUNT, volume: undefined }, houseParams: PARAMS, pricingCurrent: true, accountRead: true, wallet: { address: "0xabc", label: "w" } });
     expect(unsupported).not.toContain("Volume tier");
@@ -115,7 +115,7 @@ describe("VolumeTierCard", () => {
 
   it("says so at the top tier, and shows nothing for a node without volume tiers or no account", () => {
     const top = decodeVolume({ tier: 1, matured: "2000000", pending: "0", progress: [{ capped: "0", days: 0 }, { capped: "1000000", days: 2 }], best_price_bounds: {} });
-    expect(render({ ...ACCOUNT, ...(top === null ? {} : { volume: top }) }, PARAMS, VolumeTierCard)).toContain("You&#x27;re at the highest tier.");
+    expect(render({ ...ACCOUNT, ...(top === null ? {} : { volume: top }) }, PARAMS, VolumeTierCard)).toContain("You have reached the highest tier.");
     expect(render({ ...ACCOUNT, volume: undefined }, PARAMS, VolumeTierCard)).not.toContain("Volume tier");
     expect(render(null, PARAMS, VolumeTierCard)).not.toContain("Volume tier");
   });

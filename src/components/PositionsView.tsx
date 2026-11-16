@@ -53,16 +53,16 @@ const CELL_BUTTON = `${BUTTON} mt-1`;
 const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 
 /** What the Close-out value means, shared by the table's head and the phone rows' label. */
-const CLOSEOUT_TIP = "This is the price at which your account would be closed out, with your other positions at their current prices. Margin is shared, and your largest losing position is closed first, which may be a different one. Due means your account is already below the close-out level, and None means no realistic price reaches it.";
+const CLOSEOUT_TIP = "The price at which your account would be closed out, assuming your other positions remain at their current prices. Because margin is shared across your account, your largest losing position is closed first, and that may not be this one. Due means your account is already below the close-out level. None means no realistic price would close out your account.";
 
 /** What the P&L column means, shared by the table's head and the phone rows' labels. */
-const PNL_TIP = "This is your profit or loss if you close the whole position now, before the profit fee. It uses the price you'd close at (the bid for a long, the offer for a short), so the spread is already included. Details shows the figure at the mark price.";
+const PNL_TIP = "The profit or loss you would realise by closing the entire position now, before the profit fee. It is calculated at the price at which the position would close (the bid for a long position, the offer for a short), so the spread is already taken into account. Details shows the figure at the mark price.";
 
 /** What the hold, fee and close columns mean, shared by the table's head and the phone rows' labels. */
-const HOLD_TIP = "This is how long you've held the position, which sets its profit fee. Adding to the position shortens this time, weighted by the size you add. Reducing it leaves the time as it is.";
+const HOLD_TIP = "The length of time the position has been open, which determines its profit fee rate. Adding to a position reduces its holding time in proportion to the size added. Reducing a position leaves it unchanged.";
 const NO_FEE_NOTE = "No fee without a profit";
-const FEE_USD_TIP = "This is the profit fee, in USD, for closing the whole position now. There's no fee if you close without a profit. A ≤ means the fee rate is about to fall, so you may pay less if the price holds.";
-const CLOSE_TIP = "This is what closing the whole position now adds to or takes from your balance: the profit or loss at the closing price, less the profit fee. It changes as prices move. A ≥ means the fee rate is about to fall, so you may keep more.";
+const FEE_USD_TIP = "The profit fee, in USD, that you would pay by closing the entire position now. No fee is charged when a position is closed without a profit. A ≤ sign means the fee rate is about to fall, so the fee may be lower if the price holds.";
+const CLOSE_TIP = "The amount that closing the entire position now would add to or deduct from your balance: the profit or loss at the closing price, less the profit fee. This figure changes as prices move. A ≥ sign means the fee rate is about to fall, so you may keep more.";
 
 /** The slippage bound a Close sends, capped at the market's own. */
 const CLOSE_SLIPPAGE_BPS = 25;
@@ -80,7 +80,7 @@ export function PositionsView() {
   const { armed, state, arm, cancel } = useConfirmWindow(CONFIRM_MS, CONFIRM_MIN_GAP_MS);
   const { confirmBatch } = usePrefs().prefs;
   const positions = account?.positions ?? [];
-  const feeTip = `This is the fee rate paid on a winning trade. ${feeTerms === null ? "The fee falls the longer you hold the position." : describeSchedule(feeTerms)}`;
+  const feeTip = `This is the fee rate paid on a winning trade. ${feeTerms === null ? "The fee rate falls the longer the position is held." : describeSchedule(feeTerms)}`;
   const rows = positions.map((p) => {
     const market = markets.find((m) => m.id === p.market);
     // An unpriced market shows no mark and no profit, not the entry price as if it were the mark.
@@ -157,8 +157,8 @@ export function PositionsView() {
   const listed = targetsKey(targets);
   useEffect(() => cancel(), [listed, cancel]);
   // An account that could not be read (the panel above says so) shows no positions, rather than none as if it had none.
-  if (account === null && notices.accountRead !== undefined) return <p className="px-4 py-6 text-caption text-fg-3">Your positions will show once your account loads.</p>;
-  if (positions.length === 0) return <><p className="px-4 py-6 text-caption text-fg-3">No open positions.</p><div className="px-4 has-[p]:pb-3"><Notice surface="positions" /></div></>;
+  if (account === null && notices.accountRead !== undefined) return <p className="px-4 py-6 text-caption text-fg-3">Your positions will be shown once your account has loaded.</p>;
+  if (positions.length === 0) return <><p className="px-4 py-6 text-caption text-fg-3">You have no open positions.</p><div className="px-4 has-[p]:pb-3"><Notice surface="positions" /></div></>;
   const closeEverything = (event: { currentTarget: HTMLElement }) => {
     const press = pressBatch(confirmBatch, state(), count);
     if (press === "arm") arm();
@@ -200,7 +200,7 @@ export function PositionsView() {
               <div><dt className="text-label text-fg-3"><Term label="Close now" tip={CLOSE_TIP} /></dt><dd>{r.proceeds}</dd></div>
             </dl>
             <button type="button" disabled={!r.closable} className={`${BUTTON} mt-3 w-full`} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-            <p aria-hidden={!r.unquoted} className={`mt-2 text-label ${r.unquoted ? "text-fg-3" : "invisible"}`}>Select {r.symbol} to see its closing price.</p>
+            <p aria-hidden={!r.unquoted} className={`mt-2 text-label ${r.unquoted ? "text-fg-3" : "invisible"}`}>Select {r.symbol} in the watchlist to load its closing price.</p>
           </li>
         ))}
       </ul>

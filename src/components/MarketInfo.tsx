@@ -65,7 +65,7 @@ export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price
           <dl className="mt-2 space-y-1">
             {bands.map((band) => <div key={band.span} className={ROW}><dt className="text-fg-3">{band.span}</dt><dd>{band.rate}</dd></div>)}
           </dl>
-          <p className="mt-2 text-label leading-relaxed text-fg-3">Each trade pays these rates on the part of your position it opens or closes{stress !== null && stress.size_spread_multiplier_bps !== 10_000 ? `, ×${formatMultiplier(stress.size_spread_multiplier_bps)} at this stress level` : ""}.</p>
+          <p className="mt-2 text-label leading-relaxed text-fg-3">Each trade pays these spread rates on the portion of the position that it opens or closes.{stress !== null && stress.size_spread_multiplier_bps !== 10_000 ? ` At the current stress level, the rates are multiplied by ${formatMultiplier(stress.size_spread_multiplier_bps)}.` : ""}</p>
           {changes.map((line) => <p key={line} className="mt-2 text-label leading-relaxed text-amber">{line}</p>)}
         </div>
         <div>
@@ -73,16 +73,16 @@ export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price
           <UseBar bps={useBps ?? 0} />
         </div>
         <div>
-          <p className="flex justify-between text-label"><span className="text-fg-3">Order size against the market limit</span><span className="text-fg-2">{capShare}%</span></p>
+          <p className="flex justify-between text-label"><span className="text-fg-3">Share of the exposure limit</span><span className="text-fg-2">{capShare}%</span></p>
           <div aria-hidden="true" className="mt-2 flex h-1.5 gap-1">
             {Array.from({ length: 8 }, (_, segment) => <span key={segment} className={`flex-1 rounded-sm ${segment < filled ? "bg-glow/70" : "bg-line-2"}`} />)}
           </div>
-          <p className="mt-2 text-label leading-relaxed text-fg-3">This market's limit is {usd(preview.houseCap)}, net across all traders' positions in {market.symbol}. If your order would take the market past its limit, it's refused.</p>
+          <p className="mt-2 text-label leading-relaxed text-fg-3">The house limits its net exposure in {market.symbol} to {usd(preview.houseCap)}, across all clients&apos; positions. The bar shows your order&apos;s size as a share of that limit. An order that would take the house&apos;s exposure beyond the limit is rejected, even if the order alone is smaller than the limit.</p>
         </div>
         <dl className="space-y-3 border-t border-line pt-4 text-label leading-relaxed text-fg-3">
-          <div><dt className="text-fg-2">Reference</dt><dd>Live prices from the exchanges and data providers this market uses, combined into one price.</dd></div>
-          <div><dt className="text-fg-2">Execution</dt><dd>You trade at the reference price plus or minus the spread. The spread depends on your position size, market stress and any extra spread on your account.</dd></div>
-          <div><dt className="text-fg-2">Risk</dt><dd>Spreads widen when the market is under stress. Your positions are closed out when your equity falls below {CLOSE_OUT_BPS / 100}% of your margin.</dd></div>
+          <div><dt className="text-fg-2">Reference</dt><dd>The reference price combines live prices from the exchanges and data providers that this market uses into a single price.</dd></div>
+          <div><dt className="text-fg-2">Execution</dt><dd>Orders are executed at the reference price plus or minus the spread. The spread depends on the size of your position, the market&apos;s stress level and any extra spread applied to your account.</dd></div>
+          <div><dt className="text-fg-2">Risk</dt><dd>Spreads widen when the market is under stress. If your equity falls below {CLOSE_OUT_BPS / 100}% of your margin, your positions are closed out.</dd></div>
         </dl>
       </div>
     </details>

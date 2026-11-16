@@ -39,14 +39,14 @@ export function PnlLedger() {
   })), [markets]);
   const view = useMemo(() => viewOf(ledger.data, ledger.schedule), [ledger.data, ledger.schedule]);
 
-  if (address === "") return <p className="px-4 py-6 text-caption text-fg-3">Connect a wallet to see your profit and loss.</p>;
+  if (address === "") return <p className="px-4 py-6 text-caption text-fg-3">Connect a wallet to view your realised profit and loss.</p>;
   const { items, totals } = view;
   const ready = ledger.status === "ready";
   const more = rowsRemain(ledger.data) || allocationsShort(ledger.data, ledger.schedule);
   const full = atBound(ledger.data);
   const { blank, status } = ledgerHeader(ledger, items.length, totals, more, full);
   const rowFor = (item: (typeof items)[number]) => ({ item, symbol: names.get(item.row.market)?.symbol ?? `market ${item.row.market}`, places: names.get(item.row.market)?.places ?? 2, scheduleStatus: ledger.scheduleStatus });
-  const empty = !ready ? (ledger.status === "failed" ? "Your results couldn't be loaded." : "Loading your results…") : more ? "No realised results in what's loaded so far. Load more to see older ones." : "No realised results yet. Closed positions, close-outs and cash in lieu from stock splits show here.";
+  const empty = !ready ? (ledger.status === "failed" ? "Your realised results could not be loaded." : "Loading your realised results…") : more ? "No realised profit or loss has been loaded yet. Select Load more to see older results." : "You have no realised profit or loss yet. Closed positions, close-outs and cash paid in lieu after a stock split will be listed here.";
 
   return (
     <div>

@@ -33,7 +33,7 @@ describe("previewTicket", () => {
   it("lists why an order cannot go: no equity, too much margin, closed; a resting order is admitted while closed", async () => {
     const market = await btcAt(100_000);
     expect(previewTicket({ market, side: "buy", qty: q("0.5"), slippageBps: 10, account: null, houseNav: NAV }).problems).toContain("Deposit funds to start trading.");
-    expect(previewTicket({ market, side: "buy", qty: q("9"), slippageBps: 10, account: account(1_000), houseNav: NAV }).problems).toContain("Not enough equity to cover the margin for this order.");
+    expect(previewTicket({ market, side: "buy", qty: q("9"), slippageBps: 10, account: account(1_000), houseNav: NAV }).problems).toContain("Insufficient margin. Your equity does not cover the margin this order requires.");
     expect(previewTicket({ market: { ...market, open: false }, side: "buy", qty: q("0.01"), slippageBps: 10, account: account(1_000), houseNav: NAV }).problems).toContain("This market is closed.");
     const closed = { market: { ...market, open: false }, side: "buy" as const, qty: q("0.01"), slippageBps: 10, account: account(1), houseNav: NAV };
     expect(previewTicket({ ...closed, resting: true }).problems).toEqual([]);
@@ -42,14 +42,14 @@ describe("previewTicket", () => {
   it("lists a refusal when the spread alone exhausts a positive equity", async () => {
     const market = await btcAt(100_000);
     const tiny = previewTicket({ market, side: "buy", qty: q("0.5"), slippageBps: 10, account: account(1), houseNav: NAV });
-    expect(tiny.problems).toContain("Not enough equity to cover the margin for this order.");
+    expect(tiny.problems).toContain("Insufficient margin. Your equity does not cover the margin this order requires.");
   });
 
   it("checks the minimum on the exact quantity, with no rounding up to reach it", async () => {
     const market = await btcAt(100_000);
     const base = { market, side: "buy" as const, slippageBps: 10, account: account(10_000), houseNav: NAV };
     expect(previewTicket({ ...base, qty: q("0.001") }).problems).toEqual([]); // exactly $100
-    expect(previewTicket({ ...base, qty: q("0.000999") }).problems).toContain("Minimum order is 100 USD.");
+    expect(previewTicket({ ...base, qty: q("0.000999") }).problems).toContain("The minimum order value in this market is 100 USD.");
     expect(previewTicket({ ...base, qty: q("0.000999") }).qty).toBe(q("0.000999"));
   });
 
@@ -59,7 +59,7 @@ describe("previewTicket", () => {
     // 0.5 contracts is $50,000 at the mark but $2,500 at a $5,000 trigger: both clear; at $100 it is $50.
     expect(previewTicket({ ...base, qty: q("0.5"), triggerPrice: fixedFromInt(5_000) }).problems).toEqual([]);
     const low = previewTicket({ ...base, qty: q("0.5"), triggerPrice: fixedFromInt(100) });
-    expect(low.problems).toContain("Minimum order is 100 USD.");
+    expect(low.problems).toContain("The minimum order value in this market is 100 USD.");
     expect(low.notional).toBe(fixedFromInt(50));
     expect(low.markNotional).toBe(fixedFromInt(50_000));
     expect(low.worstPrice).toBeNull();
@@ -72,11 +72,11 @@ describe("previewTicket", () => {
     const market = await btcAt(100_000);
     const base = { side: "buy" as const, slippageBps: 10, account: account(10_000), houseNav: NAV };
     const unpriced = previewTicket({ ...base, market: { ...market, mark: null }, qty: q("0.5") });
-    expect(unpriced.problems).toEqual(["This market has no price yet."]);
+    expect(unpriced.problems).toEqual(["No price is available for this market yet."]);
     expect(unpriced.notional).toBeNull();
     expect(unpriced.qty).toBe(q("0.5"));
     expect(previewTicket({ ...base, market, qty: 0n }).problems).toContain(NO_SIZE);
-    expect(previewTicket({ ...base, market: { ...market, reduceOnly: true }, qty: q("0.5") }).problems).toContain("This market only accepts orders that reduce a position.");
+    expect(previewTicket({ ...base, market: { ...market, reduceOnly: true }, qty: q("0.5") }).problems).toContain("This market is currently accepting only orders that reduce an existing position.");
   });
 
   it("never applies the minimum to an order that only reduces a position, a short close included", async () => {
@@ -92,10 +92,10 @@ describe("previewTicket", () => {
     expect(short.qty).toBe(1_500n);
     expect(short.quote?.price).toBeGreaterThan(market.mark ?? 0n);
     // The same size opened from flat is under the minimum.
-    expect(previewTicket({ ...base, side: "buy", qty: q("0.0005"), account: account(10_000) }).problems).toContain("Minimum order is 100 USD.");
+    expect(previewTicket({ ...base, side: "buy", qty: q("0.0005"), account: account(10_000) }).problems).toContain("The minimum order value in this market is 100 USD.");
     // Closing part of a short is a reduction too, and growing it is not.
     expect(previewTicket({ ...base, side: "buy", qty: q("0.0002"), account: heldIn(market, "-0.0005") }).problems).toEqual([]);
-    expect(previewTicket({ ...base, side: "sell", qty: q("0.0002"), account: heldIn(market, "-0.0005") }).problems).toContain("Minimum order is 100 USD.");
+    expect(previewTicket({ ...base, side: "sell", qty: q("0.0002"), account: heldIn(market, "-0.0005") }).problems).toContain("The minimum order value in this market is 100 USD.");
   });
 
   it("checks the minimum on the whole quantity of an order that flips the position, as the engine does", async () => {
@@ -105,7 +105,7 @@ describe("previewTicket", () => {
     expect(previewTicket({ ...base, qty: q("0.5") }).problems).toEqual([]);
     const small = { ...base, account: heldIn(market, "0.0001") };
     // Selling 0.0005 against 0.0001 flips to a 0.0004 short: the order is worth $50, under the minimum.
-    expect(previewTicket({ ...small, qty: q("0.0005") }).problems).toContain("Minimum order is 100 USD.");
+    expect(previewTicket({ ...small, qty: q("0.0005") }).problems).toContain("The minimum order value in this market is 100 USD.");
   });
 
   it("shows no margin rate before there is a size or a position, and the tier's rate once there is", async () => {
@@ -128,7 +128,7 @@ describe("previewTicket", () => {
       expect(preview.problems, String(trigger)).toContain(TRIGGER_NOT_POSITIVE);
       expect(preview.notional).toBe(fixedFromInt(50_000)); // the mark values it, not the trigger
     }
-    expect(previewTicket({ ...base, triggerPrice: q("0.000000001") }).problems).toContain("Minimum order is 100 USD.");
+    expect(previewTicket({ ...base, triggerPrice: q("0.000000001") }).problems).toContain("The minimum order value in this market is 100 USD.");
     expect(previewTicket({ ...base, triggerPrice: null }).problems).toEqual([]);
     // A market order ignores a trigger price left in the field.
     expect(previewTicket({ ...base, resting: false, triggerPrice: 0n }).problems).toEqual([]);

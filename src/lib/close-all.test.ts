@@ -12,13 +12,13 @@ describe("planning a close all", () => {
   it("leaves out a position with no quote and names it", () => {
     const plan = planCloseAll([row(1, "BTC-USD"), row(2, "ETH-USD", { quoted: null }), row(3, "EUR-USD")]);
     expect(plan.targets.map((t) => t.market)).toEqual([1, 3]);
-    expect(plan.leftOut).toEqual([{ symbol: "ETH-USD", why: "no closing price yet" }]);
+    expect(plan.leftOut).toEqual([{ symbol: "ETH-USD", why: "closing price not yet available" }]);
   });
 
   it("tells a position the node quotes only once its market is selected apart from one with no price yet", () => {
     const plan = planCloseAll([row(1, "BTC-USD", { quoted: null, select: true }), row(2, "ETH-USD", { quoted: null, select: false })]);
-    expect(plan.leftOut).toEqual([{ symbol: "BTC-USD", why: "select it to get a price" }, { symbol: "ETH-USD", why: "no closing price yet" }]);
-    expect(describeLeftOut(plan.leftOut)).toBe("Close all skips BTC-USD (select it to get a price), ETH-USD (no closing price yet).");
+    expect(plan.leftOut).toEqual([{ symbol: "BTC-USD", why: "select it in the watchlist to load its closing price" }, { symbol: "ETH-USD", why: "closing price not yet available" }]);
+    expect(describeLeftOut(plan.leftOut)).toBe("The following positions are not included in Close all: BTC-USD (select it in the watchlist to load its closing price), ETH-USD (closing price not yet available).");
   });
 
   it("leaves out a position in a closed market, even with a quote, as its Close button is disabled", () => {
@@ -40,7 +40,7 @@ describe("planning a close all", () => {
 
 describe("describing what a close all leaves out", () => {
   it("names each position and why", () => {
-    expect(describeLeftOut([{ symbol: "ETH-USD", why: "no closing price yet" }, { symbol: "US500", why: "market closed" }])).toBe("Close all skips ETH-USD (no closing price yet), US500 (market closed).");
+    expect(describeLeftOut([{ symbol: "ETH-USD", why: "closing price not yet available" }, { symbol: "US500", why: "market closed" }])).toBe("The following positions are not included in Close all: ETH-USD (closing price not yet available), US500 (market closed).");
   });
 
   it("says nothing when nothing is left out", () => {

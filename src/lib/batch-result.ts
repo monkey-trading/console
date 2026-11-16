@@ -53,37 +53,37 @@ export function closeAllOutcome(markets: readonly MarketId[], events: readonly E
 const positions = (n: number) => `${n} ${n === 1 ? "position" : "positions"}`;
 
 /**
- * Why one market did not close, as a clause that follows its name.
+ * Why one market's position did not close, as a sentence that names it.
  * Error cases:
  * - the entry closed, which has no reason; the caller passes only the others
  */
 function whyNot(symbol: string, outcome: EntryOutcome): string {
-  if (outcome.result === "unconfirmed") return `${symbol} isn't confirmed closed yet`;
+  if (outcome.result === "unconfirmed") return `The ${symbol} position has not yet been confirmed as closed.`;
   if (outcome.result === "closed") throw new Error("a closed entry has no reason");
   const { reason } = outcome;
   switch (reason.kind) {
-    case "slippage": return `${symbol} moved more than your max slippage`;
-    case "market_closed": return `${symbol} is closed`;
-    case "no_price": return `${symbol} has no price right now`;
+    case "slippage": return `The ${symbol} position was not closed, because the price moved by more than your maximum slippage.`;
+    case "market_closed": return `The ${symbol} position was not closed, because its market is closed.`;
+    case "no_price": return `The ${symbol} position was not closed, because no live price is currently available for its market.`;
     // A position closed elsewhere since the list was built: the engine refuses the empty reduce-only order.
-    case "reduce_only": return `${symbol} had no position left to close`;
-    default: return `${symbol}: ${describeReject(reason).replace(/\.$/, "")}`;
+    case "reduce_only": return `The ${symbol} position had already been closed.`;
+    default: return `The ${symbol} position was not closed. ${describeReject(reason)}`;
   }
 }
 
 /** What a close-all click says when something was not closed: how many did, and each market that did not, by name. Null when every position closed, which the list shows. */
 export function describeCloseAll(outcome: CloseAllOutcome, symbolOf: (market: MarketId) => string): string | null {
-  if (outcome.kind === "refused") return `Nothing was closed. ${describeReject(outcome.reason)}`;
+  if (outcome.kind === "refused") return `No positions were closed. ${describeReject(outcome.reason)}`;
   const { entries } = outcome;
   const failed = entries.filter((e) => e.result !== "closed");
   if (failed.length === 0) return null;
   const closed = entries.length - failed.length;
-  const reasons = failed.map((e) => whyNot(symbolOf(e.market), e)).join("; ");
-  return closed === 0 ? `No position was closed: ${reasons}.` : `Closed ${closed} of ${positions(entries.length)}; ${reasons}.`;
+  const reasons = failed.map((e) => whyNot(symbolOf(e.market), e)).join(" ");
+  return closed === 0 ? `No positions were closed. ${reasons}` : `${closed} of ${positions(entries.length)} ${closed === 1 ? "was" : "were"} closed. ${reasons}`;
 }
 
 /** What a cancel-all click says when the node refused it; null otherwise, since the orders leave the list. Any rejection is the whole request's: it has no entries. */
 export function describeCancelAll(events: readonly EngineEvent[]): string | null {
   const refused = events.find((e) => e.type === "order_rejected");
-  return refused !== undefined && refused.type === "order_rejected" ? `Nothing was cancelled. ${describeReject(refused.reason)}` : null;
+  return refused !== undefined && refused.type === "order_rejected" ? `No orders were cancelled. ${describeReject(refused.reason)}` : null;
 }

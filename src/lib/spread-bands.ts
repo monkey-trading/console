@@ -91,8 +91,8 @@ export function describeNotice(notice: ListingNotice): string[] {
   const from = `From ${formatStamp(notice.effective_at)} UTC`;
   const words = (rows: BandRow[]) => rows.map((row) => `${row.rate} ${row.span.charAt(0).toLowerCase()}${row.span.slice(1)}`).join(", ");
   const lines: string[] = [];
-  if (notice.spread_tiers !== undefined) lines.push(`${from}, spreads may change to ${words(bandRows(notice.spread_tiers, spreadRate))}.`);
-  if (notice.margin_tiers !== undefined) lines.push(`${from}, margin rates may change to ${words(bandRows(notice.margin_tiers, marginRate))}.`);
-  if (notice.markup_bps !== undefined) lines.push(`${from}, the overnight financing markup may change to ${notice.markup_bps} bps a year.`);
+  if (notice.spread_tiers !== undefined) lines.push(`${from}, the spreads in this market may change to ${words(bandRows(notice.spread_tiers, spreadRate))}.`);
+  if (notice.margin_tiers !== undefined) lines.push(`${from}, the margin rates in this market may change to ${words(bandRows(notice.margin_tiers, marginRate))}.`);
+  if (notice.markup_bps !== undefined) lines.push(`${from}, the overnight financing markup in this market may change to ${notice.markup_bps} bps per year.`);
   return lines;
 }

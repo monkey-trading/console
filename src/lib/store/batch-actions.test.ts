@@ -96,14 +96,14 @@ describe("cancel all", () => {
   it("reports a refusal of the request as nothing cancelled", async () => {
     const { store } = await setup(() => () => ({ seq: 5, events: [rejected(0, { kind: "batch_unsupported" })] }));
     await cancelAll(store);
-    expect(store.getSnapshot().notices.orders).toMatchObject({ tone: "error", text: "Nothing was cancelled. This server can't cancel or close everything in one go yet." });
+    expect(store.getSnapshot().notices.orders).toMatchObject({ tone: "error", text: "No orders were cancelled. This server does not yet support cancelling or closing everything in a single request." });
   });
 
   it("says plainly that an older node does not support it, and does not loop over single cancels", async () => {
     const { client, store } = await setup(() => () => { throw new EngineError(404, "The node answered HTTP 404."); });
     await cancelAll(store);
     expect(routes(client)).toEqual(["cancel_all"]);
-    expect(store.getSnapshot().notices.orders?.text).toBe("This server doesn't support Cancel all yet.");
+    expect(store.getSnapshot().notices.orders?.text).toBe("This server does not support Cancel all yet.");
   });
 });
 
@@ -137,21 +137,21 @@ describe("close all", () => {
   it("names the market whose entry was rejected, by its list index, and the count that closed", async () => {
     const { store } = await setup(() => () => ({ seq: 6, events: [rejected(0, slippage), fill(1)] }));
     await closeAll(store, TARGETS, BPS);
-    expect(store.getSnapshot().notices.positions).toMatchObject({ tone: "error", text: "Closed 1 of 2 positions; ETH-USD moved more than your max slippage." });
+    expect(store.getSnapshot().notices.positions).toMatchObject({ tone: "error", text: "1 of 2 positions was closed. The ETH-USD position was not closed, because the price moved by more than your maximum slippage." });
   });
 
   it("does not mistake a refusal of the whole request for entry 0's rejection", async () => {
     const { store } = await setup(() => () => ({ seq: 6, events: [rejected(0, { kind: "batch_unsupported" })] }));
     await closeAll(store, TARGETS, BPS);
     const text = store.getSnapshot().notices.positions?.text ?? "";
-    expect(text).toBe("Nothing was closed. This server can't cancel or close everything in one go yet.");
+    expect(text).toBe("No positions were closed. This server does not yet support cancelling or closing everything in a single request.");
     expect(text).not.toContain("ETH-USD");
   });
 
   it("reads a lone rejection of the only entry as that entry's", async () => {
     const { store } = await setup(() => () => ({ seq: 6, events: [rejected(0, slippage)] }));
     await closeAll(store, [{ market: 2, quoted: fixedFromInt(3_000) }], BPS);
-    expect(store.getSnapshot().notices.positions?.text).toBe("No position was closed: ETH-USD moved more than your max slippage.");
+    expect(store.getSnapshot().notices.positions?.text).toBe("No positions were closed. The ETH-USD position was not closed, because the price moved by more than your maximum slippage.");
   });
 
   it("does not sign again after a 409, since a copy may have run, and says so", async () => {
@@ -167,7 +167,7 @@ describe("close all", () => {
     const { client, store } = await setup(() => () => { throw new EngineError(404, "The node answered HTTP 404."); });
     await closeAll(store, TARGETS, BPS);
     expect(routes(client)).toEqual(["close_all"]);
-    expect(store.getSnapshot().notices.positions?.text).toBe("This server doesn't support Close all yet.");
+    expect(store.getSnapshot().notices.positions?.text).toBe("This server does not support Close all yet.");
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
   });
 

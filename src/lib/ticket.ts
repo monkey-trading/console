@@ -15,21 +15,21 @@ const QTY_PLACES = 6;
 const QTY_STEP: Fixed = SCALE / 1_000_000n;
 
 /** The ticket's own refusal of an order it cannot value in USD, which the node would decline for want of an FX price. */
-export const NO_FX_PRICE = "The exchange rate for this market isn't available yet, so this order can't be valued in USD.";
+export const NO_FX_PRICE = "The exchange rate for this market's quote currency is not yet available, so this order cannot be valued in USD.";
 
 /** The note an order with no size gets, which a size the field itself refuses does not repeat: a prompt under the field, not an error. */
 export const MARKET_CLOSED = "This market is closed.";
-export const REDUCE_ONLY = "This market only accepts orders that reduce a position.";
-export const NO_SIZE = "Enter a size";
+export const REDUCE_ONLY = "This market is currently accepting only orders that reduce an existing position.";
+export const NO_SIZE = "Enter an order size.";
 
 /** The refusal of a size under the market's minimum order value, given the spec's `min_order_notional`. */
-export const belowMinimum = (minOrderNotional: string) => `Minimum order is ${minOrderNotional} USD.`;
+export const belowMinimum = (minOrderNotional: string) => `The minimum order value in this market is ${minOrderNotional} USD.`;
 
 /** The refusal of a resting order's trigger price that is not above zero. */
 export const TRIGGER_NOT_POSITIVE = "Enter a trigger price above zero.";
 
 /** The ticket's own margin refusal, which a live build leaves to the node's executable quote. */
-export const MARGIN_SHORT = "Not enough equity to cover the margin for this order.";
+export const MARGIN_SHORT = "Insufficient margin. Your equity does not cover the margin this order requires.";
 
 /** The ticket's refusal of an order that adds risk to an account with no equity, which links to the Funding page. */
 export const NO_FUNDS = "Deposit funds to start trading.";
@@ -113,7 +113,7 @@ export function parseSize(text: string): SizeInput {
   if (match === null) return { kind: "refused", message: "Enter the size in digits, such as 0.5 or 2.25." };
   const [, whole = "0", places = ""] = match;
   const fraction = places.replace(/0+$/, "");
-  if (fraction.length > QTY_PLACES) return { kind: "refused", message: `Sizes can have at most ${QTY_PLACES} decimal places.` };
+  if (fraction.length > QTY_PLACES) return { kind: "refused", message: `Order sizes can have at most ${QTY_PLACES} decimal places.` };
   const qty = parseFixed(fraction === "" ? whole : `${whole}.${fraction}`);
   // Digits and at most six places after the trailing zeros are dropped, which `parseFixed` always takes.
   if (qty === null) throw new Error(`size ${trimmed} matched the size pattern but did not parse`);
@@ -226,7 +226,7 @@ export function previewTicket(input: TicketInput): TicketPreview {
     qty, notional: null, markNotional: 0n, quote: null, offer: null, bid: null, spreadTenths: null, worstPrice: null, marginAfter: account?.margin ?? 0n, marginAdded: 0n,
     marginUseBps: null, marginRateBps: null, impliedLeverage: null, houseCap, problems: [problem],
   });
-  if (mark === null || mark <= 0n) return unpriced("This market has no price yet.");
+  if (mark === null || mark <= 0n) return unpriced("No price is available for this market yet.");
   // The node refuses every fill of a market quoted in another currency while its FX market has no price.
   const toUsd = usdConverter(spec, mark);
   if (toUsd === null) return unpriced(NO_FX_PRICE);

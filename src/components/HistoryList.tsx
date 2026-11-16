@@ -24,7 +24,7 @@ export function HistoryList() {
   return (
     <div>
       {rows.length === 0 ? (
-        <p className="px-4 py-6 text-caption text-fg-3">{wallet ? "Nothing yet. Your trades, deposits and withdrawals will show here." : "Connect a wallet to see your history."}</p>
+        <p className="px-4 py-6 text-caption text-fg-3">{wallet ? "You have no account history yet. Your trades, deposits and withdrawals will be listed here." : "Connect a wallet to view your account history."}</p>
       ) : (
         <ol>
           {rows.map(({ entry, text }) => (

@@ -21,9 +21,9 @@ describe("parseSize", () => {
   });
 
   it("refuses more than six decimal places, saying so, rather than rounding", () => {
-    expect(parseSize("0.0000001")).toEqual({ kind: "refused", message: "Sizes can have at most 6 decimal places." });
-    expect(parseSize("1.23456789")).toEqual({ kind: "refused", message: "Sizes can have at most 6 decimal places." });
-    expect(parseSize("0.12345678901234")).toEqual({ kind: "refused", message: "Sizes can have at most 6 decimal places." });
+    expect(parseSize("0.0000001")).toEqual({ kind: "refused", message: "Order sizes can have at most 6 decimal places." });
+    expect(parseSize("1.23456789")).toEqual({ kind: "refused", message: "Order sizes can have at most 6 decimal places." });
+    expect(parseSize("0.12345678901234")).toEqual({ kind: "refused", message: "Order sizes can have at most 6 decimal places." });
   });
 
   it("refuses text that is not a plain decimal", () => {

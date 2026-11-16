@@ -69,33 +69,33 @@ describe("the close-all message", () => {
   });
 
   it("says how many closed and names the market that moved past its bound", () => {
-    expect(summary([1, 2, 3], [fill(1), rejected(1, slippage), fill(3)])).toBe("Closed 2 of 3 positions; ETH-USD moved more than your max slippage.");
+    expect(summary([1, 2, 3], [fill(1), rejected(1, slippage), fill(3)])).toBe("2 of 3 positions were closed. The ETH-USD position was not closed, because the price moved by more than your maximum slippage.");
   });
 
   it("names every market that did not close, each with its reason", () => {
     expect(summary([1, 2, 3], [fill(1), rejected(1, { kind: "market_closed" }), rejected(2, { kind: "house_capacity" })]))
-      .toBe("Closed 1 of 3 positions; ETH-USD is closed; EUR-USD: This market is at its limit. Try a smaller size.");
+      .toBe("1 of 3 positions was closed. The ETH-USD position was not closed, because its market is closed. The EUR-USD position was not closed. The house has reached its exposure limit in this market. Please try a smaller order size.");
   });
 
   it("says a position that was already flat had none left to close", () => {
-    expect(summary([1, 2], [fill(1), rejected(1, { kind: "reduce_only" })])).toBe("Closed 1 of 2 positions; ETH-USD had no position left to close.");
+    expect(summary([1, 2], [fill(1), rejected(1, { kind: "reduce_only" })])).toBe("1 of 2 positions was closed. The ETH-USD position had already been closed.");
   });
 
   it("says a market with no price has none right now", () => {
-    expect(summary([1, 2], [fill(1), rejected(1, { kind: "no_price" })])).toBe("Closed 1 of 2 positions; ETH-USD has no price right now.");
+    expect(summary([1, 2], [fill(1), rejected(1, { kind: "no_price" })])).toBe("1 of 2 positions was closed. The ETH-USD position was not closed, because no live price is currently available for its market.");
   });
 
   it("says an entry it heard nothing for could not be confirmed closed", () => {
-    expect(summary([1, 2], [fill(1)])).toBe("Closed 1 of 2 positions; ETH-USD isn't confirmed closed yet.");
+    expect(summary([1, 2], [fill(1)])).toBe("1 of 2 positions was closed. The ETH-USD position has not yet been confirmed as closed.");
   });
 
   it("says none closed when none did", () => {
-    expect(summary([1, 2], [rejected(0, slippage), rejected(1, slippage)])).toBe("No position was closed: BTC-USD moved more than your max slippage; ETH-USD moved more than your max slippage.");
+    expect(summary([1, 2], [rejected(0, slippage), rejected(1, slippage)])).toBe("No positions were closed. The BTC-USD position was not closed, because the price moved by more than your maximum slippage. The ETH-USD position was not closed, because the price moved by more than your maximum slippage.");
   });
 
   it("says nothing closed for a refusal of the whole request, with the node's reason", () => {
     const text = summary([1, 2], [rejected(0, { kind: "batch_unsupported" })]);
-    expect(text).toBe("Nothing was closed. This server can't cancel or close everything in one go yet.");
+    expect(text).toBe("No positions were closed. This server does not yet support cancelling or closing everything in a single request.");
   });
 });
 
@@ -112,6 +112,6 @@ describe("the cancel-all message", () => {
   });
 
   it("reports a refusal as such, never as a success", () => {
-    expect(describeCancelAll([rejected(0, { kind: "batch_unsupported" })])).toMatch(/^Nothing was cancelled\./);
+    expect(describeCancelAll([rejected(0, { kind: "batch_unsupported" })])).toMatch(/^No orders were cancelled\./);
   });
 });
