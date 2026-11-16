@@ -49,7 +49,7 @@ const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-g
 const CLOSEOUT_TIP = "Where this market must reach for your account to fall below its close-out level, with your other positions held at their marks. Margin is shared, and the largest losing position closes first, which may be another. Due: already below it. None: no price in the node's range reaches it.";
 
 /** What the P&L column means, shared by the table's head and the phone rows' labels. */
-const PNL_TIP = "What closing the whole position now realises, before the profit fee: at the node's closing price for the position's size (the bid for a long, the offer for a short), not at the mark, so it already counts the exit spread. Point at or focus the figure for the result at the mark.";
+const PNL_TIP = "What closing the whole position now realises, before the profit fee: at the node's closing price for the position's size (the bid for a long, the offer for a short), not at the mark, so it already counts the exit spread. Point at or focus Details for the result at the mark.";
 
 /** What the hold, fee and close columns mean, shared by the table's head and the phone rows' labels. */
 const HOLD_TIP = "How long the position has been held, from its open time: an add moves the open time to the size-weighted average of now and the open time, counting the units already held as no older than the fee curve's end (15 minutes at launch); a reduction leaves it.";
@@ -123,7 +123,7 @@ export function PositionsView() {
       noFee,
       noClose,
       // One static-named explanation per row, so no live figure is the name of a control.
-      details: describeDetails({ pnl: describePnl(atMark === null ? null : formatUsd(atMark), pnl === null ? noPrice : null), noClose, noFee, next: falls }),
+      details: describeDetails({ pnl: describePnl(atMark === null ? null : formatUsd(atMark), pnl === null ? noPrice : null), noClose, noFee }),
       closeout: formatCloseout(p.closeout, places),
       hold: fee === null ? "—" : formatHold(fee.holdMs),
       fee: feeBps === null ? "—" : formatRate(feeBps),
@@ -220,7 +220,10 @@ export function PositionsView() {
                   <span className="ml-2 text-label text-fg-3"><Term label="Details" tip={r.details} /></span>
                 </td>
                 <td className={`${TD} ${HELD_W}`}>{r.hold}</td>
-                <td className={TD}>{r.fee}</td>
+                <td className={TD}>
+                  <span className="inline-block min-w-[8ch]">{r.fee}</span>
+                  <span className="inline-block min-w-[29ch] text-label text-fg-3">{r.falls}</span>
+                </td>
                 <td className={`${TD} ${FEE_W}`}>{r.feeUsd}</td>
                 <td className={`${TD} ${CLOSE_W}`}>{r.proceeds}</td>
                 <td className={`${TD} text-right`}>

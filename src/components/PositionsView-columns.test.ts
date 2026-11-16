@@ -48,6 +48,7 @@ const details = (html: string) => (html.split("<tbody>")[1] ?? "").match(/role="
 const GAIN = { account: holding(2, 100_000), quotes: { 1: closing("sell", "100979.8") } };
 // The cells by column: market, side, size, entry, mark, close-out, P&L and its details, held, fee rate, fee in USD, close now, close.
 const PNL = 6;
+const FEE_RATE = 8;
 const FEE_USD = 9;
 const CLOSE_NOW = 10;
 
@@ -57,7 +58,7 @@ describe("a position whose mark gain is smaller than its exit spread", () => {
     const html = render({ account: holding(2, 100_990), quotes: { 1: closing("sell", "100979.8") } });
     const [row] = rows(html);
     expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["-$20.40Details", "$0.00", "-$20.40"]);
-    expect(details(html)).toBe("At the node's closing price for this size. At the mark it is $20.00, before the exit spread. No profit fee on this close: it realises a loss or nothing. Profit fee rate: Base rate.");
+    expect(details(html)).toBe("At the node's closing price for this size. At the mark it is $20.00, before the exit spread. No profit fee on this close: it realises a loss or nothing.");
     expect(html).toContain('aria-hidden="false" class="block text-label text-fg-3">No profit fee on this close');
   });
 
@@ -76,7 +77,7 @@ describe("a position at a gain after the exit spread", () => {
     const html = render(GAIN);
     const [row] = rows(html);
     expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["$1,959.60Details", "$195.96", "$1,763.64"]);
-    expect(details(html)).toBe("At the node's closing price for this size. At the mark it is $2,000.00, before the exit spread. Profit fee rate: Base rate.");
+    expect(details(html)).toBe("At the node's closing price for this size. At the mark it is $2,000.00, before the exit spread.");
     // The card reserves the note's line, hidden from view and from a screen reader.
     expect(html).toContain('aria-hidden="true" class="block text-label invisible">No profit fee on this close');
   });
@@ -113,7 +114,7 @@ describe("the table's one row per position", () => {
   it("gives the figure columns the same width, shown or withheld, and the hold room for its longest value", () => {
     const widths = (html: string) => (html.split("<tbody>")[1] ?? "").match(/min-w-\[[^\]]*\]/g);
     const withheld = render({ account: holding(2, 100_000), quotes: {} });
-    expect(widths(render(GAIN))).toEqual(["min-w-[12ch]", "min-w-[calc(7ch+1rem)]", "min-w-[calc(13ch+1rem)]", "min-w-[calc(14ch+1rem)]"]);
+    expect(widths(render(GAIN))).toEqual(["min-w-[12ch]", "min-w-[calc(7ch+1rem)]", "min-w-[8ch]", "min-w-[29ch]", "min-w-[calc(13ch+1rem)]", "min-w-[calc(14ch+1rem)]"]);
     expect(widths(withheld)).toEqual(widths(render(GAIN)));
   });
 
@@ -127,6 +128,17 @@ describe("the table's one row per position", () => {
     const tips = render(GAIN).match(/<span id="[^"]*" role="tooltip"[^>]*>/g) ?? [];
     expect(tips.length).toBeGreaterThan(10);
     for (const tip of tips) expect(tip).toContain("whitespace-normal");
+  });
+});
+
+describe("the profit fee rate's cell", () => {
+  it("says when the rate next falls beside the rate, on the row's one line", () => {
+    expect(rows(render(GAIN))[0]?.[FEE_RATE]).toBe("10.00%Base rate");
+    const account = holding(2, 100_000);
+    const [position] = account.positions;
+    if (position === undefined) throw new Error("no position");
+    const falling = render({ account: { ...account, positions: [{ ...position, closeFee: { openedAt: 1_940_000, feeBps: 6_421, fallsAt: 2_000_005 } }] }, quotes: GAIN.quotes });
+    expect(rows(falling)[0]?.[FEE_RATE]).toBe("64.21%Falling to 10.00% in 14m 00s");
   });
 });
 

@@ -44,8 +44,8 @@ export function describeNoClose(g: CloseGaps): string | null {
   return g.rateRead ? null : "The profit fee rate has not been read yet.";
 }
 
-/** A row's details in one explanation: the P&L's basis, what the fee and the close keep come to, and when the rate next falls. */
-export function describeDetails(parts: { pnl: string; noClose: string | null; noFee: boolean; next: string | null }): string {
+/** A row's details in one explanation: the P&L's basis, and what the fee and the close keep come to. */
+export function describeDetails(parts: { pnl: string; noClose: string | null; noFee: boolean }): string {
   const close = parts.noClose !== null ? `The profit fee and what a close keeps are withheld: ${parts.noClose}` : parts.noFee ? "No profit fee on this close: it realises a loss or nothing." : null;
-  return [parts.pnl, close, parts.next === null ? null : `Profit fee rate: ${parts.next}.`].filter((x) => x !== null).join(" ");
+  return [parts.pnl, close].filter((x) => x !== null).join(" ");
 }

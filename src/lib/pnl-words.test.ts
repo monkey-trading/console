@@ -36,9 +36,9 @@ describe("describeNoPrice and describeNoClose", () => {
 });
 
 describe("describeDetails", () => {
-  it("joins the basis, what the fee and the close come to, and when the rate falls", () => {
-    expect(describeDetails({ pnl: "Basis.", noClose: null, noFee: true, next: "Base rate" })).toBe("Basis. No profit fee on this close: it realises a loss or nothing. Profit fee rate: Base rate.");
-    expect(describeDetails({ pnl: "Basis.", noClose: "Why.", noFee: false, next: null })).toBe("Basis. The profit fee and what a close keeps are withheld: Why.");
-    expect(describeDetails({ pnl: "Basis.", noClose: null, noFee: false, next: null })).toBe("Basis.");
+  it("joins the basis and what the fee and the close come to", () => {
+    expect(describeDetails({ pnl: "Basis.", noClose: null, noFee: true })).toBe("Basis. No profit fee on this close: it realises a loss or nothing.");
+    expect(describeDetails({ pnl: "Basis.", noClose: "Why.", noFee: false })).toBe("Basis. The profit fee and what a close keeps are withheld: Why.");
+    expect(describeDetails({ pnl: "Basis.", noClose: null, noFee: false })).toBe("Basis.");
   });
 });
