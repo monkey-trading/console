@@ -1,5 +1,6 @@
 /** The console's check of a node's attestation, which must pass before it signs anything for the node. */
 
+import { signerClause } from "./signer-naming";
 import type { Attestation } from "./types";
 
 export type AttestationStatus =
@@ -71,6 +72,7 @@ export function signBlock(status: AttestationStatus, feed: FeedStatus, readOnly 
 export function readBlock(status: AttestationStatus, feed: FeedStatus): string | null {
   if (status.kind === "clock") return "your device clock differs from the node's signed time";
   if (status.kind === "reverifying") return "the node is being verified again";
+  if (status.kind === "unverified") return signerClause(status.reason) ?? "the node's attestation is not verified";
   if (status.kind !== "mock" && status.kind !== "verified" && status.kind !== "attested") return "the node's attestation is not verified";
   if (feed === "stale") return "the node's feed is stale";
   return feed === "connecting" ? "the node's feed has not started yet" : null;

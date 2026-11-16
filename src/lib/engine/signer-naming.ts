@@ -31,9 +31,25 @@ export type SignerWord = { enclave?: string; signer?: Readonly<SignerFloor> };
 export type SignerRefusal = { reason: string; vaultLifts: boolean };
 
 /** What the console says when the vault names a signer other than the enclave the node answers with. */
-export const SIGNER_SUPERSEDED = "The vault names another signer than this node's enclave, so the node's answers are refused.";
+export const SIGNER_SUPERSEDED = "The on-chain vault now uses a different signing key than this server, so its answers are refused. This clears only if the server switches to that key.";
+/** What the console says when two keys were named as the vault's signer at the highest epoch seen: every key at it is refused, waiting helps only once a later epoch names one (monkey-trading/console#387). */
+export const SIGNER_CONFLICT = "Two signing keys are listed as current, so this server's answers are refused. Waiting helps: this clears once a later key change names just one.";
+/** What the console says when a node that states no signer has no read of the vault naming its enclave yet: a read of the vault lifts it (monkey-trading/console#387). */
+export const SIGNER_AWAITING_VAULT = "This server doesn't say which signing key it uses, and the vault hasn't been checked for it yet. This clears once the vault is checked, which connecting a wallet does.";
 /** What the console says when the node's own word on the signer the vault names could not be read, before the read's failure. */
 export const SIGNER_UNREAD = "The node's word on the signer the vault names could not be read, so its answers are not taken yet.";
+/** The refusal reasons above as the clause a control names ("The console cannot sign now: ..."), keyed by the reason (monkey-trading/console#387). */
+const SIGNER_CLAUSES = new Map<string, string>([
+  [SIGNER_SUPERSEDED, "the vault now uses a different signing key than this server"],
+  [SIGNER_CONFLICT, "two signing keys are listed as current, until a later key change names one"],
+  [SIGNER_AWAITING_VAULT, "the vault hasn't been checked for this server's signing key yet"],
+]);
+
+/** The clause a control names for a refusal `reason`, or null when the reason is not one of these. */
+export function signerClause(reason: string): string | null {
+  return SIGNER_CLAUSES.get(reason) ?? null;
+}
+
 /** What the console says when a node's answer names an enclave other than the one that signed it. */
 const WRONG_ENCLAVE = "The node named an enclave other than the one that signed its answer, so the answer was discarded.";
 
@@ -52,8 +68,8 @@ export class SignerNaming {
   private named: SignerFloor | null = null;
   /** Each key named at the highest epoch, or held since a word raised it: a word at a later epoch puts each aside but the key it names (monkey-trading/console#381). */
   private readonly keys = new Set<string>();
-  /** Enclave addresses a stated signer has put aside, the key named at an earlier epoch among them: a node that attests one stays refused until the vault names it again at a later epoch. */
-  private readonly superseded = new Set<string>();
+  /** Enclave addresses a stated signer has put aside, the key named at an earlier epoch among them, each with the reason: a node that attests one stays refused until the vault names it again at a later epoch. */
+  private readonly superseded = new Map<string, string>();
   /** Those a read of the vault put aside: only a read of the vault that names one takes it back, never a word, which may be older than the read. */
   private readonly vaultRefused = new Set<string>();
 
@@ -70,19 +86,20 @@ export class SignerNaming {
     const named = (this.named = raised(before, answer.signer));
     if (before === null || named.epoch > before.epoch) {
       // The keys named at the earlier epoch are no longer the vault's, whichever node says so.
-      for (const key of this.keys) if (key !== named.address) this.superseded.add(key);
+      for (const key of this.keys) if (key !== named.address) this.superseded.set(key, SIGNER_SUPERSEDED);
       this.keys.clear();
       if (named.address !== null && !this.vaultRefused.has(named.address)) this.superseded.delete(named.address);
     }
     if (answer.signer.epoch === named.epoch) {
       if (answer.signer.address !== null) this.keys.add(answer.signer.address.toLowerCase());
       // No key named at an epoch two keys were named at stands on a word, its answers in flight included.
-      if (named.address === null) for (const key of this.keys) this.superseded.add(key);
+      if (named.address === null) for (const key of this.keys) this.superseded.set(key, SIGNER_CONFLICT);
     }
     const stands = trusted === null || trusted === named.address;
-    if (trusted !== null && !stands) this.superseded.add(trusted);
+    const reason = named.address === null ? SIGNER_CONFLICT : SIGNER_SUPERSEDED;
+    if (trusted !== null && !stands) this.superseded.set(trusted, reason);
     if (named !== before) this.onRaised();
-    return stands ? null : { reason: SIGNER_SUPERSEDED, supersede: true };
+    return stands ? null : { reason, supersede: true };
   }
 
   /**
@@ -108,8 +125,10 @@ export class SignerNaming {
     const unnamed = claim.signer === undefined && !vaultJudged && this.named !== null && this.named.address !== address;
     if (!unnamed && !this.refuses(address)) return null;
     // An answer or a scan still in flight under it is refused too.
-    this.superseded.add(address);
-    return { reason: SIGNER_SUPERSEDED, vaultLifts: !vaultJudged };
+    // A node put aside for a reason keeps it: it is the more specific one.
+    const reason = this.superseded.get(address) ?? (unnamed ? SIGNER_AWAITING_VAULT : SIGNER_SUPERSEDED);
+    this.superseded.set(address, reason);
+    return { reason, vaultLifts: !vaultJudged };
   }
 
   /** The vault itself, read through the wallet, names `signer`: an enclave it does not name is put aside until a read of the vault names it, and the one it does is taken back. */
@@ -118,7 +137,7 @@ export class SignerNaming {
       this.superseded.delete(enclave);
       this.vaultRefused.delete(enclave);
     } else {
-      this.superseded.add(enclave);
+      this.superseded.set(enclave, SIGNER_SUPERSEDED);
       this.vaultRefused.add(enclave);
     }
   }
@@ -135,6 +154,11 @@ export class SignerNaming {
   /** The highest epoch seen and the key named at it, none once two were; null before any. */
   get highest(): Readonly<SignerFloor> | null {
     return this.named;
+  }
+
+  /** Why `enclave` was put aside, as the reason its answers are refused with. */
+  why(enclave: string): string {
+    return this.superseded.get(enclave) ?? SIGNER_SUPERSEDED;
   }
 
   /** Whether `enclave` has been put aside by a stated signer. */

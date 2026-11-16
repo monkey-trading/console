@@ -10,7 +10,7 @@ import { dev } from "./live-setup";
 import type { PinnedRelease } from "./manifests";
 import type { VaultFacts } from "./registry";
 import { releaseName } from "./release-check";
-import { SIGNER_SUPERSEDED, SIGNER_UNREAD, type OperatorClaim } from "./signer-naming";
+import { SIGNER_AWAITING_VAULT, SIGNER_CONFLICT, SIGNER_SUPERSEDED, SIGNER_UNREAD, type OperatorClaim } from "./signer-naming";
 import { mockAttestation, settle } from "./test-kit";
 import { NodeTrust } from "./trust";
 import type { Verifier } from "./verifier";
@@ -59,9 +59,9 @@ describe("a node that states no signer under another node's later word (monkey-t
       const { trust, held } = await silentNode(provider);
       held.address = KC;
       await expect(trust.recheck(KA), provider).resolves.toBe(false);
-      expect(trust.status, provider).toEqual({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+      expect(trust.status, provider).toEqual({ kind: "unverified", reason: SIGNER_AWAITING_VAULT });
       expect(trust.refuses(KC), provider).toBe(true);
-      await expect(trust.signer(), provider).rejects.toThrow(SIGNER_SUPERSEDED);
+      await expect(trust.signer(), provider).rejects.toThrow(SIGNER_AWAITING_VAULT);
     }
   });
 
@@ -94,7 +94,7 @@ describe("a node that states no signer under another node's later word (monkey-t
       // The wallet goes, and a failed answer has the node checked again.
       vault.facts = null;
       await trust.verify();
-      expect(trust.status, provider).toEqual({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+      expect(trust.status, provider).toEqual({ kind: "unverified", reason: SIGNER_AWAITING_VAULT });
       expect(trust.refuses(KC), provider).toBe(true);
       vault.facts = { release, signer: KC };
       await trust.verify();
@@ -119,7 +119,7 @@ describe("a node moved to under a signer the visit heard before (monkey-trading/
       vault.facts = null;
       held.address = KC;
       await expect(trust.recheck(KB), provider).resolves.toBe(false);
-      expect(trust.status, provider).toEqual({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+      expect(trust.status, provider).toEqual({ kind: "unverified", reason: SIGNER_AWAITING_VAULT });
     }
   });
 });
@@ -159,7 +159,7 @@ describe("a node refused for want of a read of the vault (monkey-trading/console
     const refusals = [
       { refusal: "its own word names another key", provider: "hardware", claim: { signer: { epoch: 9, address: KA } }, reason: SIGNER_SUPERSEDED },
       { refusal: "its word could not be read", provider: "hardware", claim: new Error("Failed to fetch"), reason: expect.stringContaining(SIGNER_UNREAD) },
-      { refusal: "a mock node with no stand-in digests", provider: "mock", claim: {}, reason: SIGNER_SUPERSEDED },
+      { refusal: "a mock node with no stand-in digests", provider: "mock", claim: {}, reason: SIGNER_AWAITING_VAULT },
     ] as const;
     for (const { refusal, provider, claim, reason } of refusals) {
       const { trust, held, vault, release } = silentTrust(provider, []);
@@ -190,7 +190,7 @@ describe("a node moved to while two keys were named at the highest epoch (monkey
       expect([trust.status.kind, trust.refuses(KB), trust.signerNamed], provider).toEqual([provider === "mock" ? "mock" : "verified", false, { epoch: 8, address: null }]);
       vault.facts = null;
       await trust.verify();
-      expect(trust.status, provider).toEqual({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+      expect(trust.status, provider).toEqual({ kind: "unverified", reason: SIGNER_AWAITING_VAULT });
       vault.facts = { release, signer: KB };
       await trust.verify();
       expect(trust.status.kind, provider).toBe(provider === "mock" ? "mock" : "verified");
@@ -211,7 +211,7 @@ describe("a node moved to while two keys were named at the highest epoch (monkey
       vault.facts = null;
       held.address = first;
       await trust.verify();
-      expect(trust.status, first).toEqual({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+      expect(trust.status, first).toEqual({ kind: "unverified", reason: SIGNER_CONFLICT });
       trust.heedSigner({ epoch: 9, address: first });
       await trust.verify();
       expect([trust.status.kind, trust.signerNamed], first).toEqual(["attested", { epoch: 9, address: first }]);
