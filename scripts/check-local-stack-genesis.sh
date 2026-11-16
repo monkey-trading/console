@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Starts the local stack (scripts/dev-local-stack.sh) with GENESIS_FILE and checks that the node accepted that
-# genesis: it serves every market the file lists with the file's house cap floors, margin and spread bands,
-# serves the file's total cap floor and volume tiers, starts the house with nothing, and that the stack's summary
-# and `dev-local-stack-ctl.sh status` name the genesis. The default is the launch genesis,
-# config/production-genesis.toml (34 markets, a $61M total floor).
+# genesis: it serves exactly the markets the file lists, each with the file's cap floors, margin and spread bands,
+# schedule, price rules and financing, serves the file's protocol parameters (the total cap floor and the volume
+# tiers, field by field, with the rest the house state lists), starts the house with what the stack deposited to it
+# (nothing under a launch genesis), and that the stack's summary and `dev-local-stack-ctl.sh status` name the genesis. The default is the launch
+# genesis, config/production-genesis.toml (34 markets, a $61M total floor).
 #
 # The stack runs on its own ports (default 18545, 18080, 13000, 19464 and 28846; ANVIL_PORT, API_PORT,
 # CONSOLE_PORT, METRICS_PORT and ACCESS_SOURCE_PORT move them) and on its own info file, so it never meets a stack
@@ -28,9 +29,9 @@ cleanup() {
   local status=$?
   trap - EXIT INT TERM
   if [[ -n "$stack_pid" ]] && kill -0 "$stack_pid" 2>/dev/null; then
-    # The stack stops everything it started on TERM; give it time to drain the node.
+    # The stack stops everything it started on TERM, one after another (up to 50 s); give it that and more.
     kill -TERM "$stack_pid" 2>/dev/null || true
-    for _ in $(seq 1 200); do kill -0 "$stack_pid" 2>/dev/null || break; sleep 0.2; done
+    for _ in $(seq 1 350); do kill -0 "$stack_pid" 2>/dev/null || break; sleep 0.2; done
     kill -KILL "$stack_pid" 2>/dev/null || true
     wait "$stack_pid" 2>/dev/null || true
   fi
@@ -58,42 +59,73 @@ echo "==> Check the node's markets against $genesis"
 curl -sk --max-time 10 "$api/v1/markets" >"$work/markets.json" || die "the node did not answer /v1/markets"
 curl -sk --max-time 10 "$api/v1/house/state" >"$work/house-state.json" || die "the node did not answer /v1/house/state"
 curl -sk --max-time 10 "$api/v1/house" >"$work/house.json" || die "the node did not answer /v1/house"
-python3 -I - "$genesis" "$work" <<'PY' || die "the node's genesis is not the file's"
+python3 -I - "$genesis" "$work" "$(jq -r .houseUsdc "$STACK_INFO_FILE")" <<'PY' || die "the node's genesis is not the file's"
 import json
 import sys
 import tomllib
-from decimal import Decimal
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 genesis = tomllib.loads(Path(sys.argv[1]).read_text())["genesis"]
 work = Path(sys.argv[2])
+house_usdc = Decimal(sys.argv[3])
 served = {m["id"]: m for m in json.loads((work / "markets.json").read_text())}
 params = json.loads((work / "house-state.json").read_text())["params"]
 house = json.loads((work / "house.json").read_text())
 
-def bands(tiers):
-    """A band table as numbers, its open last band as None."""
-    return [(None if t.get("up_to") is None else Decimal(t["up_to"]), t.get("bps", t.get("tenth_bps"))) for t in tiers]
 
+def number(value):
+    """The value as a Decimal, or None when it is not a number."""
+    if isinstance(value, bool):
+        return None
+    try:
+        return Decimal(str(value))
+    except InvalidOperation:
+        return None
+
+
+def empty(value):
+    """What the node leaves out of its answer: absent, zero, or an empty list or table."""
+    return value is None or value == "" or value is False or value == [] or value == {} or number(value) == 0
+
+
+def same(got, want):
+    """Whether the node serves `want`. Numbers compare as numbers, a table by each key the file lists, and
+    a field the node leaves out when it is zero equals a zero in the file."""
+    if isinstance(want, dict):
+        got = got if isinstance(got, dict) else {}
+        return all(same(got.get(key), value) for key, value in want.items())
+    if isinstance(want, list):
+        return isinstance(got, list) and len(got) == len(want) and all(same(g, w) for g, w in zip(got, want, strict=True))
+    if isinstance(want, datetime | date):
+        return got == want.isoformat()
+    if got is None:
+        return empty(want)
+    if number(got) is not None and number(want) is not None:
+        return number(got) == number(want)
+    return got == want
+
+
+# What the node's market list serves of a market's spec; a field it leaves out when zero equals a zero in the file.
+MARKET_FIELDS = ("symbol", "asset_class", "schedule", "margin_tiers", "spread_tiers", "price_rules", "max_slippage_bps",
+                 "financing", "house_cap_bps", "house_cap_floor", "min_order_notional", "markout_floor_bps")
 wanted = {m["id"]: m for m in genesis["markets"]}
 assert set(served) == set(wanted), f"markets differ: only served {sorted(set(served) - set(wanted))}, only listed {sorted(set(wanted) - set(served))}"
 for i, want in sorted(wanted.items()):
-    got = served[i]
-    name = f"{want['symbol']} ({i})"
-    assert got["symbol"] == want["symbol"], f"{name}: served as {got['symbol']}"
-    # A field the file leaves out takes the engine's default for its asset class, so only listed ones are compared.
-    for field in ("house_cap_floor", "house_cap_bps", "max_slippage_bps"):
+    for field in MARKET_FIELDS:
         if field in want:
-            assert Decimal(got[field]) == Decimal(want[field]), f"{name}: {field} {got[field]}"
-    for field in ("margin_tiers", "spread_tiers"):
-        if field in want:
-            assert bands(got[field]) == bands(want[field]), f"{name}: {field} {got[field]}"
-total = Decimal(genesis["params"].get("house_total_cap_floor", params["house_total_cap_floor"]))
-assert Decimal(params["house_total_cap_floor"]) == total, f"total cap floor {params['house_total_cap_floor']}"
-assert len(params["volume_tiers"]) == len(genesis["params"].get("volume_tiers", [])), "volume tiers differ"
-if genesis["house_capital"] == "0":
-    assert Decimal(house["cash"]) == 0 and Decimal(house["nav"]) == 0, f"the house starts with {house['nav']}, not nothing"
-print(f"{len(wanted)} markets match, total cap floor {total:,.0f} USD, {len(params['volume_tiers'])} volume tiers")
+            assert same(served[i].get(field), want[field]), f"{want['symbol']} ({i}): {field} is {served[i].get(field)}, the file lists {want[field]}"
+# The house state serves the protocol parameters as set: the volume tiers and the total floor, which it leaves out when
+# zero, with every other it lists.
+for field, want in genesis["params"].items():
+    if field not in params and field not in ("house_total_cap_floor", "volume_tiers"):
+        continue
+    assert same(params.get(field), want), f"parameter {field} is {params.get(field)}, the file lists {want}"
+# The house holds what the stack deposited to it in the vault, nothing under a launch genesis.
+assert Decimal(house["nav"]) == house_usdc, f"the house starts with {house['nav']} USD, not the stack's {house_usdc}"
+print(f"{len(wanted)} markets and {len(genesis['params'])} parameters match, total cap floor {number(params.get('house_total_cap_floor', 0)):,.0f} USD, "
+      f"{len(params.get('volume_tiers', []))} volume tiers")
 PY
 
 echo "==> Check the summary and the control script name the genesis"

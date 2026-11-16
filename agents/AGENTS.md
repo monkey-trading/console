@@ -198,7 +198,8 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   copies any engine config file's `[genesis]` table into the one `node.toml` it assembles, so the node keeps one attested config;
   the default is `config/dev.toml`; a launch genesis lists all 34 launch markets with their cap floors on a house with no capital,
   prices the crypto markets from the live venues and leaves the vendor-sourced ones unpriced, and takes the launch deployment's
-  values from the engine's `ops/runbooks/production-deployment.toml`, the summary naming each it shortens);
+  values from the engine's `ops/runbooks/production-deployment.toml`, the summary naming each it shortens; `LAUNCH_VALUES=0|1` overrides
+  whether a genesis takes them, which a file named `production-genesis.toml` does by default);
   `./scripts/check-local-stack-genesis.sh` starts it and checks the node serves the 34 markets with their production cap floors
   (needs what the stack needs; it builds the node, so run it through the build slot with `CARGO_CMD`)
 - Two-engine local stack: `SECOND_ENGINE=1 ./scripts/dev-local-stack.sh`, then, from another terminal,

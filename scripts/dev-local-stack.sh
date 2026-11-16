@@ -56,13 +56,16 @@
 #   RESTRICTION_TTL  with GOVERNANCE=1, how long a fast-path restriction lasts (default 3m: a development
 #                    value; the engine takes up to seven days)
 #   GENESIS_FILE     an engine config file whose `[genesis]` table the node takes: a path, or one relative to the engine
-#                    checkout (default config/dev.toml; config/production-genesis.toml is the launch genesis)
+#                    checkout (default config/dev.toml; config/production-genesis.toml is the launch genesis). A genesis
+#                    that lists [genesis.staking] is refused: the stack initialises staking itself
+#   LAUNCH_VALUES    `1` takes the launch deployment's values and an empty house with the genesis, `0` keeps the
+#                    development ones (default: `1` for a file named production-genesis.toml, else `0`)
 #   STAKING_EPOCH_SECS
 #                    the MONKEY distribution epoch and unstake cooldown, in seconds (default 300)
 #   CONSOLE_BUILD    `dev` (default) runs next dev; `production` runs npm run build, then next start
 #   STACK_INFO_FILE  a path to write the stack's addresses and keys to as JSON while it is up (with
-#                    SECOND_ENGINE=1, default `monkey-local-stack.json` in the temporary directory,
-#                    which `dev-local-stack-ctl.sh` reads)
+#                    SECOND_ENGINE=1 or LAUNCH_VALUES=1, default `monkey-local-stack.json` in the temporary
+#                    directory, which `dev-local-stack-ctl.sh` reads)
 #   KEEP_WORK=1      keep the private work directory (configs and logs) on exit
 set -euo pipefail
 # The config scripts import a module beside them; leave no bytecode in the checkout.
@@ -93,9 +96,9 @@ metrics_url="http://127.0.0.1:$metrics_port/metrics"
 usdc_units=1000000
 house_usdc=5000000
 dev_usdc=100000
-# With another genesis than the development one, the launch deployment's values (set below, once the
-# engine checkout is found) replace the development ones that follow where the demo stays watchable.
-launch=0
+# With a launch genesis, the launch deployment's values (set below, once the engine checkout is found)
+# replace the development ones that follow where the demo stays watchable.
+launch="${LAUNCH_VALUES:-auto}"
 # MONKEY staking, development values and not approved production parameters: a five-minute
 # distribution epoch, an unstake cooldown of the same length (the staking contract refuses one
 # shorter than its epoch), and a liquidity floor 100000 USDC under the house's capital, so the first
@@ -238,14 +241,18 @@ else
 fi
 [[ -f "$engine_dir/config/anvil.toml" ]] || die "$engine_dir is not the engine checkout; set ENGINE_DIR to it"
 engine_dir="$(cd "$engine_dir" && pwd)"
-# The genesis: a path as given, or relative to the engine checkout. Anything but the development
-# genesis also takes the launch deployment's values.
+# The genesis: a path as given, or relative to the engine checkout. The launch genesis also takes the
+# launch deployment's values.
 genesis_file="${GENESIS_FILE:-$engine_dir/config/dev.toml}"
 [[ -f "$genesis_file" ]] || genesis_file="$engine_dir/$genesis_file"
 [[ -f "$genesis_file" ]] || die "GENESIS_FILE is not a file, here or under $engine_dir: ${GENESIS_FILE:-}"
 genesis_file="$(cd "$(dirname "$genesis_file")" && pwd)/$(basename "$genesis_file")"
-if [[ "$genesis_file" != "$engine_dir/config/dev.toml" ]]; then
-  launch=1
+[[ "$launch" == auto || "$launch" == 0 || "$launch" == 1 ]] || die "LAUNCH_VALUES must be 0 or 1: $launch"
+if [[ "$launch" == auto ]]; then
+  launch=0
+  if [[ "$(basename "$genesis_file")" == production-genesis.toml ]]; then launch=1; fi
+fi
+if [[ "$launch" == 1 ]]; then
   deployment="$engine_dir/ops/runbooks/production-deployment.toml"
   [[ -f "$deployment" ]] || die "$deployment is missing: the launch values need an engine checkout with the deployment inputs"
   # The launch genesis starts the house with nothing. The stack's own floor and the funding below follow.
@@ -429,16 +436,24 @@ cfg["api"]["operators_interval"] = "5s"
 # house, so the config credits none.
 genesis = tomllib.loads(Path(genesis_file).read_text()).get("genesis")
 assert genesis and genesis.get("markets"), f"{genesis_file} has no [genesis] table with markets"
+# The stack initialises staking itself, against the contracts it deploys: a second initialisation is refused.
+if genesis.get("staking") is not None:
+    sys.exit(f"{genesis_file} lists [genesis.staking]: remove it, as the stack initialises staking itself")
 cfg["genesis"] = genesis
 cfg["genesis"]["house_capital"] = "0"
 # Live crypto venues price every crypto market the genesis lists, Coinbase and Kraken quoting each
 # against USD; markets with no venue here stay unpriced (the others' vendors need keys the stack lacks).
-cfg["feeds"]["provider"] = "venues"
 cfg["feeds"]["mock_mids"] = []
 crypto = [(m["id"], m["symbol"]) for m in genesis["markets"] if m.get("asset_class") == "crypto"]
-for conn in cfg["feeds"]["venues"]["connections"]:
-    slash = conn["venue"] == "kraken"
-    conn["symbols"] = [{"market": i, "symbol": sym.replace("-", "/") if slash else sym} for i, sym in crypto]
+if crypto:
+    cfg["feeds"]["provider"] = "venues"
+    for conn in cfg["feeds"]["venues"]["connections"]:
+        slash = conn["venue"] == "kraken"
+        conn["symbols"] = [{"market": i, "symbol": sym.replace("-", "/") if slash else sym} for i, sym in crypto]
+else:
+    # No venue quotes a market here: the mock feed with no mids quotes nothing, and the engine refuses a venue with no symbols.
+    cfg["feeds"]["provider"] = "mock"
+    del cfg["feeds"]["venues"]
 cfg["checkpoints"] = {"rpc_url": rpc, "relayer": relayer, "retry_interval": "500ms", "rpc_timeout": "5s"}
 # A rotating node's handovers check the log against the head posted on chain: the poster sends the
 # newest released head every few seconds through its own relayer.
@@ -466,7 +481,7 @@ if launch == "1":
 heartbeat = re.fullmatch(r"(\d+)(ms|s)", cfg["api"]["heartbeat_interval"])
 assert heartbeat, "api.heartbeat_interval is not whole seconds or milliseconds"
 ms = int(heartbeat[1]) * (1 if heartbeat[2] == "ms" else 1000)
-venues = sorted({s["market"] for c in cfg["feeds"]["venues"]["connections"] for s in c["symbols"]})
+venues = sorted({s["market"] for c in cfg["feeds"].get("venues", {}).get("connections", []) for s in c["symbols"]})
 print(cfg["custody"]["vault"].lower(), evm["usdc"].lower(), ms, json.dumps(venues, separators=(",", ":")))
 PY
 read -r vault usdc heartbeat_ms venue_markets <"$work/config-values"
@@ -556,7 +571,11 @@ if [[ -n "$logheads" ]]; then
   [[ "$(lower "$deployed_logheads")" == "$(lower "$logheads")" ]] || die "LogHeads deployed at $deployed_logheads, not at $logheads"
 fi
 
-step "Fund the house with $house_usdc USDC in the vault, and the dev wallet with $dev_usdc USDC"
+if ((house_usdc > 0)); then
+  step "Fund the house with $house_usdc USDC in the vault, and the dev wallet with $dev_usdc USDC"
+else
+  step "Leave the house empty, and fund the dev wallet with $dev_usdc USDC"
+fi
 send() { nice -n 10 cast send "$@" --rpc-url "$rpc" >>"$step_log" 2>&1; }
 if ((house_usdc > 0)); then
   send "$usdc" 'mint(address,uint256)' "$house" $((house_usdc * usdc_units)) --private-key "$deployer_key"
@@ -805,7 +824,7 @@ venues_priced() {
     jq -e --argjson venue "$venue_markets" '[.[] | select(.id as $id | $venue | index($id)) | .mark] | length > 0 and all(. != null)' \
       >/dev/null 2>&1
 }
-if ! poll 60 venues_priced; then
+if [[ "$venue_markets" != "[]" ]] && ! poll 60 venues_priced; then
   echo "    The venue feeds have not priced every crypto market yet; each gets a mark once two venues quote it." >&2
 fi
 markets="$(curl -sk --max-time 5 "$api/v1/markets")"
@@ -856,7 +875,7 @@ if [[ -n "${STACK_INFO_FILE:-}" ]]; then
     --arg usdc "$usdc" --arg monkey "$monkey" --arg staking "$staking" --arg registry "$registry" \
     --arg devWallet "$dev_wallet" --arg devWalletKey "$dev_wallet_key" --arg houseKey "$house_key" \
     --arg deployerKey "$deployer_key" --arg workDir "$work" --arg nodeLog "$work/node.log" --arg metricsUrl "$metrics_url" \
-    --arg genesisFile "$genesis_file" --arg genesisSummary "$genesis_summary" \
+    --arg genesisFile "$genesis_file" --arg genesisSummary "$genesis_summary" --argjson houseUsdc "$house_usdc" \
     --arg secondEngine "$second_engine" --arg secondApiOrigin "$second_api" --arg secondNodeLog "$work/second.log" \
     --arg dev2Wallet "${dev_wallet2:-}" --arg dev2WalletKey "${dev_wallet2_key:-}" --arg payerKey "${payer_key:-}" \
     --arg secondRelease "${second_release:-}" --arg firstRelease "${first_release:-}" \
@@ -866,7 +885,7 @@ if [[ -n "${STACK_INFO_FILE:-}" ]]; then
     '{consoleUrl: $consoleUrl, apiOrigin: $apiOrigin, rpcUrl: $rpcUrl, chainId: 31337, vault: $vault, usdc: $usdc,
       monkey: $monkey, staking: $staking, registry: $registry,
       devWallet: $devWallet, devWalletKey: (if $devWalletKey == "" then null else $devWalletKey end),
-      houseKey: $houseKey, deployerKey: $deployerKey, genesisFile: $genesisFile, genesisSummary: $genesisSummary, workDir: $workDir, nodeLog: $nodeLog, metricsUrl: $metricsUrl}
+      houseKey: $houseKey, deployerKey: $deployerKey, genesisFile: $genesisFile, genesisSummary: $genesisSummary, houseUsdc: $houseUsdc, workDir: $workDir, nodeLog: $nodeLog, metricsUrl: $metricsUrl}
       + (if $secondEngine == "1" then {secondApiOrigin: $secondApiOrigin, secondNodeLog: $secondNodeLog,
           secondDevWallet: $dev2Wallet, secondDevWalletKey: (if $dev2WalletKey == "" then null else $dev2WalletKey end),
           payerKey: $payerKey, firstRelease: $firstRelease, secondRelease: $secondRelease,
@@ -885,7 +904,11 @@ if [[ -n "$dev_wallet_key" ]]; then
 else
   wallet_line="$dev_wallet (DEV_WALLET, given 100 ETH for gas)"
 fi
-genesis_label="$genesis_file (the development genesis)"
+if [[ "$genesis_file" == "$engine_dir/config/dev.toml" ]]; then
+  genesis_label="$genesis_file (the development genesis)"
+else
+  genesis_label="$genesis_file (development values for the vault, staking and house)"
+fi
 staking_values="Development values, not production parameters: epochs of $((staking_epoch_secs / 60)) minutes from
                    $staking_start, an unstake cooldown of $((staking_cooldown_secs / 60)) minutes, and a liquidity floor of
                    $staking_floor_usdc USDC."

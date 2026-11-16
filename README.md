@@ -80,10 +80,11 @@ house cap floors, close-spread ceilings, volume tiers with their limits and fee 
 so an opening order meets the cap floors as at launch. The crypto markets (BTC-USD, ETH-USD, SOL-USD) price from the live
 venues. The markets whose launch sources are vendors needing keys (foreign exchange, indices, commodities, shares) have
 no price, because a node's feed is the live venues or the mock and never both, and the vendor sources accept only their
-own domains; the summary lists them as unpriced.
+own domains; the summary lists them as unpriced. A genesis with no crypto market prices nothing, and one that lists
+`[genesis.staking]` is refused, because the stack initialises staking itself against the contracts it deploys.
 
-A launch genesis also takes the launch deployment's values from the engine's `ops/runbooks/production-deployment.toml`:
-the MONKEY period budget and the vault's exit period, claim window and deposit staleness stay as they are at launch. The
+`config/production-genesis.toml` (or any genesis with `LAUNCH_VALUES=1`; `LAUNCH_VALUES=0` keeps the development values) also
+takes the launch deployment's values from the engine's `ops/runbooks/production-deployment.toml`: the MONKEY period budget and the vault's exit period, claim window and deposit staleness stay as they are at launch. The
 summary names what the stack shortens to be watchable: the staking epoch and the unstake cooldown (five minutes each), the
 liquidity floor (10,000 USDC, since the house starts empty), the timelock's delay (one second) and the start of
 emissions and staking (the next minute). `./scripts/dev-local-stack-ctl.sh status` names the genesis the stack runs, and
