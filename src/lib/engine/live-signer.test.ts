@@ -174,6 +174,32 @@ describe("an answer in flight", () => {
     await expect(inFlight).rejects.toThrow(SIGNER_SUPERSEDED);
   });
 
+  it("is discarded when the node now signs as another key named at the same epoch, and once a later epoch names that key (monkey-trading/console#381)", async () => {
+    for (const lands of ["at the same epoch", "at the later epoch"] as const) {
+      const held = { address: ENCLAVE };
+      const attests: Verifier = { ...acceptAll, verifyMockAttestation: () => ({ ok: true, enclave: { address: held.address, release: null, config: null } }) };
+      const { live, node, operator, reply, gates } = client(attests);
+      operator({ epoch: 5, address: ENCLAVE });
+      reply("/v1/markets", []);
+      await live.verify();
+      let release: () => void = () => undefined;
+      gates.markets = new Promise<void>((resolve) => { release = resolve; });
+      const inFlight = live.markets();
+      await settle();
+      // The node at the same origin now signs as another enclave, whose word names that key at the epoch the first was named at.
+      held.address = OTHER;
+      node.attestation(() => OTHER);
+      operator({ epoch: 5, address: OTHER }, OTHER);
+      await expect(live.verify(), lands).resolves.toEqual({ kind: "unverified", reason: SIGNER_SUPERSEDED });
+      if (lands === "at the later epoch") {
+        operator({ epoch: 6, address: OTHER }, OTHER);
+        await expect(live.verify(), lands).resolves.toMatchObject({ kind: "mock" });
+      }
+      release();
+      await expect(inFlight, lands).rejects.toThrow(SIGNER_SUPERSEDED);
+    }
+  });
+
   it("ends an archive scan under a signer the vault stopped naming, on the next frame", async () => {
     const { live, operator, reply, sockets } = client();
     operator({ epoch: 5, address: ENCLAVE });

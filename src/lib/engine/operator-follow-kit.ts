@@ -30,7 +30,7 @@ export class TrialClient {
   /** The node's signed `/v1/operators`, of which the follower reads each candidate's registered hostname. */
   operatorList: () => Promise<unknown> = async () => ({ candidates: [] });
   stats = { operator: () => this.operatorRead(), operators: () => this.operatorList() };
-  /** The signer every route read named, a refused one's included, as a live client's naming keeps it, and reports each rise of through `watch`. */
+  /** The signer every route read named, a refused one's included, as a live client's naming keeps it, and reports each rise of, or second key named at its epoch, through `watch`. */
   readonly naming = new SignerNaming(undefined, () => { for (const watcher of this.watchers) watcher({ type: "signer" }); });
   /** Each signer the follower put to this client, oldest first. */
   heard: SignerFloor[] = [];

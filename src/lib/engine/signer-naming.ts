@@ -27,8 +27,8 @@ export interface OperatorClaim {
 /** What `judge` weighs: a node's claim, or the highest signer another client heard, which may name two keys at its epoch. */
 export type SignerWord = { enclave?: string; signer?: Readonly<SignerFloor> };
 
-/** Why a check refuses a node for the signer the vault names, and whether a read of the vault naming its enclave would have taken it (`unread`). */
-export type SignerRefusal = { reason: string; unread: boolean };
+/** Why a check refuses a node for the signer the vault names, and whether a read of the vault naming its enclave would have taken it (`vaultLifts`). */
+export type SignerRefusal = { reason: string; vaultLifts: boolean };
 
 /** What the console says when the vault names a signer other than the enclave the node answers with. */
 export const SIGNER_SUPERSEDED = "The vault names another signer than this node's enclave, so the node's answers are refused.";
@@ -50,6 +50,8 @@ export class SignerNaming {
 
   /** The highest epoch seen and the key the vault names at it, none once two were named at it. */
   private named: SignerFloor | null = null;
+  /** Each key named at the highest epoch, or held since a word raised it: a word at a later epoch puts each aside but the key it names (monkey-trading/console#381). */
+  private readonly keys = new Set<string>();
   /** Enclave addresses a stated signer has put aside, the key named at an earlier epoch among them: a node that attests one stays refused until the vault names it again at a later epoch. */
   private readonly superseded = new Set<string>();
   /** Those a read of the vault put aside: only a read of the vault that names one takes it back, never a word, which may be older than the read. */
@@ -67,9 +69,15 @@ export class SignerNaming {
     const before = this.named;
     const named = (this.named = raised(before, answer.signer));
     if (before === null || named.epoch > before.epoch) {
-      // The key named at the earlier epoch is no longer the vault's, whichever node says so.
-      if (before !== null && before.address !== null && before.address !== named.address) this.superseded.add(before.address);
+      // The keys named at the earlier epoch are no longer the vault's, whichever node says so.
+      for (const key of this.keys) if (key !== named.address) this.superseded.add(key);
+      this.keys.clear();
       if (named.address !== null && !this.vaultRefused.has(named.address)) this.superseded.delete(named.address);
+    }
+    if (answer.signer.epoch === named.epoch) {
+      if (answer.signer.address !== null) this.keys.add(answer.signer.address.toLowerCase());
+      // No key named at an epoch two keys were named at stands on a word, its answers in flight included.
+      if (named.address === null) for (const key of this.keys) this.superseded.add(key);
     }
     const stands = trusted === null || trusted === named.address;
     if (trusted !== null && !stands) this.superseded.add(trusted);
@@ -85,23 +93,23 @@ export class SignerNaming {
    * route, which `operatorClaim` reads as nothing stated, or whose liveness rule does not run) is judged by what other reads have said:
    * it is refused, and put aside, while they name another key at the highest epoch seen, or two keys at it, unless this check's own read
    * of the vault named it (`vaultJudged`, monkey-trading/console#376). A word that cannot be read refuses the node: the next answer it is
-   * asked for checks it again. A refusal past the node's own word with no read of the vault is `unread`: a read naming the enclave would
-   * have taken it (monkey-trading/console#379).
+   * asked for checks it again. A refusal past the node's own word with no read of the vault is one a read naming the enclave would have
+   * lifted (`vaultLifts`, monkey-trading/console#379).
    */
   async refusal(address: string, vaultJudged: boolean): Promise<SignerRefusal | null> {
     let claim: OperatorClaim;
     try {
       claim = (await this.operatorClaim?.(address)) ?? {};
     } catch (error) {
-      return { reason: `${SIGNER_UNREAD} ${error instanceof Error ? error.message : "The read failed."}`, unread: false };
+      return { reason: `${SIGNER_UNREAD} ${error instanceof Error ? error.message : "The read failed."}`, vaultLifts: false };
     }
     const judged = this.judge(address, claim);
-    if (judged !== null) return { reason: judged.reason, unread: false };
+    if (judged !== null) return { reason: judged.reason, vaultLifts: false };
     const unnamed = claim.signer === undefined && !vaultJudged && this.named !== null && this.named.address !== address;
     if (!unnamed && !this.refuses(address)) return null;
     // An answer or a scan still in flight under it is refused too.
     this.superseded.add(address);
-    return { reason: SIGNER_SUPERSEDED, unread: !vaultJudged };
+    return { reason: SIGNER_SUPERSEDED, vaultLifts: !vaultJudged };
   }
 
   /** The vault itself, read through the wallet, names `signer`: an enclave it does not name is put aside until a read of the vault names it, and the one it does is taken back. */
@@ -119,6 +127,8 @@ export class SignerNaming {
   hold(floor: Readonly<SignerFloor>): void {
     const before = this.named;
     this.named = raised(before, floor);
+    // Kept for a word's later epoch to put aside.
+    if (floor.address !== null && floor.epoch === this.named.epoch) this.keys.add(floor.address.toLowerCase());
     if (this.named !== before) this.onRaised();
   }
 

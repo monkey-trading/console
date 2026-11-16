@@ -42,8 +42,8 @@ export class NodeTrust {
   private lastJudged = false;
   /** How many reads of the vault's word have been taken: a check's own read stands only while no newer one came. */
   private vaultHeard = 0;
-  /** Whether the verdict now is a refusal a read of the vault naming the enclave would have lifted, so a read that comes later decides again (monkey-trading/console#379). */
-  private refusedUnread = false;
+  /** Whether the verdict now is a refusal a read of the vault naming the enclave would lift, so a read that comes later decides again (monkey-trading/console#379). */
+  private vaultLifts = false;
   /** The address whose last failed answer a re-verification did not explain, and when: it is not re-verified again for a while. */
   private suspect: { signer: string; at: number } | null = null;
   /** The signer the node says the vault names (monkey-trading/console#280). */
@@ -176,12 +176,12 @@ export class NodeTrust {
   private outdatedBy(signer: string): boolean {
     if (!this.judgedByVault) return false;
     // A check running now may have read the vault before these facts.
-    return this.verifying !== null || this.current.kind === "attested" || this.refusedUnread || (this.signerAddress !== null && this.signerAddress !== signer);
+    return this.verifying !== null || this.current.kind === "attested" || this.vaultLifts || (this.signerAddress !== null && this.signerAddress !== signer);
   }
 
   /** The vault's read has answered after the check gave up on it: a verdict that went without it may now have it. */
   vaultAnsweredLate(): void {
-    if (this.verifying !== null || this.current.kind === "attested" || this.refusedUnread) void this.verifyAfresh();
+    if (this.verifying !== null || this.current.kind === "attested" || this.vaultLifts) void this.verifyAfresh();
   }
 
   /** The device clock disagrees with the node's signed time by `skewMs`; nothing the node says can be judged. */
@@ -198,16 +198,16 @@ export class NodeTrust {
     this.setStatus(this.verifiedStatus ?? { kind: "checking" });
   }
 
-  private setStatus(status: AttestationStatus, unread = false): void {
+  private setStatus(status: AttestationStatus, vaultLifts = false): void {
     this.current = status;
-    this.refusedUnread = unread;
+    this.vaultLifts = vaultLifts;
     if (status.kind === "mock" || status.kind === "verified" || status.kind === "attested") this.verifiedStatus = status;
     this.deps.onStatus(status);
   }
 
   /** Ends a check on `refusal`, unless its own read of the node's word found the device clock wrong (a verdict other than `earlier`): that says more, and stays. */
   private refused(refusal: SignerRefusal, earlier: AttestationStatus): void {
-    if (this.current.kind !== "clock" || this.current === earlier) this.setStatus({ kind: "unverified", reason: refusal.reason }, refusal.unread);
+    if (this.current.kind !== "clock" || this.current === earlier) this.setStatus({ kind: "unverified", reason: refusal.reason }, refusal.vaultLifts);
   }
 
   private trust(address: string, judged: boolean): void {
@@ -234,11 +234,11 @@ export class NodeTrust {
    * the same two checks a hardware quote does once a wallet can read the vault; a mock quote proves
    * no enclave, so this exercises the path and vouches for nothing.
    */
-  private async mockRefusal(configHash: unknown, address: string): Promise<{ refused: string; unread?: true } | { judged: boolean }> {
+  private async mockRefusal(configHash: unknown, address: string): Promise<{ refused: string; vaultLifts?: true } | { judged: boolean }> {
     if (this.deps.devDigests.length === 0) return { judged: false };
     const vault = await readVault(this.deps.vaultFacts());
     if (vault.kind === "none") return { judged: false };
-    if (vault.kind === "failed") return { refused: `Your wallet could not read the vault's current release: ${vault.reason}`, unread: true };
+    if (vault.kind === "failed") return { refused: `Your wallet could not read the vault's current release: ${vault.reason}`, vaultLifts: true };
     this.vaultNames(vault.facts.signer);
     const digests = this.deps.devDigests.map((digest) => ({ launchDigest: digest as Hex })); // deploy.ts checked each is 0x hex
     if (!isConfigHash(configHash) || digestNamed(digests, vault.facts.release, configHash) === null) return { refused: NOT_NAMED };
@@ -262,9 +262,9 @@ export class NodeTrust {
         if (!mock.ok) return this.setStatus({ kind: "unverified", reason: mock.reason });
         const address = mock.enclave.address.toLowerCase();
         const byVault = await this.mockRefusal(configHash, address);
-        if ("refused" in byVault) return this.setStatus({ kind: "unverified", reason: byVault.refused }, byVault.unread === true);
+        if ("refused" in byVault) return this.setStatus({ kind: "unverified", reason: byVault.refused }, byVault.vaultLifts === true);
         const superseded = await this.naming.refusal(address, byVault.judged);
-        if (superseded !== null) return this.refused({ ...superseded, unread: superseded.unread && this.deps.devDigests.length > 0 }, earlier); // with no stand-in digests no read of the vault judges it
+        if (superseded !== null) return this.refused({ ...superseded, vaultLifts: superseded.vaultLifts && this.deps.devDigests.length > 0 }, earlier); // with no stand-in digests no read of the vault judges it
         this.trust(address, this.deps.devDigests.length > 0);
         return this.setStatus({ kind: "mock" });
       }
