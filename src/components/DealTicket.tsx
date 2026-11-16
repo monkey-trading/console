@@ -85,14 +85,14 @@ export function DealTicket() {
   if (parsedSize.kind === "refused") sizeProblems.push(parsedSize.message);
   if (kind !== "market" && triggerPrice === null) problems.push(price.trim() === "" ? "Enter a trigger price." : "Enter the trigger price in digits, such as 61250.50.");
   const sizeMissing = parsedSize.kind === "empty" || (parsedSize.kind === "qty" && qty === 0n);
-  const blockSentence = (why: string | null) => (why === null ? null : `Trading is paused: ${why}.`);
+  const blockSentence = (why: string | null) => (why === null ? null : `Trading is unavailable because ${why}.`);
   const readOnlyWhy = signBlock(state.attestation, state.stream, state.wallet?.readOnly === true);
   // Trading never registers a key: until the declaration is signed, this button reopens setup. A declared wallet is asked for its key when an order needs it.
   const setup = setupGate(state);
-  const setupNote = setup === null ? null : setup === "reading" ? "Loading your account…" : "Sign the declaration and authorize this browser to trade.";
+  const setupNote = setup === null ? null : setup === "reading" ? "Loading your account…" : "To trade, sign the eligibility declaration and authorize this browser.";
   // Why the console cannot sign comes first: a node it does not trust may never answer the read that setup waits on.
   // The paused state then names the one market-level reason, folding the ticket's own line for it.
-  const gate = !state.wallet ? "Connect a wallet to trade." : blockSentence(readOnlyWhy) ?? setupNote ?? blockSentence(paused?.why ?? null);
+  const gate = !state.wallet ? "Connect a wallet to trade." : blockSentence(readOnlyWhy) ?? setupNote ?? paused?.text ?? null;
   const folded = paused?.cause === "closed" ? MARKET_CLOSED : paused?.cause === "reduce_only" ? REDUCE_ONLY : null;
   const shownProblems = folded === null ? problems : problems.filter((p) => p !== folded);
   const canPlace = gate === null && shownProblems.length === 0 && sizeProblems.length === 0 && !sizeMissing && !state.busy;
@@ -147,7 +147,7 @@ export function DealTicket() {
             <dl aria-labelledby={`${id}-limits`} className="mt-1 grid grid-cols-3 gap-2 text-label text-fg-3">
               <div><dt>Best-price size</dt><dd className="mt-0.5 text-fg-2">{limits === null ? "—" : describeBestPrice(limits.bestPriceBound)}</dd></div>
               <div><dt>Max leverage</dt><dd className="mt-0.5 text-fg-2">{limits === null || limits.leverage === null ? "—" : `${formatLeverage(limits.leverage)}${limits.weekendSets ? " (weekend margin)" : ""}`}</dd></div>
-              <div><dt>Open orders</dt><dd className="mt-0.5 text-fg-2">{limits === null ? "—" : `${limits.resting}${limits.orderLimit === null ? "" : ` of ${limits.orderLimit}`}`}</dd></div>
+              <div><dt>Working orders</dt><dd className="mt-0.5 text-fg-2">{limits === null ? "—" : `${limits.resting}${limits.orderLimit === null ? "" : ` of ${limits.orderLimit}`}`}</dd></div>
             </dl>
           </div>
         )}
@@ -155,7 +155,7 @@ export function DealTicket() {
           <label htmlFor={`${id}-size`} className="block text-caption text-fg-2">Size (contracts)</label>
           <input {...AMOUNT_INPUT} id={`${id}-size`} value={size} inputMode="decimal" maxLength={24} aria-describedby={`${id}-size-note ${id}-size-problems`} onChange={(event) => setTypedSize(event.target.value)} className={INPUT} />
           <p id={`${id}-size-note`} className="mt-1 text-label text-fg-3">
-            1 contract = 1 {contractUnit(market)} · {preview.notional === null || qty === 0n ? "Value —" : `Value ≈ $${formatFixedPlaces(preview.notional, 2)}`}{preview.notional !== null && qty > 0n && kind !== "market" && triggerPrice !== null && triggerPrice > 0n ? " at the trigger price" : ""}
+            1 contract = 1 {contractUnit(market)} · {preview.notional === null || qty === 0n ? "Notional value —" : `Notional value ≈ $${formatFixedPlaces(preview.notional, 2)}`}{preview.notional !== null && qty > 0n && kind !== "market" && triggerPrice !== null && triggerPrice > 0n ? " at the trigger price" : ""}
           </p>
           <div id={`${id}-size-problems`} aria-live="polite" className="space-y-1 text-label leading-relaxed text-ember">
             {sizeMissing && <p className="mt-1 text-fg-3">{NO_SIZE}</p>}
@@ -173,7 +173,7 @@ export function DealTicket() {
                 <button key={bps} type="button" aria-pressed={slippage === bps} onClick={() => setSlippage(bps)} className={`min-h-11 rounded border py-2 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow ${slippage === bps ? "border-glow bg-glow/10 text-glow" : "border-line-2 text-fg-2"}`}>{bps} bps</button>
               ))}
             </div>
-            <p className="mt-2 text-label leading-relaxed text-fg-3">{kind === "market" ? "Your order won't fill if the price moves against you by more than this before it reaches the market." : "Limit and stop orders fill at the market price when triggered."}</p>
+            <p className="mt-2 text-label leading-relaxed text-fg-3">{kind === "market" ? "In a fast-moving market, the execution price of a market order may be worse than the price quoted on screen. Restricting the maximum slippage means orders that would fill at an adverse price are rejected." : "The maximum slippage applies only to market orders. A limit order is filled only at its limit price or better, and a stop order is executed at the prevailing market price once its trigger price is reached."}</p>
           </fieldset>
         </details>
         <button type="submit" aria-disabled={!canPlace && setup !== "needed"} className={`mt-4 min-h-12 w-full rounded border py-3 text-caption lg:min-h-0 focus-visible:outline-2 focus-visible:outline-glow aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:bg-transparent aria-disabled:text-fg-3 ${side === "buy" ? "border-glow bg-glow/10 text-glow hover:bg-glow/20" : "border-ember bg-ember/10 text-ember hover:bg-ember/20"}`}>
@@ -187,13 +187,13 @@ export function DealTicket() {
           {!gate && shownProblems.map((p) => <p key={p}>{p}{p === NO_FUNDS && <> <FundingLink /></>}</p>)}
         </div>
       </form>
-      <MarketInfo market={market} spreadTiers={spreadTiers} ownBands={ownBands} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={terms?.stressLevels[market.stress] ?? null} notice={terms === null ? null : (state.listingNotices[market.id] ?? null)} paramsNote={houseTermsNote(state)} />
+      <MarketInfo market={market} spreadTiers={spreadTiers} ownBands={ownBands} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={terms?.stressLevels[market.stress] ?? null} closeoutBps={terms?.closeoutLevelBps ?? null} notice={terms === null ? null : (state.listingNotices[market.id] ?? null)} paramsNote={houseTermsNote(state)} />
     </>
   );
 }
 
-/** The spread line under the prices: the executable spread for the size, and the toxicity add-on on each price, named extra spread, when there is one. */
+/** The spread line under the prices: the executable spread for the size, and the account's toxicity add-on, named extra spread, when there is one. */
 function spreadLine(spreadTenths: number | null, live: boolean, toxicityBps: number) {
-  if (spreadTenths === null) return "No price for this size yet.";
-  return <>{live ? "Your spread" : "Spread"} for this size <span className="text-fg-2">{formatTenthPercent(spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(spreadTenths)})</span>{toxicityBps > 0 && <>, including <span className="text-fg-2">+{toxicityBps} {toxicityBps === 1 ? "bp" : "bps"}</span> of extra spread on each price</>}</>;
+  if (spreadTenths === null) return "No price is available for this order size yet.";
+  return <>{live ? "Your spread" : "The spread"} for this order size is <span className="text-fg-2">{formatTenthPercent(spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(spreadTenths)})</span>{toxicityBps > 0 && <>, including an extra spread of <span className="text-fg-2">{toxicityBps} {toxicityBps === 1 ? "bp" : "bps"}</span> that applies to your account</>}.</>;
 }

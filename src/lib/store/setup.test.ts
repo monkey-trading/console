@@ -155,7 +155,7 @@ describe("what closes it", () => {
     await attestEligibility(store, "professional");
     expect(store.getSnapshot().blocked).toBeNull();
     expect(setupVisible(store.getSnapshot())).toBe(true);
-    expect(store.getSnapshot().notices.setup?.text).toBe("The signature wasn't accepted.");
+    expect(store.getSnapshot().notices.setup?.text).toBe("The request's signature was not accepted. Try again.");
   });
 
   it("stays on the step and tells the trader to try again later when the node limits new wallets", async () => {

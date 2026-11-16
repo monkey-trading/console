@@ -26,16 +26,16 @@ function Steady({ shown, longest }: { shown: ReactNode; longest: ReactNode }) {
 export function CloseSummary({ shape, close, why, side, places, converts }: { shape: CloseShape; close: ClosePreview | null; why: string | null; side: Side; places: number; converts: boolean }) {
   const bound = close === null || !close.exact;
   // A market quoted in another currency books its result in USD at the FX index the fill meets.
-  const holds = converts ? "the price and exchange rate hold" : "the price holds";
+  const holds = converts ? "the price and the exchange rate hold" : "the price holds";
   // A sell closes a long at this price or better, a buy a short at this price or better.
   const priceWord = bound ? (side === "sell" ? "at least " : "at most ") : "";
   // A bound shows its figures rounded the way its claim reads: an "at most" price up, an "at least" amount down.
   const price = close === null ? 0n : bound ? roundToPlaces(close.price, places, side === "sell" ? "down" : "up") : close.price;
   const least = (amount: bigint) => formatUsd(bound ? roundToPlaces(amount, 2, "down") : amount);
-  const boundNote = `These are limits. If ${holds}, you close at this price or better and keep at least this much, as the fee rate can only fall. If the price moves against you, the order can still fill at a worse price, within your max slippage.`;
-  const exactNote = `These figures are exact if ${converts ? "the price, exchange rate" : "the price"} and fee rate don't change. If the price moves against you, the order can still fill at a worse price, within your max slippage.`;
+  const boundNote = `These figures are limits. If ${holds}, the order will close at the price shown or better, and you will keep at least the amount shown, because the fee rate can only fall. If the price moves against you, the order may still fill at a worse price, within your maximum slippage.`;
+  const exactNote = `These figures are exact provided that ${converts ? "the price, the exchange rate" : "the price"} and the fee rate do not change. If the price moves against you, the order may still fill at a worse price, within your maximum slippage.`;
   const boundFee = close === null ? "" : `${formatRate(close.feeBps)} of profit, ${formatUsd(close.fee)} at this price`;
-  const fee = close === null ? "" : bound ? boundFee : close.realised > 0n ? `${formatRate(close.feeBps)} of profit, ${formatUsd(close.fee)}` : "none without a profit";
+  const fee = close === null ? "" : bound ? boundFee : close.realised > 0n ? `${formatRate(close.feeBps)} of profit, ${formatUsd(close.fee)}` : "None without a profit";
   return (
     <div className="mt-4 rounded border border-line-2 px-3 py-3 text-caption">
       <p className="text-label tracking-caps text-fg-3 uppercase">{shape.whole ? "Closes the whole position" : shape.reverses ? "Closes the whole position and opens the other side" : `Closes ${formatFixedPlaces(shape.closed, 6)} of the position`}</p>

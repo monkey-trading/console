@@ -67,12 +67,12 @@ describe("ticketPrices", () => {
   });
 
   it("says why a live order has no price: no quote yet, an account not yet credited, no market price, too large, or declined", () => {
-    expect(live("1", "buy", null)).toEqual({ bid: null, offer: null, price: null, exactClose: false, toxicityBps: 0, spreadTenths: null, problem: "Waiting for a price.", problemIsSize: false });
-    expect(live("1", "buy", null, UNCREDITED).problem).toBe("Prices for your account show after your first deposit.");
-    expect(live("1", "buy", null, "unknown market 9").problem).toBe("No price is available for this market: unknown market 9.");
+    expect(live("1", "buy", null)).toEqual({ bid: null, offer: null, price: null, exactClose: false, toxicityBps: 0, spreadTenths: null, problem: "Waiting for a live price for this market.", problemIsSize: false });
+    expect(live("1", "buy", null, UNCREDITED).problem).toBe("Live prices for your account will be shown once your first deposit has been credited.");
+    expect(live("1", "buy", null, "unknown market 9").problem).toBe("No live price is currently available for this market. Please reload the page to try again.");
     expect(live("1", "buy", { ...QUOTE, unavailable: { kind: "market_closed" }, ask: [], bid: [] })).toMatchObject({ price: null, problem: "This market is closed.", problemIsSize: false });
-    expect(live("6", "sell")).toMatchObject({ price: null, offer: f("100.5"), problem: "This order is too large. Try a smaller size.", problemIsSize: true });
-    expect(live("6", "buy")).toMatchObject({ price: f("100.5"), problem: "With your equity, the largest size you can open here is about 5 contracts.", problemIsSize: true });
+    expect(live("6", "sell")).toMatchObject({ price: null, offer: f("100.5"), problem: "This order is too large to be priced. Please try a smaller order size.", problemIsSize: true });
+    expect(live("6", "buy")).toMatchObject({ price: f("100.5"), problem: "Insufficient margin for this order size. With your current equity, the largest order you can place is approximately 5 contracts.", problemIsSize: true });
   });
 
   it("shows the mock's own estimate, which needs no quote", () => {
@@ -97,16 +97,16 @@ describe("a covering step the node's ladder declines", () => {
 
   it("shows the largest size the account can open, never the probe's equity or margin", () => {
     const result = live("0.128865", "buy", btcLadder, null, BTC_MARK);
-    expect(result.problem).toBe("With your equity, the largest size you can open here is about 0.12886 contracts.");
+    expect(result.problem).toBe("Insufficient margin for this order size. With your current equity, the largest order you can place is approximately 0.12886 contracts.");
     expect(result.price).toBe(f("77900"));
   });
 
   it("names the largest size at the size field's six places, and in the singular for one contract", () => {
     const margin = { kind: "insufficient_margin" as const, equity: "1", required: "9" };
     const ladder = (fitting: string): MarketQuote => ({ ...QUOTE, ask: [{ qty: fitting, price: "100.1" }, { qty: "30", price: "100.5", declined: margin }] });
-    expect(live("29", "buy", ladder("25.773195876")).problem).toBe("With your equity, the largest size you can open here is about 25.773195 contracts.");
-    expect(live("29", "buy", ladder("1")).problem).toBe("With your equity, the largest size you can open here is about 1 contract.");
-    expect(live("29", "buy", ladder("0.0000005")).problem).toBe("Not enough equity to open a position here.");
+    expect(live("29", "buy", ladder("25.773195876")).problem).toBe("Insufficient margin for this order size. With your current equity, the largest order you can place is approximately 25.773195 contracts.");
+    expect(live("29", "buy", ladder("1")).problem).toBe("Insufficient margin for this order size. With your current equity, the largest order you can place is approximately 1 contract.");
+    expect(live("29", "buy", ladder("0.0000005")).problem).toBe("Insufficient margin. Your equity does not cover the margin this order requires.");
   });
 
   it("keeps a decline whose message carries no probe figures, and refuses no-size accounts without figures", () => {
@@ -118,10 +118,10 @@ describe("a covering step the node's ladder declines", () => {
         { qty: "8", price: "100.5", declined: { kind: "house_capacity" } },
       ],
     };
-    expect(live("6", "buy", capped).problem).toBe("This market is at its limit. Try a smaller size.");
+    expect(live("6", "buy", capped).problem).toBe("The house has reached its exposure limit in this market. Please try a smaller order size.");
     expect(live("6", "buy", capped).problemIsSize).toBe(true);
     const nothingFits: MarketQuote = { ...QUOTE, ask: [{ qty: "1", price: "100.1", declined: { kind: "insufficient_margin", equity: "0", required: "40" } }] };
-    expect(live("0.5", "buy", nothingFits).problem).toBe("Not enough equity to open a position here.");
+    expect(live("0.5", "buy", nothingFits).problem).toBe("Insufficient margin. Your equity does not cover the margin this order requires.");
   });
 });
 
@@ -139,7 +139,7 @@ describe("the toxicity add-on and the tier's leverage in a live quote", () => {
     const ladder: MarketQuote = { ...QUOTE, ask: [{ qty: "2", price: "100.1" }, { qty: "30", price: "100.5", declined: weekend }] };
     const result = ticketPrices({ live: true, quote: ladder, quoteError: null, preview: preview("29"), side: "buy", mark: f("100"), limits });
     expect(result.problemIsSize).toBe(true);
-    expect(result.problem).toBe("With your equity, the largest size you can open here is about 2 contracts. Weekend margin applies here, which allows up to 13x leverage.");
+    expect(result.problem).toBe("Insufficient margin for this order size. With your current equity, the largest order you can place is approximately 2 contracts. The higher weekend margin applies in this market, so the maximum leverage is 13x.");
   });
 
   it("explains a margin decline with the leverage the account's tier allows in the market", () => {
@@ -147,8 +147,8 @@ describe("the toxicity add-on and the tier's leverage in a live quote", () => {
     const margin = { kind: "insufficient_margin" as const, equity: "1", required: "9" };
     const ladder: MarketQuote = { ...QUOTE, ask: [{ qty: "2", price: "100.1" }, { qty: "30", price: "100.5", declined: margin }] };
     const withLimits = ticketPrices({ live: true, quote: ladder, quoteError: null, preview: preview("29"), side: "buy", mark: f("100"), limits });
-    expect(withLimits.problem).toBe("With your equity, the largest size you can open here is about 2 contracts. Volume tier 0 allows up to 20x leverage here.");
+    expect(withLimits.problem).toBe("Insufficient margin for this order size. With your current equity, the largest order you can place is approximately 2 contracts. Volume tier 0 allows leverage of up to 20x in this market.");
     const none: MarketQuote = { ...QUOTE, ask: [{ qty: "1", price: "100.1", declined: margin }] };
-    expect(ticketPrices({ live: true, quote: none, quoteError: null, preview: preview("1"), side: "buy", mark: f("100"), limits }).problem).toBe("Not enough equity to open a position here. Volume tier 0 allows up to 20x leverage here.");
+    expect(ticketPrices({ live: true, quote: none, quoteError: null, preview: preview("1"), side: "buy", mark: f("100"), limits }).problem).toBe("Insufficient margin. Your equity does not cover the margin this order requires. Volume tier 0 allows leverage of up to 20x in this market.");
   });
 });

@@ -11,7 +11,7 @@ const withMinimum = (market: MarketModel, minimum: string): MarketModel => ({ ..
 /** Whether the ticket's own check, for a resting order at `trigger`, refuses `size` on the minimum. */
 function belowMinimum(market: MarketModel, size: string, trigger: string): boolean {
   const { problems } = previewTicket({ market, side: "buy", qty: q(size), slippageBps: 10, resting: true, triggerPrice: q(trigger), account: account(1_000_000), houseNav: NAV });
-  return problems.some((p) => p.startsWith("Minimum order"));
+  return problems.some((p) => p.startsWith("The minimum order value"));
 }
 
 describe("a resting order's starting size", () => {

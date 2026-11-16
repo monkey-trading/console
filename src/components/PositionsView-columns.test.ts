@@ -58,7 +58,7 @@ describe("a position whose mark gain is smaller than its exit spread", () => {
     const html = render({ account: holding(2, 100_990), quotes: { 1: closing("sell", "100979.8") } });
     const [row] = rows(html);
     expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["-$20.40Details", "$0.00", "-$20.40Close"]);
-    expect(details(html)).toBe("This uses the price you'd close the whole position at. At the mark price it's $20.00, before the spread. There's no profit fee, because closing now doesn't make a profit.");
+    expect(details(html)).toBe("This figure is calculated at the price at which the entire position would close. At the mark price, before the spread, the unrealised profit or loss is $20.00. No profit fee applies, because closing the position now would not realise a profit.");
     expect(html).toContain('aria-hidden="false" class="block text-label text-fg-3">No fee without a profit');
   });
 
@@ -67,7 +67,7 @@ describe("a position whose mark gain is smaller than its exit spread", () => {
     const html = render({ account: holding(-2, 101_010), quotes: { 1: closing("buy", "101020") } });
     const [row] = rows(html);
     expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["-$20.00Details", "$0.00", "-$20.00Close"]);
-    expect(details(html)).toContain("At the mark price it's $20.00, before the spread. There's no profit fee, because closing now doesn't make a profit.");
+    expect(details(html)).toContain("At the mark price, before the spread, the unrealised profit or loss is $20.00. No profit fee applies, because closing the position now would not realise a profit.");
   });
 });
 
@@ -77,7 +77,7 @@ describe("a position at a gain after the exit spread", () => {
     const html = render(GAIN);
     const [row] = rows(html);
     expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["$1,959.60Details", "$195.96", "$1,763.64Close"]);
-    expect(details(html)).toBe("This uses the price you'd close the whole position at. At the mark price it's $2,000.00, before the spread.");
+    expect(details(html)).toBe("This figure is calculated at the price at which the entire position would close. At the mark price, before the spread, the unrealised profit or loss is $2,000.00.");
     // The card reserves the note's line, hidden from view and from a screen reader.
     expect(html).toContain('aria-hidden="true" class="block text-label invisible">No fee without a profit');
   });
@@ -97,20 +97,20 @@ describe("the table's one row per position", () => {
     const html = render({ ...GAIN, pricingCurrent: false, houseStateStatus: "read" });
     const [row] = rows(html);
     expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["$1,959.60Details", "—", "—Close"]);
-    expect(details(html)).toContain("The fee and close figures aren't shown yet. The trading terms changed. Loading the new ones.");
+    expect(details(html)).toContain("The profit fee and closing figures are not yet available. The trading terms have changed. The new terms are loading.");
   });
 
   it("withholds every figure that needs a price while the node has quoted none, naming the market to select", () => {
     const html = render({ account: holding(2, 100_000), quotes: {} });
     const [row] = rows(html);
     expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["—Details", "—", "—Close"]);
-    expect(details(html)).toContain("Select BTC-USD to see its closing price. At the mark price it's $2,000.00.");
+    expect(details(html)).toContain("Select BTC-USD in the watchlist to load its closing price. At the mark price, the unrealised profit or loss is $2,000.00.");
   });
 
   it("says a closed market is closed, not that its rate is unread, though the mock still prices it", () => {
     const html = render({ ...GAIN, markets: [{ ...market, open: false }] });
-    expect(details(html)).toContain("The market is closed, so there's no closing price.");
-    expect(details(html)).not.toContain("rate hasn't loaded");
+    expect(details(html)).toContain("The market is closed, so no closing price is available.");
+    expect(details(html)).not.toContain("rate has not loaded");
   });
 
   it("gives the figure columns the same width, shown or withheld, and the hold room for its longest value", () => {
@@ -158,10 +158,10 @@ describe("a fee that may still change", () => {
 
 describe("a held market the node does not quote", () => {
   const unquoted = () => render({ account: holding(2, 100_000), quotes: {} });
-  const left = (html: string) => html.match(/Close all skips [^<]*/)?.[0];
+  const left = (html: string) => html.match(/The following positions? (is|are) not included in Close all[^<]*/)?.[0];
 
   it("tells the desktop trader, in Close all's note, to select the market for its closing price", () => {
-    expect(left(unquoted())).toBe("Close all skips BTC-USD (select it to get a price).");
+    expect(left(unquoted())).toBe("The following position is not included in Close all: BTC-USD (select it in the watchlist to load its closing price).");
   });
 
   it("does not say so of a market that is quoted, or of one the mock prices itself", () => {
@@ -177,15 +177,15 @@ describe("the phone card's height", () => {
 
   it("keeps the Close now figure's reason out of the card, in the row's explanation only", () => {
     const html = unquotedCard();
-    expect(card(html)).not.toContain("Waiting for a closing price");
-    expect(details(html)).toContain("Select BTC-USD to see its closing price.");
+    expect(card(html)).not.toContain("The closing price for this position is still loading");
+    expect(details(html)).toContain("Select BTC-USD in the watchlist to load its closing price.");
   });
 
   it("has the same elements whether or not a closing price has arrived, the select line mounted and hidden when it is not needed", () => {
     const quoted = render({ ...GAIN, quoted: [1] });
     expect(shape(unquotedCard())).toBe(shape(quoted));
-    expect(card(quoted)).toContain('aria-hidden="true" class="mt-2 text-label invisible">Select BTC-USD to see its closing price.');
-    expect(card(unquotedCard())).toContain('aria-hidden="false" class="mt-2 text-label text-fg-3">Select BTC-USD to see its closing price.');
+    expect(card(quoted)).toContain('aria-hidden="true" class="mt-2 text-label invisible">Select BTC-USD in the watchlist to load its closing price.');
+    expect(card(unquotedCard())).toContain('aria-hidden="false" class="mt-2 text-label text-fg-3">Select BTC-USD in the watchlist to load its closing price.');
   });
 });
 

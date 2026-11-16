@@ -64,7 +64,7 @@ export function describeNextFallShort(fee: FeeNow, baseBps: number | null, now: 
 }
 
 /** A rate in bps as a person says it, with no trailing zeros: `10000` is `100%`, `950` is `9.5%`. */
-function spokenRate(bps: number): string {
+export function spokenRate(bps: number): string {
   const part = bps % 100;
   return `${Math.trunc(bps / 100)}${part === 0 ? "" : `.${String(part).padStart(2, "0").replace(/0+$/, "")}`}%`;
 }
@@ -81,6 +81,6 @@ export function describeSchedule(terms: FeeTerms): string {
   const curve = terms.profitFeeCurve;
   const first = curve[0];
   const base = baseFrom(terms.profitFeeBps, curve);
-  if (first === undefined || base === 0) return `The fee is ${spokenRate(terms.profitFeeBps)} of the profit, however long you hold the position.`;
+  if (first === undefined || base === 0) return `The fee is ${spokenRate(terms.profitFeeBps)} of the profit, regardless of how long the position is held.`;
   return `The fee decays over time, starting at ${spokenRate(first.fee_bps)} on a newly opened position and falling to ${spokenRate(terms.profitFeeBps)} for positions held for ${spokenHold(base)} or more.`;
 }

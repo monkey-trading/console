@@ -65,7 +65,7 @@ describe("a fresh wallet at tier 0", () => {
     // The panel: counted and pending volume as read, and the step to tier 1 from the table.
     expect([tier.volume.matured, tier.volume.pending]).toEqual([fixedFromWire(raw.volume?.matured ?? "x"), fixedFromWire(raw.volume?.pending ?? "x")]);
     expect(tier.next).toMatchObject({ tier: 1, volumeLeft: fixedFromInt(TIER_1), daysNeeded: 1 });
-    expect(describeNextTier(tier.next ?? (() => { throw new Error("no next tier"); })())).toContain("Tier 1 needs $50,000 more counted volume");
+    expect(describeNextTier(tier.next ?? (() => { throw new Error("no next tier"); })())).toContain("To reach tier 1, you need a further $50,000 of counted volume");
     // The account strip and the withdraw form: the node's requirement and its withdrawable cash, and free cash above the requirement.
     const account = snapshot().account;
     if (account === null) throw new Error("no account");
@@ -88,7 +88,7 @@ describe("a fresh wallet at tier 0", () => {
     await wait(() => ticketFor(rig.store, BTC, "buy", qty).prices.problem !== null, 30_000, "the ticket's reason");
     const { prices } = ticketFor(rig.store, BTC, "buy", qty);
     expect(prices.problemIsSize).toBe(true);
-    expect(prices.problem).toContain("Volume tier 0 allows up to 20x leverage here.");
+    expect(prices.problem).toContain("Volume tier 0 allows leverage of up to 20x in this market.");
     // An order inside it has no problem.
     expect(ticketFor(rig.store, BTC, "buy", sizeFor(marketOf(rig.store, BTC), 150_000)).prices.problem).toBeNull();
   });
@@ -102,11 +102,11 @@ describe("a fresh wallet at tier 0", () => {
     }
     const limits = ticketLimits(snapshot().account, BTC);
     expect(limits).toMatchObject({ orderLimit: 3, resting: 3 });
-    expect(orderLimitProblem(limits, true)).toBe("You have 3 open orders, the most for volume tier 0. Cancel one to place another, or trade more to reach a higher tier.");
+    expect(orderLimitProblem(limits, true)).toBe("Working order limit reached. Volume tier 0 allows up to 3 working orders at a time, and you have 3. Cancel a working order to place a new one, or trade more to reach a higher tier.");
     expect(orderLimitProblem(limits, false)).toBeNull();
     // Sent anyway, the node's own refusal names the tier and its limit, at the control that sent it.
     expect(await placeOrder(rig.store, order)).toBe(false);
-    expect(snapshot().notices.ticket?.text).toBe("You already have 3 open orders, the most for volume tier 0. Cancel one to place another, or trade more to reach a higher tier.");
+    expect(snapshot().notices.ticket?.text).toBe("Working order limit reached. Volume tier 0 allows up to 3 working orders at a time. Cancel a working order to place a new one, or trade more to reach a higher tier.");
     // The orders above spent the tier's burst of requests; the cancels wait for it to refill.
     await new Promise((resolve) => setTimeout(resolve, 3_000));
     for (const resting of snapshot().account?.orders ?? []) {
@@ -123,7 +123,7 @@ describe("a fresh wallet at tier 0", () => {
       await cancelOrder(rig.store, 999_999);
       text = snapshot().notices.orders?.text.startsWith("Requests are coming faster") ? snapshot().notices.orders?.text : undefined;
     }
-    expect(text, `the 429s the node answered: ${JSON.stringify(rig.limited)}`).toBe("You're sending requests faster than volume tier 0 allows, which is 3 a second. Nothing was done. Wait a moment and try again.");
+    expect(text, `the 429s the node answered: ${JSON.stringify(rig.limited)}`).toBe("Your request was not processed. You are sending requests faster than volume tier 0 allows, which is 3 per second. Wait a moment and try again.");
     // The tier's own refusal is signed by the enclave, so the client reads the tier and rate from it.
     expect(rig.limited.some((answer) => answer.signed && answer.body.includes('"tier":0'))).toBe(true);
     // The burst refills; the next request is admitted.

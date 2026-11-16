@@ -47,7 +47,7 @@ export interface TicketFigures {
 }
 
 /** Why closing figures are withheld when no other reason applies: the price or the fee rate has not arrived. */
-export const CLOSE_WAITS = "Close figures appear once the price and fee rate have loaded.";
+export const CLOSE_WAITS = "The closing figures will be shown once the price and the profit fee rate have loaded.";
 
 /** The house state's parameters while they are current: read since every change to them the stream carried; null otherwise. */
 export function currentParams(state: ConsoleState): HouseParams | null {
@@ -61,11 +61,11 @@ export function currentParams(state: ConsoleState): HouseParams | null {
 export function houseTermsNote(state: ConsoleState): string | null {
   const status = state.houseStateStatus;
   if (state.houseParams === null) {
-    if (status === "failed") return "The trading terms couldn't be loaded. The page will try again by itself.";
-    return status === "unavailable" ? "This server doesn't publish its trading terms." : null;
+    if (status === "failed") return "The trading terms could not be loaded. The app will try again automatically.";
+    return status === "unavailable" ? "This server does not publish its trading terms." : null;
   }
   if (state.pricingCurrent) return null;
-  return status === "failed" ? "The trading terms changed and couldn't be reloaded. The page will try again by itself." : "The trading terms changed. Loading the new ones.";
+  return status === "failed" ? "The trading terms have changed, and the new terms could not be loaded. The app will try again automatically." : "The trading terms have changed. The new terms are loading.";
 }
 
 /**

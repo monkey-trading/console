@@ -43,7 +43,7 @@ export function PhoneNav({ pane, onChange }: { pane: PhonePane; onChange: (pane:
               className={`flex min-h-bar w-full flex-wrap content-center items-center justify-center gap-x-1 border-t-2 text-label tracking-caps uppercase focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow ${pane === id ? "border-t-glow bg-glow/5 text-glow" : "border-t-transparent text-fg-3"}`}
             >
               {label}
-              {id === "account" && open > 0 && <span className="text-fg-2">({open}<span className="sr-only"> open positions and orders</span>)</span>}
+              {id === "account" && open > 0 && <span className="text-fg-2">({open}<span className="sr-only"> open positions and working orders</span>)</span>}
             </button>
           </li>
         ))}

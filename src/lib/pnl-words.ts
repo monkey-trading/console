@@ -1,13 +1,16 @@
 /** The words behind a position's P&L: its basis, the figure at the mark it replaces, and why a figure is withheld. */
 
+/** How the P&L figure is priced, the sentence every explanation with a closing price starts with. */
+const AT_CLOSE = "This figure is calculated at the price at which the entire position would close.";
+
 /**
  * The explanation of one position's P&L. A close at the closing price has `atMark`, the gain at the
  * mark, which the exit spread takes from; a position with no closing price has `reason` instead, and
  * `atMark` as the only figure there is.
  */
 export function describePnl(atMark: string | null, reason: string | null): string {
-  if (reason !== null) return atMark === null ? reason : `${reason} At the mark price it's ${atMark}.`;
-  return atMark === null ? "This uses the price you'd close the whole position at." : `This uses the price you'd close the whole position at. At the mark price it's ${atMark}, before the spread.`;
+  if (reason !== null) return atMark === null ? reason : `${reason} At the mark price, the unrealised profit or loss is ${atMark}.`;
+  return atMark === null ? AT_CLOSE : `${AT_CLOSE} At the mark price, before the spread, the unrealised profit or loss is ${atMark}.`;
 }
 
 /** What stands between a position and a closing price, in the order a close needs them. */
@@ -29,23 +32,23 @@ export interface CloseGaps {
 
 /** Why a position has no closing price, or null when it has one. */
 export function describeNoPrice(g: CloseGaps): string | null {
-  if (!g.open) return "The market is closed, so there's no closing price.";
-  if (!g.marked) return "This market has no price yet.";
-  if (!g.converts) return "The exchange rate for this market isn't available yet, so it can't be shown in USD.";
+  if (!g.open) return "The market is closed, so no closing price is available.";
+  if (!g.marked) return "No price is available for this market yet.";
+  if (!g.converts) return "The exchange rate for this market's quote currency is not yet available, so the profit or loss cannot be shown in USD.";
   if (g.quoted) return null;
-  return g.asked ? "Waiting for a closing price." : `Select ${g.symbol} to see its closing price.`;
+  return g.asked ? "The closing price for this position is still loading." : `Select ${g.symbol} in the watchlist to load its closing price.`;
 }
 
 /** Why the profit fee and what a close keeps are withheld, or null when they are shown: no closing price, else the house state's reason, else the unread rate. */
 export function describeNoClose(g: CloseGaps): string | null {
   const price = describeNoPrice(g);
   if (price !== null) return price;
-  if (!g.termsCurrent) return g.houseNote ?? "The trading terms haven't loaded yet.";
-  return g.rateRead ? null : "The profit fee rate hasn't loaded yet.";
+  if (!g.termsCurrent) return g.houseNote ?? "The trading terms have not loaded yet.";
+  return g.rateRead ? null : "The profit fee rate has not loaded yet.";
 }
 
 /** A row's details in one explanation: the P&L's basis, and what the fee and the close keep come to. */
 export function describeDetails(parts: { pnl: string; noClose: string | null; noFee: boolean }): string {
-  const close = parts.noClose !== null ? `The fee and close figures aren't shown yet. ${parts.noClose}` : parts.noFee ? "There's no profit fee, because closing now doesn't make a profit." : null;
+  const close = parts.noClose !== null ? `The profit fee and closing figures are not yet available. ${parts.noClose}` : parts.noFee ? "No profit fee applies, because closing the position now would not realise a profit." : null;
   return [parts.pnl, close].filter((x) => x !== null).join(" ");
 }

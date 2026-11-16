@@ -148,7 +148,7 @@ describe("seeding the chart from the marks endpoint", () => {
     expect(client.marksReads).toHaveLength(3);
     expect(store.getSnapshot().notices.chart).toMatchObject({
       tone: "error",
-      text: expect.stringContaining("Chart history is unavailable: The node did not answer."),
+      text: "The price history for this chart could not be loaded, so the chart shows only the prices received since this page was opened.",
     });
     await nextRead();
     client.onMessage?.(tick(NOW + 180_000));

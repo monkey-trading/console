@@ -57,7 +57,7 @@ describe("signed actions with a fixed-key wallet", () => {
     await loginSession(store, "setup");
     expect(client.posted.map((p) => ("auth" in p.body ? p.body.auth?.nonce : undefined))).toEqual([4, 9]);
     expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(2);
-    expect(store.getSnapshot().notices.setup).toMatchObject({ tone: "error", text: "The request was out of order. Try again." });
+    expect(store.getSnapshot().notices.setup).toMatchObject({ tone: "error", text: "Another request from your account was processed first, so this request was not accepted. Check your orders and positions, then try again." });
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
   });
 
@@ -72,7 +72,7 @@ describe("signed actions with a fixed-key wallet", () => {
     expect(client.posted.filter((p) => p.route === "cancel").map((p) => (p.body as CancelRequest).auth?.nonce)).toEqual([4, 9]);
     // No wallet signature beyond the connect-time login's: the retry is the key's.
     expect(provider.calls.filter((c) => c.method === "eth_signTypedData_v4")).toHaveLength(1);
-    expect(store.getSnapshot().notices.orders).toMatchObject({ tone: "error", text: "The request was out of order. Try again." });
+    expect(store.getSnapshot().notices.orders).toMatchObject({ tone: "error", text: "Another request from your account was processed first, so this request was not accepted. Check your orders and positions, then try again." });
     expect(store.getSnapshot()).toMatchObject({ busy: false, prompt: null });
   });
   it("does not sign an order or a withdrawal again after a 409, since a copy may have run, and reads the account before saying so", async () => {

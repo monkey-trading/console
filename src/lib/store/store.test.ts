@@ -151,7 +151,7 @@ describe("what the store refuses or hides", () => {
     ]);
     const text = store.getSnapshot().feed.map((f) => f.text);
     expect(text).toContain("Deposit credited: $7.00");
-    expect(text).toContain("US500 closed");
+    expect(text).toContain("US500 market closed");
     expect(text).not.toContain("Deposit credited: $5.00");
   });
 

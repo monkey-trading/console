@@ -7,8 +7,8 @@ export interface Spot {
   bottom?: number;
 }
 
-/** The tallest a tooltip is expected to be, which decides whether it fits below its label. */
-const TOOLTIP_ROOM = 160;
+/** The tallest a tooltip is expected to be, which decides whether it fits below its label: the positions table's Close-out note is 204 px at the full width. */
+const TOOLTIP_ROOM = 240;
 const MARGIN = 8;
 const MAX_WIDTH = 240;
 

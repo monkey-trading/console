@@ -80,14 +80,14 @@ export function ticketLimits(account: AccountModel | null, market: MarketId, mar
 /** The reason a limit or stop order is stopped at the ticket: the account already rests its tier's most. Null for a market order or while there is room. */
 export function orderLimitProblem(limits: TicketLimits | null, resting: boolean): string | null {
   if (limits === null || !resting || limits.orderLimit === null || limits.resting < limits.orderLimit) return null;
-  return `You have ${limits.resting} open orders, the most for volume tier ${limits.tier}. Cancel one to place another, or trade more to reach a higher tier.`;
+  return `Working order limit reached. Volume tier ${limits.tier} allows up to ${limits.orderLimit} working orders at a time, and you have ${limits.resting}. Cancel a working order to place a new one, or trade more to reach a higher tier.`;
 }
 
 /** Why the leverage limit applies, for a size the node declines for margin: the tier's limit, named. */
 export function leverageReason(limits: TicketLimits | null): string {
   if (limits === null || limits.leverage === null) return "";
   const leverage = formatLeverage(limits.leverage);
-  return limits.weekendSets ? ` Weekend margin applies here, which allows up to ${leverage} leverage.` : ` Volume tier ${limits.tier} allows up to ${leverage} leverage here.`;
+  return limits.weekendSets ? ` The higher weekend margin applies in this market, so the maximum leverage is ${leverage}.` : ` Volume tier ${limits.tier} allows leverage of up to ${leverage} in this market.`;
 }
 
 /**
@@ -104,8 +104,8 @@ export function accountPricing(account: AccountModel | null, params: HouseParams
 /** The step to the next tier in words: the counted volume left, how many days a day's cap makes of it, and the fewest more days that can cover it. */
 export function describeNextTier(next: NextTier): string {
   const days = next.daysLeast === 1 ? "one more day" : `${next.daysLeast} more days`;
-  if (next.volumeLeft === 0n) return `Tier ${next.tier} needs trading on at least ${next.daysNeeded} days. Each day counts up to ${usdWhole(next.dayCap)}.`;
-  return `Tier ${next.tier} needs ${usdWholeUp(next.volumeLeft)} more counted volume. Each day counts up to ${usdWhole(next.dayCap)}, so that takes at least ${days} of trading.`;
+  if (next.volumeLeft === 0n) return `To reach tier ${next.tier}, you need to have traded on at least ${next.daysNeeded} days, and each day counts for up to ${usdWhole(next.dayCap)} of volume.`;
+  return `To reach tier ${next.tier}, you need a further ${usdWholeUp(next.volumeLeft)} of counted volume. Each day counts for up to ${usdWhole(next.dayCap)}, so reaching it will take at least ${days} of trading.`;
 }
 
 /** A share of a charge a tier takes off, in bps of it, as the panel states it: `10%`, or `None`. */

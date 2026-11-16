@@ -19,7 +19,7 @@ const LABEL: Record<Tab, string> = { positions: "Positions", orders: "Orders", h
 
 function Activity() {
   const { feed } = useConsole();
-  if (feed.length === 0) return <p className="px-4 py-6 text-caption text-fg-3">Waiting for live updates.</p>;
+  if (feed.length === 0) return <p className="px-4 py-6 text-caption text-fg-3">No activity yet. Market events and activity on your account will appear here as they happen.</p>;
   return (
     <ol>
       {feed.map((line) => (

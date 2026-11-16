@@ -40,21 +40,21 @@ describe("scheduleNotice", () => {
 
 describe("coverageNote", () => {
   it("says the totals cover the whole account only when nothing more can be read", () => {
-    expect(coverageNote(7, totals(false), false, false)).toBe("Totals cover all your realised results.");
+    expect(coverageNote(7, totals(false), false, false)).toBe("The totals cover all of your realised results.");
   });
 
   it("says the totals cover only what is loaded, with the singular for one result", () => {
-    expect(coverageNote(1, totals(false), true, false)).toBe("Totals cover the 1 result loaded so far. Load more to include older ones.");
+    expect(coverageNote(1, totals(false), true, false)).toBe("The totals cover the 1 result loaded so far. Select Load more to include older results.");
     expect(coverageNote(1_500, totals(false), true, false)).toContain("the 1,500 results loaded");
   });
 
   it("names the bound, and does not offer Load more, when the ledger is full", () => {
     const note = coverageNote(2_000, totals(false), true, true);
-    expect(note).toBe("Totals cover the 2,000 results loaded, the most this list holds. Older results aren't included.");
+    expect(note).toBe("The totals cover the 2,000 results loaded, which is the maximum this list can hold. Older results are not included.");
   });
 
   it("adds that the MONKEY total leaves losses out while some share is not known", () => {
-    expect(coverageNote(7, totals(true), false, false)).toContain("leaves out losses shown as Pending, Loading or —");
+    expect(coverageNote(7, totals(true), false, false)).toContain("excludes losses shown as Pending, Loading or —");
   });
 });
 

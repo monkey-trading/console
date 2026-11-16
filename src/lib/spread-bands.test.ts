@@ -47,9 +47,9 @@ describe("describeNotice", () => {
   it("states each value a listing notice names, and from when", () => {
     const effective_at = Date.UTC(2026, 10, 21, 14, 0, 0);
     expect(describeNotice({ spread_tiers: EUR, margin_tiers: [{ up_to: "5000000", bps: 50 }, { up_to: null, bps: 100 }], markup_bps: 90, effective_at })).toEqual([
-      "From 21 Nov 14:00:00 UTC, spreads may change to 0.4 bps up to $10.0M, 0.8 bps $10.0M to $50.0M, 1.6 bps above $50.0M.",
-      "From 21 Nov 14:00:00 UTC, margin rates may change to 0.50% up to $5.00M, 1.00% above $5.00M.",
-      "From 21 Nov 14:00:00 UTC, the overnight financing markup may change to 90 bps a year.",
+      "From 21 Nov 14:00:00 UTC, the spreads in this market may change to 0.4 bps up to $10.0M, 0.8 bps $10.0M to $50.0M, 1.6 bps above $50.0M.",
+      "From 21 Nov 14:00:00 UTC, the margin rates in this market may change to 0.50% up to $5.00M, 1.00% above $5.00M.",
+      "From 21 Nov 14:00:00 UTC, the overnight financing markup in this market may change to 90 bps per year.",
     ]);
     expect(describeNotice({ effective_at })).toEqual([]);
   });
