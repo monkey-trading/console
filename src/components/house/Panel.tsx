@@ -62,7 +62,7 @@ export function Term({ label, tip }: { label: string; tip: string }) {
       <button type="button" aria-describedby={id} onFocus={(event) => show(event.currentTarget)} onBlur={() => setSpot(null)} className="cursor-help [text-transform:inherit] border-b border-dotted border-edge text-left hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-glow">
         {label}
       </button>
-      <span id={id} role="tooltip" hidden={!open} style={spot ?? undefined} className="fixed z-40 text-left text-caption leading-snug tracking-normal text-fg-2 normal-case">
+      <span id={id} role="tooltip" hidden={!open} style={spot ?? undefined} className="fixed z-40 text-left text-caption leading-snug tracking-normal whitespace-normal text-fg-2 normal-case">
         <span className={`block ${spot?.bottom === undefined ? "pt-1" : "pb-1"}`}>
           <span className="block rounded border border-line-2 bg-ink-2 p-2 shadow-platform">{tip}</span>
         </span>
