@@ -173,9 +173,11 @@ as a member; it delegates to itself and to the third candidate.
 2. The Staking page's Governance tab lists the proposal with its tally against two thirds, how the members the
    account delegates to voted, and a Vote yes button. A vote moves the tally once the node reads the next final
    block.
-3. `./scripts/dev-local-stack-ctl.sh vote third 1` adds the third candidate's yes, which passes it. A fast-path
-   change is in force at once as a restriction, which lapses after three minutes here (`RESTRICTION_TTL`); a
-   normal change waits seven days of the engine's clock, which a local stack cannot move.
+3. `./scripts/dev-local-stack-ctl.sh vote third 1` adds the third candidate's yes, which passes it. The engine
+   applies a passed change only while a drawn turn is in effect, which this stack draws only under `ROTATION=1`
+   (below): with `GOVERNANCE=1` alone, a passed proposal changes nothing. Under `ROTATION=1` a fast-path change is
+   in force at once as a restriction, which lapses after three minutes here (`RESTRICTION_TTL`); a normal change
+   waits seven days of the engine's clock, which a local stack cannot move.
 
 As after a handover, the chain's clock is then ahead of the engine's, eight days here, so withdrawals do not pay,
 and with a schedule the registry's closes adopt rotation sets, so `elect` and `handover` do not apply. A
