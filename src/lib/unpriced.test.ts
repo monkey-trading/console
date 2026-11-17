@@ -1,4 +1,4 @@
-/** Tests for a market's live price and why it has none: a lagging venue, a market no feed prices, a closed market, recovery, and the refusals that name the reason. */
+/** Tests for a market's live price and why it has none: a lagging venue, a market no feed prices, a server waiting for its first prices, a closed market, recovery, and the refusals that name the reason. */
 
 import { describe, expect, it } from "vitest";
 
@@ -44,8 +44,9 @@ describe("a market no feed prices on this server", () => {
     ["sources whose connections are withheld", [["massive", "off"], ["tradermade", "off"]], true],
     ["fewer sources that can count than its price needs", [["coinbase", "counts"], ["kraken", "off"]], true],
     ["sources that take no quotes for it", [["cme", "not_expected"], ["massive", "counts"]], true],
-    ["sources that have never quoted it", [["massive", "never_quoted"], ["tradermade", "never_quoted"]], true],
+    ["a source waiting for its first price beside one withheld", [["coinbase", "never_quoted"], ["kraken", "off"]], true],
     ["sources that can recover by themselves", [["coinbase", "counts"], ["kraken", "down"]], false],
+    ["sources connected and waiting for their first price", [["coinbase", "never_quoted"], ["kraken", "never_quoted"]], false],
   ] as [string, [string, SourceState][], boolean][])("is told from an outage for %s", (_, sources, unfed) => {
     expect(isUnfed(pricing(sources, "too_few_sources"))).toBe(unfed);
     expect(marketStatus(market(pricing(sources, "too_few_sources")))).toBe(unfed ? "unfed" : "unpriced");
@@ -64,6 +65,23 @@ describe("a market no feed prices on this server", () => {
   });
 });
 
+describe("a server that has just started", () => {
+  // Coinbase and Kraken are connected, and the engine holds no quote from either yet.
+  const STARTING = pricing([["coinbase", "never_quoted"], ["kraken", "never_quoted"]], "too_few_sources");
+
+  it("reads a market whose connected venues have not yet quoted as waiting for a price, not as unavailable on the server", () => {
+    expect(marketStatus(market(STARTING))).toBe("unpriced");
+    expect(noPriceRefusal(STARTING)).toBe("No live price is currently available for this market because the server is waiting for the first prices from Coinbase and Kraken.");
+    expect(noPriceClose("BTC-USD", STARTING)).toBe("The BTC-USD position was not closed, because no live price is currently available for its market. The server is waiting for the first prices from Coinbase and Kraken.");
+  });
+
+  it("names only the venue still to quote once the other has", () => {
+    const half = pricing([["coinbase", "counts"], ["kraken", "never_quoted"]], "too_few_sources");
+    expect(marketStatus(market(half))).toBe("unpriced");
+    expect(unpricedWhy(half)).toBe("the server is waiting for the first price from Kraken");
+  });
+});
+
 describe("unpricedWhy", () => {
   it.each([
     ["a lagging venue", [["coinbase", "counts"], ["kraken", "delayed"]], "the prices received from Kraken are delayed"],
@@ -73,7 +91,8 @@ describe("unpricedWhy", () => {
     ["a venue the server is not connected to", [["tradermade", "off"]], "the server is not currently connected to TraderMade"],
     ["an out-of-date price", [["cme", "stale"]], "the latest price from CME Group is out of date"],
     ["two out-of-date prices", [["coinbase", "stale"], ["kraken", "stale"]], "the latest prices from Coinbase and Kraken are out of date"],
-    ["a venue that has not quoted", [["massive", "never_quoted"]], "Massive has not yet sent a price"],
+    ["a venue that has not yet quoted", [["massive", "never_quoted"]], "the server is waiting for the first price from Massive"],
+    ["two venues that have not yet quoted", [["coinbase", "never_quoted"], ["kraken", "never_quoted"]], "the server is waiting for the first prices from Coinbase and Kraken"],
     ["a venue lost and another delayed", [["kraken", "delayed"], ["coinbase", "down"]], "the server has lost its connection to Coinbase and the prices received from Kraken are delayed"],
     ["a venue this app has no name for", [["newvenue", "down"]], "the server has lost its connection to Newvenue"],
     ["no venue that reports a problem", [["coinbase", "counts"], ["kraken", "not_expected"]], "the server is not currently receiving enough up-to-date prices"],
