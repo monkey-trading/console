@@ -46,7 +46,8 @@ case "$1:$sig" in
 esac
 STUB
 printf '#!/usr/bin/env bash\nexit 0\n' >"$work/bin/sleep"
-chmod +x "$work/bin/cast" "$work/bin/sleep"
+printf '#!/usr/bin/env bash\necho ok\n' >"$work/bin/curl"
+chmod +x "$work/bin/curl" "$work/bin/cast" "$work/bin/sleep"
 : >"$work/epoch-reads"
 
 status=0

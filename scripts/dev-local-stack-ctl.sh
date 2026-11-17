@@ -21,8 +21,9 @@
 #                     with GOVERNANCE=1, proposes the admin command JSON (its canonical form, as the
 #                     engine serialises it) as MEMBER (operator, second or third), which votes yes
 #   vote MEMBER ID    with GOVERNANCE=1, votes yes on proposal ID as MEMBER
-#   stop-operator     with ROTATION=1, stops the operator in effect's engine, waits for the other members to promote
-#                     the next member's standby key, then has the stack start the stopped engine again, as a member
+#   stop-operator     with ROTATION=1, waits for the next turn when a promotion would not fit in the current one, stops
+#                     the operator in effect's engine, waits for the other members to promote the next member's
+#                     standby key, then has the stack start the stopped engine again, as a member
 #
 # What `handover` leaves alone and what it does not is in the README's walkthrough: the chain's
 # clock moves, the engine's does not. Withdrawal authorizations expire on the chain's clock, so none
@@ -303,23 +304,48 @@ rotation_status() {
 
 stop_operator() {
   rotating
-  local named i epoch current interval tolerance misses window now length offset next next_member deadline promoted p started=$SECONDS
-  named="$(named_operator)"
-  i="$(member_of "$named")" || die "the operator in effect, $named, runs no engine of this stack"
-  epoch="$(signer_epoch)"
-  [[ "$epoch" =~ ^[0-9]+$ ]] || die "the vault's signer epoch read as \"$epoch\""
+  local named i epoch current interval tolerance misses window margin span now length offset left next_member deadline promoted p waiting=0 started
   read -r interval tolerance misses _ <<<"$(call "$schedule" 'liveness()(uint64,uint64,uint16,uint16)' | awk '{print $1}' | tr '\n' ' ')"
+  # From the stop, the operator misses `misses` complete heartbeat slots, which with the slot it stops in and the head
+  # tolerance is the promotion's window (`promotionDueAt`). The margin is two slots more: one for a liveness caller to see
+  # the promotion is due, one for the promoted engine to take over.
   window=$((interval * (misses + 1) + tolerance))
-  # A turn that passes to another member before a promotion could would leave the stop on an engine no longer in office.
-  now="$(chain_time)"
+  margin=$((interval * 2))
+  span=$((window + margin))
   length="$(call "$schedule" 'turnLength()(uint64)' | first_of)"
   offset="$(call "$schedule" 'boundary(uint64)(uint64)' 0 | first_of)"
-  next=$((((now - offset) / length + 1) * length + offset))
-  next_member="$(call "$schedule" 'turnOf(uint64)((address,uint16,uint8,uint32,uint64,uint64,bytes32,address))' $(((now - offset) / length + 1)) | tr -d '( )' | cut -d, -f1)"
-  if [[ "$(lower "$next_member")" != "$(lower "$named")" && "$next_member" != 0x0000000000000000000000000000000000000000 ]] &&
-    ((next - now < window + 60)); then
-    die "the turn passes to another engine in $((next - now)) s, before a promotion could: run stop-operator again after $(stamp "$next")"
-  fi
+  ((length >= span)) || die "a turn is $length s, shorter than the $span s a promotion needs ($window s of missed heartbeats and $margin s to be taken up): no stop could end in one"
+  # A turn that passes to another member before a promotion could complete would leave the stop on an engine no longer in
+  # office, so the stop waits for that turn to begin, when the engine named is the member's and a whole turn is left. It
+  # then also waits, as long as the turn's room allows, for that engine to take the turn: one that is stopped before
+  # it holds the keys is skipped, not replaced.
+  deadline=$((SECONDS + length * 3))
+  while :; do
+    now="$(chain_time)"
+    left=$((length - (now - offset) % length))
+    named="$(named_operator)"
+    i="$(member_of "$named")" || die "the operator in effect, $named, runs no engine of this stack"
+    next_member="$(call "$schedule" 'turnOf(uint64)((address,uint16,uint8,uint32,uint64,uint64,bytes32,address))' $(((now - offset) / length + 1)) | tr -d '( )' | cut -d, -f1)"
+    ((SECONDS < deadline)) || die "the ${member_names[$i]} engine, the operator in effect, did not serve its turn within $((length * 3)) s; see the members' logs in $work_dir"
+    if ((left >= span)) || [[ "$(lower "$next_member")" == "$(lower "$named")" || "$next_member" == 0x0000000000000000000000000000000000000000 ]]; then
+      [[ "$(health "${member_apis[$i]}")" == serving ]] && break
+      if ((!waiting)); then
+        echo "The ${member_names[$i]} engine is the operator in effect but does not serve yet: waiting for it to take its turn."
+        waiting=1
+      fi
+      sleep 5
+      continue
+    fi
+    if ((!waiting)); then
+      echo "The turn passes to another engine in $left s, and a promotion needs up to $span s ($window s of missed heartbeats and $margin s to be taken up)."
+      echo "Waiting $left s, until $(stamp "$((now + left))"), for the next turn to begin before stopping the operator in effect."
+      waiting=1
+    fi
+    sleep "$left"
+  done
+  epoch="$(signer_epoch)"
+  [[ "$epoch" =~ ^[0-9]+$ ]] || die "the vault's signer epoch read as \"$epoch\""
+  started=$SECONDS
   touch "$work_dir/stop-${member_names[$i]}"
   # However this command ends, the stack then starts the stopped engine again. The trap reads the path from a
   # global, which outlives the function, so whatever characters the work directory's path holds, it stays one word.
