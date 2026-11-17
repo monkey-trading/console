@@ -17,10 +17,7 @@ export interface ServerStatus {
   takes_orders: boolean;
   holds: { cause: HoldCause; since_ms: number }[];
   trusted_time: { state: "starting" } | { state: "sampled"; last_sample_ms: number } | { state: "held"; cause: "no_sample" | "drift"; last_sample_ms: number };
-  /**
-   * Each venue once, however many connections carry it (`connections`, as Coinbase's two): a symbol
-   * several of them carry is listed once, in the best state any of them reports.
-   */
+  /** Each venue once, however many connections carry it (`connections`): a symbol several of them carry is listed once, in the best state any of them reports. */
   venues: { venue: string; connections: number; state: VenueState; symbols: { symbol: string; market: MarketId; state: VenueState }[] }[];
   /** The markets open for trading that have no price. */
   unpriced_markets: { market: MarketId; symbol: string; reason: UnpricedReason; fresh_sources: number; min_sources: number }[];
