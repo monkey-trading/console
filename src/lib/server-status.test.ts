@@ -61,6 +61,16 @@ describe("markets without a live price", () => {
     });
   });
 
+  it("names a market whose connected venues have not yet quoted as the server starts, as one that resumes by itself", () => {
+    // The status read reports a connected venue's symbol as quoting until its first quote reaches the engine.
+    const server = signed({ venues: [venue("coinbase", "quoting", BTC), venue("kraken", "quoting", BTC)], unpriced_markets: [{ ...unpriced(...BTC), fresh_sources: 0 }] });
+    expect(serverLine("live", server, null)).toEqual({
+      role: "status",
+      lead: "Live prices for BTC-USD are temporarily unavailable because the server is not currently receiving enough up-to-date prices.",
+      rest: "Trading in this market will resume automatically once prices return.",
+    });
+  });
+
   it("names four markets in full, and counts the rest past three", () => {
     const ids = (n: number) => Array.from({ length: n }, (_, i): [number, string] => [i + 1, `M${i + 1}`]);
     const markets = (n: number) => signed({ venues: [venue("coinbase", "down", ...ids(n)), venue("kraken", "quoting", ...ids(n))], unpriced_markets: ids(n).map((m) => unpriced(...m)) });

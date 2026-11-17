@@ -67,7 +67,7 @@ describe("a market no feed prices on this server", () => {
 
 describe("a server that has just started", () => {
   // Coinbase and Kraken are connected, and the engine holds no quote from either yet.
-  const STARTING = pricing([["coinbase", "never_quoted"], ["kraken", "never_quoted"]], "too_few_sources");
+  const STARTING = { ...pricing([["coinbase", "never_quoted"], ["kraken", "never_quoted"]], "too_few_sources"), fresh_sources: 0 };
 
   it("reads a market whose connected venues have not yet quoted as waiting for a price, not as unavailable on the server", () => {
     expect(marketStatus(market(STARTING))).toBe("unpriced");
