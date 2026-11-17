@@ -234,9 +234,13 @@ engines in turn. At each boundary:
    the operator in effect, the vault's signer, and whether each engine serves, follows or is stopped.
 
 `./scripts/dev-local-stack-ctl.sh stop-operator` stops the operator in effect's engine. The other members record
-each heartbeat it misses, and after three in a row, within about two and a half minutes, they promote the next
+each heartbeat it misses, and after five in a row, within about three and a half minutes, they promote the next
 member's standby key to the vault's signer. That member's engine serves the rest of the turn from its own copy of
 the log, the console moves to it, and the command then has the stack start the stopped engine again as a member.
+A promotion needs those 200 seconds and two heartbeat slots more (the schedule's heartbeat interval, tolerance and
+misses set both), so when less than that is left of the turn and another member holds the next one, the command
+says so and waits for the next turn to begin, at most five minutes, then stops that turn's operator. Run at any
+point in a turn, it ends in the promotion, with no second run.
 At the next boundary the turn's member takes the keys from the promoted engine as from any other.
 
 Because the chain runs on true time, withdrawals pay here. While the turns rotate, the engine authorizes a
