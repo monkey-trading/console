@@ -18,11 +18,15 @@ const NOT_COUNTING: readonly [SourceState, (names: string, many: boolean) => str
   ["silent", (names, many) => `${names} ${many ? "are" : "is"} not currently sending prices`],
   ["off", (names) => `the server is not currently connected to ${names}`],
   ["stale", (names, many) => `the latest ${many ? "prices" : "price"} from ${names} ${many ? "are" : "is"} out of date`],
-  ["never_quoted", (names, many) => `${names} ${many ? "have" : "has"} not yet sent a price`],
+  ["never_quoted", (names, many) => `the server is waiting for the first ${many ? "prices" : "price"} from ${names}`],
 ];
 
-/** The states in which a source cannot price a market until the server's operator acts: withheld, taking no quotes for it, or never having quoted it. */
-const UNFED: ReadonlySet<SourceState> = new Set(["off", "not_expected", "never_quoted"]);
+/**
+ * The states in which a source cannot price a market until the server's operator acts: withheld, or taking no
+ * quotes for it. A connected source that has not yet quoted (`never_quoted`) is waiting for its first price, and
+ * the server reports it `silent` once its connection has gone the silence timeout without one.
+ */
+const UNFED: ReadonlySet<SourceState> = new Set(["off", "not_expected"]);
 
 /** What the deal ticket and a refused order tell a trader of a market no feed prices on this server. */
 export const UNFED_TEXT = "Live prices for this market are not available on this server, so it cannot be traded.";
