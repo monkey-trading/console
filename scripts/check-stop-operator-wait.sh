@@ -48,19 +48,25 @@ cat >"$work/bin/sleep" <<'STUB'
 echo "$1" >>"$STUB_DIR/sleeps"
 echo $(($(cat "$STUB_DIR/clock") + $1)) >"$STUB_DIR/clock"
 STUB
-chmod +x "$work/bin/cast" "$work/bin/sleep"
+# The engine's health: it serves from the `$STUB_NOT_SERVING`th+1 read on.
+cat >"$work/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+echo x >>"$STUB_DIR/health-reads"
+if (($(wc -l <"$STUB_DIR/health-reads" | tr -d ' ') > ${STUB_NOT_SERVING:-0})); then echo ok; fi
+STUB
+chmod +x "$work/bin/curl" "$work/bin/cast" "$work/bin/sleep"
 
 fail() {
   echo "FAIL: $*" >&2
   cat "$work/out" >&2
   exit 1
 }
-# run CLOCK NEXT: stop-operator with the chain at CLOCK and the next turn `NEXT`'s.
+# run CLOCK NEXT [N]: stop-operator with the chain at CLOCK, the next turn `NEXT`'s and the first N health reads failing.
 run() {
-  rm -f "$work/sleeps" "$work/stack/stop-first" "$work/stack/start-first"
+  rm -f "$work/sleeps" "$work/health-reads" "$work/stack/stop-first" "$work/stack/start-first"
   : >"$work/epoch-reads"
   echo "$1" >"$work/clock"
-  PATH="$work/bin:$PATH" STUB_DIR="$work" STUB_A="$a" STUB_B="$b" STUB_NEXT="$2" STACK_INFO_FILE="$work/info.json" \
+  PATH="$work/bin:$PATH" STUB_DIR="$work" STUB_A="$a" STUB_B="$b" STUB_NEXT="$2" STUB_NOT_SERVING="${3:-0}" STACK_INFO_FILE="$work/info.json" \
     "$root/scripts/dev-local-stack-ctl.sh" stop-operator >"$work/out" 2>&1 || fail "stop-operator exited $? at clock $1"
   grep -q "in signer epoch 6:" "$work/out" || fail "no promotion was reported at clock $1"
   [[ -f "$work/stack/stop-first" && -f "$work/stack/start-first" ]] || fail "the engine was not stopped and started again at clock $1"
@@ -77,4 +83,8 @@ if grep -q "Waiting" "$work/out" || [[ -s "$work/sleeps" ]]; then fail "it waite
 # The next turn is the same member's: no wait however little is left.
 run 1050 "$a"
 if grep -q "Waiting" "$work/out" || [[ -s "$work/sleeps" ]]; then fail "it waited for a turn the same member holds"; fi
+# An operator that does not serve yet, as one that has not taken its turn: it waits for it, then stops it.
+run 1205 "$b" 2
+grep -q "does not serve yet" "$work/out" || fail "it did not say it waited for the engine to serve"
+[[ "$(tr '\n' ' ' <"$work/sleeps")" == "5 5 " ]] || fail "it did not poll twice before stopping: $(cat "$work/sleeps" | tr "\n" " ")"
 echo "stop-operator waits for the next turn when a promotion would not fit in the current one, and only then"

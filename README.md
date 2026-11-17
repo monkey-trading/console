@@ -239,8 +239,8 @@ member's standby key to the vault's signer. That member's engine serves the rest
 the log, the console moves to it, and the command then has the stack start the stopped engine again as a member.
 A promotion needs those 200 seconds and two heartbeat slots more (the schedule's heartbeat interval, tolerance and
 misses set both), so when less than that is left of the turn and another member holds the next one, the command
-says so and waits for the next turn to begin, at most five minutes, then stops that turn's operator. Run at any
-point in a turn, it ends in the promotion, with no second run.
+says so and waits for the next turn to begin, at most five minutes, then stops that turn's operator once its engine serves, so a stop never lands on an engine that has yet to take the
+keys. Run at any point in a turn, it ends in the promotion, with no second run.
 At the next boundary the turn's member takes the keys from the promoted engine as from any other.
 
 Because the chain runs on true time, withdrawals pay here. While the turns rotate, the engine authorizes a

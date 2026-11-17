@@ -316,14 +316,25 @@ stop_operator() {
   offset="$(call "$schedule" 'boundary(uint64)(uint64)' 0 | first_of)"
   ((length >= span)) || die "a turn is $length s, shorter than the $span s a promotion needs ($window s of missed heartbeats and $margin s to be taken up): no stop could end in one"
   # A turn that passes to another member before a promotion could complete would leave the stop on an engine no longer in
-  # office, so the stop waits for that turn to begin, when the engine named is the member's and a whole turn is left.
+  # office, so the stop waits for that turn to begin, when the engine named is the member's and a whole turn is left. It
+  # then also waits, as long as the turn's room allows, for that engine to take the turn: one that is stopped before
+  # it holds the keys is skipped, not replaced.
+  deadline=$((SECONDS + length * 3))
   while :; do
     now="$(chain_time)"
     left=$((length - (now - offset) % length))
     named="$(named_operator)"
+    i="$(member_of "$named")" || die "the operator in effect, $named, runs no engine of this stack"
     next_member="$(call "$schedule" 'turnOf(uint64)((address,uint16,uint8,uint32,uint64,uint64,bytes32,address))' $(((now - offset) / length + 1)) | tr -d '( )' | cut -d, -f1)"
+    ((SECONDS < deadline)) || die "the ${member_names[$i]} engine, the operator in effect, did not serve its turn within $((length * 3)) s; see the members' logs in $work_dir"
     if ((left >= span)) || [[ "$(lower "$next_member")" == "$(lower "$named")" || "$next_member" == 0x0000000000000000000000000000000000000000 ]]; then
-      break
+      [[ "$(health "${member_apis[$i]}")" == serving ]] && break
+      if ((!waiting)); then
+        echo "The ${member_names[$i]} engine is the operator in effect but does not serve yet: waiting for it to take its turn."
+        waiting=1
+      fi
+      sleep 5
+      continue
     fi
     if ((!waiting)); then
       echo "The turn passes to another engine in $left s, and a promotion needs up to $span s ($window s of missed heartbeats and $margin s to be taken up)."
@@ -332,7 +343,6 @@ stop_operator() {
     fi
     sleep "$left"
   done
-  i="$(member_of "$named")" || die "the operator in effect, $named, runs no engine of this stack"
   epoch="$(signer_epoch)"
   [[ "$epoch" =~ ^[0-9]+$ ]] || die "the vault's signer epoch read as \"$epoch\""
   started=$SECONDS
