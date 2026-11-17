@@ -55,6 +55,15 @@
 # launch deployment's values (the engine's ops/runbooks/production-deployment.toml) where the demo stays
 # watchable, and the summary names each it shortens.
 #
+# TRUSTED CERTIFICATES: each engine serves a self-signed certificate, which a browser must accept by hand, and a
+# rotation moves the console to an engine the browser has not accepted yet at each boundary. When mkcert's local
+# root exists (`mkcert -CAROOT` holds rootCA.pem and its key; once, `brew install mkcert && mkcert -install`), the
+# stack issues a certificate for 127.0.0.1 and localhost and starts `scripts/dev-tls-proxy.mjs`, which serves each
+# engine's API again on a port of its own under that certificate, forwarding HTTP and WebSocket traffic to the
+# engine's own TLS listener. The proxied origins are the candidates' registered API hostnames and the console's
+# origins; the engines, their attestation and their signed answers are unchanged, so the console verifies every
+# answer as before. Without mkcert's root the stack runs as above, and its summary says how to enable this.
+#
 # Needs anvil, forge, cast, cargo, node, npm, curl, jq and python3 (3.11 or later); the engine
 # checkout with its contract dependencies (`forge soldeer install` in its contracts/); the
 # console's node_modules (`npm ci`); and the internet, for the node's Roughtime servers and venues.
@@ -75,6 +84,11 @@
 #                    GOVERNANCE=1; default off)
 #   THIRD_API_PORT, THIRD_METRICS_PORT, THIRD_HANDOVER_PORT
 #                    with ROTATION=1, override 8082, 9466 and 9445; each must be free
+#   TRUSTED_CERTS    `auto` (default) serves the engines through locally trusted certificates when mkcert's root exists,
+#                    `0` never does, `1` stops the stack when the root is missing
+#   TRUSTED_API_PORT, SECOND_TRUSTED_API_PORT, THIRD_TRUSTED_API_PORT
+#                    the proxied ports of the first, second and third engines' APIs, with a trusted certificate
+#                    (default 8480, 8481 and 8482); each must be free
 #   RESTRICTION_TTL  with GOVERNANCE=1, how long a fast-path restriction lasts (default 3m: a development
 #                    value; the engine takes up to seven days)
 #   GENESIS_FILE     an engine config file whose `[genesis]` table the node takes: a path, or one relative to the engine
@@ -116,11 +130,25 @@ second_handover_port="${SECOND_HANDOVER_PORT:-9444}"
 third_api_port="${THIRD_API_PORT:-8082}"
 third_metrics_port="${THIRD_METRICS_PORT:-9466}"
 third_handover_port="${THIRD_HANDOVER_PORT:-9445}"
+trusted_certs="${TRUSTED_CERTS:-auto}"
+trusted_api_port="${TRUSTED_API_PORT:-8480}"
+second_trusted_api_port="${SECOND_TRUSTED_API_PORT:-8481}"
+third_trusted_api_port="${THIRD_TRUSTED_API_PORT:-8482}"
 rpc="http://127.0.0.1:$anvil_port"
 # The node serves its API over TLS with a key it generates at startup, so curl skips verification.
 api="https://127.0.0.1:$api_port"
 second_api="https://127.0.0.1:$second_api_port"
 third_api="https://127.0.0.1:$third_api_port"
+# What the browser and the registry use: the engines' own origins, or with trusted certificates the proxy's.
+console_api="$api"
+console_second_api="$second_api"
+console_third_api="$third_api"
+console_api_host="127.0.0.1:$api_port"
+console_second_api_host="127.0.0.1:$second_api_port"
+console_third_api_host="127.0.0.1:$third_api_port"
+trusted=0
+mkcert_root=""
+proxy_pid=""
 # The node allows this browser origin only.
 console_url="http://localhost:$console_port"
 metrics_url="http://127.0.0.1:$metrics_port/metrics"
@@ -253,6 +281,7 @@ cleanup() {
   # Quietly: bash reports each child a signal stops.
   if [[ -n "$console_pid" ]]; then stop_group "$console_pid" 2>/dev/null; fi
   if [[ -n "$driver_pid" ]]; then stop_pid "$driver_pid" 5 2>/dev/null; fi
+  if [[ -n "$proxy_pid" ]]; then stop_pid "$proxy_pid" 5 2>/dev/null; fi
   # The node drains on TERM; give it time to finish its log.
   if [[ -n "$third_pid" ]]; then stop_pid "$third_pid" 30 2>/dev/null; fi
   if [[ -n "$second_pid" ]]; then stop_pid "$second_pid" 30 2>/dev/null; fi
@@ -311,10 +340,32 @@ fi
 [[ "$rotation" == 0 || "$rotation" == 1 ]] || die "ROTATION must be 0 or 1: $rotation"
 [[ "$parameter_votes" == 0 || "$second_engine" == 1 ]] || die "GOVERNANCE=1 needs SECOND_ENGINE=1, whose rotation it votes under"
 [[ "$parameter_votes" == 0 || "$parameter_votes" == 1 ]] || die "GOVERNANCE must be 0 or 1: $parameter_votes"
+[[ "$trusted_certs" == auto || "$trusted_certs" == 0 || "$trusted_certs" == 1 ]] || die "TRUSTED_CERTS must be auto, 0 or 1: $trusted_certs"
+# Trusted certificates need mkcert's root and its key, which only `mkcert -install` and a first run make: the stack never
+# creates a root, and never installs one.
+if [[ "$trusted_certs" != 0 ]]; then
+  if command -v mkcert >/dev/null 2>&1 && mkcert_root="$(mkcert -CAROOT 2>/dev/null)" &&
+    [[ -f "$mkcert_root/rootCA.pem" && -f "$mkcert_root/rootCA-key.pem" ]]; then
+    trusted=1
+    console_api="https://127.0.0.1:$trusted_api_port"
+    console_second_api="https://127.0.0.1:$second_trusted_api_port"
+    console_third_api="https://127.0.0.1:$third_trusted_api_port"
+    console_api_host="127.0.0.1:$trusted_api_port"
+    console_second_api_host="127.0.0.1:$second_trusted_api_port"
+    console_third_api_host="127.0.0.1:$third_trusted_api_port"
+  elif [[ "$trusted_certs" == 1 ]]; then
+    die "TRUSTED_CERTS=1 needs mkcert and its root: run \`brew install mkcert && mkcert -install\` once"
+  fi
+fi
 [[ "$restriction_ttl" =~ ^[1-9][0-9]*(s|m|h)$ ]] || die "RESTRICTION_TTL must be a whole number of seconds, minutes or hours, such as 3m: $restriction_ttl"
 ports=("$anvil_port" "$api_port" "$console_port" "$metrics_port" "$access_port")
 [[ "$second_engine" == 0 ]] || ports+=("$second_api_port" "$second_metrics_port" "$handover_port" "$second_handover_port")
 [[ "$rotation" == 0 ]] || ports+=("$third_api_port" "$third_metrics_port" "$third_handover_port")
+if [[ "$trusted" == 1 ]]; then
+  ports+=("$trusted_api_port")
+  [[ "$second_engine" == 0 ]] || ports+=("$second_trusted_api_port")
+  [[ "$rotation" == 0 ]] || ports+=("$third_trusted_api_port")
+fi
 for port in "${ports[@]}"; do
   if ! [[ "$port" =~ ^[0-9]+$ ]] || ((port < 1 || port > 65535)); then die "not a port: $port"; fi
   if port_answers "$port"; then
@@ -334,6 +385,23 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 work="$(mktemp -d "${TMPDIR:-/tmp}/local-stack.XXXXXX")"
+
+if [[ "$trusted" == 1 ]]; then
+  step "Serve the engines' APIs under a certificate mkcert's root issues, from port $trusted_api_port"
+  step_log="$work/proxy.log"
+  # For 127.0.0.1 and localhost only, kept in the work directory with its key; the root itself is read, never changed.
+  mkcert -cert-file "$work/proxy-cert.pem" -key-file "$work/proxy-key.pem" 127.0.0.1 localhost >"$step_log" 2>&1 ||
+    die "mkcert did not issue a certificate"
+  proxy_routes=("$trusted_api_port=$api_port")
+  [[ "$second_engine" == 0 ]] || proxy_routes+=("$second_trusted_api_port=$second_api_port")
+  [[ "$rotation" == 0 ]] || proxy_routes+=("$third_trusted_api_port=$third_api_port")
+  node "$root/scripts/dev-tls-proxy.mjs" --cert "$work/proxy-cert.pem" --key "$work/proxy-key.pem" "${proxy_routes[@]}" \
+    </dev/null >>"$step_log" 2>&1 &
+  proxy_pid=$!
+  for route in "${proxy_routes[@]}"; do
+    poll 20 port_answers "${route%%=*}" || die "the TLS proxy did not start on port ${route%%=*}"
+  done
+fi
 
 # Built first, so a slow build cannot leave the chain's head stale by the time the node starts.
 step "Build the node and the local access source"
@@ -717,9 +785,9 @@ if [[ "$second_engine" == 1 ]]; then
   govern "$registry" "$(cast calldata 'setVault(address)' "$vault")"
   govern "$vault" "$(cast calldata 'setRegistry(address)' "$registry")"
   register_candidate "$operator" "$operator_key" "$first_digest" "$first_config_hash" \
-    "127.0.0.1:$api_port" "127.0.0.1:$handover_port"
+    "$console_api_host" "127.0.0.1:$handover_port"
   register_candidate "$second_candidate" "$second_admin_key" "$second_digest" "$second_config_hash" \
-    "127.0.0.1:$second_api_port" "127.0.0.1:$second_handover_port"
+    "$console_second_api_host" "127.0.0.1:$second_handover_port"
   mint_monkey "$dev_wallet" "${wallet_monkey}$mon"
   mint_monkey "$dev_wallet2" "${wallet_monkey}$mon"
   if [[ -n "${DEV_WALLET2:-}" ]]; then
@@ -762,7 +830,7 @@ if [[ "$second_engine" == 1 ]]; then
       "$(lower "$deployed_vote")" == "$(lower "$vote")" ]] || die "the vote's contracts did not deploy where the node config names them"
     third_release=("$third_digest" "$(hex_bytes 7c 32)" localhost:9 localhost:9)
     if [[ "$rotation" == 1 ]]; then
-      third_release=("$third_digest" "$third_config_hash" "127.0.0.1:$third_api_port" "127.0.0.1:$third_handover_port")
+      third_release=("$third_digest" "$third_config_hash" "$console_third_api_host" "127.0.0.1:$third_handover_port")
       # The schedule's witnesses and heads read Arbitrum's block number from ArbSys, which Anvil lacks: the engine's stand-in,
       # which answers the chain's own, takes its address.
       arb_sys="$(create --private-key "$vote_deployer_key" test/mocks/ChainArbSys.sol:ChainArbSys)"
@@ -1137,8 +1205,8 @@ unfed="$(jq -r --argjson venue "$venue_markets" \
 
 step "Start the console ($console_build) on $console_url"
 export NEXT_PUBLIC_ENGINE_MODE=live-dev
-export NEXT_PUBLIC_ENGINE_ORIGIN="$api"
-export NEXT_PUBLIC_ENGINE_DEV_ORIGINS="$api"
+export NEXT_PUBLIC_ENGINE_ORIGIN="$console_api"
+export NEXT_PUBLIC_ENGINE_DEV_ORIGINS="$console_api"
 export NEXT_PUBLIC_ENGINE_CHAIN_ID=31337
 export NEXT_PUBLIC_ENGINE_VAULT="$vault"
 export NEXT_PUBLIC_ENGINE_USDC="$usdc"
@@ -1150,11 +1218,11 @@ export NEXT_PUBLIC_ENGINE_RPC_URL="$rpc"
 if [[ "$second_engine" == 1 ]]; then
   # The console may follow an election to the second engine: its CSP names the origin, and as a
   # dev origin it may present the mock attestation the mock TEE gives.
-  export NEXT_PUBLIC_ENGINE_CANDIDATE_ORIGINS="$second_api"
-  export NEXT_PUBLIC_ENGINE_DEV_ORIGINS="$api,$second_api"
+  export NEXT_PUBLIC_ENGINE_CANDIDATE_ORIGINS="$console_second_api"
+  export NEXT_PUBLIC_ENGINE_DEV_ORIGINS="$console_api,$console_second_api"
   if [[ "$rotation" == 1 ]]; then
-    export NEXT_PUBLIC_ENGINE_CANDIDATE_ORIGINS="$second_api,$third_api"
-    export NEXT_PUBLIC_ENGINE_DEV_ORIGINS="$api,$second_api,$third_api"
+    export NEXT_PUBLIC_ENGINE_CANDIDATE_ORIGINS="$console_second_api,$console_third_api"
+    export NEXT_PUBLIC_ENGINE_DEV_ORIGINS="$console_api,$console_second_api,$console_third_api"
   fi
 fi
 if [[ "$console_build" == production ]]; then
@@ -1176,18 +1244,18 @@ console_up() {
 poll 300 console_up || die "the console did not answer on $console_url"
 
 if [[ -n "${STACK_INFO_FILE:-}" ]]; then
-  jq -n --arg consoleUrl "$console_url" --arg apiOrigin "$api" --arg rpcUrl "$rpc" --arg vault "$vault" \
+  jq -n --arg consoleUrl "$console_url" --arg apiOrigin "$console_api" --arg rpcUrl "$rpc" --arg vault "$vault" \
     --arg usdc "$usdc" --arg monkey "$monkey" --arg staking "$staking" --arg registry "$registry" \
     --arg devWallet "$dev_wallet" --arg devWalletKey "$dev_wallet_key" --arg houseKey "$house_key" \
     --arg deployerKey "$deployer_key" --arg workDir "$work" --arg nodeLog "$work/node.log" --arg metricsUrl "$metrics_url" \
     --arg genesisFile "$genesis_file" --arg genesisSummary "$genesis_summary" --argjson houseUsdc "$house_usdc" \
-    --arg secondEngine "$second_engine" --arg secondApiOrigin "$second_api" --arg secondNodeLog "$work/second.log" \
+    --arg secondEngine "$second_engine" --arg secondApiOrigin "$console_second_api" --arg secondNodeLog "$work/second.log" \
     --arg dev2Wallet "${dev_wallet2:-}" --arg dev2WalletKey "${dev_wallet2_key:-}" --arg payerKey "${payer_key:-}" \
     --arg secondRelease "${second_release:-}" --arg firstRelease "${first_release:-}" \
     --arg operator "${operator:-}" --arg secondCandidate "${second_candidate:-}" \
     --arg vote "$vote" --arg schedule "$schedule" --arg thirdCandidate "${third_candidate:-}" \
     --arg secondCandidateKey "${second_candidate_key:-}" --arg thirdCandidateKey "${third_candidate_key:-}" \
-    --arg rotation "$rotation" --arg thirdApiOrigin "$third_api" --arg thirdNodeLog "$work/third.log" \
+    --arg rotation "$rotation" --arg thirdApiOrigin "$console_third_api" --arg thirdNodeLog "$work/third.log" \
     --arg secondMetricsUrl "http://127.0.0.1:$second_metrics_port/metrics" --arg thirdMetricsUrl "http://127.0.0.1:$third_metrics_port/metrics" \
     '{consoleUrl: $consoleUrl, apiOrigin: $apiOrigin, rpcUrl: $rpcUrl, chainId: 31337, vault: $vault, usdc: $usdc,
       monkey: $monkey, staking: $staking, registry: $registry,
@@ -1206,6 +1274,33 @@ if [[ -n "${STACK_INFO_FILE:-}" ]]; then
   info_written=yes
 fi
 
+if [[ "$trusted" == 1 ]]; then
+  api_lines="$console_api, under a certificate mkcert's root issued, so a browser that trusts the root accepts it
+                   with nothing to click (the engine's own listener, $api, stays self-signed)."
+  rotation_cert_note="
+                   The console moves between engines through certificates the browser trusts, so no
+                   engine's certificate needs accepting."
+  election_cert_note=""
+  second_cert_hint=""
+  if [[ "$(uname)" == Darwin ]] && ! security verify-cert -c "$mkcert_root/rootCA.pem" -p ssl >/dev/null 2>&1; then
+    api_lines="$api_lines
+                   This system does not trust mkcert's root ($mkcert_root/rootCA.pem): run
+                   \`mkcert -install\` once, or the browser still warns."
+  fi
+else
+  api_lines="$api
+                   Open $api/v1/health once in the same browser and accept its
+                   self-signed certificate, or the console cannot reach the node.
+                   To serve the engines under a certificate the browser trusts, so none needs accepting (the rotation
+                   demo moves the console to a new engine at each boundary), run \`brew install mkcert && mkcert -install\`
+                   once (one keychain prompt), then start the stack again."
+  rotation_cert_note=" If the console does
+                   not move to the engine that holds the turn, open that engine's /v1/health and accept its
+                   certificate."
+  election_cert_note="
+                   Then open $second_api/v1/health once and accept its certificate."
+  second_cert_hint=" (open $second_api/v1/health once and accept its certificate)"
+fi
 if [[ -n "$dev_wallet_key" ]]; then
   wallet_line="$dev_wallet (Anvil account 1)
   Private key      $dev_wallet_key
@@ -1258,13 +1353,11 @@ if [[ "$second_engine" == 1 ]]; then
   if [[ "$rotation" == 1 ]]; then
     two_engines="
 Rotation           Each member of the rotation set runs an engine built with five-minute turns, a development
-                   option. The first engine ($api) holds the key the timelock installed until the first turn,
-                   and the second ($second_api) and the third ($third_api) follow it.
+                   option. The first engine ($console_api) holds the key the timelock installed until the first turn,
+                   and the second ($console_second_api) and the third ($console_third_api) follow it.
                    The stack draws each turn from turn $next_turn, which begins at $(stamp "$(boundary_of "$next_turn")"), for the
                    next member in that order, and at each boundary that member's engine takes the keys from
-                   the previous one. An engine serves its API only while it holds a turn: if the console does
-                   not move to the engine that holds the turn, open that engine's /v1/health and accept its
-                   certificate.
+                   the previous one. An engine serves its API only while it holds a turn.$rotation_cert_note
 Relayers           Each engine posts its checkpoints and its log heads (to the LogHeads contract $logheads)
                    through relayers of its own, Anvil accounts 9 and 10, 11 and 12, and 13 and 14, and runs a
                    liveness caller from account 15, 16 or 17.
@@ -1278,10 +1371,9 @@ Watch it           ./scripts/dev-local-stack-ctl.sh status shows the turns, the 
 "
   else
     two_engines="
-Two engines        The first engine ($api) is the operator in effect, under sealed keys.
-                   The second ($second_api) is registered with an approved release, and
-                   the stack starts it once an election has made the vault name its release;
-                   then open $second_api/v1/health once and accept its certificate.
+Two engines        The first engine ($console_api) is the operator in effect, under sealed keys.
+                   The second ($console_second_api) is registered with an approved release, and
+                   the stack starts it once an election has made the vault name its release.$election_cert_note
 Log heads          Each engine posts its newest log head every 10 seconds to the LogHeads contract $logheads,
                    through its own relayer $heads_relayer (Anvil account 10), apart from the checkpoint
                    relayer $relayer.
@@ -1320,9 +1412,7 @@ cat <<EOF
 
 Console            $console_url
                    Open it at localhost, not 127.0.0.1: the node accepts that browser origin only.
-Engine API         $api
-                   Open $api/v1/health once in the same browser and accept its
-                   self-signed certificate, or the console cannot reach the node.
+Engine API         $api_lines
 
 Add the network to MetaMask or Rabby
   Network name     Anvil (local)
@@ -1368,7 +1458,7 @@ EOF
 # holds its keys and its log. The stack reads no chain state here: Anvil can deadlock under polling.
 second_engine_tick() {
   if [[ -z "$second_pid" && -f "$work/start-second-engine" ]]; then
-    step "The vault names the second engine's release: starting it on $second_api (open $second_api/v1/health once and accept its certificate)"
+    step "The vault names the second engine's release: starting it on $console_second_api$second_cert_hint"
     (cd "$work/second" && exec "$engine" run --config "$work/second.toml" --mock-launch-digest "$second_digest") \
       >"$work/second.log" 2>&1 &
     second_pid=$!
@@ -1434,6 +1524,7 @@ anvil_probe() {
 while :; do
   alive "$anvil_pid" || { step_log="$work/anvil.log" && die "Anvil exited"; }
   alive "$access_pid" || { step_log="$work/access-source.log" && die "the access source exited"; }
+  if [[ -n "$proxy_pid" ]]; then alive "$proxy_pid" || { step_log="$work/proxy.log" && die "the TLS proxy exited"; }; fi
   if [[ "$rotation" == 1 ]]; then
     rotation_tick
   else

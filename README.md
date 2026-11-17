@@ -64,6 +64,17 @@ house's USDC above its floor. The staking epoch, unstake cooldown and floor are 
 script prints. Its header lists the variables that move its ports, fund
 another address, or serve a production build.
 
+Each engine serves a self-signed certificate, which a browser must accept by hand, and a rotation moves the console
+to an engine it has not accepted yet at each boundary. Run `brew install mkcert && mkcert -install` once, with one
+keychain prompt, and the stack serves each engine's API again through a local TLS proxy
+(`scripts/dev-tls-proxy.mjs`) under a certificate that mkcert's root issues for `127.0.0.1` and `localhost`, on ports
+8480, 8481 and 8482 (`TRUSTED_API_PORT`, `SECOND_TRUSTED_API_PORT` and `THIRD_TRUSTED_API_PORT`). The candidates register
+those origins as their API hostnames and the console's origin variables name them, so no certificate is accepted by
+hand. The proxy forwards HTTP and WebSocket traffic unchanged to the engine's own TLS listener, so the console still
+verifies every signed answer. Without mkcert's root the stack runs as before and its summary says how to enable
+this; `TRUSTED_CERTS=0` turns it off, and `TRUSTED_CERTS=1` stops the stack when the root is missing. The proxy
+is development only: `scripts/check-tls-proxy.sh` checks it against a stand-in engine with a throwaway root.
+
 ### Run the launch genesis
 
 `GENESIS_FILE` chooses the genesis the node starts from: any engine config file with a `[genesis]` table, by path or
@@ -122,7 +133,7 @@ hold 20,000 MONKEY and 100,000 mock USDC. In a second terminal, `scripts/dev-loc
    moves the chain's clock past the election's seven-day notice, so the vault names the second engine's
    release; the stack starts that engine, which takes the keys and the log, and the first engine exits. The
    console follows to the second engine by itself, with balances and positions intact, and trading works. A
-   browser keeps a self-signed certificate per origin: if the console does not move, open
+   browser keeps a self-signed certificate per origin: without mkcert's root (above), if the console does not move, open
    `https://127.0.0.1:8081/v1/health` once and accept it. A page loaded after the handover moves as soon as a
    wallet is connected.
 4. `./scripts/dev-local-stack-ctl.sh fund-house 50000` adds mock USDC to the house's capital. This stack's
@@ -217,8 +228,8 @@ engines in turn. At each boundary:
    goes back to following. The first engine, which started with new keys, exits once it has handed them over,
    and the stack starts it again as a member.
 2. The console moves to the engine that holds the turn within a minute, with balances and positions intact, and
-   trading continues there. Each engine serves a self-signed certificate: if the console does not move, open that
-   engine's `/v1/health` and accept its certificate.
+   trading continues there. Without mkcert's root (above), each engine serves a self-signed certificate: if the console does not
+   move, open that engine's `/v1/health` and accept its certificate.
 3. `./scripts/dev-local-stack-ctl.sh status` shows the turns around the present one and the engine each names,
    the operator in effect, the vault's signer, and whether each engine serves, follows or is stopped.
 
