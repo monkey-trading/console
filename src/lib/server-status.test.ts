@@ -7,8 +7,8 @@ import { serverLine } from "./server-status";
 
 const HEALTHY: ServerStatus = { as_of_ms: 1, takes_orders: true, holds: [], trusted_time: { state: "sampled", last_sample_ms: 1 }, venues: [], unpriced_markets: [] };
 
-/** A venue quoting `markets` (id and symbol) in `state`. */
-const venue = (name: string, state: VenueState, ...markets: [number, string][]) => ({ venue: name, state, symbols: markets.map(([market, symbol]) => ({ symbol, market, state })) });
+/** A venue on one connection quoting `markets` (id and symbol) in `state`. */
+const venue = (name: string, state: VenueState, ...markets: [number, string][]) => ({ venue: name, connections: 1, state, symbols: markets.map(([market, symbol]) => ({ symbol, market, state })) });
 const unpriced = (market: number, symbol: string, reason: UnpricedReason = "too_few_sources", minSources = 2) => ({ market, symbol, reason, fresh_sources: 1, min_sources: minSources });
 const signed = (status: Partial<ServerStatus>): ServerRead => ({ kind: "signed", status: { ...HEALTHY, ...status } });
 const BTC: [number, string] = [1, "BTC-USD"];
@@ -66,6 +66,24 @@ describe("markets without a live price", () => {
     const markets = (n: number) => signed({ venues: [venue("coinbase", "down", ...ids(n)), venue("kraken", "quoting", ...ids(n))], unpriced_markets: ids(n).map((m) => unpriced(...m)) });
     expect(serverLine("live", markets(4), null)?.lead).toMatch(/^Live prices for M1, M2, M3 and M4 are/);
     expect(serverLine("live", markets(6), null)?.lead).toMatch(/^Live prices for M1, M2, M3 and 3 other markets are/);
+  });
+});
+
+describe("a venue on two connections", () => {
+  // Coinbase over Advanced Trade and Exchange, as the server reports it: one venue, and each symbol in
+  // the best state either connection reports, so `down` only while both are.
+  const coinbase = (state: VenueState): ServerStatus["venues"][number] => ({ ...venue("coinbase", state, BTC), connections: 2 });
+
+  it("shows no line with one connection down, as the other still prices the market", () => {
+    expect(serverLine("live", signed({ venues: [coinbase("quoting"), venue("kraken", "quoting", BTC)] }), null)).toBeNull();
+  });
+
+  it.each([
+    ["one connection down, beside another venue down", "quoting", "down", "the server has lost its connection to Kraken"],
+    ["both connections down", "down", "quoting", "the server has lost its connection to Coinbase"],
+  ] as const)("names Coinbase once, and only while neither connection quotes the market, with %s", (_, coinbaseState, krakenState, why) => {
+    const server = signed({ venues: [coinbase(coinbaseState), venue("kraken", krakenState, BTC)], unpriced_markets: [unpriced(...BTC)] });
+    expect(serverLine("live", server, null)?.lead).toBe(`Live prices for BTC-USD are temporarily unavailable because ${why}.`);
   });
 });
 

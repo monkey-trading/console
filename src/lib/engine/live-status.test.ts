@@ -12,7 +12,7 @@ import { UnsignedAnswer } from "./trust-errors";
 
 const STATUS: ServerStatus = {
   as_of_ms: 1_000, takes_orders: true, holds: [], trusted_time: { state: "sampled", last_sample_ms: 900 },
-  venues: [{ venue: "coinbase", state: "down", symbols: [{ symbol: "BTC-USD", market: 1, state: "down" }] }],
+  venues: [{ venue: "coinbase", connections: 1, state: "down", symbols: [{ symbol: "BTC-USD", market: 1, state: "down" }] }],
   unpriced_markets: [{ market: 1, symbol: "BTC-USD", reason: "too_few_sources", fresh_sources: 1, min_sources: 2 }],
 };
 
