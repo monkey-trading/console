@@ -1,4 +1,4 @@
-/** Follows what the node streams besides its log: the connected account's executable quotes and withdrawal authorizations, and the server's operating state. */
+/** Follows what the node streams besides its log: the connected account's executable quotes and withdrawal authorizations, the server's operating state and the operator's status notice. */
 
 import type { ClientEvent } from "../engine/client";
 import { sameNotice } from "../engine/notice-types";
@@ -7,7 +7,7 @@ import { quoteMarkets } from "../quotes";
 import type { ConsoleState } from "./state";
 import type { ConsoleStore } from "./store";
 
-/** The state after a quote, a refused quote request, an authorization, or the server's state arrives; null when the event changes nothing. */
+/** The state after a quote, a refused quote request, an authorization, the server's state or the notice arrives; null when the event changes nothing. */
 export function applyFeedEvent(state: ConsoleState, event: ClientEvent): Partial<ConsoleState> | null {
   if (event.type === "server") return { server: event.server };
   if (event.type === "notice") return sameNotice(state.notice, event.notice) ? null : { notice: event.notice };
@@ -40,7 +40,7 @@ export function keepLatest(authorizations: readonly SignedWithdrawal[], signed: 
   return [...authorizations.filter((w) => w.nonce !== signed.nonce), signed];
 }
 
-/** Applies each quote, authorization and server state the client reports to the store; returns the unsubscribe. */
+/** Applies each quote, authorization, server state and notice the client reports to the store; returns the unsubscribe. */
 export function followAccountFeeds(store: ConsoleStore): () => void {
   return store.deps.client.watch((event) => {
     const change = applyFeedEvent(store.getSnapshot(), event);

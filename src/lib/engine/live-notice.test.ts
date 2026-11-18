@@ -57,37 +57,81 @@ describe("a notice read", () => {
     expect(none.reports).toEqual([null]);
   });
 
-  it("reports nothing for a node that predates the route, and never asks the stream for frames", async () => {
+  it("reports nothing for a node that predates the route, and does not ask the stream for frames", async () => {
     const t = watching(new EngineError(404, "not found"));
     await expect(t.watch.frames()).resolves.toBe(false);
-    await expect(t.watch.frames()).resolves.toBe(false);
-    expect(t.reads()).toBe(1);
     expect(t.reports).toEqual([]);
   });
 
-  it("is read again before each connection until the node has answered, and says nothing when it cannot", async () => {
-    const t = watching(new EngineError(0, "down"), new EngineError(503, "busy"), { notice: NOTICE }, { notice: null });
+  it("asks the node again before every connection, so a server replaced by another release is asked the right query", async () => {
+    const t = watching({ notice: NOTICE }, new EngineError(404, "not found"), { notice: null }, new EngineError(404, "not found"), { notice: NOTICE });
+    const asked = [await t.watch.frames(), await t.watch.frames(), await t.watch.frames(), await t.watch.frames(), await t.watch.frames()];
+    expect(asked).toEqual([true, false, true, false, true]);
+    expect(t.reads()).toBe(5);
+    expect(t.reports).toEqual([NOTICE, null, NOTICE]);
+  });
+
+  it("says nothing of the notice when the read fails, and still asks the stream for frames", async () => {
+    const t = watching(new EngineError(0, "down"), new EngineError(503, "busy"));
     await expect(t.watch.frames()).resolves.toBe(true);
     await expect(t.watch.frames()).resolves.toBe(true);
-    await expect(t.watch.frames()).resolves.toBe(true);
-    await expect(t.watch.frames()).resolves.toBe(true);
-    expect(t.reads()).toBe(3);
-    expect(t.reports).toEqual([NOTICE]);
+    expect(t.reports).toEqual([]);
   });
 
   it("ignores an answer that is not a notice", async () => {
     const t = watching({ unrelated: true });
-    await t.watch.read();
+    await expect(t.watch.frames()).resolves.toBe(true);
     expect(t.reports).toEqual([]);
   });
 
-  it("reports each frame, and a frame shows the node serves notices", async () => {
-    const t = watching(new EngineError(0, "down"));
+  it("does not hide a failure of the listener", async () => {
+    const watch = new NoticeWatch({ read: async () => ({ notice: null }), report: () => { throw new Error("listener failed"); } });
+    await expect(watch.frames()).rejects.toThrow("listener failed");
+  });
+
+  it("reports each frame", () => {
+    const t = watching();
     t.watch.frame(NOTICE);
     t.watch.frame(null);
     expect(t.reports).toEqual([NOTICE, null]);
-    await t.watch.frames();
-    expect(t.reads()).toBe(0);
+  });
+});
+
+/** A watch whose reads each wait for the test to answer them. */
+function deferred() {
+  const answers: ((body: unknown) => void)[] = [];
+  const reports: (StatusNotice | null)[] = [];
+  const watch = new NoticeWatch({ read: () => new Promise((resolve) => answers.push(resolve)), report: (notice) => reports.push(notice) });
+  return { watch, answers, reports };
+}
+
+describe("a read that answers late", () => {
+  it("is dropped once the stream has stopped", async () => {
+    const t = deferred();
+    const asked = t.watch.frames();
+    t.watch.stop();
+    t.answers[0]?.({ notice: NOTICE });
+    await expect(asked).resolves.toBe(true);
+    expect(t.reports).toEqual([]);
+  });
+
+  it("is dropped once a frame has said something newer", async () => {
+    const t = deferred();
+    const asked = t.watch.frames();
+    t.watch.frame(null);
+    t.answers[0]?.({ notice: NOTICE });
+    await asked;
+    expect(t.reports).toEqual([null]);
+  });
+
+  it("is dropped once a later read has been asked for", async () => {
+    const t = deferred();
+    const first = t.watch.frames();
+    const second = t.watch.frames();
+    t.answers[1]?.({ notice: null });
+    t.answers[0]?.({ notice: NOTICE });
+    await Promise.all([first, second]);
+    expect(t.reports).toEqual([null]);
   });
 });
 
@@ -98,16 +142,17 @@ function client(status: number, body: unknown) {
   node.signed("/v1/status", () => ({ status: 404, body: '{"error":"not found"}', signature: "0x00", timeMs: 1_000, seq: 9 })); // this node predates status frames
   node.signed("/v1/notice", () => ({ status, body: JSON.stringify(body), signature: "0x00", timeMs: 1_000, seq: 9 }));
   const sockets: FakeSocket[] = [];
+  const scheduler = new FakeScheduler();
   const live = new LiveEngineClient({
     origin: "https://node.test", streamOrigin: "wss://node.test", chainId: 31337, vault: "0x00000000000000000000000000000000000000bb", heartbeatMs: 5_000,
     loadVerifier: async () => acceptAll, releases: [], acceptsMock: true, fetch: node.fetch,
     openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
-    scheduler: new FakeScheduler(), nowMs: () => 1_000, challenge: () => "ab".repeat(32),
+    scheduler, nowMs: () => 1_000, challenge: () => "ab".repeat(32),
   });
   const notices: (StatusNotice | null)[] = [];
   live.watch((event: ClientEvent) => { if (event.type === "notice") notices.push(event.notice); });
   const frame = (n: number, notice: StatusNotice | null) => sockets[0]?.receive(JSON.stringify({ v: 1, n, time: 1_000, msg: JSON.stringify({ type: "notice", notice }), sig: "0x00" }));
-  return { node, live, sockets, notices, frame };
+  return { node, live, sockets, scheduler, notices, frame };
 }
 
 describe("the live client", () => {
@@ -129,5 +174,18 @@ describe("the live client", () => {
     await settle();
     expect(t.sockets[0]?.url).toBe(`wss://node.test/v1/stream?signed=1&challenge=${"ab".repeat(32)}`);
     expect(t.notices).toEqual([]);
+  });
+
+  it("asks again when the stream reconnects, so a node upgraded meanwhile is asked for notice frames", async () => {
+    const t = client(404, { error: "not found" });
+    t.live.subscribe(() => {});
+    await settle();
+    expect(t.sockets[0]?.url).not.toContain("notice=1");
+    t.node.signed("/v1/notice", () => ({ status: 200, body: JSON.stringify({ notice: NOTICE }), signature: "0x00", timeMs: 1_000, seq: 9 }));
+    t.sockets[0]?.drop("close");
+    t.scheduler.advance(5_000); // past the first backoff
+    await settle();
+    expect(t.notices).toEqual([NOTICE]);
+    expect(t.sockets.at(-1)?.url).toContain("&notice=1&");
   });
 });

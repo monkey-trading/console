@@ -51,8 +51,8 @@ export class MockEngineClient implements EngineClient {
     return this.state.log[this.state.log.length - 1]?.seq ?? null;
   }
   attestationMode: AttestationMode = "mock";
-  /** The operator's status notice in force; none until the demo controls set one. */
-  notice: StatusNotice | null = null;
+  /** The operator's status notice in force; none until the demo controls set one. Changed only by `setNotice`, which tells the watchers. */
+  private notice: StatusNotice | null = null;
   private readonly watchers = new Set<(event: ClientEvent) => void>();
 
   /** The dashboard routes: the mock answers every one, as the node does. */

@@ -87,7 +87,7 @@ export class LiveStream {
   /** Whether the socket has opened, so it can carry the quote request. */
   private connected = false;
 
-  /** The operator's status notice: read before a connection asks for its frames, which a node that predates the route is not asked for. */
+  /** The operator's status notice, read before each connection asks for its frames, which a node that predates the route is not asked for. */
   private readonly notice = new NoticeWatch({ read: () => this.deps.readNotice(), report: (notice) => this.deps.onNotice(notice) });
 
   constructor(private readonly deps: StreamDeps) {}
@@ -128,6 +128,7 @@ export class LiveStream {
   stop(): void {
     this.stopped = true;
     this.generation++;
+    this.notice.stop();
     this.connected = false;
     this.clearTimers();
     this.socket?.close();

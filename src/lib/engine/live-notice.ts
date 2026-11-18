@@ -1,7 +1,9 @@
 /**
  * The operator's status notice for the live client (monkey-trading/console#446): `GET /v1/notice`
- * before the first connection asks for the stream's `notice` frames, which carry it from then on.
- * A read that fails says nothing, so the notice last heard stays until a frame or a read replaces it.
+ * read before each connection asks for the stream's `notice` frames, which carry it from then on.
+ * The read also tells whether the node serves notices, asked again at every connection so a server
+ * replaced by another release is asked the right query. A read that fails says nothing about the
+ * notice, which stays as last heard until a frame or a read replaces it.
  */
 
 import { EngineError } from "./client";
@@ -15,33 +17,35 @@ export interface NoticeWatchDeps {
 }
 
 export class NoticeWatch {
-  /** Whether the node serves the notice: true once it signs an answer, false once its signed 404 says it predates the route; null before either. */
-  private served: boolean | null = null;
+  /** Bumped by each read, frame and stop, so a read that answers after something newer is dropped. */
+  private generation = 0;
 
   constructor(private readonly deps: NoticeWatchDeps) {}
 
-  /** Whether a connection asks for notice frames, which a node that predates them refuses to be asked for: read from the node until it has said. Never rejects. */
+  /**
+   * Reads the notice and reports it, and says whether a connection asks for notice frames: false for a
+   * node that predates them, which refuses to be asked for them. Never rejects.
+   */
   async frames(): Promise<boolean> {
-    if (this.served === null) await this.read();
-    return this.served !== false;
-  }
-
-  /** Reads the notice once and reports it. */
-  async read(): Promise<void> {
+    const generation = ++this.generation;
+    let notice: StatusNotice | null | undefined;
     try {
-      const notice = noticeOf(await this.deps.read());
-      if (notice === undefined) return;
-      this.served = true;
-      this.deps.report(notice);
+      notice = noticeOf(await this.deps.read());
     } catch (error) {
-      if (error instanceof EngineError && error.status === 404) this.served = false;
-      // Any other failure says nothing of the notice.
+      return !(error instanceof EngineError && error.status === 404);
     }
+    if (notice !== undefined && generation === this.generation) this.deps.report(notice);
+    return true;
   }
 
   /** A notice frame the stream carried. */
   frame(notice: StatusNotice | null): void {
-    this.served = true;
+    this.generation++;
     this.deps.report(notice);
+  }
+
+  /** The stream ended: a read still on its way is dropped. */
+  stop(): void {
+    this.generation++;
   }
 }

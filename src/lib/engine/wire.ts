@@ -80,7 +80,7 @@ export interface NoticeFrame {
 
 export type FrameMessage = StreamMessage | Heartbeat | MarketQuote | QuoteError | WithdrawalEntry | CheckpointEntry | StatusFrame | NoticeFrame;
 
-/** Reads a verified frame's message: a log entry, a heartbeat, a quote, or the server's status; null for any other shape. */
+/** Reads a verified frame's message: a log entry, a heartbeat, a quote, the server's status or the operator's notice; null for any other shape. */
 export function parseFrameMessage(msg: string): FrameMessage | null {
   let value: unknown;
   try {

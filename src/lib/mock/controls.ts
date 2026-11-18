@@ -37,11 +37,6 @@ export class MockControls {
     return this.client.vaultExit;
   }
 
-  /** The operator's status notice now in force, or null. */
-  get notice(): string | null {
-    return this.client.notice?.text ?? null;
-  }
-
   /** Publishes `text` as the notice, replacing any in force; returns why the node would refuse it, or null once published. */
   publishNotice(text: string): string | null {
     const problem = noticeProblem(text);

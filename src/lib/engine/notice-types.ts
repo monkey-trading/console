@@ -6,11 +6,6 @@ export interface StatusNotice {
   set_at_ms: number;
 }
 
-/** The body of the route and of a frame: the notice, or null while none is in force. */
-export interface NoticeBody {
-  notice: StatusNotice | null;
-}
-
 /** The body's notice, or undefined when `body` is not the shape the route answers. */
 export function noticeOf(body: unknown): StatusNotice | null | undefined {
   if (typeof body !== "object" || body === null) return undefined;

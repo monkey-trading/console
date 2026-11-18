@@ -119,7 +119,7 @@ export interface EngineClient {
    * against it as against the node's own word, and leaves the enclave it trusts now, which its own check judged, its verdict.
    */
   holdSigner(floor: Readonly<SignerFloor>): void;
-  /** Reports each change of attestation status and of the feed. */
+  /** Reports each change of attestation status and of the feed, and what the server says of its state and the operator's notice. */
   watch(listener: (event: ClientEvent) => void): Unsubscribe;
   markets(): Promise<MarketView[]>;
   house(): Promise<HouseView>;

@@ -4,7 +4,7 @@
 
 import type { Notice, NoticeSurface } from "@/lib/store/state";
 
-import { useConsole, useSession } from "./ConsoleProvider";
+import { useConsole, useConsoleValue, useSession } from "./ConsoleProvider";
 
 const SURFACES: readonly NoticeSurface[] = ["account", "node"];
 const LINE = "border-b px-4 py-1 text-center text-label";
@@ -32,9 +32,9 @@ function Rows({ tone }: { tone: Notice["tone"] }) {
 
 /** The operator's status notice, in the operator's own words after a sentence saying whose they are. */
 function OperatorNotice() {
-  const { notice } = useConsole();
+  const notice = useConsoleValue((state) => state.notice);
   if (notice === null) return null;
-  return <div className={`${LINE} border-amber/40 bg-amber/10 text-amber`}><strong className="font-medium">The operator has published the following notice.</strong> <span className="break-words">{notice.text}</span></div>;
+  return <div className={TONE.info}><strong className="font-medium">The operator has published the following notice.</strong> <span className="break-words">{notice.text}</span></div>;
 }
 
 /** Every live region stays mounted, so a notice that arrives is announced. */

@@ -25,12 +25,10 @@ describe("the status notice", () => {
     expect(store.getSnapshot().notice).toBeNull();
     expect(node.controls.publishNotice("Withdrawals are paused.")).toBeNull();
     expect(store.getSnapshot().notice).toEqual({ text: "Withdrawals are paused.", set_at_ms: SIM_EPOCH_MS });
-    expect(node.controls.notice).toBe("Withdrawals are paused.");
     node.controls.publishNotice("Markets are reduce-only.");
     expect(store.getSnapshot().notice?.text).toBe("Markets are reduce-only.");
     node.controls.clearNotice();
     expect(store.getSnapshot().notice).toBeNull();
-    expect(node.controls.notice).toBeNull();
   });
 
   it("refuses text the node would refuse and leaves the notice as it was", () => {
@@ -40,12 +38,17 @@ describe("the status notice", () => {
     expect(store.getSnapshot().notice?.text).toBe("Kept.");
   });
 
-  it("is not one of the dismissable notices, and survives a change of wallet", () => {
+  it("survives a change of wallet, a disconnect and a dismissal of every other notice", () => {
     const { node, store } = rig();
     node.controls.publishNotice("Kept.");
-    store.clearNotice("account", "node", "feed", "wallet");
+    store.setWallet({ address: "0x00000000000000000000000000000000000000aa", label: "First" });
     expect(store.getSnapshot().notice?.text).toBe("Kept.");
-    expect(Object.keys(store.getSnapshot().notices)).not.toContain("notice");
+    store.setWallet({ address: "0x00000000000000000000000000000000000000bb", label: "Second" });
+    expect(store.getSnapshot().notice?.text).toBe("Kept.");
+    store.setWallet(null);
+    expect(store.getSnapshot().notice?.text).toBe("Kept.");
+    store.clearNotice("account", "node", "feed", "wallet", "ticket");
+    expect(store.getSnapshot().notice?.text).toBe("Kept.");
   });
 
   it("is told to a store that starts after it was published", () => {
