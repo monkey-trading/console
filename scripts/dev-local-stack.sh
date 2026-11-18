@@ -582,7 +582,8 @@ cfg["checkpoints"] = {"rpc_url": rpc, "relayer": relayer, "retry_interval": "500
 if logheads:
     cfg["log_heads"] = {"contract": logheads, "relayer": heads_relayer, "interval": "10s"}
 cfg["access"] = {"source": source, "endpoint": f"http://127.0.0.1:{access}", "timeout": "2s", "max_age": "30s",
-                 "max_response_bytes": 4096, "max_in_flight": 8}
+                 "max_response_bytes": 4096, "max_in_flight": 8,
+                 "max_in_flight_per_account": 2, "max_in_flight_per_client": 4, "reserved_in_flight": 2}
 
 Path(work, "node.toml").write_text(dumps(cfg))
 # What the summary says of the genesis: its markets and the caps its floors give a house of nothing.
