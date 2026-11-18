@@ -1,0 +1,10 @@
+{
+  "exceptions": [
+    {
+      "id": "GHSA-fc5q-39xc-vjpf",
+      "reason": "picomatch ReDoS through a crafted glob, with no patched release (every version through 4.0.7 is affected). The attack needs an attacker-supplied glob. The console compiles only patterns from its build tools (vite, vitest, tinyglobby, typescript-eslint) and WalletConnect's fixed storage keys, which its browser build keeps in localStorage and never matches against a glob.",
+      "expires": "2026-12-18",
+      "issue": "monkey-trading/console#450"
+    }
+  ]
+}
