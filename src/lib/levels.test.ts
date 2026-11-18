@@ -47,6 +47,7 @@ describe("movedLevels", () => {
   it("keeps only the levels a change sets anew or moves, as the engine measures them", () => {
     const held = { takeProfit: fixedFromInt(110), stopLoss: fixedFromInt(90) };
     expect(movedLevels({ takeProfit: fixedFromInt(110), stopLoss: fixedFromInt(95) }, held)).toEqual({ takeProfit: null, stopLoss: fixedFromInt(95) });
+    expect(movedLevels({ takeProfit: fixedFromInt(120), stopLoss: fixedFromInt(90) }, held)).toEqual({ takeProfit: fixedFromInt(120), stopLoss: null });
     expect(movedLevels({ takeProfit: null, stopLoss: null }, held)).toEqual({ takeProfit: null, stopLoss: null });
     expect(movedLevels(held, { takeProfit: null, stopLoss: null })).toEqual(held);
   });
