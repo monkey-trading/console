@@ -30,6 +30,7 @@ function setup(options: { address?: () => string; clockMs?: number; accept?: boo
   const problems: string[] = [];
   const statuses: ServerStatus[] = [];
   const notices: (StatusNotice | null)[] = [];
+  let noticeReads = 0;
   const opened: FrameConnection[] = [];
   // The vectors were opened with `after` first in the query; the client's own path is checked below, and the real verifier checks the vector's.
   const verifier: Verifier = options.accept
@@ -47,9 +48,9 @@ function setup(options: { address?: () => string; clockMs?: number; accept?: boo
     // Quotes, checkpoints and authorizations are tested through the live client in live-actions.test.ts.
     onQuote: () => {}, onQuoteError: () => {}, onWithdrawal: () => {}, onCheckpoint: () => {},
     statusFrames: async () => options.status === true, onStatus: (s) => statuses.push(s),
-    readNotice: async () => (options.notice === true ? { notice: null } : Promise.reject(new EngineError(404, "not found"))), onNotice: (n) => notices.push(n),
+    readNotice: async () => (noticeReads++, options.notice === true ? { notice: null } : Promise.reject(new EngineError(404, "not found"))), onNotice: (n) => notices.push(n),
   });
-  return { stream, sockets, messages, feeds, feedTimes, problems, statuses, notices, scheduler, opened };
+  return { stream, sockets, messages, feeds, feedTimes, problems, statuses, notices, noticeReads: () => noticeReads, scheduler, opened };
 }
 
 const send = (socket: FakeSocket | undefined, ...indexes: number[]) => {
@@ -240,6 +241,15 @@ describe("a stale feed", () => {
   it("asks for both kinds of frame together", async () => {
     const t = await started({ accept: true, status: true, notice: true });
     expect(t.sockets[0]?.url).toBe(`wss://node.test/v1/stream?signed=1&status=1&notice=1&challenge=${connection.challenge}`);
+  });
+
+  it("asks nothing of the node when stopped while it is being verified", async () => {
+    const t = setup({ accept: true, notice: true });
+    t.stream.start();
+    t.stream.stop();
+    await settle();
+    expect(t.noticeReads()).toBe(0);
+    expect(t.sockets).toHaveLength(0);
   });
 
   it("opens nothing when stopped while a recheck is pending", async () => {

@@ -57,10 +57,10 @@ describe("a notice read", () => {
     expect(none.reports).toEqual([null]);
   });
 
-  it("reports nothing for a node that predates the route, and does not ask the stream for frames", async () => {
+  it("reports no notice for a node that predates the route, and does not ask the stream for frames", async () => {
     const t = watching(new EngineError(404, "not found"));
     await expect(t.watch.frames()).resolves.toBe(false);
-    expect(t.reports).toEqual([]);
+    expect(t.reports).toEqual([null]);
   });
 
   it("asks the node again before every connection, so a server replaced by another release is asked the right query", async () => {
@@ -68,7 +68,7 @@ describe("a notice read", () => {
     const asked = [await t.watch.frames(), await t.watch.frames(), await t.watch.frames(), await t.watch.frames(), await t.watch.frames()];
     expect(asked).toEqual([true, false, true, false, true]);
     expect(t.reads()).toBe(5);
-    expect(t.reports).toEqual([NOTICE, null, NOTICE]);
+    expect(t.reports).toEqual([NOTICE, null, null, null, NOTICE]);
   });
 
   it("says nothing of the notice when the read fails, and still asks the stream for frames", async () => {
@@ -173,7 +173,28 @@ describe("the live client", () => {
     t.live.subscribe(() => {});
     await settle();
     expect(t.sockets[0]?.url).toBe(`wss://node.test/v1/stream?signed=1&challenge=${"ab".repeat(32)}`);
-    expect(t.notices).toEqual([]);
+    expect(t.notices).toEqual([null]);
+  });
+
+  it("drops a read still on its way from a stream that was stopped, so it cannot restore a notice the next stream has cleared", async () => {
+    const t = client(200, { notice: NOTICE });
+    const answer = t.node.routes.get("/v1/notice");
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let asked = 0;
+    t.node.routes.set("/v1/notice", async (challenge) => {
+      if (asked++ === 0) await held; // the first stream's read waits; the second's answers at once, with no notice
+      return asked === 1 ? (answer?.(challenge) as Response) : new Response('{"notice":null}', { status: 200, headers: (answer?.(challenge) as Response).headers });
+    });
+    const unsubscribe = t.live.subscribe(() => {});
+    await settle();
+    unsubscribe();
+    t.live.subscribe(() => {});
+    await settle();
+    expect(t.notices).toEqual([null]);
+    release();
+    await settle();
+    expect(t.notices).toEqual([null]);
   });
 
   it("asks again when the stream reconnects, so a node upgraded meanwhile is asked for notice frames", async () => {
@@ -185,7 +206,7 @@ describe("the live client", () => {
     t.sockets[0]?.drop("close");
     t.scheduler.advance(5_000); // past the first backoff
     await settle();
-    expect(t.notices).toEqual([NOTICE]);
+    expect(t.notices).toEqual([null, NOTICE]);
     expect(t.sockets.at(-1)?.url).toContain("&notice=1&");
   });
 });

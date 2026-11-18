@@ -3,7 +3,8 @@
  * read before each connection asks for the stream's `notice` frames, which carry it from then on.
  * The read also tells whether the node serves notices, asked again at every connection so a server
  * replaced by another release is asked the right query. A read that fails says nothing about the
- * notice, which stays as last heard until a frame or a read replaces it.
+ * notice, which stays as last heard until a frame or a read replaces it; a node that signs a 404 for
+ * the route holds none.
  */
 
 import { EngineError } from "./client";
@@ -24,7 +25,8 @@ export class NoticeWatch {
 
   /**
    * Reads the notice and reports it, and says whether a connection asks for notice frames: false for a
-   * node that predates them, which refuses to be asked for them. Never rejects.
+   * node that predates them, which refuses to be asked for them. A signed 404 also means the node holds
+   * no notice, so the one shown is cleared; any other failure says nothing of it.
    */
   async frames(): Promise<boolean> {
     const generation = ++this.generation;
@@ -32,7 +34,9 @@ export class NoticeWatch {
     try {
       notice = noticeOf(await this.deps.read());
     } catch (error) {
-      return !(error instanceof EngineError && error.status === 404);
+      if (!(error instanceof EngineError && error.status === 404)) return true;
+      if (generation === this.generation) this.deps.report(null);
+      return false;
     }
     if (notice !== undefined && generation === this.generation) this.deps.report(notice);
     return true;

@@ -157,6 +157,8 @@ export class LiveStream {
       if (generation === this.generation) this.fail(error instanceof Error ? error.message : "The server has not yet been verified.");
       return;
     }
+    // Stopped while the node was being verified: nothing is asked of it, since a late answer would reach the page after a newer stream's.
+    if (generation !== this.generation || this.stopped) return;
     const [status, notice] = await Promise.all([this.deps.statusFrames(), this.notice.frames()]);
     if (generation !== this.generation || this.stopped) return;
     const challenge = this.deps.challenge();
