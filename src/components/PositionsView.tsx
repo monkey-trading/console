@@ -56,6 +56,8 @@ const RATE_W = "min-w-[16ch]";
 const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 /** The table's Close button sits under its figure, with the gap a second line would take. */
 const CELL_BUTTON = `${BUTTON} mt-1`;
+/** The table's Edit button beside Close, its padding and gap a little tighter so the row stays inside the 740 px pane at six-digit prices. */
+const EDIT_BUTTON = "mt-1 ml-0.5 min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0 lg:px-1.5";
 /** The button while it waits for its second press: the hover colours, held. */
 const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 
@@ -274,7 +276,7 @@ export function PositionsView() {
                 <td className={`${TD} ${CLOSE_W}`}>
                   <span className="block">{r.proceeds}</span>
                   <button type="button" disabled={!r.closable} className={CELL_BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-                  {r.editor !== null && <button type="button" id={editButtonIds(id, r.key)[0]} className={`${CELL_BUTTON} ml-1`} aria-expanded={r.editing} aria-controls={r.editing ? `${id}-levels-row` : undefined} aria-label={`Edit take profit and stop loss for ${r.symbol} position`} onClick={r.edit}>Edit</button>}
+                  {r.editor !== null && <button type="button" id={editButtonIds(id, r.key)[0]} className={EDIT_BUTTON} aria-expanded={r.editing} aria-controls={r.editing ? `${id}-levels-row` : undefined} aria-label={`Edit take profit and stop loss for ${r.symbol} position`} onClick={r.edit}>Edit</button>}
                 </td>
               </tr>
               {r.editing && r.editor !== null && <tr className="border-b border-line"><td colSpan={8}><LevelsEditor id={`${id}-levels-row`} {...r.editor} readOnly={readOnly.readOnly} describedBy={readOnly.describedBy} /></td></tr>}
