@@ -40,13 +40,13 @@ describe("the log's line for a level event", () => {
 
   it("says a level an order named was not kept when the order left no position for it, in the singular for one level", () => {
     const event: LevelEvent = { type: "position_levels_removed", account: ME, market: 1, stop_loss: "95000", reason: "not_opened" };
-    expect(describeLevelEvent(event, symbolOf)).toBe("The stop loss at 95,000 named on the BTC-USD order was removed because the order did not leave a position on its side for the levels to protect");
+    expect(describeLevelEvent(event, symbolOf)).toBe("The stop loss at 95,000 named on the BTC-USD order was removed because the order did not open or add to a position for the levels to protect");
   });
 });
 
 describe("the engine's refusals of levels", () => {
   it("says a level was too close, the rule, and the closing price it was measured from", () => {
-    expect(describeReject({ kind: "level_too_close", level: "100100", min_distance_bps: 30, reference: "99980.5" })).toBe("The level 100,100 is too close to the current price. In this market, a take profit or stop loss must be at least 0.3% beyond the price at which the position would close, which was 99,980.5 when your request was processed. Choose a level further from the current price.");
+    expect(describeReject({ kind: "level_too_close", level: "100100", min_distance_bps: 30, reference: "99980.5" })).toBe("The level 100,100 was not accepted. In this market, a take profit or stop loss must be at least 0.3% beyond the price it is measured from: above it for a long position's take profit or a short position's stop loss, and below it otherwise. That price was 99,980.5 when your request was processed, so set the level further from it, on the correct side.");
     expect(describeReject({ kind: "levels_unsupported" })).toBe("This server does not support take-profit and stop-loss levels yet.");
   });
 

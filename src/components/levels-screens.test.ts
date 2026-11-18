@@ -71,6 +71,16 @@ describe("the position row's levels", () => {
   });
 });
 
+describe("a levels request's answer with no editor open", () => {
+  it("is shown above the positions, or under the empty list once the position is gone, so a refusal is never lost", () => {
+    const shown = (positions: PositionModel[]) => render(createElement(PositionsView), { account: account(positions), notices: { levels: { id: 1, text: "A refusal the trader must read.", tone: "error" } } });
+    expect(shown([position])).toMatch(/role="alert"[^>]*>(?:(?!<\/div>).)*A refusal the trader must read\./);
+    const empty = shown([]);
+    expect(empty).toMatch(/role="alert"[^>]*><p[^>]*>A refusal the trader must read\./);
+    expect(empty.indexOf("You have no open positions.")).toBeLessThan(empty.indexOf("A refusal the trader must read."));
+  });
+});
+
 describe("a read-only account's positions", () => {
   it("offer no editor: Edit is unavailable and says why", () => {
     const html = render(createElement(PositionsView), { account: account([position]), wallet: { address: "0xabc", label: "Watched", readOnly: true } });
@@ -89,7 +99,7 @@ describe("Market info's minimum distance", () => {
 describe("the levels editor", () => {
   const editor = (patch: Partial<Parameters<typeof LevelsEditor>[0]> = {}) => createElement(LevelsEditor, {
     id: "editor", market, position, fields: { takeProfit: "102000", stopLoss: "97500" }, onChange: () => undefined, closing: fixedFromInt(99_980), noClosing: "No closing price is available.", capped: null, limits: null, toUsdDown: (x) => x,
-    onCancel: () => undefined, onSaved: () => undefined, readOnly: false, describedBy: undefined, ...patch,
+    onCancel: () => undefined, onSend: () => undefined, onSaved: () => undefined, readOnly: false, describedBy: undefined, ...patch,
   });
 
   it("opens with the position's levels, their estimates and the closing price they are measured from, and offers no save until they change", () => {
@@ -103,9 +113,15 @@ describe("the levels editor", () => {
     expect(html).toContain("Leave a field empty to remove that level.");
   });
 
+  it("says a take profit is measured from the market price where the closing price may be capped nearer it", () => {
+    const html = render(editor({ capped: fixedFromInt(100_000) }));
+    expect(html).toContain("The price at which your entire position would close is currently 99,980.00. A new or moved stop loss must be at least 0.3% below that closing price. For a position of this size, a new or moved take profit must be at least 0.3% above the market price, which is currently 100,000.00.");
+  });
+
   it("keeps Cancel and Save from acting while a request is signed and sent, so its answer shows in the editor", () => {
     const html = render(editor({ fields: { takeProfit: "102000", stopLoss: "98000" } }), { busy: true });
-    expect(html).toMatch(/<button type="submit" aria-disabled="true"[^>]*>Signing…<\/button>/);
+    // Save says it is signing only for its own request; while another is signed it is simply unavailable.
+    expect(html).toMatch(/<button type="submit" aria-disabled="true"[^>]*>Save<\/button>/);
     expect(html).toMatch(/<button type="button" disabled=""[^>]*>Cancel<\/button>/);
   });
 

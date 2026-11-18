@@ -3,9 +3,9 @@
 /**
  * The Positions tab's one levels editor: which position it is open under, the fields typed in it, held
  * here so the table's and the cards' editors show the same draft across a change of layout, and what a
- * save says to a screen reader. A draft belongs to the account and the side of the position it was
- * opened for, and is dropped once that position is no longer held, so a later position in the market or
- * another account never inherits it. Each opening is a new instance, and a save that lands later closes
+ * save says to a screen reader. A draft belongs to the position it was opened for (`openDraft`) and is
+ * dropped once that position is no longer the one held, so a later position in the market, a changed one
+ * or another account never inherits it. Each opening is a new instance, and a save that lands later closes
  * only the instance and draft it was sent from, returning focus to the row's Edit button when it held focus.
  */
 
@@ -13,23 +13,9 @@ import { useEffect, useRef, useState } from "react";
 
 import type { MarketId } from "@/lib/engine/types";
 import type { LevelFields } from "@/lib/level-check";
+import { landedSave, openDraft, type HeldPosition, type LevelsDraft } from "@/lib/level-draft";
 import { levelsWire, type Levels } from "@/lib/levels";
 import type { ConsoleStore } from "@/lib/store/store";
-
-/** The open editor's position, the account and side it was opened for, its draft, and the instance it was opened as. */
-export interface LevelsDraft {
-  market: MarketId;
-  owner: string;
-  long: boolean;
-  fields: LevelFields;
-  instance: number;
-}
-
-/** A position the account holds now: its market and side. */
-export interface HeldPosition {
-  market: MarketId;
-  long: boolean;
-}
 
 /** The fields a position's levels prefill: each as the plain digits it was set with, or empty. */
 function fieldsOf(levels: Levels): LevelFields {
@@ -51,9 +37,9 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
     latest.current = next;
     setDraft(next);
   };
-  const current = draft !== null && draft.owner === owner && held.some((p) => p.market === draft.market && p.long === draft.long) ? draft : null;
-  // A draft whose position closed or turned, or whose account is no longer connected, is dropped while rendering, as React adjusts
-  // state on a change of props, so it never shows again; the handlers' copy follows once the drop is committed.
+  const current = openDraft(draft, owner, held);
+  // A draft whose position is no longer the one it was opened for, or whose account is no longer connected, is dropped while
+  // rendering, as React adjusts state on a change of props, so it never shows again; the handlers' copy follows once committed.
   if (draft !== null && current === null) setDraft(null);
   useEffect(() => {
     if (draft === null) latest.current = null;
@@ -68,33 +54,39 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
     shown?.focus();
   };
   return {
-    /** The draft of `market`'s editor, open for its position on that side; null while it is closed. */
-    draftFor: (market: MarketId, long: boolean): LevelsDraft | null => (current?.market === market && current.long === long ? current : null),
+    /** The draft of `market`'s editor while it is open; null while it is closed. */
+    draftFor: (market: MarketId): LevelsDraft | null => (current?.market === market ? current : null),
+    /** Whether an editor is open under any row. */
+    open: current !== null,
     announced,
     /** Opens the editor under `market`'s row with its levels, or closes it there. */
-    toggle: (market: MarketId, long: boolean, levels: Levels) => {
+    toggle: (position: HeldPosition) => {
       if (owner === null) return;
       store.clearNotice("levels");
       opened.current += 1;
-      set(latest.current?.market === market ? null : { market, owner, long, fields: fieldsOf(levels), instance: opened.current });
+      const { market, long, entry, opened: openedAt, levels } = position;
+      set(latest.current?.market === market ? null : { market, owner, long, entry, opened: openedAt, base: levels, sent: null, fields: fieldsOf(levels), instance: opened.current });
     },
     edit: (fields: LevelFields) => {
       if (latest.current !== null) set({ ...latest.current, fields });
     },
+    /** Editor `instance` sends `levels`, which the position may hold before the answer lands. */
+    sending: (instance: number, levels: Levels) => {
+      if (latest.current?.instance === instance) set({ ...latest.current, sent: levels });
+    },
     cancel: (market: MarketId) => {
+      store.clearNotice("levels");
       const refocusing = focusInEditor();
       set(null);
       if (refocusing) refocus(market);
     },
-    /**
-     * A save of `sent` from `instance` landed: says what was saved while that editor is still open, and closes it if it still
-     * holds that draft. An editor closed, reopened or dropped since is left alone.
-     */
+    /** A save of `sent` from `instance` landed: what it does to the editor open now is `landedSave`'s. */
     saved: (instance: number, sent: LevelFields, market: MarketId, words: string) => {
-      const now = latest.current;
-      if (now === null || now.instance !== instance) return;
+      const draft = latest.current;
+      const outcome = landedSave(draft, instance, sent);
+      if (draft === null || outcome === "ignore") return;
       setAnnounced(words);
-      if (now.fields !== sent) return;
+      if (outcome === "announce") return set({ ...draft, base: draft.sent ?? draft.base, sent: null });
       const refocusing = focusInEditor();
       set(null);
       if (refocusing) refocus(market);

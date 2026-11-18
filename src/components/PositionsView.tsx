@@ -18,15 +18,16 @@ import { formatCloseout, formatMark } from "@/lib/price-format";
 import { absFixed, formatFixedPlaces, formatUsd } from "@/lib/fixed";
 import { roundToPlaces } from "@/lib/fixed-rounding";
 import { realisedAt } from "@/lib/close-preview";
-import { formatLevel, minLevelDistance, NO_LEVELS } from "@/lib/levels";
+import { formatLevel, minLevelDistance, NO_LEVELS, type Levels } from "@/lib/levels";
 import type { LevelFields } from "@/lib/level-check";
 import { CLOSE_ALL_REMOVES_LEVELS } from "@/lib/level-words";
 import { editorReference } from "@/lib/ticket-levels";
+import type { PositionModel } from "@/lib/models";
 import { closingPrice } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
 import { closeAll } from "@/lib/store/batch-actions";
 import { previewTicket, unrealisedPnl, usdConverter } from "@/lib/ticket";
-import { accountFeeTerms, CLOSE_WAITS, currentParams, positionClose, positionFeeNow } from "@/lib/ticket-figures";
+import { accountFeeTerms, CLOSE_WAITS, currentParams, houseTermsNote, positionClose, positionFeeNow } from "@/lib/ticket-figures";
 import { accountPricing, ticketLimits } from "@/lib/tier-view";
 
 import { useConsole, useSession } from "./ConsoleProvider";
@@ -90,8 +91,10 @@ export function PositionsView() {
   const { armed, state, arm, cancel } = useConfirmWindow(CONFIRM_MS, CONFIRM_MIN_GAP_MS);
   const { confirmBatch } = usePrefs().prefs;
   const positions = account?.positions ?? [];
-  // The one levels editor, under the row of the position it is open for, and its draft, which the account and the position's side own.
-  const levelsEditor = useLevelsEditor(store, id, snapshot.wallet?.address.toLowerCase() ?? null, positions.map((p) => ({ market: p.market, long: p.qty > 0n })));
+  // The one levels editor, under the row of the position it is open for, and its draft, which that position as it was opened owns.
+  const heldOf = (p: PositionModel) => ({ market: p.market, long: p.qty > 0n, entry: p.entry, opened: p.closeFee?.openedAt ?? null, levels: p.levels ?? NO_LEVELS });
+  const held = positions.map(heldOf);
+  const levelsEditor = useLevelsEditor(store, id, snapshot.wallet?.address.toLowerCase() ?? null, held);
   const feeTip = `This is the fee rate paid on a winning trade. ${feeTerms === null ? "The fee rate falls the longer the position is held." : describeSchedule(feeTerms)}`;
   const rows = positions.map((p) => {
     const market = markets.find((m) => m.id === p.market);
@@ -132,11 +135,11 @@ export function PositionsView() {
     };
     // From V79 a position in a market that takes levels shows them and an editor to set, move or remove them, measured from its closing price.
     const levels = p.levels ?? NO_LEVELS;
-    const draft = levelsEditor.draftFor(p.market, p.qty > 0n);
+    const draft = levelsEditor.draftFor(p.market);
     const editor = market === undefined || minLevelDistance(market.view) === null ? null : {
-      market, position: p, ...editorReference(account, terms, market, p.qty, known === null ? null : quoted), noClosing: `The take profit and stop loss cannot be checked at the moment. ${noPrice ?? CLOSE_WAITS}`,
+      market, position: p, ...editorReference(account, terms, market, p.qty, known === null ? null : quoted), noClosing: `The take profit and stop loss cannot be checked at the moment. ${noPrice ?? houseTermsNote(snapshot) ?? CLOSE_WAITS}`,
       limits: ticketLimits(account, p.market), toUsdDown, fields: draft?.fields ?? { takeProfit: "", stopLoss: "" }, onChange: levelsEditor.edit,
-      onCancel: () => levelsEditor.cancel(p.market), onSaved: (sent: LevelFields, words: string) => { if (draft !== null) levelsEditor.saved(draft.instance, sent, p.market, words); },
+      onCancel: () => levelsEditor.cancel(p.market), onSend: (sent: Levels) => { if (draft !== null) levelsEditor.sending(draft.instance, sent); }, onSaved: (sent: LevelFields, words: string) => { if (draft !== null) levelsEditor.saved(draft.instance, sent, p.market, words); },
     };
     return {
       key: p.market,
@@ -158,7 +161,7 @@ export function PositionsView() {
       holdsLevels: p.levels !== undefined,
       editor,
       editing: editor !== null && draft !== null,
-      edit: () => levelsEditor.toggle(p.market, p.qty > 0n, levels),
+      edit: () => levelsEditor.toggle(heldOf(p)),
       // While a request is signed and sent, the editor stays as it is, so its answer is shown in it.
       editable: !busy && !readOnly.readOnly,
       hold: fee === null ? "—" : formatHold(fee.holdMs),
@@ -188,7 +191,7 @@ export function PositionsView() {
   useEffect(() => cancel(), [listed, cancel]);
   // An account that could not be read (the panel above says so) shows no positions, rather than none as if it had none.
   if (account === null && notices.accountRead !== undefined) return <p className="px-4 py-6 text-caption text-fg-3">Your positions will be shown once your account has loaded.</p>;
-  if (positions.length === 0) return <><p className="px-4 py-6 text-caption text-fg-3">You have no open positions.</p><div className="px-4 has-[p]:pb-3"><Notice surface="positions" /></div></>;
+  if (positions.length === 0) return <><p className="px-4 py-6 text-caption text-fg-3">You have no open positions.</p><div className="px-4 has-[p]:pb-3"><Notice surface="positions" /><Notice surface="levels" /></div></>;
   const closeEverything = (event: { currentTarget: HTMLElement }) => {
     const press = pressBatch(confirmBatch, state(), count);
     if (press === "arm") arm();
@@ -212,7 +215,7 @@ export function PositionsView() {
         {confirming && removesLevels && <p className="text-label leading-relaxed text-fg-2">{CLOSE_ALL_REMOVES_LEVELS}</p>}
         {leftOutNote !== null && <p id={noteId} className="text-label leading-relaxed text-fg-3">{leftOutNote}</p>}
       </div>
-      <div className="px-4 has-[p]:border-b has-[p]:border-line has-[p]:pb-3"><Notice surface="positions" /></div>
+      <div className="px-4 has-[p]:border-b has-[p]:border-line has-[p]:pb-3"><Notice surface="positions" />{!levelsEditor.open && <Notice surface="levels" />}</div>
       <p role="status" className="sr-only">{levelsEditor.announced}</p>
       <ul className="lg:hidden">
         {rows.map((r) => (
@@ -279,7 +282,7 @@ export function PositionsView() {
                   {r.editor !== null && <button type="button" id={editButtonIds(id, r.key)[0]} disabled={!r.editable} aria-describedby={readOnly.describedBy} className={EDIT_BUTTON} aria-expanded={r.editing} aria-controls={r.editing ? `${id}-levels-row` : undefined} aria-label={`Edit take profit and stop loss for ${r.symbol} position`} onClick={r.edit}>Edit</button>}
                 </td>
               </tr>
-              {r.editing && r.editor !== null && <tr className="border-b border-line"><td colSpan={8}><LevelsEditor id={`${id}-levels-row`} {...r.editor} readOnly={readOnly.readOnly} describedBy={readOnly.describedBy} /></td></tr>}
+              {r.editing && r.editor !== null && <tr className="border-b border-line"><td colSpan={8}><div className="[contain:inline-size]"><LevelsEditor id={`${id}-levels-row`} {...r.editor} readOnly={readOnly.readOnly} describedBy={readOnly.describedBy} /></div></td></tr>}
               </Fragment>
             ))}
           </tbody>

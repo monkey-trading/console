@@ -51,7 +51,17 @@ describe("setting a position's levels", () => {
     const mine: EngineEvent = { type: "order_rejected", account: ME, client_id: 0, reason: { kind: "level_too_close", level: "100100", min_distance_bps: 30, reference: "99980" } };
     const { store } = await setup([other, mine]);
     expect(await setPositionLevels(store, 1, LEVELS)).toBe(false);
-    expect(store.getSnapshot().notices.levels).toMatchObject({ tone: "error", text: expect.stringContaining("The level 100,100 is too close to the current price.") });
+    expect(store.getSnapshot().notices.levels).toMatchObject({ tone: "error", text: expect.stringContaining("The level 100,100 was not accepted.") });
+  });
+
+  it("says a levels request refused for the working order limit was refused because the levels take a slot", async () => {
+    const atLimit = async (reason: { kind: "tier_order_limit"; tier: number; max: number } | { kind: "too_many_orders"; max: number }) => {
+      const { store } = await setup([{ type: "order_rejected", account: ME, client_id: 0, reason }]);
+      expect(await setPositionLevels(store, 1, LEVELS)).toBe(false);
+      return store.getSnapshot().notices.levels?.text;
+    };
+    expect(await atLimit({ kind: "tier_order_limit", tier: 1, max: 50 })).toBe("Working order limit reached. Volume tier 1 allows up to 50 working orders at a time, and the take profit and stop loss on a position together count as one. Cancel a working order, or remove the levels from another position, to set levels here.");
+    expect(await atLimit({ kind: "too_many_orders", max: 25 })).toBe("Working order limit reached. Your account can have up to 25 working orders at a time, and the take profit and stop loss on a position together count as one. Cancel a working order, or remove the levels from another position, to set levels here.");
   });
 
   it("matches the refusal to the account that sent the request, though another is connected when the answer lands", async () => {

@@ -12,7 +12,7 @@ import type { HouseParams } from "./house";
 import type { AccountModel, MarketModel } from "./models";
 import { CALM, conversionAt, priceOrder, stressTermsAt, type StressTerms } from "./pricing";
 import type { ConsoleState } from "./store/state";
-import { currentParams, type TicketFigures, type TicketOrder } from "./ticket-figures";
+import { CLOSE_WAITS, currentParams, houseTermsNote, type TicketFigures, type TicketOrder } from "./ticket-figures";
 import { usdConverter } from "./ticket";
 import { accountPricing } from "./tier-view";
 import { isPriced } from "./unpriced";
@@ -51,13 +51,15 @@ export function closingExact(market: MarketModel, held: Fixed, tiers: readonly S
  * What the position editor measures a position of `held` in `market` from: the node's exact whole close,
  * `quoted`, where it quotes one; else the console's own close at the mark, as the engine measures from the
  * last mark while the market is shut, the mark taking a take profit where that close may be capped. An open
- * market with no live price has none: the engine refuses a new or moved level there.
+ * market with no live price has none, as the engine refuses a new or moved level there, and nor does a close
+ * the console prices while the house's parameters are not current (`params` null).
  */
 export function editorReference(account: AccountModel | null, params: HouseParams | null, market: MarketModel, held: Fixed, quoted: Fixed | null): { closing: Fixed | null; capped: Fixed | null } {
   if (quoted !== null) return { closing: quoted, capped: null };
-  if (market.mark === null || (market.open && !isPriced(market))) return { closing: null, capped: null };
+  // Its own close needs the stress level's terms and the account's bands, which only current parameters give.
+  if (params === null || market.mark === null || (market.open && !isPriced(market))) return { closing: null, capped: null };
   const tiers = accountPricing(account, params, market.view).spreadTiers ?? market.view.spread_tiers;
-  const closing = closingAt(market, held, { tiers, stress: stressTermsAt(params?.stressLevels, market.stress) ?? CALM, toxicityBps: account?.toxicity?.addOnBps ?? 0 });
+  const closing = closingAt(market, held, { tiers, stress: stressTermsAt(params.stressLevels, market.stress) ?? CALM, toxicityBps: account?.toxicity?.addOnBps ?? 0 });
   return { closing, capped: closing !== null && !closingExact(market, held, tiers) ? market.mark : null };
 }
 
@@ -74,12 +76,14 @@ export function ticketLevels(state: ConsoleState, market: MarketModel, order: Ti
   const params = currentParams(state);
   const tiers = accountPricing(state.account, params, market.view).spreadTiers ?? market.view.spread_tiers;
   const stress = stressTermsAt(params?.stressLevels, market.stress) ?? CALM;
-  const closing = order.resting ? null : closingAt(market, left, { tiers, stress, toxicityBps: figures.prices.toxicityBps });
+  // Its own close needs the stress level's terms and the account's bands, which only current parameters give.
+  const closing = order.resting || params === null ? null : closingAt(market, left, { tiers, stress, toxicityBps: figures.prices.toxicityBps });
+  const unmeasured = order.resting || params !== null ? null : `The take profit and stop loss cannot be checked at the moment. ${houseTermsNote(state) ?? CLOSE_WAITS}`;
   // Where the closing price may be capped nearer the mark, a take profit is measured from the mark, so none the engine refuses passes.
   const capped = closing !== null && !closingExact(market, left, tiers) ? market.mark : null;
   return checkTicketLevels({
     market, side: order.side, qty: order.qty, resting: order.resting, price: order.resting ? order.triggerPrice : figures.prices.price,
-    held, heldLevels: position?.levels ?? NO_LEVELS, closing, capped, limits: figures.limits, fields,
+    held, heldLevels: position?.levels ?? NO_LEVELS, closing, capped, unmeasured, limits: figures.limits, fields,
     toUsdDown: market.mark === null ? null : usdConverter(market.view, market.mark, "down"),
   });
 }

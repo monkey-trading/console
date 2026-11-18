@@ -7,11 +7,13 @@
  * (`useLevelsEditor`), so the table's and the card's editors are one.
  */
 
+import { useState } from "react";
+
 import { spokenRate } from "@/lib/fee-words";
 import type { Fixed } from "@/lib/fixed";
 import { checkEditorLevels, type LevelFields } from "@/lib/level-check";
 import { levelsSavedWords } from "@/lib/level-words";
-import { NO_LEVELS } from "@/lib/levels";
+import { NO_LEVELS, type Levels } from "@/lib/levels";
 import type { MarketModel, PositionModel } from "@/lib/models";
 import { formatMark } from "@/lib/price-format";
 import { setPositionLevels } from "@/lib/store/level-actions";
@@ -37,6 +39,8 @@ interface Props {
   limits: TicketLimits | null;
   toUsdDown: ((amount: Fixed) => Fixed) | null;
   onCancel: () => void;
+  /** Save sends `levels`. */
+  onSend: (levels: Levels) => void;
   /** The node took `sent`, and `words` say what the position now holds. */
   onSaved: (sent: LevelFields, words: string) => void;
   readOnly: boolean;
@@ -44,9 +48,11 @@ interface Props {
   describedBy: string | undefined;
 }
 
-export function LevelsEditor({ id, market, position, fields, onChange, closing, noClosing, capped, limits, toUsdDown, onCancel, onSaved, readOnly, describedBy }: Props) {
+export function LevelsEditor({ id, market, position, fields, onChange, closing, noClosing, capped, limits, toUsdDown, onCancel, onSend, onSaved, readOnly, describedBy }: Props) {
   const { store } = useSession();
   const busy = useConsoleValue((state) => state.busy);
+  // Whether this editor's own request is being signed and sent, which alone its Save button says.
+  const [saving, setSaving] = useState(false);
   const long = position.qty > 0n;
   const check = checkEditorLevels({ market, qty: position.qty, entry: position.entry, held: position.levels ?? NO_LEVELS, closing, noClosing, capped, limits, fields, toUsdDown });
   const canSave = check.changed && !check.blocked && !busy && !readOnly;
@@ -55,14 +61,21 @@ export function LevelsEditor({ id, market, position, fields, onChange, closing, 
     if (!canSave) return;
     const sent = fields;
     const words = levelsSavedWords(market.symbol, check.named, market.places);
-    void setPositionLevels(store, market.id, check.named).then((saved) => { if (saved) onSaved(sent, words); });
+    setSaving(true);
+    onSend(check.named);
+    void setPositionLevels(store, market.id, check.named).then((saved) => {
+      setSaving(false);
+      if (saved) onSaved(sent, words);
+    });
   };
   return (
     <form id={id} data-levels-editor className="px-4 py-3 lg:px-1.5" onSubmit={(event) => { event.preventDefault(); save(); }}>
       <LevelInputs title={`Take profit and stop loss for your ${market.symbol} ${long ? "long" : "short"} position`} check={check} fields={fields} onChange={onChange} />
-      {closing !== null && <p className="mt-1 text-label leading-relaxed text-fg-3">The price at which your entire position would close is currently {formatMark(closing, market.places)}. A new or moved take profit must be at least {rate} {long ? "above" : "below"} that closing price, and a new or moved stop loss at least {rate} {long ? "below" : "above"} it.</p>}
+      {closing !== null && <p className="mt-1 text-label leading-relaxed text-fg-3">The price at which your entire position would close is currently {formatMark(closing, market.places)}. {capped === null
+        ? `A new or moved take profit must be at least ${rate} ${long ? "above" : "below"} that closing price, and a new or moved stop loss at least ${rate} ${long ? "below" : "above"} it.`
+        : `A new or moved stop loss must be at least ${rate} ${long ? "below" : "above"} that closing price. For a position of this size, a new or moved take profit must be at least ${rate} ${long ? "above" : "below"} the market price, which is currently ${formatMark(capped, market.places)}.`}</p>}
       <div className="mt-3 flex gap-2">
-        <button type="submit" aria-disabled={!canSave} aria-describedby={describedBy} className={BUTTON}>{busy ? "Signing…" : "Save"}</button>
+        <button type="submit" aria-disabled={!canSave} aria-describedby={describedBy} className={BUTTON}>{saving ? "Signing…" : "Save"}</button>
         <button type="button" disabled={busy} className={`${BUTTON} disabled:opacity-40`} onClick={onCancel}>Cancel</button>
       </div>
       <Notice surface="levels" />

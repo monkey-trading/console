@@ -19,7 +19,7 @@ export interface Levels {
 export const NO_LEVELS: Levels = { takeProfit: null, stopLoss: null };
 
 /** The largest price the engine accepts as input (`Fixed::MAX_INPUT`). */
-const MAX_INPUT = fixedFromInt(1_000_000_000);
+export const MAX_INPUT = fixedFromInt(1_000_000_000);
 
 /** Why a level is refused against its reference: on the other side of it, or on its side but closer than the market's minimum distance. `bound` is the nearest level the engine accepts. */
 export interface LevelRefusal {

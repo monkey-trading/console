@@ -110,6 +110,8 @@ export interface TicketLevelsInput {
   closing: Fixed | null;
   /** The mark, where that closing price may be capped nearer it (`closingExact`); null where it is the engine's. */
   capped: Fixed | null;
+  /** Why a market order's closing price cannot be worked out, such as trading terms not yet read; it stops a new or moved level. Null otherwise. */
+  unmeasured: string | null;
   limits: TicketLimits | null;
   fields: LevelFields;
   toUsdDown: ((amount: Fixed) => Fixed) | null;
@@ -142,7 +144,7 @@ export function checkTicketLevels(input: TicketLevelsInput): LevelCheck | null {
   const added = input.held !== 0n && (input.held > 0n) === (left > 0n);
   const measured = movedLevels(named, added ? input.heldLevels : NO_LEVELS);
   // A position holding no levels in this market needs a working order slot for its first pair.
-  const general = none ? null : levelSlotProblem(input.limits, noLevels(input.heldLevels));
+  const general = (noLevels(measured) ? null : input.unmeasured) ?? (none ? null : levelSlotProblem(input.limits, noLevels(input.heldLevels)));
   return checked({ ...base, long: left > 0n, measured, reference: input.closing, capped: input.capped, basis: "closing", general, note, size: minFixed(input.qty, absFixed(left)) });
 }
 

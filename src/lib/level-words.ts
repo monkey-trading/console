@@ -28,7 +28,7 @@ export const TICKET_LEVELS_NOTES = {
   adds: "This order adds to your position. Each level entered here replaces the position's current level, and a field left empty keeps the current level.",
   reverses: "This order reverses your position, so the position's current take profit and stop loss are removed, and only the levels entered here apply to the new position.",
   rests: "The levels entered here apply only once the order is executed. If the order then adds to your position, each level replaces the position's current level, and a field left empty keeps the current level.",
-  restsReducing: "If this order is executed while your current position is still open, it reduces that position instead of opening one on its own side, and the levels entered here are then discarded.",
+  restsReducing: "The levels entered here are attached only if this order, when it is executed, leaves you a position in its own direction. If your current position is then still at least as large as the order, the order only reduces it, and the levels are discarded.",
 } as const;
 
 /** What the position editor's fields do. */
@@ -90,10 +90,20 @@ function decimal(wire: string, places = 9): string {
   return text.replace(/0+$/, "").replace(/\.$/, "");
 }
 
-/** The engine's refusal of a level closer than the market's minimum distance, after the request reached it. */
+/**
+ * The engine's refusal of a level, after the request reached it: one closer than the market's minimum distance to the price it
+ * is measured from, or on the wrong side of it. That price is a position's closing price or a working order's own price, so it
+ * is named as the price the level was measured from.
+ */
 export function describeLevelReject(reject: LevelReject): string {
   if (reject.kind === "levels_unsupported") return "This server does not support take-profit and stop-loss levels yet.";
-  return `The level ${decimal(reject.level)} is too close to the current price. In this market, a take profit or stop loss must be at least ${spokenRate(reject.min_distance_bps)} beyond the price at which the position would close, which was ${decimal(reject.reference)} when your request was processed. Choose a level further from the current price.`;
+  return `The level ${decimal(reject.level)} was not accepted. In this market, a take profit or stop loss must be at least ${spokenRate(reject.min_distance_bps)} beyond the price it is measured from: above it for a long position's take profit or a short position's stop loss, and below it otherwise. That price was ${decimal(reject.reference)} when your request was processed, so set the level further from it, on the correct side.`;
+}
+
+/** A levels request refused for want of a working order slot, in words that say the levels take one. */
+export function describeLevelSlotReject(reject: { kind: "tier_order_limit"; tier: number; max: number } | { kind: "too_many_orders"; max: number }): string {
+  const who = reject.kind === "tier_order_limit" ? `Volume tier ${reject.tier} allows` : "Your account can have";
+  return `Working order limit reached. ${who} up to ${reject.max} working orders at a time, and the take profit and stop loss on a position together count as one. Cancel a working order, or remove the levels from another position, to set levels here.`;
 }
 
 /** The levels an event names, as a phrase: `take profit at 105,000 and stop loss at 95,000`. */
@@ -112,7 +122,7 @@ const REMOVED_BECAUSE: Record<LevelsRemovedReason, string> = {
   weekend_close_out: "because the position was closed out before the weekend",
   split: "because of a share split",
   reversed: "because the position was reversed",
-  not_opened: "because the order did not leave a position on its side for the levels to protect",
+  not_opened: "because the order did not open or add to a position for the levels to protect",
 };
 
 /** The log's line for a level event on `symbol`'s position, as a whole sentence without its full stop, as the log's other lines are. */

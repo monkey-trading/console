@@ -6,14 +6,11 @@
  */
 
 import type { EngineEvent, LevelKind, MarketId, OrderRequest, Reject, Side } from "../engine/types";
-import { absFixed, fixedFromInt, fixedToWire, parseFixed, type Fixed } from "../fixed";
-import { checkLevels, levelOf, levelsWire, movedLevels, NO_LEVELS, noLevels, type Levels } from "../levels";
+import { absFixed, fixedToWire, parseFixed, type Fixed } from "../fixed";
+import { checkLevels, levelOf, levelsWire, MAX_INPUT, movedLevels, NO_LEVELS, noLevels, type Levels } from "../levels";
 import { fillEvents, fillOrder, liveQuote } from "./execute";
 import { slotRefusal, writeLevels } from "./level-state";
 import type { AccountState, MockState } from "./state";
-
-/** The largest price the engine accepts as input (`Fixed::MAX_INPUT`). */
-const MAX_INPUT = fixedFromInt(1_000_000_000);
 
 /** What a request names: no level, the levels, or a level that is not a price the engine takes (`Fixed::is_valid_input`). */
 export type Named = { kind: "none" } | { kind: "levels"; levels: Levels } | { kind: "invalid" };

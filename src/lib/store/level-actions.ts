@@ -3,7 +3,7 @@
 import { EngineError } from "../engine/client";
 import { positionLevelsTypedData } from "../engine/eip712";
 import type { MarketId } from "../engine/types";
-import { describeNamedLevels } from "../level-words";
+import { describeLevelSlotReject, describeNamedLevels } from "../level-words";
 import { levelsWire, type Levels } from "../levels";
 import { describeReject } from "../messages";
 import { sessionSigned } from "./session-signed";
@@ -37,7 +37,10 @@ export async function setPositionLevels(store: ConsoleStore, market: MarketId, l
   if (!out.ok) return false;
   // The answer can carry other accounts' events of the same moment: the refusal is the sending account's, with `client_id` 0.
   const refused = out.result.events.find((e) => e.type === "order_rejected" && e.client_id === 0 && e.account.toLowerCase() === sentFor);
-  if (refused?.type === "order_rejected") store.notify(surface, describeReject(refused.reason));
+  if (refused?.type === "order_rejected") {
+    const { reason } = refused;
+    store.notify(surface, reason.kind === "tier_order_limit" || reason.kind === "too_many_orders" ? describeLevelSlotReject(reason) : describeReject(reason));
+  }
   await store.refresh(true);
   return refused === undefined;
 }
