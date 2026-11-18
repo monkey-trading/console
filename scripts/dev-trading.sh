@@ -106,7 +106,8 @@ if scenario == "tiers":
 cfg["metrics"]["listen"] = f"127.0.0.1:{metrics}"
 # Anvil account 0, the published access-source test authority the fixture signs with.
 cfg["access"] = {"source": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "endpoint": f"http://127.0.0.1:{access}",
-                 "timeout": "2s", "max_age": "30s", "max_response_bytes": 4096, "max_in_flight": 8}
+                 "timeout": "2s", "max_age": "30s", "max_response_bytes": 4096, "max_in_flight": 8,
+                 "max_in_flight_per_account": 2, "max_in_flight_per_client": 4, "reserved_in_flight": 2}
 
 def key(name):
     return name if re.fullmatch(r"[A-Za-z0-9_-]+", name) else json.dumps(name)
