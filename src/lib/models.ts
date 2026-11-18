@@ -4,6 +4,7 @@ import { metaFor } from "./engine/meta";
 import type { AccountView, CloseFee, EligibilityClass, HouseView, MarketId, MarketView, PriceRules, RestingOrder } from "./engine/types";
 import { fixedFromWire, parseFixed, type Fixed } from "./fixed";
 import { decodeHouseScan, type HouseScan } from "./house-scan";
+import { decodeLevels, noLevels, type Levels } from "./levels";
 import { decodeVolume, type VolumeModel } from "./volume-tier";
 
 export interface MarketModel {
@@ -48,6 +49,8 @@ export interface PositionModel {
   closeout: CloseoutModel | null;
   /** From V55, when the position opened and what a close of it paid at the read; null before V55 or from a node that does not serve it. */
   closeFee: CloseFeeModel | null;
+  /** From V79, the position's take profit and stop loss; absent while it holds neither. */
+  levels?: Levels;
 }
 
 /** A position's close fee as the account read gave it: its open time, the rate a gain paid then, and when that rate next fell. */
@@ -130,12 +133,18 @@ export function decodeAccount(view: AccountView): AccountModel {
     unfinalised: fixedFromWire(view.unfinalised_deposits ?? "0"),
     equity: fixedFromWire(view.equity),
     margin: fixedFromWire(view.margin),
-    positions: Object.entries(view.positions).map(([id, p]) => ({ market: Number(id), qty: fixedFromWire(p.qty), entry: fixedFromWire(p.entry), closeout: decodeCloseout(view, Number(id)), closeFee: decodeCloseFee(view, Number(id)) })),
+    positions: Object.entries(view.positions).map(([id, p]) => ({ market: Number(id), qty: fixedFromWire(p.qty), entry: fixedFromWire(p.entry), closeout: decodeCloseout(view, Number(id)), closeFee: decodeCloseFee(view, Number(id)), ...positionLevels(view, id) })),
     orders: Object.values(view.orders),
     ...optional("requirements", decodeRequirements(view)),
     ...optional("volume", decodeVolume(view.volume) ?? undefined),
     ...optional("toxicity", decodeToxicity(view)),
   };
+}
+
+/** The levels the read gives the position in market `id`, or nothing while it holds neither. */
+function positionLevels(view: AccountView, id: string): { levels?: Levels } {
+  const levels = decodeLevels(view.levels?.[id]);
+  return noLevels(levels) ? {} : { levels };
 }
 
 /** `{ key: value }`, or nothing for an absent value, so a model from a node that predates a field has no key for it. */

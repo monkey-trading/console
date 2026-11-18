@@ -13,7 +13,7 @@ import type { StatusNotice } from "./notice-types";
 import type { ServerRead } from "./status-types";
 import type { SignerFloor } from "./signer-naming";
 import type { StatsReads } from "./stats-types";
-import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, Reject, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
+import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PositionLevelsRequest, PriceRules, Reject, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketQuote, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 
 /** What a 429 for an account over its volume tier's request rate names: the tier and the requests a second it admits. */
@@ -167,6 +167,12 @@ export interface EngineClient {
    * `client_id` 0. A node that predates the route answers 404.
    */
   closeAll(request: CloseAllRequest): Promise<ActionResult>;
+  /**
+   * Sets, moves or removes the take profit and stop loss of the account's position in one market on one
+   * signature (from V79): the position takes exactly the levels named. `position_levels_set`, or a lone
+   * `order_rejected` (`client_id` 0) for a refusal. A node that predates the route answers 404.
+   */
+  setPositionLevels(request: PositionLevelsRequest): Promise<ActionResult>;
   withdraw(request: WithdrawalRequest): Promise<ActionResult>;
   /** Registers the account's session key (monkey-trading/console#68); the events name `session_key_registered`, or a `session_key_rejected` refusal. */
   registerSessionKey(request: SessionKeyRequest): Promise<ActionResult>;

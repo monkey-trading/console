@@ -10,7 +10,7 @@ import type { QuoteRequest } from "../engine/live-stream";
 import { ProviderWallet } from "../engine/provider-wallet";
 import type { KeyStorage } from "../engine/session-key-store";
 import { settle } from "../engine/test-kit";
-import type { AccountView, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityClass, EligibilityRequest, HistoryPage, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalRequest, MarketView } from "../engine/types";
+import type { AccountView, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityClass, EligibilityRequest, HistoryPage, OrderRequest, PayoutsPage, PositionLevelsRequest, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
 import { ACCOUNT, memoryStorage, StubProvider, type StubOptions } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
@@ -23,7 +23,7 @@ export const VAULT = vectors.vault;
 export const BTC = { id: 1, symbol: "BTC-USD", open: true, reduce_only: false, mark: "100000", stress_level: 0, max_slippage_bps: 25, min_order_notional: "10", margin_tiers: [], spread_tiers: [], house_cap_bps: 0, schedule: { kind: "always_open" }, asset_class: "crypto" } as unknown as MarketView;
 export const NODE_TIME = 1_792_540_800_000;
 
-export type Posted = { route: string; body: OrderRequest | CancelRequest | CancelAllRequest | CloseAllRequest | WithdrawalRequest | EligibilityRequest | SessionKeyRequest | SessionKeyRevocationRequest | { replaces_expires_at: number; signature: string } };
+export type Posted = { route: string; body: OrderRequest | CancelRequest | CancelAllRequest | CloseAllRequest | PositionLevelsRequest | WithdrawalRequest | EligibilityRequest | SessionKeyRequest | SessionKeyRevocationRequest | { replaces_expires_at: number; signature: string } };
 
 /** A live client whose actions record what they were sent and answer as the test says. */
 export class ActionClient implements EngineClient {
@@ -91,6 +91,7 @@ export class ActionClient implements EngineClient {
   cancelOrder(body: CancelRequest) { return this.act("cancel", body); }
   cancelAll(body: CancelAllRequest) { return this.act("cancel_all", body); }
   closeAll(body: CloseAllRequest) { return this.act("close_all", body); }
+  setPositionLevels(body: PositionLevelsRequest) { return this.act("levels", body); }
   withdraw(body: WithdrawalRequest) { return this.act("withdraw", body); }
   registerSessionKey(body: SessionKeyRequest) { return this.act("session_key", body); }
   revokeSessionKey(body: SessionKeyRevocationRequest) { return this.act("session_key_revoke", body); }

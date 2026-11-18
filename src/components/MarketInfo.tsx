@@ -1,7 +1,8 @@
-/** The ticket's "Market info" section: hours, stress, the spread bands and any pending listing change, margin, price terms and the house's room. */
+/** The ticket's "Market info" section: hours, stress, the spread bands and any pending listing change, margin, price terms, the take-profit and stop-loss distance and the house's room. */
 
 import type { ListingNotice, Side, SpreadTier, StressLevel } from "@/lib/engine/types";
 import { spokenRate } from "@/lib/fee-words";
+import { minLevelDistance } from "@/lib/levels";
 import { bpsOf, formatUsd, type Fixed } from "@/lib/fixed";
 import { formatMovePercent } from "@/lib/format";
 import type { MarketModel } from "@/lib/models";
@@ -31,6 +32,11 @@ export function describeCloseout(closeoutBps: number | null): string {
   return `If your equity falls below ${spokenRate(closeoutBps)} of your margin requirement, your positions are closed out.`;
 }
 
+/** What the market's minimum distance for take-profit and stop-loss levels means. */
+export function describeLevelDistance(bps: number): string {
+  return `A take profit or stop loss must be set at least ${spokenRate(bps)} away from the price at which the position would close, on the correct side of it. For a limit or stop order, the distance is measured from the order's trigger price.`;
+}
+
 /** What the market's stress level adds now: the size spread's multiplier and the spread it adds to every fill. */
 function stressTerms(level: StressLevel): string {
   const minimum = level.min_spread_bps > 0 ? `, plus ${level.min_spread_bps} ${level.min_spread_bps === 1 ? "bp" : "bps"} on every trade` : "";
@@ -51,6 +57,7 @@ export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price
   const stressName = STRESS_NAMES[market.stress] ?? "Normal";
   const bands = bandRows(spreadTiers, spreadRate);
   const changes = notice === null ? [] : describeNotice(notice);
+  const levelDistance = minLevelDistance(market.view);
   return (
     <details className="group border-t border-line">
       <summary className="flex items-center justify-between px-4 py-4 text-label tracking-caps text-fg-3 uppercase hover:text-fg-2 focus-visible:outline-2 focus-visible:outline-glow sm:px-5">
@@ -65,6 +72,7 @@ export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price
           <div className={ROW}><dt className="text-fg-3">Leverage</dt><dd>{preview.impliedLeverage === null ? "—" : `${preview.impliedLeverage}×`}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Quoted price</dt><dd>{price === null ? "—" : formatMark(price, market.places)}</dd></div>
           {preview.worstPrice !== null && <div className={ROW}><dt className="text-fg-3">Worst price allowed</dt><dd>{worst === null ? "—" : formatMark(worst, market.places)}</dd></div>}
+          {levelDistance !== null && <div><div className={ROW}><dt className="text-fg-3">Take profit and stop loss distance</dt><dd>{spokenRate(levelDistance)}</dd></div><p className="mt-1 text-label leading-relaxed text-fg-3">{describeLevelDistance(levelDistance)}</p></div>}
         </dl>
         <div>
           <p className="text-label text-fg-3">Spread by position size{ownBands ? ", for your account" : ""}</p>

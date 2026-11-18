@@ -4,15 +4,13 @@ import { EngineError, type ActionResult } from "../engine/client";
 import type { CancelRequest, EligibilityRequest, EngineEvent, OrderRequest, RequestAuth, Reject, RestingOrder } from "../engine/types";
 import { absFixed, fixedFromInt, fixedFromWire, minFixed, parseFixed, type Fixed } from "../fixed";
 import { growthOf, notionalOf } from "../pricing";
-import { tierOfAccount } from "./accounts";
 import { fillEvents, fillOrder, liveQuote } from "./execute";
+import { slotRefusal, type FillCause } from "./level-state";
+import { attachLevels, checkAttachedLevels, checkNamedLevels, marketOrderLevels, namedLevels } from "./levels";
 import type { AccountState, MockState } from "./state";
 
 /** The largest quantity or price the engine accepts as input. */
 const MAX_INPUT = fixedFromInt(1_000_000_000);
-
-/** Most limit and stop orders an account may rest. */
-export const MAX_RESTING = 10;
 
 /**
  * Refuses a caller from a region the node does not serve, as its real-peer screening does.
@@ -86,7 +84,8 @@ export function placeOrder(state: MockState, req: OrderRequest): ActionResult {
   return { seq: state.emit({ type: "place_order" }, events).seq, events };
 }
 
-export function orderEvents(state: MockState, req: OrderRequest, account: AccountState): EngineEvent[] {
+/** An order's events; `cause` is what its fill is booked as, which names why closing the whole position removes its levels. */
+export function orderEvents(state: MockState, req: OrderRequest, account: AccountState, cause: FillCause = "order"): EngineEvent[] {
   const qty = parseFixed(req.qty);
   if (qty === null || qty <= 0n || qty > MAX_INPUT) return rejected(req, { kind: "invalid_amount" });
   const runtime = state.markets.get(req.market);
@@ -96,25 +95,32 @@ export function orderEvents(state: MockState, req: OrderRequest, account: Accoun
   if (req.kind.kind === "market") {
     const quoted = parseFixed(req.kind.quoted);
     if (quoted === null || quoted <= 0n || quoted > MAX_INPUT) return rejected(req, { kind: "invalid_order", reason: "price out of range" });
+    const refused = checkNamedLevels(state, req, null);
+    if (refused !== null) return rejected(req, refused);
+    // From V79 the levels the order names are checked against its priced fill, and the position it leaves on its side takes them.
+    const named = namedLevels(req);
     const outcome = fillOrder(state, {
-      address: req.account, market: req.market, side: req.side, qty, reduceOnly: req.reduce_only ?? false, orderId,
+      address: req.account, market: req.market, side: req.side, qty, reduceOnly: req.reduce_only ?? false, orderId, cause,
       slippage: { quoted, maxBps: req.kind.max_slippage_bps ?? runtime.listed.spec.max_slippage_bps },
+      ...(named.kind === "levels" ? { check: marketOrderLevels(state, req.account, account, { market: req.market, side: req.side, qty }, named.levels) } : {}),
     });
-    return outcome.ok ? [accepted, ...fillEvents(outcome.fill, outcome.badDebt)] : rejected(req, outcome.reject);
+    if (!outcome.ok) return rejected(req, outcome.reject);
+    return [accepted, ...fillEvents(outcome), ...(named.kind === "levels" ? [attachLevels(account, req.account, req.market, req.side, named.levels)] : [])];
   }
   const price = parseFixed(req.kind.price);
   if (price === null || price <= 0n || price > MAX_INPUT) return rejected(req, { kind: "invalid_order", reason: "trigger price" });
+  const refused = checkNamedLevels(state, req, price);
+  if (refused !== null) return rejected(req, refused);
   const growsHere = growthOf(runtime ? account.positions.get(req.market)?.qty ?? 0n : 0n, req.side === "buy" ? qty : -qty).grows;
   if (growsHere && notionalOf(qty, price) < fixedFromWire(runtime.listed.spec.min_order_notional)) {
     return rejected(req, { kind: "invalid_order", reason: `below the minimum order of ${runtime.listed.spec.min_order_notional} USD at the trigger price` });
   }
-  // From V66 the account's tier names how many orders it rests, in place of the parameters' cap.
-  const { tier, terms } = tierOfAccount(state, account);
-  if (terms?.maxRestingOrders != null) {
-    if (account.orders.size >= terms.maxRestingOrders) return rejected(req, { kind: "tier_order_limit", tier, max: terms.maxRestingOrders });
-  } else if (account.orders.size >= MAX_RESTING) return rejected(req, { kind: "invalid_order", reason: `your account already has the maximum of ${MAX_RESTING} working orders` });
-  // A resting order is admitted while its market is closed; it cannot trigger until the market trades.
-  account.orders.set(orderId, { order_id: orderId, client_id: req.client_id, market: req.market, side: req.side, qty: req.qty, kind: req.kind, reduce_only: req.reduce_only ?? false });
+  // From V66 the account's tier names how many orders it rests, in place of the parameters' cap; from V79 each market holding levels takes one.
+  const slot = slotRefusal(state, account);
+  if (slot !== null) return rejected(req, slot);
+  // A resting order is admitted while its market is closed; it cannot trigger until the market trades. Its levels wait with it.
+  const levels = { ...(req.take_profit === undefined ? {} : { take_profit: req.take_profit }), ...(req.stop_loss === undefined ? {} : { stop_loss: req.stop_loss }) };
+  account.orders.set(orderId, { order_id: orderId, client_id: req.client_id, market: req.market, side: req.side, qty: req.qty, kind: req.kind, reduce_only: req.reduce_only ?? false, ...levels });
   // A newly accepted order that is already executable fills at once, as the engine checks it on insertion.
   return [accepted, ...triggerResting(state, req.account, orderId)];
 }
@@ -175,7 +181,7 @@ export function triggerResting(state: MockState, only?: string, orderId?: number
     if (!hit) continue;
     account.orders.delete(order.order_id);
     const outcome = fillOrder(state, { address, market: order.market, side: order.side, qty, reduceOnly: order.reduce_only, orderId: order.order_id });
-    if (outcome.ok) events.push(...fillEvents(outcome.fill, outcome.badDebt));
+    if (outcome.ok) events.push(...fillEvents(outcome), ...attachOrderLevels(state, address, account, order));
     else if (outcome.reject.kind === "close_spread_ceiling") events.push(...fillClosingSlice(state, address, order, qty, limit));
     else events.push({ type: "order_cancelled", account: address, order_id: order.order_id, reason: "unfillable" });
   }
@@ -195,8 +201,17 @@ function fillClosingSlice(state: MockState, address: string, order: RestingOrder
   const within = quote !== null && quote.kind === "priced" && (limit === null || (order.side === "buy" ? quote.price <= limit : quote.price >= limit));
   if (within) {
     const outcome = fillOrder(state, { address, market: order.market, side: order.side, qty: closing, reduceOnly: true, orderId: order.order_id });
-    if (outcome.ok) events.push(...fillEvents(outcome.fill, outcome.badDebt));
+    // The closing slice leaves no position on the order's side for its levels.
+    if (outcome.ok) events.push(...fillEvents(outcome), ...attachOrderLevels(state, address, state.account(address), order));
   }
   events.push({ type: "order_cancelled", account: address, order_id: order.order_id, reason: "unfillable" });
   return events;
+}
+
+/** From V79, the position a working order's fill left on its side takes the order's levels, which fire at once if its closing price already reaches one. */
+function attachOrderLevels(state: MockState, address: string, account: AccountState, order: RestingOrder): EngineEvent[] {
+  const named = namedLevels(order);
+  if (named.kind !== "levels") return [];
+  const attached = attachLevels(account, address, order.market, order.side, named.levels);
+  return account.levels.has(order.market) ? [attached, ...checkAttachedLevels(state, address, account, order.market)] : [attached];
 }

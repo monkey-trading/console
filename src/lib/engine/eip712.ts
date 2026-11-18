@@ -3,11 +3,11 @@
  * `crates/core/src/eip712.rs` defines them (and `ReissueRequest` as `crates/node/src/api/reissue.rs`
  * does): amounts and prices are `int128` in `Fixed`'s raw units, `expiresAt` is Unix milliseconds,
  * and sides and order kinds are their JSON names. `CancelAllRequest` and `CloseAllRequest` (with its
- * `CloseEntry`) are the V44 batch forms.
+ * `CloseEntry`) are the V44 batch forms; `OrderWithLevels` and `SetPositionLevels` the V79 levels.
  */
 
 import { fixedFromWire } from "../fixed";
-import type { Address, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityClass, OrderRequest } from "./types";
+import type { Address, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityClass, OrderRequest, PositionLevelsRequest } from "./types";
 
 export const DOMAIN_NAME = "monkeytrading";
 export const DOMAIN_VERSION = "1";
@@ -18,20 +18,39 @@ export const STATEMENTS: Record<EligibilityClass, string> = {
   eligible_client: "I attest that I am an eligible client.",
 };
 
+/** `OrderRequest`'s fields, which `OrderWithLevels` starts with. */
+const ORDER_FIELDS = [
+  { name: "account", type: "address" },
+  { name: "nonce", type: "uint64" },
+  { name: "expiresAt", type: "int64" },
+  { name: "clientId", type: "uint64" },
+  { name: "market", type: "uint32" },
+  { name: "side", type: "string" },
+  { name: "qty", type: "int128" },
+  { name: "kind", type: "string" },
+  { name: "price", type: "int128" },
+  { name: "hasMaxSlippage", type: "bool" },
+  { name: "maxSlippageBps", type: "int64" },
+  { name: "reduceOnly", type: "bool" },
+] as const;
+
+/** Each level with whether it is named, after the fields `OrderWithLevels` and `SetPositionLevels` start with. */
+const LEVEL_FIELDS = [
+  { name: "hasTakeProfit", type: "bool" },
+  { name: "takeProfit", type: "int128" },
+  { name: "hasStopLoss", type: "bool" },
+  { name: "stopLoss", type: "int128" },
+] as const;
+
 const TYPES = {
-  OrderRequest: [
+  OrderRequest: ORDER_FIELDS,
+  OrderWithLevels: [...ORDER_FIELDS, ...LEVEL_FIELDS],
+  SetPositionLevels: [
     { name: "account", type: "address" },
     { name: "nonce", type: "uint64" },
     { name: "expiresAt", type: "int64" },
-    { name: "clientId", type: "uint64" },
     { name: "market", type: "uint32" },
-    { name: "side", type: "string" },
-    { name: "qty", type: "int128" },
-    { name: "kind", type: "string" },
-    { name: "price", type: "int128" },
-    { name: "hasMaxSlippage", type: "bool" },
-    { name: "maxSlippageBps", type: "int64" },
-    { name: "reduceOnly", type: "bool" },
+    ...LEVEL_FIELDS,
   ],
   CancelRequest: [
     { name: "account", type: "address" },
@@ -135,16 +154,34 @@ function typed(domain: RequestDomain, primaryType: RequestType, message: TypedRe
   return { domain, types, primaryType, message };
 }
 
-/** `order_hash`'s struct: a market order signs its quoted price, a limit or stop order its trigger price. */
+/**
+ * `order_hash`'s struct: a market order signs its quoted price, a limit or stop order its trigger price.
+ * An order naming a take profit or a stop loss signs `OrderWithLevels`, and one naming neither `OrderRequest`.
+ */
 export function orderTypedData(domain: RequestDomain, order: Omit<OrderRequest, "auth">, terms: Terms): TypedRequest {
   const { kind } = order;
   const price = kind.kind === "market" ? kind.quoted : kind.price;
   const slippage = kind.kind === "market" ? kind.max_slippage_bps : undefined;
-  return typed(domain, "OrderRequest", {
+  const message = {
     account: hexAddress(order.account), nonce: BigInt(terms.nonce), expiresAt: BigInt(terms.expiresAt), clientId: BigInt(order.client_id),
     market: order.market, side: order.side, qty: fixedFromWire(order.qty), kind: kind.kind, price: fixedFromWire(price),
     hasMaxSlippage: slippage !== undefined, maxSlippageBps: BigInt(slippage ?? 0), reduceOnly: order.reduce_only ?? false,
-  });
+  };
+  if (order.take_profit === undefined && order.stop_loss === undefined) return typed(domain, "OrderRequest", message);
+  return typed(domain, "OrderWithLevels", { ...message, ...levelFields(order) });
+}
+
+/** `position_levels_hash`'s struct: the position takes exactly the levels named, and one left out signs as not named. */
+export function positionLevelsTypedData(domain: RequestDomain, request: Omit<PositionLevelsRequest, "auth">, terms: Terms): TypedRequest {
+  return typed(domain, "SetPositionLevels", { account: hexAddress(request.account), nonce: BigInt(terms.nonce), expiresAt: BigInt(terms.expiresAt), market: request.market, ...levelFields(request) });
+}
+
+/** Each level as its raw `Fixed` with whether it is named; one not named signs false and 0. */
+function levelFields(levels: { take_profit?: string; stop_loss?: string }) {
+  return {
+    hasTakeProfit: levels.take_profit !== undefined, takeProfit: levels.take_profit === undefined ? 0n : fixedFromWire(levels.take_profit),
+    hasStopLoss: levels.stop_loss !== undefined, stopLoss: levels.stop_loss === undefined ? 0n : fixedFromWire(levels.stop_loss),
+  };
 }
 
 /** `cancel_hash`'s struct. */

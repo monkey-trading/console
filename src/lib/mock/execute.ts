@@ -9,6 +9,7 @@ import { equityOf, feeBaseOf, houseNav, houseNetNotional, initialMarginOf, margi
 import { recordEmissionResult } from "./emissions";
 import { adverseBps, executionCost, exceedsSlippage, notionalOf, priceOrder, USD, type Priced } from "../pricing";
 import { accountSpreadTiers, flooredMargin } from "../volume-tier";
+import { settleLevels, type FillCause } from "./level-state";
 import type { AccountState, Holding, MockState } from "./state";
 import { recordFill } from "./volume";
 
@@ -23,19 +24,24 @@ export interface FillRequest {
   slippage?: { quoted: Fixed; maxBps: number };
   /** A close-out skips the checks that stop an order adding risk. */
   liquidation?: boolean;
+  /** What the fill is booked as, which names why closing the whole position removes its levels; an order's without it. */
+  cause?: FillCause;
+  /** A last check on the priced fill before it is booked, as the engine's `execute_checked` runs a market order's levels; its refusal refuses the fill. */
+  check?: () => Reject | null;
 }
 
-/** A filled order, with any loss beyond the balance that the house wrote off because the account is flat. */
-export type FillOutcome = { ok: true; fill: Fill; badDebt: Fixed } | { ok: false; reject: Reject };
+/** A filled order, with any loss beyond the balance that the house wrote off because the account is flat, and the levels it removed. */
+export type FillOutcome = { ok: true; fill: Fill; badDebt: Fixed; removed: EngineEvent | null } | { ok: false; reject: Reject };
 
 const signed = (side: Side, qty: Fixed): Fixed => (side === "buy" ? qty : -qty);
 
 /**
  * The price `qty` of `market` on `side` pays for the account's current holding, as the engine prices it
  * from V52 (`pricing.ts`): the account's tier's best-price bound, the market's stress level from the mock's
- * parameters, no toxicity add-on (the mock scores none), and its close-spread ceiling. Null for a market the mock does not list.
+ * parameters, no toxicity add-on (the mock scores none), and its close-spread ceiling. `held` prices it against
+ * another holding than the account's own, such as the position a fill would leave. Null for a market the mock does not list.
  */
-export function liveQuote(state: MockState, address: string, market: MarketId, side: Side, qty: Fixed): Priced | null {
+export function liveQuote(state: MockState, address: string, market: MarketId, side: Side, qty: Fixed, held?: Fixed): Priced | null {
   const runtime = state.markets.get(market);
   if (!runtime) return null;
   const level = state.params.stressLevels[runtime.stress] ?? state.params.stressLevels[0];
@@ -44,7 +50,7 @@ export function liveQuote(state: MockState, address: string, market: MarketId, s
   // From V59 the account's first band ends at its tier's share of the market's, so a higher tier trades more size at the best price.
   const share = tierOfAccount(state, account).terms?.bestPriceShareBps;
   return priceOrder({
-    mid: runtime.mid, side, held: account.positions.get(market)?.qty ?? 0n, qty, tiers: share === undefined ? runtime.listed.spec.spread_tiers : accountSpreadTiers(runtime.listed.spec.spread_tiers, share),
+    mid: runtime.mid, side, held: held ?? account.positions.get(market)?.qty ?? 0n, qty, tiers: share === undefined ? runtime.listed.spec.spread_tiers : accountSpreadTiers(runtime.listed.spec.spread_tiers, share),
     stress: { minSpreadBps: level.min_spread_bps, sizeMultiplierBps: level.size_spread_multiplier_bps }, toxicityBps: 0,
     ceilingBps: metaFor(runtime.listed.spec.symbol).closeCeilingBps, conversion: USD,
   });
@@ -111,12 +117,15 @@ export function fillOrder(state: MockState, order: FillRequest): FillOutcome {
     const refusal = riskRefusal(state, req, runtime.reduceOnly || state.governance.reduceOnlyAt(req.market, state.now), delta, held, spreadLoss);
     if (refusal) return { ok: false, reject: refusal };
   }
+  const checked = req.check?.() ?? null;
+  if (checked !== null) return { ok: false, reject: checked };
   const holding = before ?? { qty: 0n, entry: 0n, openedAt: state.now };
   const pnl = applyToHolding(holding, delta, priced.price);
   recordFill(account.volume, { market: req.market, held, delta, price: priced.price, now: state.now, liquidation: req.liquidation ?? false });
   const openedAt = openedAfter(held, before?.openedAt ?? null, holding.qty, state.now, lastHold(state.params.profitFeeCurve));
   if (openedAt === null) account.positions.delete(req.market);
   else account.positions.set(req.market, { ...holding, openedAt });
+  const removed = settleLevels(account, req.address, req.market, held, holding.qty, req.cause ?? "order");
   const fee = profitFee(pnl, feeBps);
   account.balance += pnl - fee;
   state.houseCash += fee - pnl;
@@ -135,6 +144,7 @@ export function fillOrder(state: MockState, order: FillRequest): FillOutcome {
   return {
     ok: true,
     badDebt,
+    removed,
     fill: {
       account: req.address, order_id: req.orderId, market: req.market, side: req.side,
       qty: fixedToWire(req.qty), price: fixedToWire(priced.price), index: fixedToWire(runtime.mid),
@@ -170,9 +180,10 @@ function riskRefusal(state: MockState, req: FillRequest, reduceOnly: boolean, de
   return null;
 }
 
-/** The events a fill produces. */
-export function fillEvents(fill: Fill, badDebt: Fixed = 0n): EngineEvent[] {
+/** The events a fill produces, in the engine's order: the fill, the levels it removed, and any write-off. */
+export function fillEvents({ fill, badDebt, removed }: { fill: Fill; badDebt: Fixed; removed: EngineEvent | null }): EngineEvent[] {
   const events: EngineEvent[] = [{ type: "fill", ...fill }];
+  if (removed !== null) events.push(removed);
   if (badDebt > 0n) events.push({ type: "bad_debt", account: fill.account, amount: fixedToWire(badDebt) });
   return events;
 }

@@ -9,6 +9,7 @@ import { saveChoice } from "../engine/wallet-persist";
 import { UntrustedError } from "../engine/trust-errors";
 import { fixedToWire, formatFixedPlaces, parseFixed, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
+import { levelsWire, type Levels } from "../levels";
 import { describeReject } from "../messages";
 import { noPriceRefusal } from "../unpriced";
 import { loadAccount } from "./account";
@@ -202,6 +203,8 @@ export interface OrderParams {
   /** A market order carries the price the user was shown and their slippage bound; a limit or stop order its trigger. */
   kind: { kind: "market"; quoted: Fixed; slippageBps: number } | { kind: "limit" | "stop"; price: Fixed };
   reduceOnly: boolean;
+  /** From V79, the take profit and stop loss the position the order leaves on its side takes, signed with the order. */
+  levels?: Levels;
 }
 
 /**
@@ -217,9 +220,11 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams, surfa
     params.kind.kind === "market"
       ? { kind: "market", quoted: fixedToWire(params.kind.quoted), max_slippage_bps: params.kind.slippageBps }
       : { kind: params.kind.kind, price: fixedToWire(params.kind.price) };
-  const order = { client_id: store.id(), market: market.id, side: params.side, qty, kind, reduce_only: params.reduceOnly };
+  const levels = params.levels === undefined ? {} : levelsWire(params.levels);
+  const order = { client_id: store.id(), market: market.id, side: params.side, qty, kind, reduce_only: params.reduceOnly, ...levels };
   const at = params.kind.kind === "market" ? `at ${formatFixedPlaces(params.kind.quoted, market.places)} with a maximum slippage of ${params.kind.slippageBps} bps` : `with a ${params.kind.kind} order at ${formatFixedPlaces(params.kind.price, market.places)}`;
-  const summary = `${params.side} ${qty} ${market.symbol} ${at}${params.reduceOnly ? " (reduce only)" : ""}`;
+  const named = [levels.take_profit === undefined ? null : `a take profit at ${levels.take_profit}`, levels.stop_loss === undefined ? null : `a stop loss at ${levels.stop_loss}`].filter((part) => part !== null);
+  const summary = `${params.side} ${qty} ${market.symbol} ${at}${params.reduceOnly ? " (reduce only)" : ""}${named.length === 0 ? "" : ` with ${named.join(" and ")}`}`;
   const out = await sessionSigned(store, surface, summary, (t, account) => orderTypedData(domainOf(store), { ...order, account }, t), (auth, wallet) =>
     store.deps.client.placeOrder({ ...order, account: wallet.address, auth }), "report",
   );

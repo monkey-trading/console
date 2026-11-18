@@ -50,7 +50,7 @@ export function closeAll(state: MockState, req: CloseAllRequest): ActionResult {
       // With no position the engine sends the smallest sell, which a reduce-only order refuses.
       const closing = { side: held >= 0n ? "sell" : "buy", qty: held === 0n ? "0.000000001" : fixedToWire(absFixed(held)) } as const;
       const kind = { kind: "market", quoted: entry.quoted, ...(req.max_slippage_bps === undefined ? {} : { max_slippage_bps: req.max_slippage_bps }) } as const;
-      events.push(...orderEvents(state, { account: req.account, client_id: index, market: entry.market, ...closing, kind, reduce_only: true }, account));
+      events.push(...orderEvents(state, { account: req.account, client_id: index, market: entry.market, ...closing, kind, reduce_only: true }, account, "close_all"));
     });
   }
   return { seq: state.emit({ type: "close_all" }, events).seq, events };

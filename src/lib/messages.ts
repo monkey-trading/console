@@ -6,6 +6,7 @@ import type { EngineEvent, MarketId, Reject } from "./engine/types";
 import { formatHold } from "./fee-words";
 import { absFixed, fixedFromWire, formatFixedPlaces, formatUsd } from "./fixed";
 import { formatMonkey, formatRate } from "./format";
+import { describeLevelEvent, describeLevelReject } from "./level-words";
 import { formatTenthBps, tenthBpsOfValue } from "./spread-bands";
 import { noPriceRefusal } from "./unpriced";
 
@@ -64,6 +65,8 @@ export function describeReject(reject: Reject): string {
     case "expiry_too_far": return "The request was rejected because its expiry time was too far ahead of the server's time. Check that your device clock is correct, then try again.";
     case "too_many_session_keys": return reject.max === MAX_SESSION_KEYS_PER_ACCOUNT ? "This account already has the maximum number of session keys." : "This account has added too many session keys in a short time. One more can be added each hour.";
     case "batch_unsupported": return "This server does not yet support cancelling or closing everything in a single request.";
+    case "level_too_close":
+    case "levels_unsupported": return describeLevelReject(reject);
   }
   // A refusal the engine adds later must get a case above; until then the user still sees that one happened.
   return unnamed(reject);
@@ -79,6 +82,12 @@ function describeInvalidOrder(reason: string): string {
   if (reason === "spread at this size reaches the price") return "This order is too large to be priced. Please try a smaller order size.";
   if (reason === "qty out of range") return "The order size is outside the range the server accepts.";
   if (reason === "price out of range") return "The order price is outside the range the server accepts.";
+  // The engine's reasons for a take profit or stop loss it cannot take (`levels/request.rs`).
+  if (reason === "level out of range") return "The take profit or stop loss is outside the range of prices the server accepts.";
+  if (reason === "no position to set levels on") return "You no longer hold a position in this market, so a take profit or stop loss cannot be set on it.";
+  if (reason === "no price to measure levels from") return "No price is available for this market, so the take profit and stop loss cannot be checked. Please try again once prices are updating.";
+  if (reason === "a reduce-only order names no levels") return "An order that only reduces a position cannot set a take profit or stop loss.";
+  if (reason === "the market names no minimum level distance") return "This market does not accept take-profit and stop-loss levels.";
   return `This order cannot be placed. ${reason.charAt(0).toUpperCase()}${reason.slice(1).replace(/\.$/, "")}.`;
 }
 
@@ -147,6 +156,9 @@ export function describeEvent(event: EngineEvent, symbolOf: (id: MarketId) => st
     case "session_key_registered": return null;
     case "session_key_revoked": return null;
     case "session_key_rejected": return null;
+    case "position_levels_set":
+    case "position_level_triggered":
+    case "position_levels_removed": return describeLevelEvent(event, symbolOf);
   }
   // Events the engine adds later stay out of the log until they get a case above.
   return unnamedEvent(event);

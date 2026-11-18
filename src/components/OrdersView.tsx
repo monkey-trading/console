@@ -1,12 +1,15 @@
 "use client";
 
-/** Resting orders with a Cancel button each and a Cancel all above them: a table from 1024 px, cards below. */
+/** Resting orders, with the take profit and stop loss each will attach, a Cancel button each and a Cancel all above them: a table from 1024 px, cards below. */
 
 import { useEffect, useId } from "react";
 
 import { pressBatch } from "@/lib/close-all";
 import { CONFIRM_MIN_GAP_MS, CONFIRM_MS } from "@/lib/confirm-window";
 import { fixedFromWire, formatFixedPlaces } from "@/lib/fixed";
+import { CANCEL_ALL_KEEPS_LEVELS } from "@/lib/level-words";
+import { decodeLevels, formatLevel } from "@/lib/levels";
+import type { RestingOrder } from "@/lib/engine/types";
 import { cancelOrder } from "@/lib/store/actions";
 import { cancelAll } from "@/lib/store/batch-actions";
 
@@ -44,6 +47,8 @@ export function OrdersView() {
       type: o.kind.kind,
       size: formatFixedPlaces(fixedFromWire(o.qty), 6),
       trigger: o.kind.kind === "market" ? "—" : formatFixedPlaces(fixedFromWire(o.kind.price), market?.places ?? 2),
+      // From V79, the levels the order attaches to its position when it fills.
+      ...levelsOf(o, market?.places ?? 2),
       cancel: (event: { currentTarget: HTMLElement }) => { keepFocus(event.currentTarget); void cancelOrder(store, o.order_id); },
     };
   });
@@ -68,6 +73,7 @@ export function OrdersView() {
           {confirming ? `Confirm: cancel ${count} ${noun}` : `Cancel all (${count})`}
         </button>
         <p role="status" className="sr-only">{confirming ? `Press again within ${CONFIRM_MS / 1000} seconds to cancel ${count} working ${noun}.` : ""}</p>
+        {confirming && account?.positions.some((p) => p.levels !== undefined) === true && <p className="mt-2 text-label leading-relaxed text-fg-2">{CANCEL_ALL_KEEPS_LEVELS}</p>}
         <Notice surface="orders" />
       </div>
       <ul className="lg:hidden">
@@ -80,6 +86,8 @@ export function OrdersView() {
             <dl className="mt-2 grid grid-cols-2 gap-2 text-fg-2">
               <div><dt className="text-label text-fg-3">Size</dt><dd>{r.size}</dd></div>
               <div><dt className="text-label text-fg-3">Trigger</dt><dd>{r.trigger}</dd></div>
+              {r.takeProfit !== null && <div><dt className="text-label text-fg-3">Take profit</dt><dd>{r.takeProfit}</dd></div>}
+              {r.stopLoss !== null && <div><dt className="text-label text-fg-3">Stop loss</dt><dd>{r.stopLoss}</dd></div>}
             </dl>
             <button type="button" disabled={busy || readOnly.readOnly} className={`${BUTTON} mt-3 w-full`} aria-label={`Cancel order ${r.id}`} aria-describedby={readOnly.describedBy} onClick={r.cancel}>Cancel</button>
           </li>
@@ -87,7 +95,7 @@ export function OrdersView() {
       </ul>
       <div className="relative hidden overflow-x-auto lg:block">
         <table className="w-full min-w-[560px] text-caption">
-          <thead><tr className="border-b border-line"><th className={TH}>Order</th><th className={TH}>Market</th><th className={TH}>Side</th><th className={TH}>Type</th><th className={TH}>Size</th><th className={TH}>Trigger</th><th className={TH}><span className="sr-only">Actions</span></th></tr></thead>
+          <thead><tr className="border-b border-line"><th className={TH}>Order</th><th className={TH}>Market</th><th className={TH}>Side</th><th className={TH}>Type</th><th className={TH}>Size</th><th className={TH}>Trigger</th><th className={TH}>Take profit</th><th className={TH}>Stop loss</th><th className={TH}><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-line last:border-b-0">
@@ -97,6 +105,8 @@ export function OrdersView() {
                 <td className="px-4 py-4 capitalize">{r.type}</td>
                 <td className="px-4 py-4">{r.size}</td>
                 <td className="px-4 py-4">{r.trigger}</td>
+                <td className="px-4 py-4">{r.takeProfit ?? "—"}</td>
+                <td className="px-4 py-4">{r.stopLoss ?? "—"}</td>
                 <td className="px-4 py-4 text-right">
                   <button type="button" disabled={busy || readOnly.readOnly} className={BUTTON} aria-label={`Cancel order ${r.id}`} aria-describedby={readOnly.describedBy} onClick={r.cancel}>Cancel</button>
                 </td>
@@ -107,4 +117,10 @@ export function OrdersView() {
       </div>
     </>
   );
+}
+
+/** The take profit and stop loss a working order attaches when it fills, each null while it names none. */
+function levelsOf(order: RestingOrder, places: number): { takeProfit: string | null; stopLoss: string | null } {
+  const { takeProfit, stopLoss } = decodeLevels(order);
+  return { takeProfit: takeProfit === null ? null : formatLevel(takeProfit, places), stopLoss: stopLoss === null ? null : formatLevel(stopLoss, places) };
 }

@@ -91,7 +91,7 @@ describe("a weekend margin that applies now", () => {
 
 describe("ticketLimits", () => {
   it("reads the market's best-price bound and leverage and the order count against the tier's limit", () => {
-    expect(ticketLimits(account(0, 3), 1)).toEqual({ tier: 0, bestPriceBound: fixedFromInt(500_000), leverage: fixedFromInt(20), weekendSets: false, orderLimit: 25, resting: 3 });
+    expect(ticketLimits(account(0, 3), 1)).toEqual({ tier: 0, bestPriceBound: fixedFromInt(500_000), leverage: fixedFromInt(20), weekendSets: false, orderLimit: 25, resting: 3, levelSlots: 0 });
     expect(ticketLimits(account(0), 2)).toMatchObject({ bestPriceBound: null, leverage: null });
   });
 
@@ -104,6 +104,13 @@ describe("ticketLimits", () => {
 describe("orderLimitProblem", () => {
   it("stops a resting order once the account rests its tier's limit, and names the tier", () => {
     expect(orderLimitProblem(ticketLimits(account(0, 25), 1), true)).toBe("Working order limit reached. Volume tier 0 allows up to 25 working orders at a time, and you have 25. Cancel a working order to place a new one, or trade more to reach a higher tier.");
+  });
+
+  it("counts each position's take profit and stop loss together as one working order, and says so", () => {
+    const position = (market: number, levels?: { takeProfit: bigint | null; stopLoss: bigint | null }) => ({ market, qty: 1n, entry: 1n, closeout: null, closeFee: null, ...(levels === undefined ? {} : { levels }) });
+    const held = { ...account(0, 23), positions: [position(1, { takeProfit: 2n, stopLoss: null }), position(2, { takeProfit: 3n, stopLoss: 1n }), position(3)] };
+    expect(ticketLimits(held, 1)).toMatchObject({ resting: 25, levelSlots: 2 });
+    expect(orderLimitProblem(ticketLimits(held, 1), true)).toBe("Working order limit reached. Volume tier 0 allows up to 25 working orders at a time, and you have 25, counting the take profit and stop loss on each position as one. Cancel a working order to place a new one, or trade more to reach a higher tier.");
   });
 
   it("lets an order through while there is room, a market order at the limit, and a tier that names no limit", () => {

@@ -2,6 +2,7 @@
 
 import { fixedFromInt, type Fixed } from "../fixed";
 import type { HouseParams } from "../house";
+import type { Levels } from "../levels";
 import { LAUNCH_CURVE } from "../holding-fee";
 import { mulberry32, SEED } from "../prng";
 import type {
@@ -58,6 +59,8 @@ export interface AccountState {
   pending: PendingDeposit[];
   positions: Map<MarketId, Holding>;
   orders: Map<OrderId, RestingOrder>;
+  /** Each position's take profit and stop loss, by market, from V79; a market with neither has no entry. */
+  levels: Map<MarketId, Levels>;
   nextNonce: number;
   /** The last withdrawal approval nonce issued: one counter per account, starting at 1, never reused. */
   approvalNonce: number;
@@ -200,7 +203,7 @@ export class MockState {
     const key = address.toLowerCase();
     let state = this.accounts.get(key);
     if (!state) {
-      state = { balance: 0n, pending: [], positions: new Map(), orders: new Map(), nextNonce: 0, approvalNonce: 0, eligibility: null, volume: newBook() };
+      state = { balance: 0n, pending: [], positions: new Map(), orders: new Map(), levels: new Map(), nextNonce: 0, approvalNonce: 0, eligibility: null, volume: newBook() };
       this.accounts.set(key, state);
     }
     return state;

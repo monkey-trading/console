@@ -53,4 +53,8 @@ describe("describeNotice", () => {
     ]);
     expect(describeNotice({ effective_at })).toEqual([]);
   });
+
+  it("states a new minimum distance for take-profit and stop-loss levels as a person says it", () => {
+    expect(describeNotice({ min_level_distance_bps: 45, effective_at: Date.UTC(2026, 10, 21, 14, 0, 0) })).toEqual(["From 21 Nov 14:00:00 UTC, the minimum distance for take-profit and stop-loss levels in this market may change to 0.45%."]);
+  });
 });

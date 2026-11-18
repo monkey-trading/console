@@ -20,6 +20,14 @@ describe("the demo account", () => {
     expect(node.client.state.now).toBe(SIM_EPOCH_MS);
   });
 
+  it("holds a take profit above and a stop loss below its BTC-USD long, and no other levels", async () => {
+    const view = await node.client.account(DEMO_ADDRESS);
+    const btc = view.levels?.["1"];
+    const mark = parseFixed((await node.client.markets()).find((m) => m.id === 1)?.mark ?? "") ?? 0n;
+    expect(Object.keys(view.levels ?? {})).toEqual(["1"]);
+    expect([parseFixed(btc?.take_profit ?? "") ?? 0n, parseFixed(btc?.stop_loss ?? "") ?? 0n].map((level) => level > mark)).toEqual([true, false]);
+  });
+
   it("leaves winners and losers, and an account close to but not past its close-out threshold", async () => {
     const view = await node.client.account(DEMO_ADDRESS);
     const equity = parseFixed(view.equity) ?? 0n;

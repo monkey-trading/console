@@ -1,4 +1,4 @@
-/** The mock node's `GET /v1/accounts/{address}`: an account's balance, equity, margin, positions, orders, close-outs and close fees. */
+/** The mock node's `GET /v1/accounts/{address}`: an account's balance, equity, margin, positions, orders, close-outs, close fees and levels. */
 
 import type { AccountView, Address } from "../engine/types";
 import { bpsOf, fixedToWire } from "../fixed";
@@ -8,6 +8,7 @@ import { standingOf } from "./volume";
 import { withdrawable } from "./funds";
 import { equityOf, feeBaseOf, initialMarginOf, marginFloorOf, marginOf, tierTable } from "./accounts";
 import { closeoutsOf } from "./closeout-price";
+import { levelsWire } from "../levels";
 import type { MockState } from "./state";
 
 /** `GET /v1/accounts/{address}` now, without waiting; null for an account the node has never credited. */
@@ -25,6 +26,9 @@ export function accountViewOf(state: MockState, address: Address): AccountView |
     const fee = feeNow(held.openedAt, profitFeeBps, profitFeeCurve, state.now);
     closeFees[id] = { opened_at: held.openedAt, fee_bps: fee.feeBps, falls_at: fee.fallsAt };
   }
+  // From V79 each position's levels, by market, and the field absent while none holds any, as the node serves them.
+  const levels: NonNullable<AccountView["levels"]> = {};
+  for (const [id, held] of account.levels) levels[id] = levelsWire(held);
   const orders: AccountView["orders"] = {};
   for (const [id, order] of account.orders) orders[id] = order;
   const pending = account.pending.reduce((sum, deposit) => sum + deposit.amount, 0n);
@@ -50,5 +54,6 @@ export function accountViewOf(state: MockState, address: Address): AccountView |
     volume: standingOf(account.volume, tierTable(state), state.now, new Map([...state.markets].map(([id, runtime]) => [id, runtime.listed.spec]))),
     closeouts: closeoutsOf(state, account),
     close_fees: closeFees,
+    ...(account.levels.size > 0 ? { levels } : {}),
   };
 }

@@ -37,14 +37,14 @@ export function closeOutUnderwater(state: MockState): EngineEvent[] {
       const held = id === null ? undefined : account.positions.get(id);
       if (id === null || !held) break;
       const outcome = fillOrder(state, {
-        address, market: id, side: held.qty > 0n ? "sell" : "buy", qty: absFixed(held.qty), reduceOnly: true, orderId: 0, liquidation: true,
+        address, market: id, side: held.qty > 0n ? "sell" : "buy", qty: absFixed(held.qty), reduceOnly: true, orderId: 0, liquidation: true, cause: "close_out",
       });
       if (!outcome.ok) break;
       if (!announced) {
         announced = true;
         events.push({ type: "close_out", account: address, equity: fixedToWire(triggering.equity), margin: fixedToWire(triggering.margin) });
       }
-      events.push(...fillEvents(outcome.fill, outcome.badDebt));
+      events.push(...fillEvents(outcome));
     }
   }
   return events;

@@ -20,7 +20,7 @@ import { LiveStream, type QuoteRequest, type Scheduler, type Socket } from "./li
 import { VaultReads, VerifierLoader } from "./live-verifier";
 import { SignedTransport } from "./transport";
 import { NodeTrust } from "./trust";
-import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PriceRules, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
+import type { AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PositionLevelsRequest, PriceRules, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketId, MarketView } from "./types";
 import type { MarkPage, MarkResolution } from "./mark-types";
 import type { Verifier } from "./verifier";
 import { newChallenge } from "./wire";
@@ -212,13 +212,9 @@ export class LiveEngineClient implements EngineClient {
     return this.action("POST", "/v1/orders/cancel", request);
   }
 
-  cancelAll(request: CancelAllRequest): Promise<ActionResult> {
-    return this.action("POST", "/v1/orders/cancel-all", request);
-  }
-
-  closeAll(request: CloseAllRequest): Promise<ActionResult> {
-    return this.action("POST", "/v1/positions/close-all", request);
-  }
+  cancelAll(request: CancelAllRequest): Promise<ActionResult> { return this.action("POST", "/v1/orders/cancel-all", request); }
+  closeAll(request: CloseAllRequest): Promise<ActionResult> { return this.action("POST", "/v1/positions/close-all", request); }
+  setPositionLevels(request: PositionLevelsRequest): Promise<ActionResult> { return this.action("POST", "/v1/positions/levels", request); }
 
   withdraw(request: WithdrawalRequest): Promise<ActionResult> {
     return this.action("POST", "/v1/withdrawals", request);

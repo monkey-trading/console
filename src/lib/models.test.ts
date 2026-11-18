@@ -60,6 +60,19 @@ describe("decodeAccount's close fees", () => {
   });
 });
 
+describe("decodeAccount's levels", () => {
+  it("gives each position the levels the read lists for its market, and none to one it leaves out or names none for", () => {
+    const view = { balance: "1", equity: "1", margin: "0", toxicity_bps: 0, orders: {}, positions: { "1": { qty: "1", entry: "100" }, "2": { qty: "-1", entry: "100" }, "3": { qty: "1", entry: "100" } } };
+    const levels = { "1": { take_profit: "110", stop_loss: "95.5" }, "2": { stop_loss: "104" }, "3": {} };
+    expect(decodeAccount({ ...view, levels }).positions.map((p) => p.levels)).toEqual([
+      { takeProfit: fixedFromInt(110), stopLoss: 95_500_000_000n },
+      { takeProfit: null, stopLoss: fixedFromInt(104) },
+      undefined,
+    ]);
+    expect(decodeAccount(view).positions.every((p) => !("levels" in p))).toBe(true);
+  });
+});
+
 describe("decodeAccount", () => {
   it("reads the node's strings into fixed point and lists positions and orders", () => {
     const account = decodeAccount({

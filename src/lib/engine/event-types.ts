@@ -1,5 +1,6 @@
 /** The events the console reads from the log, tagged by `type` as the engine's `Event` is (`engine_core::event`). */
 
+import type { LevelEvent } from "./level-types";
 import type { Address, EligibilityClass, Fill, MarketId, OrderId, Reject } from "./types";
 
 /** The events the console reads from the log, tagged by `type`. */
@@ -14,6 +15,8 @@ export type EngineEvent =
   | { type: "order_rejected"; account: Address; client_id: number; reason: Reject }
   | { type: "order_cancelled"; account: Address; order_id: OrderId; reason: "client" | "unfillable" }
   | ({ type: "fill" } & Fill)
+  /** From V79, a position's take profit and stop loss set, triggered or removed. */
+  | LevelEvent
   | { type: "close_out"; account: Address; equity: string; margin: string }
   | { type: "withdrawal_approved"; account: Address; amount: string; nonce: number }
   | { type: "withdrawal_queued"; account: Address; amount: string; requested_seq: number }
