@@ -4,10 +4,11 @@ import { execFileSync } from "node:child_process";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { MOCK_REFUSED } from "../../src/lib/engine/attestation";
 import type { ClientEvent } from "../../src/lib/engine/client";
 import { LiveEngineClient } from "../../src/lib/engine/live";
 import { realVerifier } from "../../src/lib/engine/test-vectors";
-import { UntrustedError } from "../../src/lib/engine/trust";
+import { SignatureError, UntrustedError } from "../../src/lib/engine/trust";
 import type { Verifier } from "../../src/lib/engine/verifier";
 import { startProxy, type Proxy } from "./tamper-proxy";
 
@@ -80,13 +81,11 @@ describe("reads", () => {
     const client = clientFor(proxy.url);
     await client.house();
     proxy.tamper.replay = true;
-    await expect(client.house()).rejects.toThrow("failed its check");
+    await expect(client.house()).rejects.toBeInstanceOf(SignatureError);
   });
 
   it("refuse a mock attestation in a production build, with the message", async () => {
-    await expect(clientFor(proxy.url, { production: true }).verify()).resolves.toEqual({
-      kind: "unverified", reason: "This server is a test server that can't be verified, so this version of the app won't use it.",
-    });
+    await expect(clientFor(proxy.url, { production: true }).verify()).resolves.toEqual({ kind: "unverified", reason: MOCK_REFUSED });
   });
 });
 

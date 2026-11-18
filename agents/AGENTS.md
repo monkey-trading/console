@@ -231,7 +231,8 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   origins as their hostnames and the console's origin variables name them; `TRUSTED_CERTS=0|1` turns it off or
   requires it; `scripts/check-tls-proxy.sh` checks the proxy against a stand-in engine (Node and openssl)
 - Live client dev scenario: `ENGINE_DIR=<engine checkout> ENGINE_BIN=<built engine binary> scripts/dev-live-client.sh`
-  (Node, `curl`; starts a dev node on private data and ends `PASS: signed reads verify; tamper, replay, gap
+  (Node, `curl`; starts a dev node on private data, on `LIVE_CLIENT_API_PORT` and `LIVE_CLIENT_METRICS_PORT`, default 8080 and
+  9464, and ends `PASS: signed reads verify; tamper, replay, gap
   and mock-in-production are refused`)
 - Trading dev scenario: `ENGINE_DIR=<engine checkout> ENGINE_BIN=<built engine binary> scripts/dev-trading.sh`
   (Node, `curl`, python3 3.11 or later, and the internet for the node's Roughtime servers; with `ENGINE_BIN`,
