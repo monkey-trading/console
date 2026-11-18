@@ -166,7 +166,12 @@ describe("spreads in tenths of a bp and the holding-time fee", () => {
     admin(["announce-listing", "1", "--spreads-from", spec, "--effective-at", effective]);
     await wait(() => snapshot().listingNotices[BTC] !== undefined, 30_000, "the listing notice");
     const notice = snapshot().listingNotices[BTC];
-    expect(notice === undefined ? [] : describeNotice(notice)).toEqual([expect.stringMatching(/the spread bands may become 3 bps up to \$2\.00M, 6 bps \$2\.00M to \$10\.0M, 12 bps above \$10\.0M\.$/)]);
+    // The announced bands and time as the node serves them, then the console's one line naming each band, not the sentence around them.
+    expect(notice?.spread_tiers).toEqual([{ up_to: "2000000", tenth_bps: 30 }, { up_to: "10000000", tenth_bps: 60 }, { up_to: null, tenth_bps: 120 }]);
+    expect(notice?.effective_at).toBe(Date.parse(effective));
+    const lines = notice === undefined ? [] : describeNotice(notice);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("3 bps up to $2.00M, 6 bps $2.00M to $10.0M, 12 bps above $10.0M");
   });
 
   it("restarts the node with the mock mids raised, and closes out an ETH-USD short past its margin, leaving the others open", async () => {
