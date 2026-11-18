@@ -5,6 +5,7 @@ import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { SignatureChecks } from "../engine/client";
 import type { EntitlementProof } from "../engine/emissions";
 import type { HistoryEvent, HouseView, ListingNotices, QueuedWithdrawal, Reject, SignedWithdrawal, MarketId, MarketQuote, MarketView } from "../engine/types";
+import type { StatusNotice } from "../engine/notice-types";
 import type { ServerRead } from "../engine/status-types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
@@ -103,6 +104,7 @@ export interface ConsoleState {
   stream: FeedStatus;
   /** What the server last said of its own operating state; null before it says anything, and always for the mock. */
   server: ServerRead | null;
+  notice: StatusNotice | null; // the operator's status notice, shown on every page until it is cleared; null while none is set
   /** Whether the client checks the node's signatures; `none` is the in-browser mock. */
   signatures: SignatureChecks;
   /** Set when the node refuses the caller's region. */
@@ -237,7 +239,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     // node starts unchecked, and nothing renders until its check passes.
     attestation: signatures === "none" ? { kind: "mock" } : { kind: "checking" },
     stream: signatures === "none" ? "live" : "connecting",
-    server: null,
+    server: null, notice: null,
     signatures,
     blocked: null,
     accessChecked: false,

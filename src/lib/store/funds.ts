@@ -1,6 +1,7 @@
 /** Follows what the node streams besides its log: the connected account's executable quotes and withdrawal authorizations, and the server's operating state. */
 
 import type { ClientEvent } from "../engine/client";
+import { sameNotice } from "../engine/notice-types";
 import type { SignedWithdrawal } from "../engine/types";
 import { quoteMarkets } from "../quotes";
 import type { ConsoleState } from "./state";
@@ -9,6 +10,7 @@ import type { ConsoleStore } from "./store";
 /** The state after a quote, a refused quote request, an authorization, or the server's state arrives; null when the event changes nothing. */
 export function applyFeedEvent(state: ConsoleState, event: ClientEvent): Partial<ConsoleState> | null {
   if (event.type === "server") return { server: event.server };
+  if (event.type === "notice") return sameNotice(state.notice, event.notice) ? null : { notice: event.notice };
   const mine = state.wallet?.address.toLowerCase();
   if (event.type === "quote") {
     // A quote for a market the console no longer asks about may be stale, so it is not kept.

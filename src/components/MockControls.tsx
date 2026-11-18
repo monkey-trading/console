@@ -37,9 +37,11 @@ export function MockControls() {
 
 function MockPanel({ node }: { node: MockNode }) {
   const { store } = useSession();
-  const { markets, selected, attestation, wallet, paused } = useConsole();
+  const { markets, selected, attestation, wallet, paused, notice } = useConsole();
   const [open, setOpen] = useState(false);
   const [region, setRegion] = useState<Region>("allowed");
+  const [noticeText, setNoticeText] = useState("");
+  const [noticeProblem, setNoticeProblem] = useState<string | null>(null);
   const id = useId();
   const toggle = useRef<HTMLButtonElement>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -93,6 +95,16 @@ function MockPanel({ node }: { node: MockNode }) {
               </div>
             </fieldset>
           )}
+          <fieldset className="space-y-2">
+            <legend className="text-fg-2">Operator notice</legend>
+            <label htmlFor={`${id}-notice`} className="block text-fg-3">Notice text</label>
+            <input id={`${id}-notice`} type="text" value={noticeText} maxLength={400} aria-describedby={`${id}-notice-note`} onChange={(event) => { setNoticeText(event.target.value); setNoticeProblem(null); }} className="min-h-11 w-full min-w-0 rounded border border-line-2 bg-ink px-2 py-2 text-base text-fg lg:min-h-0 lg:text-data focus-visible:outline-2 focus-visible:outline-glow" />
+            <p id={`${id}-notice-note`} role={noticeProblem === null ? undefined : "alert"} className={noticeProblem === null ? "text-label leading-relaxed text-fg-3" : "text-label leading-relaxed text-ember"}>{noticeProblem ?? (notice === null ? "No notice is currently published." : "A notice is currently published on every page.")}</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={BUTTON} onClick={() => setNoticeProblem(controls.publishNotice(noticeText))}>Publish notice</button>
+              <button type="button" className={`${BUTTON} disabled:opacity-50`} disabled={notice === null} onClick={() => { controls.clearNotice(); setNoticeProblem(null); }}>Clear notice</button>
+            </div>
+          </fieldset>
           <button type="button" className={BUTTON} onClick={() => controls.addLiquidity(fixedFromInt(100_000))}>Add $100,000 to the vault</button>
           <fieldset className="space-y-2">
             <legend className="text-fg-2">The vault&apos;s exit</legend>

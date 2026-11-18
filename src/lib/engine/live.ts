@@ -278,6 +278,7 @@ export class LiveEngineClient implements EngineClient {
         onCheckpoint: (checkpoint) => { this.houseFold.foldCheckpoint(checkpoint); this.emit({ type: "checkpoint", seq: checkpoint.seq }); },
         onProblem: (reason) => this.emit({ type: "problem", reason }),
         statusFrames: () => this.status.frames(), onStatus: (status) => this.status.frame(status),
+        readNotice: () => this.transport.get("/v1/notice"), onNotice: (notice) => this.emit({ type: "notice", notice }),
         onFeed: (status: FeedStatus, time?: number) => {
           this.status.feed(status);
           this.emit(time === undefined ? { type: "feed", status } : { type: "feed", status, time });

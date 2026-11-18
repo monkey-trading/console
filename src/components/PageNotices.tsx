@@ -1,6 +1,6 @@
 "use client";
 
-/** What happened to the account or the node that no control caused: a slim row under the node's banner, in the page's flow, until the user dismisses it. The account's is also dropped with a change of wallet. */
+/** What happened to the account or the node that no control caused: a slim row under the node's banner, in the page's flow, until the user dismisses it. The account's is also dropped with a change of wallet. Above them, the operator's status notice, which stays until the operator clears it and which nothing here dismisses. */
 
 import type { Notice, NoticeSurface } from "@/lib/store/state";
 
@@ -30,10 +30,18 @@ function Rows({ tone }: { tone: Notice["tone"] }) {
   });
 }
 
-/** Both live regions stay mounted, so a notice that arrives is announced. */
+/** The operator's status notice, in the operator's own words after a sentence saying whose they are. */
+function OperatorNotice() {
+  const { notice } = useConsole();
+  if (notice === null) return null;
+  return <div className={`${LINE} border-amber/40 bg-amber/10 text-amber`}><strong className="font-medium">The operator has published the following notice.</strong> <span className="break-words">{notice.text}</span></div>;
+}
+
+/** Every live region stays mounted, so a notice that arrives is announced. */
 export function PageNotices() {
   return (
     <section aria-label="Notices">
+      <div role="status" className="empty:hidden"><OperatorNotice /></div>
       <div role="status" className="empty:hidden"><Rows tone="info" /></div>
       <div role="alert" className="empty:hidden"><Rows tone="error" /></div>
     </section>
