@@ -22,7 +22,10 @@ export async function setPositionLevels(store: ConsoleStore, market: MarketId, l
   const wire = levelsWire(levels);
   const named = describeNamedLevels(levels, listed?.places ?? 2);
   const summary = named === null ? `remove the take profit and stop loss from your ${symbol} position` : `set ${named} on your ${symbol} position`;
+  // The account the request went out for: its refusal is matched against it, whichever wallet is connected when the answer lands.
+  let sentFor: string | null = null;
   const out = await sessionSigned(store, surface, summary, (t, account) => positionLevelsTypedData(domainOf(store), { account, market, ...wire }, t), async (auth, wallet) => {
+    sentFor = wallet.address.toLowerCase();
     try {
       return await store.deps.client.setPositionLevels({ account: wallet.address, market, ...wire, auth });
     } catch (error) {
@@ -32,9 +35,8 @@ export async function setPositionLevels(store: ConsoleStore, market: MarketId, l
     }
   }, "sign-again");
   if (!out.ok) return false;
-  // The answer can carry other accounts' events of the same moment: the refusal is this account's, with `client_id` 0.
-  const account = store.getSnapshot().wallet?.address.toLowerCase();
-  const refused = out.result.events.find((e) => e.type === "order_rejected" && e.client_id === 0 && e.account.toLowerCase() === account);
+  // The answer can carry other accounts' events of the same moment: the refusal is the sending account's, with `client_id` 0.
+  const refused = out.result.events.find((e) => e.type === "order_rejected" && e.client_id === 0 && e.account.toLowerCase() === sentFor);
   if (refused?.type === "order_rejected") store.notify(surface, describeReject(refused.reason));
   await store.refresh(true);
   return refused === undefined;

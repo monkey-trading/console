@@ -71,6 +71,14 @@ describe("the position row's levels", () => {
   });
 });
 
+describe("a read-only account's positions", () => {
+  it("offer no editor: Edit is unavailable and says why", () => {
+    const html = render(createElement(PositionsView), { account: account([position]), wallet: { address: "0xabc", label: "Watched", readOnly: true } });
+    expect(html).toContain("Closing a position or editing its take profit and stop loss is unavailable because you are viewing this account in read-only mode.");
+    expect(html).toMatch(/<button type="button" id="[^"]*-edit-1" disabled="" aria-describedby="[^"]+"[^>]*>Edit<\/button>/);
+  });
+});
+
 describe("Market info's minimum distance", () => {
   it("holds its explanation inside the term's definition, and none in a market that takes no levels", () => {
     expect(render(createElement(DealTicket))).toMatch(/<dt[^>]*>Minimum distance for take profit and stop loss<\/dt><dd[^>]*>0\.3%<span[^>]*>A take profit or stop loss must be set at least 0\.3% away/);
@@ -80,7 +88,7 @@ describe("Market info's minimum distance", () => {
 
 describe("the levels editor", () => {
   const editor = (patch: Partial<Parameters<typeof LevelsEditor>[0]> = {}) => createElement(LevelsEditor, {
-    id: "editor", market, position, fields: { takeProfit: "102000", stopLoss: "97500" }, onChange: () => undefined, closing: fixedFromInt(99_980), noClosing: "No closing price is available.", limits: null, toUsdDown: (x) => x,
+    id: "editor", market, position, fields: { takeProfit: "102000", stopLoss: "97500" }, onChange: () => undefined, closing: fixedFromInt(99_980), noClosing: "No closing price is available.", capped: null, limits: null, toUsdDown: (x) => x,
     onCancel: () => undefined, onSaved: () => undefined, readOnly: false, describedBy: undefined, ...patch,
   });
 
@@ -88,11 +96,17 @@ describe("the levels editor", () => {
     const html = render(editor());
     expect(html).toContain('value="102000"');
     expect(html).toContain('value="97500"');
-    expect(html).toContain("Estimated profit $3,000.00 before the profit fee");
-    expect(html).toContain("Estimated loss $1,500.00 before the profit fee, not guaranteed");
+    expect(html).toContain("Estimated profit $3,000.00 for the whole position, before the profit fee");
+    expect(html).toContain("Estimated loss $1,500.00 for the whole position, before the profit fee, not guaranteed");
     expect(html).toContain("The price at which your entire position would close is currently 99,980.00. A new or moved take profit must be at least 0.3% above that closing price, and a new or moved stop loss at least 0.3% below it.");
     expect(html).toMatch(/<button type="submit" aria-disabled="true"[^>]*>Save<\/button>/);
     expect(html).toContain("Leave a field empty to remove that level.");
+  });
+
+  it("keeps Cancel and Save from acting while a request is signed and sent, so its answer shows in the editor", () => {
+    const html = render(editor({ fields: { takeProfit: "102000", stopLoss: "98000" } }), { busy: true });
+    expect(html).toMatch(/<button type="submit" aria-disabled="true"[^>]*>Signing…<\/button>/);
+    expect(html).toMatch(/<button type="button" disabled=""[^>]*>Cancel<\/button>/);
   });
 
   it("hosts its own notice, read out as an alert for a failure and as a status otherwise", () => {

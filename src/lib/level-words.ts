@@ -38,7 +38,7 @@ export const EDITOR_LEVELS_NOTE = "Saving replaces the position's levels with th
 export const REDUCING_ORDER_LEVELS = "A take profit and stop loss cannot be set on this order. It only reduces your position, so there is no new position for the levels to protect. Clear both fields, or set the levels on the position in the Positions list.";
 
 /** What Cancel all's confirmation says while the account holds levels. */
-export const CANCEL_ALL_KEEPS_LEVELS = "The take-profit and stop-loss levels on your positions are not working orders, so Cancel all leaves them in place.";
+export const CANCEL_ALL_KEEPS_LEVELS = "Cancel all does not remove the take-profit and stop-loss levels on your positions, which stay in place.";
 
 /** What Close all's confirmation says while a position it closes holds levels. */
 export const CLOSE_ALL_REMOVES_LEVELS = "Closing these positions also removes their take-profit and stop-loss levels.";
@@ -49,8 +49,14 @@ const TITLES: Record<LevelKind, string> = { take_profit: "Take profit", stop_los
 /** A level's name in a sentence, or at its start. */
 export const levelName = (kind: LevelKind, start = false): string => (start ? TITLES[kind] : NAMES[kind]);
 
-/** What a level is measured from: the closing price of the position, or a working order's trigger price. */
-export type LevelBasis = "closing" | "trigger";
+/** What a level is measured from: the closing price of the position, a working order's trigger price, or for a position large enough that its closing price may be capped, the market price. */
+export type LevelBasis = "closing" | "trigger" | "mark";
+
+const BASES: Record<LevelBasis, { name: string; text: (price: string) => string; rule: string }> = {
+  closing: { name: "closing price", text: (price) => `the price at which the position would close, which is currently ${price}`, rule: "In this market" },
+  trigger: { name: "trigger price", text: (price) => `the order's trigger price of ${price}`, rule: "In this market" },
+  mark: { name: "market price", text: (price) => `the market price, which is currently ${price}`, rule: "For a position of this size" },
+};
 
 /**
  * Why a level is refused before anything is signed, and the nearest level accepted at the market's
@@ -62,14 +68,14 @@ export function describeLevelRefusal(refusal: LevelRefusal, long: boolean, place
   const position = long ? "a long position" : "a short position";
   // The reference is a price like any other on screen; the level to set is exact, rounded away from it.
   const reference = formatMark(refusal.reference, places);
-  const basisText = basis === "closing" ? `the price at which the position would close, which is currently ${reference}` : `the order's trigger price of ${reference}`;
-  const basisName = basis === "closing" ? "closing price" : "trigger price";
+  const basisText = BASES[basis].text(reference);
+  const basisName = BASES[basis].name;
   const nearest = formatLevel(roundToPlaces(refusal.bound, places, above ? "up" : "down"), places);
   const direction = above ? "above" : "below";
   const rate = spokenRate(refusal.minDistanceBps);
   const fix = `Set a ${name} of ${nearest} or ${above ? "higher" : "lower"}.`;
-  if (refusal.why === "wrong_side") return `${TITLES[refusal.kind]} ${above ? "below" : "above"} the ${basisName}. A ${name} on ${position} must be ${direction} ${basisText}, by at least ${rate} in this market. ${fix}`;
-  return `${TITLES[refusal.kind]} too close to the ${basisName}. In this market, a ${name} on ${position} must be at least ${rate} ${direction} ${basisText}. ${fix}`;
+  if (refusal.why === "wrong_side") return `${TITLES[refusal.kind]} ${above ? "below" : "above"} the ${basisName}. ${BASES[basis].rule}, a ${name} on ${position} must be ${direction} ${basisText}, by at least ${rate}. ${fix}`;
+  return `${TITLES[refusal.kind]} too close to the ${basisName}. ${BASES[basis].rule}, a ${name} on ${position} must be at least ${rate} ${direction} ${basisText}. ${fix}`;
 }
 
 /** The ticket's and the editor's stop for a first pair of levels past the account's working order limit; null while there is room or the tier names no limit. */
@@ -152,8 +158,12 @@ export function levelClosedSentence(kind: LevelKind, symbol: string, level: stri
   return `Your ${NAMES[kind]} at ${decimal(level)} on ${symbol} was reached, so the entire position was closed${at}.`;
 }
 
-/** The level fields' estimate in words: what the level would realise for the order's size before the profit fee, a stop loss's marked as not guaranteed. */
-export function describeEstimate(kind: LevelKind, result: Fixed, usd: (value: Fixed) => string): string {
+/** What an estimate covers: on the ticket the size the order opens, at the order's price; in the editor the whole position, from its entry. */
+export type EstimateBasis = "order" | "position";
+
+/** The level fields' estimate in words: what the level would realise on `basis` before the profit fee, a stop loss's marked as not guaranteed. */
+export function describeEstimate(kind: LevelKind, result: Fixed, usd: (value: Fixed) => string, basis: EstimateBasis): string {
   const what = result >= 0n ? "Estimated profit" : "Estimated loss";
-  return `${what} ${usd(result < 0n ? -result : result)} before the profit fee${kind === "stop_loss" ? ", not guaranteed" : ""}`;
+  const on = basis === "order" ? "for the size this order opens" : "for the whole position";
+  return `${what} ${usd(result < 0n ? -result : result)} ${on}, before the profit fee${kind === "stop_loss" ? ", not guaranteed" : ""}`;
 }

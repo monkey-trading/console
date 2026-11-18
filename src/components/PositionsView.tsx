@@ -13,7 +13,7 @@ import { describeLeftOut, planCloseAll, pressBatch, targetsKey } from "@/lib/clo
 import { describeNextFall, describeNextFallShort, describeSchedule, formatHold } from "@/lib/fee-words";
 import { formatRate } from "@/lib/format";
 import { describeDetails, describeNoClose, describeNoPrice, describePnl, type CloseGaps } from "@/lib/pnl-words";
-import { CALM, stressTermsAt } from "@/lib/pricing";
+import { stressTermsAt } from "@/lib/pricing";
 import { formatCloseout, formatMark } from "@/lib/price-format";
 import { absFixed, formatFixedPlaces, formatUsd } from "@/lib/fixed";
 import { roundToPlaces } from "@/lib/fixed-rounding";
@@ -21,7 +21,7 @@ import { realisedAt } from "@/lib/close-preview";
 import { formatLevel, minLevelDistance, NO_LEVELS } from "@/lib/levels";
 import type { LevelFields } from "@/lib/level-check";
 import { CLOSE_ALL_REMOVES_LEVELS } from "@/lib/level-words";
-import { closingAt } from "@/lib/ticket-levels";
+import { editorReference } from "@/lib/ticket-levels";
 import { closingPrice } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
 import { closeAll } from "@/lib/store/batch-actions";
@@ -57,7 +57,7 @@ const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption tex
 /** The table's Close button sits under its figure, with the gap a second line would take. */
 const CELL_BUTTON = `${BUTTON} mt-1`;
 /** The table's Edit button beside Close, its padding and gap a little tighter so the row stays inside the 740 px pane at six-digit prices. */
-const EDIT_BUTTON = "mt-1 ml-0.5 min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow lg:min-h-0 lg:px-1.5";
+const EDIT_BUTTON = "mt-1 ml-0.5 min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-1.5";
 /** The button while it waits for its second press: the hover colours, held. */
 const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 
@@ -86,12 +86,12 @@ export function PositionsView() {
   const feeTerms = accountFeeTerms(snapshot);
   const { store } = useSession();
   const id = useId();
-  const readOnly = useReadOnlyNote(id, "Close");
+  const readOnly = useReadOnlyNote(id, "Closing a position or editing its take profit and stop loss");
   const { armed, state, arm, cancel } = useConfirmWindow(CONFIRM_MS, CONFIRM_MIN_GAP_MS);
   const { confirmBatch } = usePrefs().prefs;
-  // The one levels editor, under the row of the position it is open for, and its draft.
-  const levelsEditor = useLevelsEditor(store, id);
   const positions = account?.positions ?? [];
+  // The one levels editor, under the row of the position it is open for, and its draft, which the account and the position's side own.
+  const levelsEditor = useLevelsEditor(store, id, snapshot.wallet?.address.toLowerCase() ?? null, positions.map((p) => ({ market: p.market, long: p.qty > 0n })));
   const feeTip = `This is the fee rate paid on a winning trade. ${feeTerms === null ? "The fee rate falls the longer the position is held." : describeSchedule(feeTerms)}`;
   const rows = positions.map((p) => {
     const market = markets.find((m) => m.id === p.market);
@@ -132,11 +132,9 @@ export function PositionsView() {
     };
     // From V79 a position in a market that takes levels shows them and an editor to set, move or remove them, measured from its closing price.
     const levels = p.levels ?? NO_LEVELS;
-    // The node's exact whole close where it quotes one, else the console's own at the mark, as the engine measures from the last mark while the market is shut.
-    const estimate = market === undefined ? null : closingAt(market, p.qty, { tiers: accountPricing(account, terms, market.view).spreadTiers ?? market.view.spread_tiers, stress: stressTermsAt(terms?.stressLevels, market.stress) ?? CALM, toxicityBps: account?.toxicity?.addOnBps ?? 0 });
-    const draft = levelsEditor.draft?.market === p.market ? levelsEditor.draft : null;
+    const draft = levelsEditor.draftFor(p.market, p.qty > 0n);
     const editor = market === undefined || minLevelDistance(market.view) === null ? null : {
-      market, position: p, closing: known === null ? null : quoted ?? estimate, noClosing: `The take profit and stop loss cannot be checked at the moment. ${noPrice ?? CLOSE_WAITS}`,
+      market, position: p, ...editorReference(account, terms, market, p.qty, known === null ? null : quoted), noClosing: `The take profit and stop loss cannot be checked at the moment. ${noPrice ?? CLOSE_WAITS}`,
       limits: ticketLimits(account, p.market), toUsdDown, fields: draft?.fields ?? { takeProfit: "", stopLoss: "" }, onChange: levelsEditor.edit,
       onCancel: () => levelsEditor.cancel(p.market), onSaved: (sent: LevelFields, words: string) => { if (draft !== null) levelsEditor.saved(draft.instance, sent, p.market, words); },
     };
@@ -160,7 +158,9 @@ export function PositionsView() {
       holdsLevels: p.levels !== undefined,
       editor,
       editing: editor !== null && draft !== null,
-      edit: () => levelsEditor.toggle(p.market, levels),
+      edit: () => levelsEditor.toggle(p.market, p.qty > 0n, levels),
+      // While a request is signed and sent, the editor stays as it is, so its answer is shown in it.
+      editable: !busy && !readOnly.readOnly,
       hold: fee === null ? "—" : formatHold(fee.holdMs),
       fee: feeBps === null ? "—" : formatRate(feeBps),
       falls,
@@ -235,7 +235,7 @@ export function PositionsView() {
             </dl>
             <div className="mt-3 flex gap-2">
               <button type="button" disabled={!r.closable} className={`${BUTTON} flex-1`} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-              {r.editor !== null && <button type="button" id={editButtonIds(id, r.key)[1]} className={`${BUTTON} flex-1`} aria-expanded={r.editing} aria-controls={r.editing ? `${id}-levels-card` : undefined} aria-label={`Edit take profit and stop loss for ${r.symbol} position`} onClick={r.edit}>Edit take profit and stop loss</button>}
+              {r.editor !== null && <button type="button" id={editButtonIds(id, r.key)[1]} disabled={!r.editable} aria-describedby={readOnly.describedBy} className={`${BUTTON} flex-1`} aria-expanded={r.editing} aria-controls={r.editing ? `${id}-levels-card` : undefined} aria-label={`Edit take profit and stop loss for ${r.symbol} position`} onClick={r.edit}>Edit take profit and stop loss</button>}
             </div>
             <p aria-hidden={!r.unquoted} className={`mt-2 text-label ${r.unquoted ? "text-fg-3" : "invisible"}`}>Select {r.symbol} in the watchlist to load its closing price.</p>
             {r.editing && r.editor !== null && <LevelsEditor id={`${id}-levels-card`} {...r.editor} readOnly={readOnly.readOnly} describedBy={readOnly.describedBy} />}
@@ -276,7 +276,7 @@ export function PositionsView() {
                 <td className={`${TD} ${CLOSE_W}`}>
                   <span className="block">{r.proceeds}</span>
                   <button type="button" disabled={!r.closable} className={CELL_BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-                  {r.editor !== null && <button type="button" id={editButtonIds(id, r.key)[0]} className={EDIT_BUTTON} aria-expanded={r.editing} aria-controls={r.editing ? `${id}-levels-row` : undefined} aria-label={`Edit take profit and stop loss for ${r.symbol} position`} onClick={r.edit}>Edit</button>}
+                  {r.editor !== null && <button type="button" id={editButtonIds(id, r.key)[0]} disabled={!r.editable} aria-describedby={readOnly.describedBy} className={EDIT_BUTTON} aria-expanded={r.editing} aria-controls={r.editing ? `${id}-levels-row` : undefined} aria-label={`Edit take profit and stop loss for ${r.symbol} position`} onClick={r.edit}>Edit</button>}
                 </td>
               </tr>
               {r.editing && r.editor !== null && <tr className="border-b border-line"><td colSpan={8}><LevelsEditor id={`${id}-levels-row`} {...r.editor} readOnly={readOnly.readOnly} describedBy={readOnly.describedBy} /></td></tr>}

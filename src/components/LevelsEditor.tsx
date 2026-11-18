@@ -30,9 +30,10 @@ interface Props {
   /** The draft typed in the editor, and what replaces it. */
   fields: LevelFields;
   onChange: (fields: LevelFields) => void;
-  /** What closing the whole position fills at now, or null with `noClosing` saying why. */
+  /** What closing the whole position fills at now, or null with `noClosing` saying why; and the mark where that close may be capped nearer it. */
   closing: Fixed | null;
   noClosing: string;
+  capped: Fixed | null;
   limits: TicketLimits | null;
   toUsdDown: ((amount: Fixed) => Fixed) | null;
   onCancel: () => void;
@@ -43,11 +44,11 @@ interface Props {
   describedBy: string | undefined;
 }
 
-export function LevelsEditor({ id, market, position, fields, onChange, closing, noClosing, limits, toUsdDown, onCancel, onSaved, readOnly, describedBy }: Props) {
+export function LevelsEditor({ id, market, position, fields, onChange, closing, noClosing, capped, limits, toUsdDown, onCancel, onSaved, readOnly, describedBy }: Props) {
   const { store } = useSession();
   const busy = useConsoleValue((state) => state.busy);
   const long = position.qty > 0n;
-  const check = checkEditorLevels({ market, qty: position.qty, entry: position.entry, held: position.levels ?? NO_LEVELS, closing, noClosing, limits, fields, toUsdDown });
+  const check = checkEditorLevels({ market, qty: position.qty, entry: position.entry, held: position.levels ?? NO_LEVELS, closing, noClosing, capped, limits, fields, toUsdDown });
   const canSave = check.changed && !check.blocked && !busy && !readOnly;
   const rate = spokenRate(market.view.min_level_distance_bps ?? 0);
   const save = () => {
@@ -62,7 +63,7 @@ export function LevelsEditor({ id, market, position, fields, onChange, closing, 
       {closing !== null && <p className="mt-1 text-label leading-relaxed text-fg-3">The price at which your entire position would close is currently {formatMark(closing, market.places)}. A new or moved take profit must be at least {rate} {long ? "above" : "below"} that closing price, and a new or moved stop loss at least {rate} {long ? "below" : "above"} it.</p>}
       <div className="mt-3 flex gap-2">
         <button type="submit" aria-disabled={!canSave} aria-describedby={describedBy} className={BUTTON}>{busy ? "Signing…" : "Save"}</button>
-        <button type="button" className={BUTTON} onClick={onCancel}>Cancel</button>
+        <button type="button" disabled={busy} className={`${BUTTON} disabled:opacity-40`} onClick={onCancel}>Cancel</button>
       </div>
       <Notice surface="levels" />
     </form>

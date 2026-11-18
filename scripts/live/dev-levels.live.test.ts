@@ -129,7 +129,7 @@ describe("take profit and stop loss against a dev node", () => {
     const closing = quote === undefined ? null : closingPrice(quote, "sell", absFixed(held.qty));
     const moved = awayFromMark(-300);
     const check = checkEditorLevels({
-      market, qty: held.qty, entry: held.entry, held: held.levels, closing, noClosing: "", limits: ticketLimits(snapshot().account, BTC),
+      market, qty: held.qty, entry: held.entry, held: held.levels, closing, noClosing: "", capped: null, limits: ticketLimits(snapshot().account, BTC),
       fields: fields(held.levels.takeProfit, moved), toUsdDown: market.mark === null ? null : usdConverter(market.view, market.mark, "down"),
     });
     expect(check).toMatchObject({ changed: true, blocked: false });

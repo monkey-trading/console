@@ -82,9 +82,9 @@ describe("what the editor and the wallet say of levels", () => {
 
 describe("the fields' estimates and the account notice", () => {
   it("states a profit or a loss before the profit fee, a stop loss's as not guaranteed", () => {
-    expect(describeEstimate("take_profit", fixedFromInt(980), formatUsd)).toBe("Estimated profit $980.00 before the profit fee");
-    expect(describeEstimate("stop_loss", fixedFromInt(-1_020), formatUsd)).toBe("Estimated loss $1,020.00 before the profit fee, not guaranteed");
-    expect(describeEstimate("stop_loss", fixedFromInt(15), formatUsd)).toBe("Estimated profit $15.00 before the profit fee, not guaranteed");
+    expect(describeEstimate("take_profit", fixedFromInt(980), formatUsd, "order")).toBe("Estimated profit $980.00 for the size this order opens, before the profit fee");
+    expect(describeEstimate("stop_loss", fixedFromInt(-1_020), formatUsd, "order")).toBe("Estimated loss $1,020.00 for the size this order opens, before the profit fee, not guaranteed");
+    expect(describeEstimate("stop_loss", fixedFromInt(15), formatUsd, "position")).toBe("Estimated profit $15.00 for the whole position, before the profit fee, not guaranteed");
   });
 
   it("names the level that closed a position and the price it closed at", () => {

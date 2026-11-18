@@ -35,7 +35,7 @@ export function LevelInputs({ title, check, fields, onChange }: { title: string;
               <label htmlFor={`${id}-${kind}`} className="block text-label text-fg-3">{levelName(kind, true)}</label>
               <input {...AMOUNT_INPUT} id={`${id}-${kind}`} value={fields[FIELD[kind]]} inputMode="decimal" maxLength={24} aria-invalid={check.problems[kind] !== null} aria-describedby={`${id}-${kind}-estimate ${id}-problems`}
                 onChange={(event) => onChange({ ...fields, [FIELD[kind]]: event.target.value })} className={INPUT} />
-              <p id={`${id}-${kind}-estimate`} className="mt-1 text-label leading-relaxed text-fg-3">{estimate === null ? "" : describeEstimate(kind, estimate, formatUsd)}</p>
+              <p id={`${id}-${kind}-estimate`} className="mt-1 text-label leading-relaxed text-fg-3">{estimate === null ? "" : describeEstimate(kind, estimate, formatUsd, check.estimatedOn)}</p>
             </div>
           );
         })}

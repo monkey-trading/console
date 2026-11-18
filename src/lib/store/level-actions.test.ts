@@ -54,6 +54,16 @@ describe("setting a position's levels", () => {
     expect(store.getSnapshot().notices.levels).toMatchObject({ tone: "error", text: expect.stringContaining("The level 100,100 is too close to the current price.") });
   });
 
+  it("matches the refusal to the account that sent the request, though another is connected when the answer lands", async () => {
+    const mine: EngineEvent = { type: "order_rejected", account: ME, client_id: 0, reason: { kind: "level_too_close", level: "100100", min_distance_bps: 30, reference: "99980" } };
+    const { client, store } = await setup([]);
+    client.answer = () => {
+      store.setWallet({ address: "0x0000000000000000000000000000000000000b0b", label: "Other wallet" });
+      return { seq: 6, events: [mine] };
+    };
+    expect(await setPositionLevels(store, 1, LEVELS)).toBe(false);
+  });
+
   it("takes another account's refusal alone as no refusal of its own", async () => {
     const { store } = await setup([{ type: "order_rejected", account: "0x0000000000000000000000000000000000000bad", client_id: 0, reason: { kind: "unknown_market" } }]);
     expect(await setPositionLevels(store, 1, LEVELS)).toBe(true);

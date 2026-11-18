@@ -9,7 +9,7 @@
 
 import type { LevelKind, Side } from "./engine/types";
 import { absFixed, minFixed, type Fixed } from "./fixed";
-import { describeLevelRefusal, EDITOR_LEVELS_NOTE, levelSlotProblem, REDUCING_ORDER_LEVELS, TICKET_LEVELS_NOTES, type LevelBasis } from "./level-words";
+import { describeLevelRefusal, EDITOR_LEVELS_NOTE, levelSlotProblem, REDUCING_ORDER_LEVELS, TICKET_LEVELS_NOTES, type EstimateBasis, type LevelBasis } from "./level-words";
 import { checkLevel, levelOf, minLevelDistance, movedLevels, NO_LEVELS, noLevels, parseLevel, resultAtLevel, type LevelInput, type Levels } from "./levels";
 import type { MarketModel } from "./models";
 import type { TicketLimits } from "./tier-view";
@@ -30,6 +30,8 @@ export interface LevelCheck {
   general: string | null;
   /** What each level would realise before the profit fee, in USD; null with no level or no price to estimate from. */
   estimates: Record<LevelKind, Fixed | null>;
+  /** What the estimates cover: the size the order opens, or the whole position. */
+  estimatedOn: EstimateBasis;
   /** The levels to send, as typed. */
   named: Levels;
   /** What the levels do to the position the order leaves, by what the order does to the position held; null with none held. */
@@ -55,8 +57,11 @@ interface Draft {
   measured: Levels;
   reference: Fixed | null;
   basis: LevelBasis;
+  /** Where the closing price may be capped nearer the mark: the mark, which a take profit is measured from instead. */
+  capped: Fixed | null;
   general: string | null;
   note: string | null;
+  estimatedOn: EstimateBasis;
   /** The estimate's entry and size; null with nothing to estimate from. */
   entry: Fixed | null;
   size: Fixed;
@@ -77,13 +82,16 @@ function checked(draft: Draft): LevelCheck {
     const input = draft.inputs[kind];
     if (input.kind === "refused") problems[kind] = input.message;
     const measured = levelOf(draft.measured, kind);
-    const refusal = measured === null || draft.reference === null ? null : checkLevel(kind, measured, draft.long, draft.reference, draft.minBps);
-    if (refusal !== null) problems[kind] = describeLevelRefusal(refusal, draft.long, draft.market.places, draft.basis);
+    // A cap can only bring the closing price nearer the mark, which leaves a stop loss measured from the uncapped price on the safe side and a take profit not.
+    const fromMark = kind === "take_profit" && draft.capped !== null;
+    const reference = fromMark ? draft.capped : draft.reference;
+    const refusal = measured === null || reference === null ? null : checkLevel(kind, measured, draft.long, reference, draft.minBps);
+    if (refusal !== null) problems[kind] = describeLevelRefusal(refusal, draft.long, draft.market.places, fromMark ? "mark" : draft.basis);
     const level = levelOf(named, kind);
     if (level !== null && draft.entry !== null && draft.toUsdDown !== null && draft.size > 0n) estimates[kind] = resultAtLevel(draft.long, draft.entry, draft.size, level, draft.toUsdDown);
   }
   const blocked = draft.general !== null || KINDS.some((kind) => problems[kind] !== null);
-  return { problems, general: draft.general, estimates, named, blocked, note: draft.note };
+  return { problems, general: draft.general, estimates, estimatedOn: draft.estimatedOn, named, blocked, note: draft.note };
 }
 
 /** What the deal ticket holds of an order. */
@@ -100,6 +108,8 @@ export interface TicketLevelsInput {
   heldLevels: Levels;
   /** A market order's reference: what closing the whole position it leaves would fill at; null for a working order or with no price. */
   closing: Fixed | null;
+  /** The mark, where that closing price may be capped nearer it (`closingExact`); null where it is the engine's. */
+  capped: Fixed | null;
   limits: TicketLimits | null;
   fields: LevelFields;
   toUsdDown: ((amount: Fixed) => Fixed) | null;
@@ -111,7 +121,7 @@ export function checkTicketLevels(input: TicketLevelsInput): LevelCheck | null {
   if (minBps === null) return null;
   const inputs = readFields(input.fields);
   const named = namedOf(inputs);
-  const base = { market: input.market, minBps, inputs, entry: input.price, toUsdDown: input.toUsdDown };
+  const base = { market: input.market, minBps, inputs, entry: input.price, toUsdDown: input.toUsdDown, capped: null, estimatedOn: "order" as const };
   const buy = input.side === "buy";
   // Whether the position held is on the other side and at least the order's size: the order then only reduces it.
   const reduces = input.held !== 0n && (input.held > 0n) !== buy && absFixed(input.held) >= input.qty;
@@ -133,7 +143,7 @@ export function checkTicketLevels(input: TicketLevelsInput): LevelCheck | null {
   const measured = movedLevels(named, added ? input.heldLevels : NO_LEVELS);
   // A position holding no levels in this market needs a working order slot for its first pair.
   const general = none ? null : levelSlotProblem(input.limits, noLevels(input.heldLevels));
-  return checked({ ...base, long: left > 0n, measured, reference: input.closing, basis: "closing", general, note, size: minFixed(input.qty, absFixed(left)) });
+  return checked({ ...base, long: left > 0n, measured, reference: input.closing, capped: input.capped, basis: "closing", general, note, size: minFixed(input.qty, absFixed(left)) });
 }
 
 /** What the position editor holds. */
@@ -146,6 +156,8 @@ export interface EditorLevelsInput {
   /** What closing the whole position fills at now, which new or moved levels are measured from; null with no price, with `noClosing` saying why. */
   closing: Fixed | null;
   noClosing: string;
+  /** The mark, where that closing price is the console's own and may be capped nearer it; null where it is the engine's. */
+  capped: Fixed | null;
   limits: TicketLimits | null;
   fields: LevelFields;
   toUsdDown: ((amount: Fixed) => Fixed) | null;
@@ -159,7 +171,7 @@ export function checkEditorLevels(input: EditorLevelsInput): LevelCheck & { chan
   const measured = movedLevels(named, input.held);
   const unmeasured = input.closing === null && !noLevels(measured) ? input.noClosing : null;
   const general = unmeasured ?? levelSlotProblem(input.limits, noLevels(input.held) && !noLevels(named));
-  const check = checked({ market: input.market, minBps, inputs, long: input.qty > 0n, measured, reference: input.closing, basis: "closing", general, note: EDITOR_LEVELS_NOTE, entry: input.entry, size: absFixed(input.qty), toUsdDown: input.toUsdDown });
+  const check = checked({ market: input.market, minBps, inputs, long: input.qty > 0n, measured, reference: input.closing, capped: input.capped, basis: "closing", general, note: EDITOR_LEVELS_NOTE, estimatedOn: "position", entry: input.entry, size: absFixed(input.qty), toUsdDown: input.toUsdDown });
   const refused = KINDS.some((kind) => inputs[kind].kind === "refused");
   const changed = !refused && (named.takeProfit !== input.held.takeProfit || named.stopLoss !== input.held.stopLoss);
   return { ...check, changed };

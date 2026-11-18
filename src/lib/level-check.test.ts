@@ -15,7 +15,7 @@ const limits = (resting: number): TicketLimits => ({ tier: 0, bestPriceBound: nu
 
 /** A market buy of 1 BTC with nothing held; the long would close at 99,980. */
 const ticket = (patch: Partial<TicketLevelsInput>): TicketLevelsInput => ({
-  market, side: "buy", qty: fixedFromInt(1), resting: false, price: q("100020"), held: 0n, heldLevels: NO_LEVELS, closing: q("99980"), limits: limits(0), fields: EMPTY_FIELDS, toUsdDown: usd, ...patch,
+  market, side: "buy", qty: fixedFromInt(1), resting: false, price: q("100020"), held: 0n, heldLevels: NO_LEVELS, closing: q("99980"), capped: null, limits: limits(0), fields: EMPTY_FIELDS, toUsdDown: usd, ...patch,
 });
 
 describe("the ticket's levels on a market order", () => {
@@ -32,9 +32,19 @@ describe("the ticket's levels on a market order", () => {
     expect(checkTicketLevels(ticket({ fields: { takeProfit: "100279.94", stopLoss: "99680.06" } }))).toMatchObject({ blocked: false, named: { takeProfit: q("100279.94"), stopLoss: q("99680.06") } });
   });
 
+  it("measures a take profit from the mark where the closing price may be capped nearer it, and a stop loss still from the closing price", () => {
+    // Past the first band a live node may cap the close nearer the mark: the mark is the strictest a take profit can be measured from.
+    const check = checkTicketLevels(ticket({ capped: fixedFromInt(100_000), fields: { takeProfit: "100250", stopLoss: "99700" } }));
+    expect(check?.problems.take_profit).toBe("Take profit too close to the market price. For a position of this size, a take profit on a long position must be at least 0.3% above the market price, which is currently 100,000.00. Set a take profit of 100,300.00 or higher.");
+    expect(check?.problems.stop_loss).toMatch(/^Stop loss too close to the closing price\. In this market, .* which is currently 99,980\.00\./);
+    // 100,290 passes against the closing price of 99,980 but not against the mark.
+    expect(checkTicketLevels(ticket({ fields: { takeProfit: "100290", stopLoss: "" } }))?.blocked).toBe(false);
+    expect(checkTicketLevels(ticket({ capped: fixedFromInt(100_000), fields: { takeProfit: "100290", stopLoss: "" } }))?.blocked).toBe(true);
+  });
+
   it("says a level on the wrong side is on the wrong side", () => {
     const check = checkTicketLevels(ticket({ side: "sell", price: q("99980"), closing: q("100020"), fields: { takeProfit: "", stopLoss: "99000" } }));
-    expect(check?.problems.stop_loss).toBe("Stop loss below the closing price. A stop loss on a short position must be above the price at which the position would close, which is currently 100,020.00, by at least 0.3% in this market. Set a stop loss of 100,320.06 or higher.");
+    expect(check?.problems.stop_loss).toBe("Stop loss below the closing price. In this market, a stop loss on a short position must be above the price at which the position would close, which is currently 100,020.00, by at least 0.3%. Set a stop loss of 100,320.06 or higher.");
   });
 
   it("estimates each level's result for the order's size from the price it is sent at, before the fee", () => {
@@ -98,7 +108,7 @@ describe("the ticket's levels on a working order", () => {
 
 describe("the position editor's levels", () => {
   const editor = (patch: Partial<EditorLevelsInput>): EditorLevelsInput => ({
-    market, qty: fixedFromInt(1), entry: fixedFromInt(99_000), held: { takeProfit: q("101000"), stopLoss: q("98000") }, closing: q("99980"), noClosing: "No closing price.", limits: limits(25), fields: { takeProfit: "101000", stopLoss: "98000" }, toUsdDown: usd, ...patch,
+    market, qty: fixedFromInt(1), entry: fixedFromInt(99_000), held: { takeProfit: q("101000"), stopLoss: q("98000") }, closing: q("99980"), noClosing: "No closing price.", capped: null, limits: limits(25), fields: { takeProfit: "101000", stopLoss: "98000" }, toUsdDown: usd, ...patch,
   });
 
   it("offers no save until the fields change the position's levels", () => {
