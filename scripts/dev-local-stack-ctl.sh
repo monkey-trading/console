@@ -25,7 +25,7 @@
 #                     the operator in effect's engine, waits for the other members to promote the next member's
 #                     standby key, then has the stack start the stopped engine again, as a member
 #
-# What `handover` leaves alone and what it does not is in the README's walkthrough: the chain's
+# What `handover` leaves alone and what it does not is in docs/local-stack.md's walkthrough: the chain's
 # clock moves, the engine's does not. Withdrawal authorizations expire on the chain's clock, so none
 # pays until real time has caught up with the chain; claim any before running `handover`.
 #

@@ -1,375 +1,349 @@
-# console
+# Monkey Trading console
 
-The Monkey Trading web app, to be served at console.monkey.trading: the client for the open-source CFD
-engine in [monkey-trading/engine](https://github.com/monkey-trading/engine). One full-view trading
-terminal with a watchlist, a candlestick chart, a deal ticket that sends the quote you saw with your
-slippage bound, positions, orders, history, a P&L ledger of realised results with the MONKEY each loss earned, a Funding page, a Settings page for trading preferences and the browsers signed in to trade, a MONKEY page of Emissions and Activity tabs for the token, claiming its emissions and the latest activity, a Staking page for staking, delegation, the USDC distributions, the operators and their daily rotation, a Dashboard page for the house's NAV, exposure and withdrawal queue histories, MONKEY emissions and supply, and the USDC distributions, under one range, and a House page of Overview, Risk and Withdrawals tabs that shows the
-house's solvency from the node's signed answers: its net asset value, cash and exposure against its
-caps, the withdrawal queue's size, and the signed checkpoint roots the figures stand on. Their
-charts — the house's NAV, exposure and withdrawal-queue histories, MONKEY's emissions and supply, the
-distributions paid — live on the Dashboard page under one range control.
+The web app for trading on [Monkey Trading](https://github.com/monkey-trading/engine): a trading
+terminal in the browser that verifies the trading server's attestation, and the signature on each
+of the server's answers, before it shows them.
 
-By default this build runs against a simulated node inside the browser. Prices, fills and funds are
-simulated, and the app says so on screen. It opens on a demo account with positions, resting orders,
-history and a withdrawal in the queue; Demo controls can reset it to an empty account.
+Monkey Trading is a platform for trading contracts for difference against a house, whose rules are
+the public code of the engine. The console is its client. You can watch markets, place and manage
+orders, fund the account and withdraw from it, claim and stake MONKEY, and inspect the house's
+solvency. The console has the following pages:
 
-A build can instead talk to a real engine node: it checks the node's attestation, shows only answers the
-attested enclave signed for the request, and follows the node's signed stream, which starts at the live end of the log and reconnects there, marking the feed stale
-(and disabling order entry) when it stops. With a browser wallet, or a wallet app over WalletConnect, it
-deposits USDC to the vault, signs the engine's typed requests (orders, cancels, cancel all and close all, withdrawals, the eligibility
-declaration) for a node whose attestation it accepts. Orders, cancels and the two batches sign with an in-browser
-session key the wallet authorizes with one signature, straight after a connect for a wallet that has declared and in the setup popup for one that has not, kept in the browser's storage until it expires; deposits, withdrawals and claims always use
-the wallet. It trades at the executable quote the node streams for the account, and claims approved
-withdrawals on the vault. The checks run
-in the engine's own verifier, built for the browser (`public/engine-verify/`, pinned by SHA-256 in
-`src/lib/engine/wasm-pin.json`, which `npm run build` checks).
+| Page | What it shows |
+| --- | --- |
+| Trade | The watchlist, a candlestick chart, the deal ticket, and your positions, working orders, history and profit and loss ledger |
+| Funding | Deposits, withdrawals and the withdrawal queue |
+| MONKEY | The MONKEY you have earned and claimed, and the latest activity |
+| Staking | Staking, delegation to operator candidates, USDC distributions, the operators and their rotation, and governance votes |
+| Dashboard | Charts of the house's net asset value, exposure and withdrawal queue, MONKEY emissions and supply, and distributions |
+| House | The house's net asset value, cash and exposure against its limits, the withdrawal queue, and the signed checkpoints these figures rest on |
+| Settings | Trading preferences, and the browsers authorised to trade for your account |
 
-## Run it
+## Status
 
-Requires Node.js 24 (see `.nvmrc`).
+The console has not been released, and nothing it connects to holds real funds.
 
-```sh
+| Part | State |
+| --- | --- |
+| Simulated trading server | The default build, which runs entirely in the browser |
+| Live trading server | Runs against a local development server, and against a local chain with wallets |
+| Hardware attestation | No engine release is pinned yet, so a `live` build trusts no trading server |
+| Hosting | Built to deploy to Vercel at console.monkey.trading |
+
+## How it works
+
+### Two modes
+
+By default, the console runs against a simulated trading server inside the browser. Prices,
+executions and funds are all simulated, and the console says so on screen. The console opens on a
+demo account with positions, working orders, history and a withdrawal in the queue. The Demo
+controls button in the top bar changes the simulated server: the region it sees you in, its
+attestation, price shocks that trigger a close-out, market halts, stress levels, the vault's
+liquidity, and an operator notice.
+
+A build configured for a live trading server talks to that server instead. The engine's code and
+logs call the trading server a node. The console reads the server's REST API, and follows its
+WebSocket stream from the live end of the log. When the stream
+stops, the console marks the prices as stale and disables order entry until the stream resumes.
+
+### What the console verifies
+
+The trading server runs inside an enclave, a virtual machine whose memory the host machine can
+neither read nor alter. The enclave's processor signs an attestation, a report that identifies the
+exact code the enclave runs and the key it signs with. Before the console trusts a server, it
+checks the attestation:
+
+- The report must show the launch digest, the guest policy and at least the minimum TCB version,
+  which is the processor's firmware level, of an engine release that this build of the console
+  pins in `src/lib/engine/manifests.ts`.
+- With a wallet connected, the attested launch digest and config hash must also hash to the vault's
+  `currentRelease()`, and the attested enclave must be the vault's `checkpointSigner()`. Until both
+  checks pass, the console reads the server but signs nothing for it.
+
+From then on, the console shows an answer only if the attested enclave signed it for that request,
+and shows a stream message only if it carries the enclave's signature. The checks run in the
+engine's own verifier, compiled to WebAssembly, which is checked in under `public/engine-verify/`
+and pinned by SHA-256 in `src/lib/engine/wasm-pin.json`. `npm run build` refuses a package whose
+hashes do not match.
+
+A development server simulates its enclave, and its attestation proves nothing. A `live` build
+refuses such an attestation. A `live-dev` build accepts one only from the servers that its build
+names, and shows a banner saying that the server cannot be verified and is suitable for testing
+only.
+
+### Signing
+
+You connect a browser wallet, or a wallet app through WalletConnect. Deposits, withdrawals and
+MONKEY claims are always signed by the wallet. Orders, cancellations, Cancel all and Close all are
+signed by a session key: a key held in this browser that places orders without a wallet prompt.
+The wallet authorises the session key with one signature. An account that has already declared its
+eligibility gives that signature right after it connects, and a new account gives it in the setup
+dialog. A session key can trade for at most 24 hours, can never move funds, and is kept in the
+browser's storage until it expires or you disconnect.
+
+Orders are sent at the executable price that the server streams for your account, with your
+maximum slippage. Every request that acts for your account carries an EIP-712 signature over the
+chain id and the vault's address that the build names.
+
+### Following the operator
+
+The operator who runs the trading server can change, either by an election or by the daily
+rotation of operators. When a connected wallet's reads name a new operator's registered address,
+the console moves to that server without a rebuild, provided that the build lists the address and
+the server passes every check above. A console that does not list the operator in effect stays
+where it is and says that it needs updating. A change of the engine's code needs a new console
+release, which pins the new engine release.
+
+### What leaves the browser
+
+The console has no backend of its own. Its Content Security Policy allows connections only to the
+trading server the build names and to each listed candidate, over `https:` and `wss:`. A build with
+a WalletConnect project id also allows WalletConnect's relay and its verification frame. Chain
+reads go through your wallet, never through an RPC endpoint of the console's own. The one exception
+is a development build's faucet, which funds a local Anvil wallet through the RPC address that the
+build names. The console stores your wallet connection, session key, trading preferences and latest
+exit proof in the browser. The `/notices` page lists everything that leaves the browser or is
+stored in it.
+
+### Restricted regions
+
+A request from a restricted country is answered with the static `/restricted` page, which says
+that the console is not available in the visitor's region. The country comes from the header that
+the hosting edge sets from the visitor's IP address, `x-vercel-ip-country` on Vercel. A request
+with no country is served normally. The list of countries is `RESTRICTED_COUNTRIES` in
+[`src/lib/geo-block.ts`](src/lib/geo-block.ts), which names the United States and its territories.
+Because the block follows the IP address, a VPN or proxy bypasses it. The engine requires each
+account to sign an eligibility declaration before it credits a deposit or accepts an order.
+
+Search engines are asked not to index the console. Every page carries a `noindex` robots tag and an
+`X-Robots-Tag: noindex, nofollow` header, and `robots.txt` disallows every path.
+
+## Getting it
+
+You need Node.js 24, the version in [`.nvmrc`](.nvmrc), and npm. Running against a trading server
+also needs the [engine repository](https://github.com/monkey-trading/engine) and what it requires,
+which [the local stack](docs/local-stack.md#requirements) lists.
+
+```shell
+git clone https://github.com/monkey-trading/console.git
+cd console
 npm ci
+```
+
+## What you get
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | The console against the simulated trading server |
+| `npm run dev:live` | The console against an engine development server at `https://127.0.0.1:8080` |
+| `npm run build`, `npm start` | The production build, and a server for it |
+| `scripts/dev-local-stack.sh` | A local chain, the vault, one or more trading servers and the console, for trading with a wallet |
+| `scripts/dev-local-stack-ctl.sh` | Drives the local stack's elections, handovers, votes and operator rotation |
+| `scripts/dev-live-client.sh` | Checks that the console's live client refuses tampered, replayed and missing answers |
+| `scripts/dev-trading.sh` | Trades against a private development server through the console's own code |
+
+## Running it
+
+### With the simulated trading server
+
+To try the console without anything else running, run:
+
+```shell
 npm run dev
 ```
 
-The app is served at `http://localhost:3000`. The Demo controls button in the top strip changes the
-simulated node: the region it sees you in (to show the geo-block), its attestation, price shocks that
-trigger a close-out, market halts, stress levels, vault liquidity for the withdrawal queue, and an operator status notice, published and cleared. Before sending a change, run `npm run lint`,
-`npm run typecheck`, `npm test`, `npm run build`, and `npm audit --audit-level=high`; CI runs these,
-the geo-block check (`scripts/check-geo-block.sh`, after the build), and the docs and workflow checks.
+The development server prints `✓ Ready` and serves the console at `http://localhost:3000`. To use
+another port, run `npm run dev -- --port 3001`. The console opens on the demo account, under a
+banner saying that the console is a simulation running in your browser and that its prices, trades
+and funds are not real.
 
-## Trade against a local engine node
+### Against an engine development server
 
-`scripts/dev-local-stack.sh` starts everything a wallet needs on one machine: an Anvil chain with the vault
-and a mock USDC, the operator registry that deploys the MONKEY staking contract (rotation off), the house's
-capital in the vault, mock USDC in a dev wallet, an engine node on that chain's custody that prices BTC-USD and
-ETH-USD from live crypto venues (the other markets need market-data vendor keys and stay unpriced), runs MONKEY
-emissions and staking, and posts checkpoints so withdrawals and MONKEY claims can be made, and the console in
-development mode against it, with the MONKEY token and staking contract named for its MONKEY and Staking pages. It needs Anvil, Forge and Cast, Cargo, Node.js and npm, curl, `jq`, Python 3.11 or later, and the engine's
-repository beside this one (or at `ENGINE_DIR`) with its contract dependencies installed (`forge soldeer
-install` in its `contracts/`):
+To see the console read a real trading server, start the engine's development server. In the
+engine repository, run:
 
-```sh
-npm ci
-./scripts/dev-local-stack.sh
-```
-
-It prints how to add the Anvil network and import the dev wallet's key (a public test key) into a browser
-wallet, the mock USDC's address, and the console's address, `http://localhost:3000`; Ctrl-C stops everything
-it started. In the console, connect the wallet and follow the setup popup (fund with Anvil, sign the eligibility
-declaration, authorize the browser, deposit), then trade; Funding is where later deposits go. A realised loss earns MONKEY once its ten-minute period closes:
-claim it on the MONKEY page and stake it on the Staking page, and the epoch that closes next, every five minutes, pays stakers the
-house's USDC above its floor. The staking epoch, unstake cooldown and floor are development values that the
-script prints. Its header lists the variables that move its ports, fund
-another address, or serve a production build.
-
-Each engine serves a self-signed certificate, which a browser must accept by hand, and a rotation moves the console
-to an engine it has not accepted yet at each boundary. Run `brew install mkcert && mkcert -install` once, with one
-keychain prompt, and the stack serves each engine's API again through a local TLS proxy
-(`scripts/dev-tls-proxy.mjs`) under a certificate that mkcert's root issues for `127.0.0.1` and `localhost`, on ports
-8480, 8481 and 8482 (`TRUSTED_API_PORT`, `SECOND_TRUSTED_API_PORT` and `THIRD_TRUSTED_API_PORT`). The candidates register
-those origins as their API hostnames and the console's origin variables name them, so no certificate is accepted by
-hand. The proxy forwards HTTP and WebSocket traffic unchanged to the engine's own TLS listener, so the console still
-verifies every signed answer. Without mkcert's root the stack runs as before and its summary says how to enable
-this; `TRUSTED_CERTS=0` turns it off, and `TRUSTED_CERTS=1` stops the stack when the root is missing. The proxy
-is development only: `scripts/check-tls-proxy.sh` checks it against a stand-in engine with a throwaway root.
-
-### Run the launch genesis
-
-`GENESIS_FILE` chooses the genesis the node starts from: any engine config file with a `[genesis]` table, by path or
-relative to the engine checkout. The default is `config/dev.toml`, a handful of markets. To trade on the launch values
-instead:
-
-```sh
-GENESIS_FILE=config/production-genesis.toml ./scripts/dev-local-stack.sh
-```
-
-The stack copies that table into the one `node.toml` it assembles, so the node still loads a single config file and
-attests its hash. The node then lists all 34 launch markets with their margin and spread bands, per-market and total
-house cap floors, close-spread ceilings, volume tiers with their limits and fee discounts, and a house with no capital,
-so an opening order meets the cap floors as at launch. The crypto markets (BTC-USD, ETH-USD, SOL-USD) price from the live
-venues. The markets whose launch sources are vendors needing keys (foreign exchange, indices, commodities, shares) have
-no price, because a node's feed is the live venues or the mock and never both, and the vendor sources accept only their
-own domains; the summary lists them as unpriced. A genesis with no crypto market prices nothing, and one that lists
-`[genesis.staking]` is refused, because the stack initialises staking itself against the contracts it deploys.
-
-`config/production-genesis.toml` (or any genesis with `LAUNCH_VALUES=1`; `LAUNCH_VALUES=0` keeps the development
-values) also takes the launch deployment's values from the engine's `ops/runbooks/production-deployment.toml`: the
-MONKEY period budget and the vault's exit period, claim window and deposit staleness stay as they are at launch. The
-summary names what the stack shortens to be watchable: the staking epoch and the unstake cooldown (five minutes each), the
-liquidity floor (10,000 USDC, since the house starts empty), the timelock's delay (one second) and the start of
-emissions and staking (the next minute). `./scripts/dev-local-stack-ctl.sh status` names the genesis the stack runs, and
-`fund-house` fills the empty house of a stack with launch values. `./scripts/check-local-stack-genesis.sh` starts the stack on the
-launch genesis and checks that the node serves 34 markets with their production cap floors.
-
-## Try delegation, an election and a handover
-
-The same stack can run two engines, so a staker's vote moves the operator and the console follows it:
-
-```sh
-SECOND_ENGINE=1 ./scripts/dev-local-stack.sh
-```
-
-The first engine runs under sealed keys with operator rotation on, as the operator in effect. A second engine
-is registered as a candidate with an approved release; the stack starts it once an election has made the
-vault name that release, and it then takes the first engine's keys and log. The registry's election epoch is a
-minute. A rotating node must post its log heads on chain, so the stack also deploys the `LogHeads` contract
-(from Anvil account 8) and funds a log-head relayer, Anvil account 10 (the stack starts Anvil with eleven
-accounts), apart from the checkpoint relayer; each engine's config names both in `[log_heads]`, with a
-ten-second posting interval. Two wallets (Anvil accounts 1 and 3, whose public test keys the script prints) each
-hold 20,000 MONKEY and 100,000 mock USDC. In a second terminal, `scripts/dev-local-stack-ctl.sh` drives the rest:
-
-1. On the Staking page, connect the first wallet, stake its MONKEY and delegate an amount of it to
-   `127.0.0.1:8081`, the second engine, from that row's Delegate button. Do the same from the second wallet. The
-   operators table, which the node reads from the chain at a final block every five seconds here, lists both
-   candidates with their delegated stake and whether each is eligible. A delegation can be moved to another
-   candidate or taken back in part from its row, and an unstake takes the undelegated stake first, then each
-   delegation in proportion.
-2. `./scripts/dev-local-stack-ctl.sh elect` closes the election epoch. The candidate with the most delegated
-   stake wins when it is eligible (5% of all stake), at least 20% of all stake is delegated, and it is not the
-   operator in effect already. The Staking page's operators then show the pending election.
-3. Claim any withdrawal you want paid (see below), then run `./scripts/dev-local-stack-ctl.sh handover`. It
-   moves the chain's clock past the election's seven-day notice, so the vault names the second engine's
-   release; the stack starts that engine, which takes the keys and the log, and the first engine exits. The
-   console follows to the second engine by itself, with balances and positions intact, and trading works. A
-   browser keeps a self-signed certificate per origin: without mkcert's root (above), if the console does not move, open
-   `https://127.0.0.1:8081/v1/health` once and accept it. A page loaded after the handover moves as soon as a
-   wallet is connected.
-4. `./scripts/dev-local-stack-ctl.sh fund-house 50000` adds mock USDC to the house's capital. This stack's
-   staking floor is that capital, so the next epoch that closes with a stake (every five minutes; set
-   `STAKING_EPOCH_SECS` to shorten it) distributes the added amount: while operator rotation is on, a fifth to
-   the operator in effect, and the rest to stakers in proportion to their stake. Each wallet sees its share on
-   the Staking page's Rewards tab and claims it there, and the House page shows the same total as "USDC
-   distributed" and "Distributed".
-
-`./scripts/dev-local-stack-ctl.sh status` prints the election, the vault's release, both engines and the
-chain's clock. The stack writes its addresses to `monkey-local-stack.json` in the temporary directory (or
-`STACK_INFO_FILE`), which the control script reads, and its probe of Anvil stops it with a message if Anvil
-stops answering, since the chain is lost with it.
-
-The notice can only pass on the chain's clock: the engine's clock is signed time from the internet, which a
-local stack cannot move. After `handover` the chain is a week ahead of the engine, which leaves:
-
-- Working: trading, quotes, session keys, positions and balances, deposits, staking and delegation, epochs,
-  distributions and their claims, checkpoints and the exit proof.
-- Not working until real time has caught up a week later: withdrawals. The vault accepts an authorization for
-  24 hours of the chain's clock from when the engine signed it, on the engine's clock, so every authorization
-  is expired when it arrives and the vault refuses the claim. Claim what you want paid before `handover`.
-- Different from a real election: the engine still shows the previous admin key as the operator's, with the
-  elected key pending, because it applies a new key only after seven days of its own time, so admin commands
-  signed by the elected key are not accepted either.
-- One handover per stack. Stop the stack and start it again for a fresh chain.
-
-## Try parameter votes
-
-While operator rotation is on, the engine's parameters change only by a vote of the rotation set's members,
-weighted by the stake the set adopted. The two-engine stack can run them:
-
-```sh
-GOVERNANCE=1 SECOND_ENGINE=1 ./scripts/dev-local-stack.sh
-```
-
-The stack deploys the operator schedule and the vote contract, which the node follows, registers a third
-candidate, registers a standby key for each candidate that the vault's signer vouches for, as the schedule
-requires of every member, and stakes for the three candidates: 40,000 MONKEY for the first engine's, 24,000 for the second
-engine's and 35,000 for the third. It then moves the chain's clock past the registry's one-day epoch, which
-adopts the three as the rotation set, and past the set's seven-day notice, so the set is in effect. Import the
-second engine's candidate (Anvil account 4, whose public test key the script prints) into a dev wallet to vote
-as a member; it delegates to itself and to the third candidate.
-
-1. `./scripts/dev-local-stack-ctl.sh propose operator fast '{"action":"set_stress_floor","market":null,"level":1}'`
-   proposes a fast-path stress floor as the first engine's candidate, which votes yes with its 40%. The command
-   is the admin command's JSON as the engine serialises it; `normal` proposes on the normal path.
-2. The Staking page's Governance tab lists the proposal with its tally against two thirds, how the members the
-   account delegates to voted, and a Vote yes button. A vote moves the tally once the node reads the next final
-   block.
-3. `./scripts/dev-local-stack-ctl.sh vote third 1` adds the third candidate's yes, which passes it. The engine
-   applies a passed change only while a drawn turn is in effect, which this stack draws only under `ROTATION=1`
-   (below): with `GOVERNANCE=1` alone, a passed proposal changes nothing. Under `ROTATION=1` a fast-path change is
-   in force at once as a restriction, which lapses after three minutes here (`RESTRICTION_TTL`); a normal change
-   waits seven days of the engine's clock, which a local stack cannot move.
-
-As after a handover, the chain's clock is then ahead of the engine's, eight days here, so withdrawals do not pay,
-and with a schedule the registry's closes adopt rotation sets, so `elect` and `handover` do not apply. A
-proposal's voting window runs on the chain's clock and the tab counts it down on the engine's, so here it reads
-about eight days longer than it is, and the contract closes voting while the tab still counts.
-
-## Watch operator rotation
-
-While operator rotation is on, each turn of the operator schedule names one member of the rotation set as the
-operator, and at the turn's boundary that member's engine takes the keys and the log from the engine that held
-the previous turn. The stack can run an engine for every member, on a development build of the engine whose
-turns last five minutes instead of a day, so the turns hand over while you watch:
-
-```sh
-ROTATION=1 ./scripts/dev-local-stack.sh
-```
-
-This includes the two-engine option and the parameter votes, with the same three candidates, wallets and vote
-contract, and builds the node with the engine's `short-turns` feature (monkey-trading/engine#850), which a
-production build refuses, so the engine checkout must include it. Anvil
-starts nine days in the past, so the registry's one-day epoch adopts the three candidates as the rotation set
-and the set's seven-day notice passes on the chain's clock before any engine starts. The stack then draws the turn
-in effect for the first engine (`https://127.0.0.1:8080`) and moves the chain to the present, after which it
-runs on true time, so the chain and the engines keep the same clock. The first engine seals new keys and the
-timelock installs its enclave as the vault's signer. The second (`https://127.0.0.1:8081`) and the third
-(`https://127.0.0.1:8082`) start as members and follow it. Each engine posts its checkpoints and log heads
-through relayers of its own and runs a liveness caller, and each seals a standby key, which the stack registers
-for its candidate once the vault's signer has vouched for it.
-
-An engine accepts a turn only once its log has recorded the rotation set a turn earlier, so the first handover
-comes within ten minutes of the stack coming up; the summary names the first turn the stack draws and when it
-begins. From then on the stack draws every turn at its draw deadline, a turn before it begins. It relays each
-turn's seed itself, in place of the seed relay, choosing one that gives the turns to the second, third and first
-engines in turn. At each boundary:
-
-1. The turn's member takes the keys and the end of the log from the engine that held the previous turn, which
-   goes back to following. The first engine, which started with new keys, exits once it has handed them over,
-   and the stack starts it again as a member.
-2. The console moves to the engine that holds the turn within a minute, with balances and positions intact, and
-   trading continues there. Without mkcert's root (above), each engine serves a self-signed certificate: if the console does not
-   move, open that engine's `/v1/health` and accept its certificate.
-3. `./scripts/dev-local-stack-ctl.sh status` shows the turns around the present one and the engine each names,
-   the operator in effect, the vault's signer, and whether each engine serves, follows or is stopped.
-
-`./scripts/dev-local-stack-ctl.sh stop-operator` stops the operator in effect's engine. The other members record
-each heartbeat it misses, and after five in a row, within about three and a half minutes, they promote the next
-member's standby key to the vault's signer. That member's engine serves the rest of the turn from its own copy of
-the log, the console moves to it, and the command then has the stack start the stopped engine again as a member.
-A promotion needs those 200 seconds and two heartbeat slots more (the schedule's heartbeat interval, tolerance and
-misses set both), so when less than that is left of the turn and another member holds the next one, the command
-says so and waits for the next turn to begin, at most five minutes, then stops that turn's operator once its engine serves, so a stop never lands on an engine that has yet to take the
-keys. Run at any point in a turn, it ends in the promotion, with no second run.
-At the next boundary the turn's member takes the keys from the promoted engine as from any other.
-
-Because the chain runs on true time, withdrawals pay here. While the turns rotate, the engine authorizes a
-withdrawal only once the next turn's member has checked the log up to its approval, so a withdrawal can be claimed
-from the next boundary, at most five minutes away.
-
-## Read a local engine development node
-
-Needs the engine's repository, Cargo, and a development node (`config/dev.toml` lists
-`http://localhost:3000` as an allowed origin). In the engine checkout:
-
-```sh
+```shell
 cargo run -p engine-node -- run --config config/dev.toml
 ```
 
-The node serves TLS on `https://127.0.0.1:8080` with a self-signed certificate: open
-`https://127.0.0.1:8080/v1/health` in the browser once and accept it, so the page may fetch and open
-the stream. Then, here:
+The server simulates its enclave, custody and price feeds, and serves its API over TLS at
+`https://127.0.0.1:8080` with a self-signed certificate. Open `https://127.0.0.1:8080/v1/health` in
+your browser once and accept the certificate, so that the console can fetch from the server and open
+its stream. Then, in this repository, run:
 
-```sh
+```shell
 npm run dev:live
 ```
 
-Open `http://localhost:3000` (not `127.0.0.1`: the node allows that origin only). Markets and prices
-stream in under a banner saying the mock attestation was accepted, which only a development build
-for a listed dev origin does. To
-read an account, add `?account=<address>` to the page address; it is read-only.
+Open the console at `http://localhost:3000`, not at `127.0.0.1`, because the engine's development
+config allows browser requests from that origin only. Markets and prices stream in, under a banner
+saying that the server cannot be verified and is suitable for testing only. To view an account, add
+`?account=<address>` to the page address. The account is then shown read-only, and nothing can be
+signed for it.
 
-A live build is configured by environment variables at build time, all pinned into the bundle:
+`npm run dev:live` sets the build variables described under
+[Building for a live trading server](#building-for-a-live-trading-server). To use other ports, set
+those variables yourself, and change `node.listen`, `metrics.listen` and `api.allowed_origins` in a
+copy of the engine's config to match. For a server on port 9080 and the console on port 3001, run:
+
+```shell
+NEXT_PUBLIC_ENGINE_MODE=live-dev NEXT_PUBLIC_ENGINE_ORIGIN=https://127.0.0.1:9080 \
+  NEXT_PUBLIC_ENGINE_DEV_ORIGINS=https://127.0.0.1:9080 NEXT_PUBLIC_ENGINE_CHAIN_ID=31337 \
+  NEXT_PUBLIC_ENGINE_VAULT=0x0000000000000000000000000000000000000000 npx next dev --port 3001
+```
+
+### On a local chain with a wallet
+
+To deposit, trade, withdraw, claim and stake with a browser wallet, run the local stack. It needs
+the engine repository beside this one, with its contracts' dependencies installed:
+
+```shell
+(cd ../engine/contracts && forge soldeer install)
+./scripts/dev-local-stack.sh
+```
+
+The script starts an Anvil chain on port 8545 with the vault and a mock USDC token, a trading server
+at `https://127.0.0.1:8080` that prices BTC-USD and ETH-USD from live crypto venues, and the console
+at `http://localhost:3000`. It then prints the settings for adding the chain to a browser wallet and
+the key of a funded development wallet. The first run builds the trading server with Cargo, which
+takes several minutes. The stack is up when it prints `==> The local stack is up.` Press Ctrl-C to
+stop everything it started. `ANVIL_PORT`, `API_PORT`, `CONSOLE_PORT`,
+`METRICS_PORT` and `ACCESS_SOURCE_PORT` move its ports.
+
+[The local stack](docs/local-stack.md) describes each step, and the options that run the launch
+genesis, an election and handover between two engines, parameter votes, and operator rotation.
+
+## Building for a live trading server
+
+A build that talks to a trading server reads these variables when it is built, and fixes their
+values in the bundle:
 
 | Variable | Meaning |
 | --- | --- |
-| `NEXT_PUBLIC_ENGINE_MODE` | `mock` (default), `live-dev`, or `live` |
-| `NEXT_PUBLIC_ENGINE_ORIGIN` | The node's bare `https://` origin; the stream is the same host over `wss` |
-| `NEXT_PUBLIC_ENGINE_CHAIN_ID`, `NEXT_PUBLIC_ENGINE_VAULT` | The deployment every signature must name |
-| `NEXT_PUBLIC_ENGINE_USDC` | The USDC the vault takes; without it the build cannot deposit |
-| `NEXT_PUBLIC_ENGINE_STAKING` | Optional staking contract the Staking page stakes into; without it staking is refused |
-| `NEXT_PUBLIC_ENGINE_MONKEY` | Optional MONKEY token address the MONKEY page shows with a copy button |
-| `NEXT_PUBLIC_ENGINE_RPC_URL` | Optional RPC URL a wallet that does not know the chain is offered, such as a local Anvil chain's; in a `live-dev` build the faucet also tops gas up and mints the mock USDC through it |
-| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional WalletConnect project id (32 lowercase hex characters); without it the build offers no WalletConnect |
-| `NEXT_PUBLIC_ENGINE_HEARTBEAT_MS` | The node's `[api] heartbeat_interval`, in milliseconds (default 5000) |
-| `NEXT_PUBLIC_ENGINE_DEV_ORIGINS` | Comma-separated node origins a `live-dev` build may accept a mock attestation from |
-| `NEXT_PUBLIC_ENGINE_REGISTRY` | Optional operator registry; without it the build does not follow the operator, and the Staking page lists no operators |
-| `NEXT_PUBLIC_ENGINE_CANDIDATE_ORIGINS` | Comma-separated bare `https://` origins of every timelock-approved candidate's registered hostname: the nodes the build can follow beside its own, named one by one |
-| `NEXT_PUBLIC_ENGINE_DEV_LAUNCH_DIGESTS` | Comma-separated 48-byte stand-ins, in a `live-dev` build only, for the launch digest a mock quote cannot measure, so a local stack runs the vault's release check |
+| `NEXT_PUBLIC_ENGINE_MODE` | `mock` for the simulated server, which is the default; `live-dev` for a development server; or `live` |
+| `NEXT_PUBLIC_ENGINE_ORIGIN` | The trading server's `https://` origin, with no path. The stream is on the same host over `wss:` |
+| `NEXT_PUBLIC_ENGINE_CHAIN_ID`, `NEXT_PUBLIC_ENGINE_VAULT` | The chain and vault that every signature names |
+| `NEXT_PUBLIC_ENGINE_USDC` | The USDC token the vault accepts. Without it, the build cannot deposit |
+| `NEXT_PUBLIC_ENGINE_STAKING` | The staking contract. Without it, the Staking page cannot stake |
+| `NEXT_PUBLIC_ENGINE_MONKEY` | The MONKEY token's address, which the MONKEY page shows. Optional |
+| `NEXT_PUBLIC_ENGINE_REGISTRY` | The operator registry. Without it, the build does not follow a change of operator, and the Staking page lists no operators |
+| `NEXT_PUBLIC_ENGINE_CANDIDATE_ORIGINS` | A comma-separated list of the `https://` origins of every approved operator candidate, which the build may move to |
+| `NEXT_PUBLIC_ENGINE_HEARTBEAT_MS` | The server's `[api] heartbeat_interval`, in milliseconds. The default is 5000 |
+| `NEXT_PUBLIC_ENGINE_RPC_URL` | An RPC address to offer a wallet that does not know the chain, such as a local Anvil chain. In a `live-dev` build, the faucet also uses it. Optional |
+| `NEXT_PUBLIC_ENGINE_DEV_ORIGINS` | In a `live-dev` build, the comma-separated servers whose simulated attestation the build accepts |
+| `NEXT_PUBLIC_ENGINE_DEV_LAUNCH_DIGESTS` | In a `live-dev` build, comma-separated 48-byte values that stand in for the launch digest a simulated attestation cannot measure, so that a local stack can run the vault's release check |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | A WalletConnect project id of 32 lowercase hexadecimal characters. Without it, the build does not offer WalletConnect |
 
-The node's origin and each candidate's are added to the Content Security Policy's `connect-src` (each with its `wss:` form), with no wildcard or scheme source, and
-`'wasm-unsafe-eval'` to `script-src`; a build with a WalletConnect project id also adds WalletConnect's relay,
-`wss://relay.walletconnect.org`, to `connect-src`, and its Verify service, `https://verify.walletconnect.org`, to
-`frame-src`. Chain reads go through the user's wallet, never to an RPC of the console's
-own; the one exception is the `live-dev` build's dev faucet, which tops the wallet's gas up with
-`anvil_setBalance` and mints the mock USDC from one of Anvil's unlocked accounts, both on the build's pinned
-`NEXT_PUBLIC_ENGINE_RPC_URL` (its `connect-src` only in that build), so the wallet signs nothing. `/notices` says what leaves the browser. A `live` build refuses a mock attestation, and the console's wrapper of the verifier does
-not expose the mock entry point there (the served package still exports it); with no releases pinned yet
-(`src/lib/engine/manifests.ts`), it trusts no hardware node either.
+## Verifying it
 
-A hardware quote must show a pinned release's launch digest, guest policy and minimum TCB. With a wallet connected, the
-attested launch digest and config hash must also hash to the vault's `currentRelease()`, and the attested enclave must be the
-vault's `checkpointSigner()`; until then the node may be read and nothing is signed for it. A connected wallet's reads name the
-operator's registered hostname, and the console moves to it, when the build lists it, once that node passes the whole check and
-answers a signed read, without a rebuild. Rotation among listed candidates needs no release; a newly approved candidate needs one,
-and while rotation is on a console that does not list the elected operator stays out and says it needs updating. A code upgrade
-needs a console release first, which pins the new release.
+Two scripts check the console's live client against a real development server. Each needs Node.js,
+`curl`, and `ENGINE_DIR`, the path of the engine repository. With `ENGINE_BIN` naming a built
+`engine` binary, the scripts use it; otherwise they build one with Cargo.
 
-`scripts/dev-live-client.sh` (Node, `curl`, and `ENGINE_DIR`, the engine checkout, with `ENGINE_BIN`
-or Cargo) starts a dev node and runs the live client in Node against it through a tampering proxy,
-checking that a flipped byte, a replayed response, a dropped stream frame and a mock attestation in
-a production build are each refused. `scripts/dev-trading.sh` (the same needs, plus python3 3.11 or
-later and the internet for the node's Roughtime servers; with `ENGINE_BIN`, the `access_source`
-example built beside it) starts a private dev node on mock custody with EIP-712 client auth
-and trades against it through the console's store and actions: it funds a fixed-key wallet through
-the mock-custody dev endpoint, declares eligibility, fills a market order at the streamed
-executable quote sent as the quoted price with a slippage bound, rests and cancels a limit order,
-and closes a position reduce only at the streamed closing price. It then opens BTC-USD and EUR-USD
-positions and checks that each partial close's preview is a bound its fill meets, reads a listing
-notice from the house state, restarts the node with the mock prices raised, which closes out an
-ETH-USD short past its margin, and once the profit fee's curve has run its fifteen minutes checks
-that each whole close's preview equals its fill: the price, the fee and the cash it moves. It takes
-about twenty minutes. With `TRADING_SCENARIO=tiers` it runs the volume tier scenario instead, on a node
-whose genesis names a tier table a fresh wallet climbs in a few minutes: it checks the wallet's limits at tier 0
-against the account read, is stopped past its leverage and its order limit, sees the tier's request rate, trades
-to tier 1 and withdraws. It does not exercise the browser build: how
-the page loads the verifier, and its Content Security Policy, are checked by running `npm run
-dev:live`, or a production build with the same variables, against a node.
+```shell
+ENGINE_DIR=../engine scripts/dev-live-client.sh
+```
+
+`dev-live-client.sh` starts a development server on port 8080, and runs the live client against it
+through a proxy that tampers with answers. It checks that the client's reads equal the server's,
+and that the client refuses a changed byte, a replayed response, a dropped stream message, and a
+simulated attestation in a production build. It ends with
+`PASS: signed reads verify; tamper, replay, gap and mock-in-production are refused`.
+
+```shell
+ENGINE_DIR=../engine scripts/dev-trading.sh
+```
+
+`dev-trading.sh` also needs Python 3.11 or later and an internet connection, and, with
+`ENGINE_BIN`, the engine's `access_source` example built beside the binary. It starts a private
+development server on port 18080, and trades against it through the console's own code for about
+twenty minutes. A wallet funds itself, declares its eligibility, executes a market order at the
+streamed price, places and cancels a limit order, and closes positions. The script checks that the
+preview of each partial close is a bound that its execution meets, and that the preview of each
+whole close equals its execution. It also trades through a close-out after a restart with moved
+prices. It ends with a line that begins `PASS: funded, declared, filled at the streamed
+quote`. `TRADING_SCENARIO=tiers` runs the volume tier scenario instead, which takes a few minutes.
+
+Neither script loads the browser build. To check how the page loads the verifier, and its Content
+Security Policy, run `npm run dev:live`, or a production build with the same variables, against a
+server.
+
+## Deploying it
+
+```shell
+npm run build
+npm start
+```
+
+`npm run build` prerenders every route, and `npm start` serves the build at
+`http://localhost:3000`. The build reads two optional variables for the canonical address in the
+page metadata:
+
+- `SITE_URL`, a bare origin such as `https://console.monkey.trading`, takes precedence.
+- `VERCEL_PROJECT_PRODUCTION_URL` is the bare host that Vercel sets for a connected project.
+- With neither, the address is `http://localhost:3000`.
+
+A build for a live trading server also needs the variables under
+[Building for a live trading server](#building-for-a-live-trading-server), set in the hosting
+provider's settings.
+
+`next.config.ts` builds the rewrite for restricted regions from `RESTRICTED_COUNTRIES`.
+`scripts/check-geo-block.sh` serves a production build on port 3217 and checks the rewrite. If a
+host stops applying the rewrite, the same effect comes from a firewall rule in the host's
+dashboard. The rule matches the request's country against the list and rewrites the path to
+`/restricted`, leaving `/_next/`, `/restricted` and `/robots.txt` unmatched.
 
 ### Updating the verifier
 
-`public/engine-verify/` is the package `scripts/build-wasm-verifier.sh` writes in the engine
-repository (`engine_verify_bg.wasm`, its glue and types, and `SHA256SUMS`), copied unchanged; the
-`.wasm` and glue hashes are in `src/lib/engine/wasm-pin.json`. A `file:` dependency would break the
-exact-version rule, and no release publishes the package yet, so the copy is checked in. A release's
-package replaces it, with its hashes, before the console is promoted.
+`public/engine-verify/` holds the package that the engine's `scripts/build-wasm-verifier.sh`
+writes: `engine_verify_bg.wasm`, its JavaScript glue and types, and `SHA256SUMS`. The package is
+copied in unchanged, and `src/lib/engine/wasm-pin.json` records the engine commit it was built from
+and the hashes of the `.wasm` file and its glue. To update it, build the package in the engine
+repository, copy the files over the old ones, and update `wasm-pin.json` with the new commit and
+hashes.
 
-## Deploy
+## Contributing
 
-`npm run build` prerenders every route; `npm start` serves the build. The build reads two optional
-environment variables for the canonical origin in the document metadata: `SITE_URL`, a bare
-http(s) origin such as `https://console.monkey.trading` that takes precedence, and
-`VERCEL_PROJECT_PRODUCTION_URL`, a bare host that Vercel sets once the repository is connected to
-it. With neither, the origin is `http://localhost:3000`. A build that talks to a live node also reads the
-`NEXT_PUBLIC_ENGINE_*` variables and the WalletConnect project id in the table under "Read a local engine
-development node", which the owner sets in the hosting settings.
+Pull requests against `main` are welcome. For a large change, please open an issue first.
 
-The WalletConnect connection uses Reown's WalletConnect SDK under the WalletConnect Community License
-Agreement, not an open-source licence. The console uses it unmodified, ships the notice and a copy of the
-licence (`public/walletconnect/LICENSE.txt`, both shown on `/notices`), and shows WalletConnect's logo where
-it offers WalletConnect; above 500 monthly active users the licence requires a paid licence from Reown.
+Before you open a pull request, run the checks that CI runs:
 
-## Restricted regions
+```shell
+npm run lint
+npm run typecheck
+npm test
+npm run build
+scripts/check-geo-block.sh
+node scripts/check-audit.mjs
+python3 scripts/check-docs.py
+```
 
-A request from a restricted country is rewritten to the static `/restricted` page, which says the
-app is not available in the visitor's region. Every path is rewritten except the build's `/_next/`
-assets, `/restricted` itself, and `/robots.txt`. The edge decides from the country header its IP
-lookup sets (`x-vercel-ip-country` on Vercel); a request with no country is served normally. The
-countries are `RESTRICTED_COUNTRIES` in `src/lib/geo-block.ts`: the US and its territories, a
-placeholder until counsel supplies the final list. `next.config.ts` builds the rewrite from that
-list, and `scripts/check-geo-block.sh` checks it against a production build.
+- `npm run lint` fails on any warning, and on a source file longer than 300 lines.
+- `node scripts/check-audit.mjs` runs `npm audit` and fails on a high or critical advisory, except
+  for the unexpired entries in `scripts/audit-exceptions.json`.
+- The documentation check confirms that every relative link in `agents/` and in the root Markdown
+  files resolves.
+- After you change a workflow under `.github/workflows/`, also run `actionlint`.
 
-The block follows the visitor's IP address, so a VPN or proxy evades it, and it is not a compliance
-control on its own: enforcement belongs to the engine node, not to this block.
+Text that a trader reads in the console is written as a broker writes help text for its clients,
+in complete, formal sentences that use the standard terms of trading.
 
-Search engines are asked to stay away from the whole console: every page carries a `noindex` robots
-meta tag and an `X-Robots-Tag: noindex, nofollow` header, and `robots.txt` disallows every path.
+Commit and pull request titles take the form `[<scopes>] Subject`, where the scopes are `app`,
+`workspace` and `agents`, for example `[app] Show the closing spread cap on the deal ticket`. A pull
+request merges once CI passes and a maintainer has approved it.
 
-If the host stops matching the header in a rewrite, the fallback is a firewall rule in the host's
-dashboard that serves `/restricted` for the same countries: match the request's country against the
-list, rewrite the path to `/restricted`, and leave `/_next/`, `/restricted`, and `/robots.txt`
-unmatched.
+## Security
+
+Please report vulnerabilities privately, by email to william.jevons@proton.me, and never in a
+public issue.
 
 ## License
 
-Licensed under the Apache License, Version 2.0; see [LICENSE](LICENSE).
+The console is licensed under the Apache License 2.0, in [`LICENSE`](LICENSE). Two parts it ships
+are under their own licences:
+
+- The Geist Mono font is under the SIL Open Font License, in
+  [`src/app/fonts/OFL.txt`](src/app/fonts/OFL.txt).
+- The WalletConnect connection uses Reown's WalletConnect SDK, unmodified, under the WalletConnect
+  Community License Agreement, which is not an open-source licence. A copy is in
+  [`public/walletconnect/LICENSE.txt`](public/walletconnect/LICENSE.txt), and `/notices` shows it.
