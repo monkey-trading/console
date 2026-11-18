@@ -31,9 +31,15 @@ describe("checkLevel", () => {
   });
 
   it("names the nearest level accepted, the distance rounded up as the engine rounds it", () => {
-    // 17 bps of 1.08245 is 0.001840165, which the engine rounds up to the billionth.
-    const refused = checkLevel("take_profit", f("1.0825"), true, f("1.08245"), 17);
-    expect(refused).toEqual({ kind: "take_profit", why: "too_close", level: f("1.0825"), bound: f("1.084290165"), reference: f("1.08245"), minDistanceBps: 17 });
+    // 30 bps of 99,980.123456789 is 299.9403703703667, which the engine rounds up to 299.940370371.
+    const reference = f("99980.123456789");
+    const refused = checkLevel("take_profit", f("100000"), true, reference, 30);
+    expect(refused).toEqual({ kind: "take_profit", why: "too_close", level: f("100000"), bound: f("100280.063827160"), reference, minDistanceBps: 30 });
+    // At the bound a take profit passes, and a billionth inside it is refused; a stop loss's bound rounds away below.
+    expect(checkLevel("take_profit", f("100280.063827160"), true, reference, 30)).toBeNull();
+    expect(checkLevel("take_profit", f("100280.063827159"), true, reference, 30)?.why).toBe("too_close");
+    expect(checkLevel("stop_loss", f("99680.183086418"), true, reference, 30)).toBeNull();
+    expect(checkLevel("stop_loss", f("99680.183086419"), true, reference, 30)?.why).toBe("too_close");
   });
 });
 

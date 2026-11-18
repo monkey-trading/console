@@ -3,7 +3,8 @@
 import { EngineError } from "../engine/client";
 import { positionLevelsTypedData } from "../engine/eip712";
 import type { MarketId } from "../engine/types";
-import { levelsWire, noLevels, type Levels } from "../levels";
+import { describeNamedLevels } from "../level-words";
+import { levelsWire, type Levels } from "../levels";
 import { describeReject } from "../messages";
 import { sessionSigned } from "./session-signed";
 import { domainOf } from "./signing";
@@ -16,10 +17,11 @@ import type { ConsoleStore } from "./store";
  * next read brings, so a success says nothing. A request is idempotent, so a lost nonce signs again.
  */
 export async function setPositionLevels(store: ConsoleStore, market: MarketId, levels: Levels, surface: NoticeSurface = "levels"): Promise<boolean> {
-  const symbol = store.getSnapshot().markets.find((m) => m.id === market)?.symbol ?? `market ${market}`;
+  const listed = store.getSnapshot().markets.find((m) => m.id === market);
+  const symbol = listed?.symbol ?? `market ${market}`;
   const wire = levelsWire(levels);
-  const named = [wire.take_profit === undefined ? null : `a take profit at ${wire.take_profit}`, wire.stop_loss === undefined ? null : `a stop loss at ${wire.stop_loss}`].filter((part) => part !== null);
-  const summary = noLevels(levels) ? `remove the take profit and stop loss from your ${symbol} position` : `set ${named.join(" and ")} on your ${symbol} position`;
+  const named = describeNamedLevels(levels, listed?.places ?? 2);
+  const summary = named === null ? `remove the take profit and stop loss from your ${symbol} position` : `set ${named} on your ${symbol} position`;
   const out = await sessionSigned(store, surface, summary, (t, account) => positionLevelsTypedData(domainOf(store), { account, market, ...wire }, t), async (auth, wallet) => {
     try {
       return await store.deps.client.setPositionLevels({ account: wallet.address, market, ...wire, auth });

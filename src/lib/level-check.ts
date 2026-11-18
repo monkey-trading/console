@@ -9,7 +9,7 @@
 
 import type { LevelKind, Side } from "./engine/types";
 import { absFixed, minFixed, type Fixed } from "./fixed";
-import { describeLevelRefusal, levelSlotProblem, REDUCING_ORDER_LEVELS, type LevelBasis } from "./level-words";
+import { describeLevelRefusal, EDITOR_LEVELS_NOTE, levelSlotProblem, REDUCING_ORDER_LEVELS, TICKET_LEVELS_NOTES, type LevelBasis } from "./level-words";
 import { checkLevel, levelOf, minLevelDistance, movedLevels, NO_LEVELS, noLevels, parseLevel, resultAtLevel, type LevelInput, type Levels } from "./levels";
 import type { MarketModel } from "./models";
 import type { TicketLimits } from "./tier-view";
@@ -32,6 +32,8 @@ export interface LevelCheck {
   estimates: Record<LevelKind, Fixed | null>;
   /** The levels to send, as typed. */
   named: Levels;
+  /** What the levels do to the position the order leaves, by what the order does to the position held; null with none held. */
+  note: string | null;
   /** Whether anything above stops the request being signed. */
   blocked: boolean;
 }
@@ -54,6 +56,7 @@ interface Draft {
   reference: Fixed | null;
   basis: LevelBasis;
   general: string | null;
+  note: string | null;
   /** The estimate's entry and size; null with nothing to estimate from. */
   entry: Fixed | null;
   size: Fixed;
@@ -80,7 +83,7 @@ function checked(draft: Draft): LevelCheck {
     if (level !== null && draft.entry !== null && draft.toUsdDown !== null && draft.size > 0n) estimates[kind] = resultAtLevel(draft.long, draft.entry, draft.size, level, draft.toUsdDown);
   }
   const blocked = draft.general !== null || KINDS.some((kind) => problems[kind] !== null);
-  return { problems, general: draft.general, estimates, named, blocked };
+  return { problems, general: draft.general, estimates, named, blocked, note: draft.note };
 }
 
 /** What the deal ticket holds of an order. */
@@ -109,21 +112,28 @@ export function checkTicketLevels(input: TicketLevelsInput): LevelCheck | null {
   const inputs = readFields(input.fields);
   const named = namedOf(inputs);
   const base = { market: input.market, minBps, inputs, entry: input.price, toUsdDown: input.toUsdDown };
+  const buy = input.side === "buy";
+  // Whether the position held is on the other side and at least the order's size: the order then only reduces it.
+  const reduces = input.held !== 0n && (input.held > 0n) !== buy && absFixed(input.held) >= input.qty;
   if (input.resting) {
     // A working order's levels are all measured from its own price when it is placed, and attach when it fills.
-    return checked({ ...base, long: input.side === "buy", measured: named, reference: input.price, basis: "trigger", general: null, size: input.qty });
+    const note = input.held === 0n ? null : reduces ? TICKET_LEVELS_NOTES.restsReducing : TICKET_LEVELS_NOTES.rests;
+    return checked({ ...base, long: buy, measured: named, reference: input.price, basis: "trigger", general: null, note, size: input.qty });
   }
-  const left = input.held + (input.side === "buy" ? input.qty : -input.qty);
+  const left = input.held + (buy ? input.qty : -input.qty);
   const none = noLevels(named);
-  if (!none && (left === 0n || (left > 0n) !== (input.side === "buy"))) {
-    return checked({ ...base, long: input.side === "buy", measured: NO_LEVELS, reference: null, basis: "closing", general: REDUCING_ORDER_LEVELS, size: 0n });
+  // An empty size leaves the order's shape to the size field's own prompt.
+  if (input.qty === 0n) return checked({ ...base, long: buy, measured: NO_LEVELS, reference: null, basis: "closing", general: null, note: null, size: 0n });
+  if (!none && reduces) {
+    return checked({ ...base, long: buy, measured: NO_LEVELS, reference: null, basis: "closing", general: REDUCING_ORDER_LEVELS, note: null, size: 0n });
   }
+  const note = input.held === 0n || reduces ? null : (input.held > 0n) === (left > 0n) ? TICKET_LEVELS_NOTES.adds : TICKET_LEVELS_NOTES.reverses;
   // An add keeps the position's levels, so a level it names unchanged is not measured again; a new position or a reversal takes only the order's.
   const added = input.held !== 0n && (input.held > 0n) === (left > 0n);
   const measured = movedLevels(named, added ? input.heldLevels : NO_LEVELS);
   // A position holding no levels in this market needs a working order slot for its first pair.
   const general = none ? null : levelSlotProblem(input.limits, noLevels(input.heldLevels));
-  return checked({ ...base, long: left > 0n, measured, reference: input.closing, basis: "closing", general, size: minFixed(input.qty, absFixed(left)) });
+  return checked({ ...base, long: left > 0n, measured, reference: input.closing, basis: "closing", general, note, size: minFixed(input.qty, absFixed(left)) });
 }
 
 /** What the position editor holds. */
@@ -149,7 +159,7 @@ export function checkEditorLevels(input: EditorLevelsInput): LevelCheck & { chan
   const measured = movedLevels(named, input.held);
   const unmeasured = input.closing === null && !noLevels(measured) ? input.noClosing : null;
   const general = unmeasured ?? levelSlotProblem(input.limits, noLevels(input.held) && !noLevels(named));
-  const check = checked({ market: input.market, minBps, inputs, long: input.qty > 0n, measured, reference: input.closing, basis: "closing", general, entry: input.entry, size: absFixed(input.qty), toUsdDown: input.toUsdDown });
+  const check = checked({ market: input.market, minBps, inputs, long: input.qty > 0n, measured, reference: input.closing, basis: "closing", general, note: EDITOR_LEVELS_NOTE, entry: input.entry, size: absFixed(input.qty), toUsdDown: input.toUsdDown });
   const refused = KINDS.some((kind) => inputs[kind].kind === "refused");
   const changed = !refused && (named.takeProfit !== input.held.takeProfit || named.stopLoss !== input.held.stopLoss);
   return { ...check, changed };

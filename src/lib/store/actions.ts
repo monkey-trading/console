@@ -9,6 +9,7 @@ import { saveChoice } from "../engine/wallet-persist";
 import { UntrustedError } from "../engine/trust-errors";
 import { fixedToWire, formatFixedPlaces, parseFixed, type Fixed } from "../fixed";
 import { formatUsdc } from "../vault";
+import { describeNamedLevels } from "../level-words";
 import { levelsWire, type Levels } from "../levels";
 import { describeReject } from "../messages";
 import { noPriceRefusal } from "../unpriced";
@@ -223,8 +224,8 @@ export async function placeOrder(store: ConsoleStore, params: OrderParams, surfa
   const levels = params.levels === undefined ? {} : levelsWire(params.levels);
   const order = { client_id: store.id(), market: market.id, side: params.side, qty, kind, reduce_only: params.reduceOnly, ...levels };
   const at = params.kind.kind === "market" ? `at ${formatFixedPlaces(params.kind.quoted, market.places)} with a maximum slippage of ${params.kind.slippageBps} bps` : `with a ${params.kind.kind} order at ${formatFixedPlaces(params.kind.price, market.places)}`;
-  const named = [levels.take_profit === undefined ? null : `a take profit at ${levels.take_profit}`, levels.stop_loss === undefined ? null : `a stop loss at ${levels.stop_loss}`].filter((part) => part !== null);
-  const summary = `${params.side} ${qty} ${market.symbol} ${at}${params.reduceOnly ? " (reduce only)" : ""}${named.length === 0 ? "" : ` with ${named.join(" and ")}`}`;
+  const named = params.levels === undefined ? null : describeNamedLevels(params.levels, market.places);
+  const summary = `${params.side} ${qty} ${market.symbol} ${at}${params.reduceOnly ? " (reduce only)" : ""}${named === null ? "" : `, and set ${named}`}`;
   const out = await sessionSigned(store, surface, summary, (t, account) => orderTypedData(domainOf(store), { ...order, account }, t), (auth, wallet) =>
     store.deps.client.placeOrder({ ...order, account: wallet.address, auth }), "report",
   );

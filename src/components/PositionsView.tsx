@@ -6,20 +6,22 @@
  * so the table fits the 740 px centre pane of a 1280 px screen with its buttons in view. Edit opens the levels' editor under its row.
  */
 
-import { Fragment, useEffect, useId, useState } from "react";
+import { Fragment, useEffect, useId } from "react";
 
 import { CONFIRM_MIN_GAP_MS, CONFIRM_MS } from "@/lib/confirm-window";
 import { describeLeftOut, planCloseAll, pressBatch, targetsKey } from "@/lib/close-all";
 import { describeNextFall, describeNextFallShort, describeSchedule, formatHold } from "@/lib/fee-words";
 import { formatRate } from "@/lib/format";
 import { describeDetails, describeNoClose, describeNoPrice, describePnl, type CloseGaps } from "@/lib/pnl-words";
-import { stressTermsAt } from "@/lib/pricing";
+import { CALM, stressTermsAt } from "@/lib/pricing";
 import { formatCloseout, formatMark } from "@/lib/price-format";
 import { absFixed, formatFixedPlaces, formatUsd } from "@/lib/fixed";
 import { roundToPlaces } from "@/lib/fixed-rounding";
 import { realisedAt } from "@/lib/close-preview";
 import { formatLevel, minLevelDistance, NO_LEVELS } from "@/lib/levels";
+import type { LevelFields } from "@/lib/level-check";
 import { CLOSE_ALL_REMOVES_LEVELS } from "@/lib/level-words";
+import { closingAt } from "@/lib/ticket-levels";
 import { closingPrice } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
 import { closeAll } from "@/lib/store/batch-actions";
@@ -34,6 +36,7 @@ import { Notice } from "./Notice";
 import { useReadOnlyNote } from "./SignGate";
 import { Term } from "./house/Panel";
 import { useConfirmWindow } from "./use-confirm-window";
+import { editButtonIds, useLevelsEditor } from "./use-levels-editor";
 import { usePrefs } from "./use-prefs";
 
 const TH = "whitespace-nowrap px-1.5 py-2 text-left align-bottom text-label font-normal tracking-caps text-fg-3 uppercase";
@@ -67,7 +70,7 @@ const HOLD_TIP = "The length of time the position has been open, which determine
 const NO_FEE_NOTE = "No fee without a profit";
 const FEE_USD_TIP = "The profit fee, in USD, that you would pay by closing the entire position now. No fee is charged when a position is closed without a profit. A ≤ sign means the fee rate is about to fall, so the fee may be lower if the price holds.";
 const CLOSE_TIP = "The amount that closing the entire position now would add to or deduct from your balance, which is the profit or loss at the closing price less the profit fee. This figure changes as prices move. A ≥ sign means the fee rate is about to fall, so you may keep more.";
-const LEVELS_TIP = "The levels at which the entire position is closed automatically. A take profit or stop loss is triggered when the price at which the position would close reaches it. Use Edit to set, move or remove them.";
+const LEVELS_TIP = "The levels at which the entire position is closed automatically. A take profit or stop loss is triggered when the price at which the position would close reaches it.";
 
 /** The slippage bound a Close sends, capped at the market's own. */
 const CLOSE_SLIPPAGE_BPS = 25;
@@ -84,8 +87,8 @@ export function PositionsView() {
   const readOnly = useReadOnlyNote(id, "Close");
   const { armed, state, arm, cancel } = useConfirmWindow(CONFIRM_MS, CONFIRM_MIN_GAP_MS);
   const { confirmBatch } = usePrefs().prefs;
-  // The position whose levels' editor is open, under its row: one at a time.
-  const [editing, setEditing] = useState<number | null>(null);
+  // The one levels editor, under the row of the position it is open for, and its draft.
+  const levelsEditor = useLevelsEditor(store, id);
   const positions = account?.positions ?? [];
   const feeTip = `This is the fee rate paid on a winning trade. ${feeTerms === null ? "The fee rate falls the longer the position is held." : describeSchedule(feeTerms)}`;
   const rows = positions.map((p) => {
@@ -127,9 +130,13 @@ export function PositionsView() {
     };
     // From V79 a position in a market that takes levels shows them and an editor to set, move or remove them, measured from its closing price.
     const levels = p.levels ?? NO_LEVELS;
+    // The node's exact whole close where it quotes one, else the console's own at the mark, as the engine measures from the last mark while the market is shut.
+    const estimate = market === undefined ? null : closingAt(market, p.qty, { tiers: accountPricing(account, terms, market.view).spreadTiers ?? market.view.spread_tiers, stress: stressTermsAt(terms?.stressLevels, market.stress) ?? CALM, toxicityBps: account?.toxicity?.addOnBps ?? 0 });
+    const draft = levelsEditor.draft?.market === p.market ? levelsEditor.draft : null;
     const editor = market === undefined || minLevelDistance(market.view) === null ? null : {
-      market, position: p, closing: known !== null ? quoted : null, noClosing: `The take profit and stop loss cannot be checked at the moment. ${noPrice ?? CLOSE_WAITS}`,
-      limits: ticketLimits(account, p.market), toUsdDown,
+      market, position: p, closing: known === null ? null : quoted ?? estimate, noClosing: `The take profit and stop loss cannot be checked at the moment. ${noPrice ?? CLOSE_WAITS}`,
+      limits: ticketLimits(account, p.market), toUsdDown, fields: draft?.fields ?? { takeProfit: "", stopLoss: "" }, onChange: levelsEditor.edit,
+      onCancel: () => levelsEditor.cancel(p.market), onSaved: (sent: LevelFields, words: string) => { if (draft !== null) levelsEditor.saved(draft.instance, sent, p.market, words); },
     };
     return {
       key: p.market,
@@ -145,14 +152,13 @@ export function PositionsView() {
       // One static-named explanation per row, so no live figure is the name of a control.
       details: describeDetails({ pnl: describePnl(atMark === null ? null : formatUsd(atMark), pnl === null ? noPrice : null), noClose, noFee }),
       closeout: formatCloseout(p.closeout, places),
-      takeProfit: levels.takeProfit === null ? "—" : formatLevel(levels.takeProfit, places),
-      stopLoss: levels.stopLoss === null ? "—" : formatLevel(levels.stopLoss, places),
+      // A market that takes no levels shows none, as its card leaves them out.
+      takeProfit: levels.takeProfit === null || editor === null ? "—" : formatLevel(levels.takeProfit, places),
+      stopLoss: levels.stopLoss === null || editor === null ? "—" : formatLevel(levels.stopLoss, places),
       holdsLevels: p.levels !== undefined,
       editor,
-      editing: editor !== null && editing === p.market,
-      edit: () => { store.clearNotice("levels"); setEditing(editing === p.market ? null : p.market); },
-      // A save that lands later closes only its own editor, never one opened since.
-      done: () => setEditing((now) => (now === p.market ? null : now)),
+      editing: editor !== null && draft !== null,
+      edit: () => levelsEditor.toggle(p.market, levels),
       hold: fee === null ? "—" : formatHold(fee.holdMs),
       fee: feeBps === null ? "—" : formatRate(feeBps),
       falls,
@@ -200,11 +206,12 @@ export function PositionsView() {
         <button type="button" disabled={busy || readOnly.readOnly || count === 0} className={`${confirming ? ARMED : BUTTON} w-full lg:w-auto`} aria-describedby={describedBy} onClick={closeEverything} onKeyDown={holdsDown}>
           {confirming ? `Confirm: close ${count} ${count === 1 ? "position" : "positions"}` : `Close all (${count})`}
         </button>
-        <p role="status" className="sr-only">{confirming ? `Press again within ${CONFIRM_MS / 1000} seconds to close ${count} ${count === 1 ? "position" : "positions"}.` : ""}</p>
+        <p role="status" className="sr-only">{confirming ? `Press again within ${CONFIRM_MS / 1000} seconds to close ${count} ${count === 1 ? "position" : "positions"}.${removesLevels ? ` ${CLOSE_ALL_REMOVES_LEVELS}` : ""}` : ""}</p>
         {confirming && removesLevels && <p className="text-label leading-relaxed text-fg-2">{CLOSE_ALL_REMOVES_LEVELS}</p>}
         {leftOutNote !== null && <p id={noteId} className="text-label leading-relaxed text-fg-3">{leftOutNote}</p>}
       </div>
       <div className="px-4 has-[p]:border-b has-[p]:border-line has-[p]:pb-3"><Notice surface="positions" /></div>
+      <p role="status" className="sr-only">{levelsEditor.announced}</p>
       <ul className="lg:hidden">
         {rows.map((r) => (
           <li key={r.key} className="border-b border-line px-4 py-3 text-caption last:border-b-0">
@@ -226,10 +233,10 @@ export function PositionsView() {
             </dl>
             <div className="mt-3 flex gap-2">
               <button type="button" disabled={!r.closable} className={`${BUTTON} flex-1`} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-              {r.editor !== null && <button type="button" className={`${BUTTON} flex-1`} aria-expanded={r.editing} aria-controls={r.editing ? `${id}-levels-card` : undefined} aria-label={`Edit take profit and stop loss for ${r.symbol} position`} onClick={r.edit}>Edit take profit and stop loss</button>}
+              {r.editor !== null && <button type="button" id={editButtonIds(id, r.key)[1]} className={`${BUTTON} flex-1`} aria-expanded={r.editing} aria-controls={r.editing ? `${id}-levels-card` : undefined} aria-label={`Edit take profit and stop loss for ${r.symbol} position`} onClick={r.edit}>Edit take profit and stop loss</button>}
             </div>
             <p aria-hidden={!r.unquoted} className={`mt-2 text-label ${r.unquoted ? "text-fg-3" : "invisible"}`}>Select {r.symbol} in the watchlist to load its closing price.</p>
-            {r.editing && r.editor !== null && <LevelsEditor id={`${id}-levels-card`} {...r.editor} onDone={r.done} readOnly={readOnly.readOnly} />}
+            {r.editing && r.editor !== null && <LevelsEditor id={`${id}-levels-card`} {...r.editor} readOnly={readOnly.readOnly} describedBy={readOnly.describedBy} />}
           </li>
         ))}
       </ul>
@@ -267,10 +274,10 @@ export function PositionsView() {
                 <td className={`${TD} ${CLOSE_W}`}>
                   <span className="block">{r.proceeds}</span>
                   <button type="button" disabled={!r.closable} className={CELL_BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-                  {r.editor !== null && <button type="button" className={`${CELL_BUTTON} ml-1`} aria-expanded={r.editing} aria-controls={r.editing ? `${id}-levels-row` : undefined} aria-label={`Edit take profit and stop loss for ${r.symbol} position`} onClick={r.edit}>Edit</button>}
+                  {r.editor !== null && <button type="button" id={editButtonIds(id, r.key)[0]} className={`${CELL_BUTTON} ml-1`} aria-expanded={r.editing} aria-controls={r.editing ? `${id}-levels-row` : undefined} aria-label={`Edit take profit and stop loss for ${r.symbol} position`} onClick={r.edit}>Edit</button>}
                 </td>
               </tr>
-              {r.editing && r.editor !== null && <tr className="border-b border-line"><td colSpan={8}><LevelsEditor id={`${id}-levels-row`} {...r.editor} onDone={r.done} readOnly={readOnly.readOnly} /></td></tr>}
+              {r.editing && r.editor !== null && <tr className="border-b border-line"><td colSpan={8}><LevelsEditor id={`${id}-levels-row`} {...r.editor} readOnly={readOnly.readOnly} describedBy={readOnly.describedBy} /></td></tr>}
               </Fragment>
             ))}
           </tbody>

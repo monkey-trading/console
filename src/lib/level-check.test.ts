@@ -67,6 +67,21 @@ describe("the ticket's levels on a market order", () => {
     expect(checkTicketLevels(ticket({ held: fixedFromInt(1), heldLevels: { takeProfit: null, stopLoss: q("98000") }, limits: limits(25), fields }))?.general).toBeNull();
   });
 
+  it("says what the levels do to the position held, by what the order does to it", () => {
+    const fields = { takeProfit: "", stopLoss: "" };
+    expect(checkTicketLevels(ticket({ fields }))?.note).toBeNull();
+    expect(checkTicketLevels(ticket({ held: fixedFromInt(1), fields }))?.note).toMatch(/^This order adds to your position\. Each level entered here replaces/);
+    expect(checkTicketLevels(ticket({ held: -q("0.5"), fields }))?.note).toMatch(/^This order reverses your position, so the position's current take profit and stop loss are removed/);
+    expect(checkTicketLevels(ticket({ resting: true, price: fixedFromInt(95_000), held: fixedFromInt(1), fields }))?.note).toMatch(/^The levels entered here apply only once the order is executed\./);
+    expect(checkTicketLevels(ticket({ resting: true, price: fixedFromInt(95_000), held: -fixedFromInt(2), fields }))?.note).toMatch(/^If this order is executed while your current position is still open, it reduces that position/);
+  });
+
+  it("says nothing of the order's shape while the size is empty, whatever is held", () => {
+    for (const held of [0n, fixedFromInt(1), -fixedFromInt(1)]) {
+      expect(checkTicketLevels(ticket({ qty: 0n, held, fields: { takeProfit: "101000", stopLoss: "" } }))).toMatchObject({ general: null, note: null, blocked: false });
+    }
+  });
+
   it("shows no fields in a market that takes no levels", async () => {
     const old = { ...market, view: { ...market.view, min_level_distance_bps: undefined } };
     expect(checkTicketLevels(ticket({ market: old, fields: { takeProfit: "1", stopLoss: "" } }))).toBeNull();

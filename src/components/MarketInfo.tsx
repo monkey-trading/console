@@ -72,7 +72,7 @@ export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price
           <div className={ROW}><dt className="text-fg-3">Leverage</dt><dd>{preview.impliedLeverage === null ? "—" : `${preview.impliedLeverage}×`}</dd></div>
           <div className={ROW}><dt className="text-fg-3">Quoted price</dt><dd>{price === null ? "—" : formatMark(price, market.places)}</dd></div>
           {preview.worstPrice !== null && <div className={ROW}><dt className="text-fg-3">Worst price allowed</dt><dd>{worst === null ? "—" : formatMark(worst, market.places)}</dd></div>}
-          {levelDistance !== null && <div><div className={ROW}><dt className="text-fg-3">Take profit and stop loss distance</dt><dd>{spokenRate(levelDistance)}</dd></div><p className="mt-1 text-label leading-relaxed text-fg-3">{describeLevelDistance(levelDistance)}</p></div>}
+          {levelDistance !== null && <div className={ROW}><dt className="text-fg-3">Minimum distance for take profit and stop loss</dt><dd className="text-right">{spokenRate(levelDistance)}<span className="mt-1 block text-left text-label leading-relaxed text-fg-3">{describeLevelDistance(levelDistance)}</span></dd></div>}
         </dl>
         <div>
           <p className="text-label text-fg-3">Spread by position size{ownBands ? ", for your account" : ""}</p>

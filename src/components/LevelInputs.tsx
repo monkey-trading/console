@@ -7,7 +7,7 @@ import { useId } from "react";
 import type { LevelKind } from "@/lib/engine/types";
 import { formatUsd } from "@/lib/fixed";
 import type { LevelCheck, LevelFields } from "@/lib/level-check";
-import { describeEstimate, LEVELS_HELP, levelName } from "@/lib/level-words";
+import { describeEstimate, headline, LEVELS_HELP, levelName } from "@/lib/level-words";
 
 import { AMOUNT_INPUT } from "./amount-input";
 import { Term } from "./house/Panel";
@@ -17,10 +17,11 @@ const FIELD: Record<LevelKind, keyof LevelFields> = { take_profit: "takeProfit",
 const KINDS: readonly LevelKind[] = ["take_profit", "stop_loss"];
 
 /**
- * The two fields under `title`, whose help explains how a level triggers and fills. `note` is a line
- * under them, such as what the fields do to a position already held. Problems are read out as they change.
+ * The two fields under `title`, whose help explains how a level triggers and fills, with the check's note
+ * under them. A refusal names the price it is measured from, which moves with the market, so the fields
+ * describe themselves by the whole text while only its unchanging first sentence is read out as it changes.
  */
-export function LevelInputs({ title, check, fields, onChange, note }: { title: string; check: LevelCheck; fields: LevelFields; onChange: (next: LevelFields) => void; note: string | null }) {
+export function LevelInputs({ title, check, fields, onChange }: { title: string; check: LevelCheck; fields: LevelFields; onChange: (next: LevelFields) => void }) {
   const id = useId();
   const problems = [check.problems.take_profit, check.problems.stop_loss, check.general].filter((p) => p !== null);
   return (
@@ -39,10 +40,11 @@ export function LevelInputs({ title, check, fields, onChange, note }: { title: s
           );
         })}
       </div>
-      {note !== null && <p className="mt-1 text-label leading-relaxed text-fg-3">{note}</p>}
-      <div id={`${id}-problems`} aria-live="polite" className="space-y-1 text-label leading-relaxed text-ember">
+      {check.note !== null && <p className="mt-1 text-label leading-relaxed text-fg-3">{check.note}</p>}
+      <div id={`${id}-problems`} className="space-y-1 text-label leading-relaxed text-ember">
         {problems.map((p) => <p key={p} className="mt-1">{p}</p>)}
       </div>
+      <p aria-live="polite" className="sr-only">{problems.map(headline).join(" ")}</p>
     </fieldset>
   );
 }

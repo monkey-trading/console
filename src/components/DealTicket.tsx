@@ -8,7 +8,6 @@ import { useId, useState } from "react";
 import { signBlock } from "@/lib/engine/attestation";
 import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { EMPTY_FIELDS, type LevelFields } from "@/lib/level-check";
-import { TICKET_LEVELS_NOTE } from "@/lib/level-words";
 import { noLevels } from "@/lib/levels";
 import { ORDER_LABELS, ORDER_TYPES, type OrderType } from "@/lib/prefs";
 import { formatMark } from "@/lib/price-format";
@@ -179,7 +178,7 @@ export function DealTicket() {
           </div>
         </div>
         {closing !== null && <CloseSummary shape={closing} close={close} why={closeWithheld} side={side} places={market.places} converts={market.view.quote_currency !== undefined} />}
-        {levels !== null && <LevelInputs title="Take profit and stop loss (optional)" check={levels} fields={levelFields} onChange={setLevelFields} note={state.account?.positions.some((p) => p.market === market.id) ? TICKET_LEVELS_NOTE : null} />}
+        {levels !== null && <LevelInputs title="Take profit and stop loss (optional)" check={levels} fields={levelFields} onChange={setLevelFields} />}
         <details className="mt-4 rounded border border-line-2">
           <summary className="px-3 py-3.5 text-caption lg:py-2 text-fg-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-glow">Advanced</summary>
           <fieldset className="px-3 pb-3">

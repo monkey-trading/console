@@ -234,7 +234,7 @@ export class ConsoleStore {
   private onMessage(message: StreamMessage): void {
     const viewer = this.snapshot.wallet?.address ?? this.viewer;
     const said = accountNotice(message, viewer, this.snapshot.houseParams, (id) => this.snapshot.markets.find((m) => m.id === id)?.symbol ?? `market ${id}`);
-    if (said !== null) this.notify("account", said);
+    if (said !== null) this.notify("account", said.text, said.tone);
     this.pacing?.observe(message);
     if (message.events.some((event) => event.type === "admin_applied")) stalePricing(this); // parameters, listings or notices may have changed
     this.ledger.ingest(message);

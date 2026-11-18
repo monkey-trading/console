@@ -6,7 +6,9 @@
  */
 
 import type { EngineEvent, Side } from "../engine/types";
+import { metaFor } from "../engine/meta";
 import { fixedFromInt, fixedToWire, divFixed, SCALE, type Fixed } from "../fixed";
+import { roundToPlaces } from "../fixed-rounding";
 import { equityOf, marginOf } from "./accounts";
 import { advance } from "./step";
 import { mockHex } from "./client";
@@ -81,10 +83,12 @@ class Script {
     });
   }
 
-  /** A take profit and a stop loss on the long held in `market`, `percent` above and below the index. */
+  /** A take profit and a stop loss on the long held in `market`, `percent` above and below the index, at the market's places as a trader types them. */
   levels(market: number, percent: number): void {
-    const mid = this.state.markets.get(market)?.mid ?? 1n;
-    const at = (away: number) => fixedToWire(mid + (mid * BigInt(Math.round(away * 100))) / 10_000n);
+    const runtime = this.state.markets.get(market);
+    const mid = runtime?.mid ?? 1n;
+    const places = metaFor(runtime?.listed.spec.symbol ?? "").places;
+    const at = (away: number) => fixedToWire(roundToPlaces(mid + (mid * BigInt(Math.round(away * 100))) / 10_000n, places, "toward-zero"));
     setPositionLevels(this.state, { account: DEMO_ADDRESS, market, take_profit: at(percent), stop_loss: at(-percent), auth: this.auth() });
   }
 

@@ -122,6 +122,8 @@ describe("take profit and stop loss against a dev node", () => {
     await quoted();
     const held = position();
     if (held === null || held.levels === undefined) throw new Error("no position with levels");
+    // The row's closing price: the node's exact whole close, which the quote stream carries once it reflects the position.
+    await wait(() => { const quote = snapshot().quotes[BTC]; return quote !== undefined && closingPrice(quote, "sell", absFixed(held.qty)) !== null; }, 30_000, "the position's closing price");
     const market = marketOf(rig.store, BTC);
     const quote = snapshot().quotes[BTC];
     const closing = quote === undefined ? null : closingPrice(quote, "sell", absFixed(held.qty));
@@ -155,7 +157,7 @@ describe("take profit and stop loss against a dev node", () => {
     const fill = await newest("fill", (e) => e.type === "fill" && e.order_id === orderId);
     expect(fill.type === "fill" ? [fill.position, fixedFromWire(fill.price) < stop] : null).toEqual(["0", true]);
     expect(await newest("position_levels_removed")).toMatchObject({ reason: "stop_loss" });
-    expect(describeEvent(fired, () => "BTC-USD")).toMatch(/^Stop loss at [\d,.]+ reached on BTC-USD, closing the whole position$/);
+    expect(describeEvent(fired, () => "BTC-USD")).toMatch(/^The stop loss at [\d,.]+ on BTC-USD was reached, and the whole position was closed$/);
     await wait(() => snapshot().notices.account?.text.startsWith("Your stop loss at") === true, 30_000, "the account notice");
   }, 180_000);
 

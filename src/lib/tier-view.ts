@@ -89,7 +89,8 @@ function slotsOf(account: AccountModel): { resting: number; levelSlots: number }
 export function orderLimitProblem(limits: TicketLimits | null, resting: boolean): string | null {
   if (limits === null || !resting || limits.orderLimit === null || limits.resting < limits.orderLimit) return null;
   const counting = limits.levelSlots > 0 ? ", counting the take profit and stop loss on each position as one" : "";
-  return `Working order limit reached. Volume tier ${limits.tier} allows up to ${limits.orderLimit} working orders at a time, and you have ${limits.resting}${counting}. Cancel a working order to place a new one, or trade more to reach a higher tier.`;
+  const remedy = limits.levelSlots > 0 ? "Cancel a working order or remove the levels from a position to place a new one, or trade more to reach a higher tier." : "Cancel a working order to place a new one, or trade more to reach a higher tier.";
+  return `Working order limit reached. Volume tier ${limits.tier} allows up to ${limits.orderLimit} working orders at a time, and you have ${limits.resting}${counting}. ${remedy}`;
 }
 
 /** Why the leverage limit applies, for a size the node declines for margin: the tier's limit, named. */

@@ -5,9 +5,15 @@ import type { MarketId } from "./engine/types";
 import { spokenRate } from "./fee-words";
 import { fixedFromWire, formatFixedPlaces, type Fixed } from "./fixed";
 import { roundToPlaces } from "./fixed-rounding";
-import { formatLevel, levelAbove, type LevelRefusal } from "./levels";
+import { formatLevel, levelAbove, type LevelRefusal, type Levels } from "./levels";
 import { formatMark } from "./price-format";
 import type { TicketLimits } from "./tier-view";
+
+/** A problem's first sentence, which says what is wrong without the prices that move with the market: what a live region reads out. */
+export function headline(problem: string): string {
+  const end = problem.indexOf(". ");
+  return end === -1 ? problem : problem.slice(0, end + 1);
+}
 
 /** What the levels are, in the ticket's and the position editor's help. */
 export const LEVELS_HELP = [
@@ -17,8 +23,13 @@ export const LEVELS_HELP = [
   "The take profit and stop loss on a position together count as one working order towards your limit.",
 ] as const;
 
-/** What the ticket's level fields do to a position already held in the market. */
-export const TICKET_LEVELS_NOTE = "If you already hold a position in this market, a level entered here replaces the position's current level, and a field left empty keeps it.";
+/** What the ticket's level fields do to the position an order leaves, by what the order does to the position held: an add keeps a level left empty, a reversal removes the old levels, and a working order's levels apply only once it is executed. */
+export const TICKET_LEVELS_NOTES = {
+  adds: "This order adds to your position. Each level entered here replaces the position's current level, and a field left empty keeps the current level.",
+  reverses: "This order reverses your position, so the position's current take profit and stop loss are removed, and only the levels entered here apply to the new position.",
+  rests: "The levels entered here apply only once the order is executed. If the order then adds to your position, each level replaces the position's current level, and a field left empty keeps the current level.",
+  restsReducing: "If this order is executed while your current position is still open, it reduces that position instead of opening one on its own side, and the levels entered here are then discarded.",
+} as const;
 
 /** What the position editor's fields do. */
 export const EDITOR_LEVELS_NOTE = "Saving replaces the position's levels with the values shown. Leave a field empty to remove that level.";
@@ -67,9 +78,9 @@ export function levelSlotProblem(limits: TicketLimits | null, needsSlot: boolean
   return `Working order limit reached. Volume tier ${limits.tier} allows up to ${limits.orderLimit} working orders at a time, and the take profit and stop loss on a position together count as one. Cancel a working order, or remove the levels from another position, to set levels here.`;
 }
 
-/** A wire decimal grouped in thousands, with no trailing zeros: `97500.50` is `97,500.5`. */
-function decimal(wire: string): string {
-  const text = formatFixedPlaces(fixedFromWire(wire), 9);
+/** A wire decimal grouped in thousands, with at most `places` places and no trailing zeros: `97500.50` is `97,500.5`. */
+function decimal(wire: string, places = 9): string {
+  const text = formatFixedPlaces(fixedFromWire(wire), places);
   return text.replace(/0+$/, "").replace(/\.$/, "");
 }
 
@@ -85,39 +96,59 @@ function namedLevels(event: { take_profit?: string; stop_loss?: string }): strin
   return parts.length === 0 ? null : parts.join(" and ");
 }
 
+/** Why levels were removed, as the end of a sentence. A split's reason also covers a level it scaled out of range, so it names only the split. */
 const REMOVED_BECAUSE: Record<LevelsRemovedReason, string> = {
-  closed: "the position was closed",
-  close_all: "Close all closed the position",
-  take_profit: "the take profit closed the position",
-  stop_loss: "the stop loss closed the position",
-  close_out: "the position was closed out",
-  weekend_close_out: "the position was closed out before the weekend",
-  split: "a share split reduced the position to zero",
-  reversed: "the position was reversed",
-  not_opened: "the order did not leave a position for them to protect",
+  closed: "because the position was closed",
+  close_all: "because Close all closed the position",
+  take_profit: "because the take profit closed the position",
+  stop_loss: "because the stop loss closed the position",
+  close_out: "because the position was closed out",
+  weekend_close_out: "because the position was closed out before the weekend",
+  split: "because of a share split",
+  reversed: "because the position was reversed",
+  not_opened: "because the order did not leave a position on its side for the levels to protect",
 };
 
-/** The log's line for a level event on `symbol`'s position. */
+/** The log's line for a level event on `symbol`'s position, as a whole sentence without its full stop, as the log's other lines are. */
 export function describeLevelEvent(event: LevelEvent, symbolOf: (id: MarketId) => string): string {
   const symbol = symbolOf(event.market);
   switch (event.type) {
     case "position_levels_set": {
-      const named = namedLevels(event);
-      if (named === null) return `Take profit and stop loss removed from the ${symbol} position`;
-      const missing = event.take_profit === undefined ? ", with no take profit" : event.stop_loss === undefined ? ", with no stop loss" : "";
-      return `${symbol} position: ${named}${missing}`;
+      const { take_profit: take, stop_loss: stop } = event;
+      if (take === undefined && stop === undefined) return `The take profit and stop loss were removed from the ${symbol} position`;
+      if (stop === undefined) return `The take profit on the ${symbol} position was set at ${decimal(take ?? "0")}, with no stop loss`;
+      if (take === undefined) return `The stop loss on the ${symbol} position was set at ${decimal(stop)}, with no take profit`;
+      return `The take profit on the ${symbol} position was set at ${decimal(take)} and the stop loss at ${decimal(stop)}`;
     }
-    case "position_level_triggered": return `${TITLES[event.level]} at ${decimal(event.price)} reached on ${symbol}, closing the whole position`;
+    case "position_level_triggered": return `The ${NAMES[event.level]} at ${decimal(event.price)} on ${symbol} was reached, and the whole position was closed`;
     case "position_levels_removed": {
       const named = namedLevels(event) ?? "take profit and stop loss";
-      return `${named.charAt(0).toUpperCase()}${named.slice(1)} removed from ${symbol} because ${REMOVED_BECAUSE[event.reason]}`;
+      const both = event.take_profit !== undefined && event.stop_loss !== undefined;
+      const where = event.reason === "not_opened" ? `named on the ${symbol} order` : `on ${symbol}`;
+      return `The ${named} ${where} ${both || namedLevels(event) === null ? "were" : "was"} removed ${REMOVED_BECAUSE[event.reason]}`;
     }
   }
 }
 
-/** The account notice's sentence for a level that closed a position: the market, the level and the price the position closed at. */
+/** The levels `levels` names, as the wallet's prompt states them at the market's places: `a take profit at 105,000.00 and a stop loss at 95,000.00`; null for none. */
+export function describeNamedLevels(levels: Levels, places: number): string | null {
+  const parts = [levels.takeProfit === null ? null : `a take profit at ${formatLevel(levels.takeProfit, places)}`, levels.stopLoss === null ? null : `a stop loss at ${formatLevel(levels.stopLoss, places)}`].filter((part) => part !== null);
+  return parts.length === 0 ? null : parts.join(" and ");
+}
+
+/** What a screen reader hears once a position's levels are saved: what the position now holds. */
+export function levelsSavedWords(symbol: string, levels: Levels, places: number): string {
+  const take = levels.takeProfit === null ? null : formatLevel(levels.takeProfit, places);
+  const stop = levels.stopLoss === null ? null : formatLevel(levels.stopLoss, places);
+  if (take === null && stop === null) return `The take profit and stop loss on your ${symbol} position have been removed.`;
+  if (stop === null) return `The take profit on your ${symbol} position is now ${take}, and it has no stop loss.`;
+  if (take === null) return `The stop loss on your ${symbol} position is now ${stop}, and it has no take profit.`;
+  return `The take profit on your ${symbol} position is now ${take}, and the stop loss is ${stop}.`;
+}
+
+/** The account notice's sentence for a level that closed a position: the market, the level as set and the price the position closed at, to five places as History shows a fill's. */
 export function levelClosedSentence(kind: LevelKind, symbol: string, level: string, filledAt: string | null): string {
-  const at = filledAt === null ? "" : ` at ${decimal(filledAt)}`;
+  const at = filledAt === null ? "" : ` at ${decimal(filledAt, 5)}`;
   return `Your ${NAMES[kind]} at ${decimal(level)} on ${symbol} was reached, so the entire position was closed${at}.`;
 }
 

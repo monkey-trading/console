@@ -53,6 +53,7 @@ export function OrdersView() {
     };
   });
   const confirming = armed && count > 0;
+  const keepsLevels = account?.positions.some((p) => p.levels !== undefined) === true;
   const cancelEverything = (event: { currentTarget: HTMLElement }) => {
     const press = pressBatch(confirmBatch, state(), count);
     if (press === "arm") arm();
@@ -72,8 +73,8 @@ export function OrdersView() {
         <button type="button" disabled={busy || readOnly.readOnly} className={`${confirming ? ARMED : BUTTON} w-full lg:w-auto`} aria-describedby={readOnly.describedBy} onClick={cancelEverything} onKeyDown={holdsDown}>
           {confirming ? `Confirm: cancel ${count} ${noun}` : `Cancel all (${count})`}
         </button>
-        <p role="status" className="sr-only">{confirming ? `Press again within ${CONFIRM_MS / 1000} seconds to cancel ${count} working ${noun}.` : ""}</p>
-        {confirming && account?.positions.some((p) => p.levels !== undefined) === true && <p className="mt-2 text-label leading-relaxed text-fg-2">{CANCEL_ALL_KEEPS_LEVELS}</p>}
+        <p role="status" className="sr-only">{confirming ? `Press again within ${CONFIRM_MS / 1000} seconds to cancel ${count} working ${noun}.${keepsLevels ? ` ${CANCEL_ALL_KEEPS_LEVELS}` : ""}` : ""}</p>
+        {confirming && keepsLevels && <p className="mt-2 text-label leading-relaxed text-fg-2">{CANCEL_ALL_KEEPS_LEVELS}</p>}
         <Notice surface="orders" />
       </div>
       <ul className="lg:hidden">

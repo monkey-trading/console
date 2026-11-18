@@ -41,7 +41,7 @@ describe("the deal ticket's levels", () => {
 
   it("says what its fields do to a position already held, only while one is", () => {
     expect(render(createElement(DealTicket), { account: account([]) })).not.toContain("replaces the position's current level");
-    expect(render(createElement(DealTicket), { account: account([position]) })).toContain("If you already hold a position in this market, a level entered here replaces the position's current level, and a field left empty keeps it.");
+    expect(render(createElement(DealTicket), { account: account([position]) })).toContain("This order adds to your position. Each level entered here replaces the position's current level, and a field left empty keeps the current level.");
   });
 
   it("shows no level fields in a market listed by a node that predates them", () => {
@@ -59,17 +59,29 @@ describe("the position row's levels", () => {
   });
 
   it("shows dashes for a position with none, and neither levels nor Edit from a node that predates them", () => {
+    const dashes = '<span class="block">—</span><span class="block min-h-lh text-label text-fg-3"><span class="sr-only">Stop loss </span>—</span>';
     const bare = render(createElement(PositionsView), { account: account([{ ...position, levels: undefined }]) });
-    expect(bare).toContain('<span class="block">—</span><span class="block min-h-lh text-label text-fg-3"><span class="sr-only">Stop loss </span>—</span>');
+    expect(bare).toContain(dashes);
     const old = render(createElement(PositionsView), { markets: [older], account: account([position]) });
+    expect(old).toContain(dashes);
+    expect(old).not.toContain("102,000.00");
     expect(old).not.toContain(">Edit<");
     expect(old).not.toContain("Edit take profit and stop loss");
+    expect(old).not.toMatch(/<dt[^>]*>(?:<[^>]*>)*Take profit/);
+  });
+});
+
+describe("Market info's minimum distance", () => {
+  it("holds its explanation inside the term's definition, and none in a market that takes no levels", () => {
+    expect(render(createElement(DealTicket))).toMatch(/<dt[^>]*>Minimum distance for take profit and stop loss<\/dt><dd[^>]*>0\.3%<span[^>]*>A take profit or stop loss must be set at least 0\.3% away/);
+    expect(render(createElement(DealTicket), { markets: [older] })).not.toContain("Minimum distance for take profit and stop loss");
   });
 });
 
 describe("the levels editor", () => {
   const editor = (patch: Partial<Parameters<typeof LevelsEditor>[0]> = {}) => createElement(LevelsEditor, {
-    id: "editor", market, position, closing: fixedFromInt(99_980), noClosing: "No closing price is available.", limits: null, toUsdDown: (x) => x, onDone: () => undefined, readOnly: false, ...patch,
+    id: "editor", market, position, fields: { takeProfit: "102000", stopLoss: "97500" }, onChange: () => undefined, closing: fixedFromInt(99_980), noClosing: "No closing price is available.", limits: null, toUsdDown: (x) => x,
+    onCancel: () => undefined, onSaved: () => undefined, readOnly: false, describedBy: undefined, ...patch,
   });
 
   it("opens with the position's levels, their estimates and the closing price they are measured from, and offers no save until they change", () => {
