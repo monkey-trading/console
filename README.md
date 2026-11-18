@@ -89,9 +89,9 @@ chain id and the vault's address that the build names.
 
 The operator who runs the trading server can change, either by an election or by the daily
 rotation of operators. When a connected wallet's reads name a new operator's registered address,
-the console moves to that server without a rebuild, provided that the build lists the address and
-the server passes every check above. A console that does not list the operator in effect stays
-where it is and says that it needs updating. A change of the engine's code needs a new console
+the console moves to that server without a rebuild. It moves only to an address that the build
+lists, and only once that server has passed every check above. A console that does not list the
+operator in effect stays where it is, and says that it needs updating. A change of the engine's code needs a new console
 release, which pins the new engine release.
 
 ### What leaves the browser

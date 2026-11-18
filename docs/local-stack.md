@@ -201,17 +201,20 @@ In a second terminal, `scripts/dev-local-stack-ctl.sh` drives the rest:
    seconds. A delegation can be moved to another candidate, or partly withdrawn, from its row.
    Unstaking takes the undelegated stake first, and then each delegation in proportion.
 2. Run `./scripts/dev-local-stack-ctl.sh elect` to close the election period. The candidate with
-   the most delegated stake wins, provided that it is eligible, that at least 20% of all stake is
-   delegated, and that it is not already the operator in effect. A candidate is eligible with 5% of
-   all stake. The Staking page then shows the pending election.
+   the most delegated stake wins if all of the following hold:
+   - the candidate is eligible, which needs 5% of all stake;
+   - at least 20% of all stake is delegated;
+   - the candidate is not already the operator in effect.
+
+   The Staking page then shows the pending election.
 3. Claim any withdrawal that you want paid, and then run
    `./scripts/dev-local-stack-ctl.sh handover`. The command moves the chain's clock past the
    election's seven-day notice, so the vault names the second engine's release. The stack starts the
    second engine, which takes the keys and the log, and the first engine exits. The console moves to
    the second engine by itself, with balances and positions intact, and trading continues there.
-   Without mkcert's root, open `https://127.0.0.1:8081/v1/health` once and accept its certificate
-   if the console does not move. A page loaded after the handover moves as soon as a wallet is
-   connected.
+   If the console does not move, the browser has not yet accepted the second engine's self-signed
+   certificate. Open `https://127.0.0.1:8081/v1/health` once and accept it. A page loaded after the
+   handover moves as soon as a wallet is connected.
 4. Run `./scripts/dev-local-stack-ctl.sh fund-house 50000` to add 50,000 mock USDC to the house's
    capital. In this option the liquidity floor equals the house's starting capital, so the next
    staking period that closes with stake distributes the added amount. While operator rotation is
@@ -334,8 +337,8 @@ each boundary:
    turn, and that engine goes back to following. The first engine, which started with new keys,
    exits once it has handed them over, and the stack starts it again as a member.
 2. Within a minute, the console moves to the engine that holds the turn, with balances and
-   positions intact, and trading continues there. Without mkcert's root, open that engine's
-   `/v1/health` address and accept its certificate if the console does not move.
+   positions intact, and trading continues there. If the console does not move, open that engine's
+   `/v1/health` address once and accept its self-signed certificate.
 3. `./scripts/dev-local-stack-ctl.sh status` shows the turns around the present one and the engine
    each names, the operator in effect, the vault's signer, and whether each engine is serving,
    following or stopped.
