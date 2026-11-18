@@ -115,6 +115,7 @@ function client(status: number, body: unknown) {
   const node = new FakeNode();
   node.attestation(() => VECTORS.signer);
   node.signed("/v1/status", () => ({ status, body: JSON.stringify(body), signature: "0x00", timeMs: 1_000, seq: 9 }));
+  node.signed("/v1/notice", () => ({ status: 404, body: '{"error":"not found"}', signature: "0x00", timeMs: 1_000, seq: 9 })); // this node predates notices
   const sockets: FakeSocket[] = [];
   const scheduler = new FakeScheduler();
   const live = new LiveEngineClient({

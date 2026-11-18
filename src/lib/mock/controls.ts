@@ -10,6 +10,7 @@ import { delegatedOf } from "../staking/delegations";
 import { chainDeposit, payQueue } from "./funds";
 import { claimDistribution, completeUnstake, distributionProof, stake, startUnstake, walletBalance } from "./monkey";
 import { delegationsOf, mockChainReads, moveDelegation, reduceForUnstake } from "./operators";
+import { noticeProblem } from "./notice-text";
 import { MAX_STRESS, type Region } from "./state";
 
 /** What each mock wallet starts with on the simulated chain. */
@@ -34,6 +35,18 @@ export class MockControls {
   /** The simulated vault's exit: what its wallet side and these controls act on. */
   get exit(): MockEngineClient["vaultExit"] {
     return this.client.vaultExit;
+  }
+
+  /** Publishes `text` as the notice, replacing any in force; returns why the node would refuse it, or null once published. */
+  publishNotice(text: string): string | null {
+    const problem = noticeProblem(text);
+    if (problem === null) this.client.setNotice(text);
+    return problem;
+  }
+
+  /** Clears the notice. */
+  clearNotice(): void {
+    this.client.setNotice(null);
   }
 
   setRegion(region: Region): void {

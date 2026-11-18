@@ -128,6 +128,7 @@ function LoadedConsole({ initial, children }: { initial: Session; children: Reac
       };
     }
     const stop = store.start(SIM_EPOCH_MS);
+    const stopFeeds = followAccountFeeds(store); // the demo controls' operator notice
     // The demo account is connected on load, so no screen starts empty. Its login signs with a session key, whose signer (and the curves under it) loads after the page does.
     void loadSessionKeySigner().then(() => connectWallet(store, "browser", true)).finally(() => store.patch({ walletDecided: true }));
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) store.setPaused(true);
@@ -158,6 +159,7 @@ function LoadedConsole({ initial, children }: { initial: Session; children: Reac
       if (timer !== null) clearInterval(timer);
       document.removeEventListener("visibilitychange", sync);
       unsubscribe();
+      stopFeeds();
       stop();
     };
   }, [store, session]);

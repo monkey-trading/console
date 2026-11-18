@@ -9,6 +9,7 @@ import type { ScanBudget, ScannedMark } from "./live-marks";
 import type { SessionRule } from "./mark-session";
 import type { QuoteRequest } from "./live-stream";
 import type { DeploymentReads, VaultFacts } from "./registry";
+import type { StatusNotice } from "./notice-types";
 import type { ServerRead } from "./status-types";
 import type { SignerFloor } from "./signer-naming";
 import type { StatsReads } from "./stats-types";
@@ -68,7 +69,9 @@ export type ClientEvent =
   /** A signed withdrawal authorization the stream carried, for any account. */
   | { type: "withdrawal"; withdrawal: SignedWithdrawal }
   /** What the server says of its own operating state, or null when nothing current is known (monkey-trading/console#398). */
-  | { type: "server"; server: ServerRead | null };
+  | { type: "server"; server: ServerRead | null }
+  /** The operator's status notice in force, or null once it is cleared (monkey-trading/console#446). */
+  | { type: "notice"; notice: StatusNotice | null };
 
 /**
  * Whether a client checks the signatures on the node's answers: `checked` for a live client, `none`
@@ -116,7 +119,7 @@ export interface EngineClient {
    * against it as against the node's own word, and leaves the enclave it trusts now, which its own check judged, its verdict.
    */
   holdSigner(floor: Readonly<SignerFloor>): void;
-  /** Reports each change of attestation status and of the feed. */
+  /** Reports each change of attestation status and of the feed, and what the server says of its state and the operator's notice. */
   watch(listener: (event: ClientEvent) => void): Unsubscribe;
   markets(): Promise<MarketView[]>;
   house(): Promise<HouseView>;

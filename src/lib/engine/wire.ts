@@ -1,5 +1,6 @@
 /** The node's signed-answer wire format: header names, the challenge, and the stream envelope (engine-wire). */
 
+import { noticeOf, type StatusNotice } from "./notice-types";
 import type { ServerStatus } from "./status-types";
 import type { MarketQuote, SignedWithdrawal, StreamMessage } from "./types";
 
@@ -71,9 +72,15 @@ export interface CheckpointEntry {
 /** The server's operating state, sent on a `status=1` connection when it opens and each time it changes. */
 export type StatusFrame = ServerStatus & { type: "status" };
 
-export type FrameMessage = StreamMessage | Heartbeat | MarketQuote | QuoteError | WithdrawalEntry | CheckpointEntry | StatusFrame;
+/** The operator's status notice, sent on a `notice=1` connection when it opens and each time it changes. */
+export interface NoticeFrame {
+  type: "notice";
+  notice: StatusNotice | null;
+}
 
-/** Reads a verified frame's message: a log entry, a heartbeat, a quote, or the server's status; null for any other shape. */
+export type FrameMessage = StreamMessage | Heartbeat | MarketQuote | QuoteError | WithdrawalEntry | CheckpointEntry | StatusFrame | NoticeFrame;
+
+/** Reads a verified frame's message: a log entry, a heartbeat, a quote, the server's status or the operator's notice; null for any other shape. */
 export function parseFrameMessage(msg: string): FrameMessage | null {
   let value: unknown;
   try {
@@ -90,6 +97,10 @@ export function parseFrameMessage(msg: string): FrameMessage | null {
   if (type === "quote_error") {
     const { error } = value as { error?: unknown };
     return typeof error === "string" ? { type, error } : null;
+  }
+  if (type === "notice") {
+    const notice = noticeOf(value);
+    return notice === undefined ? null : { type, notice };
   }
   // The enclave signed these, so past their tag their shape is the engine's.
   if (type === "command" || type === "quote" || type === "withdrawal" || type === "checkpoint" || type === "status") return value as FrameMessage;

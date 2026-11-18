@@ -35,7 +35,7 @@ npm run dev
 
 The app is served at `http://localhost:3000`. The Demo controls button in the top strip changes the
 simulated node: the region it sees you in (to show the geo-block), its attestation, price shocks that
-trigger a close-out, market halts, stress levels, and vault liquidity for the withdrawal queue. Before sending a change, run `npm run lint`,
+trigger a close-out, market halts, stress levels, vault liquidity for the withdrawal queue, and an operator status notice, published and cleared. Before sending a change, run `npm run lint`,
 `npm run typecheck`, `npm test`, `npm run build`, and `npm audit --audit-level=high`; CI runs these,
 the geo-block check (`scripts/check-geo-block.sh`, after the build), and the docs and workflow checks.
 

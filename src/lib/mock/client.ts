@@ -1,12 +1,13 @@
 /** An in-browser engine node that answers as the real node's REST and stream routes do. */
 
 import { checkAttestation, type AttestationStatus } from "../engine/attestation";
-import { EngineError, type ActionResult, type EngineClient, type SignatureChecks, type Unsubscribe } from "../engine/client";
+import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks, type Unsubscribe } from "../engine/client";
 import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
 import type { EligibilityClass, AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage, MarkResolution } from "../engine/mark-types";
 import type { HouseState } from "../engine/house-state";
+import type { StatusNotice } from "../engine/notice-types";
 import type { StatsReads } from "../engine/stats-types";
 import type { CheckpointEntry } from "../engine/wire";
 import type { HouseParams, QueueTotals } from "../house";
@@ -50,6 +51,9 @@ export class MockEngineClient implements EngineClient {
     return this.state.log[this.state.log.length - 1]?.seq ?? null;
   }
   attestationMode: AttestationMode = "mock";
+  /** The operator's status notice in force; none until the demo controls set one. Changed only by `setNotice`, which tells the watchers. */
+  private notice: StatusNotice | null = null;
+  private readonly watchers = new Set<(event: ClientEvent) => void>();
 
   /** The dashboard routes: the mock answers every one, as the node does. */
   readonly stats: StatsReads;
@@ -101,9 +105,19 @@ export class MockEngineClient implements EngineClient {
   heedSigner(): void {}
   holdSigner(): void {}
 
-  /** The mock's trust and feed never change, so there is nothing to report. */
-  watch(): Unsubscribe {
-    return () => {};
+  /** The mock's trust and feed never change; the only thing it reports is the operator's notice, which its controls set and clear. */
+  watch(listener: (event: ClientEvent) => void): Unsubscribe {
+    this.watchers.add(listener);
+    if (this.notice !== null) listener({ type: "notice", notice: this.notice });
+    return () => {
+      this.watchers.delete(listener);
+    };
+  }
+
+  /** Sets the operator's notice, or clears it with null, and tells every watcher. */
+  setNotice(text: string | null): void {
+    this.notice = text === null ? null : { text, set_at_ms: this.state.now };
+    for (const watcher of this.watchers) watcher({ type: "notice", notice: this.notice });
   }
 
   async markets(): Promise<MarketView[]> {
