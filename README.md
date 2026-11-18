@@ -244,7 +244,8 @@ Two scripts check the console's live client against a real development server. E
 ENGINE_DIR=../engine scripts/dev-live-client.sh
 ```
 
-`dev-live-client.sh` starts a development server on port 8080, and runs the live client against it
+`dev-live-client.sh` starts a development server on port 8080 and its metrics on port 9464, or on
+`LIVE_CLIENT_API_PORT` and `LIVE_CLIENT_METRICS_PORT` when set, and runs the live client against it
 through a proxy that tampers with answers. It checks that the client's reads equal the server's,
 and that the client refuses a changed byte, a replayed response, a dropped stream message, and a
 simulated attestation in a production build. It ends with
