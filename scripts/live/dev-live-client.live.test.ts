@@ -57,11 +57,22 @@ async function until(done: () => boolean, ms = 20_000): Promise<void> {
 
 const curl = (path: string): unknown => JSON.parse(execFileSync("curl", ["-sk", `${NODE}${path}`], { encoding: "utf8" }));
 
+/**
+ * The House read less what moves between two reads of an idle node: each market's mark follows the mock feed
+ * every 200 ms, and the snapshot's `seq` and `snapshot_ms` follow the node's 5 s refresh. A read of each at a
+ * different instant would differ by that alone, so the comparison holds what the client must pass on unchanged.
+ */
+function steady(house: unknown) {
+  const without = (row: Record<string, unknown>, ...names: string[]) => Object.fromEntries(Object.entries(row).filter(([name]) => !names.includes(name)));
+  const { markets, ...rest } = without(house as Record<string, unknown>, "seq", "snapshot_ms");
+  return { ...rest, markets: (markets as Record<string, unknown>[]).map((market) => without(market, "mark")) };
+}
+
 describe("reads", () => {
   it("equal curl of the same routes, directly and through the untouched proxy", async () => {
     for (const origin of [NODE, proxy.url]) {
       const client = clientFor(origin);
-      await expect(client.house()).resolves.toEqual(curl("/v1/house"));
+      expect(steady(await client.house())).toEqual(steady(curl("/v1/house")));
       const symbols = (rows: unknown) => (rows as { id: number; symbol: string; schedule: unknown }[]).map(({ id, symbol, schedule }) => ({ id, symbol, schedule }));
       expect(symbols(await client.markets())).toEqual(symbols(curl("/v1/markets")));
       await expect(client.attestation()).resolves.toEqual(curl("/v1/attestation"));
