@@ -231,7 +231,7 @@ in a test file: a test cannot reset it, and a second instance of a component can
   `src/lib/engine/deploy.ts` reads, which pin the live node a build talks to): `SITE_URL`, an optional override of the
   canonical origin, and `VERCEL_PROJECT_PRODUCTION_URL`, which Vercel sets.
 - A new variable needs a safe default or a build that fails without it, a line in the README's
-  deployment section, and the owner to set it at Vercel; an agent sets it only on the owner's
+  build variables or deployment section, and the owner to set it at Vercel; an agent sets it only on the owner's
   explicit approval for that action ([no-deploy](../../rules/no-deploy.md)).
 - From the environment, only `NEXT_PUBLIC_*` variables and `NODE_ENV` reach the browser, and
   everything in them is public; never put anything secret in one. `next.config.ts` has no `env`
@@ -504,12 +504,12 @@ change. Keep each new file's import grouping.
 
 ## README
 
-The root `README.md` is the public introduction, in prose: what the site is and shows, how to run
-it locally (Node.js from `.nvmrc`, `npm ci`, `npm run dev`, and the checks CI runs), how it deploys
-and which environment variables it reads, and a `## License` section with the single line:
-Licensed under the Apache License, Version 2.0; see `LICENSE`. It follows the public-copy rules,
-so it says nothing about internal build management. Keep its commands in step with `package.json`
-and its deployment notes with `siteUrl()`.
+Write and edit the root `README.md`, and the pages under `docs/` it links, by
+[readme-writing](../readme-writing/SKILL.md): what the app is and does, how to run it locally
+(Node.js from `.nvmrc`, `npm ci`, `npm run dev`, and the checks CI runs), the build variables, how
+it deploys, and its licences. It follows the public-copy rules, so it says nothing about internal
+build management. Keep its commands in step with `package.json`, its build variables with
+`src/lib/engine/deploy.ts`, and its deployment notes with `siteUrl()`.
 
 ## Build configuration
 

@@ -12,7 +12,7 @@
 # It prints what to add to the wallet, then runs until Ctrl-C, which stops everything it started.
 #
 # SECOND_ENGINE=1 adds what delegation, an election, a handover and distributions need, and
-# `scripts/dev-local-stack-ctl.sh` drives it (see the README): the first engine runs under sealed
+# `scripts/dev-local-stack-ctl.sh` drives it (see docs/local-stack.md): the first engine runs under sealed
 # keys with operator rotation on, a second engine is registered as a candidate and starts once an
 # election has put its release in the vault's hands, and two wallets hold MONKEY to stake.
 # A rotating node posts its log heads on chain, so the nodes' configs name a deployed LogHeads

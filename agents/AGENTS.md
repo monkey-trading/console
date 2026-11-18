@@ -176,8 +176,14 @@ matches the current action.
 - **agents/** — this index, `rules/`, and `skills/`; root `AGENTS.md` / `CLAUDE.md` symlink to
   `agents/AGENTS.md`. The gitignored `agents/.processes/` holds local runs — reviews, plans, and dev
   runs — and, in the main checkout, each PR branch's fix notes.
-- **README.md** — the public introduction: what the app is, how to run it, and how it deploys.
-  Keep its commands and deployment notes in step with `package.json`.
+- **README.md** — the public introduction, written by
+  [readme-writing](skills/readme-writing/SKILL.md): what the app is, its status, what it verifies
+  and signs, how to run it against the simulated server, a development server and the local stack,
+  the build variables, the scenario scripts, deployment, contributing and licences. Keep its
+  commands and deployment notes in step with `package.json`.
+- **docs/** — `local-stack.md`, the local stack's requirements, ports and settings, wallet setup,
+  trusted certificates, the launch genesis, and the walkthroughs of an election and handover,
+  parameter votes and operator rotation, which the README links.
 - **LICENSE** — Apache License 2.0.
 
 ## Commands
@@ -186,7 +192,7 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
 
 - Install: `npm ci`
 - Dev server: `npm run dev` (`http://localhost:3000`); against a local engine dev node,
-  `npm run dev:live` (see the README)
+  `npm run dev:live` (see the README's "Against an engine development server")
 - Local trading stack: `./scripts/dev-local-stack.sh` (Anvil, Forge, Cast, Cargo, Node and npm, `curl`, `jq`, Python 3.11+; the engine
   checkout from `ENGINE_DIR`, default the `engine` beside the main checkout, with `forge soldeer install` run in its
   `contracts/`; deploys the vault and, as the launch deployment does, the operator registry that deploys the MONKEY staking
@@ -203,7 +209,7 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   `./scripts/check-local-stack-genesis.sh` starts it and checks the node serves the 34 markets with their production cap floors
   (needs what the stack needs; it builds the node, so run it through the build slot with `CARGO_CMD`)
 - Two-engine local stack: `SECOND_ENGINE=1 ./scripts/dev-local-stack.sh`, then, from another terminal,
-  `./scripts/dev-local-stack-ctl.sh status | elect | handover | fund-house [USDC]` (the README's walkthrough: stake and
+  `./scripts/dev-local-stack-ctl.sh status | elect | handover | fund-house [USDC]` (`docs/local-stack.md`'s walkthrough: stake and
   delegate from the Staking page, `elect`, `handover`, then `fund-house` and claim; the stack writes its addresses to
   `STACK_INFO_FILE`, by default `monkey-local-stack.json` in the temporary directory, which the control script reads; rotation needs the engine's `[log_heads]`, so the stack also deploys `LogHeads`
   and funds a log-head relayer, Anvil account 10, apart from the checkpoint relayer)
@@ -216,7 +222,7 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   `GOVERNANCE=1`; builds the node with the engine's `short-turns` feature, so turns last five minutes; the third engine's
   ports default to 8082, 9466 and 9445, set by `THIRD_API_PORT`, `THIRD_METRICS_PORT` and `THIRD_HANDOVER_PORT`; Anvil
   accounts 11 to 17 relay the second and third engines' checkpoints and log heads and call each engine's liveness rule),
-  then `./scripts/dev-local-stack-ctl.sh status | stop-operator`; the README's walkthrough follows a few turns and a
+  then `./scripts/dev-local-stack-ctl.sh status | stop-operator`; `docs/local-stack.md`'s walkthrough follows a few turns and a
   promotion
 - Trusted certificates on the local stack: with mkcert's root (`mkcert -CAROOT` holds `rootCA.pem` and its key), the
   stack issues a certificate for `127.0.0.1` and `localhost` and starts `scripts/dev-tls-proxy.mjs`, which serves each
@@ -334,7 +340,9 @@ self-review, opening the PR, and reviewing — not only at the end.
 
 **Public copy.** Before writing text a visitor or a crawler reads — the page, metadata, image and
 alt text, the README — load [writing-style](rules/writing-style.md) and the Public copy section of
-[development-checklist](rules/development-checklist.md), even when no code changes.
+[development-checklist](rules/development-checklist.md), even when no code changes. Before writing
+or editing a README or a page under `docs/`, also load
+[readme-writing](skills/readme-writing/SKILL.md).
 
 ### Rules
 
@@ -368,3 +376,4 @@ skills: section 16 of [development-checklist](rules/development-checklist.md) fo
 - [skills/agent-review-pr/SKILL.md](skills/agent-review-pr/SKILL.md) — review or re-review a GitHub PR via `agent-code-review` (multi-agent on request) and post its in-scope findings — Low confidence rechecked or dropped, points already in the discussion skipped or added as replies — as a PENDING review only after a yes to "Push the draft comments?"; a re-review runs the same flow and also rechecks your earlier threads; never submits; load for "review PR" / "draft review" / "review the PR but don't submit" / "re-check my review".
 - [skills/agent-address-pr-comments/SKILL.md](skills/agent-address-pr-comments/SKILL.md) — answer a PR's open threads and actionable comments: verify, agree the triage with the user, fix what is true and in scope, update the PR description, and post the approved replies as one `COMMENT` review; never approves, requests changes, or resolves; load for "address the PR comments" / "address review feedback" / "reply to the review".
 - [skills/agent-create-worktree/SKILL.md](skills/agent-create-worktree/SKILL.md) — create a worktree under the sibling `console-worktrees/`, named after the branch, clearing a new branch's leftover fix notes; detached at the head SHA to review a PR; load for "create a worktree" / "spin up a working tree".
+- [skills/readme-writing/SKILL.md](skills/readme-writing/SKILL.md) — write or edit any README or `docs/` page, modelled on go-ethereum's README: one line of identity, status, how it works today, getting it, what you get, running it case by case with commands run from a fresh clone, verifying it, contributing and licence; depth in linked `docs/` pages; complete formal sentences with context first and one condition per clause, as interface-copy sets for the app; no history, accretion, issue numbers, project process or unbacked claims; load before writing or editing any README or `docs/` page.
