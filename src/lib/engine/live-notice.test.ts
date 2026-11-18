@@ -100,9 +100,13 @@ describe("a notice read", () => {
 /** A watch whose reads each wait for the test to answer them. */
 function deferred() {
   const answers: ((body: unknown) => void)[] = [];
+  const failures: ((error: Error) => void)[] = [];
   const reports: (StatusNotice | null)[] = [];
-  const watch = new NoticeWatch({ read: () => new Promise((resolve) => answers.push(resolve)), report: (notice) => reports.push(notice) });
-  return { watch, answers, reports };
+  const watch = new NoticeWatch({
+    read: () => new Promise((resolve, reject) => { answers.push(resolve); failures.push(reject); }),
+    report: (notice) => reports.push(notice),
+  });
+  return { watch, answers, failures, reports };
 }
 
 describe("a read that answers late", () => {
@@ -132,6 +136,26 @@ describe("a read that answers late", () => {
     t.answers[0]?.({ notice: NOTICE });
     await Promise.all([first, second]);
     expect(t.reports).toEqual([null]);
+  });
+
+  it("reports no cleared notice when its 404 comes after a later read", async () => {
+    const t = deferred();
+    const first = t.watch.frames();
+    const second = t.watch.frames();
+    t.answers[1]?.({ notice: NOTICE });
+    t.failures[0]?.(new EngineError(404, "not found"));
+    await expect(first).resolves.toBe(false);
+    await second;
+    expect(t.reports).toEqual([NOTICE]);
+  });
+
+  it("reports no cleared notice when its 404 comes after a frame", async () => {
+    const t = deferred();
+    const asked = t.watch.frames();
+    t.watch.frame(NOTICE);
+    t.failures[0]?.(new EngineError(404, "not found"));
+    await asked;
+    expect(t.reports).toEqual([NOTICE]);
   });
 });
 
@@ -183,8 +207,9 @@ describe("the live client", () => {
     const held = new Promise<void>((resolve) => { release = resolve; });
     let asked = 0;
     t.node.routes.set("/v1/notice", async (challenge) => {
-      if (asked++ === 0) await held; // the first stream's read waits; the second's answers at once, with no notice
-      return asked === 1 ? (answer?.(challenge) as Response) : new Response('{"notice":null}', { status: 200, headers: (answer?.(challenge) as Response).headers });
+      const mine = asked++; // counted before the wait, so the held read answers with the notice
+      if (mine === 0) await held; // the first stream's read waits; the second's answers at once, with no notice
+      return mine === 0 ? (answer?.(challenge) as Response) : new Response('{"notice":null}', { status: 200, headers: (answer?.(challenge) as Response).headers });
     });
     const unsubscribe = t.live.subscribe(() => {});
     await settle();
