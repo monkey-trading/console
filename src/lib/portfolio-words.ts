@@ -43,7 +43,7 @@ export function formatNetExposure(net: Fixed): string {
 
 /** The account summary's line for an account whose hedges earn an offset: the requirement before and after it, and the close-out level. */
 export function describeOffsetSummary(perPosition: Fixed, portfolio: PortfolioModel): string {
-  return `Your hedged positions reduce your margin requirement from ${formatUsd(perPosition)} to ${formatUsd(portfolio.margin)}. Your account will be closed out if its equity falls below ${formatUsd(portfolio.maintenanceMargin)}.`;
+  return `Your hedged positions reduce your margin from ${formatUsd(perPosition)} to ${formatUsd(portfolio.margin)}. Your account will be closed out if its equity falls below ${formatUsd(portfolio.maintenanceMargin)}.`;
 }
 
 /** Under a hedge whose positions cannot all be traded: Close hedge leaves them open, and the hedge earns no offset for new orders or withdrawals meanwhile. */

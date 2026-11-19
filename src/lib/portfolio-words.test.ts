@@ -17,7 +17,7 @@ describe("portfolio margin's words", () => {
 
   it("states the requirement before and after the offset, and the close-out level", () => {
     const portfolio = { margin: fixedFromInt(20_010), initialMargin: fixedFromInt(33_450), maintenanceMargin: fixedFromInt(10_005), groups: [] };
-    expect(describeOffsetSummary(fixedFromInt(24_000), portfolio)).toBe("Your hedged positions reduce your margin requirement from $24,000.00 to $20,010.00. Your account will be closed out if its equity falls below $10,005.00.");
+    expect(describeOffsetSummary(fixedFromInt(24_000), portfolio)).toBe("Your hedged positions reduce your margin from $24,000.00 to $20,010.00. Your account will be closed out if its equity falls below $10,005.00.");
   });
 
   it("names the positions a hedge cannot trade, one, several or all of them", () => {
