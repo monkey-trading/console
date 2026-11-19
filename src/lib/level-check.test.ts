@@ -114,6 +114,20 @@ describe("the ticket's levels on a working order", () => {
     expect(check?.problems.take_profit).toBe("Take profit too close to the trigger price. In this market, a take profit on a long position must be at least 0.3% above the order's trigger price of 95,000.00. Set a take profit of 95,285.00 or higher.");
     expect(check?.general).toBeNull();
   });
+
+  it("estimates for the size the order would open against the position held now, none while it would only reduce it, and names a reversal", () => {
+    // A sell at 95,000 names a short's take profit 1,000 below it and stop loss 1,000 above it.
+    const sell = (qty: number, held: number) => checkTicketLevels(ticket({ resting: true, side: "sell", qty: fixedFromInt(qty), price: fixedFromInt(95_000), held: fixedFromInt(held), fields: { takeProfit: "94000", stopLoss: "96000" } }));
+    // Holding 2 long, a sell of 1 only reduces the position: the levels would be discarded, so nothing is estimated.
+    expect(sell(1, 2)).toMatchObject({ blocked: false, estimates: { take_profit: null, stop_loss: null } });
+    expect(sell(1, 2)?.note).toMatch(/^The levels entered here are attached only if this order, when it is executed, leaves you a position in its own direction\./);
+    // Holding 1 long, a sell of 3 would reverse it and open 2 short.
+    expect(sell(3, 1)).toMatchObject({ estimates: { take_profit: fixedFromInt(2_000), stop_loss: -fixedFromInt(2_000) }, note: "The levels entered here apply only once the order is executed. If your position is then still smaller than the order, the order reverses it, so the position's current take profit and stop loss are removed, and only the levels entered here apply to the new position." });
+    // With nothing held, or held short, the order opens or adds its whole size.
+    expect(sell(3, 0)).toMatchObject({ estimates: { take_profit: fixedFromInt(3_000), stop_loss: -fixedFromInt(3_000) }, note: null });
+    expect(sell(3, -1)?.estimates.take_profit).toBe(fixedFromInt(3_000));
+    expect(sell(3, -1)?.note).toMatch(/^The levels entered here apply only once the order is executed\. If the order then adds to your position/);
+  });
 });
 
 describe("the position editor's levels", () => {
