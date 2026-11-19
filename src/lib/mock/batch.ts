@@ -6,6 +6,7 @@
 import { EngineError, type ActionResult } from "../engine/client";
 import type { CancelAllRequest, CloseAllRequest, EngineEvent, Reject } from "../engine/types";
 import { absFixed, fixedToWire } from "../fixed";
+import { checkFilled } from "./closeout";
 import { checkAccess, identifySigner, orderEvents } from "./orders";
 import type { MockState } from "./state";
 
@@ -52,6 +53,7 @@ export function closeAll(state: MockState, req: CloseAllRequest): ActionResult {
       const kind = { kind: "market", quoted: entry.quoted, ...(req.max_slippage_bps === undefined ? {} : { max_slippage_bps: req.max_slippage_bps }) } as const;
       events.push(...orderEvents(state, { account: req.account, client_id: index, market: entry.market, ...closing, kind, reduce_only: true }, account, "close_all"));
     });
+    events.push(...checkFilled(state, req.account, events));
   }
   return { seq: state.emit({ type: "close_all" }, events).seq, events };
 }

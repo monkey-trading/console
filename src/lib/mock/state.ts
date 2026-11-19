@@ -2,6 +2,7 @@
 
 import { fixedFromInt, type Fixed } from "../fixed";
 import type { HouseParams } from "../house";
+import type { PortfolioGridWire } from "../engine/portfolio-types";
 import type { Levels } from "../levels";
 import { LAUNCH_CURVE } from "../holding-fee";
 import { mulberry32, SEED } from "../prng";
@@ -103,8 +104,8 @@ export const FINALITY_MS = 6_000;
  * too; the engine's own is its config's.
  */
 export const CHECKPOINT_EVERY = 50;
-/** The protocol version the mock states: V79, the newest whose rules it models. */
-export const MOCK_PROTOCOL = 79;
+/** The protocol version the mock states: V84, the newest whose rules it models. */
+export const MOCK_PROTOCOL = 84;
 const LOG_LIMIT = 1_000;
 
 /** The volume tiers the mock mirrors from the engine's production genesis (`config/production-genesis.toml`): the counted volume that reaches each, the best-price share, the margin floor, and the resting-order limit and request rate, and from V68 the fee and financing discounts and the emissions boost. */
@@ -115,7 +116,21 @@ const LAUNCH_VOLUME_TIERS: VolumeTierWire[] = [
   { threshold: "250000000", day_divisor: 10, best_price_share_bps: 25000, max_resting_orders: 250, requests_per_second: 20, fee_discount_bps: 2000, financing_discount_bps: 2000, emissions_boost_bps: 5000 },
 ];
 
-/** The launch parameters the mock mirrors from the engine's dev genesis (`config/dev.toml`): solvency, its three stress levels and the fee's hold curve. */
+/**
+ * The offset grid of the engine's dev genesis (`config/dev.toml`, a labelled test fixture): BTC-USD and ETH-USD moving with a common
+ * factor, ETH-USD 1.25 times as far, each also 0.2% on its own, and matched exposure keeping at least half its bands.
+ */
+const DEV_GRID: PortfolioGridWire = {
+  groups: [{
+    name: "crypto", floor_share_bps: 5000, max_floor_share_bps: 10000,
+    members: [
+      { market: 1, loading: "1", residual_shock_bps: 20, max_residual_shock_bps: 80 },
+      { market: 2, loading: "1.25", residual_shock_bps: 20, max_residual_shock_bps: 80 },
+    ],
+  }],
+};
+
+/** The launch parameters the mock mirrors from the engine's dev genesis (`config/dev.toml`): solvency, its three stress levels, the fee's hold curve and the offset grid. */
 const LAUNCH_PARAMS: HouseParams = {
   profitFeeBps: 1000,
   closeoutLevelBps: 5000,
@@ -128,6 +143,7 @@ const LAUNCH_PARAMS: HouseParams = {
   ],
   profitFeeCurve: [...LAUNCH_CURVE],
   volumeTiers: LAUNCH_VOLUME_TIERS,
+  portfolioGrid: DEV_GRID,
   seq: null,
 };
 

@@ -4,13 +4,14 @@ import { EngineError, type ActionResult } from "../engine/client";
 import type { CancelRequest, EligibilityRequest, EngineEvent, OrderRequest, RequestAuth, Reject, RestingOrder } from "../engine/types";
 import { absFixed, fixedFromInt, fixedFromWire, minFixed, parseFixed, type Fixed } from "../fixed";
 import { growthOf, notionalOf } from "../pricing";
+import { checkFilled } from "./closeout";
 import { fillEvents, fillOrder, liveQuote } from "./execute";
 import { slotRefusal, type FillCause } from "./level-state";
 import { attachLevels, checkAttachedLevels, checkNamedLevels, marketOrderLevels, namedLevels } from "./levels";
 import type { AccountState, MockState } from "./state";
 
 /** The largest quantity or price the engine accepts as input. */
-const MAX_INPUT = fixedFromInt(1_000_000_000);
+export const MAX_INPUT = fixedFromInt(1_000_000_000);
 
 /**
  * Refuses a caller from a region the node does not serve, as its real-peer screening does.
@@ -81,6 +82,7 @@ export function placeOrder(state: MockState, req: OrderRequest): ActionResult {
   if (account.eligibility === null) throw new EngineError(403, "eligibility attestation required", { kind: "access", reason: "eligibility_required" });
   identifySigner(state, req.account, account, req.auth);
   const events = orderEvents(state, req, account);
+  events.push(...checkFilled(state, req.account, events));
   return { seq: state.emit({ type: "place_order" }, events).seq, events };
 }
 
@@ -100,7 +102,7 @@ export function orderEvents(state: MockState, req: OrderRequest, account: Accoun
     // From V79 the levels the order names are checked against its priced fill, and the position it leaves on its side takes them.
     const named = namedLevels(req);
     const outcome = fillOrder(state, {
-      address: req.account, market: req.market, side: req.side, qty, reduceOnly: req.reduce_only ?? false, orderId, cause,
+      address: req.account, market: req.market, side: req.side, qty, reduceOnly: req.reduce_only ?? false, orderId, cause, closeChecked: cause !== "close_all",
       slippage: { quoted, maxBps: req.kind.max_slippage_bps ?? runtime.listed.spec.max_slippage_bps },
       ...(named.kind === "levels" ? { check: marketOrderLevels(state, req.account, account, { market: req.market, side: req.side, qty }, named.levels) } : {}),
     });

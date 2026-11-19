@@ -1,0 +1,204 @@
+{
+  "source": "monkey-trading/engine at 04f63c2a5da6d42aa2737f9ad93c1c2d29450836: each vector's legs and expected values are an engine test's own, the test named in engine_test",
+  "vectors": [
+    {
+      "name": "a $1M BTC long against a $1M ETH short loading 1.05 at a 50% floor share",
+      "engine_test": "crates/core/src/portfolio/tests.rs::the_credit_is_the_matched_parts_bands_less_its_charge_rounded_down_once",
+      "level_bps": 5000,
+      "floor_share_bps": 5000,
+      "legs": [
+        { "qty": "10", "price": "100000", "loading": "1", "bands": "10000", "notional": "1000000", "residual_shock_bps": 20, "ceiling_bps": 30 },
+        { "qty": "-250", "price": "4000", "loading": "1.05", "bands": "10000", "notional": "1000000", "residual_shock_bps": 20, "ceiling_bps": 30 }
+      ],
+      "expected": { "offset": "3904.761904761", "worst_loss": "3904.761904762", "matched_notional": "2000000" }
+    },
+    {
+      "name": "the same pair at a 90% floor share",
+      "engine_test": "crates/core/src/portfolio/tests.rs::the_credit_is_the_matched_parts_bands_less_its_charge_rounded_down_once",
+      "level_bps": 5000,
+      "floor_share_bps": 9000,
+      "legs": [
+        { "qty": "10", "price": "100000", "loading": "1", "bands": "10000", "notional": "1000000", "residual_shock_bps": 20, "ceiling_bps": 30 },
+        { "qty": "-250", "price": "4000", "loading": "1.05", "bands": "10000", "notional": "1000000", "residual_shock_bps": 20, "ceiling_bps": 30 }
+      ],
+      "expected": { "offset": "1952.38095238" }
+    },
+    {
+      "name": "a grid charge at or above the matched bands credits nothing",
+      "engine_test": "crates/core/src/portfolio/tests.rs::the_credit_is_the_matched_parts_bands_less_its_charge_rounded_down_once",
+      "level_bps": 5000,
+      "floor_share_bps": 1,
+      "legs": [
+        { "qty": "10", "price": "100000", "loading": "1", "bands": "10000", "notional": "1000000", "residual_shock_bps": 0, "ceiling_bps": 200 },
+        { "qty": "-250", "price": "4000", "loading": "1", "bands": "10000", "notional": "1000000", "residual_shock_bps": 0, "ceiling_bps": 200 }
+      ],
+      "expected": { "offset": "0" }
+    },
+    {
+      "name": "a leg with no bands and no charge still matches its side",
+      "engine_test": "crates/core/src/portfolio/tests.rs::a_leg_left_out_of_the_credit_still_matches_its_side",
+      "level_bps": 5000,
+      "floor_share_bps": 5000,
+      "legs": [
+        { "qty": "10", "price": "100000", "loading": "1", "bands": "0", "notional": "1000000", "residual_shock_bps": 0, "ceiling_bps": 0 },
+        { "qty": "-250", "price": "4000", "loading": "1.05", "bands": "10000", "notional": "1000000", "residual_shock_bps": 20, "ceiling_bps": 30 }
+      ],
+      "expected": { "offset": "1904.761904761" }
+    },
+    {
+      "name": "a lone leg gets no credit",
+      "engine_test": "crates/core/src/portfolio/tests.rs::exposure_on_one_side_gets_no_credit",
+      "level_bps": 5000,
+      "floor_share_bps": 5000,
+      "legs": [
+        { "qty": "10", "price": "100000", "loading": "1", "bands": "10000", "notional": "1000000", "residual_shock_bps": 20, "ceiling_bps": 30 }
+      ],
+      "expected": { "offset": "0", "matched_notional": "0", "worst_loss": "0" }
+    },
+    {
+      "name": "two legs on one side through loadings of opposite signs get no credit",
+      "engine_test": "crates/core/src/portfolio/tests.rs::exposure_on_one_side_gets_no_credit",
+      "level_bps": 5000,
+      "floor_share_bps": 5000,
+      "legs": [
+        { "qty": "10", "price": "100000", "loading": "1", "bands": "10000", "notional": "1000000", "residual_shock_bps": 20, "ceiling_bps": 30 },
+        { "qty": "-250", "price": "4000", "loading": "-1", "bands": "10000", "notional": "1000000", "residual_shock_bps": 20, "ceiling_bps": 30 }
+      ],
+      "expected": { "offset": "0", "matched_notional": "0", "worst_loss": "0" }
+    },
+    {
+      "name": "opposite fractional notionals cancel exactly",
+      "engine_test": "crates/core/src/portfolio/tests.rs::opposite_fractional_notionals_cancel_exactly",
+      "level_bps": 5000,
+      "floor_share_bps": 5000,
+      "legs": [
+        { "qty": "0.000000001", "price": "0.5", "loading": "1", "bands": "0", "notional": "0", "residual_shock_bps": 0, "ceiling_bps": 0 },
+        { "qty": "-0.000000001", "price": "0.25", "loading": "2", "bands": "0", "notional": "0", "residual_shock_bps": 0, "ceiling_bps": 0 }
+      ],
+      "expected": { "net_notional": "0" }
+    },
+    {
+      "name": "a tenth of a nano-dollar left over rounds its magnitude up",
+      "engine_test": "crates/core/src/portfolio/tests.rs::opposite_fractional_notionals_cancel_exactly",
+      "level_bps": 5000,
+      "floor_share_bps": 5000,
+      "legs": [
+        { "qty": "0.000000001", "price": "0.5", "loading": "1", "bands": "0", "notional": "0", "residual_shock_bps": 0, "ceiling_bps": 0 },
+        { "qty": "-0.000000001", "price": "0.4", "loading": "1", "bands": "0", "notional": "0", "residual_shock_bps": 0, "ceiling_bps": 0 }
+      ],
+      "expected": { "net_notional": "0.000000001" }
+    },
+    {
+      "name": "a short remainder rounds its magnitude away from zero",
+      "engine_test": "crates/core/src/portfolio/tests.rs::opposite_fractional_notionals_cancel_exactly",
+      "level_bps": 5000,
+      "floor_share_bps": 5000,
+      "legs": [
+        { "qty": "1", "price": "0.333333333", "loading": "3", "bands": "0", "notional": "0", "residual_shock_bps": 0, "ceiling_bps": 0 },
+        { "qty": "-1", "price": "1", "loading": "1", "bands": "0", "notional": "0", "residual_shock_bps": 0, "ceiling_bps": 0 }
+      ],
+      "expected": { "net_notional": "-0.000000001", "binding_direction": "up" }
+    },
+    {
+      "name": "a negative loading turns a long term short",
+      "engine_test": "crates/core/src/portfolio/tests.rs::negative_loadings_turn_a_term_around",
+      "level_bps": 5000,
+      "floor_share_bps": 5000,
+      "legs": [
+        { "qty": "2", "price": "100", "loading": "-1", "bands": "0", "notional": "0", "residual_shock_bps": 0, "ceiling_bps": 0 }
+      ],
+      "expected": { "net_notional": "-200" }
+    },
+    {
+      "name": "two shorts with loadings of opposite signs cancel",
+      "engine_test": "crates/core/src/portfolio/tests.rs::negative_loadings_turn_a_term_around",
+      "level_bps": 5000,
+      "floor_share_bps": 5000,
+      "legs": [
+        { "qty": "-10", "price": "100", "loading": "-0.5", "bands": "0", "notional": "0", "residual_shock_bps": 0, "ceiling_bps": 0 },
+        { "qty": "-10", "price": "50", "loading": "1", "bands": "0", "notional": "0", "residual_shock_bps": 0, "ceiling_bps": 0 }
+      ],
+      "expected": { "net_notional": "0", "binding_direction": "either" }
+    },
+    {
+      "name": "positions past the input bound net exactly",
+      "engine_test": "crates/core/src/portfolio/tests.rs::positions_past_the_input_bound_net_exactly_where_i128_would_overflow",
+      "level_bps": 5000,
+      "floor_share_bps": 5000,
+      "legs": [
+        { "qty": "5000000000", "price": "1000000000", "loading": "10", "bands": "0", "notional": "0", "residual_shock_bps": 0, "ceiling_bps": 0 },
+        { "qty": "-5000000000", "price": "1000000000", "loading": "9.999999999", "bands": "0", "notional": "0", "residual_shock_bps": 0, "ceiling_bps": 0 }
+      ],
+      "expected": { "net_notional": "5000000000" }
+    },
+    {
+      "name": "$700k of oil long against $700k of gold short loading 0.9, with $100k of BTC alone",
+      "engine_test": "crates/core/tests/portfolio_margin.rs::a_hedged_pair_takes_its_matched_exposures_credit",
+      "level_bps": 5000,
+      "floor_share_bps": 3000,
+      "per_position": "24000",
+      "legs": [
+        { "qty": "10000", "price": "70", "loading": "1", "bands": "7000", "notional": "700000", "residual_shock_bps": 20, "ceiling_bps": 25 },
+        { "qty": "-350", "price": "2000", "loading": "0.9", "bands": "7000", "notional": "700000", "residual_shock_bps": 20, "ceiling_bps": 25 }
+      ],
+      "expected": { "net_notional": "70000", "matched_notional": "1260000", "worst_loss": "2660", "binding_direction": "down", "offset": "3990", "requirement": "20010", "maintenance_margin": "10005" }
+    },
+    {
+      "name": "the same book at a 95% floor share",
+      "engine_test": "crates/core/tests/portfolio_margin.rs::a_hedged_pair_takes_its_matched_exposures_credit",
+      "level_bps": 5000,
+      "floor_share_bps": 9500,
+      "per_position": "24000",
+      "legs": [
+        { "qty": "10000", "price": "70", "loading": "1", "bands": "7000", "notional": "700000", "residual_shock_bps": 20, "ceiling_bps": 25 },
+        { "qty": "-350", "price": "2000", "loading": "0.9", "bands": "7000", "notional": "700000", "residual_shock_bps": 20, "ceiling_bps": 25 }
+      ],
+      "expected": { "requirement": "23335" }
+    },
+    {
+      "name": "70 more ounces of gold short take the net short",
+      "engine_test": "crates/core/tests/portfolio_margin.rs::a_net_short_binds_on_the_factor_rising",
+      "level_bps": 5000,
+      "floor_share_bps": 3000,
+      "legs": [
+        { "qty": "10000", "price": "70", "loading": "1", "bands": "7000", "notional": "700000", "residual_shock_bps": 20, "ceiling_bps": 25 },
+        { "qty": "-420", "price": "2000", "loading": "0.9", "bands": "8400", "notional": "840000", "residual_shock_bps": 20, "ceiling_bps": 25 }
+      ],
+      "expected": { "net_notional": "-56000", "binding_direction": "up", "matched_notional": "1400000", "worst_loss": "2955.555555556" }
+    },
+    {
+      "name": "9,000 barrels of oil against 350 ounces of gold net to nothing",
+      "engine_test": "crates/core/tests/portfolio_margin.rs::an_exactly_hedged_group_binds_either_way",
+      "level_bps": 5000,
+      "floor_share_bps": 3000,
+      "legs": [
+        { "qty": "9000", "price": "70", "loading": "1", "bands": "6300", "notional": "630000", "residual_shock_bps": 20, "ceiling_bps": 25 },
+        { "qty": "-350", "price": "2000", "loading": "0.9", "bands": "7000", "notional": "700000", "residual_shock_bps": 20, "ceiling_bps": 25 }
+      ],
+      "expected": { "net_notional": "0", "binding_direction": "either", "matched_notional": "1260000", "worst_loss": "2660" }
+    },
+    {
+      "name": "oil alone matches nothing and keeps its bands",
+      "engine_test": "crates/core/tests/portfolio_margin.rs::a_book_that_offsets_nothing_keeps_its_bands",
+      "level_bps": 5000,
+      "floor_share_bps": 3000,
+      "per_position": "7000",
+      "legs": [
+        { "qty": "10000", "price": "70", "loading": "1", "bands": "7000", "notional": "700000", "residual_shock_bps": 20, "ceiling_bps": 25 }
+      ],
+      "expected": { "matched_notional": "0", "offset": "0", "requirement": "7000" }
+    },
+    {
+      "name": "at tier 0's 5% floor each commodity band charges 5%, and the credit still applies",
+      "engine_test": "crates/core/tests/portfolio_margin.rs::the_tier_floor_raises_each_band_and_the_credit_applies_at_every_tier",
+      "level_bps": 5000,
+      "floor_share_bps": 3000,
+      "per_position": "80000",
+      "legs": [
+        { "qty": "10000", "price": "70", "loading": "1", "bands": "35000", "notional": "700000", "residual_shock_bps": 20, "ceiling_bps": 25 },
+        { "qty": "-350", "price": "2000", "loading": "0.9", "bands": "35000", "notional": "700000", "residual_shock_bps": 20, "ceiling_bps": 25 }
+      ],
+      "expected": { "offset": "46550", "requirement": "33450" }
+    }
+  ]
+}

@@ -20,7 +20,7 @@ describe("close-out of several positions", () => {
     return { node, account };
   }
 
-  it("closes the largest tradable loser first, skips a halted market, and announces once", async () => {
+  it("closes BTC-USD and ETH-USD as their offset group, skips a halted market, and announces once", async () => {
     const { node, account } = await setup(2_000);
     node.controls.setHalted(3, true);
     const seen: EngineEvent[] = [];
@@ -34,14 +34,14 @@ describe("close-out of several positions", () => {
   });
 
   it("stops as soon as the account is healthy again, leaving the other positions open", async () => {
-    // BTC's 1,500 loss puts equity under half the margin; with BTC closed, equity covers what is left.
+    // BTC's 1,500 loss puts equity under half the margin; closing EUR-USD alone would not restore it, and the crypto group, closed together, does.
     const { node, account } = await setup(1_500);
     const seen: EngineEvent[] = [];
     node.client.subscribe((m) => seen.push(...m.events));
     node.client.tick(START + 9_000);
     const closed = seen.filter((e) => e.type === "fill").map((e) => (e.type === "fill" ? e.market : 0));
-    expect(closed).toEqual([1]);
-    expect([...account.positions.keys()].sort()).toEqual([2, 3]);
+    expect(closed).toEqual([1, 2]);
+    expect([...account.positions.keys()].sort()).toEqual([3]);
   });
 });
 

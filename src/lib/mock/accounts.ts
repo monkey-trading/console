@@ -3,7 +3,8 @@
 import { mulFixed, type Fixed } from "../fixed";
 import { tieredMargin } from "../pricing";
 import { discountedBase } from "../holding-fee";
-import { decodeTiers, flooredMargin, type TierTerms } from "../volume-tier";
+import { decodeTiers, type TierTerms } from "../volume-tier";
+import { requirementOf } from "./portfolio";
 import type { AccountState, MockState } from "./state";
 import { tierNow } from "./volume";
 
@@ -49,15 +50,17 @@ export function marginFloorOf(state: MockState, account: AccountState): number {
   return tierOfAccount(state, account).terms?.marginFloorBps ?? 0;
 }
 
-/** The account's initial requirement: its margin with each band charged at least its tier's floor, which fills that add risk and withdrawals must leave equity above. */
+/**
+ * The account's initial requirement, which fills that add risk and withdrawals must leave equity above: its margin with each band
+ * charged at least its tier's floor, less each offset group's credit while no member it holds is shut (V84).
+ */
 export function initialMarginOf(state: MockState, account: AccountState): Fixed {
-  const floor = marginFloorOf(state, account);
-  let total = 0n;
-  for (const [id, held] of account.positions) {
-    const market = state.markets.get(id);
-    if (market) total += flooredMargin(market.listed.spec.margin_tiers, mulFixed(held.qty, market.mid), floor);
-  }
-  return total;
+  return requirementOf(state, account, { kind: "initial", floorBps: marginFloorOf(state, account), shutCredited: false }).requirement;
+}
+
+/** The requirement the account's close-outs read: its margin at the market's bands less each offset group's credit (V81). */
+export function closeoutRequirementOf(state: MockState, account: AccountState): Fixed {
+  return requirementOf(state, account, { kind: "market" }).requirement;
 }
 
 export function equityOf(state: MockState, account: AccountState): Fixed {
