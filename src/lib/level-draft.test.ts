@@ -3,16 +3,24 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
-import { landedSave, openDraft, sentFrom, type HeldPosition, type LevelsDraft } from "./level-draft";
+import { fieldsOf, landedSave, openDraft, sentFrom, type HeldPosition, type LevelsDraft } from "./level-draft";
 import { NO_LEVELS } from "./levels";
 
 const OWNER = "0xabc";
 const LEVELS = { takeProfit: fixedFromInt(105_000), stopLoss: fixedFromInt(95_000) };
-const HELD: HeldPosition = { market: 1, long: true, entry: fixedFromInt(100_000), opened: 1_000, levels: LEVELS };
-const DRAFT: LevelsDraft = { market: 1, owner: OWNER, long: true, entry: HELD.entry, opened: 1_000, base: LEVELS, sent: [], fields: { takeProfit: "105000", stopLoss: "94000" }, instance: 3 };
+const HELD: HeldPosition = { market: 1, levels: LEVELS };
+/** A draft opened on `LEVELS`, its take profit as it opened and its stop loss edited. */
+const DRAFT: LevelsDraft = { market: 1, owner: OWNER, base: LEVELS, sent: [], fields: { takeProfit: "105000", stopLoss: "94000" }, instance: 3 };
+
+describe("fieldsOf", () => {
+  it("prefills each level as the plain digits it was set with, and a level not set as empty", () => {
+    expect(fieldsOf({ takeProfit: fixedFromInt(105_000), stopLoss: null })).toEqual({ takeProfit: "105000", stopLoss: "" });
+    expect(fieldsOf(NO_LEVELS)).toEqual({ takeProfit: "", stopLoss: "" });
+  });
+});
 
 describe("openDraft", () => {
-  it("keeps the draft while its account holds the position it was opened for, unchanged", () => {
+  it("keeps the draft, unchanged, while its account holds a position in its market with the levels it opened with, whatever the position's size or side", () => {
     expect(openDraft(DRAFT, OWNER, [{ ...HELD, market: 2 }, HELD])).toBe(DRAFT);
     expect(openDraft(null, OWNER, [HELD])).toBeNull();
   });
@@ -22,17 +30,16 @@ describe("openDraft", () => {
     expect(openDraft(DRAFT, null, [HELD])).toBeNull();
   });
 
-  it("drops it once the position is closed, reversed, or closed and opened again", () => {
+  it("drops it once the account holds no position in its market", () => {
     expect(openDraft(DRAFT, OWNER, [])).toBeNull();
-    expect(openDraft(DRAFT, OWNER, [{ ...HELD, long: false }])).toBeNull();
-    // A position closed and opened again on the same side in one moment differs in its entry or its open time.
-    expect(openDraft(DRAFT, OWNER, [{ ...HELD, entry: fixedFromInt(101_000) }])).toBeNull();
-    expect(openDraft(DRAFT, OWNER, [{ ...HELD, opened: 2_000 }])).toBeNull();
+    expect(openDraft(DRAFT, OWNER, [{ ...HELD, market: 2 }])).toBeNull();
   });
 
-  it("drops it once the position's levels are changed by anything but its own save", () => {
-    expect(openDraft(DRAFT, OWNER, [{ ...HELD, levels: NO_LEVELS }])).toBeNull();
-    expect(openDraft(DRAFT, OWNER, [{ ...HELD, levels: { ...LEVELS, stopLoss: fixedFromInt(96_000) } }])).toBeNull();
+  it("takes levels changed by anything but its own save as its base, a field still showing the old level showing the new one and an edited field kept", () => {
+    const moved = { takeProfit: fixedFromInt(106_000), stopLoss: fixedFromInt(96_000) };
+    expect(openDraft(DRAFT, OWNER, [{ ...HELD, levels: moved }])).toEqual({ ...DRAFT, base: moved, fields: { takeProfit: "106000", stopLoss: "94000" } });
+    // A reversal removes the levels: the take profit as it opened goes, and the edited stop loss stays for the check to measure on the new side.
+    expect(openDraft(DRAFT, OWNER, [{ ...HELD, levels: NO_LEVELS }])).toEqual({ ...DRAFT, base: NO_LEVELS, fields: { takeProfit: "", stopLoss: "94000" } });
   });
 
   it("keeps it while the position holds the levels it opened with or those any of its own saves sent, taking the newest the account shows as its base", () => {
@@ -43,10 +50,11 @@ describe("openDraft", () => {
     expect(openDraft(sending, OWNER, [HELD])).toBe(sending);
     expect(openDraft(sending, OWNER, [{ ...HELD, levels: first }])).toEqual({ ...sending, base: first, sent: [second] });
     expect(openDraft(sending, OWNER, [{ ...HELD, levels: second }])).toEqual({ ...sending, base: second, sent: [] });
-    expect(openDraft(sending, OWNER, [{ ...HELD, levels: NO_LEVELS }])).toBeNull();
-    // Once the account shows a later save's levels, the levels before them are no longer the position's.
+    // Levels none of its saves sent are a change from elsewhere, which leaves the saves still on their way.
+    expect(openDraft(sending, OWNER, [{ ...HELD, levels: NO_LEVELS }])).toEqual({ ...sending, base: NO_LEVELS, fields: { takeProfit: "", stopLoss: "94000" } });
+    // Once the account shows a later save's levels, the levels before them are no longer the position's, but a change from elsewhere.
     const shown = openDraft(sending, OWNER, [{ ...HELD, levels: second }]);
-    expect(openDraft(shown, OWNER, [HELD])).toBeNull();
+    expect(openDraft(shown, OWNER, [HELD])).toEqual({ ...shown, base: LEVELS });
   });
 
   it("keeps newer fields typed while a save was on its way when the save lands but its account read fails", () => {

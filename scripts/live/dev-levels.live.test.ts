@@ -133,7 +133,7 @@ describe("take profit and stop loss against a dev node", () => {
       fields: fields(held.levels.takeProfit, moved), toUsdDown: market.mark === null ? null : usdConverter(market.view, market.mark, "down"),
     });
     expect(check).toMatchObject({ changed: true, blocked: false });
-    expect(await setPositionLevels(rig.store, BTC, check.named)).toBe(true);
+    expect(await setPositionLevels(rig.store, BTC, check.named)).toEqual({ saved: true, refused: null });
     await wait(() => position()?.levels?.stopLoss === moved, 30_000, "the moved stop loss");
     expect(await newest("position_levels_set", (e) => e.type === "position_levels_set" && e.stop_loss === fixedToWire(moved))).toMatchObject({ take_profit: fixedToWire(held.levels.takeProfit ?? 0n) });
     stop = moved;

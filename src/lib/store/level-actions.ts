@@ -2,7 +2,9 @@
 
 import { EngineError } from "../engine/client";
 import { positionLevelsTypedData } from "../engine/eip712";
+import type { LevelKind } from "../engine/level-types";
 import type { MarketId } from "../engine/types";
+import { fixedFromWire } from "../fixed";
 import { describeLevelSlotReject, describeNamedLevels } from "../level-words";
 import { levelsWire, type Levels } from "../levels";
 import { describeReject } from "../messages";
@@ -11,12 +13,18 @@ import { domainOf } from "./signing";
 import type { NoticeSurface } from "./state";
 import type { ConsoleStore } from "./store";
 
+/** What a levels request came to: whether the node took the levels, and which of them a refusal of a level too close to its price named. */
+export interface LevelsAnswer {
+  saved: boolean;
+  refused: LevelKind | null;
+}
+
 /**
- * Sets the position in `market` to exactly `levels`, removing a level it leaves out. True when the node
- * took them; a refusal says why on `surface`, the editor's own. The position row shows the levels the
- * next read brings, so a success says nothing. A request is idempotent, so a lost nonce signs again.
+ * Sets the position in `market` to exactly `levels`, removing a level it leaves out. A refusal says why on
+ * `surface`, the editor's own. The position row shows the levels the next read brings, so a success says
+ * nothing. A request is idempotent, so a lost nonce signs again.
  */
-export async function setPositionLevels(store: ConsoleStore, market: MarketId, levels: Levels, surface: NoticeSurface = "levels"): Promise<boolean> {
+export async function setPositionLevels(store: ConsoleStore, market: MarketId, levels: Levels, surface: NoticeSurface = "levels"): Promise<LevelsAnswer> {
   const listed = store.getSnapshot().markets.find((m) => m.id === market);
   const symbol = listed?.symbol ?? `market ${market}`;
   const wire = levelsWire(levels);
@@ -34,7 +42,7 @@ export async function setPositionLevels(store: ConsoleStore, market: MarketId, l
       throw error;
     }
   }, "sign-again");
-  if (!out.ok) return false;
+  if (!out.ok) return { saved: false, refused: null };
   // The answer can carry other accounts' events of the same moment: the refusal is the sending account's, with `client_id` 0.
   const refused = out.result.events.find((e) => e.type === "order_rejected" && e.client_id === 0 && e.account.toLowerCase() === sentFor);
   if (refused?.type === "order_rejected") {
@@ -42,5 +50,8 @@ export async function setPositionLevels(store: ConsoleStore, market: MarketId, l
     store.notify(surface, reason.kind === "tier_order_limit" || reason.kind === "too_many_orders" ? describeLevelSlotReject(reason) : describeReject(reason));
   }
   await store.refresh(true);
-  return refused === undefined;
+  if (refused?.type !== "order_rejected") return { saved: true, refused: null };
+  if (refused.reason.kind !== "level_too_close") return { saved: false, refused: null };
+  const level = fixedFromWire(refused.reason.level);
+  return { saved: false, refused: level === levels.takeProfit ? "take_profit" : level === levels.stopLoss ? "stop_loss" : null };
 }

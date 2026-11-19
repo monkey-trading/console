@@ -1,16 +1,20 @@
-/** Tests for where levels show: the deal ticket's fields, the position row and its editor, and the working orders that carry them. */
+/** Tests for where levels show: the deal ticket's fields, the position row and its dialog, and the working orders that carry them. */
 
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import type { LevelKind } from "@/lib/engine/types";
 import { fixedFromInt, parseFixed } from "@/lib/fixed";
+import { checkEditorLevels } from "@/lib/level-check";
+import { NO_LEVELS } from "@/lib/levels";
 import type { AccountModel, MarketModel, PositionModel } from "@/lib/models";
 import type { ConsoleState } from "@/lib/store/state";
 import { btcAt } from "@/lib/ticket-fixtures";
 
 import { ConsoleProvider, useSession } from "./ConsoleProvider";
 import { DealTicket } from "./DealTicket";
+import { LevelInputs } from "./LevelInputs";
 import { LevelsEditor } from "./LevelsEditor";
 import { OrdersView } from "./OrdersView";
 import { PositionsView } from "./PositionsView";
@@ -60,13 +64,13 @@ describe("the deal ticket's levels", () => {
 describe("the position row's levels", () => {
   const CHANGE = "Change take profit and stop loss for your BTC-USD long position: take profit 102,000.00, stop loss 97,500.00";
   const ADD = "Add take profit and stop loss for your BTC-USD long position";
-  /** The table's first row, and each control on the page that opens the levels editor, by its name and what it shows. */
+  /** The table's first row, and each control on the page that opens the levels dialog, by its name and what it shows. */
   const row = (html: string) => (html.split("<tbody>")[1] ?? "").split("</tr>")[0] ?? "";
   const controls = (html: string) => [...html.matchAll(/<button type="button" id="[^"]*-levels-control-[^"]*"[^>]*aria-label="([^"]*)"[^>]*>(.*?)<\/button>/g)].map((m) => [m[1], m[2]?.replace(/<[^>]*>/g, "|")]);
 
-  it("shows the take profit over the stop loss as the one control that opens the editor, named for the position, in the table and on the card", () => {
+  it("shows the take profit over the stop loss as the one control that opens the dialog, named for the position, in the table and on the card", () => {
     const html = render(createElement(PositionsView), { account: account([position]) });
-    expect(row(html)).toContain(`aria-expanded="false" aria-label="${CHANGE}" class="`);
+    expect(row(html)).toContain(`aria-haspopup="dialog" aria-label="${CHANGE}" class="`);
     expect(row(html)).toContain(`><span class="block ${LEVEL}">102,000.00</span><span class="block min-h-lh text-label ${LEVEL}">97,500.00</span></button>`);
     expect(controls(html)).toEqual([[CHANGE, "102,000.00 / 97,500.00"], [CHANGE, "|102,000.00||97,500.00|"]]);
     expect(html).toMatch(/<dt[^>]*>(?:<[^>]*>)*Take profit \/ Stop loss<\/button>.*?<\/dt><dd class="mt-1.5"><button/);
@@ -80,12 +84,13 @@ describe("the position row's levels", () => {
     expect(controls(short)[0]?.[0]).toBe("Change take profit and stop loss for your BTC-USD short position: take profit 97,000.00, no stop loss");
   });
 
-  it("shows Add for a position with none, keeping the cell's second line, and nothing beside Close", () => {
+  it("shows Add for a position with none, keeping the cell's second line, nothing beside Close, and no dialog until it is pressed", () => {
     const html = render(createElement(PositionsView), { account: account([{ ...position, levels: undefined }]) });
     expect(controls(html)).toEqual([[ADD, "Add"], [ADD, "Add"]]);
     expect(row(html)).toMatch(/>Add<\/button><span class="block min-h-lh text-label"><\/span><\/td>/);
     expect(row(html)).toMatch(/aria-label="Close BTC-USD position"[^>]*>Close<\/button><\/td>$/);
     expect(html).not.toContain("Edit");
+    expect(html).not.toContain("<dialog");
   });
 
   it("shows a level of the most digits the engine accepts whole, wrapping inside the column's bounded width, so the table keeps to the 740 px pane", () => {
@@ -112,7 +117,7 @@ describe("the position row's levels", () => {
   });
 });
 
-describe("a levels request's answer with no editor open", () => {
+describe("a levels request's answer with no dialog open", () => {
   it("is shown above the positions, or under the empty list once the position is gone, so a refusal is never lost", () => {
     const shown = (positions: PositionModel[]) => render(createElement(PositionsView), { account: account(positions), notices: { levels: { id: 1, text: "A refusal the trader must read.", tone: "error" } } });
     expect(shown([position])).toMatch(/role="alert"[^>]*>(?:(?!<\/div>).)*A refusal the trader must read\./);
@@ -123,7 +128,7 @@ describe("a levels request's answer with no editor open", () => {
 });
 
 describe("a read-only account's positions", () => {
-  it("offer no editor: the levels and Add are unavailable and say why, the levels shown as plain text", () => {
+  it("offer no dialog: the levels and Add are unavailable and say why, the levels shown as plain text", () => {
     const watched = { wallet: { address: "0xabc", label: "Watched", readOnly: true } };
     const html = render(createElement(PositionsView), { account: account([position]), ...watched });
     expect(html).toContain("Closing a position or editing its take profit and stop loss is unavailable because you are viewing this account in read-only mode.");
@@ -139,10 +144,19 @@ describe("Market info's minimum distance", () => {
   });
 });
 
-describe("the levels editor", () => {
+describe("the levels dialog", () => {
   const editor = (patch: Partial<Parameters<typeof LevelsEditor>[0]> = {}) => createElement(LevelsEditor, {
-    id: "editor", market, position, fields: { takeProfit: "102000", stopLoss: "97500" }, onChange: () => undefined, closing: fixedFromInt(99_980), noClosing: "No closing price is available.", capped: null, limits: null, toUsdDown: (x) => x,
+    market, position, fields: { takeProfit: "102000", stopLoss: "97500" }, onChange: () => undefined, closing: fixedFromInt(99_980), noClosing: "No closing price is available.", capped: null, limits: null, toUsdDown: (x) => x,
     onCancel: () => undefined, onSend: () => undefined, onSaved: () => undefined, saving: false, onSettled: () => undefined, readOnly: false, describedBy: undefined, onRemovedWithFocus: () => undefined, ...patch,
+  });
+
+  it("is a modal dialog titled for the position, described by the levels' help, its fields one under the other", () => {
+    const html = render(editor());
+    const title = html.match(/<dialog aria-modal="true" aria-labelledby="([^"]+)" aria-describedby="([^"]+)"/);
+    expect(html).toContain(`<h2 id="${title?.[1]}" class="border-b border-line px-4 py-2 text-label tracking-caps text-glow uppercase">Take profit and stop loss · BTC-USD long</h2>`);
+    expect(html).toContain(`<p id="${title?.[2]}" class="mt-3 text-caption leading-relaxed text-fg-2">A take profit or stop loss closes your entire position when its closing price reaches the level you set. A stop loss may be executed at a worse price than your level if the market gaps.</p>`);
+    expect(html).toContain('<legend class="sr-only">Take profit and stop loss for your BTC-USD long position</legend><div class="mt-1 grid gap-2 grid-cols-1">');
+    expect(render(editor({ position: { ...position, qty: fixedFromInt(-1) } }))).toContain(">Take profit and stop loss · BTC-USD short</h2>");
   });
 
   it("opens with the position's levels, their estimates and the closing price they are measured from, and offers no save until they change", () => {
@@ -168,6 +182,14 @@ describe("the levels editor", () => {
     expect(html).toMatch(/<button type="button" disabled=""[^>]*>Cancel<\/button>/);
   });
 
+  it("shows each level's problem under its own field, which it describes", () => {
+    const html = render(editor({ fields: { takeProfit: "1o2000", stopLoss: "99970" } }));
+    const [take, stop] = html.split('id="').filter((part) => /^[^"]*-(take_profit|stop_loss)-problem"/.test(part));
+    expect(take).toMatch(/^[^"]*-take_profit-problem" class="text-label leading-relaxed text-ember"><p class="mt-1">Enter the take profit in digits, such as [\d.]+\.<\/p><\/div>/);
+    expect(stop).toMatch(/^[^"]*-stop_loss-problem" class="text-label leading-relaxed text-ember"><p class="mt-1">Stop loss too close to the closing price\./);
+    expect(html).toMatch(/<input[^>]*aria-invalid="true" aria-describedby="[^" ]*-stop_loss-estimate [^" ]*-stop_loss-problem [^" ]*-problems"/);
+  });
+
   it("holds Save from the press until its own save has finished, its account read included, though the session is no longer busy", () => {
     const moved = { fields: { takeProfit: "102000", stopLoss: "98000" } };
     expect(render(editor(moved))).toMatch(/<button type="submit" aria-disabled="false"[^>]*>Save<\/button>/);
@@ -183,6 +205,16 @@ describe("the levels editor", () => {
     const shown = (tone: "error" | "info") => renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Notify, { tone }), editor()));
     expect(shown("error")).toMatch(/role="alert"[^>]*>(?:(?!<\/div>).)*A message the trader must read\./);
     expect(shown("info")).toMatch(/role="status"[^>]*>(?:(?!<\/div>).)*A message the trader must read\./);
+    // A notice that names no field shows under the buttons.
+    expect(shown("error").indexOf(">Cancel</button>")).toBeLessThan(shown("error").indexOf("A message the trader must read."));
+  });
+
+  it("shows a refusal that names a field under that field, and leaves one that names none to the dialog", () => {
+    const check = checkEditorLevels({ market, qty: position.qty, entry: position.entry, held: NO_LEVELS, closing: fixedFromInt(99_980), noClosing: "", capped: null, limits: null, fields: { takeProfit: "", stopLoss: "" }, toUsdDown: (x) => x });
+    const inputs = (at: LevelKind | null) => render(createElement(LevelInputs, { title: "Levels", check, fields: { takeProfit: "", stopLoss: "" }, onChange: () => undefined, dialog: { notice: createElement("p", null, "The level was not accepted."), at } }));
+    expect(inputs("stop_loss")).toMatch(/-stop_loss-problem" class="[^"]*"><p>The level was not accepted\.<\/p><\/div>/);
+    expect(inputs("take_profit")).toMatch(/-take_profit-problem" class="[^"]*"><p>The level was not accepted\.<\/p><\/div>/);
+    expect(inputs(null)).not.toContain("The level was not accepted.");
   });
 });
 

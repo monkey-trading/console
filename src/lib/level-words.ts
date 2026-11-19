@@ -30,6 +30,9 @@ export const TICKET_LEVELS_NOTES = {
 /** What the position editor's fields do. */
 export const EDITOR_LEVELS_NOTE = "Saving replaces the position's levels with the values shown. Leave a field empty to remove that level.";
 
+/** What the Positions panel says once the position whose levels dialog was open has closed. */
+export const levelsDialogClosedWords = (symbol: string) => `Your ${symbol} position has been closed, so its take profit and stop loss can no longer be edited. Any changes you had not saved have been discarded.`;
+
 /** Why the take profit and stop loss cannot be checked yet: `why`, or, with none, that they wait for the trading terms. */
 export const levelsWait = (why: string | null) => `The take profit and stop loss cannot be checked at the moment. ${why ?? "They will be checked once the trading terms have loaded."}`;
 
