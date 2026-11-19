@@ -2,8 +2,8 @@
 
 /**
  * Open positions with their profit and loss at the closing price, hold, profit fee, take profit and stop loss, and what a close keeps, a Close
- * and an Edit button each and a Close all above them: a table of one row each from 1024 px, cards below. A row's cells hold two lines each,
- * so the table fits the 740 px centre pane of a 1280 px screen with its buttons in view. Edit opens the levels' editor under its row.
+ * button each and a Close all above them: a table of one row each from 1024 px, cards below. A row's cells hold two lines each, so the table
+ * fits the 740 px centre pane of a 1280 px screen with its buttons in view. The levels, or Add, open the levels' editor under their row.
  */
 
 import { Fragment, useEffect, useId } from "react";
@@ -32,12 +32,13 @@ import { accountPricing, ticketLimits } from "@/lib/tier-view";
 
 import { useConsole, useSession } from "./ConsoleProvider";
 import { keepFocus } from "./keep-focus";
+import { LevelsControl, LEVEL_W } from "./LevelsControl";
 import { LevelsEditor } from "./LevelsEditor";
 import { Notice } from "./Notice";
 import { useReadOnlyNote } from "./SignGate";
 import { Term } from "./house/Panel";
 import { useConfirmWindow } from "./use-confirm-window";
-import { editButtonIds, useLevelsEditor } from "./use-levels-editor";
+import { levelsControlIds, useLevelsEditor } from "./use-levels-editor";
 import { usePrefs } from "./use-prefs";
 
 const TH = "whitespace-nowrap px-1.5 py-2 text-left align-bottom text-label font-normal tracking-caps text-fg-3 uppercase";
@@ -54,17 +55,9 @@ const PNL_W = "min-w-[12ch]";
 const FEE_W = "min-w-[calc(13ch+0.75rem)]";
 const CLOSE_W = "min-w-[calc(14ch+0.75rem)]";
 const RATE_W = "min-w-[16ch]";
-/**
- * The take profit and stop loss: as wide as a six-digit price with two decimals and its separators ("100,300.00", 10 characters),
- * plus two characters' room. A level set with more digits, up to "999,999,999.999999999", wraps inside the column, every digit
- * shown, so the table keeps to the 740 px pane; it is the one cell whose height a figure can grow.
- */
-const LEVEL_W = "max-w-[12ch] whitespace-normal [overflow-wrap:anywhere]";
 const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 /** The table's Close button sits under its figure, with the gap a second line would take. */
 const CELL_BUTTON = `${BUTTON} mt-1`;
-/** The table's Edit button beside Close, its padding and gap a little tighter so the row stays inside the 740 px pane at six-digit prices. */
-const EDIT_BUTTON = "mt-1 ml-0.5 min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-1.5";
 /** The button while it waits for its second press: the hover colours, held. */
 const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 
@@ -162,15 +155,16 @@ export function PositionsView() {
       // One static-named explanation per row, so no live figure is the name of a control.
       details: describeDetails({ pnl: describePnl(atMark === null ? null : formatUsd(atMark), pnl === null ? noPrice : null), noClose, noFee }),
       closeout: formatCloseout(p.closeout, places),
-      // A market that takes no levels shows none, as its card leaves them out.
-      takeProfit: levels.takeProfit === null || editor === null ? "—" : formatLevel(levels.takeProfit, places),
-      stopLoss: levels.stopLoss === null || editor === null ? "—" : formatLevel(levels.stopLoss, places),
       holdsLevels: p.levels !== undefined,
       editor,
       editing: editor !== null && draft !== null,
-      edit: () => levelsEditor.toggle(heldOf(p)),
-      // While a request is signed and sent, the editor stays as it is, so its answer is shown in it.
-      editable: !busy && !readOnly.readOnly,
+      // The levels, or Add, open the editor; a market that takes no levels shows dashes, as its card leaves them out. While a request is
+      // signed and sent, the editor stays as it is, so its answer is shown in it.
+      control: {
+        symbol: String(market?.symbol ?? p.market), long: p.qty > 0n, takeProfit: levels.takeProfit === null ? null : formatLevel(levels.takeProfit, places),
+        stopLoss: levels.stopLoss === null ? null : formatLevel(levels.stopLoss, places), expanded: editor !== null && draft !== null,
+        disabled: busy || readOnly.readOnly, describedBy: readOnly.describedBy, onClick: () => levelsEditor.toggle(heldOf(p)),
+      },
       hold: fee === null ? "—" : formatHold(fee.holdMs),
       fee: feeBps === null ? "—" : formatRate(feeBps),
       falls,
@@ -236,8 +230,7 @@ export function PositionsView() {
               <div><dt className="text-label text-fg-3">Entry</dt><dd>{r.entry}</dd></div>
               <div><dt className="text-label text-fg-3">Mark</dt><dd>{r.mark}</dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Close-out" tip={CLOSEOUT_TIP} /></dt><dd>{r.closeout}</dd></div>
-              {r.editor !== null && <div><dt className="text-label text-fg-3"><Term label="Take profit" tip={LEVELS_TIP} /></dt><dd>{r.takeProfit}</dd></div>}
-              {r.editor !== null && <div><dt className="text-label text-fg-3">Stop loss</dt><dd>{r.stopLoss}</dd></div>}
+              {r.editor !== null && <div><dt className="text-label text-fg-3"><Term label="Take profit / Stop loss" tip={LEVELS_TIP} /></dt><dd className="mt-1.5"><LevelsControl {...r.control} layout="card" id={levelsControlIds(id, r.key)[1]} controls={r.editing ? `${id}-levels-card` : undefined} /></dd></div>}
               <div><dt className="text-label text-fg-3"><Term label="Held" tip={HOLD_TIP} /></dt><dd>{r.hold}</dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Profit fee" tip={feeTip} /></dt><dd>{r.fee}<span className={SUB}>{r.falls}</span></dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Fee (USD)" tip={FEE_USD_TIP} /></dt><dd>{r.feeUsd}<span aria-hidden={!r.noFee} className={`block text-label ${r.noFee ? "text-fg-3" : "invisible"}`}>{NO_FEE_NOTE}</span></dd></div>
@@ -245,7 +238,6 @@ export function PositionsView() {
             </dl>
             <div className="mt-3 flex gap-2">
               <button type="button" disabled={!r.closable} className={`${BUTTON} flex-1`} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-              {r.editor !== null && <button type="button" id={editButtonIds(id, r.key)[1]} disabled={!r.editable} aria-describedby={readOnly.describedBy} className={`${BUTTON} flex-1`} aria-expanded={r.editing} aria-controls={r.editing ? `${id}-levels-card` : undefined} aria-label={`Edit take profit and stop loss for ${r.symbol} position`} onClick={r.edit}>Edit take profit and stop loss</button>}
             </div>
             <p aria-hidden={!r.unquoted} className={`mt-2 text-label ${r.unquoted ? "text-fg-3" : "invisible"}`}>Select {r.symbol} in the watchlist to load its closing price.</p>
             {r.editing && r.editor !== null && <LevelsEditor id={`${id}-levels-card`} {...r.editor} readOnly={readOnly.readOnly} describedBy={readOnly.describedBy} />}
@@ -270,7 +262,9 @@ export function PositionsView() {
                 <td className={TD}><span className="block text-fg">{r.symbol}</span><span className={`block min-h-lh text-label ${r.long ? "text-glow" : "text-ember"}`}>{r.long ? "Long" : "Short"}</span></td>
                 <td className={TD}><span className="block">{r.size}</span><span className={SUB}><span className="sr-only">Held </span>{r.hold}</span></td>
                 <td className={TD}><span className="block">{r.entry}</span><span className={SUB}><span className="sr-only">Mark </span>{r.mark}</span></td>
-                <td className={TD}><span className={`block ${LEVEL_W}`}>{r.takeProfit}</span><span className={`${SUB} ${LEVEL_W}`}><span className="sr-only">Stop loss </span>{r.stopLoss}</span></td>
+                <td className={TD}>{r.editor === null
+                  ? <><span className={`block ${LEVEL_W}`}>—</span><span className={`${SUB} ${LEVEL_W}`}><span className="sr-only">Stop loss </span>—</span></>
+                  : <LevelsControl {...r.control} layout="row" id={levelsControlIds(id, r.key)[0]} controls={r.editing ? `${id}-levels-row` : undefined} />}</td>
                 <td className={`${TD} ${r.loss ? "text-ember" : "text-glow"}`}>
                   <span className={`block ${PNL_W}`}>{r.pnl}</span>
                   <span className={SUB}><Term label="Details" tip={r.details} /></span>
@@ -286,7 +280,6 @@ export function PositionsView() {
                 <td className={`${TD} ${CLOSE_W}`}>
                   <span className="block">{r.proceeds}</span>
                   <button type="button" disabled={!r.closable} className={CELL_BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-                  {r.editor !== null && <button type="button" id={editButtonIds(id, r.key)[0]} disabled={!r.editable} aria-describedby={readOnly.describedBy} className={EDIT_BUTTON} aria-expanded={r.editing} aria-controls={r.editing ? `${id}-levels-row` : undefined} aria-label={`Edit take profit and stop loss for ${r.symbol} position`} onClick={r.edit}>Edit</button>}
                 </td>
               </tr>
               {r.editing && r.editor !== null && <tr className="border-b border-line"><td colSpan={8}><div className="[contain:inline-size]"><LevelsEditor id={`${id}-levels-row`} {...r.editor} readOnly={readOnly.readOnly} describedBy={readOnly.describedBy} /></div></td></tr>}

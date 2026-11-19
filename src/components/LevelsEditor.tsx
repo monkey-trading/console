@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The editor an open position's Edit button opens under its row (from V79): its take profit and stop
+ * The editor a position's levels control opens under its row (from V79): its take profit and stop
  * loss, prefilled with the levels it holds, checked against the price at which the whole position would
  * close, and saved, moved or removed in one session-signed request. The draft is the Positions tab's
  * (`useLevelsEditor`), so the table's and the card's editors are one.
