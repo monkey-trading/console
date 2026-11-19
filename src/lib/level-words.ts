@@ -34,6 +34,9 @@ export const TICKET_LEVELS_NOTES = {
 /** What the position editor's fields do. */
 export const EDITOR_LEVELS_NOTE = "Saving replaces the position's levels with the values shown. Leave a field empty to remove that level.";
 
+/** Why the take profit and stop loss cannot be checked yet: `why`, or, with none, that they wait for the trading terms. */
+export const levelsWait = (why: string | null) => `The take profit and stop loss cannot be checked at the moment. ${why ?? "They will be checked once the trading terms have loaded."}`;
+
 /** An order that only reduces a position has nothing for levels to protect. */
 export const REDUCING_ORDER_LEVELS = "A take profit and stop loss cannot be set on this order. It only reduces your position, so there is no new position for the levels to protect. Clear both fields, or set the levels on the position in the Positions list.";
 
@@ -49,13 +52,13 @@ const TITLES: Record<LevelKind, string> = { take_profit: "Take profit", stop_los
 /** A level's name in a sentence, or at its start. */
 export const levelName = (kind: LevelKind, start = false): string => (start ? TITLES[kind] : NAMES[kind]);
 
-/** What a level is measured from: the closing price of the position, a working order's trigger price, or for a position large enough that its closing price may be capped, the market price. */
+/** What a level is measured from: the closing price of the position, a working order's trigger price, or, for a take profit while that closing price is the console's estimate, the market price. */
 export type LevelBasis = "closing" | "trigger" | "mark";
 
 const BASES: Record<LevelBasis, { name: string; text: (price: string) => string; rule: string }> = {
   closing: { name: "closing price", text: (price) => `the price at which the position would close, which is currently ${price}`, rule: "In this market" },
   trigger: { name: "trigger price", text: (price) => `the order's trigger price of ${price}`, rule: "In this market" },
-  mark: { name: "market price", text: (price) => `the market price, which is currently ${price}`, rule: "For a position of this size" },
+  mark: { name: "market price", text: (price) => `the market price, which is currently ${price}`, rule: "While the closing price is an estimate" },
 };
 
 /**
@@ -93,11 +96,11 @@ function decimal(wire: string, places = 9): string {
 /**
  * The engine's refusal of a level, after the request reached it: one closer than the market's minimum distance to the price it
  * is measured from, or on the wrong side of it. That price is a position's closing price or a working order's own price, so it
- * is named as the price the level was measured from.
+ * is named as the price the level was measured from, to five places as the other refusals name a price, the level as it was set.
  */
 export function describeLevelReject(reject: LevelReject): string {
   if (reject.kind === "levels_unsupported") return "This server does not support take-profit and stop-loss levels yet.";
-  return `The level ${decimal(reject.level)} was not accepted. In this market, a take profit or stop loss must be at least ${spokenRate(reject.min_distance_bps)} beyond the price it is measured from: above it for a long position's take profit or a short position's stop loss, and below it otherwise. That price was ${decimal(reject.reference)} when your request was processed, so set the level further from it, on the correct side.`;
+  return `The level ${decimal(reject.level)} was not accepted. In this market, a take profit or stop loss must be at least ${spokenRate(reject.min_distance_bps)} beyond the price it is measured from: above it for a long position's take profit or a short position's stop loss, and below it otherwise. That price was ${decimal(reject.reference, 5)} when your request was processed, so set the level further from it, on the correct side.`;
 }
 
 /** A levels request refused for want of a working order slot, in words that say the levels take one. */

@@ -33,9 +33,9 @@ describe("the ticket's levels on a market order", () => {
   });
 
   it("measures a take profit from the mark where the closing price may be capped nearer it, and a stop loss still from the closing price", () => {
-    // Past the first band a live node may cap the close nearer the mark: the mark is the strictest a take profit can be measured from.
+    // A live node may cap the close nearer the mark than the console's estimate: the mark is the strictest a take profit can be measured from.
     const check = checkTicketLevels(ticket({ capped: fixedFromInt(100_000), fields: { takeProfit: "100250", stopLoss: "99700" } }));
-    expect(check?.problems.take_profit).toBe("Take profit too close to the market price. For a position of this size, a take profit on a long position must be at least 0.3% above the market price, which is currently 100,000.00. Set a take profit of 100,300.00 or higher.");
+    expect(check?.problems.take_profit).toBe("Take profit too close to the market price. While the closing price is an estimate, a take profit on a long position must be at least 0.3% above the market price, which is currently 100,000.00. Set a take profit of 100,300.00 or higher.");
     expect(check?.problems.stop_loss).toMatch(/^Stop loss too close to the closing price\. In this market, .* which is currently 99,980\.00\./);
     // 100,290 passes against the closing price of 99,980 but not against the mark.
     expect(checkTicketLevels(ticket({ fields: { takeProfit: "100290", stopLoss: "" } }))?.blocked).toBe(false);

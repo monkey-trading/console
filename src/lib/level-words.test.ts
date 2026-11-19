@@ -46,6 +46,8 @@ describe("the log's line for a level event", () => {
 
 describe("the engine's refusals of levels", () => {
   it("says a level was too close, the rule, and the closing price it was measured from", () => {
+    // The engine's reference is a computed price, named to five places as the other refusals name one.
+    expect(describeReject({ kind: "level_too_close", level: "99909.98", min_distance_bps: 30, reference: "99989.9970001" })).toContain("That price was 99,989.997 when your request was processed");
     expect(describeReject({ kind: "level_too_close", level: "100100", min_distance_bps: 30, reference: "99980.5" })).toBe("The level 100,100 was not accepted. In this market, a take profit or stop loss must be at least 0.3% beyond the price it is measured from: above it for a long position's take profit or a short position's stop loss, and below it otherwise. That price was 99,980.5 when your request was processed, so set the level further from it, on the correct side.");
     expect(describeReject({ kind: "levels_unsupported" })).toBe("This server does not support take-profit and stop-loss levels yet.");
   });

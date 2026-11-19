@@ -61,6 +61,18 @@ describe("ticketLevels", () => {
     expect(check?.problems.take_profit).toContain(`which is currently ${formatMark(left, 2)},`);
   });
 
+  it("measures a live market order's take profit from the mark at any size, and its stop loss from the closing price", async () => {
+    const { node, state, market } = await fixture();
+    const live = { ...market, ceilingBps: null };
+    const order = { side: "buy" as const, qty: q("0.01"), slippageBps: 25, resting: false, triggerPrice: null };
+    const current = { ...state, houseParams: node.client.state.params, pricingCurrent: true };
+    const check = ticketLevels(current, live, order, { takeProfit: "1000000", stopLoss: "1" }, { prices: prices(market.mark), limits: null });
+    expect(check?.problems.take_profit).toBeNull();
+    expect(ticketLevels(current, live, order, { takeProfit: "1", stopLoss: "" }, { prices: prices(market.mark), limits: null })?.problems.take_profit).toContain(`While the closing price is an estimate, a take profit on a long position must be above the market price, which is currently ${formatMark(market.mark ?? 0n, 2)},`);
+    expect(ticketLevels(current, market, order, { takeProfit: "1", stopLoss: "" }, { prices: prices(market.mark), limits: null })?.problems.take_profit).toContain("must be above the price at which the position would close");
+    expect(ticketLevels(current, live, order, { takeProfit: "", stopLoss: "1000000" }, { prices: prices(market.mark), limits: null })?.problems.stop_loss).toMatch(/^Stop loss above the closing price\. In this market, a stop loss on a long position must be below the price at which the position would close/);
+  });
+
   it("holds a market order's new levels while the trading terms are not current, as their closing price needs the stress level's", async () => {
     const { node, state, market } = await fixture();
     const order = { side: "buy" as const, qty: fixedFromInt(1), slippageBps: 25, resting: false, triggerPrice: null };
@@ -69,6 +81,8 @@ describe("ticketLevels", () => {
     expect(ticketLevels(stale, market, order, fields, { prices: prices(market.mark), limits: null })).toMatchObject({
       blocked: true, general: "The take profit and stop loss cannot be checked at the moment. The trading terms have changed. The new terms are loading.",
     });
+    // Before the first read of the terms, the note says the levels wait for them.
+    expect(ticketLevels({ ...state, houseParams: null }, market, order, fields, { prices: prices(market.mark), limits: null })?.general).toBe("The take profit and stop loss cannot be checked at the moment. They will be checked once the trading terms have loaded.");
     // A working order's levels are measured from its own price, which needs no terms.
     const resting = { ...order, resting: true, triggerPrice: fixedFromInt(50_000) };
     expect(ticketLevels(stale, market, resting, fields, { prices: prices(market.mark), limits: null })?.general).toBeNull();
@@ -76,14 +90,10 @@ describe("ticketLevels", () => {
 });
 
 describe("closingExact", () => {
-  it("knows the mock's own close is the engine's, and a live close is only within the account's first band", async () => {
+  it("knows the mock's own close is the engine's, and no close it prices for a live node, which may cap the close below even the first band's charge", async () => {
     const { market } = await fixture();
-    const live = { ...market, ceilingBps: null };
-    const tiers = accountSpreadTiers(market.view.spread_tiers, 2_500); // the first band ends at $500,000
-    expect(closingExact(market, fixedFromInt(100), tiers)).toBe(true);
-    expect(closingExact(live, q("7"), tiers)).toBe(true);
-    expect(closingExact(live, fixedFromInt(8), tiers)).toBe(false);
-    expect(closingExact(live, fixedFromInt(8), [{ up_to: null, tenth_bps: 20 }])).toBe(true);
+    expect(closingExact(market)).toBe(true);
+    expect(closingExact({ ...market, ceilingBps: null })).toBe(false);
   });
 });
 
@@ -95,13 +105,18 @@ describe("editorReference", () => {
     expect(editorReference(null, null, await live(), fixedFromInt(1), fixedFromInt(66_000))).toEqual({ closing: fixedFromInt(66_000), capped: null });
   });
 
-  it("prices its own close at the mark while the market is shut, with the mark for a take profit past the first band", async () => {
+  it("prices its own close at the mark while the market is shut, with the mark for a take profit", async () => {
     const shut = { ...(await live()), open: false };
-    const small = editorReference(null, params, shut, fixedFromInt(1), null);
-    expect(small.capped).toBeNull();
-    expect(small.closing).toBe(closingAt(shut, fixedFromInt(1), { tiers: shut.view.spread_tiers, stress: CALM, toxicityBps: 0 }));
-    // With no volume tier in the account read the listing's first band applies, which ends at $2,000,000: 40 BTC is past it.
-    expect(editorReference(null, params, shut, fixedFromInt(40), null).capped).toBe(shut.mark);
+    expect(editorReference(null, params, shut, fixedFromInt(1), null)).toEqual({ closing: closingAt(shut, fixedFromInt(1), { tiers: shut.view.spread_tiers, stress: CALM, toxicityBps: 0 }), capped: shut.mark });
+  });
+
+  it("measures a live take profit from the mark wherever the close is its own, however small the position, and the mock's from its close", async () => {
+    const { market } = await fixture();
+    // 0.01 BTC is far inside the first band, yet a live node may cap its close nearer the mark than the console prices it.
+    const small = editorReference(null, params, { ...market, ceilingBps: null }, q("0.01"), null);
+    expect(small.capped).toBe(market.mark);
+    expect(small.closing).not.toBeNull();
+    expect(editorReference(null, params, market, q("0.01"), null).capped).toBeNull();
   });
 
   it("has nothing to measure from in an open market with no live price, which the engine refuses levels in", async () => {
