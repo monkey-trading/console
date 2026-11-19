@@ -5,6 +5,7 @@ import type { AccountView, CloseFee, EligibilityClass, HouseView, MarketId, Mark
 import { fixedFromWire, parseFixed, type Fixed } from "./fixed";
 import { decodeHouseScan, type HouseScan } from "./house-scan";
 import { decodeLevels, noLevels, type Levels } from "./levels";
+import { decodePortfolio, type PortfolioModel } from "./portfolio";
 import { decodeVolume, type VolumeModel } from "./volume-tier";
 
 export interface MarketModel {
@@ -90,6 +91,8 @@ export interface AccountModel {
   volume?: VolumeModel;
   /** From V54, the toxicity tier that applies and the spread it adds, in bps; absent from a node that predates it. */
   toxicity?: ToxicityModel;
+  /** From V81, while the parameters name an offset grid, the portfolio requirement and the offset groups; absent otherwise. */
+  portfolio?: PortfolioModel;
 }
 
 /** The margin standing of the account read: the initial requirement (at the tier's margin floor), the maintenance requirement a close-out reads, the withdrawable cash and each market's maximum leverage. */
@@ -138,6 +141,7 @@ export function decodeAccount(view: AccountView): AccountModel {
     ...optional("requirements", decodeRequirements(view)),
     ...optional("volume", decodeVolume(view.volume) ?? undefined),
     ...optional("toxicity", decodeToxicity(view)),
+    ...optional("portfolio", decodePortfolio(view.portfolio_margin)),
   };
 }
 

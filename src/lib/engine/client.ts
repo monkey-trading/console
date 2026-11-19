@@ -10,6 +10,7 @@ import type { SessionRule } from "./mark-session";
 import type { QuoteRequest } from "./live-stream";
 import type { DeploymentReads, VaultFacts } from "./registry";
 import type { StatusNotice } from "./notice-types";
+import type { OrderPreviewRequest, OrderPreviewWire } from "./portfolio-types";
 import type { ServerRead } from "./status-types";
 import type { SignerFloor } from "./signer-naming";
 import type { StatsReads } from "./stats-types";
@@ -177,6 +178,12 @@ export interface EngineClient {
    * `order_rejected` (`client_id` 0) for a refusal. A node that predates the route answers 404.
    */
   setPositionLevels(request: PositionLevelsRequest): Promise<ActionResult>;
+  /**
+   * From V84, what a market order of exactly `request.qty` would do now, from the pricing and checks a fill runs: its fill, the
+   * account's equity and requirements after it, and why it would be refused. Rejects with a 404 `EngineError` for an account
+   * never credited and from a node that predates the route.
+   */
+  preview(request: OrderPreviewRequest): Promise<OrderPreviewWire>;
   withdraw(request: WithdrawalRequest): Promise<ActionResult>;
   /** Registers the account's session key (monkey-trading/console#68); the events name `session_key_registered`, or a `session_key_rejected` refusal. */
   registerSessionKey(request: SessionKeyRequest): Promise<ActionResult>;

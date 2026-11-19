@@ -2,6 +2,7 @@
 
 import type { CloseFee } from "./pricing-types";
 import type { PositionLevelsWire } from "./level-types";
+import type { PortfolioMarginWire } from "./portfolio-types";
 import type { MarketId, Position, RestingOrder } from "./types";
 import type { MarginStandingWire, ToxicityStandingWire, VolumeStandingWire } from "./volume-types";
 
@@ -31,4 +32,6 @@ export interface AccountView extends MarginStandingWire {
   volume?: VolumeStandingWire;
   /** From V79, each position's take profit and stop loss, keyed by market id; absent while no position holds one. */
   levels?: Record<string, PositionLevelsWire>;
+  /** From V81, while the parameters name an offset grid, the portfolio requirement and each offset group the account holds a member of. */
+  portfolio_margin?: PortfolioMarginWire;
 }

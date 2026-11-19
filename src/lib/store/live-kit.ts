@@ -3,6 +3,7 @@
 import { recoverTypedDataAddress, type Hex } from "viem";
 
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient } from "../engine/client";
+import type { OrderPreviewRequest, OrderPreviewWire } from "../engine/portfolio-types";
 import vectors from "../engine/eip712-vectors.json";
 import type { EntitlementProof } from "../engine/emissions";
 import type { TypedRequest } from "../engine/eip712";
@@ -93,6 +94,14 @@ export class ActionClient implements EngineClient {
   cancelAll(body: CancelAllRequest) { return this.act("cancel_all", body); }
   closeAll(body: CloseAllRequest) { return this.act("close_all", body); }
   setPositionLevels(body: PositionLevelsRequest) { return this.act("levels", body); }
+  /** The preview's answer a test sets, else a 404 as from a node that predates the route; each request is recorded. */
+  previewAnswer: ((request: OrderPreviewRequest) => OrderPreviewWire) | null = null;
+  previews: OrderPreviewRequest[] = [];
+  async preview(request: OrderPreviewRequest): Promise<OrderPreviewWire> {
+    this.previews.push(request);
+    if (this.previewAnswer === null) throw new EngineError(404, "not found");
+    return this.previewAnswer(request);
+  }
   withdraw(body: WithdrawalRequest) { return this.act("withdraw", body); }
   registerSessionKey(body: SessionKeyRequest) { return this.act("session_key", body); }
   revokeSessionKey(body: SessionKeyRevocationRequest) { return this.act("session_key_revoke", body); }

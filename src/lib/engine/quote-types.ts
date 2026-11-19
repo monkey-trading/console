@@ -27,7 +27,7 @@ export interface MarketQuote {
   ask: QuoteStep[];
   /** What a sell receives, by size. */
   bid: QuoteStep[];
-  /** The price of closing the account's whole position, if it holds one. */
-  close: { side: Side; qty: string; price: string } | null;
+  /** The price of closing the account's whole position, if it holds one; from V84 with `declined` when an order making that close would be rejected. */
+  close: { side: Side; qty: string; price: string; declined?: Reject } | null;
 }
 
