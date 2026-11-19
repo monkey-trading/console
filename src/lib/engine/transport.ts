@@ -42,7 +42,7 @@ function superseded(why: string, fresh: boolean, bytes: Uint8Array, signer: stri
 }
 
 /** The error a signed non-2xx answer stands for. */
-function refusal(status: number, text: string): EngineError {
+function refusal(status: number, text: string, retryAfter: string | null = null): EngineError {
   let body: unknown;
   try {
     body = JSON.parse(text);
@@ -61,6 +61,8 @@ function refusal(status: number, text: string): EngineError {
   // A credited account over its volume tier's request rate: the signed body names the tier and its rate.
   // `Number.isSafeInteger` held for both, so they are numbers.
   if (status === 429 && Number.isSafeInteger(tier) && Number.isSafeInteger(perSecond)) refused.tierLimit = { tier: tier as number, requestsPerSecond: perSecond as number };
+  // A node not ready yet names, in whole seconds, when to ask again; the header is outside the signature, so callers bound it.
+  if (status === 503 && retryAfter !== null && /^\d{1,6}$/.test(retryAfter.trim())) refused.retryAfterMs = Number(retryAfter.trim()) * 1000;
   return refused;
 }
 
@@ -152,7 +154,7 @@ export class SignedTransport {
     }
     this.deps.trust.clockRight();
     const text = decoder.decode(bytes);
-    if (!response.ok) throw refusal(response.status, text);
+    if (!response.ok) throw refusal(response.status, text, header("Retry-After"));
     let body: unknown;
     try {
       body = JSON.parse(text);
