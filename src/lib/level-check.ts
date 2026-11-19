@@ -127,12 +127,13 @@ export function checkTicketLevels(input: TicketLevelsInput): LevelCheck | null {
   const buy = input.side === "buy";
   // Whether the position held is on the other side and at least the order's size: the order then only reduces it.
   const reduces = input.held !== 0n && (input.held > 0n) !== buy && absFixed(input.held) >= input.qty;
-  if (input.resting) {
-    // A working order's levels are all measured from its own price when it is placed, and attach when it fills.
-    const note = input.held === 0n ? null : reduces ? TICKET_LEVELS_NOTES.restsReducing : TICKET_LEVELS_NOTES.rests;
-    return checked({ ...base, long: buy, measured: named, reference: input.price, basis: "trigger", general: null, note, size: input.qty });
-  }
   const left = input.held + (buy ? input.qty : -input.qty);
+  if (input.resting) {
+    // A working order's levels are all measured from its own price when it is placed, and attach when it fills; what it opens, and
+    // what it does to the position, are judged against the position held now.
+    const note = input.held === 0n ? null : reduces ? TICKET_LEVELS_NOTES.restsReducing : (input.held > 0n) === (left > 0n) ? TICKET_LEVELS_NOTES.rests : TICKET_LEVELS_NOTES.restsReversing;
+    return checked({ ...base, long: buy, measured: named, reference: input.price, basis: "trigger", general: null, note, size: reduces ? 0n : minFixed(input.qty, absFixed(left)) });
+  }
   const none = noLevels(named);
   // An empty size leaves the order's shape to the size field's own prompt.
   if (input.qty === 0n) return checked({ ...base, long: buy, measured: NO_LEVELS, reference: null, basis: "closing", general: null, note: null, size: 0n });

@@ -28,6 +28,7 @@ export const TICKET_LEVELS_NOTES = {
   adds: "This order adds to your position. Each level entered here replaces the position's current level, and a field left empty keeps the current level.",
   reverses: "This order reverses your position, so the position's current take profit and stop loss are removed, and only the levels entered here apply to the new position.",
   rests: "The levels entered here apply only once the order is executed. If the order then adds to your position, each level replaces the position's current level, and a field left empty keeps the current level.",
+  restsReversing: "The levels entered here apply only once the order is executed. If your position is then still smaller than the order, the order reverses it, so the position's current take profit and stop loss are removed, and only the levels entered here apply to the new position.",
   restsReducing: "The levels entered here are attached only if this order, when it is executed, leaves you a position in its own direction. If your current position is then still at least as large as the order, the order only reduces it, and the levels are discarded.",
 } as const;
 
