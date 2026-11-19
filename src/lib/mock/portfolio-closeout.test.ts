@@ -7,10 +7,13 @@ import { describe, expect, it } from "vitest";
 
 import type { EngineEvent } from "../engine/types";
 import { fixedFromInt, fixedFromWire, type Fixed } from "../fixed";
-import { closeOutUnderwater } from "./closeout";
 import { closeoutsOf } from "./closeout-price";
 import { createMockNode } from "./index";
+import { tierTable } from "./accounts";
+import { quoteAtShare } from "./execute";
+import { closeOutUnderwater, scoreMembers } from "./closeout";
 import { closeoutShare, requirementOf } from "./portfolio";
+import { DAY_MS } from "./volume";
 import type { MockState } from "./state";
 import { ME, START } from "./test-helpers";
 
@@ -50,6 +53,24 @@ describe("the mock's close-outs under the grid", () => {
     const events = closeOutUnderwater(build(HEDGE, fixedFromInt(-1_000)));
     expect(closed(events)).toEqual([1, 2]);
     expect(events[0]).toEqual({ type: "close_out", account: ME, equity: "20000", margin: "42000" });
+  });
+
+  it("score a group's second member at the volume tier the first member's close-out volume reaches", () => {
+    // Yesterday's $600k counted, the BTC leg's $1M close-out today reaches tier 1, whose wider best-price band closes the ETH leg for less.
+    const fresh = build(HEDGE, fixedFromInt(-1_000));
+    const counted = build(HEDGE, fixedFromInt(-1_000));
+    counted.account(ME).volume.days.set(Math.floor(START / DAY_MS) - 1, fixedFromInt(600_000));
+    const [tier0, tier1] = tierTable(counted).map((tier) => tier.bestPriceShareBps);
+    const ethAt = (share: number | undefined) => {
+      const priced = quoteAtShare(counted, 2, "buy", fixedFromInt(200), fixedFromInt(-200), share);
+      if (priced?.kind !== "priced") throw new Error("ETH-USD's close prices");
+      return priced.price;
+    };
+    const cheaper = (ethAt(tier0) - ethAt(tier1)) * 200n;
+    expect(cheaper > 0n).toBe(true);
+    expect(scoreMembers(counted, counted.account(ME), [1])).toEqual(scoreMembers(fresh, fresh.account(ME), [1]));
+    const [withTier, without] = [scoreMembers(counted, counted.account(ME), [1, 2]), scoreMembers(fresh, fresh.account(ME), [1, 2])];
+    expect((withTier?.change ?? 0n) - (without?.change ?? 0n)).toBe(cheaper);
   });
 
   it("close a member alone while another it holds cannot trade, which waits", () => {

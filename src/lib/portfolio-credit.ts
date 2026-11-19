@@ -5,6 +5,7 @@
  */
 
 import { SCALE, type Fixed } from "./fixed";
+import { mulBpsRounded } from "./fixed-rounding";
 
 const BPS = 10_000n;
 /** A product of three `Fixed` values is at the scale cubed: this over it brings it to `Fixed`'s. */
@@ -46,6 +47,11 @@ interface Side {
 
 const abs = (value: bigint): bigint => (value < 0n ? -value : value);
 const ceilDiv = (numerator: bigint, denominator: bigint): bigint => (numerator + denominator - 1n) / denominator;
+
+/** The close-out level's share of a requirement, `levelBps` in bps, rounded up as the engine's charges are (`mul_bps_rounded` at `charge_rounding()`). */
+export function closeoutShareOf(requirement: Fixed, levelBps: number): Fixed {
+  return mulBpsRounded(requirement, levelBps, "up");
+}
 
 /**
  * The legs summed by side, `level` the close-out level in bps: a leg's side is the sign of quantity times price times loading,

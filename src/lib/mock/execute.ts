@@ -45,23 +45,30 @@ const signed = (side: Side, qty: Fixed): Fixed => (side === "buy" ? qty : -qty);
  * another holding than the account's own, such as the position a fill would leave. Null for a market the mock does not list.
  */
 export function liveQuote(state: MockState, address: string, market: MarketId, side: Side, qty: Fixed, held?: Fixed): Priced | null {
+  const account = state.account(address);
+  // From V59 the account's first band ends at its tier's share of the market's, so a higher tier trades more size at the best price.
+  return quoteAtShare(state, market, side, qty, held ?? account.positions.get(market)?.qty ?? 0n, tierOfAccount(state, account).terms?.bestPriceShareBps);
+}
+
+/**
+ * The price `qty` of `market` on `side` pays against a holding of `held` at a best-price share of `shareBps` (the listed bands
+ * without one), as `liveQuote` prices it. Error cases:
+ * - the mock's parameters list no stress level, which they always do
+ */
+export function quoteAtShare(state: MockState, market: MarketId, side: Side, qty: Fixed, held: Fixed, shareBps: number | undefined): Priced | null {
   const runtime = state.markets.get(market);
   if (!runtime) return null;
   const level = state.params.stressLevels[runtime.stress] ?? state.params.stressLevels[0];
   if (level === undefined) throw new Error("the mock's parameters list no stress level");
-  const account = state.account(address);
-  // From V59 the account's first band ends at its tier's share of the market's, so a higher tier trades more size at the best price.
-  const share = tierOfAccount(state, account).terms?.bestPriceShareBps;
   return priceOrder({
-    mid: runtime.mid, side, held: held ?? account.positions.get(market)?.qty ?? 0n, qty, tiers: share === undefined ? runtime.listed.spec.spread_tiers : accountSpreadTiers(runtime.listed.spec.spread_tiers, share),
+    mid: runtime.mid, side, held, qty, tiers: shareBps === undefined ? runtime.listed.spec.spread_tiers : accountSpreadTiers(runtime.listed.spec.spread_tiers, shareBps),
     stress: { minSpreadBps: level.min_spread_bps, sizeMultiplierBps: level.size_spread_multiplier_bps }, toxicityBps: 0,
     ceilingBps: metaFor(runtime.listed.spec.symbol).closeCeilingBps, conversion: USD,
   });
 }
 
-/** The profit fee rate a close of `holding` pays `account` at `now`, as the engine's `close_fee_terms` reads it: the base less the account's tier's fee discount, and the curve past it; that base with nothing held. */
-export function closeFeeBps(state: MockState, account: AccountState, holding: Holding | undefined, now: number): number {
-  const base = feeBaseOf(state, account);
+/** The profit fee rate a close of `holding` pays `account` at `now`, as the engine's `close_fee_terms` reads it: the base less the account's tier's fee discount, or `base` given, and the curve past it; that base with nothing held. */
+export function closeFeeBps(state: MockState, account: AccountState, holding: Holding | undefined, now: number, base: number = feeBaseOf(state, account)): number {
   return holding === undefined ? base : feeAt(base, state.params.profitFeeCurve, now - holding.openedAt);
 }
 

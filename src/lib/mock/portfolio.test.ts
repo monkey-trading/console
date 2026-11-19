@@ -7,9 +7,10 @@ import { describe, expect, it } from "vitest";
 
 import { EngineError } from "../engine/client";
 import { fixedFromInt, fixedFromWire, type Fixed } from "../fixed";
+import { closeOutUnderwater } from "./closeout";
 import { withdrawable } from "./funds";
-import type { MockNode } from "./index";
-import { auth, funded, ME, order, types } from "./test-helpers";
+import { createMockNode, type MockNode } from "./index";
+import { auth, funded, ME, order, START, types } from "./test-helpers";
 
 /** `ME` funded with `dollars`, BTC-USD at 100,000 and ETH-USD at 4,000, holding each of `held` (market, signed units) entered at its mark. */
 async function book(dollars: number, held: [number, number][]): Promise<MockNode> {
@@ -124,5 +125,36 @@ describe("the mock's order preview", () => {
     const empty = await node.client.preview({ account: ME, market: 3, side: "buy", qty: "1", reduceOnly: true });
     expect(empty).toMatchObject({ fill: null, refused: { kind: "reduce_only" } });
     await expect(node.client.preview({ account: "0x00000000000000000000000000000000000000ff", market: 1, side: "buy", qty: "1", reduceOnly: false })).rejects.toEqual(new EngineError(404, "not found"));
+  });
+});
+
+describe("the mock's roundings, as the engine's", () => {
+  // 3 nano-BTC at 100,016.5 entered at 100,017: $0.0003000495 of notional and -$0.0000000015 of profit or loss, neither a whole nano-dollar.
+  const tiny = (balance: Fixed) => {
+    const { state } = createMockNode(START).client;
+    const btc = state.markets.get(1);
+    if (btc !== undefined) btc.mid = fixedFromWire("100016.5");
+    const account = state.account(ME);
+    account.balance = balance;
+    account.positions.set(1, { qty: fixedFromWire("0.000000003"), entry: fixedFromInt(100_017), openedAt: START });
+    return state;
+  };
+
+  it("round a notional up, a profit or loss down and the close-out level's share up, in the account read and the preview", async () => {
+    // The notional rounds up to 0.00030005: 2% of it is 0.000006001, 5% at tier 0's floor 0.0000150025 rounded up, and half of the margin 0.0000030005 rounded up.
+    const node = await book(100, []);
+    node.client.state.account(ME).positions.set(1, { qty: fixedFromWire("0.000000003"), entry: fixedFromInt(100_017), openedAt: START });
+    const btc = node.client.state.markets.get(1);
+    if (btc !== undefined) btc.mid = fixedFromWire("100016.5");
+    const view = await node.client.account(ME);
+    expect([view.equity, view.margin, view.initial_margin, view.maintenance_margin]).toEqual(["99.999999998", "0.000006001", "0.000015003", "0.000003001"]);
+    const preview = await node.client.preview({ account: ME, market: 99, side: "buy", qty: "1", reduceOnly: false });
+    expect([preview.equity, preview.initial_margin, preview.maintenance_margin]).toEqual(["99.999999998", "0.000015003", "0.000003001"]);
+  });
+
+  it("close an account out at equity a nano-dollar under the rounded-up threshold, and not at the threshold", () => {
+    const under = tiny(fixedFromWire("0.000003002"));
+    expect(closeOutUnderwater(under)[0]).toEqual({ type: "close_out", account: ME, equity: "0.000003", margin: "0.000006001" });
+    expect(closeOutUnderwater(tiny(fixedFromWire("0.000003003")))).toEqual([]);
   });
 });

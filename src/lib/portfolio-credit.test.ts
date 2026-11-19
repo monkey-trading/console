@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromWire, fixedToWire } from "./fixed";
-import { groupCredit, type CreditLeg } from "./portfolio-credit";
+import { closeoutShareOf, groupCredit, type CreditLeg } from "./portfolio-credit";
 import vectors from "./portfolio-vectors.json";
 
 /** A vector's leg in the module's terms. */
@@ -19,8 +19,7 @@ describe("groupCredit", () => {
     const credit = groupCredit(vector.legs.map(leg), vector.floor_share_bps, vector.level_bps);
     const perPosition = vector.per_position === undefined ? null : fixedFromWire(vector.per_position);
     const requirement = perPosition === null ? null : perPosition - credit.offset;
-    // The close-out level's share of the requirement, rounded up as the engine's charges are (`mul_bps_rounded`).
-    const maintenance = requirement === null ? null : (requirement * BigInt(vector.level_bps) + 9_999n) / 10_000n;
+    const maintenance = requirement === null ? null : closeoutShareOf(requirement, vector.level_bps);
     const computed: Record<string, string> = {
       net_notional: fixedToWire(credit.netNotional), matched_notional: fixedToWire(credit.matchedNotional), worst_loss: fixedToWire(credit.worstLoss),
       binding_direction: credit.bindingDirection, offset: fixedToWire(credit.offset),

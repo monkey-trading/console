@@ -26,9 +26,10 @@ describe("close-out of several positions", () => {
     const seen: EngineEvent[] = [];
     node.client.subscribe((m) => seen.push(...m.events));
     node.client.tick(START + 9_000);
-    expect(seen.filter((e) => e.type === "fill")[0]).toMatchObject({ market: 1, liquidation: true });
+    // The group closes whole, BTC-USD then ETH-USD, each a close-out's fill.
+    expect(seen.flatMap((e) => (e.type === "fill" ? [[e.market, e.liquidation]] : []))).toEqual([[1, true], [2, true]]);
     expect(types(seen).filter((t) => t === "close_out")).toHaveLength(1);
-    expect(account.positions.has(3)).toBe(true); // a halted market's position waits
+    expect([...account.positions.keys()]).toEqual([3]); // a halted market's position waits
     node.client.tick(START + 10_000);
     expect(types(seen).filter((t) => t === "close_out")).toHaveLength(1); // not repeated while nothing can trade
   });
