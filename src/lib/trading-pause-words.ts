@@ -17,6 +17,10 @@ export const SERVER_REFUSED = "The trading server could not be verified.";
 export const STILL_PAUSED = "Trading remains paused, and the app will try again automatically.";
 export const UNLISTED_NEXT = "This version of the app does not recognise the next trading server, so it cannot connect to it. Trading remains paused. Reload the page to use the latest version of the app.";
 export const WALLET_HOLD = "A request you sent is still in progress. The change will complete once it has finished, or once you have confirmed or rejected it in your wallet.";
+/** What holds a change of trading server while the wallet's reads of the blockchain fail: what happened, then what to check. */
+export const CHAIN_UNREAD_LEAD = "The app could not read the blockchain through your wallet, so the change of trading server cannot complete.";
+export const CHAIN_UNREAD_FIX = "Check that your wallet is connected to the correct network and responding. The app will try again automatically.";
+export const CHAIN_UNREAD = `${CHAIN_UNREAD_LEAD} ${CHAIN_UNREAD_FIX}`;
 export const CLOCK_WRONG = "Your device clock is incorrect, so the trading server cannot be verified.";
 export const CLOCK_FIX = "Correct the clock and reload the page.";
 export const CLOCK_FAILED = `${CLOCK_WRONG} Trading remains paused. ${CLOCK_FIX}`;

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { pauseLine, switchLine } from "./server-status";
 import type { PauseView, Steps } from "./store/trading-pause";
-import { LONG_PAUSE, PAUSE_TITLE, RESUMES_WHEN, WALLET_HOLD } from "./trading-pause-words";
+import { CHAIN_UNREAD, CHAIN_UNREAD_FIX, CHAIN_UNREAD_LEAD, LONG_PAUSE, PAUSE_TITLE, RESUMES_WHEN, WALLET_HOLD } from "./trading-pause-words";
 
 const at = (steps: Partial<Steps>): Extract<PauseView, { kind: "paused" }> => ({ kind: "paused", steps: { connect: "done", verify: "done", prices: "done", resume: "done", ...steps }, long: false, failure: null, hold: null });
 
@@ -16,6 +16,7 @@ describe("the banner's lines for a change of server", () => {
     expect(pauseLine(at({ connect: "current" }))).toMatchObject({ rest: RESUMES_WHEN });
     // What else holds the pause is said over how long it has run, as the panel says it.
     expect(pauseLine({ ...at({ prices: "current" }), long: true, hold: WALLET_HOLD })).toMatchObject({ role: "status", rest: WALLET_HOLD });
+    expect(pauseLine({ ...at({ connect: "current" }), hold: CHAIN_UNREAD })).toMatchObject({ role: "status", rest: CHAIN_UNREAD });
     expect(pauseLine({ kind: "resumed", leaving: false })).toBeNull();
   });
 
@@ -28,10 +29,11 @@ describe("the banner's lines for a change of server", () => {
   });
 
   it("says while the server in use still trades that only new orders wait, and what the trader must do about a clock", () => {
-    const waiting = (stage: "connecting" | "wallet" | "refused" | "clock") => switchLine({ kind: "waiting", origin: "https://a.test", target: "https://b.test", stage, reason: null }, true);
+    const waiting = (stage: "connecting" | "wallet" | "refused" | "clock" | "unread") => switchLine({ kind: "waiting", origin: "https://a.test", target: "https://b.test", stage, reason: null }, true);
     expect(waiting("connecting")).toEqual({ role: "status", lead: "The trading server is changing.", rest: "New orders are paused until the change is complete, but you can still close positions and cancel working orders." });
     expect(waiting("wallet")).toEqual({ role: "status", lead: "The trading server is changing.", rest: WALLET_HOLD });
     expect(switchLine({ kind: "waiting", origin: "https://a.test", target: "https://b.test", stage: "wallet", reason: null }, false)).toEqual({ role: "status", lead: "Connecting to the current trading server.", rest: WALLET_HOLD });
+    expect(waiting("unread")).toEqual({ role: "status", lead: CHAIN_UNREAD_LEAD, rest: CHAIN_UNREAD_FIX });
     expect(waiting("refused")).toEqual({ role: "alert", lead: "The next trading server could not be verified, so the app has not connected to it.", rest: "New orders remain paused, and the app will try again automatically." });
     expect(waiting("clock")).toEqual({ role: "alert", lead: "Your device clock is incorrect, so the trading server cannot be verified.", rest: "Correct the clock and reload the page." });
   });

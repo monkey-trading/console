@@ -3,7 +3,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { PauseView, Steps } from "./store/trading-pause";
-import { LONG_PAUSE, pauseAnnouncement, PAUSE_TITLE } from "./trading-pause-words";
+import { countSentences } from "./copy-length";
+import { CHAIN_UNREAD, LONG_PAUSE, pauseAnnouncement, PAUSE_TITLE } from "./trading-pause-words";
 
 const at = (steps: Partial<Steps>): Extract<PauseView, { kind: "paused" }> => ({ kind: "paused", steps: { connect: "done", verify: "done", prices: "done", resume: "done", ...steps }, long: false, failure: null, hold: null });
 
@@ -20,5 +21,11 @@ describe("pauseAnnouncement", () => {
   it("says why a step failed, or that the pause runs long, in place of the step", () => {
     expect(pauseAnnouncement({ ...at({ verify: "failed" }), failure: "It failed." })).toBe("It failed.");
     expect(pauseAnnouncement({ ...at({ prices: "current", resume: "waiting" }), long: true })).toBe(`${LONG_PAUSE} Restoring live prices.`);
+  });
+
+  it("says that the wallet's failed reads of the blockchain hold the change, in three sentences at most", () => {
+    expect(pauseAnnouncement({ ...at({ connect: "current" }), hold: CHAIN_UNREAD })).toBe(CHAIN_UNREAD);
+    expect(CHAIN_UNREAD).toBe("The app could not read the blockchain through your wallet, so the change of trading server cannot complete. Check that your wallet is connected to the correct network and responding. The app will try again automatically.");
+    expect(countSentences(CHAIN_UNREAD)).toBeLessThanOrEqual(3);
   });
 });

@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { WALLET_HOLD } from "../trading-pause-words";
+import { CHAIN_UNREAD, WALLET_HOLD } from "../trading-pause-words";
 import { pauseSteps, pricesFlow } from "./trading-pause";
 import { A, B, input, market, source, sources, state } from "./trading-pause-kit";
 
@@ -31,6 +31,10 @@ describe("a change of server while the server in use still serves", () => {
   it("says a request waiting in the wallet holds the move, and a clock the next server disagrees with fails verification", () => {
     expect(pauseSteps(input({ follow: { ...WAITING, stage: "wallet" }, stream: "stale" }))).toMatchObject({ steps: { verify: "done", prices: "current" }, hold: WALLET_HOLD });
     expect(pauseSteps(input({ follow: { ...WAITING, stage: "clock" }, stream: "stale" }))).toMatchObject({ steps: { verify: "failed" }, failure: expect.stringContaining("Correct the clock") });
+  });
+
+  it("says that a failed read of the blockchain through the wallet holds the move, in place of the wait for a server", () => {
+    expect(pauseSteps(input({ follow: { ...WAITING, stage: "unread" }, stream: "stale" }))).toMatchObject({ steps: { connect: "current" }, failure: null, hold: CHAIN_UNREAD });
   });
 });
 

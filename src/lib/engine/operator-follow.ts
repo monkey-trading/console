@@ -17,7 +17,7 @@ import { FollowPace, RETRY_MS } from "./operator-follow-pace";
 import { ROTATION_EVENTS } from "./rotation-events";
 import { SignerFloorWatch } from "./operator-follow-floor";
 import { NodeWord } from "./operator-follow-node";
-import { bounded, operatorTarget, refusedRoute, successor, type FollowerDeps, type FollowStatus, type NodeSaid, type WaitingStage } from "./operator-follow-status";
+import { bounded, operatorTarget, refusedRoute, successor, unread, type FollowerDeps, type FollowStatus, type NodeSaid, type WaitingStage } from "./operator-follow-status";
 import { runTrial } from "./operator-follow-trial";
 import type { DeploymentReads, NamedOperator } from "./registry";
 
@@ -231,8 +231,8 @@ export class OperatorFollower {
     this.unmoved({ kind: "pinned", origin: this.origin });
   }
 
-  /** A read that failed; a handover under way keeps its pause, as the failed read says nothing of whether the successor verifies. */
-  private failed = (reason: string): void => { if (this.state.kind !== "waiting") this.unmoved({ kind: "failed", origin: this.origin, reason }); };
+  /** A read that failed; a handover under way keeps its pause, held for the wallet's read where it has nothing more specific to say, as the failed read says nothing of whether the successor verifies. */
+  private failed = (reason: string): void => { const held = unread(this.state, reason); if (held !== null) this.set(held); else if (this.state.kind !== "waiting") this.unmoved({ kind: "failed", origin: this.origin, reason }); };
 
   private settled(state: FollowStatus): void {
     this.trial = null;
@@ -256,7 +256,7 @@ export class OperatorFollower {
     // one, which decides it; going back for a moment would say trading resumed when it has not.
     const abandon = () => { if (!this.again) this.set(before); };
     const waiting = (stage: WaitingStage, reason: string | null = null) => (this.deps.chain() !== chain ? abandon() : rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, stage, reason }) : this.settled({ kind: "following", origin: this.origin }));
-    if (rotationEnabled && !(this.state.kind === "waiting" && this.state.target === target)) waiting("connecting");
+    if (rotationEnabled && !(this.state.kind === "waiting" && this.state.target === target && this.state.stage !== "unread")) waiting("connecting");
     if (this.trial?.origin !== target) this.trial = { origin: target, client: this.deps.open(target) };
     const { client } = this.trial;
     let answered = false;

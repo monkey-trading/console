@@ -126,7 +126,7 @@ describe("OperatorFollower.check", () => {
     trial.verdict = { kind: "attested", release: "r", address: "0xk", why: "the wallet could not read" };
     await follower.check();
     expect(adopted).toEqual([]);
-    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", stage: "verifying", reason: "the wallet could not read" });
+    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", stage: "unread", reason: "the wallet could not read" });
   });
 
   it("does not move to an enclave that serves its attestation and signs nothing, as one the vault does not name does", async () => {
