@@ -6,8 +6,10 @@
  */
 
 import type { EngineClient } from "./client";
+import type { Deploy } from "./deploy";
 import type { Scheduler } from "./live-stream";
-import { bounded, nodeSaid, NOTHING_SAID, type NodeSaid, type SaidTurn } from "./operator-follow-status";
+import { FollowPace } from "./operator-follow-pace";
+import { bounded, nodeSaid, NOTHING_SAID, operatorTarget, type FollowStatus, type NodeSaid, type SaidTurn } from "./operator-follow-status";
 import { CLOCK_TOLERANCE_MS } from "./transport";
 import { notReady, RefusedAnswer } from "./trust-errors";
 
@@ -74,6 +76,18 @@ export class NodeWord {
     let member: SaidTurn | null = null;
     for (const turn of this.turns) if (turn.atMs <= nowMs && (member === null || turn.atMs >= member.atMs)) member = turn;
     return (member === null ? undefined : this.hostOf.get(member.candidate)) ?? said.hostname;
+  }
+
+  /**
+   * The origin to try before anything is read, while a change of server is under way with no wallet to read a chain: the target a pause
+   * waits on, or, for a drop held at a boundary, the member the turns heard name now when it is another listed node. Null otherwise.
+   */
+  firstTarget(deploy: Pick<Deploy, "origin" | "candidateOrigins">, state: FollowStatus, origin: string, nowMs: number): string | null {
+    if (!FollowPace.switching(state)) return null;
+    if (state.kind === "waiting") return state.target;
+    const hostname = this.hostname(NOTHING_SAID, nowMs);
+    const target = hostname === null ? null : operatorTarget(deploy, { hostname, rotationEnabled: true });
+    return target !== null && "origin" in target && target.origin !== null && target.origin !== origin ? target.origin : null;
   }
 
   /**
