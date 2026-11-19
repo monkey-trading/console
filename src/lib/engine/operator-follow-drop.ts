@@ -21,6 +21,17 @@ export class DropHold {
     return { kind: "confirming", origin, scheduled: windowEndMs !== null };
   }
 
+  /**
+   * The stream dropped with the follower at `state`: what to show, and whether to read now. Only a drop read at once or held at a boundary
+   * is shown as `confirming`; any other leaves what was concluded before it, so an outage that returns is called one without waiting for the read.
+   */
+  dropped(state: FollowStatus, origin: string, windowEndMs: number | null): { show: FollowStatus | null; check: boolean } {
+    const begins = state.kind === "pinned" || state.kind === "following" || state.kind === "failed";
+    const now = this.readsAtOnce();
+    const held = begins ? windowEndMs !== null : this.holds(state);
+    return { show: begins && (now || held) ? this.begin(state, origin, windowEndMs) : null, check: now || held };
+  }
+
   /** Whether a drop now is read at once: a feed that keeps dropping is read at the pace of other events, at most once in `RETRY_MS`. */
   readsAtOnce(): boolean {
     const nowMs = this.nowMs();
