@@ -3,9 +3,9 @@
 /**
  * The trading workspace. From 1024 px it is three columns: watchlist, chart with the account panels,
  * and the order ticket. Below that it shows one pane at a time, chosen from a bar at the foot. While
- * trading is paused for a change of trading server, the panes are inert under the pause
- * panel, the bar at the foot still chooses among them, and focus goes back where it was once they are
- * enabled again.
+ * trading is paused for a change of trading server, the panes are inert under the pause panel, the bar
+ * at the foot still chooses among them, and a move that remounts the workspace shows the pane focus
+ * was in.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -17,7 +17,6 @@ import { BottomPanel } from "./BottomPanel";
 import { ChartPanel } from "./ChartPanel";
 import { useSession, useTradingPause } from "./ConsoleProvider";
 import { OrderTicket } from "./OrderTicket";
-import { focusPlace, placeOf } from "./pause-focus";
 import { PHONE_PANES, PhoneNav, type PhonePane } from "./PhoneNav";
 import { TradingPausePanel } from "./TradingPausePanel";
 import { Watchlist } from "./Watchlist";
@@ -26,8 +25,8 @@ import { Watchlist } from "./Watchlist";
 const hiddenUnless = (current: PhonePane, pane: PhonePane) => (current === pane ? "" : "max-lg:hidden");
 
 export function TradeWorkspace() {
-  const [pane, setPane] = useState<PhonePane>("chart");
   const { pause } = useSession();
+  const [pane, setPane] = useState<PhonePane>(() => PHONE_PANES.find((p) => p.id === pause?.heldPane())?.id ?? "chart");
   const view = useTradingPause();
   // The view stays held while "Trading resumed" shows, and is enabled again as the panel fades.
   const held = view.kind === "paused" || (view.kind === "resumed" && !view.leaving);
@@ -59,19 +58,6 @@ export function TradeWorkspace() {
       wide.removeEventListener("change", onChange);
     };
   }, []);
-  useEffect(() => {
-    if (pause === null) return;
-    // Heard as the pause begins, before the panes turn inert and the browser takes focus from them.
-    return pause.subscribe(() => {
-      if (pause.getSnapshot().kind === "paused") pause.holdFocus(placeOf(document.activeElement, root.current));
-    });
-  }, [pause]);
-  useEffect(() => {
-    if (held || pause === null || root.current === null) return;
-    const kept = pause.takeFocus();
-    // Focus outside the panes, or on a control that is gone, falls back to the page, as after any move to another server.
-    if (kept !== null) focusPlace(kept.place, root.current);
-  }, [held, pause]);
   useEffect(() => {
     // The watchlist the user tapped is hidden now; focus goes to the heading of the market they chose.
     if (focusMarket.current && pane === "chart") document.getElementById("market-title")?.focus();

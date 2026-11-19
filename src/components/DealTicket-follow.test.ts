@@ -38,6 +38,11 @@ describe("the ticket while the operator moves", () => {
     expect(unlisted).toContain("This version of the app does not recognise the next trading server, so trading has been suspended. Trading will resume once the app has been updated.");
   });
 
+  it("pauses on a drop held as a change of server around a turn boundary, and not on one away from any", () => {
+    expect(render({ kind: "confirming", origin: "https://a.test", scheduled: true })).toContain("Trading is paused while the trading server changes.");
+    expect(render({ kind: "confirming", origin: "https://a.test", scheduled: false })).not.toContain("trading server changes");
+  });
+
   it("does not pause on a node followed or pinned", () => {
     expect(render({ kind: "following", origin: "https://a.test" })).not.toContain("trading server changes");
     expect(render(null)).not.toContain("trading server changes");

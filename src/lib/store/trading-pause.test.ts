@@ -6,7 +6,7 @@ import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { FollowStatus } from "../engine/operator-follow-status";
 import { FakeScheduler } from "../engine/test-kit";
 import type { ConsoleState } from "./state";
-import { LEAVE_MS, LONG_PAUSE_MS, pauseSteps, readyToTrade, RESUMED_MS, TradingPause, type PauseInput } from "./trading-pause";
+import { LEAVE_MS, LONG_PAUSE_MS, pauseSteps, PRICE_WAIT_MS, readyToTrade, RESUMED_MS, TradingPause, type PauseInput } from "./trading-pause";
 
 const A = "https://a.test";
 const B = "https://b.test";
@@ -15,10 +15,10 @@ const MOCK: AttestationStatus = { kind: "mock" };
 /** A market as the pause reads it: open or not, and priced or not by the server's word. */
 const market = (id: number, open: boolean, priced: boolean) => ({ id, open, mark: priced ? 1n : null, view: { pricing: { priced, min_sources: 1, sources: [{ state: priced ? "fresh" : "stale" }] } } });
 /** The state the pause reads; the rest of `ConsoleState` it never touches. */
-const state = (partial: { stream?: FeedStatus; attestation?: AttestationStatus; markets?: ReturnType<typeof market>[]; selected?: number }): ConsoleState =>
-  ({ stream: "live", attestation: MOCK, markets: [market(1, true, true)], selected: 1, ...partial }) as unknown as ConsoleState;
+const state = (partial: { stream?: FeedStatus; attestation?: AttestationStatus; markets?: ReturnType<typeof market>[]; selected?: number; accountRead?: boolean }): ConsoleState =>
+  ({ stream: "live", attestation: MOCK, markets: [market(1, true, true)], selected: 1, wallet: { address: "0xa" }, accountRead: true, ...partial }) as unknown as ConsoleState;
 
-const input = (partial: Partial<PauseInput>): PauseInput => ({ follow: { kind: "following", origin: A }, moved: false, stream: "live", attestation: MOCK, marketsRead: true, ready: true, ...partial });
+const input = (partial: Partial<PauseInput>): PauseInput => ({ follow: { kind: "following", origin: A }, moved: false, stream: "live", attestation: MOCK, marketsRead: true, flowing: true, ready: true, ...partial });
 
 describe("pauseSteps", () => {
   it("shows the first step under way from a drop at a boundary, and as the next server has not answered", () => {
@@ -109,6 +109,8 @@ describe("TradingPause", () => {
     store.set(state({ stream: "stale" })); // the store left behind says nothing any more
     expect(pause.getSnapshot()).toMatchObject({ steps: { prices: "current" } });
     next.set(state({ markets: [market(1, true, false)] }));
+    expect(pause.getSnapshot()).toMatchObject({ steps: { prices: "current", resume: "waiting" } });
+    next.set(state({ accountRead: false }));
     expect(pause.getSnapshot()).toMatchObject({ steps: { prices: "done", resume: "current" } });
     next.set(state({}));
     expect(pause.getSnapshot()).toEqual({ kind: "resumed", leaving: false });
@@ -144,4 +146,46 @@ describe("TradingPause", () => {
     scheduler.advance(1);
     expect(pause.getSnapshot()).toMatchObject({ kind: "paused", long: true });
   });
+
+  it("ends with no resume when the server moved to drops after it served and the follower finds the operator still there", () => {
+    const { follower, pause } = sources();
+    follower.set({ kind: "waiting", origin: A, target: B, stage: "verifying", reason: null });
+    const next = source(state({ stream: "connecting" }));
+    pause.use(next);
+    follower.set({ kind: "following", origin: B });
+    expect(pause.getSnapshot()).toMatchObject({ kind: "paused", steps: { prices: "current" } });
+    // A drop the follower is still reading keeps the pause; one it has read as an outage ends it.
+    follower.set({ kind: "confirming", origin: B, scheduled: false });
+    next.set(state({ stream: "stale" }));
+    expect(pause.getSnapshot().kind).toBe("paused");
+    follower.set({ kind: "following", origin: B });
+    expect(pause.getSnapshot()).toEqual({ kind: "none" });
+  });
+
+  it("fails verification with what the trader must do when the device clock disagrees with the server moved to", () => {
+    expect(pauseSteps(input({ follow: { kind: "following", origin: B }, moved: true, attestation: { kind: "clock", skewMs: 60_000 } }))).toMatchObject({ steps: { verify: "failed" }, failure: expect.stringContaining("Correct the clock and reload the page.") });
+  });
+
+  it("hands over to the server's own explanation when its prices do not come in time, and not before", () => {
+    const { follower, scheduler, pause } = sources();
+    follower.set({ kind: "waiting", origin: A, target: B, stage: "verifying", reason: null });
+    pause.use(source(state({ markets: [market(1, true, false)] })));
+    follower.set({ kind: "following", origin: B });
+    expect(pause.getSnapshot()).toMatchObject({ kind: "paused", steps: { prices: "current" } });
+    scheduler.advance(PRICE_WAIT_MS - 1);
+    expect(pause.getSnapshot().kind).toBe("paused");
+    scheduler.advance(1);
+    expect(pause.getSnapshot()).toEqual({ kind: "none" });
+  });
+
+  it("publishes nothing when the store changes but the steps do not", () => {
+    const { follower, store, pause } = sources();
+    follower.set({ kind: "waiting", origin: A, target: B, stage: "connecting", reason: null });
+    let published = 0;
+    pause.subscribe(() => { published += 1; });
+    store.set(state({ stream: "stale" }));
+    store.set(state({ stream: "stale" }));
+    expect(published).toBe(0);
+  });
 });
+

@@ -29,7 +29,9 @@ export function AttestationBanner() {
   const onTradingPage = usePathname() === "/";
   // Nothing said of the server being left applies while the console moves.
   const moving = pause.kind !== "none" ? (onTradingPage ? null : pauseLine(pause)) : switchLine(follow);
-  if (pause.kind !== "none" || moving !== null) return <section aria-label="Server verification">{moving !== null && <Line line={moving} />}</section>;
+  if (pause.kind !== "none" && moving === null) return null;
+  // The pause's own live region announces it, so its line here is not a second one.
+  if (moving !== null) return <section aria-label="Server verification"><Line line={moving} live={pause.kind === "none"} /></section>;
   // A node that failed its check says so above, and nothing it said is shown; a drop is not an outage until the follower has read where the operator runs.
   const line = attestation.kind === "unverified" || follow?.kind === "confirming" ? null : serverLine(stream, server, notices.feed?.text ?? null);
   return (
@@ -41,9 +43,9 @@ export function AttestationBanner() {
   );
 }
 
-function Line({ line }: { line: ServerLine }) {
+function Line({ line, live = true }: { line: ServerLine; live?: boolean }) {
   return (
-    <div role={line.role} className={line.role === "alert" ? BAD : WARN}>
+    <div role={live ? line.role : undefined} className={line.role === "alert" ? BAD : WARN}>
       <strong className="font-medium">{line.lead}</strong> {line.rest}
     </div>
   );

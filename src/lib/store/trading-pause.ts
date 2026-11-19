@@ -2,20 +2,23 @@
  * Trading paused while the trading server changes: when a pause begins, the steps it goes through, each from something the console
  * observes, and when trading resumes. A pause begins once trading was live and the follower finds the operator moving to another
  * server (`waiting`, or `unlisted`), or the stream drops around a turn boundary at which the member changes (a scheduled `confirming`),
- * and it lasts across the move to a fresh store. A drop the follower calls an outage ends it with no resume, and the outage line says so.
+ * and it lasts across the move to a fresh store. A drop the follower calls an outage ends it with no resume, and the outage line says so, as
+ * does a server that has taken over but whose prices do not come within `PRICE_WAIT_MS`: the server's own line then says why.
  */
 
 import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { FollowStatus } from "../engine/operator-follow-status";
 import type { Scheduler } from "../engine/live-stream";
+import { CLOCK_FAILED, NEXT_REFUSED, SERVER_REFUSED, STILL_PAUSED, UNLISTED_NEXT } from "../trading-pause-words";
 import { isPriced, isUnfed } from "../unpriced";
 import type { ConsoleState } from "./state";
 
 export type PauseStep = "connect" | "verify" | "prices" | "resume";
-/** Where focus was in the trading view when trading paused, told by what a trader sees of the control: no element survives a move. */
+/** Where focus was when trading paused, told by what a trader sees of the control, and the phone pane it sat in: no element survives a move. */
 export interface FocusPlace {
   tag: string;
   name: string;
+  pane: string | null;
 }
 export type StepState = "done" | "current" | "waiting" | "failed";
 export type Steps = Readonly<Record<PauseStep, StepState>>;
@@ -35,6 +38,8 @@ export interface PauseInput {
   attestation: AttestationStatus;
   /** Whether the server's markets have been read. */
   marketsRead: boolean;
+  /** Whether the server prices its markets again (`pricesFlow`). */
+  flowing: boolean;
   /** Whether prices reach the market on screen again (`readyToTrade`). */
   ready: boolean;
 }
@@ -44,15 +49,14 @@ export const LONG_PAUSE_MS = 30_000;
 /** How long "Trading resumed" shows before the panel leaves, and how long it takes to leave, in milliseconds. */
 export const RESUMED_MS = 1_500;
 export const LEAVE_MS = 300;
-
-const NOT_YET: Steps = { connect: "waiting", verify: "waiting", prices: "waiting", resume: "waiting" };
-
 /**
- * A failed verification's words: what happened and what follows, with no chain of reasons; why the server was refused is the verifier's
- * internal detail, so it is not shown.
+ * How long a server that has taken over, verified and streaming, may go without pricing the market on screen before the pause hands over to
+ * the server's own explanation, in milliseconds: a server that has just taken over held every market unpriced for 24 s in the owner's demo.
  */
-const NEXT_REFUSED = "The next trading server could not be verified, so the app has not connected to it.";
-const STILL_PAUSED = "Trading remains paused, and the app will try again automatically.";
+export const PRICE_WAIT_MS = 60_000;
+
+const STEP_ORDER: readonly PauseStep[] = ["connect", "verify", "prices", "resume"];
+const NOT_YET: Steps = { connect: "waiting", verify: "waiting", prices: "waiting", resume: "waiting" };
 
 /** Whether `follow` begins a pause: the operator moving to another server, or a drop held as one. */
 export function pauses(follow: FollowStatus): boolean {
@@ -69,7 +73,7 @@ export function pauseSteps(input: PauseInput): { steps: Steps; failure: string |
       case "confirming":
         return { steps: { ...NOT_YET, connect: "current" }, failure: null };
       case "unlisted":
-        return { steps: { ...NOT_YET, connect: "failed" }, failure: "This version of the app does not recognise the next trading server, so it cannot connect to it. Trading remains paused. Reload the page to use the latest version of the app." };
+        return { steps: { ...NOT_YET, connect: "failed" }, failure: UNLISTED_NEXT };
       case "waiting":
         if (follow.stage === "connecting") return { steps: { ...NOT_YET, connect: "current" }, failure: null };
         if (follow.stage === "verifying") return { steps: { ...NOT_YET, connect: "done", verify: "current" }, failure: null };
@@ -83,20 +87,33 @@ export function pauseSteps(input: PauseInput): { steps: Steps; failure: string |
       default:
         return follow satisfies never;
     }
+  } else if (follow.kind !== "confirming" && input.stream === "stale") {
+    // The server moved to dropped after it served, and the follower found the operator still there: an outage, which its line says.
+    return "outage";
   }
-  if (attestation.kind === "unverified") return { steps: { connect: "done", verify: "failed", prices: "waiting", resume: "waiting" }, failure: `The trading server could not be verified. ${STILL_PAUSED}` };
+  const failed = { connect: "done", verify: "failed", prices: "waiting", resume: "waiting" } as const;
+  if (attestation.kind === "unverified") return { steps: failed, failure: `${SERVER_REFUSED} ${STILL_PAUSED}` };
+  // A clock the server disagrees with stops every answer until the trader corrects it, which nothing automatic does.
+  if (attestation.kind === "clock") return { steps: failed, failure: CLOCK_FAILED };
   if (!trusted) return { steps: { ...NOT_YET, connect: "done", verify: "current" }, failure: null };
-  if (input.stream !== "live" || !input.marketsRead) return { steps: { connect: "done", verify: "done", prices: "current", resume: "waiting" }, failure: null };
+  if (input.stream !== "live" || !input.marketsRead || !input.flowing) return { steps: { connect: "done", verify: "done", prices: "current", resume: "waiting" }, failure: null };
   return { steps: { connect: "done", verify: "done", prices: "done", resume: input.ready ? "done" : "current" }, failure: null };
 }
 
+/** Whether the server `state` reads prices its markets again: an open market has a live price, or none can have one, every open market being without a feed here. */
+export function pricesFlow(state: ConsoleState): boolean {
+  const open = state.markets.filter((m) => m.open);
+  return open.some(isPriced) || open.every((m) => isUnfed(m.view.pricing));
+}
 
 /**
- * Whether trading can resume on the server `state` reads: the market on screen has a live price, or cannot have one for a reason of its own
- * (closed, or no feed prices it), or another open market has one, so prices flow and the market's own outage is the server's to explain.
- * A server that has just taken over may hold every market unpriced for a while; nothing here waits on the chart's history.
+ * Whether trading can resume on the server `state` reads: the connected account has been read, and the market on screen has a live price,
+ * or cannot have one for a reason of its own (closed, or no feed prices it), or another open market has one, so prices flow and the
+ * market's own outage is the server's to explain. A server that has just taken over may hold every market unpriced for a while, which
+ * `PRICE_WAIT_MS` bounds; nothing here waits on the chart's history.
  */
 export function readyToTrade(state: ConsoleState): boolean {
+  if (state.wallet !== null && !state.accountRead) return false;
   const market = state.markets.find((m) => m.id === state.selected);
   if (market === undefined || !market.open || isPriced(market) || isUnfed(market.view.pricing)) return true;
   return state.markets.some((other) => other.open && isPriced(other));
@@ -118,7 +135,9 @@ export class TradingPause {
   private wasLive = false;
   private long: unknown = null;
   private leave: unknown = null;
-  /** Where focus was in the trading view when the pause began (`place`, null when it was elsewhere), which the view restores once it is enabled again; null with nothing to restore. */
+  /** Bounds the wait for a price once the server has taken over (`PRICE_WAIT_MS`). */
+  private priceWait: unknown = null;
+  /** Where focus was when the pause began (`place`, null when on nothing named), which the page restores once the view is enabled again; null with nothing to restore. */
   private focusBefore: { place: FocusPlace | null } | null = null;
 
   constructor(private readonly follower: Source & { getSnapshot(): FollowStatus }, private readonly scheduler: Scheduler) {
@@ -140,9 +159,14 @@ export class TradingPause {
     this.update();
   }
 
-  /** Keeps where focus was as a pause begins, unless it is kept already: the first is where the trader was. */
+  /** Keeps where focus was as a pause begins, unless it is kept already for this pause: the first is where the trader was. */
   holdFocus(place: FocusPlace | null): void {
     this.focusBefore ??= { place };
+  }
+
+  /** The phone pane focus was in when the pause began, which the trading view shows again as a move remounts it; null for none. */
+  heldPane(): string | null {
+    return this.focusBefore?.place?.pane ?? null;
   }
 
   /** Where focus was when the pause began, given once after it ends: the view enabled again puts it back. */
@@ -164,15 +188,34 @@ export class TradingPause {
     if (state.stream === "live") this.wasLive = true;
     if (pauses(follow) && this.wasLive && this.view.kind !== "paused") this.begin();
     if (this.view.kind !== "paused") return;
-    const steps = pauseSteps({ follow, moved: this.startStore !== this.store, stream: state.stream, attestation: state.attestation, marketsRead: state.markets.length > 0, ready: readyToTrade(state) });
+    const steps = pauseSteps({ follow, moved: this.startStore !== this.store, stream: state.stream, attestation: state.attestation, marketsRead: state.markets.length > 0, flowing: pricesFlow(state), ready: readyToTrade(state) });
     if (steps === "outage") return this.end();
     if (Object.values(steps.steps).every((step) => step === "done")) return this.resumed();
-    this.set({ kind: "paused", steps: steps.steps, long: this.view.long, failure: steps.failure });
+    this.waitForPrices(steps.steps.verify === "done" && state.stream === "live");
+    const { view } = this;
+    if (view.kind !== "paused") return;
+    // Unchanged steps publish nothing: the store changes many times a second.
+    const same = view.failure === steps.failure && STEP_ORDER.every((step) => view.steps[step] === steps.steps[step]);
+    if (!same) this.set({ kind: "paused", steps: steps.steps, long: view.long, failure: steps.failure });
   };
+
+  /** While a server that has taken over streams and is trusted but its prices have not come, the wait is bounded; otherwise it is not. */
+  private waitForPrices(waiting: boolean): void {
+    if (!waiting) {
+      if (this.priceWait !== null) this.scheduler.clearTimeout(this.priceWait);
+      this.priceWait = null;
+      return;
+    }
+    this.priceWait ??= this.scheduler.setTimeout(() => {
+      this.priceWait = null;
+      if (this.view.kind === "paused") this.end();
+    }, PRICE_WAIT_MS);
+  }
 
   private begin(): void {
     this.clearTimers();
     this.startStore = this.store;
+    this.focusBefore = null; // a place an earlier pause kept, which nothing took, is not this one's
     this.set({ kind: "paused", steps: NOT_YET, long: false, failure: null });
     this.long = this.scheduler.setTimeout(() => {
       this.long = null;
@@ -201,7 +244,7 @@ export class TradingPause {
   }
 
   private clearTimers(): void {
-    for (const timer of [this.long, this.leave]) if (timer !== null) this.scheduler.clearTimeout(timer);
-    this.long = this.leave = null;
+    for (const timer of [this.long, this.leave, this.priceWait]) if (timer !== null) this.scheduler.clearTimeout(timer);
+    this.long = this.leave = this.priceWait = null;
   }
 }

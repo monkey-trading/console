@@ -6,6 +6,15 @@ export const PAUSE_TITLE = "Trading is paused while the trading server changes";
 export const RESUMED_TITLE = "Trading has resumed";
 export const PAUSE_KEPT = "Your positions, working orders, and take-profit and stop-loss levels are kept, and no order is executed until the trading server receives live prices again.";
 export const LONG_PAUSE = "The change is taking longer than usual. Trading will resume automatically once it is complete.";
+/** What a pause expects to end it, on a page without the trading view and at the deal ticket. */
+export const RESUMES_WHEN = "Trading will resume automatically once the new server has been verified and live prices have returned.";
+
+/** A failed step's words: what happened and what follows, with no chain of reasons; why a server was refused is the verifier's detail. */
+export const NEXT_REFUSED = "The next trading server could not be verified, so the app has not connected to it.";
+export const SERVER_REFUSED = "The trading server could not be verified.";
+export const STILL_PAUSED = "Trading remains paused, and the app will try again automatically.";
+export const UNLISTED_NEXT = "This version of the app does not recognise the next trading server, so it cannot connect to it. Trading remains paused. Reload the page to use the latest version of the app.";
+export const CLOCK_FAILED = "Your device clock is incorrect, so the trading server cannot be verified. Trading remains paused. Correct the clock and reload the page.";
 
 /** The steps in order, each with its name in the state it is in. */
 export const PAUSE_STEPS: readonly { step: PauseStep; name: (state: StepState) => string }[] = [

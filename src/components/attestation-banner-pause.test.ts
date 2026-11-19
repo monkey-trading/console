@@ -41,11 +41,12 @@ describe("the banner while the trading server changes", () => {
 
   it("leaves the trading page's panel to say trading is paused, and says it in one line on every other page", () => {
     const trading = render({ kind: "waiting", origin: "https://a.test", target: "https://b.test", stage: "connecting", reason: null }, PAUSED);
-    expect(trading).not.toContain(LOST);
-    expect(trading).not.toContain("Trading is paused");
+    // Nothing at all on the trading page, not even an empty region; elsewhere one line, which is no second live region beside the pause's own.
+    expect(trading).toBe("");
     const other = render({ kind: "waiting", origin: "https://a.test", target: "https://b.test", stage: "connecting", reason: null }, PAUSED, "/funding");
     expect(other).toContain("Trading is paused while the trading server changes.");
     expect(other).not.toContain(LOST);
+    expect(other).not.toMatch(/role="(status|alert)"/);
   });
 
   it("says a move with no pause, as when a page load finds the current server elsewhere, in one calm line", () => {

@@ -8,7 +8,7 @@
 import type { FeedStatus } from "./engine/attestation";
 import type { FollowStatus } from "./engine/operator-follow-status";
 import type { PauseView } from "./store/trading-pause";
-import { LONG_PAUSE, PAUSE_TITLE } from "./trading-pause-words";
+import { LONG_PAUSE, PAUSE_TITLE, RESUMES_WHEN } from "./trading-pause-words";
 import type { HoldCause, ServerRead, ServerStatus, UnpricedReason, VenueState } from "./engine/status-types";
 import { asSentence } from "./format";
 
@@ -146,9 +146,9 @@ export function switchLine(follow: FollowStatus | null): ServerLine | null {
   return { role: "status", lead: "Connecting to the current trading server.", rest: `Trading will be available once the server has been verified.${why}` };
 }
 
-/** The one line on a page without the trading view while trading is paused for a change of trading server, or null once it has resumed. */
+/** The one line on a page without the trading view while trading is paused for a change of trading server, or null once it has resumed; the pause's own live region announces it. */
 export function pauseLine(view: PauseView): ServerLine | null {
   if (view.kind !== "paused") return null;
   if (view.failure !== null) return { role: "alert", lead: `${PAUSE_TITLE}.`, rest: view.failure };
-  return { role: "status", lead: `${PAUSE_TITLE}.`, rest: view.long ? LONG_PAUSE : "Trading will resume automatically once the new server has been verified and live prices have returned." };
+  return { role: "status", lead: `${PAUSE_TITLE}.`, rest: view.long ? LONG_PAUSE : RESUMES_WHEN };
 }

@@ -100,7 +100,8 @@ describe("OperatorFollower.check", () => {
     trial.verify = () => new Promise((resolve) => { verified = resolve as typeof verified; });
     const checking = follower.check();
     await settle();
-    expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, stage: "connecting", reason: null });
+    // It answered with its verification data, which is being checked.
+    expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, stage: "verifying", reason: null });
     expect(adopted).toEqual([]);
     verified(trial.verdict);
     await checking;

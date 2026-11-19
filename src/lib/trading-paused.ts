@@ -1,5 +1,6 @@
 /** The one plain-words state for which trading is paused on the trading page (monkey-trading/console#273): a single reason, what will end it, and whether closing still works. */
 
+import { PAUSE_TITLE, RESUMES_WHEN } from "./trading-pause-words";
 import { UNFED_TEXT } from "./unpriced";
 
 export type PausedCause = "handover" | "unlisted" | "closed" | "unfed" | "price" | "reduce_only";
@@ -37,7 +38,7 @@ export function tradingPaused(input: {
   reduceOnly: boolean;
 }): PausedState | null {
   if (input.handover) {
-    return { cause: "handover", text: "Trading is paused while the trading server changes. Trading will resume automatically once the new server has been verified and live prices have returned.", closesAllowed: true };
+    return { cause: "handover", text: `${PAUSE_TITLE}. ${RESUMES_WHEN}`, closesAllowed: true };
   }
   if (input.unlisted) {
     return { cause: "unlisted", text: "This version of the app does not recognise the next trading server, so trading has been suspended. Trading will resume once the app has been updated.", closesAllowed: true };

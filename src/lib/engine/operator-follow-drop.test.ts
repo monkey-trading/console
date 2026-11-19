@@ -62,14 +62,14 @@ describe("a dropped stream", () => {
     kit.setOperator(async () => named({ hostname: "b.example" }));
     kit.drop();
     await settle();
-    const tries = [kit.successor.verifies];
+    const tries = [kit.successor.attestations];
     for (const wait of [SWITCH_RETRY_MS, 2 * SWITCH_RETRY_MS, 4 * SWITCH_RETRY_MS]) {
       kit.advance(wait - 1);
       await settle();
-      expect(kit.successor.verifies).toBe(tries.at(-1));
+      expect(kit.successor.attestations).toBe(tries.at(-1));
       kit.advance(1);
       await settle();
-      tries.push(kit.successor.verifies);
+      tries.push(kit.successor.attestations);
     }
     expect(tries).toEqual([1, 2, 3, 4]);
     expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", stage: "connecting" });
@@ -99,11 +99,11 @@ describe("a dropped stream", () => {
     kit.advance(SWITCH_RETRY_MS);
     await settle();
     kit.advance(1_000);
-    expect(kit.successor.verifies).toBe(2);
+    expect(kit.successor.attestations).toBe(2);
     // The node in use then goes down as it hands over: the successor is read at once, and again within the first wait.
     kit.drop();
     await settle();
-    expect(kit.successor.verifies).toBe(3);
+    expect(kit.successor.attestations).toBe(3);
     kit.successor.verdict = VERIFIED;
     kit.advance(SWITCH_RETRY_MS);
     await settle();
@@ -138,7 +138,7 @@ describe("a dropped stream", () => {
     kit.held.chain = null; // the wallet disconnected while the chain read was out
     release();
     await settle();
-    expect(kit.follower.getSnapshot().kind).not.toBe("confirming");
+    expect(kit.follower.getSnapshot()).toEqual({ kind: "following", origin: BUILD });
   });
 
   it("holds a drop at a turn boundary at which the member changes as a change of server, re-reading within seconds, until the chain names the successor", async () => {

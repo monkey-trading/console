@@ -27,21 +27,28 @@ export class FollowPace {
   private wait = RETRY_MS;
   private switchWait = SWITCH_RETRY_MS;
   private timer: unknown = null;
+  private dueAtMs: number | null = null;
 
   constructor(private readonly scheduler: Scheduler, private readonly nowMs: () => number) {}
 
   /** Runs `fire` once after `delay`, in place of a read already timed. */
   schedule(delay: number, fire: () => void): void {
     this.cancel();
+    this.dueAtMs = this.nowMs() + delay;
     this.timer = this.scheduler.setTimeout(() => {
-      this.timer = null;
+      this.timer = this.dueAtMs = null;
       fire();
     }, delay);
   }
 
   cancel(): void {
     if (this.timer !== null) this.scheduler.clearTimeout(this.timer);
-    this.timer = null;
+    this.timer = this.dueAtMs = null;
+  }
+
+  /** How long until the read timed now comes, or null with none timed. */
+  pendingMs(): number | null {
+    return this.dueAtMs === null ? null : Math.max(0, this.dueAtMs - this.nowMs());
   }
 
   /** A drop or a hidden tab coming back is new evidence: the next waits start from the first again. */

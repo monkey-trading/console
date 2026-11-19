@@ -19,9 +19,9 @@ import { FollowPace, RETRY_MS } from "./operator-follow-pace";
 import { ROTATION_EVENTS } from "./rotation-events";
 import { SignerFloorWatch } from "./operator-follow-floor";
 import { NodeWord } from "./operator-follow-node";
-import { bounded, operatorTarget, refusedRoute, signedAnswer, successor, type FollowerDeps, type FollowStatus, type NodeSaid, type WaitingStage } from "./operator-follow-status";
+import { bounded, operatorTarget, refusedRoute, successor, type FollowerDeps, type FollowStatus, type NodeSaid, type WaitingStage } from "./operator-follow-status";
+import { runTrial } from "./operator-follow-trial";
 import type { DeploymentReads, NamedOperator } from "./registry";
-import { notReady } from "./trust-errors";
 
 export { operatorTarget, type FollowerDeps, type FollowStatus } from "./operator-follow-status";
 export { RETRY_MS, SLOW_READ_MS, SWITCH_RETRY_MS } from "./operator-follow-pace";
@@ -134,7 +134,8 @@ export class OperatorFollower {
     }
     const left = this.lastCheckAt + RETRY_MS - this.deps.nowMs();
     if (left <= 0) void this.check();
-    else if (this.isHidden !== null) this.arm(left);
+    // A read already timed sooner, such as a successor's quick retry, keeps its time.
+    else if (this.isHidden !== null) this.arm(Math.min(left, this.pace.pendingMs() ?? left));
   }
 
   /** Reads the chain and moves to the node it names, if that verifies; joins a check already running, which then runs again for a wallet that changed since. */
@@ -224,12 +225,10 @@ export class OperatorFollower {
   /** A read that failed; a handover under way keeps its pause, as the failed read says nothing of whether the successor verifies. */
   private failed = (reason: string): void => { if (this.state.kind !== "waiting") this.unmoved({ kind: "failed", origin: this.origin, reason }); };
 
-
   private settled(state: FollowStatus): void {
     this.trial = null;
     this.set(state);
   }
-
 
   /** A read found the operator where the console already is, or failed: a drop at a boundary stays held, as the chain may not yet name the successor. */
   private unmoved(state: FollowStatus): void {
@@ -245,38 +244,30 @@ export class OperatorFollower {
    */
   private async tryNode(target: string, chain: DeploymentReads | null, rotationEnabled: boolean, tried: readonly string[] = [this.origin]): Promise<void> {
     const before = this.state; // trading pauses the moment the chain names another node, as its verification takes the time (monkey-trading/console#280)
-    // A trial another wallet came during says nothing for it, failed or not: the pause it began goes, and `check` runs again for the new one.
-    const waiting = (stage: WaitingStage, reason: string | null = null) => (this.deps.chain() !== chain ? this.set(before) : rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, stage, reason }) : this.settled({ kind: "following", origin: this.origin }));
+    // A trial another wallet came during says nothing for it, failed or not: the pause it began goes, unless `check` runs again for the new
+    // one, which decides it; going back for a moment would say trading resumed when it has not.
+    const abandon = () => { if (!this.again) this.set(before); };
+    const waiting = (stage: WaitingStage, reason: string | null = null) => (this.deps.chain() !== chain ? abandon() : rotationEnabled ? this.set({ kind: "waiting", origin: this.origin, target, stage, reason }) : this.settled({ kind: "following", origin: this.origin }));
     if (rotationEnabled && !(this.state.kind === "waiting" && this.state.target === target)) waiting("connecting");
-    let client: EngineClient | null = null;
+    if (this.trial?.origin !== target) this.trial = { origin: target, client: this.deps.open(target) };
+    const { client } = this.trial;
+    let answered = false;
     // With no wallet, a node refused for the signer the vault names still says in its signed route where the operator now runs: the next node, among the listed origins, bounded; its client and turns are never taken.
     // A node not serving yet is not refused: a successor answers once it has taken the keys, and signs once its time is confirmed.
-    const failed = async (reason: string, error?: unknown, notAnswering = notReady(error)): Promise<void> => {
-      const route = chain === null && client !== null ? await refusedRoute(this.deps.scheduler, client, error) : null;
+    const failed = async (reason: string, error: unknown, notAnswering: boolean): Promise<void> => {
+      const route = chain === null ? await refusedRoute(this.deps.scheduler, client, error) : null;
       const next = route === null || this.deps.chain() !== chain ? null : successor(this.deps.deploy, route, [...tried, target]);
-      if (route === null || next === null) return notAnswering ? waiting("connecting") : waiting("refused", reason);
+      if (route === null || next === null) return notAnswering ? waiting(answered ? "verifying" : "connecting") : waiting("refused", reason);
       if ("unlisted" in next) return this.settled({ kind: "unlisted", origin: this.origin, hostname: next.unlisted });
       return this.tryNode(next.origin, chain, route.rotation_enabled, [...tried, target]);
     };
-    try {
-      if (this.trial?.origin !== target) this.trial = { origin: target, client: this.deps.open(target) };
-      ({ client } = this.trial);
-      // What each read of the trial names of the signer counts as that read ends, whatever it ends in.
-      this.floor.hear(client);
-      await client.readChainThrough(chain);
-      const status = await client.verify();
-      if (status.kind === "unverified") return failed(status.reason, undefined, status.notReady === true);
-      if (rotationEnabled) waiting("verifying"); // it answered: what is left is its check
-      // With no wallet no verdict reads the vault, so an attested node is the best a visit without one can have; it reads, and never signs.
-      if (status.kind === "attested" && chain !== null) return waiting("verifying", status.why);
-      const said = await signedAnswer(client);
-      // Each client judges the signer from its own first check, so the floor, the node in use's own word included, is held here, with a wallet or not.
-      const behind = this.floor.lags(said, chain !== null && status.kind === "verified");
-      if (behind !== null) return waiting("refused", behind);
-    } catch (error) {
-      return failed(error instanceof Error ? error.message : "The server did not respond.", error);
-    }
-    if (this.deps.chain() !== chain) return this.set(before);
+    const end = await runTrial(client, chain, this.floor, () => {
+      answered = true;
+      if (rotationEnabled) waiting("verifying");
+    });
+    if (end.kind === "failed") return failed(end.reason, end.error, end.notReady);
+    if (end.kind === "held") return waiting(end.stage, end.reason);
+    if (this.deps.chain() !== chain) return abandon();
     if (this.deps.busy()) return waiting("verifying", "A request is waiting for your wallet. You will be moved to the new server once that request is complete.");
     this.deps.adopt(client, target);
     // In use from now, before the provider watches it: a check the floor's refusal of the old node starts reads this one.

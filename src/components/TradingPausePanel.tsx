@@ -2,9 +2,8 @@
 
 /**
  * The panel over the trading view while trading is paused for a change of trading server: what is happening, what is kept, and the steps
- * the change goes through, each in the state the console has observed; then the resumed title over the ticked steps for a moment before
- * it fades. The polite
- * live region that announces each step is `PauseAnnouncer`, outside the screens a move remounts.
+ * the change goes through, each in the state the console has observed; then the resumed title over the ticked steps for a moment before it
+ * fades. The polite live region that announces each step is `PauseAnnouncer`, outside the screens a move remounts.
  */
 
 import { useId } from "react";

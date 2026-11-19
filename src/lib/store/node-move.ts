@@ -36,9 +36,10 @@ export async function moveToNode(old: ConsoleStore, next: ConsoleStore): Promise
   old.liveWallet = null;
   old.sessionKey = null;
   old.sessionLogin = null;
-  const { walletDecided, notices, selected, timeframe } = old.getSnapshot();
+  const { walletDecided, selected, timeframe } = old.getSnapshot();
   // The page load's wallet was settled on the old store; the next one starts from that, on the same market and timeframe.
-  next.patch({ walletDecided, notices: carriedNotices(notices), selected, timeframe });
+  next.patch({ walletDecided, selected, timeframe });
+  carryOutcomes(old, next);
   if (wallet === null) return;
   // Set first, so the connect below keeps the key rather than clearing another wallet's.
   next.liveWallet = wallet;
@@ -46,8 +47,35 @@ export async function moveToNode(old: ConsoleStore, next: ConsoleStore): Promise
   next.patch({ setup, walletChain: old.getSnapshot().walletChain });
   if (key !== null && sessionExpiresAt > 0) installKey(next, key, sessionExpiresAt);
   await connectWallet(next, wallet.topic !== undefined ? "walletconnect" : "injected", true, wallet);
-  // Connecting a wallet starts its surfaces afresh; what the requests came to is the same account's, so it is said again, under anything said since.
-  if (next.liveWallet === wallet) next.patch({ notices: { ...carriedNotices(notices), ...next.getSnapshot().notices } });
+}
+
+/**
+ * Says on `next` what each request came to on `old`: what it said before the move, again the moment connecting the same wallet clears its
+ * surfaces, and what it says after, as a request whose outcome lands only once its refresh ends, while the account is the same.
+ */
+function carryOutcomes(old: ConsoleStore, next: ConsoleStore): void {
+  const account = old.getSnapshot().wallet?.address.toLowerCase();
+  let carried = carriedNotices(old.getSnapshot().notices);
+  const sameAccount = () => next.getSnapshot().wallet?.address.toLowerCase() === account;
+  const say = () => {
+    const current = next.getSnapshot().notices;
+    const missing = Object.entries(carried).filter(([surface, notice]) => current[surface as NoticeSurface]?.id !== notice.id); // the keys are `Notices`' own
+    if (missing.length > 0) next.patch({ notices: { ...current, ...Object.fromEntries(missing) } });
+  };
+  next.patch({ notices: carried });
+  // Until the wallet is connected again its surfaces may be cleared once; after that, nothing else of the old store's carries over.
+  const stopNext = next.subscribe(() => {
+    if (!sameAccount()) return;
+    stopNext();
+    say();
+  });
+  // Never stopped: the listener goes with the old store, which nothing holds once its last request has ended.
+  old.subscribe(() => {
+    const later = carriedNotices(old.getSnapshot().notices);
+    const fresh = Object.entries(later).filter(([surface, notice]) => carried[surface as NoticeSurface]?.id !== notice.id);
+    carried = later;
+    if (fresh.length > 0 && (account === undefined || sameAccount())) next.patch({ notices: { ...next.getSnapshot().notices, ...Object.fromEntries(fresh) } });
+  });
 }
 
 /** Has `follower` read the chain when this store's wallet changes, and hear this store's client. Returns what stops that. */
