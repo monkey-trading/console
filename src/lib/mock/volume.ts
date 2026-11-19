@@ -43,6 +43,11 @@ export function newBook(): VolumeBook {
   return { days: new Map(), opening: new Map(), closing: [] };
 }
 
+/** A copy of `book` that recording into leaves `book` as it was. */
+export function cloneBook(book: VolumeBook): VolumeBook {
+  return { days: new Map(book.days), opening: new Map([...book.opening].map(([market, lots]) => [market, lots.map((lot) => ({ ...lot }))])), closing: book.closing.map((lot) => ({ ...lot })) };
+}
+
 const dayOf = (ms: number): number => Math.floor(ms / DAY_MS);
 
 /** Adds `notional` to the counted volume of UTC `day`. */

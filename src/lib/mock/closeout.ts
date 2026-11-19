@@ -4,13 +4,16 @@
  * offset group together.
  */
 
-import { absFixed, fixedToWire, mulFixed, type Fixed } from "../fixed";
+import { absFixed, fixedToWire, type Fixed } from "../fixed";
 import type { EngineEvent, MarketId } from "../engine/types";
 import { mulRounded } from "../fixed-rounding";
-import { profitFee } from "../holding-fee";
-import { closeFeeBps, fillEvents, fillOrder, liveQuote } from "./execute";
+import { discountedBase, profitFee } from "../holding-fee";
+import type { TierTerms } from "../volume-tier";
+import { tierTable } from "./accounts";
+import { closeFeeBps, fillEvents, fillOrder, quoteAtShare } from "./execute";
 import { closeoutShare, groupIndexOf, groupMarkets, requirementOf, tradeable } from "./portfolio";
 import type { AccountState, MockState } from "./state";
+import { cloneBook, recordFill, tierNow } from "./volume";
 
 /** A candidate's score: the change in slack its closes make, the USD notional they close, and its lowest market. */
 interface Scored {
@@ -20,23 +23,51 @@ interface Scored {
   first: MarketId;
 }
 
+/** One position's close in a close-out: what it changes the account's equity by, the notional it closes, and its fill's price. */
+interface Close {
+  change: Fixed;
+  notional: Fixed;
+  price: Fixed;
+}
+
 /**
  * What closing the whole position in `market` changes the account's equity by, at the price a close-out fills at (the index, its
- * spread up to the close-spread ceiling) less the profit fee on a gain, and the notional it closes; null when its close does not
- * price. The mock scores every close at the stress level and tier it trades at now, where the engine scores a group's later
- * members at the house NAV and the tier its earlier fills leave.
+ * spread up to the close-spread ceiling, at the best-price share of the tier `terms`) less the profit fee on a gain at that tier's
+ * discount, against the unrealised result it replaces; null when its close does not price.
  */
-function closeChange(state: MockState, address: string, account: AccountState, market: MarketId): { change: Fixed; notional: Fixed } | null {
+function closeChange(state: MockState, account: AccountState, market: MarketId, terms: TierTerms | null): Close | null {
   const held = account.positions.get(market);
   const runtime = state.markets.get(market);
   if (held === undefined || runtime === undefined) return null;
   const long = held.qty > 0n;
-  const priced = liveQuote(state, address, market, long ? "sell" : "buy", absFixed(held.qty));
+  const priced = quoteAtShare(state, market, long ? "sell" : "buy", absFixed(held.qty), held.qty, terms?.bestPriceShareBps);
   if (priced === null || priced.kind === "refused") return null;
-  // Realised as `Position::apply` rounds it, down, then less its fee, against the unrealised result at the index it replaces.
+  // Realised as `Position::apply` rounds it, down, then less its fee, against the unrealised result at the index, also rounded down.
   const realised = mulRounded(long ? priced.price - held.entry : held.entry - priced.price, absFixed(held.qty), "down");
-  const change = realised - profitFee(realised, closeFeeBps(state, account, held, state.now)) - mulFixed(held.qty, runtime.mid - held.entry);
-  return { change, notional: absFixed(mulFixed(held.qty, runtime.mid)) };
+  const feeBps = closeFeeBps(state, account, held, state.now, discountedBase(state.params.profitFeeBps, terms?.feeDiscountBps ?? 0));
+  const change = realised - profitFee(realised, feeBps) - mulRounded(held.qty, runtime.mid - held.entry, "down");
+  return { change, notional: mulRounded(absFixed(held.qty), runtime.mid, "up"), price: priced.price };
+}
+
+/**
+ * What closing `members` in market order changes the account's equity by, and the notional they close; null when one does not
+ * price. As the engine scores a group from V84 (#1008), each member after the first fills at the volume tier the earlier fills
+ * leave, which count a close-out's volume at once: its best-price share and its fee discount (`tier_after_closeouts`). The engine
+ * also scores them at the house NAV those fills leave, which only its stress level reads; the mock's stress reads no NAV, so every
+ * member fills at its market's level now.
+ */
+export function scoreMembers(state: MockState, account: AccountState, members: readonly MarketId[]): { change: Fixed; notional: Fixed } | null {
+  const table = tierTable(state);
+  const book = cloneBook(account.volume);
+  let [change, notional] = [0n, 0n];
+  for (const market of members) {
+    const held = account.positions.get(market)?.qty ?? 0n;
+    const close = closeChange(state, account, market, table[tierNow(book, table, state.now)] ?? null);
+    if (close === null) return null;
+    [change, notional] = [change + close.change, notional + close.notional];
+    recordFill(book, { market, held, delta: -held, price: close.price, now: state.now, liquidation: true });
+  }
+  return { change, notional };
 }
 
 /**
@@ -73,21 +104,18 @@ function preferred(a: Scored, b: Scored, restores: (scored: Scored) => boolean):
 }
 
 /** The positions the account closes next, with its equity and requirement, or null when it meets the level or nothing it holds may close (`next_portfolio_step`). */
-function nextStep(state: MockState, address: string, account: AccountState): { members: MarketId[]; equity: Fixed; requirement: Fixed } | null {
+function nextStep(state: MockState, account: AccountState): { members: MarketId[]; equity: Fixed; requirement: Fixed } | null {
   const { equity, requirement } = requirementOf(state, account, { kind: "market" });
   const threshold = closeoutShare(state, requirement);
   if (account.positions.size === 0 || requirement === 0n || equity >= threshold) return null;
   const slack = equity - threshold;
-  const closes = new Map<MarketId, { change: Fixed; notional: Fixed }>();
-  for (const id of account.positions.keys()) {
-    const close = tradeable(state, id) ? closeChange(state, address, account, id) : null;
-    if (close !== null) closes.set(id, close);
-  }
-  const scored: Scored[] = candidates(state, account, new Set(closes.keys())).map((members) => {
+  // A position may close when its market trades and its close prices at the tier the account trades at now.
+  const closable = new Set([...account.positions.keys()].filter((id) => tradeable(state, id) && scoreMembers(state, account, [id]) !== null));
+  const scored: Scored[] = candidates(state, account, closable).flatMap((members) => {
+    const closes = scoreMembers(state, account, members);
+    if (closes === null) return [];
     const after = requirementOf(state, account, { kind: "market" }, members).requirement;
-    const gain = members.reduce((sum, id) => sum + (closes.get(id)?.change ?? 0n), 0n) + threshold - closeoutShare(state, after);
-    const notional = members.reduce((sum, id) => sum + (closes.get(id)?.notional ?? 0n), 0n);
-    return { members, gain, notional, first: members[0] ?? 0 };
+    return [{ members, gain: closes.change + threshold - closeoutShare(state, after), notional: closes.notional, first: members[0] ?? 0 }];
   });
   const restores = (candidate: Scored) => slack + candidate.gain >= 0n;
   const best = scored.reduce<Scored | null>((kept, next) => (kept === null || preferred(next, kept, restores) ? next : kept), null);
@@ -101,7 +129,7 @@ function nextStep(state: MockState, address: string, account: AccountState): { m
 export function closeOutAccount(state: MockState, address: string): EngineEvent[] {
   const account = state.account(address);
   const events: EngineEvent[] = [];
-  for (let step = nextStep(state, address, account); step !== null; step = nextStep(state, address, account)) {
+  for (let step = nextStep(state, account); step !== null; step = nextStep(state, account)) {
     if (events.length === 0) events.push({ type: "close_out", account: address, equity: fixedToWire(step.equity), margin: fixedToWire(step.requirement) });
     for (const market of step.members) {
       const held = account.positions.get(market);

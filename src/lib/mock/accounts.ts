@@ -1,31 +1,26 @@
 /** An account's equity and margin at the current marks, and the house's exposure. */
 
 import { mulFixed, type Fixed } from "../fixed";
-import { tieredMargin } from "../pricing";
+import { mulRounded } from "../fixed-rounding";
 import { discountedBase } from "../holding-fee";
 import { decodeTiers, type TierTerms } from "../volume-tier";
 import { requirementOf } from "./portfolio";
 import type { AccountState, MockState } from "./state";
 import { tierNow } from "./volume";
 
-/** Unrealised profit and loss of the account's positions at the index. */
+/** Unrealised profit and loss of the account's positions at the index, each rounded down as the engine's equity counts it (`Position::unrealised`). */
 export function unrealised(state: MockState, account: AccountState): Fixed {
   let total = 0n;
   for (const [id, held] of account.positions) {
     const market = state.markets.get(id);
-    if (market) total += mulFixed(held.qty, market.mid - held.entry);
+    if (market) total += mulRounded(held.qty, market.mid - held.entry, "down");
   }
   return total;
 }
 
-/** The account's initial margin over every position. */
+/** The account's margin at each market's own bands, position by position, each notional valued as its requirement values it. */
 export function marginOf(state: MockState, account: AccountState): Fixed {
-  let total = 0n;
-  for (const [id, held] of account.positions) {
-    const market = state.markets.get(id);
-    if (market) total += tieredMargin(market.listed.spec.margin_tiers, mulFixed(held.qty, market.mid));
-  }
-  return total;
+  return requirementOf(state, account, { kind: "market" }).perPosition;
 }
 
 /** The volume tier table in the mock's parameters; empty when they name none. */

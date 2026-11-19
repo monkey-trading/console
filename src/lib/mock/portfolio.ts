@@ -4,11 +4,12 @@
  * credit (`portfolio-credit.ts`), on the mock's USD markets at their index.
  */
 
-import { absFixed, fixedFromWire, fixedToWire, mulFixed, type Fixed } from "../fixed";
+import { absFixed, fixedFromWire, fixedToWire, type Fixed } from "../fixed";
+import { mulRounded } from "../fixed-rounding";
 import { metaFor } from "../engine/meta";
 import type { PortfolioMarginWire } from "../engine/portfolio-types";
 import type { MarketId } from "../engine/types";
-import { groupCredit, type CreditLeg, type GroupCredit } from "../portfolio-credit";
+import { closeoutShareOf, groupCredit, type CreditLeg, type GroupCredit } from "../portfolio-credit";
 import { tieredMargin } from "../pricing";
 import { flooredMargin } from "../volume-tier";
 import type { Holding, MockState } from "./state";
@@ -88,10 +89,11 @@ function valueBook(state: MockState, book: Book, basis: Basis, without: readonly
     const runtime = state.markets.get(id);
     if (runtime === undefined || without.includes(id)) continue;
     const price = priceOf?.(id) ?? runtime.mid;
-    const notional = absFixed(mulFixed(held.qty, price));
+    // As the engine values a position for margin (`valued_positions`): its notional rounded up, its profit or loss rounded down.
+    const notional = mulRounded(absFixed(held.qty), price, "up");
     const tiers = runtime.listed.spec.margin_tiers;
     const band = basis.kind === "market" ? tieredMargin(tiers, notional) : flooredMargin(tiers, notional, basis.floorBps);
-    equity += mulFixed(held.qty, price - held.entry);
+    equity += mulRounded(held.qty, price - held.entry, "down");
     perPosition += band;
     valued.set(id, { qty: held.qty, price, notional, band });
   }
@@ -146,9 +148,9 @@ export function portfolioStanding(state: MockState, book: Book, floorBps: number
   };
 }
 
-/** The close-out level's share of a requirement, truncated as the mock's close-out check takes it. */
+/** The close-out level's share of a requirement, rounded up as the engine's charges are: the maintenance requirement and the close-out threshold. */
 export function closeoutShare(state: MockState, requirement: Fixed): Fixed {
-  return (requirement * BigInt(state.params.closeoutLevelBps)) / 10_000n;
+  return closeoutShareOf(requirement, state.params.closeoutLevelBps);
 }
 
 /**
