@@ -24,6 +24,11 @@
 # BTC-USD's mock mid under the stop loss closing the position in one fill below it, and a new long's take profit filling at its
 # level or better after a restart past it.
 #
+# TRADING_SCENARIO=portfolio runs the portfolio margin scenario instead (scripts/live/dev-portfolio.live.test.ts), on a node whose
+# genesis keeps the dev BTC-USD and ETH-USD offset group and gives tier 0 a 5% margin floor: a lone BTC-USD long shows no portfolio
+# detail, a hedge of it is previewed and earns an offset, closing its ETH-USD leg alone is refused at the ticket and at its Close as the
+# node refuses it, a buy stop on that leg fills after a restart with ETH-USD's mid above it, and a reopened pair closes from Close hedge.
+#
 # Needs Node, curl, python3 (3.11 or later), and either ENGINE_BIN (a built `engine` binary with
 # the access_source example built beside it) with ENGINE_DIR (the engine checkout holding
 # config/dev.toml), or just ENGINE_DIR to build and run them with Cargo; set CARGO_CMD to prefix
@@ -49,7 +54,8 @@ case "$scenario" in
   trading) test_file=scripts/live/dev-trading.live.test.ts ;;
   tiers) test_file=scripts/live/dev-volume-tier.live.test.ts ;;
   levels) test_file=scripts/live/dev-levels.live.test.ts ;;
-  *) echo "FAIL: TRADING_SCENARIO is trading, tiers or levels, not $scenario" >&2; exit 1 ;;
+  portfolio) test_file=scripts/live/dev-portfolio.live.test.ts ;;
+  *) echo "FAIL: TRADING_SCENARIO is trading, tiers, levels or portfolio, not $scenario" >&2; exit 1 ;;
 esac
 api_port="${TRADING_API_PORT:-18080}"
 access_port="${TRADING_ACCESS_PORT:-28846}"
@@ -110,6 +116,9 @@ if scenario == "tiers":
         {"threshold": "5000000", "day_divisor": 1, "best_price_share_bps": 10000, "max_resting_orders": 10, "requests_per_second": 12,
          "fee_discount_bps": 2000, "financing_discount_bps": 1000, "emissions_boost_bps": 2500},
     ]
+if scenario == "portfolio":
+    # The dev tiers with production's 5% margin floor at tier 0, under which closing one leg of a hedge can raise the initial margin past the equity.
+    cfg["genesis"]["params"]["volume_tiers"][0]["margin_floor_bps"] = 500
 cfg["metrics"]["listen"] = f"127.0.0.1:{metrics}"
 # Anvil account 0, the published access-source test authority the fixture signs with.
 cfg["access"] = {"source": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "endpoint": f"http://127.0.0.1:{access}",
@@ -183,6 +192,10 @@ if ! ENGINE_NODE_URL="$api" ENGINE_BIN="$engine_bin" NODE_CONFIG="$node_config" 
   echo "--- the last lines of $work/access-source.log ---" >&2
   tail -n 20 "$work/access-source.log" >&2
   exit 1
+fi
+if [[ "$scenario" == portfolio ]]; then
+  echo "PASS: a lone long showed no portfolio detail, a hedge was previewed and earned an offset, a lone close was refused at the ticket and its Close as the node refused it, a stop on that leg filled when triggered, and a reopened pair closed from Close hedge"
+  exit 0
 fi
 if [[ "$scenario" == levels ]]; then
   echo "PASS: a long's take profit and stop loss from the ticket, a close stop loss stopped at the ticket and refused by the node, the stop loss moved from the position row and kept through Cancel all, the position closed in one fill below its stop loss, and a take profit filled at its level or better"

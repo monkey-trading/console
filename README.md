@@ -266,6 +266,9 @@ prices. It ends with a line that begins `PASS: funded, declared, filled at the s
 quote`. `TRADING_SCENARIO=tiers` runs the volume tier scenario instead, which takes a few minutes.
 `TRADING_SCENARIO=levels` runs the take-profit and stop-loss scenario instead, in which the server
 restarts twice with moved prices so that a stop loss and then a take profit close a position.
+`TRADING_SCENARIO=portfolio` runs the portfolio margin scenario instead, in which a BTC-USD and ETH-USD
+hedge earns a margin offset, closing one of its positions alone is refused, a stop order on that
+position is executed when it is triggered, and Close hedge closes the hedge whole.
 
 Neither script loads the browser build. To check how the page loads the verifier, and its Content
 Security Policy, run `npm run dev:live`, or a production build with the same variables, against a
