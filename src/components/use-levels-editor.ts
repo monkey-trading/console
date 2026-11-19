@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { MarketId } from "@/lib/engine/types";
 import type { LevelFields } from "@/lib/level-check";
-import { landedSave, openDraft, type HeldPosition, type LevelsDraft } from "@/lib/level-draft";
+import { landedSave, openDraft, sentFrom, type HeldPosition, type LevelsDraft } from "@/lib/level-draft";
 import { levelsWire, type Levels } from "@/lib/levels";
 import type { ConsoleStore } from "@/lib/store/store";
 
@@ -42,10 +42,11 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
   };
   const current = openDraft(draft, owner, held);
   // A draft whose position is no longer the one it was opened for, or whose account is no longer connected, is dropped while
-  // rendering, as React adjusts state on a change of props, so it never shows again; the handlers' copy follows once committed.
-  if (draft !== null && current === null) setDraft(null);
+  // rendering, as React adjusts state on a change of props, so it never shows again, and one whose position now shows its own
+  // save's levels takes them as its base; the handlers' copy follows once committed.
+  if (current !== draft) setDraft(current);
   useEffect(() => {
-    if (draft === null) latest.current = null;
+    latest.current = draft;
   }, [draft]);
   /** Whether focus is in the open editor, or was dropped from it: only then does closing move it. */
   const focusInEditor = () => {
@@ -70,7 +71,7 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
       store.clearNotice("levels");
       opened.current += 1;
       const { market, long, entry, opened: openedAt, levels } = position;
-      set(latest.current?.market === market ? null : { market, owner, long, entry, opened: openedAt, base: levels, sent: null, fields: fieldsOf(levels), instance: opened.current });
+      set(latest.current?.market === market ? null : { market, owner, long, entry, opened: openedAt, base: levels, sent: [], fields: fieldsOf(levels), instance: opened.current });
     },
     edit: (fields: LevelFields) => {
       if (latest.current !== null) set({ ...latest.current, fields });
@@ -78,7 +79,7 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
     /** Editor `instance` sends `levels`, which the position may hold before the answer lands. */
     sending: (instance: number, levels: Levels) => {
       setSaving(instance);
-      if (latest.current?.instance === instance) set({ ...latest.current, sent: levels });
+      if (latest.current?.instance === instance) set(sentFrom(latest.current, levels));
     },
     /** Editor `instance`'s save has finished, its account read included, whether or not it was taken. */
     settled: (instance: number) => setSaving((now) => (now === instance ? null : now)),
@@ -94,7 +95,7 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
       const outcome = landedSave(draft, instance, sent);
       if (draft === null || outcome === "ignore") return;
       setAnnounced(words);
-      if (outcome === "announce") return set({ ...draft, base: draft.sent ?? draft.base, sent: null });
+      if (outcome === "announce") return;
       const refocusing = focusInEditor();
       set(null);
       if (refocusing) refocus(market);

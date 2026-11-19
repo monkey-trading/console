@@ -3,13 +3,13 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
-import { landedSave, openDraft, type HeldPosition, type LevelsDraft } from "./level-draft";
+import { landedSave, openDraft, sentFrom, type HeldPosition, type LevelsDraft } from "./level-draft";
 import { NO_LEVELS } from "./levels";
 
 const OWNER = "0xabc";
 const LEVELS = { takeProfit: fixedFromInt(105_000), stopLoss: fixedFromInt(95_000) };
 const HELD: HeldPosition = { market: 1, long: true, entry: fixedFromInt(100_000), opened: 1_000, levels: LEVELS };
-const DRAFT: LevelsDraft = { market: 1, owner: OWNER, long: true, entry: HELD.entry, opened: 1_000, base: LEVELS, sent: null, fields: { takeProfit: "105000", stopLoss: "94000" }, instance: 3 };
+const DRAFT: LevelsDraft = { market: 1, owner: OWNER, long: true, entry: HELD.entry, opened: 1_000, base: LEVELS, sent: [], fields: { takeProfit: "105000", stopLoss: "94000" }, instance: 3 };
 
 describe("openDraft", () => {
   it("keeps the draft while its account holds the position it was opened for, unchanged", () => {
@@ -35,12 +35,29 @@ describe("openDraft", () => {
     expect(openDraft(DRAFT, OWNER, [{ ...HELD, levels: { ...LEVELS, stopLoss: fixedFromInt(96_000) } }])).toBeNull();
   });
 
-  it("keeps it while the position holds the levels its own save sent, which the account can show before the answer lands", () => {
-    const sent = { ...LEVELS, stopLoss: fixedFromInt(94_000) };
-    const sending = { ...DRAFT, sent };
-    expect(openDraft(sending, OWNER, [{ ...HELD, levels: sent }])).toBe(sending);
+  it("keeps it while the position holds the levels it opened with or those any of its own saves sent, taking the newest the account shows as its base", () => {
+    const first = { ...LEVELS, stopLoss: fixedFromInt(94_000) };
+    const second = { ...LEVELS, stopLoss: fixedFromInt(93_000) };
+    const sending = sentFrom(sentFrom(DRAFT, first), second);
+    expect(sending.sent).toEqual([first, second]);
     expect(openDraft(sending, OWNER, [HELD])).toBe(sending);
+    expect(openDraft(sending, OWNER, [{ ...HELD, levels: first }])).toEqual({ ...sending, base: first, sent: [second] });
+    expect(openDraft(sending, OWNER, [{ ...HELD, levels: second }])).toEqual({ ...sending, base: second, sent: [] });
     expect(openDraft(sending, OWNER, [{ ...HELD, levels: NO_LEVELS }])).toBeNull();
+    // Once the account shows a later save's levels, the levels before them are no longer the position's.
+    const shown = openDraft(sending, OWNER, [{ ...HELD, levels: second }]);
+    expect(openDraft(shown, OWNER, [HELD])).toBeNull();
+  });
+
+  it("keeps newer fields typed while a save was on its way when the save lands but its account read fails", () => {
+    const sent = { ...LEVELS, stopLoss: fixedFromInt(94_000) };
+    const typed = { ...sentFrom(DRAFT, sent), fields: { takeProfit: "106000", stopLoss: "94000" } };
+    // The save lands with other fields open, so it is announced and leaves the draft as it is.
+    expect(landedSave(typed, 3, DRAFT.fields)).toBe("announce");
+    // The account read after it failed, so the account still shows the levels the editor opened with.
+    expect(openDraft(typed, OWNER, [HELD])).toBe(typed);
+    // The next read shows the save's levels, which become the base, the fields typed still open.
+    expect(openDraft(typed, OWNER, [{ ...HELD, levels: sent }])).toEqual({ ...typed, base: sent, sent: [] });
   });
 });
 
