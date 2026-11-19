@@ -23,7 +23,7 @@ import { postedStanding } from "./monkey-state";
 import { registerSessionKey, revokeSessionKey } from "./session-keys";
 import { advance } from "./step";
 import { emissionScheduleOf, houseFigures, marksPage, mockStats } from "./stats";
-import { CHECKPOINT_EVERY, type MockState } from "./state";
+import { CHECKPOINT_EVERY, MOCK_PROTOCOL, type MockState } from "./state";
 
 export { mockHex };
 
@@ -149,13 +149,15 @@ export class MockEngineClient implements EngineClient {
     return { seq: this.headSeq, params: this.state.params, checkpoint: mockCheckpoint(this.headSeq ?? 0), listingNotices: {}, governance: this.state.governance.houseGovernance(this.state.now) };
   }
 
+  async protocolVersion(): Promise<number> { return MOCK_PROTOCOL; }
+
   /**
    * The house panel's state now, without waiting; what the mock branch of the session passes as the
    * store's initial state, so the page's first paint carries it.
    */
-  housePanelSnapshot(): { params: HouseParams; checkpoint: CheckpointEntry | null; totals: QueueTotals } {
+  housePanelSnapshot(): { params: HouseParams; checkpoint: CheckpointEntry | null; totals: QueueTotals; protocolVersion: number } {
     return {
-      params: this.state.params,
+      params: this.state.params, protocolVersion: MOCK_PROTOCOL,
       checkpoint: mockCheckpoint(this.headSeq ?? 0),
       totals: mockTotals(this.state),
     };

@@ -2,7 +2,6 @@
 
 import type { ListingNotice, Side, SpreadTier, StressLevel } from "@/lib/engine/types";
 import { spokenRate } from "@/lib/fee-words";
-import { minLevelDistance } from "@/lib/levels";
 import { bpsOf, formatUsd, type Fixed } from "@/lib/fixed";
 import { formatMovePercent } from "@/lib/format";
 import type { MarketModel } from "@/lib/models";
@@ -49,7 +48,7 @@ function stressTerms(level: StressLevel): string {
  * `notice` its pending listing notice, and `closeoutBps` the close-out level; null when the node has given none or they are not current.
  * `paramsNote` says why they are missing: a read failed, the node serves none, or a change is unread.
  */
-export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price, slippageBps, stress, closeoutBps, notice, paramsNote }: { market: MarketModel; spreadTiers: readonly SpreadTier[]; ownBands: boolean; preview: TicketPreview; side: Side; price: Fixed | null; slippageBps: number; stress: StressLevel | null; closeoutBps: number | null; notice: ListingNotice | null; paramsNote: string | null }) {
+export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price, slippageBps, stress, closeoutBps, notice, paramsNote, levelDistance }: { market: MarketModel; spreadTiers: readonly SpreadTier[]; ownBands: boolean; preview: TicketPreview; side: Side; price: Fixed | null; slippageBps: number; stress: StressLevel | null; closeoutBps: number | null; notice: ListingNotice | null; paramsNote: string | null; levelDistance: number | null }) {
   const worst = price === null ? null : side === "buy" ? price + bpsOf(price, slippageBps) : price - bpsOf(price, slippageBps);
   const useBps = preview.marginUseBps;
   const filled = preview.houseCap > 0n ? Math.min(8, Math.ceil(Number((preview.markNotional * 8n) / preview.houseCap) || 0)) : 0;
@@ -57,7 +56,6 @@ export function MarketInfo({ market, spreadTiers, ownBands, preview, side, price
   const stressName = STRESS_NAMES[market.stress] ?? "Normal";
   const bands = bandRows(spreadTiers, spreadRate);
   const changes = notice === null ? [] : describeNotice(notice);
-  const levelDistance = minLevelDistance(market.view);
   return (
     <details className="group border-t border-line">
       <summary className="flex items-center justify-between px-4 py-4 text-label tracking-caps text-fg-3 uppercase hover:text-fg-2 focus-visible:outline-2 focus-visible:outline-glow sm:px-5">

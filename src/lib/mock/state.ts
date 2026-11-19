@@ -103,6 +103,8 @@ export const FINALITY_MS = 6_000;
  * too; the engine's own is its config's.
  */
 export const CHECKPOINT_EVERY = 50;
+/** The protocol version the mock states: V79, the newest whose rules it models. */
+export const MOCK_PROTOCOL = 79;
 const LOG_LIMIT = 1_000;
 
 /** The volume tiers the mock mirrors from the engine's production genesis (`config/production-genesis.toml`): the counted volume that reaches each, the best-price share, the margin floor, and the resting-order limit and request rate, and from V68 the fee and financing discounts and the emissions boost. */

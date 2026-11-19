@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { EngineEvent, StreamMessage } from "../engine/types";
 import { fixedFromWire } from "../fixed";
 import { settle } from "../engine/test-kit";
+import { openHousePanel } from "./house";
 import { setup as setupClosed } from "./live-fake";
 
 const PARAMS = { profitFeeBps: 1000, closeoutLevelBps: 5000, totalCapBps: 20000, totalCapFloor: fixedFromWire("2000000"), stressLevels: [], profitFeeCurve: [], seq: 7 };
@@ -51,6 +52,32 @@ describe("the house state the trading surfaces read, with the House page closed"
     client.listener?.({ type: "feed", status: "live" });
     await settle();
     expect(client.houseStateReads).toBe(3);
+  });
+
+  it("reads the protocol version with the first read and after an applied admin command, and keeps it through a failed read", async () => {
+    const { client, store } = setupClosed();
+    client.stated = 78;
+    store.start(0);
+    await settle();
+    await store.refresh(false);
+    await settle();
+    expect([store.getSnapshot().protocolVersion, client.protocolVersionReads]).toEqual([78, 1]);
+    // The House page reads the house state on every refresh, but nothing it reads moves the version.
+    openHousePanel(store);
+    await store.refresh(false);
+    await settle();
+    expect([client.houseStateReads, client.protocolVersionReads]).toEqual([2, 1]);
+    // An activation is an admin command.
+    client.stated = 79;
+    client.onMessage?.(message(12, { type: "admin_applied" }));
+    await store.refresh(false);
+    await settle();
+    expect([store.getSnapshot().protocolVersion, client.protocolVersionReads]).toEqual([79, 2]);
+    client.houseStateError = new Error("the house state is unavailable");
+    client.onMessage?.(message(13, { type: "admin_applied" }));
+    await store.refresh(false);
+    await settle();
+    expect(store.getSnapshot().protocolVersion).toBe(79);
   });
 
   it("reads again on a later refresh after a failed read, until one lands", async () => {

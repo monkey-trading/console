@@ -31,10 +31,22 @@ export interface LevelRefusal {
   minDistanceBps: number;
 }
 
-/** The market's minimum level distance in bps, or null for a market that takes no levels: one listed before V79, or by a node that predates it. */
+/** The protocol version from which a position takes a take profit and stop loss (V79). */
+export const LEVELS_PROTOCOL = 79;
+
+/** The minimum level distance the market's listing names, in bps, or null for a listing that names none, as a node that predates V79 lists it. */
 export function minLevelDistance(view: MarketView): number | null {
   const bps = view.min_level_distance_bps;
   return bps !== undefined && Number.isSafeInteger(bps) && bps > 0 ? bps : null;
+}
+
+/**
+ * The market's minimum level distance while the node runs `protocolVersion` V79 or later, when alone it takes levels: a listing
+ * may name a distance before V79 for its activation to take up (`check_level_distance_listing`), while the node refuses every
+ * order and request naming levels until then. Null before V79, before the version is read, and for a listing that names none.
+ */
+export function offeredLevelDistance(view: MarketView, protocolVersion: number | null): number | null {
+  return protocolVersion !== null && protocolVersion >= LEVELS_PROTOCOL ? minLevelDistance(view) : null;
 }
 
 /** The levels the account read gives a position, a malformed one read as absent. */

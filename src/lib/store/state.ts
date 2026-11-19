@@ -133,6 +133,7 @@ export interface ConsoleState {
   checkpoint: CheckpointEntry | null;
   /** Each listed market's pending listing notice, from the node's house state; empty before a read and while none waits. */
   listingNotices: ListingNotices;
+  protocolVersion: number | null; // the protocol version the node's log runs, from its house state; null before it is read, or from a node that states none
   /** Whether the house state held has caught up with every change to it the stream carried, so a position's fee may be run from its curve; false before the first read. */
   pricingCurrent: boolean;
   /** Whether the parameters and checkpoint have been read: `unavailable` from a node that predates the route that serves them, `failed` when the first read did not land. */
@@ -251,8 +252,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     house: decodeHouse(house),
     houseReady: signatures === "none",
     houseFresh: true,
-    houseParams: housePanel?.params ?? null,
-    checkpoint: housePanel?.checkpoint ?? null,
+    houseParams: housePanel?.params ?? null, checkpoint: housePanel?.checkpoint ?? null, protocolVersion: housePanel?.protocolVersion ?? null,
     listingNotices: {},
     // A mock session's first state carries the house state it holds.
     pricingCurrent: housePanel !== undefined,

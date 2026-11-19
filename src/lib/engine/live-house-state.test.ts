@@ -1,4 +1,4 @@
-/** Tests for the live client's read of `GET /v1/house/state` and the stream values folded beside it. */
+/** Tests for the live client's read of `GET /v1/house/state` and the stream values folded beside it, and of the protocol version `GET /v1/benchmarks` states. */
 
 import { describe, expect, it } from "vitest";
 
@@ -97,6 +97,26 @@ describe("reading the house state", () => {
     await expect(client.houseState()).resolves.toBeNull();
     reply(500, { error: "node down" });
     await expect(client.houseState()).rejects.toBeInstanceOf(EngineError);
+  });
+});
+
+describe("reading the protocol version", () => {
+  it("reads the version the benchmarks read states, and none from a node that states none or predates the route", async () => {
+    const { node, client } = house();
+    const benchmarks = (status: number, body: unknown) => node.signed("/v1/benchmarks", () => ({ status, body: JSON.stringify(body), signature: "0x00", timeMs: 1_000, seq: 9 }));
+    const state = { next_rollover: null, rollover: null, required: ["sofr"], history: { sofr: { "2026-11-18": "0.0431" } } };
+    benchmarks(200, { ...state, protocol_version: "v79" });
+    await expect(client.protocolVersion()).resolves.toBe(79);
+    benchmarks(200, { ...state, protocol_version: "v78" });
+    await expect(client.protocolVersion()).resolves.toBe(78);
+    for (const stated of [{ protocol_version: "V79" }, { protocol_version: 79 }, {}]) {
+      benchmarks(200, { ...state, ...stated });
+      await expect(client.protocolVersion()).resolves.toBeNull();
+    }
+    benchmarks(404, { error: "not found" });
+    await expect(client.protocolVersion()).resolves.toBeNull();
+    benchmarks(500, { error: "node down" });
+    await expect(client.protocolVersion()).rejects.toBeInstanceOf(EngineError);
   });
 });
 

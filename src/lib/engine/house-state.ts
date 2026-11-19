@@ -1,4 +1,4 @@
-/** `GET /v1/house/state` and its read: the house's latest parameters and checkpoint, the pending listing notices, the parameter votes the log holds, and what keeps the first two current between reads. */
+/** `GET /v1/house/state` and its read: the house's latest parameters and checkpoint, the pending listing notices, the parameter votes the log holds, and what keeps the first two current between reads; and the protocol version `GET /v1/benchmarks` states, read beside it. */
 
 import { fixedFromWire } from "../fixed";
 import type { HouseParams } from "../house";
@@ -94,6 +94,23 @@ export class HouseFold {
     this.paramsAt = at;
     this.paramsHead = head;
   }
+}
+
+/**
+ * The protocol version a signed `GET /v1/benchmarks` answer through `get` states (`protocol_version`, which the engine names as
+ * `v79`); null from a node that predates the route or states none.
+ */
+export async function readProtocolVersion(get: () => Promise<unknown>): Promise<number | null> {
+  let body: unknown;
+  try {
+    body = await get();
+  } catch (error) {
+    if (error instanceof EngineError && error.status === 404) return null;
+    throw error;
+  }
+  const wire = typeof body === "object" && body !== null && "protocol_version" in body ? body.protocol_version : null;
+  const version = typeof wire === "string" ? /^v(\d{1,4})$/.exec(wire)?.[1] : undefined;
+  return version === undefined ? null : Number(version);
 }
 
 /** The house's latest parameters and checkpoint from one signed read of the route through `get`, folded into `fold`; null from a node that predates the route. */
