@@ -135,13 +135,14 @@ export function serverLine(stream: FeedStatus, server: ServerRead | null, reason
 
 /**
  * The one line while the console moves to the server the operator runs on with trading not paused, as when a page load finds it elsewhere,
- * or null when no move is under way: a calm status while that server is checked or has not yet answered, and an alert naming it once it
- * answered and failed its check, when the console stays off it. While it shows, nothing said of the server being left applies.
+ * or null when no move is under way: a calm status while that server is checked or has not yet answered, and an alert once it answered
+ * and failed its check, when the console stays off it. While it shows, nothing said of the server being left applies.
  */
 export function switchLine(follow: FollowStatus | null): ServerLine | null {
   if (follow?.kind !== "waiting") return null;
   const why = follow.reason === null ? "" : ` ${asSentence(follow.reason)}`;
-  if (follow.stage === "refused") return { role: "alert", lead: `The current trading server, ${new URL(follow.target).host}, could not be verified, so the app has not connected to it.`, rest: `The app will try again automatically.${why}` };
+  // Why it was refused is the verifier's internal detail, which an error does not chain on.
+  if (follow.stage === "refused") return { role: "alert", lead: "The current trading server could not be verified, so the app has not connected to it.", rest: "The app will try again automatically." };
   return { role: "status", lead: "Connecting to the current trading server.", rest: `Trading will be available once the server has been verified.${why}` };
 }
 

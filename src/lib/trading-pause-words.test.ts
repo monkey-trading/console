@@ -32,9 +32,9 @@ describe("the banner's lines for a change of server", () => {
     expect(pauseLine({ kind: "resumed", leaving: false })).toBeNull();
   });
 
-  it("names the server a page load could not verify, and is calm while it is checked", () => {
+  it("says a page load could not verify the current server with no chain of reasons, and is calm while it is checked", () => {
     expect(switchLine({ kind: "waiting", origin: "https://a.test", target: "https://b.test:8443", stage: "refused", reason: "not the vault's release" })).toEqual({
-      role: "alert", lead: "The current trading server, b.test:8443, could not be verified, so the app has not connected to it.", rest: "The app will try again automatically. Not the vault's release.",
+      role: "alert", lead: "The current trading server could not be verified, so the app has not connected to it.", rest: "The app will try again automatically.",
     });
     expect(switchLine({ kind: "waiting", origin: "https://a.test", target: "https://b.test", stage: "connecting", reason: null })).toMatchObject({ role: "status", lead: "Connecting to the current trading server." });
     expect(switchLine({ kind: "following", origin: "https://a.test" })).toBeNull();

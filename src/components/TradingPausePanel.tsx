@@ -2,7 +2,8 @@
 
 /**
  * The panel over the trading view while trading is paused for a change of trading server: what is happening, what is kept, and the steps
- * the change goes through, each in the state the console has observed; then "Trading resumed" for a moment before it fades. The polite
+ * the change goes through, each in the state the console has observed; then the resumed title over the ticked steps for a moment before
+ * it fades. The polite
  * live region that announces each step is `PauseAnnouncer`, outside the screens a move remounts.
  */
 
@@ -42,7 +43,8 @@ export function TradingPausePanel({ view }: { view: Exclude<PauseView, { kind: "
     <div className="pointer-events-none absolute inset-0 z-20 flex items-start justify-center p-4 lg:pt-[12vh]">
       <section aria-labelledby={titleId} className={`pointer-events-auto w-full max-w-lg rounded border border-line-2 bg-ink-2 p-5 shadow-platform transition-opacity duration-300 ${leaving ? "opacity-0" : "opacity-100"}`}>
         <h2 id={titleId} className="text-lead font-medium text-fg">{view.kind === "resumed" ? RESUMED_TITLE : PAUSE_TITLE}</h2>
-        <p className="mt-2 text-data leading-relaxed text-fg-2">{PAUSE_KEPT}</p>
+        {/* Once trading has resumed, what is kept while it is paused no longer applies. */}
+        {view.kind === "paused" && <p className="mt-2 text-data leading-relaxed text-fg-2">{PAUSE_KEPT}</p>}
         <ol className="mt-4 flex flex-col gap-2.5">
           {PAUSE_STEPS.map(({ step, name }) => (
             <li key={step} className="flex items-center gap-3 text-data">

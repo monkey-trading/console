@@ -27,12 +27,12 @@ describe("pauseSteps", () => {
     }
   });
 
-  it("verifies once the next server answered, and fails that step, saying why in at most three sentences, when it does not verify", () => {
+  it("verifies once the next server answered, and fails that step in two sentences, with no chain of reasons, when it does not verify", () => {
     expect(pauseSteps(input({ follow: { kind: "waiting", origin: A, target: B, stage: "verifying", reason: null } }))).toMatchObject({ steps: { connect: "done", verify: "current", prices: "waiting" } });
     const refused = pauseSteps(input({ follow: { kind: "waiting", origin: A, target: B, stage: "refused", reason: "The server's signing key does not match the signing key that the vault uses." } }));
     expect(refused).toEqual({
       steps: { connect: "done", verify: "failed", prices: "waiting", resume: "waiting" },
-      failure: "The next trading server could not be verified, so the app has not connected to it. Trading remains paused, and the app will try again automatically. The server's signing key does not match the signing key that the vault uses.",
+      failure: "The next trading server could not be verified, so the app has not connected to it. Trading remains paused, and the app will try again automatically.",
     });
   });
 
@@ -49,7 +49,7 @@ describe("pauseSteps", () => {
   });
 
   it("fails verification on the server moved to when its own check refuses it", () => {
-    expect(pauseSteps(input({ follow: { kind: "following", origin: B }, moved: true, attestation: { kind: "unverified", reason: "refused" } }))).toMatchObject({ steps: { verify: "failed" }, failure: expect.stringContaining("Refused.") });
+    expect(pauseSteps(input({ follow: { kind: "following", origin: B }, moved: true, attestation: { kind: "unverified", reason: "refused" } }))).toMatchObject({ steps: { verify: "failed" }, failure: "The trading server could not be verified. Trading remains paused, and the app will try again automatically." });
   });
 
   it("calls a drop an outage once the follower finds the operator where it was and the stream is still down, and resumes if it came back", () => {

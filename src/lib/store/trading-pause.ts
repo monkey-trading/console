@@ -8,7 +8,6 @@
 import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { FollowStatus } from "../engine/operator-follow-status";
 import type { Scheduler } from "../engine/live-stream";
-import { asSentence } from "../format";
 import { isPriced, isUnfed } from "../unpriced";
 import type { ConsoleState } from "./state";
 
@@ -48,6 +47,13 @@ export const LEAVE_MS = 300;
 
 const NOT_YET: Steps = { connect: "waiting", verify: "waiting", prices: "waiting", resume: "waiting" };
 
+/**
+ * A failed verification's words: what happened and what follows, with no chain of reasons; why the server was refused is the verifier's
+ * internal detail, so it is not shown.
+ */
+const NEXT_REFUSED = "The next trading server could not be verified, so the app has not connected to it.";
+const STILL_PAUSED = "Trading remains paused, and the app will try again automatically.";
+
 /** Whether `follow` begins a pause: the operator moving to another server, or a drop held as one. */
 export function pauses(follow: FollowStatus): boolean {
   return follow.kind === "waiting" || follow.kind === "unlisted" || (follow.kind === "confirming" && follow.scheduled);
@@ -67,7 +73,7 @@ export function pauseSteps(input: PauseInput): { steps: Steps; failure: string |
       case "waiting":
         if (follow.stage === "connecting") return { steps: { ...NOT_YET, connect: "current" }, failure: null };
         if (follow.stage === "verifying") return { steps: { ...NOT_YET, connect: "done", verify: "current" }, failure: null };
-        return { steps: { ...NOT_YET, connect: "done", verify: "failed" }, failure: refusal("The next trading server could not be verified, so the app has not connected to it.", follow.reason) };
+        return { steps: { ...NOT_YET, connect: "done", verify: "failed" }, failure: `${NEXT_REFUSED} ${STILL_PAUSED}` };
       case "pinned":
       case "following":
       case "failed":
@@ -78,16 +84,12 @@ export function pauseSteps(input: PauseInput): { steps: Steps; failure: string |
         return follow satisfies never;
     }
   }
-  if (attestation.kind === "unverified") return { steps: { connect: "done", verify: "failed", prices: "waiting", resume: "waiting" }, failure: refusal("The trading server could not be verified.", attestation.reason) };
+  if (attestation.kind === "unverified") return { steps: { connect: "done", verify: "failed", prices: "waiting", resume: "waiting" }, failure: `The trading server could not be verified. ${STILL_PAUSED}` };
   if (!trusted) return { steps: { ...NOT_YET, connect: "done", verify: "current" }, failure: null };
   if (input.stream !== "live" || !input.marketsRead) return { steps: { connect: "done", verify: "done", prices: "current", resume: "waiting" }, failure: null };
   return { steps: { connect: "done", verify: "done", prices: "done", resume: input.ready ? "done" : "current" }, failure: null };
 }
 
-/** A failed step's words: what happened, that trading stays paused and is tried again, and why. */
-function refusal(happened: string, reason: string | null): string {
-  return `${happened} Trading remains paused, and the app will try again automatically.${reason === null ? "" : ` ${asSentence(reason)}`}`;
-}
 
 /**
  * Whether trading can resume on the server `state` reads: the market on screen has a live price, or cannot have one for a reason of its own
