@@ -120,7 +120,7 @@ describe("Market info's minimum distance", () => {
 describe("the levels editor", () => {
   const editor = (patch: Partial<Parameters<typeof LevelsEditor>[0]> = {}) => createElement(LevelsEditor, {
     id: "editor", market, position, fields: { takeProfit: "102000", stopLoss: "97500" }, onChange: () => undefined, closing: fixedFromInt(99_980), noClosing: "No closing price is available.", capped: null, limits: null, toUsdDown: (x) => x,
-    onCancel: () => undefined, onSend: () => undefined, onSaved: () => undefined, readOnly: false, describedBy: undefined, ...patch,
+    onCancel: () => undefined, onSend: () => undefined, onSaved: () => undefined, saving: false, onSettled: () => undefined, readOnly: false, describedBy: undefined, ...patch,
   });
 
   it("opens with the position's levels, their estimates and the closing price they are measured from, and offers no save until they change", () => {
@@ -144,6 +144,12 @@ describe("the levels editor", () => {
     // Save says it is signing only for its own request; while another is signed it is simply unavailable.
     expect(html).toMatch(/<button type="submit" aria-disabled="true"[^>]*>Save<\/button>/);
     expect(html).toMatch(/<button type="button" disabled=""[^>]*>Cancel<\/button>/);
+  });
+
+  it("holds Save from the press until its own save has finished, its account read included, though the session is no longer busy", () => {
+    const moved = { fields: { takeProfit: "102000", stopLoss: "98000" } };
+    expect(render(editor(moved))).toMatch(/<button type="submit" aria-disabled="false"[^>]*>Save<\/button>/);
+    expect(render(editor({ ...moved, saving: true }), { busy: false })).toMatch(/<button type="submit" aria-disabled="true"[^>]*>Signing…<\/button>/);
   });
 
   it("hosts its own notice, read out as an alert for a failure and as a status otherwise", () => {
