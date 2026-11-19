@@ -17,7 +17,7 @@ import { placeOrder } from "@/lib/store/actions";
 import { AMOUNT_INPUT } from "./amount-input";
 import { SessionRefusalNote } from "./SessionRefusalNote";
 import { openSetup } from "@/lib/store/setup";
-import { formatTenthBps, formatTenthPercent } from "@/lib/spread-bands";
+import { formatTenthBpsFixed, formatTenthPercent } from "@/lib/spread-bands";
 import { belowMinimum, contractUnit, MARGIN_SHORT, MARKET_CLOSED, NO_FUNDS, NO_SIZE, parseSize, REDUCE_ONLY, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
 import { currentParams, houseTermsNote, ticketFigures } from "@/lib/ticket-figures";
 import { ticketLevels } from "@/lib/ticket-levels";
@@ -211,5 +211,5 @@ export function DealTicket() {
 /** The spread line under the prices: the executable spread for the size, and the account's toxicity add-on, named extra spread, when there is one. */
 function spreadLine(spreadTenths: number | null, live: boolean, toxicityBps: number) {
   if (spreadTenths === null) return "No price is available for this order size yet.";
-  return <>{live ? "Your spread" : "The spread"} for this order size is <span className="text-fg-2">{formatTenthPercent(spreadTenths)}</span> <span className="text-fg-3">({formatTenthBps(spreadTenths)})</span>{toxicityBps > 0 && <>, including an extra spread of <span className="text-fg-2">{toxicityBps} {toxicityBps === 1 ? "bp" : "bps"}</span> that applies to your account</>}.</>;
+  return <>{live ? "Your spread" : "The spread"} for this order size is <span className="text-fg-2">{formatTenthPercent(spreadTenths)}</span> <span className="text-fg-3">({formatTenthBpsFixed(spreadTenths)})</span>{toxicityBps > 0 && <>, including an extra spread of <span className="text-fg-2">{toxicityBps} {toxicityBps === 1 ? "bp" : "bps"}</span> that applies to your account</>}.</>;
 }

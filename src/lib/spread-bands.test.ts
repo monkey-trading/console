@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { SpreadTier } from "./engine/types";
 import { fixedFromInt } from "./fixed";
-import { bandRows, describeNotice, formatMultiplier, formatTenthBps, formatTenthPercent, marginRate, spreadRate, spreadStaircase, tenthBpsOf, tenthBpsOfValue } from "./spread-bands";
+import { bandRows, describeNotice, formatMultiplier, formatTenthBps, formatTenthBpsFixed, formatTenthPercent, marginRate, spreadRate, spreadStaircase, tenthBpsOf, tenthBpsOfValue } from "./spread-bands";
 
 /** EUR-USD's bands in the engine's dev genesis. */
 const EUR: SpreadTier[] = [{ up_to: "10000000", tenth_bps: 4 }, { up_to: "50000000", tenth_bps: 8 }, { up_to: null, tenth_bps: 16 }];
@@ -31,6 +31,7 @@ describe("rates in tenths", () => {
   it("read as bps with the tenth when there is one, and as a percentage to three places", () => {
     expect([formatTenthBps(4), formatTenthBps(10), formatTenthBps(20), formatTenthBps(125), formatTenthBps(0), formatTenthBps(-8)]).toEqual(["0.4 bps", "1 bp", "2 bps", "12.5 bps", "0 bps", "−0.8 bps"]);
     expect([formatTenthPercent(8), formatTenthPercent(1_234), formatTenthPercent(0)]).toEqual(["0.008%", "1.234%", "0.000%"]);
+    expect([formatTenthBpsFixed(40), formatTenthBpsFixed(39), formatTenthBpsFixed(10), formatTenthBpsFixed(125), formatTenthBpsFixed(0), formatTenthBpsFixed(-8)]).toEqual(["4.0 bps", "3.9 bps", "1.0 bps", "12.5 bps", "0.0 bps", "−0.8 bps"]);
     expect([tenthBpsOfValue(fixedFromInt(8), fixedFromInt(100_000)), tenthBpsOfValue(1n, 0n)]).toEqual([8, 0]);
     expect([formatMultiplier(10_000), formatMultiplier(20_000), formatMultiplier(15_000), formatMultiplier(12_500)]).toEqual(["1", "2", "1.5", "1.25"]);
   });

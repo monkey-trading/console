@@ -50,6 +50,13 @@ export function formatTenthBps(tenths: number): string {
   return `${sign}${whole}.${tenth} bps`;
 }
 
+/** A rate in tenths of a bp as basis points with one place always, so a figure that updates keeps its width: `40` → `4.0 bps`, `39` → `3.9 bps`. */
+export function formatTenthBpsFixed(tenths: number): string {
+  const sign = tenths < 0 ? "−" : "";
+  const abs = Math.abs(Math.trunc(tenths));
+  return `${sign}${Math.floor(abs / 10)}.${abs % 10} bps`;
+}
+
 /** A rate in tenths of a bp as a percentage with three places, its exact unit: `8` → `0.008%`. */
 export function formatTenthPercent(tenths: number): string {
   const sign = tenths < 0 ? "−" : "";
