@@ -38,25 +38,29 @@ const NAME_TONE: Readonly<Record<StepState, string>> = { done: "text-fg-2", curr
 export function TradingPausePanel({ view }: { view: Exclude<PauseView, { kind: "none" }> }) {
   const titleId = useId();
   const steps = view.kind === "paused" ? view.steps : ALL_DONE;
-  const leaving = view.kind === "resumed" && view.leaving;
+  const fade = `transition-opacity duration-300 ${view.kind === "resumed" && view.leaving ? "opacity-0" : "opacity-100"}`;
   return (
-    <div className="pointer-events-none absolute inset-0 z-20 flex items-start justify-center p-4 lg:pt-[12vh]">
-      <section aria-labelledby={titleId} className={`pointer-events-auto w-full max-w-lg rounded border border-line-2 bg-ink-2 p-5 shadow-platform transition-opacity duration-300 ${leaving ? "opacity-0" : "opacity-100"}`}>
-        <h2 id={titleId} className="text-lead font-medium text-fg">{view.kind === "resumed" ? RESUMED_TITLE : PAUSE_TITLE}</h2>
-        {/* Once trading has resumed, what is kept while it is paused no longer applies. */}
-        {view.kind === "paused" && <p className="mt-2 text-data leading-relaxed text-fg-2">{PAUSE_KEPT}</p>}
-        <ol className="mt-4 flex flex-col gap-2.5">
-          {PAUSE_STEPS.map(({ step, name }) => (
-            <li key={step} className="flex items-center gap-3 text-data">
-              <StepMark state={steps[step]} />
-              <span className={NAME_TONE[steps[step]]}>{name(steps[step])}<span className="sr-only">, {STEP_STATE_WORDS[steps[step]]}</span></span>
-            </li>
-          ))}
-        </ol>
-        {view.kind === "paused" && view.failure !== null && <p className="mt-4 text-data leading-relaxed text-ember">{view.failure}</p>}
-        {view.kind === "paused" && view.failure === null && view.long && <p className="mt-4 text-data leading-relaxed text-amber">{LONG_PAUSE}</p>}
-      </section>
-    </div>
+    <>
+      {/* The scrim the app's dialogs use, over the paused view in its own colours; `inert` on the panes, not this, stops presses. */}
+      <div aria-hidden="true" className={`pointer-events-none absolute inset-0 z-10 bg-ink/70 ${fade}`} />
+      <div className="pointer-events-none absolute inset-0 z-20 flex items-start justify-center p-4 lg:pt-[12vh]">
+        <section aria-labelledby={titleId} className={`pointer-events-auto w-full max-w-lg rounded border border-line-2 bg-ink-2 p-5 shadow-platform ${fade}`}>
+          <h2 id={titleId} className="text-lead font-medium text-fg">{view.kind === "resumed" ? RESUMED_TITLE : PAUSE_TITLE}</h2>
+          {/* Once trading has resumed, what is kept while it is paused no longer applies. */}
+          {view.kind === "paused" && <p className="mt-2 text-data leading-relaxed text-fg-2">{PAUSE_KEPT}</p>}
+          <ol className="mt-4 flex flex-col gap-2.5">
+            {PAUSE_STEPS.map(({ step, name }) => (
+              <li key={step} className="flex items-center gap-3 text-data">
+                <StepMark state={steps[step]} />
+                <span className={NAME_TONE[steps[step]]}>{name(steps[step])}<span className="sr-only">, {STEP_STATE_WORDS[steps[step]]}</span></span>
+              </li>
+            ))}
+          </ol>
+          {view.kind === "paused" && view.failure !== null && <p className="mt-4 text-data leading-relaxed text-ember">{view.failure}</p>}
+          {view.kind === "paused" && view.failure === null && view.long && <p className="mt-4 text-data leading-relaxed text-amber">{LONG_PAUSE}</p>}
+        </section>
+      </div>
+    </>
   );
 }
 

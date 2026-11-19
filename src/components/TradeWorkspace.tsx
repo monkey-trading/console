@@ -3,7 +3,7 @@
 /**
  * The trading workspace. From 1024 px it is three columns: watchlist, chart with the account panels,
  * and the order ticket. Below that it shows one pane at a time, chosen from a bar at the foot. While
- * trading is paused for a change of trading server, the panes are dimmed and inert under the pause
+ * trading is paused for a change of trading server, the panes are inert under the pause
  * panel, the bar at the foot still chooses among them, and focus goes back where it was once they are
  * enabled again.
  */
@@ -90,16 +90,14 @@ export function TradeWorkspace() {
     focused.current = { pane: null, element: null };
     setPane("chart");
   };
-  // Greyed and dimmed, still readable: an inert view, which WCAG's contrast minimum exempts, that the trader can still read.
-  const dim = `transition-[opacity,filter] duration-300 ${held ? "opacity-40 grayscale" : ""}`;
   return (
     <div ref={root} className="relative grid min-h-0 flex-1 max-lg:content-start lg:grid-cols-[210px_minmax(0,1fr)_290px] xl:grid-cols-[230px_minmax(0,1fr)_310px]">
-      <div data-pane="markets" inert={held} className={`relative min-h-0 lg:overflow-y-auto ${dim} ${hiddenUnless(pane, "markets")}`}><Watchlist onPick={picked} /></div>
-      <div inert={held} className={`relative flex min-h-0 min-w-0 flex-col lg:overflow-y-auto ${dim}`}>
+      <div data-pane="markets" inert={held} className={`relative min-h-0 lg:overflow-y-auto ${hiddenUnless(pane, "markets")}`}><Watchlist onPick={picked} /></div>
+      <div inert={held} className="relative flex min-h-0 min-w-0 flex-col lg:overflow-y-auto">
         <div data-pane="chart" className={`flex flex-1 flex-col ${hiddenUnless(pane, "chart")}`}><ChartPanel /></div>
         <div data-pane="account" className={`flex shrink-0 flex-col ${hiddenUnless(pane, "account")}`}><BottomPanel /></div>
       </div>
-      <div data-pane="trade" inert={held} className={`relative min-h-0 border-line lg:overflow-y-auto lg:border-l ${dim} ${hiddenUnless(pane, "trade")}`}><OrderTicket /></div>
+      <div data-pane="trade" inert={held} className={`relative min-h-0 border-line lg:overflow-y-auto lg:border-l ${hiddenUnless(pane, "trade")}`}><OrderTicket /></div>
       <PhoneNav pane={pane} onChange={choose} />
       {view.kind !== "none" && <TradingPausePanel view={view} />}
     </div>
