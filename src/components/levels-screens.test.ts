@@ -37,13 +37,12 @@ describe("the deal ticket's levels", () => {
     expect(html).toContain(">Take profit and stop loss (optional)</button>");
     expect(html).toMatch(/<label[^>]*>Take profit<\/label><input/);
     expect(html).toMatch(/<label[^>]*>Stop loss<\/label><input/);
-    expect(html).toContain("A take profit or stop loss closes your entire position when the price at which it would close reaches the level you set.");
-    expect(html).toContain("Both differ from a stop order, which opens or adds to a position when the market's reference price reaches its trigger price.");
+    expect(html).toContain(">A take profit or stop loss closes your entire position when its closing price reaches the level you set. A stop loss may be executed at a worse price than your level if the market gaps.</span>");
   });
 
   it("says what its fields do to a position already held, only while one is", () => {
-    expect(render(createElement(DealTicket), { account: account([]) })).not.toContain("replaces the position's current level");
-    expect(render(createElement(DealTicket), { account: account([position]) })).toContain("This order adds to your position. Each level entered here replaces the position's current level, and a field left empty keeps the current level.");
+    expect(render(createElement(DealTicket), { account: account([]) })).not.toContain("replaces the current one");
+    expect(render(createElement(DealTicket), { account: account([position]) })).toContain("This order adds to your position, so each level entered here replaces the current one, and a field left empty keeps it.");
   });
 
   it("shows no level fields in a market listed by a node that predates them", () => {
@@ -159,7 +158,7 @@ describe("the levels editor", () => {
 
   it("says a take profit is measured from the market price while the closing price is an estimate", () => {
     const html = render(editor({ capped: fixedFromInt(100_000) }));
-    expect(html).toContain("The price at which your entire position would close is currently estimated at 99,980.00. A new or moved stop loss must be at least 0.3% below that closing price. While the closing price is an estimate, a new or moved take profit must be at least 0.3% above the market price, which is currently 100,000.00.");
+    expect(html).toContain("The price at which your entire position would close is currently estimated at 99,980.00, and the market price is 100,000.00. A new or moved stop loss must be at least 0.3% below that closing price, and a new or moved take profit at least 0.3% above the market price.");
   });
 
   it("keeps Cancel and Save from acting while a request is signed and sent, so its answer shows in the editor", () => {

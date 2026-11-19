@@ -35,7 +35,7 @@ professional sentences, using the standard terms of trading.
   - Write formally: "does not", "cannot", "you would", never "won't", "can't" or "you'd".
   - Name things. Never write "this" for something the sentence has not named, and never write "the
     one you saw" or "by more than this".
-  - Stay brief. Write the two or three sentences the reader needs, not padding.
+  - Stay brief, within the limits under [Length](#length). Write what the reader needs, not padding.
 - **Labels, titles, column headers, buttons and tight spaces** stay concise, as noun phrases or
   short imperatives ("Max slippage", "Close all", "Time held"). Use the same proper terms, never
   clipped engine shorthand.
@@ -46,6 +46,41 @@ professional sentences, using the standard terms of trading.
 - **Address the trader as "you".** Never speak as "we" or "I".
 - **Stay accurate.** Every figure and condition must still come from the same source in code and be
   true. Keep what changes a trader's decision, and drop internal detail that does not.
+
+## Length
+
+- **A tooltip** says one thing in at most two sentences and about 40 words.
+- **A note under a control** is at most two sentences.
+- **An error** says what happened, then why, then what to do, in at most three short sentences.
+- **Where caveats go:** a caveat goes where it matters, in the refusal or notice at that moment, or in
+  the trading rules. Never stack caveats in a tooltip.
+- **The guard:** `src/help-text.test.ts` fails when a tooltip exceeds two sentences or 40 words, or a
+  note exceeds two sentences. It reads every `tip` and `note`, as a JSX attribute or an object's
+  property, and every constant named `…TIP`, `…TIPS`, `…HELP`, `…NOTE` or `…NOTES`, so name help text
+  that way. Text built at run time is listed there with what it can say. Its list of help text
+  already over the limits only shrinks: cut a listed string to the limits and take it off the list.
+
+### Example: the take-profit and stop-loss tooltip
+
+Before, eight sentences and 137 words:
+
+> A take profit or stop loss closes your entire position when the price at which it would close
+> reaches the level you set. That closing price is the bid for a long position and the offer for a
+> short position, so a wider spread can trigger a level even when the market price has not moved. A
+> stop loss is then executed at the next available closing price, which may be worse than your level
+> if the market gaps or reopens after a closure. A take profit is executed at your level or at a
+> better price. Both differ from a stop order, which opens or adds to a position when the market's
+> reference price reaches its trigger price. The take profit and stop loss on a position together
+> count as one working order towards your limit.
+
+After, two sentences and 36 words:
+
+> A take profit or stop loss closes your entire position when its closing price reaches the level you
+> set. A stop loss may be executed at a worse price than your level if the market gaps.
+
+The bid, offer and spread detail stays in the trading rules. The count towards the working order
+limit stays in the refusal a trader sees when the limit is reached. The comparison with a stop order
+is dropped.
 
 ## Never show
 
@@ -77,6 +112,9 @@ professional sentences, using the standard terms of trading.
 Product names stay as they are: MONKEY, USDC, Monkey Trading.
 
 ## Before and after, from this console
+
+These rows show the voice. Where an After exceeds the limits under [Length](#length), the limits
+apply.
 
 | Before | After |
 |---|---|

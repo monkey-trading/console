@@ -67,7 +67,7 @@ describe("ticketLevels", () => {
     const held = closingAt(market, fixedFromInt(20), terms);
     if (left === null || held === null) throw new Error("both longs have a closing price");
     expect(formatMark(left, 2)).not.toBe(formatMark(held, 2));
-    expect(check?.problems.take_profit).toContain(`which is currently ${formatMark(left, 2)},`);
+    expect(check?.problems.take_profit).toContain(`the current closing price of ${formatMark(left, 2)},`);
   });
 
   it("measures a live market order's take profit from the mark at any size, and its stop loss from the closing price", async () => {
@@ -77,9 +77,9 @@ describe("ticketLevels", () => {
     const current = { ...state, houseParams: node.client.state.params, pricingCurrent: true };
     const check = ticketLevels(current, live, order, { takeProfit: "1000000", stopLoss: "1" }, { prices: prices(market.mark), limits: null });
     expect(check?.problems.take_profit).toBeNull();
-    expect(ticketLevels(current, live, order, { takeProfit: "1", stopLoss: "" }, { prices: prices(market.mark), limits: null })?.problems.take_profit).toContain(`While the closing price is an estimate, a take profit on a long position must be above the market price, which is currently ${formatMark(market.mark ?? 0n, 2)},`);
-    expect(ticketLevels(current, market, order, { takeProfit: "1", stopLoss: "" }, { prices: prices(market.mark), limits: null })?.problems.take_profit).toContain("must be above the price at which the position would close");
-    expect(ticketLevels(current, live, order, { takeProfit: "", stopLoss: "1000000" }, { prices: prices(market.mark), limits: null })?.problems.stop_loss).toMatch(/^Stop loss above the closing price\. In this market, a stop loss on a long position must be below the price at which the position would close/);
+    expect(ticketLevels(current, live, order, { takeProfit: "1", stopLoss: "" }, { prices: prices(market.mark), limits: null })?.problems.take_profit).toContain(`While the closing price is an estimate, a take profit on a long position must be above the current market price of ${formatMark(market.mark ?? 0n, 2)},`);
+    expect(ticketLevels(current, market, order, { takeProfit: "1", stopLoss: "" }, { prices: prices(market.mark), limits: null })?.problems.take_profit).toContain("must be above the current closing price of");
+    expect(ticketLevels(current, live, order, { takeProfit: "", stopLoss: "1000000" }, { prices: prices(market.mark), limits: null })?.problems.stop_loss).toMatch(/^Stop loss above the closing price\. In this market, a stop loss on a long position must be below the current closing price of/);
   });
 
   it("holds a market order's new levels while the trading terms are not current, as their closing price needs the stress level's", async () => {

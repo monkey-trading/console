@@ -27,16 +27,16 @@ describe("the ticket's levels on a market order", () => {
     // 30 bps of 99,980 is 299.94: a take profit from 100,279.94 and a stop loss to 99,680.06.
     const check = checkTicketLevels(ticket({ fields: { takeProfit: "100200", stopLoss: "99700" } }));
     expect(check?.blocked).toBe(true);
-    expect(check?.problems.take_profit).toBe("Take profit too close to the closing price. In this market, a take profit on a long position must be at least 0.3% above the price at which the position would close, which is currently 99,980.00. Set a take profit of 100,279.94 or higher.");
-    expect(check?.problems.stop_loss).toBe("Stop loss too close to the closing price. In this market, a stop loss on a long position must be at least 0.3% below the price at which the position would close, which is currently 99,980.00. Set a stop loss of 99,680.06 or lower.");
+    expect(check?.problems.take_profit).toBe("Take profit too close to the closing price. In this market, a take profit on a long position must be at least 0.3% above the current closing price of 99,980.00. Set a take profit of 100,279.94 or higher.");
+    expect(check?.problems.stop_loss).toBe("Stop loss too close to the closing price. In this market, a stop loss on a long position must be at least 0.3% below the current closing price of 99,980.00. Set a stop loss of 99,680.06 or lower.");
     expect(checkTicketLevels(ticket({ fields: { takeProfit: "100279.94", stopLoss: "99680.06" } }))).toMatchObject({ blocked: false, named: { takeProfit: q("100279.94"), stopLoss: q("99680.06") } });
   });
 
   it("measures a take profit from the mark where the closing price may be capped nearer it, and a stop loss still from the closing price", () => {
     // A live node may cap the close nearer the mark than the console's estimate: the mark is the strictest a take profit can be measured from.
     const check = checkTicketLevels(ticket({ capped: fixedFromInt(100_000), fields: { takeProfit: "100250", stopLoss: "99700" } }));
-    expect(check?.problems.take_profit).toBe("Take profit too close to the market price. While the closing price is an estimate, a take profit on a long position must be at least 0.3% above the market price, which is currently 100,000.00. Set a take profit of 100,300.00 or higher.");
-    expect(check?.problems.stop_loss).toMatch(/^Stop loss too close to the closing price\. In this market, .* which is currently 99,980\.00\./);
+    expect(check?.problems.take_profit).toBe("Take profit too close to the market price. While the closing price is an estimate, a take profit on a long position must be at least 0.3% above the current market price of 100,000.00. Set a take profit of 100,300.00 or higher.");
+    expect(check?.problems.stop_loss).toMatch(/^Stop loss too close to the closing price\. In this market, .* the current closing price of 99,980\.00\./);
     // 100,290 passes against the closing price of 99,980 but not against the mark.
     expect(checkTicketLevels(ticket({ fields: { takeProfit: "100290", stopLoss: "" } }))?.blocked).toBe(false);
     expect(checkTicketLevels(ticket({ capped: fixedFromInt(100_000), fields: { takeProfit: "100290", stopLoss: "" } }))?.blocked).toBe(true);
@@ -44,7 +44,7 @@ describe("the ticket's levels on a market order", () => {
 
   it("says a level on the wrong side is on the wrong side", () => {
     const check = checkTicketLevels(ticket({ side: "sell", price: q("99980"), closing: q("100020"), fields: { takeProfit: "", stopLoss: "99000" } }));
-    expect(check?.problems.stop_loss).toBe("Stop loss below the closing price. In this market, a stop loss on a short position must be above the price at which the position would close, which is currently 100,020.00, by at least 0.3%. Set a stop loss of 100,320.06 or higher.");
+    expect(check?.problems.stop_loss).toBe("Stop loss below the closing price. In this market, a stop loss on a short position must be above the current closing price of 100,020.00, by at least 0.3%. Set a stop loss of 100,320.06 or higher.");
   });
 
   it("estimates each level's result for the order's size from the price it is sent at, before the fee", () => {
@@ -90,10 +90,10 @@ describe("the ticket's levels on a market order", () => {
   it("says what the levels do to the position held, by what the order does to it", () => {
     const fields = { takeProfit: "", stopLoss: "" };
     expect(checkTicketLevels(ticket({ fields }))?.note).toBeNull();
-    expect(checkTicketLevels(ticket({ held: fixedFromInt(1), fields }))?.note).toMatch(/^This order adds to your position\. Each level entered here replaces/);
-    expect(checkTicketLevels(ticket({ held: -q("0.5"), fields }))?.note).toMatch(/^This order reverses your position, so the position's current take profit and stop loss are removed/);
-    expect(checkTicketLevels(ticket({ resting: true, price: fixedFromInt(95_000), held: fixedFromInt(1), fields }))?.note).toMatch(/^The levels entered here apply only once the order is executed\./);
-    expect(checkTicketLevels(ticket({ resting: true, price: fixedFromInt(95_000), held: -fixedFromInt(2), fields }))?.note).toMatch(/^The levels entered here are attached only if this order, when it is executed, leaves you a position in its own direction\./);
+    expect(checkTicketLevels(ticket({ held: fixedFromInt(1), fields }))?.note).toBe("This order adds to your position, so each level entered here replaces the current one, and a field left empty keeps it.");
+    expect(checkTicketLevels(ticket({ held: -q("0.5"), fields }))?.note).toBe("This order reverses your position, so the position's current take profit and stop loss are removed and only the levels entered here apply to the new position.");
+    expect(checkTicketLevels(ticket({ resting: true, price: fixedFromInt(95_000), held: fixedFromInt(1), fields }))?.note).toBe("When this order is executed and adds to your position, each level entered here replaces the current one, and a field left empty keeps it.");
+    expect(checkTicketLevels(ticket({ resting: true, price: fixedFromInt(95_000), held: -fixedFromInt(2), fields }))?.note).toBe("If this order only reduces your position when it is executed, the levels entered here are discarded.");
   });
 
   it("says nothing of the order's shape while the size is empty, whatever is held", () => {
@@ -120,13 +120,13 @@ describe("the ticket's levels on a working order", () => {
     const sell = (qty: number, held: number) => checkTicketLevels(ticket({ resting: true, side: "sell", qty: fixedFromInt(qty), price: fixedFromInt(95_000), held: fixedFromInt(held), fields: { takeProfit: "94000", stopLoss: "96000" } }));
     // Holding 2 long, a sell of 1 only reduces the position: the levels would be discarded, so nothing is estimated.
     expect(sell(1, 2)).toMatchObject({ blocked: false, estimates: { take_profit: null, stop_loss: null } });
-    expect(sell(1, 2)?.note).toMatch(/^The levels entered here are attached only if this order, when it is executed, leaves you a position in its own direction\./);
+    expect(sell(1, 2)?.note).toBe("If this order only reduces your position when it is executed, the levels entered here are discarded.");
     // Holding 1 long, a sell of 3 would reverse it and open 2 short.
-    expect(sell(3, 1)).toMatchObject({ estimates: { take_profit: fixedFromInt(2_000), stop_loss: -fixedFromInt(2_000) }, note: "The levels entered here apply only once the order is executed. If your position is then still smaller than the order, the order reverses it, so the position's current take profit and stop loss are removed, and only the levels entered here apply to the new position." });
+    expect(sell(3, 1)).toMatchObject({ estimates: { take_profit: fixedFromInt(2_000), stop_loss: -fixedFromInt(2_000) }, note: "When this order is executed and reverses your position, the position's current take profit and stop loss are removed and only the levels entered here apply to the new position." });
     // With nothing held, or held short, the order opens or adds its whole size.
     expect(sell(3, 0)).toMatchObject({ estimates: { take_profit: fixedFromInt(3_000), stop_loss: -fixedFromInt(3_000) }, note: null });
     expect(sell(3, -1)?.estimates.take_profit).toBe(fixedFromInt(3_000));
-    expect(sell(3, -1)?.note).toMatch(/^The levels entered here apply only once the order is executed\. If the order then adds to your position/);
+    expect(sell(3, -1)?.note).toBe("When this order is executed and adds to your position, each level entered here replaces the current one, and a field left empty keeps it.");
   });
 });
 

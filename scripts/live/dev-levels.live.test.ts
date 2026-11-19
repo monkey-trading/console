@@ -114,7 +114,7 @@ describe("take profit and stop loss against a dev node", () => {
     const posted = rig.posted.length;
     expect(await placeOrder(rig.store, { market: BTC, side: "buy", qty: add, kind: { kind: "market", quoted: prices.price ?? 0n, slippageBps: SLIPPAGE_BPS }, reduceOnly: false, levels: { takeProfit: null, stopLoss: close } })).toBe(false);
     expect(rig.posted.length).toBe(posted + 1);
-    expect(snapshot().notices.ticket?.text).toMatch(/^The level [\d,.]+ was not accepted\. In this market, a take profit or stop loss must be at least 0\.3% beyond the price it is measured from: .* That price was [\d,]+(\.\d{1,9})? when your request was processed/);
+    expect(snapshot().notices.ticket?.text).toMatch(/^The level [\d,.]+ was not accepted\. In this market, a take profit or stop loss must be at least 0\.3% beyond the price it is measured from, which was [\d,]+(\.\d{1,9})? when your request was processed\. Set the level further from that price, on the correct side\.$/);
     expect(position()?.levels?.stopLoss).toBe(stop);
   });
 
