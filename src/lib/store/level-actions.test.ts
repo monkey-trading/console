@@ -7,6 +7,7 @@ import { orderTypedData, positionLevelsTypedData, requestDomain } from "../engin
 import vectors from "../engine/eip712-vectors.json";
 import type { EngineEvent, OrderRequest, PositionLevelsRequest } from "../engine/types";
 import { fixedFromInt, parseFixed } from "../fixed";
+import type { Levels } from "../levels";
 import { placeOrder } from "./actions";
 import { setPositionLevels } from "./level-actions";
 import { ActionClient, keyed, NODE_TIME, signerOf, VAULT } from "./live-kit";
@@ -31,7 +32,7 @@ const posted = (client: ActionClient, route: string) => client.posted.filter((p)
 describe("setting a position's levels", () => {
   it("sends one request the session key signs over SetPositionLevels, with no wallet prompt, and says nothing", async () => {
     const { client, store, prompts, loginPrompts } = await setup([{ type: "position_levels_set", account: ME, market: 1, take_profit: "105000", stop_loss: "95000.5" }]);
-    expect(await setPositionLevels(store, 1, LEVELS)).toEqual({ saved: true, refused: null });
+    expect(await setPositionLevels(store, 1, LEVELS)).toBe(true);
     const [body] = posted(client, "levels") as PositionLevelsRequest[];
     expect(body).toMatchObject({ account: ME, market: 1, take_profit: "105000", stop_loss: "95000.5", auth: { nonce: 4 } });
     expect(await signerOf(positionLevelsTypedData(DOMAIN, { account: ME, market: 1, take_profit: "105000", stop_loss: "95000.5" }, TERMS), body?.auth?.signature)).toBe(store.sessionKey?.address.toLowerCase());
@@ -41,7 +42,7 @@ describe("setting a position's levels", () => {
 
   it("removes both with a request that names neither", async () => {
     const { client, store } = await setup([{ type: "position_levels_set", account: ME, market: 1 }]);
-    expect(await setPositionLevels(store, 1, { takeProfit: null, stopLoss: null })).toEqual({ saved: true, refused: null });
+    expect(await setPositionLevels(store, 1, { takeProfit: null, stopLoss: null })).toBe(true);
     expect(posted(client, "levels")[0]).not.toHaveProperty("take_profit");
     expect(posted(client, "levels")[0]).not.toHaveProperty("stop_loss");
   });
@@ -50,22 +51,27 @@ describe("setting a position's levels", () => {
     const other: EngineEvent = { type: "order_rejected", account: "0x0000000000000000000000000000000000000bad", client_id: 0, reason: { kind: "unknown_market" } };
     const mine: EngineEvent = { type: "order_rejected", account: ME, client_id: 0, reason: { kind: "level_too_close", level: "100100", min_distance_bps: 30, reference: "99980" } };
     const { store } = await setup([other, mine]);
-    expect(await setPositionLevels(store, 1, LEVELS)).toEqual({ saved: false, refused: null });
+    expect(await setPositionLevels(store, 1, LEVELS)).toBe(false);
     expect(store.getSnapshot().notices.levels).toMatchObject({ tone: "error", text: expect.stringContaining("The level 100,100 was not accepted.") });
   });
 
-  it("names the level a refusal of a level too close to its price names, as the node writes it, so the dialog shows the refusal at that field", async () => {
+  it("names on the refusal the field a level too close concerns, by the level as the node writes it, so the dialog shows it under that field", async () => {
     const tooClose = (level: string): EngineEvent => ({ type: "order_rejected", account: ME, client_id: 0, reason: { kind: "level_too_close", level, min_distance_bps: 30, reference: "99980" } });
-    expect(await setPositionLevels((await setup([tooClose("105000")])).store, 1, LEVELS)).toEqual({ saved: false, refused: "take_profit" });
-    expect(await setPositionLevels((await setup([tooClose("95000.500")])).store, 1, LEVELS)).toEqual({ saved: false, refused: "stop_loss" });
-    // With no stop loss sent, a refusal naming another level is matched to neither field.
-    expect(await setPositionLevels((await setup([tooClose("95000")])).store, 1, { ...LEVELS, stopLoss: null })).toEqual({ saved: false, refused: null });
+    const refusal = async (level: string, levels: Levels = LEVELS) => {
+      const { store } = await setup([tooClose(level)]);
+      expect(await setPositionLevels(store, 1, levels)).toBe(false);
+      return store.getSnapshot().notices.levels;
+    };
+    expect(await refusal("105000")).toMatchObject({ tone: "error", field: "take_profit" });
+    expect(await refusal("95000.500")).toMatchObject({ tone: "error", field: "stop_loss" });
+    // With no stop loss sent, a refusal naming another level concerns neither field.
+    expect(await refusal("95000", { ...LEVELS, stopLoss: null })).not.toHaveProperty("field");
   });
 
   it("says a levels request refused for the working order limit was refused because the levels take a slot", async () => {
     const atLimit = async (reason: { kind: "tier_order_limit"; tier: number; max: number } | { kind: "too_many_orders"; max: number }) => {
       const { store } = await setup([{ type: "order_rejected", account: ME, client_id: 0, reason }]);
-      expect(await setPositionLevels(store, 1, LEVELS)).toEqual({ saved: false, refused: null });
+      expect(await setPositionLevels(store, 1, LEVELS)).toBe(false);
       return store.getSnapshot().notices.levels?.text;
     };
     expect(await atLimit({ kind: "tier_order_limit", tier: 1, max: 50 })).toBe("Working order limit reached. Volume tier 1 allows up to 50 working orders at a time, and the take profit and stop loss on a position together count as one. Cancel a working order, or remove the levels from another position, to set levels here.");
@@ -79,19 +85,19 @@ describe("setting a position's levels", () => {
       store.setWallet({ address: "0x0000000000000000000000000000000000000b0b", label: "Other wallet" });
       return { seq: 6, events: [mine] };
     };
-    expect(await setPositionLevels(store, 1, LEVELS)).toEqual({ saved: false, refused: null });
+    expect(await setPositionLevels(store, 1, LEVELS)).toBe(false);
   });
 
   it("takes another account's refusal alone as no refusal of its own", async () => {
     const { store } = await setup([{ type: "order_rejected", account: "0x0000000000000000000000000000000000000bad", client_id: 0, reason: { kind: "unknown_market" } }]);
-    expect(await setPositionLevels(store, 1, LEVELS)).toEqual({ saved: true, refused: null });
+    expect(await setPositionLevels(store, 1, LEVELS)).toBe(true);
     expect(store.getSnapshot().notices.levels).toBeUndefined();
   });
 
   it("says a node that predates the route does not support levels", async () => {
     const { client, store } = await setup([]);
     client.answer = () => { throw new EngineError(404, "not found"); };
-    expect(await setPositionLevels(store, 1, LEVELS)).toEqual({ saved: false, refused: null });
+    expect(await setPositionLevels(store, 1, LEVELS)).toBe(false);
     expect(store.getSnapshot().notices.levels?.text).toBe("This server does not support take-profit and stop-loss levels yet.");
   });
 });

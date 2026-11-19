@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { MarketId } from "@/lib/engine/types";
 import type { LevelFields } from "@/lib/level-check";
-import { fieldsOf, landedSave, openDraft, sentFrom, type HeldPosition, type LevelsDraft } from "@/lib/level-draft";
+import { dialogAnnouncement, fieldsOf, landedSave, openDraft, positionClosed, sentFrom, type HeldPosition, type LevelsDraft, type SaveWords } from "@/lib/level-draft";
 import { levelsDialogClosedWords } from "@/lib/level-words";
 import type { Levels } from "@/lib/levels";
 import type { ConsoleStore } from "@/lib/store/store";
@@ -25,7 +25,8 @@ export const levelsControlIds = (id: string, market: MarketId) => [`${id}-levels
 /** The dialog for the positions `held` by the account `owner` (lowercased; null with none connected). */
 export function useLevelsEditor(store: ConsoleStore, id: string, owner: string | null, held: readonly HeldPosition[]) {
   const [draft, setDraft] = useState<LevelsDraft | null>(null);
-  const [announced, setAnnounced] = useState("");
+  // The last save's words, which the panel reads out, and the dialog that sent it while it stays open.
+  const [announced, setAnnounced] = useState<SaveWords | null>(null);
   // The instance whose save is being signed, sent and read back; null with none.
   const [saving, setSaving] = useState<number | null>(null);
   // The last draft dropped because the account no longer holds its position, which the panel's notice names once.
@@ -45,7 +46,7 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
   // change of props, so it never shows again; one whose position's levels changed takes them as its base. The handlers' copy follows once committed.
   if (current !== draft) {
     setDraft(current);
-    if (current === null && draft !== null && draft.owner === owner) setClosed(draft);
+    if (current === null && draft !== null && positionClosed(draft, owner, held)) setClosed(draft);
   }
   useEffect(() => {
     latest.current = draft;
@@ -77,7 +78,9 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
     savingFor: (market: MarketId): boolean => current?.market === market && current.instance === saving,
     /** Whether the dialog is open for any position. */
     open: current !== null,
-    announced,
+    announced: announced?.text ?? "",
+    /** What `market`'s open dialog reads out of its own save, which the panel behind it cannot while it is open. */
+    announcedFor: (market: MarketId): string => (current?.market === market ? dialogAnnouncement(current, announced) : ""),
     /** Opens the dialog for `position`, with its levels. */
     openFor: (position: HeldPosition) => {
       if (owner === null) return;
@@ -108,7 +111,7 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
     saved: (instance: number, sent: LevelFields, words: string) => {
       const outcome = landedSave(latest.current, instance, sent);
       if (outcome === "ignore") return;
-      setAnnounced(words);
+      setAnnounced({ text: words, instance });
       if (outcome === "close") set(null);
     },
   };

@@ -6,15 +6,12 @@ import { describe, expect, it } from "vitest";
 
 import type { LevelKind } from "@/lib/engine/types";
 import { fixedFromInt, parseFixed } from "@/lib/fixed";
-import { checkEditorLevels } from "@/lib/level-check";
-import { NO_LEVELS } from "@/lib/levels";
 import type { AccountModel, MarketModel, PositionModel } from "@/lib/models";
 import type { ConsoleState } from "@/lib/store/state";
 import { btcAt } from "@/lib/ticket-fixtures";
 
 import { ConsoleProvider, useSession } from "./ConsoleProvider";
 import { DealTicket } from "./DealTicket";
-import { LevelInputs } from "./LevelInputs";
 import { LevelsEditor } from "./LevelsEditor";
 import { OrdersView } from "./OrdersView";
 import { PositionsView } from "./PositionsView";
@@ -147,7 +144,7 @@ describe("Market info's minimum distance", () => {
 describe("the levels dialog", () => {
   const editor = (patch: Partial<Parameters<typeof LevelsEditor>[0]> = {}) => createElement(LevelsEditor, {
     market, position, fields: { takeProfit: "102000", stopLoss: "97500" }, onChange: () => undefined, closing: fixedFromInt(99_980), noClosing: "No closing price is available.", capped: null, limits: null, toUsdDown: (x) => x,
-    onCancel: () => undefined, onSend: () => undefined, onSaved: () => undefined, saving: false, onSettled: () => undefined, readOnly: false, describedBy: undefined, onRemovedWithFocus: () => undefined, ...patch,
+    onCancel: () => undefined, onSend: () => undefined, onSaved: () => undefined, saving: false, onSettled: () => undefined, readOnly: false, describedBy: undefined, onRemovedWithFocus: () => undefined, announced: "", ...patch,
   });
 
   it("is a modal dialog titled for the position, described by the levels' help, its fields one under the other", () => {
@@ -196,25 +193,33 @@ describe("the levels dialog", () => {
     expect(render(editor({ ...moved, saving: true }), { busy: false })).toMatch(/<button type="submit" aria-disabled="true"[^>]*>Signing…<\/button>/);
   });
 
+  /** The dialog's markup with `text` on its notice surface, naming `field` when given. */
+  function Notify({ tone, field }: { tone: "error" | "info"; field?: LevelKind }) {
+    const { store } = useSession();
+    store.notify("levels", "A message the trader must read.", tone, field);
+    return null;
+  }
+  const shown = (tone: "error" | "info", field?: LevelKind) => renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Notify, { tone, field }), editor()));
+
   it("hosts its own notice, read out as an alert for a failure and as a status otherwise", () => {
-    function Notify({ tone }: { tone: "error" | "info" }) {
-      const { store } = useSession();
-      store.notify("levels", "A message the trader must read.", tone);
-      return null;
-    }
-    const shown = (tone: "error" | "info") => renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Notify, { tone }), editor()));
     expect(shown("error")).toMatch(/role="alert"[^>]*>(?:(?!<\/div>).)*A message the trader must read\./);
     expect(shown("info")).toMatch(/role="status"[^>]*>(?:(?!<\/div>).)*A message the trader must read\./);
     // A notice that names no field shows under the buttons.
     expect(shown("error").indexOf(">Cancel</button>")).toBeLessThan(shown("error").indexOf("A message the trader must read."));
   });
 
-  it("shows a refusal that names a field under that field, and leaves one that names none to the dialog", () => {
-    const check = checkEditorLevels({ market, qty: position.qty, entry: position.entry, held: NO_LEVELS, closing: fixedFromInt(99_980), noClosing: "", capped: null, limits: null, fields: { takeProfit: "", stopLoss: "" }, toUsdDown: (x) => x });
-    const inputs = (at: LevelKind | null) => render(createElement(LevelInputs, { title: "Levels", check, fields: { takeProfit: "", stopLoss: "" }, onChange: () => undefined, dialog: { notice: createElement("p", null, "The level was not accepted."), at } }));
-    expect(inputs("stop_loss")).toMatch(/-stop_loss-problem" class="[^"]*"><p>The level was not accepted\.<\/p><\/div>/);
-    expect(inputs("take_profit")).toMatch(/-take_profit-problem" class="[^"]*"><p>The level was not accepted\.<\/p><\/div>/);
-    expect(inputs(null)).not.toContain("The level was not accepted.");
+  it("shows a refusal that names a field once, under that field and not under the buttons", () => {
+    for (const field of ["stop_loss", "take_profit"] as const) {
+      const html = shown("error", field);
+      expect(html).toMatch(new RegExp(`-${field}-problem" class="[^"]*"><div role="status" class="empty:hidden"></div><div role="alert" class="empty:hidden"><p class="[^"]*">A message the trader must read\\.</p></div></div>`));
+      expect(html.split("A message the trader must read.").length).toBe(2);
+      expect(html.indexOf("A message the trader must read.")).toBeLessThan(html.indexOf(">Cancel</button>"));
+    }
+  });
+
+  it("reads out from inside itself what its own save said while it stays open", () => {
+    expect(render(editor({ announced: "The stop loss on your BTC-USD position is now 98,000.00, and it has no take profit." }))).toMatch(/<p role="status" class="sr-only">The stop loss on your BTC-USD position is now 98,000\.00, and it has no take profit\.<\/p><\/div><\/form><\/dialog>/);
+    expect(render(editor())).toContain('<p role="status" class="sr-only"></p></div></form></dialog>');
   });
 });
 

@@ -7,9 +7,8 @@
  * (`useLevelsEditor`), and the dialog follows the position as it changes size or side.
  */
 
-import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef } from "react";
 
-import type { LevelKind } from "@/lib/engine/types";
 import { spokenRate } from "@/lib/fee-words";
 import type { Fixed } from "@/lib/fixed";
 import { checkEditorLevels, type LevelFields } from "@/lib/level-check";
@@ -50,19 +49,19 @@ interface Props {
   describedBy: string | undefined;
   /** The `dialog` is being removed while it holds focus, inside `panel`, its tab panel. */
   onRemovedWithFocus: (market: MarketModel["id"], dialog: HTMLElement, panel: HTMLElement | null) => void;
+  /** What a save of this dialog's said while it stayed open, read out from inside it. */
+  announced: string;
 }
 
 const BUTTON = "min-h-11 rounded border px-4 py-1.5 text-caption focus-visible:outline-2 focus-visible:outline-glow";
 /** A full-screen sheet on a phone; from 1024 px, a dialog centred over the page. */
 const SHEET = "m-0 h-dvh max-h-none w-full max-w-none overflow-y-auto bg-ink-1 p-0 text-fg backdrop:bg-ink/70 lg:m-auto lg:h-fit lg:max-h-[calc(100dvh-2rem)] lg:w-[calc(100%-2rem)] lg:max-w-md lg:rounded-xl lg:border lg:border-line-2";
 
-export function LevelsEditor({ market, position, fields, onChange, closing, noClosing, capped, limits, toUsdDown, onCancel, onSend, onSaved, saving, onSettled, readOnly, describedBy, onRemovedWithFocus }: Props) {
+export function LevelsEditor({ market, position, fields, onChange, closing, noClosing, capped, limits, toUsdDown, onCancel, onSend, onSaved, saving, onSettled, readOnly, describedBy, onRemovedWithFocus, announced }: Props) {
   const { store } = useSession();
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useId();
   const help = useId();
-  // The field a refusal of the last save named, under which its notice shows; null shows it under the buttons.
-  const [refusedAt, setRefusedAt] = useState<LevelKind | null>(null);
   const removedWithFocus = useEffectEvent((element: HTMLElement) => onRemovedWithFocus(market.id, element, element.closest<HTMLElement>('[role="tabpanel"]')));
   // Opens modal, with focus in the take profit field. A layout cleanup runs while the dialog is still on the page, so it can tell whether
   // focus was in it, or dropped to the page, as it goes.
@@ -94,6 +93,8 @@ export function LevelsEditor({ market, position, fields, onChange, closing, noCl
     return () => element.removeEventListener("keydown", onKey);
   }, []);
   const busy = useConsoleValue((state) => state.busy);
+  // The field a refusal names, under which the dialog's notice shows; with none, it shows under the buttons.
+  const refusedAt = useConsoleValue((state) => state.notices.levels?.field ?? null);
   const long = position.qty > 0n;
   const check = checkEditorLevels({ market, qty: position.qty, entry: position.entry, held: position.levels ?? NO_LEVELS, closing, noClosing, capped, limits, fields, toUsdDown });
   // The session's busy flag clears once the node answers; the save holds Save until its account read has landed too.
@@ -103,11 +104,9 @@ export function LevelsEditor({ market, position, fields, onChange, closing, noCl
     if (!canSave) return;
     const sent = fields;
     const words = levelsSavedWords(market.symbol, check.named, market.places);
-    setRefusedAt(null);
     onSend(check.named);
-    void setPositionLevels(store, market.id, check.named).then(({ saved, refused }) => {
+    void setPositionLevels(store, market.id, check.named).then((saved) => {
       onSettled();
-      setRefusedAt(refused);
       if (saved) onSaved(sent, words);
     });
   };
@@ -131,6 +130,7 @@ export function LevelsEditor({ market, position, fields, onChange, closing, noCl
             <button type="button" disabled={busy} className={`${BUTTON} border-line-2 text-fg-2 hover:border-glow hover:text-glow disabled:opacity-40`} onClick={cancel}>Cancel</button>
           </div>
           {refusedAt === null && <Notice surface="levels" />}
+          <p role="status" className="sr-only">{announced}</p>
         </div>
       </form>
     </dialog>

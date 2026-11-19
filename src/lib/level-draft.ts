@@ -58,6 +58,20 @@ export function openDraft(draft: LevelsDraft | null, owner: string | null, held:
   return { ...draft, base: position.levels, fields };
 }
 
+/** Whether `draft` goes because its position closed, which the panel then says: its account is still connected and holds no position in its market. */
+export function positionClosed(draft: LevelsDraft, owner: string | null, held: readonly HeldPosition[]): boolean {
+  return draft.owner === owner && !held.some((p) => p.market === draft.market);
+}
+
+/** A save's words and the dialog instance it was sent from. */
+export interface SaveWords {
+  text: string;
+  instance: number;
+}
+
+/** What the open dialog `draft` reads out: the words of its own save that landed while it stayed open, or nothing. */
+export const dialogAnnouncement = (draft: LevelsDraft | null, said: SaveWords | null): string => (draft !== null && said?.instance === draft.instance ? said.text : "");
+
 /** `draft` once a save from it sends `levels`, which the position may show as its own from then on. */
 export function sentFrom(draft: LevelsDraft, levels: Levels): LevelsDraft {
   return { ...draft, sent: [...draft.sent, levels] };

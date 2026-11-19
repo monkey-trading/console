@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
-import { fieldsOf, landedSave, openDraft, sentFrom, type HeldPosition, type LevelsDraft } from "./level-draft";
+import { dialogAnnouncement, fieldsOf, landedSave, openDraft, positionClosed, sentFrom, type HeldPosition, type LevelsDraft } from "./level-draft";
 import { NO_LEVELS } from "./levels";
 
 const OWNER = "0xabc";
@@ -66,6 +66,27 @@ describe("openDraft", () => {
     expect(openDraft(typed, OWNER, [HELD])).toBe(typed);
     // The next read shows the save's levels, which become the base, the fields typed still open.
     expect(openDraft(typed, OWNER, [{ ...HELD, levels: sent }])).toEqual({ ...typed, base: sent, sent: [] });
+  });
+});
+
+describe("positionClosed", () => {
+  it("says the position closed only while its account is still connected and holds nothing in its market", () => {
+    expect(positionClosed(DRAFT, OWNER, [])).toBe(true);
+    expect(positionClosed(DRAFT, OWNER, [{ ...HELD, market: 2 }])).toBe(true);
+    expect(positionClosed(DRAFT, OWNER, [HELD])).toBe(false);
+    // Another wallet, or none, drops the draft without saying a position closed.
+    expect(positionClosed(DRAFT, "0xdef", [])).toBe(false);
+    expect(positionClosed(DRAFT, null, [])).toBe(false);
+  });
+});
+
+describe("dialogAnnouncement", () => {
+  const SAID = { text: "The stop loss on your BTC-USD position is now 94,000.00.", instance: 3 };
+  it("reads out a save's words in the dialog instance that sent it, and nothing in another or with none open", () => {
+    expect(dialogAnnouncement(DRAFT, SAID)).toBe(SAID.text);
+    expect(dialogAnnouncement({ ...DRAFT, instance: 4 }, SAID)).toBe("");
+    expect(dialogAnnouncement(null, SAID)).toBe("");
+    expect(dialogAnnouncement(DRAFT, null)).toBe("");
   });
 });
 

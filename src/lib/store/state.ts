@@ -15,27 +15,11 @@ import { decodeHouse, decodeMarket, type AccountModel, type Eligibility, type Ho
 import { NO_EXIT, type ExitState } from "./exit-state";
 import type { HousePanelInit } from "./store-deps";
 import { emptyLedgerState, type LedgerState } from "./ledger";
+import type { NoticeSurface, Notices } from "./notice-state";
+
+export { KEPT_ON_WALLET_CHANGE, NOTICE_SURFACES, type Notice, type NoticeSurface, type Notices } from "./notice-state";
 
 export type BlockReason = "united_states" | "sanctioned_jurisdiction";
-
-/** Where a message shows: beside the control the trader used, or in the one place its subject has on the page. */
-export const NOTICE_SURFACES = [
-  "ticket", "orders", "positions", "levels", "accountRead", "account", "deposit", "withdraw", "faucet", "setup", "payouts", "payoutReads", "payoutVault",
-  "emissions", "distribution", "stake", "operator", "governance", "settings", "wallet", "node", "feed", "chart", "exit",
-] as const;
-export type NoticeSurface = (typeof NOTICE_SURFACES)[number];
-
-/** One message on a surface. A failure is `error` and read out as an alert; `info` is a status. `id` tells a repeat of the same text from the message already there. */
-export interface Notice {
-  id: number;
-  tone: "error" | "info";
-  text: string;
-}
-
-export type Notices = Partial<Record<NoticeSurface, Notice>>;
-
-/** The surfaces that outlive a change of wallet: they are about the node, the feed, the chart, or how the last wallet's connection ended. */
-export const KEPT_ON_WALLET_CHANGE: readonly NoticeSurface[] = ["wallet", "node", "feed", "chart"];
 
 export interface FeedLine {
   id: number;
