@@ -5,7 +5,7 @@
  */
 
 import { exitProofAccount, holdsAnything } from "../engine/exit-proof";
-import { readStoredExit, removeStoredExit, sameProof, writeStoredExit, type ExitRecord, type ExitScope, type ExitStorage } from "../engine/exit-file";
+import { readStoredExit, sameProof, writeStoredExit, type ExitRecord, type ExitScope, type ExitStorage } from "../engine/exit-file";
 import { holdsLess } from "../engine/exit-steps";
 import type { ExitProof, ExitWallet, VaultExitFacts } from "../engine/exit-types";
 import type { Wallet } from "../engine/wallet";
@@ -41,13 +41,13 @@ export class ExitAdopter {
 
   /** Has the vault's verifier judge a saved proof at its latest root, once per connection, and takes its figures from that answer. */
   async checkSaved(wallet: Wallet, exit: ExitWallet, scope: ExitScope, record: ExitRecord, held: VaultExitFacts): Promise<"good" | "unknown" | "refused"> {
-    if (this.store.getSnapshot().exit.checked === record) return "good";
-    // Only the proof the verifier refused goes: another tab or an import may have saved a good one while it was checked.
+    const { checked, refused } = this.store.getSnapshot().exit;
+    if (checked === record) return "good";
+    if (refused !== null && sameProof(refused, record)) return "refused";
+    // The refused proof stays saved, as it may be the trader's only one: a wrong network or a contract change refuses a good proof too. Only a proof that passes replaces it.
     const refuse = (reason: string): "refused" => {
-      const stored = readStoredExit(this.storage, scope).record;
-      if (stored !== null && sameProof(stored, record)) removeStoredExit(this.storage, scope);
       const held = this.store.getSnapshot().exit.record;
-      this.patch({ record: held !== null && sameProof(held, record) ? null : held, attempt: { kind: "saved-refused", reason }, checkFailures: 0 });
+      this.patch({ record: held !== null && sameProof(held, record) ? null : held, refused: record, attempt: { kind: "saved-refused", reason }, checkFailures: 0 });
       return "refused";
     };
     try {
@@ -96,8 +96,9 @@ export class ExitAdopter {
         return { kind: "other-root", proofSeq: proof.seq, vaultSeq: now.latestSeq };
       }
     }
-    // The verifier proves only the parts a file carries, so a trimmed file proves too. From here to the write nothing waits, so a tab that saved while this one checked is seen.
-    const held = [readStoredExit(this.storage, scope).record, this.store.liveWallet === wallet ? this.store.getSnapshot().exit.record : null];
+    // The verifier proves only the parts a file carries, so a trimmed file proves too, though not against a saved proof it refused. From here to the write nothing waits, so a tab that saved while this one checked is seen.
+    const { refused } = this.store.getSnapshot().exit;
+    const held = [readStoredExit(this.storage, scope).record, this.store.liveWallet === wallet ? this.store.getSnapshot().exit.record : null].filter((saved) => saved === null || refused === null || !sameProof(saved, refused));
     if (held.some((saved) => saved?.proof.root === proof.root && holdsLess(proof, saved.proof))) {
       void this.store.exit.keeper.settle(); // this page may be behind what storage holds
       return { kind: "holds-less" };
@@ -107,7 +108,7 @@ export class ExitAdopter {
     const record: ExitRecord = { ...scope, proof, checkpointAt: lastCheckpointAt, accountClaim, distributionOwed, paidApprovals };
     const storageProblem = writeStoredExit(this.storage, record);
     if (this.store.liveWallet === wallet) {
-      this.patch({ record, checked: record, checkFailures: 0, storageProblem, attempt: null, nothing: false });
+      this.patch({ record, checked: record, refused: null, checkFailures: 0, storageProblem, attempt: null, nothing: false });
       if (vault.exitStartedAt !== 0) await this.store.exit.readClaims();
     }
     return { kind: "saved", record, storageProblem };

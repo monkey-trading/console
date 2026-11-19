@@ -221,6 +221,7 @@ export class ExitWatch {
     await this.keeper.retryAnswer();
     this.keeper.retryBehind();
     await this.keeper.settle();
+    await this.revalue(wallet, exit);
     await this.readClaims();
   }
 
@@ -241,6 +242,31 @@ export class ExitWatch {
       if (this.store.liveWallet === wallet) this.patch({ claimsProblem: errorText(error), claimsFailures: this.store.getSnapshot().exit.claimsFailures + 1 });
       return false;
     }
+  }
+
+  /**
+   * A credit counts only while the vault's records hold its deposit, which can change at the same
+   * root, so a proof holding credits is valued again by the verifier's preview with each read of the
+   * vault, before the exit and during it, and so before each registration. One that fails keeps the
+   * figures, says so as a failed check, which is tried again, and holds up a registration until one
+   * answers, but nothing that needs no proof.
+   */
+  private async revalue(wallet: Wallet, exit: ExitWallet): Promise<void> {
+    const accepted = acceptedRecord(this.store.getSnapshot().exit);
+    if (accepted === null || accepted.proof.unfinalised_credits.length === 0) return;
+    let claim: bigint | null;
+    let reason = "the vault's verifier did not value the proof's unconfirmed deposits";
+    try {
+      claim = await this.store.monkeySession.walletWork.work(wallet, () => exit.preview(accepted.proof, accepted.proof.root));
+    } catch (error) {
+      claim = null;
+      reason = errorText(error);
+    }
+    const now = this.store.getSnapshot().exit;
+    if (this.store.liveWallet !== wallet || now.checked !== accepted || now.record !== accepted) return;
+    if (claim === null) return this.patch({ attempt: { kind: "wallet-failed", reason }, checkFailures: now.checkFailures + 1 });
+    const fresh = { ...accepted, accountClaim: claim };
+    this.patch({ record: fresh, checked: fresh, ...(now.attempt?.kind === "wallet-failed" ? { attempt: null, checkFailures: 0 } : {}) });
   }
 
   /** What the panel says of the last import or action, until the next replaces it, and, for an import, whether its file is being read or checked. */

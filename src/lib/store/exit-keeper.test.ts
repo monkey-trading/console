@@ -57,7 +57,7 @@ describe("ExitKeeper", () => {
       kit.client.exitAnswer = { seq: "nonsense" };
       await kit.store.exit.refresh();
       expect(record()?.proof.seq).toBe(100);
-      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "refused", reason: "seq is not a whole number" });
+      expect(kit.store.getSnapshot().exit.attempt).toEqual({ kind: "refused", reason: "seq is not a whole number", unread: true });
     });
 
     it("a node read that fails, which another read of the vault alone does not repeat", async () => {

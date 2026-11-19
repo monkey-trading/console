@@ -43,11 +43,45 @@ describe("exitView, of a pending deposit the vault's record disagrees with", () 
   it("does not offer its refund, says why, and keeps the proof's other figures", () => {
     const view = exitView(exit, WALLET);
     expect(view.refunds).toEqual([]);
-    expect(view.lines).toContainEqual({ tone: "warn", text: "Deposit 2 does not match the vault's record, so the vault would reject its refund. The proof remains saved." });
+    expect(view.lines).toContainEqual({ tone: "warn", text: "Deposit 2 does not match the vault's record of that deposit, so this proof cannot be used to refund it. The proof remains saved." });
     expect(text(exit)).toMatch(/The proof covers 5,083 USDC\./);
   });
   it("names each of several", () => {
-    expect(text({ ...exit, claims: { ...NO_CLAIMS, mismatched: [2, 3] } })).toMatch(/Deposits 2, 3 do not match the vault's record, so the vault would reject their refunds\./);
+    expect(text({ ...exit, claims: { ...NO_CLAIMS, mismatched: [2, 3] } })).toMatch(/Deposits 2, 3 do not match the vault's records of those deposits, so this proof cannot be used to refund them\./);
+  });
+  it("offers this account's own deposit at that number while claims register, and not once the window has closed", () => {
+    const proof = recordAt(100).proof.pending_deposits[0];
+    if (proof === undefined) throw new Error("the fixture holds a pending deposit");
+    const ours = { ...exit, claims: { ...NO_CLAIMS, mismatched: [2], receiptRefunds: [{ id: 2, amount: 24_000_000n, proof, leafKind: 34 }] } };
+    const view = exitView(ours, WALLET);
+    expect(view.refunds).toEqual([{ kind: "refund-receipt", id: 2, amount: 24_000_000n, proof, leafKind: 34 }]);
+    expect(text(ours)).not.toMatch(/Deposit 2 does not match/);
+    expect(exitView({ ...ours, vault: factsAt(100, { exitStartedAt: 5_000, chainNow: 5_000 + 2_592_000 }) }, WALLET).refunds).toEqual([]);
+  });
+});
+
+describe("exitView, of unconfirmed deposits the vault's records disagree with", () => {
+  it("says they do not count towards the claim", () => {
+    const exit = { ...NO_EXIT, vault: OPEN, ...acceptedState(recordAt(100)), claims: { ...NO_CLAIMS, creditsUnmatched: [5, 6] } };
+    expect(exitView(exit, WALLET).lines).toContainEqual({ tone: "warn", text: "Unconfirmed deposits 5, 6 do not match the vault's records of those deposits, so they do not count towards your claim." });
+  });
+});
+
+describe("exitView, of a saved proof the vault refused", () => {
+  it("says no proof that passes is saved, whatever the node's read came to since", () => {
+    expect(exitView({ ...NO_EXIT, vault: factsAt(100), refused: recordAt(100) }, WALLET).lines[0]).toEqual({ tone: "warn", text: "No proof that passes the vault's check is saved in this browser for this account." });
+  });
+  it("puts why the latest proof failed ahead of the age of the one kept", () => {
+    const old = { ...NO_EXIT, vault: factsAt(200, { chainNow: 1_000 + 7_200 }), record: recordAt(100), attempt: { kind: "refused", reason: "the root does not prove it" } as const };
+    expect(exitView(old, WALLET).notice?.text).toBe("Your exit proof failed the vault's check. The root does not prove it.");
+  });
+});
+
+describe("exitView, of a proof the vault refused, once the exit is due or open", () => {
+  const refused = { ...NO_EXIT, record: null, attempt: { kind: "refused", reason: "the vault's snapshot does not confirm its exit terms" } as const };
+  it("puts why the proof failed ahead of the exit's start and its deadline", () => {
+    expect(exitView({ ...refused, vault: factsAt(100, { chainNow: 1_000 + 2_592_000 }) }, WALLET).notice?.text).toBe("Your exit proof failed the vault's check. The vault's snapshot does not confirm its exit terms.");
+    expect(exitView({ ...refused, vault: OPEN, claims: NO_CLAIMS }, WALLET).notice).toEqual({ tone: "bad", text: "The vault's exit has started, but your exit proof failed the vault's check. The vault's snapshot does not confirm its exit terms." });
   });
 });
 

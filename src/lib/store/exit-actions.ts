@@ -8,7 +8,7 @@
 import { ExitProofError } from "../engine/exit-proof";
 import { withTimeout } from "../engine/provider-errors";
 import { MAX_EXIT_FILE_BYTES, parseExitFile } from "../engine/exit-file";
-import { exitPhase, NO_TERMS, refundSteps, registeredTotal, registerSteps } from "../engine/exit-steps";
+import { exitPhase, NO_TERMS, refundSteps, registeredTotal, registerSteps, type RefundStep } from "../engine/exit-steps";
 import type { ExitStep, ExitWallet } from "../engine/exit-types";
 import type { Wallet } from "../engine/wallet";
 import { shortHex } from "../format";
@@ -164,13 +164,13 @@ export async function registerExitClaims(store: ConsoleStore): Promise<void> {
     const record = acceptedRecord(state);
     if (vault === null || exitPhase(vault) !== "open") return { failed: "The claim window is not open, so nothing was sent." };
     if (record === null || claims === null) return { failed: "The vault has not accepted a proof for its latest snapshot, so nothing was sent." };
+    // A credit's worth is what the vault's records hold now, which a failed valuation cannot say.
+    if (record.proof.unfinalised_credits.length > 0 && state.attempt?.kind === "wallet-failed") return { failed: "Your wallet could not value your unconfirmed deposits against the vault, so nothing was sent." };
     const steps = registerSteps(record, claims);
     if (steps.length === 0) return { did: "Everything covered by the proof has been registered." }; // that read has taken the rows off the panel
     return (await sendSteps(store, wallet, exit, steps, (step) => `Confirm the request in your wallet to register step ${steps.indexOf(step) + 1} of ${steps.length} of your claim.`)).ended("Your claim is registered, and the vault will pay it once the claim window closes.");
   });
 }
-
-type RefundStep = Extract<ExitStep, { kind: "refund" | "refund-unheld" }>;
 
 /** The id a refund step's deposit goes by. */
 const depositId = (step: RefundStep): number => (step.kind === "refund" ? step.proof.deposit.deposit_id : step.id);
@@ -182,6 +182,12 @@ export async function refundExitDeposit(store: ConsoleStore, step: RefundStep): 
   const { wallet, exit } = held;
   const id = depositId(step);
   await holding(store, wallet, async () => {
+    // A receipt's refund is taken only while claims register.
+    if (step.kind === "refund-receipt") {
+      if (!(await store.exit.readFresh())) return { failed: "The vault could not be reached, so nothing was sent." };
+      const { vault } = store.getSnapshot().exit;
+      if (vault === null || exitPhase(vault) !== "open") return { failed: `The claim window has closed, so deposit ${id} can no longer be refunded through the proof, and nothing was sent.` };
+    }
     if (!(await store.exit.readClaims())) return { failed: "The vault's record could not be checked, so nothing was sent." };
     const state = store.getSnapshot().exit;
     const { claims } = state;

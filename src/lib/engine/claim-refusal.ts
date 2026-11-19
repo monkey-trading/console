@@ -54,7 +54,7 @@ const WITHDRAWAL_GENERIC = "Your claim was not sent, because the vault did not a
 const GENERIC = "Your claim was not sent, because the vault's records do not match the proof provided by the server. Please try again shortly.";
 
 /** Every string a wallet's error carries, at the top and under `data`, `originalError` or `cause`. */
-function texts(error: unknown, depth = 0): string[] {
+export function texts(error: unknown, depth = 0): string[] {
   if (depth > 4 || error === null || error === undefined) return [];
   if (typeof error === "string") return [error];
   if (typeof error !== "object") return [];

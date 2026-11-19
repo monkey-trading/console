@@ -7,7 +7,7 @@
  */
 
 import { ExitProofError, exitProofAccount, parseExitProof } from "../engine/exit-proof";
-import { preferredRecord, readStoredExit, removeStoredExit, type ExitRecord, type ExitScope, type ExitStorage } from "../engine/exit-file";
+import { preferredRecord, readStoredExit, removeStoredExit, sameProof, type ExitRecord, type ExitScope, type ExitStorage } from "../engine/exit-file";
 import type { ExitProof, ExitWallet } from "../engine/exit-types";
 import type { Wallet } from "../engine/wallet";
 import { ExitAdopter } from "./exit-adopt";
@@ -142,7 +142,10 @@ export class ExitKeeper {
     const { vault } = state.exit;
     if (wallet === null || exit === undefined || scope === null || vault === null || !vault.hasCheckpoint) return;
     const stored = readStoredExit(this.storage, scope);
-    let record = preferredRecord(stored.record, state.exit.record, vault.latestRoot);
+    // A saved proof the verifier refused in this connection stays in storage, and out of use.
+    const { refused } = state.exit;
+    const usable = stored.record !== null && refused !== null && sameProof(stored.record, refused) ? null : stored.record;
+    let record = preferredRecord(usable, state.exit.record, vault.latestRoot);
     const storageProblem = stored.problem ?? state.exit.storageProblem;
     if (record !== state.exit.record || storageProblem !== state.exit.storageProblem) this.patch({ record, storageProblem });
     if (record?.proof.root === vault.latestRoot) {
@@ -169,7 +172,8 @@ export class ExitKeeper {
     if (!state.accountRead || (!holdsNow(state) && state.accountHistory === "waiting")) return; // its read is under way, and hearing it brings this back
     // Once the exit has started, only the root's terms can show a deposit of this account's among the gaps they name, which nothing the page has read shows.
     const termsOwed = vault.exitStartedAt !== 0 && state.exit.terms?.root !== vault.latestRoot;
-    if (!termsOwed && !holdsNow(state) && (await this.hasNothing(wallet, exit, record))) return;
+    // A saved proof the verifier refused still says the account may hold something, which the node's next proof can replace.
+    if (!termsOwed && !holdsNow(state) && (await this.hasNothing(wallet, exit, record ?? state.exit.refused))) return;
     if (this.store.liveWallet === wallet) await this.readNode(wallet, scope, vault.latestRoot);
   }
 
@@ -218,7 +222,7 @@ export class ExitKeeper {
       if (this.answer !== null && current()) this.store.exit.chaseHeld(this.answer.seq);
     } catch (error) {
       if (!current()) return;
-      this.patch({ attempt: error instanceof ExitProofError ? { kind: "refused", reason: error.message } : { kind: "node-failed", reason: errorText(error) } });
+      this.patch({ attempt: error instanceof ExitProofError ? { kind: "refused", reason: error.message, unread: true } : { kind: "node-failed", reason: errorText(error) } });
     } finally {
       if (current()) this.patch({ reading: false });
     }
@@ -267,8 +271,10 @@ export class ExitKeeper {
     }
     this.emptyKey = stakeKey(now);
     // A saved proof at an older root could never be claimed from again, and an answer that names nothing is no proof of anything, so only that one goes.
-    if (stored !== null && stored.proof.root !== proof.root) removeStoredExit(this.storage, scope);
-    this.patch({ attempt: null, nothing: true, record: now.exit.record?.proof.root === proof.root ? now.exit.record : null });
+    const removed = stored !== null && stored.proof.root !== proof.root;
+    if (removed) removeStoredExit(this.storage, scope);
+    const { refused } = now.exit;
+    this.patch({ attempt: null, nothing: true, record: now.exit.record?.proof.root === proof.root ? now.exit.record : null, refused: removed && refused !== null && sameProof(refused, stored) ? null : refused });
   }
 
   /** Takes up the answer held, from what the vault was just read to say: ahead of the vault it waits, with no read of the wallet; at the vault's latest it is checked and saved; passed, it can never be claimed from, and the settle after this asks for the next. */

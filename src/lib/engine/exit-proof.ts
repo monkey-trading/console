@@ -183,7 +183,7 @@ function pending(value: unknown, at: string, seq: number, root: string): ExitPen
  * The exit proof `value` holds, normalized: lowercase hex, and each optional field the engine leaves
  * out at its zero. Fields it does not know are dropped.
  * Error cases:
- * - `value` is not an exit proof, its parts name different checkpoints or accounts, or it repeats an approval, a queued request or a pending deposit: `ExitProofError`
+ * - `value` is not an exit proof, its parts name different checkpoints or accounts, it repeats an approval, a queued request, a pending deposit or a credit, or it holds credits with no account: `ExitProofError`
  */
 export function parseExitProof(value: unknown): ExitProof {
   const fields = object(value, "the proof");
@@ -197,9 +197,19 @@ export function parseExitProof(value: unknown): ExitProof {
     queued: distinct(mapped(fields.queued, "queued", (item, at) => queued(item, at, seq, root)), "queued", (held) => held.queued.requested_seq),
     distribution: fields.distribution === null ? null : distribution(fields.distribution, seq, root),
     pending_deposits: distinct(mapped(fields.pending_deposits, "pending_deposits", (item, at) => pending(item, at, seq, root)), "pending_deposits", (held) => held.deposit.deposit_id),
+    unfinalised_credits: credits(fields.unfinalised_credits, seq, root),
   };
+  if (proof.account === null && proof.unfinalised_credits.length > 0) refuse("the proof", "lists unconfirmed deposits for an account it does not include");
   exitProofAccount(proof);
   return proof;
+}
+
+/** The account's unfinalised credits, absent before V77 and from a proof saved before it, in increasing deposit id as the verifier takes them. */
+function credits(value: unknown, seq: number, root: string): ExitPendingProof[] {
+  if (value === undefined) return [];
+  const held = mapped(value, "unfinalised_credits", (item, at) => pending(item, at, seq, root)).sort((a, b) => a.deposit.deposit_id - b.deposit.deposit_id);
+  if (held.some((credit, index) => index > 0 && credit.deposit.deposit_id === held[index - 1]?.deposit.deposit_id)) refuse("the proof", "lists an unconfirmed deposit twice");
+  return held;
 }
 
 /**
@@ -212,6 +222,7 @@ export function exitProofAccount(proof: ExitProof): Address | null {
     proof.account?.account, proof.distribution?.account,
     ...proof.approvals.map((held) => held.approval.account), ...proof.queued.map((held) => held.queued.account),
     ...proof.pending_deposits.map((held) => held.deposit.account ?? refuse("a pending deposit", "is the house's, not an account's")),
+    ...proof.unfinalised_credits.map((held) => held.deposit.account ?? refuse("an unconfirmed deposit", "is the house's, not an account's")),
   ].filter((name) => name !== undefined);
   const [first] = named;
   if (named.some((name) => name !== first)) return refuse("the proof", "names more than one account");
@@ -228,8 +239,9 @@ export function approvalUnits(amount: string): bigint | null {
  * Whether a verified `proof`, with `accountClaim` and what a finalized block shows paid of its
  * distribution and approvals, gives the account anything: nothing else is worth keeping or reading
  * again. A payment only the chain's head shows can still be undone, so it leaves the proof standing,
- * and so do gaps its exit terms name, any of which may be a deposit of this account's to refund.
+ * and so do gaps its exit terms name, any of which may be a deposit of this account's to refund, and
+ * an unfinalised credit, whose deposit the vault may yet hold when the claim registers.
  */
 export function holdsAnything(proof: ExitProof, accountClaim: bigint, finalDistributionOwed: bigint, finalPaidApprovals: readonly number[]): boolean {
-  return accountClaim > 0n || (proof.account?.positions.length ?? 0) > 0 || proof.approvals.some((held) => !finalPaidApprovals.includes(held.approval.nonce)) || proof.queued.some((held) => (parseFixed(held.queued.remaining) ?? 0n) > 0n) || finalDistributionOwed > 0n || proof.pending_deposits.length > 0 || proof.terms.terms.gaps.length > 0;
+  return accountClaim > 0n || (proof.account?.positions.length ?? 0) > 0 || proof.approvals.some((held) => !finalPaidApprovals.includes(held.approval.nonce)) || proof.queued.some((held) => (parseFixed(held.queued.remaining) ?? 0n) > 0n) || finalDistributionOwed > 0n || proof.pending_deposits.length > 0 || proof.unfinalised_credits.length > 0 || proof.terms.terms.gaps.length > 0;
 }

@@ -45,7 +45,8 @@ export function ExitPanel() {
   const input = useRef<HTMLInputElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const view = exitView(exit, wallet);
-  const { record } = exit;
+  // A saved proof the vault refused stays exportable: the refusal may be the network's or the app's, not the proof's.
+  const record = exit.record ?? exit.refused;
   const choose = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = ""; // the same file can be chosen again
@@ -66,7 +67,7 @@ export function ExitPanel() {
       <ExitClaim view={view} settled={() => { if (document.activeElement === document.body || document.activeElement === null) heading.current?.focus(); }} />
       {(record !== null || view.canImport) && (
         <div className="flex flex-wrap gap-2">
-          {record !== null && <button type="button" onClick={() => download(exitFileName(record), exitFileText(record))} className={BUTTON}>Export to a file</button>}
+          {record !== null && <button type="button" onClick={() => download(exitFileName(record), exitFileText(record))} className={BUTTON}>{exit.record === null ? "Export the proof that failed the check" : "Export to a file"}</button>}
           {view.canImport && (
             <>
               <button type="button" aria-disabled={busy || readingProof(exit)} onClick={() => { if (!busy && !readingProof(exit)) input.current?.click(); }} className={BUTTON}>Import a file</button>

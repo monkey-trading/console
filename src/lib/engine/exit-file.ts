@@ -28,7 +28,7 @@ export interface ExitRecord extends ExitScope {
   proof: ExitProof;
   /** The vault's `lastCheckpointAt` when it was checked, in chain seconds: when its root was posted. */
   checkpointAt: number;
-  /** What `accountClaim` answered, in USDC base units. */
+  /** What the verifier's `previewClaim` answered, the account's credits included, in USDC base units. */
   accountClaim: bigint;
   /** The distribution not yet paid when it was checked, in USDC base units. */
   distributionOwed: bigint;

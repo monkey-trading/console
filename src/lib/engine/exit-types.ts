@@ -55,7 +55,7 @@ export interface ExitDistributionProof {
   siblings: string[];
 }
 
-/** `PendingDepositProof`: a deposit the root holds pending, keyed by its receipt's reference. */
+/** `PendingDepositProof`: a deposit the root holds pending, keyed by its receipt's reference. From V77 an `UnfinalisedCreditProof` takes the same shape: a deposit credited to the account whose principal still awaits finality. */
 export interface ExitPendingProof {
   seq: number;
   root: string;
@@ -74,6 +74,8 @@ export interface ExitProof {
   queued: ExitQueuedProof[];
   distribution: ExitDistributionProof | null;
   pending_deposits: ExitPendingProof[];
+  /** From V77, the account's deposits credited while awaiting finality, in increasing deposit id: the vault adds each one's principal it holds to the claim once the account's equity is registered. */
+  unfinalised_credits: ExitPendingProof[];
 }
 
 /** What the vault says about its exit now, read through the wallet; times are chain seconds. */
@@ -112,8 +114,16 @@ export interface ExitClaimFacts {
   approvalsUsed: number[];
   /** The pending deposits refunded, by `deposit_id`. */
   refunded: number[];
-  /** The pending deposits not refunded whose record on the vault is not the proof's payer and amount, by `deposit_id`: `refundPendingDeposit` refuses these. */
+  /** The pending deposits not refunded whose record on the vault is not the proof's account, payer and amount, by `deposit_id`: `refundReceipt` would refund the vault's own deposit there to whoever paid it. */
   mismatched: number[];
+  /** The vault's own deposits this account paid, at ids whose pending or credited receipt in the root the vault's records do not match: `refundReceipt` refunds each to this account while claims register. */
+  receiptRefunds: { id: number; amount: bigint; proof: ExitPendingProof; leafKind: number }[];
+  /** The account's unfinalised credits the vault's records do not match, by `deposit_id`: they add nothing to its claim. */
+  creditsUnmatched: number[];
+  /** The account's unfinalised credits the verifier has counted into its claim, by `deposit_id`. */
+  creditsCounted: number[];
+  /** What the account's registered equity and counted credits come to so far, in USDC base units: the verifier's `exitClaimed`. */
+  accountClaimed: bigint;
   /** What is registered and unpaid for the account, in USDC base units. */
   exitClaim: bigint;
   exitDistributionClaim: bigint;
@@ -139,13 +149,18 @@ export type ExitCheck =
 /** One transaction of the exit, in the order the vault takes them. */
 export type ExitStep =
   | { kind: "start"; terms: ExitTermsProof }
-  | { kind: "account"; proof: ExitAccountProof; amount: bigint }
+  /** `withCredits` when the amount includes the credits that the steps after it register. */
+  | { kind: "account"; proof: ExitAccountProof; amount: bigint; withCredits: boolean }
+  /** One batch of the account's credits not yet counted, `part` of `parts`, registered after its equity: `amount` is what they all add, on the first batch once the equity is registered, and null while the account's step includes it. */
+  | { kind: "credits"; account: Address; proofs: readonly ExitPendingProof[]; part: number; parts: number; amount: bigint | null }
   | { kind: "approval"; proof: ExitApprovalProof; amount: bigint }
   | { kind: "queued"; proof: ExitQueuedProof; amount: bigint }
   | { kind: "distribution"; proof: ExitDistributionProof; amount: bigint }
   | { kind: "refund"; proof: ExitPendingProof; amount: bigint }
   /** A deposit the exit root does not hold, which the vault refunds by its id alone. */
   | { kind: "refund-unheld"; id: number; amount: bigint }
+  /** The vault's own deposit at a receipt's id that its records do not match, refunded through that receipt to this account, which paid it, while claims register. */
+  | { kind: "refund-receipt"; id: number; amount: bigint; proof: ExitPendingProof; leafKind: number }
   | { kind: "claim" };
 
 /**
@@ -159,6 +174,8 @@ export interface ExitWallet {
   facts(): Promise<VaultExitFacts>;
   /** Checks every leaf of `proof` with the vault's deployed `ExitVerifier`, against `root`. */
   check(proof: ExitProof, root: string): Promise<ExitCheck>;
+  /** What the verifier's `previewClaim` values `proof`'s account at against `root` now, its credits included, in USDC base units; null when the verifier refuses it. */
+  preview(proof: ExitProof, root: string): Promise<bigint | null>;
   /** What the vault holds for the account, and for each part of `proof` when one is given: a claim can be paid, and a deposit the root does not hold refunded, with no proof. */
   claims(proof: ExitProof | null): Promise<ExitClaimFacts>;
   /** Whether the account has MONKEY staked or unstaking, which may earn it a distribution no account read shows. */

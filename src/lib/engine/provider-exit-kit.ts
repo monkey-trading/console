@@ -18,7 +18,7 @@ export class Chain {
   /** What each vault getter answers, by name. */
   vault: Record<string, Hex> = {
     exitStartedAt: word("uint256", 0n), hasCheckpoint: word("bool", true), latestSeq: word("uint256", 100n), latestRoot: rootAt(100) as Hex, lastCheckpointAt: word("uint256", 1_000n), exitPeriod: word("uint256", 2_592_000n), claimWindow: word("uint256", 2_592_000n),
-    exitVerifier: word("address", VERIFIER), distributionsClaimed: word("uint256", 1_000_000n), exitAccountRegistered: word("bool", false), exitDistributionRegistered: word("bool", false), exitClaims: word("uint256", 7n), exitDistributionClaims: word("uint256", 2n),
+    exitVerifier: word("address", VERIFIER), distributionsClaimed: word("uint256", 1_000_000n), exitDistributionRegistered: word("bool", false), exitClaims: word("uint256", 7n), exitDistributionClaims: word("uint256", 2n),
     exitQueuedRegistered: word("bool", true), depositRefunded: word("bool", false), exitDepositCursor: word("uint256", 3n), depositCount: word("uint256", 3n),
   };
   /** What a vault getter answers at a finalized block, where it differs from the head. */
@@ -28,9 +28,18 @@ export class Chain {
   paidNonces = new Set<bigint>();
   finalNonces = new Set<bigint>();
   deposits = new Map<bigint, { payer: Hex; amount: bigint }>();
-  /** The verifier's answers; a name set to false refuses, and `reverts` rejects. */
+  /** The verifier's answers; a name set to false refuses, and `reverts` rejects with the revert data it maps the name to. */
   proves: Record<string, boolean> = {};
-  reverts = new Set<string>();
+  reverts = new Map<string, Hex>();
+  /** The pending deposits, by id, whose receipt the vault's records do not match. */
+  unmatched = new Set<bigint>();
+  /** The credits, by deposit id, the verifier has counted. */
+  counted = new Set<bigint>();
+  exitClaimed = 0n;
+  /** Whether the verifier holds the account's equity registered. */
+  registered = false;
+  /** Each `previewClaim` read: who sent it, and the credits it carried. */
+  previews: { from: string | undefined; credits: readonly { depositId: bigint }[] }[] = [];
   fails = new Set<string>();
   accountClaim = 5_010_000_000n;
   staked = 0n;
@@ -51,7 +60,7 @@ export class Chain {
     if (method !== "eth_call") throw new Error(`no ${method}`);
     const { to, data } = list[0] as { to?: string; data: Hex };
     if (to === undefined) return data === "0x4260005260206000f3" ? word("uint256", BigInt(this.blockTime)) : "0x";
-    if (to.toLowerCase() === VERIFIER) return this.verifier(data);
+    if (to.toLowerCase() === VERIFIER) return this.verifier(data, (list[0] as { from?: string }).from);
     if (to.toLowerCase() === STAKING) return data.startsWith(toFunctionSelector("stakes(address)")) ? word("uint256", this.staked) : encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], [this.unstaking, 9n]);
     const { functionName, args } = decodeFunctionData({ abi: EXIT_VAULT, data });
     this.asked.push(functionName);
@@ -67,12 +76,20 @@ export class Chain {
     return answer;
   };
 
-  private verifier(data: Hex): Hex {
-    const { functionName } = decodeFunctionData({ abi: EXIT_VERIFIER, data });
+  private verifier(data: Hex, from: string | undefined): Hex {
+    const { functionName, args } = decodeFunctionData({ abi: EXIT_VERIFIER, data });
+    if (functionName === "previewClaim") this.previews.push({ from, credits: args[5] });
     this.asked.push(functionName);
-    if (this.reverts.has(functionName)) throw Object.assign(new Error("execution reverted"), { code: 3 });
+    const reverted = this.reverts.get(functionName);
+    if (reverted !== undefined) throw Object.assign(new Error("execution reverted"), { code: 3, data: reverted });
     if (this.fails.has(functionName)) throw new Error("the provider is rate limiting this wallet");
-    if (functionName === "accountClaim") return word("uint256", this.accountClaim);
-    return word("bool", this.proves[functionName] ?? true);
+    switch (functionName) {
+      case "previewClaim": return word("uint256", this.accountClaim);
+      case "exitClaimed": return word("uint256", this.exitClaimed);
+      case "exitRegistered": return word("bool", this.registered);
+      case "creditCounted": return word("bool", this.counted.has(args[0]));
+      case "provesReceipt": return encodeAbiParameters([{ type: "bool" }, { type: "bool" }], [this.proves.provesReceipt ?? true, !this.unmatched.has(args[1].depositId)]);
+      default: return word("bool", this.proves[functionName] ?? true);
+    }
   }
 }

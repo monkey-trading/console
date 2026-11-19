@@ -18,18 +18,21 @@ const STRUCTS = [
   "struct MarketState { uint32 market; bool marked; int128 mark; uint8 quoteCurrency; uint32 fxMarket; bool fxMarked; int128 fxMark; int128 clientQty; int128 clientCost; bytes32 stateHash; bytes32[] siblings; }",
   "struct ExitTerms { uint64 depositCursor; uint64 depositBase; int128 pending; int128 held; int128 unheld; int128 heldReceipts; uint64[] gaps; }",
   "struct QueuedWithdrawal { address account; int128 amount; int128 remaining; uint64 requestedSeq; uint64 ticket; }",
-  "struct PendingDeposit { uint64 depositId; address account; address payer; int128 amount; }",
+  "struct ReceiptLeaf { bytes chainRef; uint64 depositId; address account; address payer; int128 amount; bytes32[] siblings; }",
   "struct Approval { address account; uint256 amount; uint64 nonce; uint64 approvedSeq; }",
 ] as const;
 
 export const EXIT_VERIFIER = parseAbi([
   ...STRUCTS,
-  "function accountClaim(bytes32 root, address account, AccountState state, PositionState[] positions, MarketState[] markets) pure returns (uint256)",
+  "function previewClaim(bytes32 root, address account, AccountState state, PositionState[] positions, MarketState[] markets, ReceiptLeaf[] credits) view returns (uint256)",
   "function provesTerms(bytes32 root, ExitTerms terms, bytes32[] siblings) pure returns (bool)",
   "function provesQueued(bytes32 root, QueuedWithdrawal queued, bytes32[] siblings) pure returns (bool)",
-  "function provesPending(bytes32 root, bytes chainRef, PendingDeposit pending, bytes32[] siblings) pure returns (bool)",
+  "function provesReceipt(bytes32 root, ReceiptLeaf leaf, uint8 kind) view returns (bool proven, bool matched)",
   "function provesApproval(bytes32 root, Approval approval, bytes32[] siblings) pure returns (bool)",
   "function provesDistribution(bytes32 root, address account, uint256 entitled, bytes32[] siblings) pure returns (bool)",
+  "function exitRegistered(address account) view returns (bool)",
+  "function exitClaimed(address account) view returns (uint256)",
+  "function creditCounted(uint64 depositId) view returns (bool)",
 ]);
 
 export const EXIT_VAULT = parseAbi([
@@ -47,7 +50,6 @@ export const EXIT_VAULT = parseAbi([
   "function exitDepositCursor() view returns (uint64)",
   "function depositRecords(uint256 id) view returns (address payer, uint96 amount)",
   "function distributionsClaimed(address account) view returns (uint256)",
-  "function exitAccountRegistered(address account) view returns (bool)",
   "function exitDistributionRegistered(address account) view returns (bool)",
   "function exitQueuedRegistered(uint64 requestedSeq) view returns (bool)",
   "function depositRefunded(uint256 id) view returns (bool)",
@@ -58,7 +60,8 @@ export const EXIT_VAULT = parseAbi([
   "function registerExitWithdrawal(Approval approval, bytes32[] siblings)",
   "function registerExitQueued(QueuedWithdrawal queued, bytes32[] siblings)",
   "function registerExitDistribution(address account, uint256 entitled, bytes32[] siblings)",
-  "function refundPendingDeposit(bytes chainRef, PendingDeposit pending, bytes32[] siblings)",
+  "function registerExitCredits(address account, ReceiptLeaf[] credits)",
+  "function refundReceipt(ReceiptLeaf leaf, uint8 kind)",
   "function refundDeposit(uint256 id)",
   "function claimExit(address account) returns (uint256)",
   "event ExitPaid(address indexed account, uint256 amount)",
@@ -68,6 +71,10 @@ export const EXIT_STAKING = parseAbi([
   "function stakes(address account) view returns (uint256)",
   "function unstakes(address account) view returns (uint256 amount, uint256 claimableAt)",
 ]);
+
+/** The leaf kinds of a pending deposit's receipt and of an unfinalised credit's, as `refundReceipt` and `provesReceipt` take them (`ExitVerifier.sol`). */
+export const PENDING_DEPOSIT_LEAF = 34;
+export const UNFINALISED_CREDIT_LEAF = 35;
 
 /** The zero address, which a pending deposit's leaf holds for no payer. */
 const NO_ADDRESS: Hex = "0x0000000000000000000000000000000000000000";
@@ -94,7 +101,7 @@ export function termsArgs({ terms, siblings }: ExitTermsProof) {
   ] as const;
 }
 
-/** The account, state, positions and markets `registerExit` and `accountClaim` take. */
+/** The account, state, positions and markets `registerExit` takes. */
 export function accountArgs(proof: ExitAccountProof) {
   const { leaf } = proof;
   return [
@@ -127,11 +134,12 @@ export function queuedArgs({ queued, siblings }: ExitQueuedProof) {
   return [{ account: hexOf(queued.account), amount: raw(queued.amount), remaining: raw(queued.remaining), requestedSeq: BigInt(queued.requested_seq), ticket: BigInt(queued.ticket ?? 0) }, hexes(siblings)] as const;
 }
 
-/** The reference's UTF-8 bytes, `ExitVerifier.PendingDeposit` and its siblings. */
-export function pendingArgs({ chain_ref: chainRef, deposit, siblings }: ExitPendingProof) {
-  return [
-    stringToHex(chainRef),
-    { depositId: BigInt(deposit.deposit_id), account: hexOf(deposit.account ?? NO_ADDRESS), payer: hexOf(deposit.payer ?? NO_ADDRESS), amount: raw(deposit.amount) },
-    hexes(siblings),
-  ] as const;
+/** `ExitVerifier.ReceiptLeaf`, a pending deposit's or an unfinalised credit's: the reference's UTF-8 bytes key it. */
+export function receiptLeaf({ chain_ref: chainRef, deposit, siblings }: ExitPendingProof) {
+  return {
+    chainRef: stringToHex(chainRef), depositId: BigInt(deposit.deposit_id), account: hexOf(deposit.account ?? NO_ADDRESS), payer: hexOf(deposit.payer ?? NO_ADDRESS), amount: raw(deposit.amount), siblings: hexes(siblings),
+  };
 }
+
+/** The root, account, state, positions, markets and credits `previewClaim` takes. */
+export const previewArgs = (root: string, account: ExitAccountProof, credits: readonly ExitPendingProof[]) => [hexOf(root), ...accountArgs(account), credits.map(receiptLeaf)] as const;

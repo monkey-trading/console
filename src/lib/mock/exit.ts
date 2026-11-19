@@ -86,11 +86,12 @@ export class MockVaultExit {
       queued: this.state.queue.filter((entry) => entry.account.toLowerCase() === key).map((entry) => ({ ...stand, queued: { account: key, amount: fixedToWire(entry.amount), remaining: fixedToWire(entry.remaining), requested_seq: entry.requestedSeq } })),
       distribution: entitled === undefined ? null : { ...stand, account: key, entitled: entitled.toString() },
       pending_deposits: [],
+      unfinalised_credits: [],
     };
   }
 
   private held(key: string): ExitClaimFacts {
-    return this.claimsOf.get(key) ?? { accountRegistered: false, distributionRegistered: false, queuedRegistered: [], approvalsUsed: [], refunded: [], mismatched: [], exitClaim: 0n, exitDistributionClaim: 0n, distributionPaid: this.state.monkey.distClaimed.get(key) ?? 0n, unheld: [], unheldComplete: true };
+    return this.claimsOf.get(key) ?? { accountRegistered: false, distributionRegistered: false, queuedRegistered: [], approvalsUsed: [], refunded: [], mismatched: [], receiptRefunds: [], creditsUnmatched: [], creditsCounted: [], accountClaimed: 0n, exitClaim: 0n, exitDistributionClaim: 0n, distributionPaid: this.state.monkey.distClaimed.get(key) ?? 0n, unheld: [], unheldComplete: true };
   }
 
   private update(key: string, change: Partial<ExitClaimFacts>): void {
@@ -120,6 +121,7 @@ export class MockVaultExit {
         const distributionOwed = entitled > paid ? entitled - paid : 0n;
         return { ok: true, paidApprovals: [], accountClaim: proof.account === null ? 0n : this.accountWorth(key), distributionOwed, finalPaidApprovals: [], finalDistributionOwed: distributionOwed };
       },
+      preview: async (proof: ExitProof) => (proof.account === null ? 0n : this.accountWorth(key)),
       claims: async () => this.held(key),
       stakeHeld: async () => (this.state.monkey.staked.get(key) ?? 0n) > 0n,
       send: async (step: ExitStep) => {
@@ -130,7 +132,10 @@ export class MockVaultExit {
             this.startedAt = this.nowSeconds();
             return { hash, paid: null };
           case "account":
-            this.update(key, { accountRegistered: true, exitClaim: now.exitClaim + step.amount });
+            this.update(key, { accountRegistered: true, accountClaimed: step.amount, exitClaim: now.exitClaim + step.amount });
+            return { hash, paid: null };
+          case "credits":
+            this.update(key, { creditsCounted: [...now.creditsCounted, ...step.proofs.map((held) => held.deposit.deposit_id)] });
             return { hash, paid: null };
           case "approval":
             this.update(key, { approvalsUsed: [...now.approvalsUsed, step.proof.approval.nonce], exitClaim: now.exitClaim + step.amount });
@@ -145,6 +150,7 @@ export class MockVaultExit {
             this.update(key, { refunded: [...now.refunded, step.proof.deposit.deposit_id] });
             return { hash, paid: null };
           case "refund-unheld":
+          case "refund-receipt":
             return { hash, paid: null };
           case "claim":
             this.update(key, { exitClaim: 0n, exitDistributionClaim: 0n });

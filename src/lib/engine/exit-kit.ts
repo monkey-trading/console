@@ -30,13 +30,14 @@ export function fullProof(seq: number, account = ACCOUNT): ExitProof {
     queued: [{ ...stand, queued: { account, amount: "20", remaining: "20", requested_seq: seq - 5, ticket: 7 } }],
     distribution: { ...stand, account, entitled: "3000000" },
     pending_deposits: [{ ...stand, chain_ref: "0xfeed:1", deposit: { deposit_id: 2, account, payer: account, amount: "25" } }],
+    unfinalised_credits: [],
   };
 }
 
 /** The node's answer at `seq` for an account it holds nothing for. */
 export function emptyProof(seq: number): ExitProof {
   const root = rootAt(seq);
-  return { seq, root, terms: { seq, root, terms: { deposit_cursor: 1, deposit_base: 1, pending: "0", held: "0", unheld: "0", held_receipts: "0", gaps: [] }, siblings: SIBLINGS }, account: null, approvals: [], queued: [], distribution: null, pending_deposits: [] };
+  return { seq, root, terms: { seq, root, terms: { deposit_cursor: 1, deposit_base: 1, pending: "0", held: "0", unheld: "0", held_receipts: "0", gaps: [] }, siblings: SIBLINGS }, account: null, approvals: [], queued: [], distribution: null, pending_deposits: [], unfinalised_credits: [] };
 }
 
 /** A record of `fullProof(seq)`, as the vault's check leaves it. */
@@ -52,7 +53,7 @@ export function factsAt(seq: number, change: Partial<VaultExitFacts> = {}): Vaul
   return { hasCheckpoint: true, latestSeq: seq, latestRoot: rootAt(seq), lastCheckpointAt: 1_000, exitPeriod: 2_592_000, claimWindow: 2_592_000, exitStartedAt: 0, chainNow: 1_060, ...change };
 }
 
-export const NO_CLAIMS: ExitClaimFacts = { accountRegistered: false, distributionRegistered: false, queuedRegistered: [], approvalsUsed: [], refunded: [], mismatched: [], exitClaim: 0n, exitDistributionClaim: 0n, distributionPaid: 0n, unheld: [], unheldComplete: true };
+export const NO_CLAIMS: ExitClaimFacts = { accountRegistered: false, distributionRegistered: false, queuedRegistered: [], approvalsUsed: [], refunded: [], mismatched: [], receiptRefunds: [], creditsUnmatched: [], creditsCounted: [], accountClaimed: 0n, exitClaim: 0n, exitDistributionClaim: 0n, distributionPaid: 0n, unheld: [], unheldComplete: true };
 
 /** A browser storage in a map, which can be made to refuse. */
 export function exitStorage(): ExitStorage & { held: Map<string, string>; refuseWrites: boolean } {
@@ -116,6 +117,15 @@ export class FakeExitWallet implements ExitWallet {
     if (this.claimsError !== null) throw this.claimsError;
     if (proof === null) return { ...this.claimsHeld, accountRegistered: false, distributionRegistered: false, queuedRegistered: [], approvalsUsed: [], refunded: [], mismatched: [] };
     return { ...this.claimsHeld, unheld: [...this.claimsHeld.unheld, ...this.gapDeposits.filter(({ id }) => proof.terms.terms.gaps.includes(id))] };
+  }
+  previewError: Error | null = null;
+  previews = 0;
+  /** What the verifier previews now: what `verdict` comes to, and null when it refuses. */
+  async preview(proof: ExitProof, root: string): Promise<bigint | null> {
+    this.previews++;
+    if (this.previewError !== null) throw this.previewError;
+    const verdict = this.verdict(proof, root);
+    return verdict.ok ? verdict.accountClaim : null;
   }
   async stakeHeld(): Promise<boolean> { return this.staked; }
   async send(step: ExitStep): Promise<{ hash: string; paid: bigint | null }> {
