@@ -8,11 +8,22 @@
 import type { EngineClient } from "./client";
 import type { Scheduler } from "./live-stream";
 import { bounded, nodeSaid, NOTHING_SAID, type NodeSaid, type SaidTurn } from "./operator-follow-status";
+import { CLOCK_TOLERANCE_MS } from "./transport";
 import { RefusedAnswer } from "./trust-errors";
+
+/**
+ * How long after a turn's boundary its member may take to serve, in milliseconds: the engine's own allowance for a member coming up
+ * (`COMING_UP` in its `node/member/turn.rs`), half a turn and at most five minutes.
+ */
+const COMING_UP_MS = 5 * 60_000;
+/** The boundaries kept, oldest first: enough to tell the member before a boundary from the one after it. */
+const KEPT_BOUNDARIES = 4;
 
 export class NodeWord {
   /** The turns the last answer named, kept through reads that fail. */
   private turns: readonly SaidTurn[] = [];
+  /** Every turn any answer named, by boundary, the latest `KEPT_BOUNDARIES`, oldest first. */
+  private boundaries: readonly SaidTurn[] = [];
   /** Each member's registered hostname, from the node's signed operator list. */
   private readonly hostOf = new Map<string, string>();
 
@@ -36,6 +47,18 @@ export class NodeWord {
   }
 
   /**
+   * When the next turn begins by a node just moved to, whose turns are kept only as boundaries: the turns the console follows with no
+   * wallet stay those of the node that named them, until a check reads the node in use. Null when it cannot be read or names none.
+   */
+  async nextTurn(moved: EngineClient): Promise<number | null> {
+    const route = await bounded(this.scheduler, moved.stats.operator({ limit: 1 })).catch(() => null);
+    if (route === null) return null;
+    const said = nodeSaid(route, this.nowMs());
+    this.keep(said.turns);
+    return said.turnAtMs;
+  }
+
+  /**
    * Reads, from `current`'s signed operator list, the registered hostname of each member the kept turns name that is not known yet.
    * A list that cannot be read leaves them unknown, and the route's own hostname decides.
    */
@@ -52,8 +75,32 @@ export class NodeWord {
     return (member === null ? undefined : this.hostOf.get(member.candidate)) ?? said.hostname;
   }
 
+  /**
+   * The end of the stretch around a turn boundary at which the member changes that `nowMs` falls in, or null for none: from the device
+   * clock's tolerance before the boundary to the time its member may take to serve. A boundary whose earlier member is unknown counts.
+   */
+  handoverWindow(nowMs: number): number | null {
+    for (const [i, turn] of this.boundaries.entries()) {
+      const before = this.boundaries[i - 1];
+      const after = this.boundaries[i + 1];
+      if (before?.candidate === turn.candidate) continue;
+      // Turns are all one length, read from the boundary after this one or, before that is drawn, the one before.
+      const length = after !== undefined ? after.atMs - turn.atMs : before !== undefined ? turn.atMs - before.atMs : null;
+      const end = turn.atMs + Math.min(COMING_UP_MS, length === null ? COMING_UP_MS : length / 2);
+      if (nowMs >= turn.atMs - CLOCK_TOLERANCE_MS && nowMs < end) return end;
+    }
+    return null;
+  }
+
   private heard(said: NodeSaid): NodeSaid {
     this.turns = said.turns;
+    this.keep(said.turns);
     return said;
+  }
+
+  private keep(turns: readonly SaidTurn[]): void {
+    const byBoundary = new Map(this.boundaries.map((turn) => [turn.atMs, turn]));
+    for (const turn of turns) byBoundary.set(turn.atMs, turn);
+    this.boundaries = [...byBoundary.values()].sort((a, b) => a.atMs - b.atMs).slice(-KEPT_BOUNDARIES);
   }
 }

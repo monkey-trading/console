@@ -6,6 +6,9 @@
  */
 
 import type { FeedStatus } from "./engine/attestation";
+import type { FollowStatus } from "./engine/operator-follow-status";
+import type { PauseView } from "./store/trading-pause";
+import { LONG_PAUSE, PAUSE_TITLE } from "./trading-pause-words";
 import type { HoldCause, ServerRead, ServerStatus, UnpricedReason, VenueState } from "./engine/status-types";
 import { asSentence } from "./format";
 
@@ -128,4 +131,23 @@ export function serverLine(stream: FeedStatus, server: ServerRead | null, reason
   if (hold !== undefined) return { role: "alert", ...holdLine(hold.cause) };
   const outage = server.status.unpriced_markets.filter((m) => fed(m, server.status.venues));
   return outage.length === 0 ? null : { role: "status", ...pricesLine({ ...server.status, unpriced_markets: outage }) };
+}
+
+/**
+ * The one line while the console moves to the server the operator runs on with trading not paused, as when a page load finds it elsewhere,
+ * or null when no move is under way: a calm status while that server is checked or has not yet answered, and an alert naming it once it
+ * answered and failed its check, when the console stays off it. While it shows, nothing said of the server being left applies.
+ */
+export function switchLine(follow: FollowStatus | null): ServerLine | null {
+  if (follow?.kind !== "waiting") return null;
+  const why = follow.reason === null ? "" : ` ${asSentence(follow.reason)}`;
+  if (follow.stage === "refused") return { role: "alert", lead: `The current trading server, ${new URL(follow.target).host}, could not be verified, so the app has not connected to it.`, rest: `The app will try again automatically.${why}` };
+  return { role: "status", lead: "Connecting to the current trading server.", rest: `Trading will be available once the server has been verified.${why}` };
+}
+
+/** The one line on a page without the trading view while trading is paused for a change of trading server, or null once it has resumed. */
+export function pauseLine(view: PauseView): ServerLine | null {
+  if (view.kind !== "paused") return null;
+  if (view.failure !== null) return { role: "alert", lead: `${PAUSE_TITLE}.`, rest: view.failure };
+  return { role: "status", lead: `${PAUSE_TITLE}.`, rest: view.long ? LONG_PAUSE : "Trading will resume automatically once the new server has been verified and live prices have returned." };
 }

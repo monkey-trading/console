@@ -7,8 +7,8 @@ import type { WalletConnectConnector } from "@/lib/engine/walletconnect";
 import type { MockNode } from "@/lib/mock";
 import { PREFS_KEY, SIZES_KEY } from "@/lib/prefs";
 import { PrefsStore } from "@/lib/prefs-store";
-import type { MoveAnnouncer } from "@/lib/store/node-move";
 import type { ConsoleStore } from "@/lib/store/store";
+import type { TradingPause } from "@/lib/store/trading-pause";
 
 export interface Session {
   store: ConsoleStore;
@@ -24,8 +24,8 @@ export interface Session {
   follower: OperatorFollower | null;
   /** Counts the moves to another node, each of which remounts every screen on a fresh store. */
   moves: number;
-  /** Posts the move notice at most once per move and holds its dismissal for that move alone. */
-  announcer: MoveAnnouncer;
+  /** Whether trading is paused while the trading server changes, and how far the change has got; null for the mock, which has one node. */
+  pause: TradingPause | null;
   /** Hears each move to another node, which brings a fresh store; absent for the mock, which has one node. */
   onMove?: (listener: (store: ConsoleStore) => void) => void;
 }

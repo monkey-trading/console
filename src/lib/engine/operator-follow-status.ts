@@ -8,14 +8,27 @@ import { RefusedAnswer } from "./trust-errors";
 import type { DeploymentReads, NamedOperator } from "./registry";
 import type { SignerFloor } from "./signer-naming";
 
+/** How far a move to the node the chain names has got. */
+export type WaitingStage = "connecting" | "verifying" | "refused";
+
 /** What the console knows of the node it should talk to; `origin` is the node it talks to now. */
 export type FollowStatus =
   /** No chain read decides: no wallet reads a chain, or the build names no registry. */
   | { kind: "pinned"; origin: string }
   /** The node in use is the one the chain names. */
   | { kind: "following"; origin: string }
-  /** The chain names `target`, which has not verified yet; the node in use stays. */
-  | { kind: "waiting"; origin: string; target: string; reason: string }
+  /**
+   * The stream of the node in use dropped, and where the operator runs is being read before the drop is called an outage. `scheduled`
+   * when it dropped around a turn boundary at which the member changes: a change of server from the first moment, held until the
+   * successor is named, the stream returns, or the time the engine gives a successor to serve has passed.
+   */
+  | { kind: "confirming"; origin: string; scheduled: boolean }
+  /**
+   * The chain names `target`, which has not verified yet; the node in use stays. `stage` is `connecting` until the target answers,
+   * `verifying` once it has and its check or a wallet request holds the move, and `refused` once it failed its check; `reason` says why
+   * when that helps.
+   */
+  | { kind: "waiting"; origin: string; target: string; stage: WaitingStage; reason: string | null }
   /** The chain names an operator whose hostname this build does not list; `hostname` is null when it is not even a plain host. */
   | { kind: "unlisted"; origin: string; hostname: string | null }
   /** The chain read failed; the node in use stays, and it is tried again. */

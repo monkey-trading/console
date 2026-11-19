@@ -3,41 +3,26 @@
  * session key and setup state, since the connection has not ended. Nothing read from the old node
  * exists in the new store but the chart's bars, which the new node's marks then extend, and work
  * the old store has in flight lands in a store no screen reads and finds its wallet gone, so it
- * sends nothing. A session key survives the move because it is registered in the engine's state,
- * which an elected successor takes with the log; a node that no longer holds it refuses it, and the
- * session-signed path then disconnects the wallet, so reconnecting brings setup back at the key's
- * step.
+ * sends nothing. The follower moves only once no request is in flight, so what a request's control
+ * says of its outcome, such as an order sent as the old node went down, moves with the market and
+ * timeframe on screen; what was said of the old node's reads does not. A session key, and every
+ * nonce, survives the move because they are in the engine's state, which a successor takes with the
+ * log; a node that no longer holds the key refuses it, and the session-signed path then disconnects
+ * the wallet, so reconnecting brings setup back at the key's step.
  */
 
 import type { OperatorFollower } from "../engine/operator-follow";
 import { connectWallet } from "./actions";
 import { installKey } from "./session";
+import type { Notices, NoticeSurface } from "./state";
 import type { ConsoleStore } from "./store";
 
-/** What the console tells the user once the screens have remounted on the new store, so the log that announces it exists first. The move adopted only after the node's attestation verified, so the notice says so. */
-export const moveNotice = (host: string): string => `You have been moved to the current trading server, ${host}, after it was verified.`;
+/** The surfaces whose notices are about the node moved away from, its reads, feed and chart, rather than what a request came to. */
+const LEFT_BEHIND: ReadonlySet<NoticeSurface> = new Set(["node", "feed", "accountRead", "payoutReads", "chart"]);
 
-/**
- * Posts the move notice at most once per move, and holds a dismissal for the move it was made on:
- * whatever re-runs the effect — a repeated follow check, a remount — the same move announces once,
- * and only a move to another node announces again.
- */
-export class MoveAnnouncer {
-  private posted: { move: number; host: string } | null = null;
-  private dismissed: { move: number; host: string } | null = null;
-
-  /** The notice `move` earns, or null when this move was announced or dismissed already. */
-  noticeFor(move: number, host: string): string | null {
-    const held = (key: { move: number; host: string } | null) => key !== null && key.move === move && key.host === host;
-    if (held(this.posted) || held(this.dismissed)) return null;
-    this.posted = { move, host };
-    return moveNotice(host);
-  }
-
-  /** The user dismissed the notice now showing: it stays dismissed for that move alone. */
-  dismissShowing(): void {
-    if (this.posted !== null) this.dismissed = this.posted;
-  }
+/** What `notices` says that still holds on another node: each request's outcome where the trader made it. */
+export function carriedNotices(notices: Notices): Notices {
+  return Object.fromEntries(Object.entries(notices).filter(([surface]) => !LEFT_BEHIND.has(surface as NoticeSurface))); // the keys are `Notices`' own
 }
 
 /** Hands `old`'s wallet, key and setup state to `next`; the stored entries need no change, since they name the account, chain and vault and no node. */
@@ -51,8 +36,9 @@ export async function moveToNode(old: ConsoleStore, next: ConsoleStore): Promise
   old.liveWallet = null;
   old.sessionKey = null;
   old.sessionLogin = null;
-  // The page load's wallet was settled on the old store; the next one starts from that.
-  next.patch({ walletDecided: old.getSnapshot().walletDecided });
+  const { walletDecided, notices, selected, timeframe } = old.getSnapshot();
+  // The page load's wallet was settled on the old store; the next one starts from that, on the same market and timeframe.
+  next.patch({ walletDecided, notices: carriedNotices(notices), selected, timeframe });
   if (wallet === null) return;
   // Set first, so the connect below keeps the key rather than clearing another wallet's.
   next.liveWallet = wallet;
@@ -60,6 +46,8 @@ export async function moveToNode(old: ConsoleStore, next: ConsoleStore): Promise
   next.patch({ setup, walletChain: old.getSnapshot().walletChain });
   if (key !== null && sessionExpiresAt > 0) installKey(next, key, sessionExpiresAt);
   await connectWallet(next, wallet.topic !== undefined ? "walletconnect" : "injected", true, wallet);
+  // Connecting a wallet starts its surfaces afresh; what the requests came to is the same account's, so it is said again, under anything said since.
+  if (next.liveWallet === wallet) next.patch({ notices: { ...carriedNotices(notices), ...next.getSnapshot().notices } });
 }
 
 /** Has `follower` read the chain when this store's wallet changes, and hear this store's client. Returns what stops that. */

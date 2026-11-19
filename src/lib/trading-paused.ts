@@ -19,7 +19,7 @@ export type PausedState = {
  * gate and never reaches here.
  */
 export function tradingPaused(input: {
-  /** The console waits on the node the chain names: an operator handover is in progress. */
+  /** The trading server is changing: the console waits on the node the chain names, or holds a drop at a turn boundary as one. */
   handover: boolean;
   /** Rotation is on and the operator now named runs on a node this build does not list, so the console stays on a node that is handing over. */
   unlisted: boolean;
@@ -37,10 +37,10 @@ export function tradingPaused(input: {
   reduceOnly: boolean;
 }): PausedState | null {
   if (input.handover) {
-    return { cause: "handover", text: "A new operator is taking over the trading server, so trading has been suspended. Trading will resume once the new operator's server has been verified.", closesAllowed: true };
+    return { cause: "handover", text: "Trading is paused while the trading server changes. Trading will resume automatically once the new server has been verified and live prices have returned.", closesAllowed: true };
   }
   if (input.unlisted) {
-    return { cause: "unlisted", text: "A new operator is taking over the trading server, but this version of the app does not support the new server, so trading has been suspended. Trading will resume once the app has been updated.", closesAllowed: true };
+    return { cause: "unlisted", text: "This version of the app does not recognise the next trading server, so trading has been suspended. Trading will resume once the app has been updated.", closesAllowed: true };
   }
   if (!input.open) {
     return { cause: "closed", text: input.scheduleWords === null ? "This market is currently closed." : `This market is currently closed. Its trading hours are ${input.scheduleWords}.`, closesAllowed: true };

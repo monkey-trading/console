@@ -1,35 +1,20 @@
-/** The move notice: announced once per move, dismissed for that move alone (monkey-trading/console#272). */
+/** What a move to another node keeps of what the console said: each request's outcome where the trader made it, and nothing said of the node left behind. */
 
 import { describe, expect, it } from "vitest";
 
-import { moveNotice, MoveAnnouncer } from "./node-move";
+import { carriedNotices } from "./node-move";
+import { NOTICE_SURFACES, type Notices } from "./state";
 
-describe("MoveAnnouncer", () => {
-  it("announces a move once, however often the effect runs for it", () => {
-    const announcer = new MoveAnnouncer();
-    expect(announcer.noticeFor(1, "127.0.0.1:8081")).toBe(moveNotice("127.0.0.1:8081"));
-    expect(announcer.noticeFor(1, "127.0.0.1:8081")).toBeNull();
-    expect(announcer.noticeFor(1, "127.0.0.1:8081")).toBeNull();
+describe("carriedNotices", () => {
+  it("keeps what a request came to, such as an order sent as the old node went down, and drops what was said of the old node's reads", () => {
+    const notices: Notices = Object.fromEntries(NOTICE_SURFACES.map((surface, id) => [surface, { id, tone: "error", text: surface }]));
+    const kept = Object.keys(carriedNotices(notices)).sort();
+    expect(kept).toEqual(NOTICE_SURFACES.filter((surface) => !["node", "feed", "accountRead", "payoutReads", "chart"].includes(surface)).sort());
+    expect(kept).toContain("ticket");
+    expect(carriedNotices({ ticket: { id: 1, tone: "error", text: "The server did not respond." } })).toEqual({ ticket: { id: 1, tone: "error", text: "The server did not respond." } });
   });
 
-  it("keeps a dismissed notice dismissed for that move, and announces the next move", () => {
-    const announcer = new MoveAnnouncer();
-    expect(announcer.noticeFor(1, "127.0.0.1:8081")).not.toBeNull();
-    announcer.dismissShowing();
-    expect(announcer.noticeFor(1, "127.0.0.1:8081")).toBeNull();
-    expect(announcer.noticeFor(2, "127.0.0.1:8081")).not.toBeNull();
-    expect(announcer.noticeFor(2, "127.0.0.1:8081")).toBeNull();
-  });
-
-  it("announces a move to another node even under the same count, and says the attestation verified", () => {
-    const announcer = new MoveAnnouncer();
-    expect(announcer.noticeFor(1, "127.0.0.1:8081")).toContain("after it was verified");
-    expect(announcer.noticeFor(1, "node.example")).toBe(moveNotice("node.example"));
-  });
-
-  it("dismisses nothing before a notice posted", () => {
-    const announcer = new MoveAnnouncer();
-    announcer.dismissShowing();
-    expect(announcer.noticeFor(1, "127.0.0.1:8081")).not.toBeNull();
+  it("carries nothing from a store that said nothing", () => {
+    expect(carriedNotices({})).toEqual({});
   });
 });

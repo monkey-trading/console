@@ -2,6 +2,7 @@
 
 import { asSentence } from "../format";
 import type { AttestationStatus } from "./attestation";
+import { EngineError } from "./client";
 import type { OperatorRoute } from "./stats-types";
 
 /** A signed request stopped before it left the page, because the node may not be signed for: unlike a request that went out, it cannot have run. */
@@ -78,4 +79,13 @@ export function sendRefusal(status: AttestationStatus): string | null {
       throw new Error(`Unknown attestation status: ${String(unhandled)}`);
     }
   }
+}
+
+/**
+ * Whether `error` says the node is not serving yet rather than that it cannot be trusted: no answer, a gateway in front of it that could not
+ * reach it, or an answer it did not sign, as a node does until its time is confirmed. A server that has just taken over is like this for a
+ * moment; nothing it says is trusted either way.
+ */
+export function notReady(error: unknown): boolean {
+  return error instanceof UnsignedAnswer || (error instanceof EngineError && (error.status === 0 || error.status === 502 || error.status === 503 || error.status === 504));
 }

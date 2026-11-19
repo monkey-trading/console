@@ -33,7 +33,8 @@ describe("a visit with no wallet to read a chain (monkey-trading/console#280)", 
     follower.subscribe(() => states.push(follower.getSnapshot().kind));
     await follower.check();
     expect(adopted).toEqual([B]);
-    expect(states).toEqual(["waiting", "following"]);
+    expect(states).toEqual(["waiting", "waiting", "following"]);
+    expect(follower.getSnapshot()).toEqual({ kind: "following", origin: B });
   });
 
   it("stays on the node in use when it names its own host, a hostname that is none, or says nothing", async () => {

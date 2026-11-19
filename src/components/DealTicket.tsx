@@ -64,7 +64,7 @@ export function DealTicket() {
   // One plain-words state for a paused market: a handover in progress, an operator on a node this build does not list, a
   // closed market, no usable price, or reduce-only. A node the console does not trust is the gate below, which comes first.
   const paused = tradingPaused({
-    handover: follow?.kind === "waiting",
+    handover: follow?.kind === "waiting" || (follow?.kind === "confirming" && follow.scheduled),
     unlisted: follow?.kind === "unlisted",
     open: market.open,
     scheduleWords: market.open ? null : describeSchedule(market.view.schedule),

@@ -15,8 +15,8 @@ export type AttestationStatus =
   | { kind: "reverifying" }
   /** The device clock and the verified enclave's signed time disagree, so nothing the node says can be judged. */
   | { kind: "clock"; skewMs: number }
-  /** A quote this build cannot verify, or one that fails its checks. Nothing is signed for the node. */
-  | { kind: "unverified"; reason: string };
+  /** A quote this build cannot verify, or one that fails its checks; `notReady` when the node was not serving yet (`notReady` in `trust-errors.ts`). Nothing is signed for the node. */
+  | { kind: "unverified"; reason: string; notReady?: true };
 
 /** Whether the node's feed is arriving: `stale` from the moment the stream fails a check, closes, or goes three heartbeat intervals without a valid frame, until the next valid frame. */
 export type FeedStatus = "connecting" | "live" | "stale";
