@@ -85,11 +85,19 @@ function carryOutcomes(old: ConsoleStore, next: ConsoleStore): void {
   });
 }
 
-/** Has `follower` read the chain when this store's wallet changes, and hear this store's client. Returns what stops that. */
-export function followNode(store: ConsoleStore, follower: OperatorFollower): () => void {
+/**
+ * Has `follower` read the chain when this store's wallet changes, and again the moment a request ends that a change of server was held
+ * for, and hear this store's client. Returns what stops that.
+ */
+export function followNode(store: ConsoleStore, follower: Pick<OperatorFollower, "watch" | "check" | "getSnapshot">): () => void {
   let wallet = store.liveWallet;
+  let busy = store.getSnapshot().busy;
   const stopClient = follower.watch(store.deps.client);
   const stopStore = store.subscribe(() => {
+    const ended = busy && !store.getSnapshot().busy;
+    busy = store.getSnapshot().busy;
+    const held = follower.getSnapshot();
+    if (ended && held.kind === "waiting" && held.stage === "wallet") void follower.check();
     if (store.liveWallet === wallet) return;
     wallet = store.liveWallet;
     void follower.check();
