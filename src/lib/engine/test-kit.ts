@@ -72,6 +72,8 @@ export interface SignedReply {
   signature: string;
   timeMs: number;
   seq: number;
+  /** A `Retry-After` header the answer carries. */
+  retryAfter?: string;
 }
 
 /**
@@ -118,9 +120,9 @@ export class FakeNode {
   signed(path: string, reply: () => SignedReply): void {
     // The node echoes the request's challenge, or 32 zero bytes when it sent none.
     this.routes.set(path, (challenge) => {
-      const { status, body, signature, timeMs, seq } = reply();
+      const { status, body, signature, timeMs, seq, retryAfter } = reply();
       const echoed = challenge ?? "0".repeat(64);
-      return new Response(body, { status, headers: { [SIGNATURE_HEADER]: signature, [TIME_HEADER]: String(timeMs), [SEQ_HEADER]: String(seq), [CHALLENGE_HEADER]: echoed } });
+      return new Response(body, { status, headers: { [SIGNATURE_HEADER]: signature, [TIME_HEADER]: String(timeMs), [SEQ_HEADER]: String(seq), [CHALLENGE_HEADER]: echoed, ...(retryAfter === undefined ? {} : { "Retry-After": retryAfter }) } });
     });
   }
 }

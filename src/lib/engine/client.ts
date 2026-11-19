@@ -31,6 +31,8 @@ export class EngineError extends Error {
   readonly reject: Reject | null;
   /** Set on a 429 that names the account's volume tier; null on every other error. */
   tierLimit: TierRateLimit | null = null;
+  /** Set on a 503 that carries a whole-second `Retry-After`, in milliseconds; null on every other error. */
+  retryAfterMs: number | null = null;
 
   constructor(status: number, message: string, reject: Reject | null = null, options?: ErrorOptions) {
     super(message, options);

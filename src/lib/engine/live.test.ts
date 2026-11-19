@@ -174,6 +174,17 @@ describe("the marks history route", () => {
     node.signed("/v1/markets/7/marks?resolution=1s&from_ms=0&to_ms=5000", () => ({ status: 404, body: '{"error":"not found"}', signature: "0x", timeMs: markets.time_ms, seq: 1 }));
     await expect(client.marks(7, "1s", 0, 5_000)).rejects.toMatchObject({ status: 404 });
   });
+
+  it("carries a signed 503's Retry-After as the wait it names, and refuses an unsigned 503 as it does any unsigned answer", async () => {
+    const { node, client } = setup({ verifier: acceptAll });
+    const path = "/v1/markets/7/marks?resolution=1m&from_ms=0&to_ms=5000";
+    node.signed(path, () => ({ status: 503, body: '{"error":"not ready"}', signature: "0x", timeMs: markets.time_ms, seq: 1, retryAfter: "5" }));
+    await expect(client.marks(7, "1m", 0, 5_000)).rejects.toMatchObject({ status: 503, retryAfterMs: 5_000 });
+    node.signed(path, () => ({ status: 503, body: '{"error":"not ready"}', signature: "0x", timeMs: markets.time_ms, seq: 1, retryAfter: "soon" }));
+    await expect(client.marks(7, "1m", 0, 5_000)).rejects.toMatchObject({ status: 503, retryAfterMs: null });
+    node.routes.set(path, () => new Response('{"error":"not ready"}', { status: 503, headers: { "Retry-After": "5" } }));
+    await expect(client.marks(7, "1m", 0, 5_000)).rejects.toThrow("was not signed");
+  });
 });
 
 describe("a stream replaced while the node is being verified", () => {

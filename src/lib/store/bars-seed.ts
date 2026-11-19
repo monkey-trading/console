@@ -18,6 +18,12 @@ import { awaitsTrust } from "./signing";
 
 /** The most tries one series gets before its fetch gives up and reports. */
 const SEED_ATTEMPTS = 3;
+/** A node still importing its earlier history answers 503: the wait before asking again is its `Retry-After`, kept within these bounds. */
+const NOT_READY_MIN_MS = 1_000;
+const NOT_READY_MAX_MS = 30_000;
+const NOT_READY_DEFAULT_MS = 5_000;
+/** The most a series waits on a node that is not ready before it reports. */
+const NOT_READY_BUDGET_MS = 240_000;
 
 export class BarsSeed {
   /** The market/timeframe series a fetch finished, so each is seeded once per page load. */
@@ -28,6 +34,10 @@ export class BarsSeed {
   private readonly attempts = new Map<string, number>();
   /** The series whose failure was already reported, so it is reported once. */
   private readonly reported = new Set<string>();
+  /** The pending waits on a node that is not ready yet, by series; a series with one is not fetched again until it fires. */
+  private readonly waiting = new Map<string, ReturnType<typeof setTimeout>>();
+  /** How long each series has waited on a node that is not ready, against `NOT_READY_BUDGET_MS`. */
+  private readonly waited = new Map<string, number>();
   /** Whether the node 404'd the marks endpoint; it is an older node, so the archive scan seeds instead. */
   private unavailable = false;
   /** Whether the archive-scan fallback has started; a false start (no log head yet) is asked again. */
@@ -51,7 +61,9 @@ export class BarsSeed {
   seed(marketId: MarketId, timeframe: TimeframeId): void {
     if (this.store.deps.client.signatures !== "checked" || this.unavailable || this.store.getSnapshot().now === 0) return;
     const key = `${marketId}:${timeframe}`;
-    if (this.seeded.has(key) || this.pending.has(key)) return;
+    // A wait for another series is for a chart no longer shown: it is cancelled, and that series asks again if it is returned to.
+    for (const other of [...this.waiting.keys()]) if (other !== key) this.cancelWait(other);
+    if (this.seeded.has(key) || this.pending.has(key) || this.waiting.has(key)) return;
     const attempt = (this.attempts.get(key) ?? 0) + 1;
     this.attempts.set(key, attempt);
     this.pending.add(key);
@@ -64,6 +76,7 @@ export class BarsSeed {
     if (!this.reported.delete(key)) return;
     this.seeded.delete(key);
     this.attempts.delete(key);
+    this.waited.delete(key);
   }
 
   /** Asks for the archive scan once a node without the endpoint is read again, until it starts. */
@@ -73,6 +86,8 @@ export class BarsSeed {
 
   /** Forgets the seeds and the scan's ask, so a restarted store (StrictMode re-runs the effect) works anew. */
   reset(): void {
+    for (const key of [...this.waiting.keys()]) this.cancelWait(key);
+    this.waited.clear();
     this.seeded.clear();
     this.pending.clear();
     this.attempts.clear();
@@ -117,18 +132,46 @@ export class BarsSeed {
         this.askHistoryScan();
         return;
       }
+      // A node still importing its earlier history is not a failure: wait as long as it names, then ask again.
+      if (error instanceof EngineError && error.status === 503) {
+        const snapshot = this.store.getSnapshot();
+        // A series no longer shown waits for nothing; it asks again when it is returned to.
+        if (key !== `${snapshot.selected}:${snapshot.timeframe}`) return;
+        const waited = this.waited.get(key) ?? 0;
+        const delay = Math.min(NOT_READY_MAX_MS, Math.max(NOT_READY_MIN_MS, error.retryAfterMs ?? NOT_READY_DEFAULT_MS));
+        if (waited + delay <= NOT_READY_BUDGET_MS) {
+          this.waited.set(key, waited + delay);
+          this.attempts.delete(key);
+          this.waiting.set(key, setTimeout(() => {
+            this.waiting.delete(key);
+            if (!this.store.stopped) this.seed(marketId, timeframe);
+          }, delay));
+          return;
+        }
+        this.giveUp(key);
+        return;
+      }
       // A node not verified yet says so in the banner, and the next trigger reads again; it does not count as an attempt.
       if (awaitsTrust(error)) return;
       // A transient failure retries on the next trigger; the last one reports once and stops.
-      if (attempt >= SEED_ATTEMPTS && !this.seeded.has(key) && !this.reported.has(key)) {
-        this.reported.add(key);
-        this.seeded.add(key);
-        this.store.notify("chart", HISTORY_UNAVAILABLE);
-      }
+      if (attempt >= SEED_ATTEMPTS) this.giveUp(key);
     } finally {
       // A stale request never clears the flag a newer cycle set for the same series.
       if (!stale()) this.pending.delete(key);
     }
+  }
+
+  private cancelWait(key: string): void {
+    clearTimeout(this.waiting.get(key));
+    this.waiting.delete(key);
+  }
+
+  /** Reports once that a series' history could not be had, and stops asking for it. */
+  private giveUp(key: string): void {
+    if (this.seeded.has(key) || this.reported.has(key)) return;
+    this.reported.add(key);
+    this.seeded.add(key);
+    this.store.notify("chart", HISTORY_UNAVAILABLE);
   }
 
   /** Starts the archive-scan fallback; un-wired or not-yet-startable answers are asked again on the next read. */
