@@ -6,7 +6,8 @@
  * save says to a screen reader. A draft belongs to the position it was opened for (`openDraft`) and is
  * dropped once that position is no longer the one held, so a later position in the market, a changed one
  * or another account never inherits it. Each opening is a new instance, and a save that lands later closes
- * only the instance and draft it was sent from, returning focus to the row's Edit button when it held focus.
+ * only the instance and draft it was sent from, returning focus to the row's Edit button when it held focus. While an
+ * instance's save is signed, sent and its account read back, both its editors hold Save.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -30,6 +31,8 @@ export const editButtonIds = (id: string, market: MarketId) => [`${id}-edit-${ma
 export function useLevelsEditor(store: ConsoleStore, id: string, owner: string | null, held: readonly HeldPosition[]) {
   const [draft, setDraft] = useState<LevelsDraft | null>(null);
   const [announced, setAnnounced] = useState("");
+  // The instance whose save is being signed, sent and read back; null with none.
+  const [saving, setSaving] = useState<number | null>(null);
   // The draft as the handlers last set it, which a save that lands later compares with; written only in handlers and effects.
   const latest = useRef<LevelsDraft | null>(null);
   const opened = useRef(0);
@@ -56,6 +59,8 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
   return {
     /** The draft of `market`'s editor while it is open; null while it is closed. */
     draftFor: (market: MarketId): LevelsDraft | null => (current?.market === market ? current : null),
+    /** Whether `market`'s open editor has a save on its way, its account read included. */
+    savingFor: (market: MarketId): boolean => current?.market === market && current.instance === saving,
     /** Whether an editor is open under any row. */
     open: current !== null,
     announced,
@@ -72,8 +77,11 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
     },
     /** Editor `instance` sends `levels`, which the position may hold before the answer lands. */
     sending: (instance: number, levels: Levels) => {
+      setSaving(instance);
       if (latest.current?.instance === instance) set({ ...latest.current, sent: levels });
     },
+    /** Editor `instance`'s save has finished, its account read included, whether or not it was taken. */
+    settled: (instance: number) => setSaving((now) => (now === instance ? null : now)),
     cancel: (market: MarketId) => {
       store.clearNotice("levels");
       const refocusing = focusInEditor();

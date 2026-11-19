@@ -7,8 +7,6 @@
  * (`useLevelsEditor`), so the table's and the card's editors are one.
  */
 
-import { useState } from "react";
-
 import { spokenRate } from "@/lib/fee-words";
 import type { Fixed } from "@/lib/fixed";
 import { checkEditorLevels, type LevelFields } from "@/lib/level-check";
@@ -43,28 +41,29 @@ interface Props {
   onSend: (levels: Levels) => void;
   /** The node took `sent`, and `words` say what the position now holds. */
   onSaved: (sent: LevelFields, words: string) => void;
+  /** Whether this editor's own save is being signed, sent and read back, which alone its Save button says; and what ends it. */
+  saving: boolean;
+  onSettled: () => void;
   readOnly: boolean;
   /** Why Save is unavailable to this session, as the row's Close button says it. */
   describedBy: string | undefined;
 }
 
-export function LevelsEditor({ id, market, position, fields, onChange, closing, noClosing, capped, limits, toUsdDown, onCancel, onSend, onSaved, readOnly, describedBy }: Props) {
+export function LevelsEditor({ id, market, position, fields, onChange, closing, noClosing, capped, limits, toUsdDown, onCancel, onSend, onSaved, saving, onSettled, readOnly, describedBy }: Props) {
   const { store } = useSession();
   const busy = useConsoleValue((state) => state.busy);
-  // Whether this editor's own request is being signed and sent, which alone its Save button says.
-  const [saving, setSaving] = useState(false);
   const long = position.qty > 0n;
   const check = checkEditorLevels({ market, qty: position.qty, entry: position.entry, held: position.levels ?? NO_LEVELS, closing, noClosing, capped, limits, fields, toUsdDown });
-  const canSave = check.changed && !check.blocked && !busy && !readOnly;
+  // The session's busy flag clears once the node answers; the save holds Save until its account read has landed too.
+  const canSave = check.changed && !check.blocked && !busy && !saving && !readOnly;
   const rate = spokenRate(market.view.min_level_distance_bps ?? 0);
   const save = () => {
     if (!canSave) return;
     const sent = fields;
     const words = levelsSavedWords(market.symbol, check.named, market.places);
-    setSaving(true);
     onSend(check.named);
     void setPositionLevels(store, market.id, check.named).then((saved) => {
-      setSaving(false);
+      onSettled();
       if (saved) onSaved(sent, words);
     });
   };
