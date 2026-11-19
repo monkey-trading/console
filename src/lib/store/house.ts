@@ -1,5 +1,5 @@
 /**
- * The node's house state (the latest `set_params`, the pending listing notices and the checkpoint),
+ * The node's house state (the latest `set_params`, the pending listing notices and the checkpoint) and its protocol version,
  * which the House page and the trading surfaces' prices and fees read, and the House page's public
  * withdrawal queue size.
  */
@@ -10,7 +10,8 @@ import type { ConsoleStore } from "./store";
 import { awaitsTrust } from "./signing";
 
 /**
- * Reads the house's parameters and checkpoint from the node into the store. Called on every
+ * Reads the house's parameters and checkpoint from the node into the store, with its protocol version at the first read and
+ * after each change the stream carried. Called on every
  * refresh, like the markets and house reads; a failure says nothing here, the panels wait for the next
  * read. A node that predates the route answers null: the panels say so, and
  * the route is not asked again until the page reopens, the node restarts or `ROUTE_ABSENT_MS` passes.
@@ -21,15 +22,18 @@ export function readHouseState(store: ConsoleStore): Promise<boolean> {
   const mark = store.quiet.mark();
   // The changes asked for so far; a stream change while this read runs asks again.
   const asked = store.pricingAsked;
-  return store.deps.client.houseState().then(
-    (read) => {
+  // The protocol version moves only with an applied admin command, which makes the house state stale, so it is read only then.
+  const version = asked > store.pricingRead ? store.deps.client.protocolVersion() : undefined;
+  return Promise.all([store.deps.client.houseState(), version]).then(
+    ([read, protocolVersion]) => {
       if (read === null) store.quiet.rest(HOUSE_STATE, ROUTE_ABSENT_MS, mark);
       store.pricingRead = Math.max(store.pricingRead, asked);
       const pricingCurrent = store.pricingRead >= store.pricingAsked;
+      const version = protocolVersion === undefined ? {} : { protocolVersion };
       store.patch(
         read === null
-          ? { houseParams: null, checkpoint: null, listingNotices: {}, houseStateStatus: "unavailable", pricingCurrent }
-          : { houseParams: read.params, checkpoint: read.checkpoint, listingNotices: read.listingNotices, houseStateStatus: "read", pricingCurrent },
+          ? { houseParams: null, checkpoint: null, listingNotices: {}, houseStateStatus: "unavailable", pricingCurrent, ...version }
+          : { houseParams: read.params, checkpoint: read.checkpoint, listingNotices: read.listingNotices, houseStateStatus: "read", pricingCurrent, ...version },
       );
       return true;
     },

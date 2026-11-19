@@ -6,7 +6,7 @@ import type { DeploymentReads, VaultFacts } from "./registry";
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks, type Unsubscribe } from "./client";
 import type { EntitlementProof } from "./emissions";
 import { setParamsOf, type QueueTotals } from "../house";
-import { HouseFold, readHouseState, type HouseState } from "./house-state";
+import { HouseFold, readHouseState, readProtocolVersion, type HouseState } from "./house-state";
 import { QueueTotalsWalk } from "./live-queue";
 import { historyPath, readEmissionSchedule } from "./live-ledger";
 import type { EmissionSchedule } from "./emission-schedule";
@@ -160,6 +160,8 @@ export class LiveEngineClient implements EngineClient {
   houseState(): Promise<HouseState | null> {
     return readHouseState(() => this.transport.get("/v1/house/state"), this.houseFold);
   }
+
+  protocolVersion(): Promise<number | null> { return readProtocolVersion(() => this.transport.get("/v1/benchmarks")); }
 
   async account(address: Address): Promise<AccountView> {
     return (await this.transport.get(`/v1/accounts/${address}`)) as AccountView;

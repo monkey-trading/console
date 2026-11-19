@@ -8,7 +8,7 @@ import { useId, useState } from "react";
 import { signBlock } from "@/lib/engine/attestation";
 import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
 import { EMPTY_FIELDS, type LevelFields } from "@/lib/level-check";
-import { noLevels } from "@/lib/levels";
+import { noLevels, offeredLevelDistance } from "@/lib/levels";
 import { ORDER_LABELS, ORDER_TYPES, type OrderType } from "@/lib/prefs";
 import { formatMark } from "@/lib/price-format";
 import { describeSchedule } from "@/lib/schedule";
@@ -203,7 +203,7 @@ export function DealTicket() {
           {!gate && shownProblems.map((p) => <p key={p}>{p}{p === NO_FUNDS && <> <FundingLink /></>}</p>)}
         </div>
       </form>
-      <MarketInfo market={market} spreadTiers={spreadTiers} ownBands={ownBands} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={terms?.stressLevels[market.stress] ?? null} closeoutBps={terms?.closeoutLevelBps ?? null} notice={terms === null ? null : (state.listingNotices[market.id] ?? null)} paramsNote={houseTermsNote(state)} />
+      <MarketInfo market={market} spreadTiers={spreadTiers} ownBands={ownBands} preview={preview} side={side} price={kind === "market" ? prices.price : null} slippageBps={slippage} stress={terms?.stressLevels[market.stress] ?? null} closeoutBps={terms?.closeoutLevelBps ?? null} notice={terms === null ? null : (state.listingNotices[market.id] ?? null)} paramsNote={houseTermsNote(state)} levelDistance={offeredLevelDistance(market.view, state.protocolVersion)} />
     </>
   );
 }

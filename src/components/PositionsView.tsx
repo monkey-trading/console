@@ -18,7 +18,7 @@ import { formatCloseout, formatMark } from "@/lib/price-format";
 import { absFixed, formatFixedPlaces, formatUsd } from "@/lib/fixed";
 import { roundToPlaces } from "@/lib/fixed-rounding";
 import { realisedAt } from "@/lib/close-preview";
-import { formatLevel, minLevelDistance, NO_LEVELS, type Levels } from "@/lib/levels";
+import { formatLevel, NO_LEVELS, offeredLevelDistance, type Levels } from "@/lib/levels";
 import type { LevelFields } from "@/lib/level-check";
 import { CLOSE_ALL_REMOVES_LEVELS, levelsWait } from "@/lib/level-words";
 import { editorReference } from "@/lib/ticket-levels";
@@ -136,7 +136,7 @@ export function PositionsView() {
     // From V79 a position in a market that takes levels shows them and an editor to set, move or remove them, measured from its closing price.
     const levels = p.levels ?? NO_LEVELS;
     const draft = levelsEditor.draftFor(p.market);
-    const editor = market === undefined || minLevelDistance(market.view) === null ? null : {
+    const editor = market === undefined || offeredLevelDistance(market.view, snapshot.protocolVersion) === null ? null : {
       market, position: p, ...editorReference(account, terms, market, p.qty, known === null ? null : quoted), noClosing: levelsWait(noPrice ?? houseTermsNote(snapshot)),
       limits: ticketLimits(account, p.market), toUsdDown, fields: draft?.fields ?? { takeProfit: "", stopLoss: "" }, onChange: levelsEditor.edit,
       onCancel: () => levelsEditor.cancel(p.market), onSend: (sent: Levels) => { if (draft !== null) levelsEditor.sending(draft.instance, sent); }, onSaved: (sent: LevelFields, words: string) => { if (draft !== null) levelsEditor.saved(draft.instance, sent, p.market, words); },

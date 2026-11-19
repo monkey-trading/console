@@ -21,7 +21,7 @@ async function fixture() {
   const views = await node.client.markets();
   const market = views.map((v) => decodeMarket(v, undefined, true)).find((m) => m.id === 1);
   if (market === undefined) throw new Error("BTC-USD is listed");
-  return { node, market, state: initialState(views, { cash: "0", nav: "0", gross_exposure: "0" }, START, () => [], "none") };
+  return { node, market, state: { ...initialState(views, { cash: "0", nav: "0", gross_exposure: "0" }, START, () => [], "none"), protocolVersion: 79 } };
 }
 
 describe("closingAt", () => {
@@ -44,6 +44,15 @@ describe("closingAt", () => {
 
 describe("ticketLevels", () => {
   const prices = (price: bigint | null) => ({ bid: null, offer: null, price, exactClose: false, toxicityBps: 0, spreadTenths: null, problem: null, problemIsSize: false });
+
+  it("offers no levels before the node runs V79, though the market's listing names a distance, nor before its version is read", async () => {
+    const { node, state, market } = await fixture();
+    const order = { side: "buy" as const, qty: fixedFromInt(1), slippageBps: 25, resting: false, triggerPrice: null };
+    const at = (protocolVersion: number | null) => ticketLevels({ ...state, protocolVersion, houseParams: node.client.state.params, pricingCurrent: true }, market, order, { takeProfit: "", stopLoss: "" }, { prices: prices(market.mark), limits: null });
+    expect(market.view.min_level_distance_bps).toBe(30);
+    expect([at(null), at(78)]).toEqual([null, null]);
+    expect(at(79)).not.toBeNull();
+  });
 
   it("measures a market order's levels from the closing price of the position it leaves, not the one held", async () => {
     const { node, state, market } = await fixture();

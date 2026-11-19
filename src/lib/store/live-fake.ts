@@ -93,6 +93,9 @@ export class FakeClient implements EngineClient {
   houseSeq: number | null = null;
   /** How many times the house state was read. */
   houseStateReads = 0;
+  /** The protocol version the node states, and how many times it was read. */
+  stated: number | null = 79; protocolVersionReads = 0;
+  async protocolVersion() { this.protocolVersionReads++; return this.stated; }
   /** When set, the house state read rejects with it; `unavailable` answers as a node that predates the route does. */
   houseStateError: Error | null = null;
   unavailable = false;

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LevelKind, MarketView } from "./engine/types";
 import { fixedFromInt, parseFixed, type Fixed } from "./fixed";
-import { checkLevel, decodeLevels, formatLevel, levelsWire, minLevelDistance, movedLevels, parseLevel, resultAtLevel } from "./levels";
+import { checkLevel, decodeLevels, formatLevel, levelsWire, minLevelDistance, movedLevels, offeredLevelDistance, parseLevel, resultAtLevel } from "./levels";
 
 const f = (text: string): Fixed => parseFixed(text) ?? 0n;
 const REF = fixedFromInt(100_000);
@@ -74,6 +74,12 @@ describe("the wire", () => {
   it("takes a market's distance only from a positive whole number, as every V79 listing names one", () => {
     const view = (bps?: number) => ({ min_level_distance_bps: bps }) as unknown as MarketView; // only the field read here
     expect([view(30), view(undefined), view(0), view(1.5)].map(minLevelDistance)).toEqual([30, null, null, null]);
+  });
+
+  it("offers a listed distance only once the node runs V79, as a listing may name one before the activation that takes it up", () => {
+    const view = (bps?: number) => ({ min_level_distance_bps: bps }) as unknown as MarketView; // only the field read here
+    expect([null, 78, 79, 80].map((version) => offeredLevelDistance(view(30), version))).toEqual([null, null, 30, 30]);
+    expect(offeredLevelDistance(view(undefined), 79)).toBeNull();
   });
 });
 

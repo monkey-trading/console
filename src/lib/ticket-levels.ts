@@ -8,7 +8,7 @@ import type { SpreadTier } from "./engine/types";
 import { absFixed, type Fixed } from "./fixed";
 import { checkTicketLevels, type LevelCheck, type LevelFields } from "./level-check";
 import { levelsWait } from "./level-words";
-import { NO_LEVELS } from "./levels";
+import { NO_LEVELS, offeredLevelDistance } from "./levels";
 import type { HouseParams } from "./house";
 import type { AccountModel, MarketModel } from "./models";
 import { CALM, conversionAt, priceOrder, stressTermsAt, type StressTerms } from "./pricing";
@@ -59,12 +59,13 @@ export function editorReference(account: AccountModel | null, params: HouseParam
 }
 
 /**
- * The ticket's levels for `order`, typed in `fields`; null for a market that takes none. A market order's
+ * The ticket's levels for `order`, typed in `fields`; null for a market that takes none, or before the node runs V79. A market order's
  * are measured from the closing price of the position it would leave, at the mark, which the engine
  * measures at its fill; a working order's from its own price. The estimate's entry is the price the
  * order is sent at, or its trigger price.
  */
 export function ticketLevels(state: ConsoleState, market: MarketModel, order: TicketOrder, fields: LevelFields, figures: Pick<TicketFigures, "prices" | "limits">): LevelCheck | null {
+  if (offeredLevelDistance(market.view, state.protocolVersion) === null) return null;
   const position = state.account?.positions.find((p) => p.market === market.id) ?? null;
   const held = position?.qty ?? 0n;
   const left = held + (order.side === "buy" ? order.qty : -order.qty);

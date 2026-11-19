@@ -47,6 +47,13 @@ describe("the deal ticket's levels", () => {
   it("shows no level fields in a market listed by a node that predates them", () => {
     expect(render(createElement(DealTicket), { markets: [older] })).not.toContain("Take profit");
   });
+
+  it("shows no level fields, nor the market's distance, before the node runs V79, though the listing names a distance", () => {
+    const html = render(createElement(DealTicket), { protocolVersion: 78 });
+    expect(html).not.toContain("Take profit");
+    expect(html).not.toContain("Minimum distance for take profit and stop loss");
+    expect(render(createElement(DealTicket), { protocolVersion: 79 })).toContain("Minimum distance for take profit and stop loss");
+  });
 });
 
 describe("the position row's levels", () => {
@@ -68,6 +75,12 @@ describe("the position row's levels", () => {
     expect(old).not.toContain(">Edit<");
     expect(old).not.toContain("Edit take profit and stop loss");
     expect(old).not.toMatch(/<dt[^>]*>(?:<[^>]*>)*Take profit/);
+  });
+
+  it("offers no Edit before the node runs V79, though the market's listing names a distance", () => {
+    const html = render(createElement(PositionsView), { account: account([{ ...position, levels: undefined }]), protocolVersion: 78 });
+    expect(html).not.toContain("Edit take profit and stop loss");
+    expect(render(createElement(PositionsView), { account: account([{ ...position, levels: undefined }]), protocolVersion: 79 })).toContain("Edit take profit and stop loss");
   });
 });
 

@@ -17,6 +17,7 @@ export interface HousePanelInit {
   params: HouseParams | null;
   checkpoint: CheckpointEntry | null;
   totals: QueueTotals | null;
+  protocolVersion: number | null;
 }
 
 export interface StoreDeps {

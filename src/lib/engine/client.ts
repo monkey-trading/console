@@ -134,6 +134,8 @@ export interface EngineClient {
    * as the stream's; null from a node that predates the route.
    */
   houseState(): Promise<HouseState | null>;
+  /** The protocol version the node's log runs, as `GET /v1/benchmarks` states it (`v79` is 79); null from a node that predates the route or states none. */
+  protocolVersion(): Promise<number | null>;
   /** The public FIFO withdrawal queue's size, walked to its end within a page cap. */
   withdrawalTotals(): Promise<QueueTotals>;
   /** Rejects with a 404 `EngineError` for an account the engine has never credited. */
