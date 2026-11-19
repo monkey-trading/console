@@ -179,5 +179,22 @@ describe("a dropped stream", () => {
     }
     expect(kit.follower.getSnapshot()).toEqual({ kind: "following", origin: BUILD });
   });
-});
 
+  it("reads a drop at a boundary at once even when an earlier drop was read moments before", async () => {
+    const kit = await handover();
+    const boundary = 1_000_000 + 60_000;
+    kit.trial.signedRead = async () => ({ turn: { candidate: A_MEMBER, applies_at: 1_000_000 - 60_000 }, next_turn: { candidate: B_MEMBER, applies_at: boundary } });
+    await kit.follower.check();
+    kit.advance(20_000); // a blip well before the boundary, read at once and found no move
+    kit.drop();
+    await settle();
+    expect(kit.follower.getSnapshot()).toEqual({ kind: "following", origin: BUILD });
+    for (const watcher of kit.trial.watchers) watcher({ type: "feed", status: "live" });
+    kit.advance(15_000); // within the boundary's allowance, and within RETRY_MS of that read
+    kit.setOperator(async () => named({ hostname: "b.example" }));
+    kit.successor.verdict = VERIFIED;
+    kit.drop();
+    await settle();
+    expect(kit.adopted).toEqual([B]);
+  });
+});
