@@ -191,8 +191,8 @@ export class OperatorFollower {
     try {
       const facts = await bounded(this.deps.scheduler, chain.vault());
       if (this.deps.chain() !== chain) return; // another wallet came while this ran; `check` runs again for it
-      const heeding = this.current?.heedVault(facts, chain) ?? Promise.resolve(); // the server being left may re-verify slowly during a change
-      if (FollowPace.switching(this.state)) heeding.catch(() => undefined); // its verdict, failed or not, is its own client's, not the successor's
+      const heeding = this.current?.heedVault(facts, chain) ?? Promise.resolve(); // a server being left, or whose stream is down, may re-verify slowly
+      if (FollowPace.switching(this.state) || this.pace.streamDown) heeding.catch(() => undefined); // its verdict, failed or not, is its own client's, not the successor's
       else await heeding;
     } catch (error) {
       vaultFailed = reason(error);
