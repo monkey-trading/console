@@ -29,6 +29,14 @@ export class UnsignedAnswer extends UntrustedError {
   }
 }
 
+/** The node's check failed only because it is not serving yet (`notReady` of the check's status), which `notReady` reads through whatever wraps it. */
+export class NotServingYet extends UntrustedError {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "NotServingYet";
+  }
+}
+
 /** A signed answer that verified but that the console refuses to take as the node's word on the vault's signer; `answer` is what it said, which can still say where the operator now runs. */
 export class RefusedAnswer extends UntrustedError {
   constructor(reason: string, readonly answer: OperatorRoute, options?: ErrorOptions) {
@@ -81,6 +89,12 @@ export function sendRefusal(status: AttestationStatus): string | null {
   }
 }
 
+/** What the signer gate throws while no check has trusted the node: `NotServingYet` when the failed check was only that, so a refusal wrapping it stays readable as such. */
+export function gateRefusal(status: AttestationStatus): UntrustedError {
+  const reason = sendRefusal(status) ?? "The server has not yet been verified.";
+  return status.kind === "unverified" && status.notReady === true ? new NotServingYet(reason) : new UntrustedError(reason);
+}
+
 /**
  * Whether `error` says the node is not serving yet rather than that it cannot be trusted: no answer, a gateway in front of it that could not
  * reach it, or an answer it did not sign, as a node does until its time is confirmed. A server that has just taken over is like this for a
@@ -89,5 +103,5 @@ export function sendRefusal(status: AttestationStatus): string | null {
 export function notReady(error: unknown): boolean {
   // A refusal that carries what the node said last wraps the read's own failure, which decides.
   if (error instanceof RefusedAnswer) return notReady(error.cause);
-  return error instanceof UnsignedAnswer || (error instanceof EngineError && (error.status === 0 || error.status === 502 || error.status === 503 || error.status === 504));
+  return error instanceof UnsignedAnswer || error instanceof NotServingYet || (error instanceof EngineError && (error.status === 0 || error.status === 502 || error.status === 503 || error.status === 504));
 }

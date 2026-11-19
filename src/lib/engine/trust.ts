@@ -9,7 +9,7 @@ import { SignerNaming, type SignerFloor, type SignerRefusal, type SignerWord } f
 import { digestNamed, isConfigHash, manifestText } from "./release-check";
 
 export { NotSentError, SignatureError, UntrustedError } from "./trust-errors";
-import { notReady, NotSentError, sendRefusal, UntrustedError } from "./trust-errors";
+import { gateRefusal, notReady, NotSentError, sendRefusal, UntrustedError } from "./trust-errors";
 
 /** How long a failure under an address that re-verified unchanged goes without another re-verification, in milliseconds. */
 const RECHECK_COOLDOWN_MS = 30_000;
@@ -60,7 +60,7 @@ export class NodeTrust {
    */
   async signer(): Promise<string> {
     if (this.signerAddress === null || this.verifying !== null) await this.verify();
-    if (this.signerAddress === null) throw new UntrustedError(sendRefusal(this.current) ?? "The server has not yet been verified.");
+    if (this.signerAddress === null) throw gateRefusal(this.current);
     return this.signerAddress;
   }
 
