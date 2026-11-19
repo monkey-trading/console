@@ -17,9 +17,10 @@ import { WalletConnectConnector } from "@/lib/engine/walletconnect";
 import type { VerifierModule } from "@/lib/engine/wasm-verifier";
 import { WatchConnector } from "@/lib/engine/watch-wallet";
 import { walletSessionEnded } from "@/lib/store/actions";
-import { moveToNode, MoveAnnouncer } from "@/lib/store/node-move";
+import { moveToNode } from "@/lib/store/node-move";
 import { scanBarsHistory } from "@/lib/store/bars-scan";
 import { ConsoleStore } from "@/lib/store/store";
+import { TradingPause } from "@/lib/store/trading-pause";
 
 import { createPrefs, exitStorage, injectedProvider, scheduler, type Session } from "./session-env";
 
@@ -58,6 +59,8 @@ export async function createLiveSession(deploy: Deploy): Promise<Session> {
   // The store in use, which a move to another node replaces; `ended` above and the follower below read it when they run.
   let store = storeFor(client);
   let moved: ((next: ConsoleStore) => void) | null = null;
+  // Set below, before the follower can move: it hears each store as the move brings it, before the follower says it settled there.
+  let pause: TradingPause | null = null;
   const follower = new OperatorFollower({
     deploy, origin: deploy.origin, scheduler, nowMs,
     chain: () => store.liveWallet?.chainReads ?? null,
@@ -67,9 +70,12 @@ export async function createLiveSession(deploy: Deploy): Promise<Session> {
       const old = store;
       store = storeFor(next);
       void moveToNode(old, store);
+      pause?.use(store);
       moved?.(store);
     },
   });
-  return { store, deploy, node: null, walletConnect, prefs: createPrefs(), follower, moves: 0, announcer: new MoveAnnouncer(), onMove: (listener) => { moved = listener; } };
+  pause = new TradingPause(follower, scheduler);
+  pause.use(store);
+  return { store, deploy, node: null, walletConnect, prefs: createPrefs(), follower, moves: 0, pause, onMove: (listener) => { moved = listener; } };
 }
 

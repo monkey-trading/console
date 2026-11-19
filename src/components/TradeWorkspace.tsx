@@ -2,25 +2,36 @@
 
 /**
  * The trading workspace. From 1024 px it is three columns: watchlist, chart with the account panels,
- * and the order ticket. Below that it shows one pane at a time, chosen from a bar at the foot.
+ * and the order ticket. Below that it shows one pane at a time, chosen from a bar at the foot. While
+ * trading is paused for a change of trading server, the panes are inert under the pause panel, the bar
+ * at the foot still chooses among them, and a move that remounts the workspace shows the pane focus
+ * was in.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { type FocusWhere, paneWhenNarrowed, rememberPane } from "@/lib/panes";
+import { holdsView } from "@/lib/store/trading-pause";
 
 import { BottomPanel } from "./BottomPanel";
 import { ChartPanel } from "./ChartPanel";
+import { useSession, useTradingPause } from "./ConsoleProvider";
 import { OrderTicket } from "./OrderTicket";
 import { PHONE_PANES, PhoneNav, type PhonePane } from "./PhoneNav";
+import { TradingPausePanel } from "./TradingPausePanel";
 import { Watchlist } from "./Watchlist";
 
 /** Hides a pane below 1024 px unless it is the one chosen; the desktop layout shows all of them. */
 const hiddenUnless = (current: PhonePane, pane: PhonePane) => (current === pane ? "" : "max-lg:hidden");
 
 export function TradeWorkspace() {
-  const [pane, setPane] = useState<PhonePane>("chart");
+  const { pause } = useSession();
+  const [pane, setPane] = useState<PhonePane>(() => PHONE_PANES.find((p) => p.id === pause?.heldPane())?.id ?? "chart");
+  const view = useTradingPause();
+  // The view stays held while "Trading resumed" shows, and is enabled again as the panel fades.
+  const held = holdsView(view);
+  useEffect(() => pause?.notePane(pane), [pause, pane]);
   const focusMarket = useRef(false);
   const root = useRef<HTMLDivElement>(null);
   const focused = useRef<{ pane: PhonePane | null; element: Element | null }>({ pane: null, element: null });
@@ -68,14 +79,15 @@ export function TradeWorkspace() {
     setPane("chart");
   };
   return (
-    <div ref={root} className="grid min-h-0 flex-1 max-lg:content-start lg:grid-cols-[210px_minmax(0,1fr)_290px] xl:grid-cols-[230px_minmax(0,1fr)_310px]">
-      <div data-pane="markets" className={`relative min-h-0 lg:overflow-y-auto ${hiddenUnless(pane, "markets")}`}><Watchlist onPick={picked} /></div>
-      <div className="relative flex min-h-0 min-w-0 flex-col lg:overflow-y-auto">
+    <div ref={root} className="relative grid min-h-0 flex-1 max-lg:content-start lg:grid-cols-[210px_minmax(0,1fr)_290px] xl:grid-cols-[230px_minmax(0,1fr)_310px]">
+      <div data-pane="markets" inert={held} className={`relative min-h-0 lg:overflow-y-auto ${hiddenUnless(pane, "markets")}`}><Watchlist onPick={picked} /></div>
+      <div inert={held} className="relative flex min-h-0 min-w-0 flex-col lg:overflow-y-auto">
         <div data-pane="chart" className={`flex flex-1 flex-col ${hiddenUnless(pane, "chart")}`}><ChartPanel /></div>
         <div data-pane="account" className={`flex shrink-0 flex-col ${hiddenUnless(pane, "account")}`}><BottomPanel /></div>
       </div>
-      <div data-pane="trade" className={`relative min-h-0 border-line lg:overflow-y-auto lg:border-l ${hiddenUnless(pane, "trade")}`}><OrderTicket /></div>
+      <div data-pane="trade" inert={held} className={`relative min-h-0 border-line lg:overflow-y-auto lg:border-l ${hiddenUnless(pane, "trade")}`}><OrderTicket /></div>
       <PhoneNav pane={pane} onChange={choose} />
+      {view.kind !== "none" && <TradingPausePanel view={view} />}
     </div>
   );
 }

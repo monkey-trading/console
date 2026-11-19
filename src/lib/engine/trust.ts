@@ -9,7 +9,7 @@ import { SignerNaming, type SignerFloor, type SignerRefusal, type SignerWord } f
 import { digestNamed, isConfigHash, manifestText } from "./release-check";
 
 export { NotSentError, SignatureError, UntrustedError } from "./trust-errors";
-import { NotSentError, sendRefusal, UntrustedError } from "./trust-errors";
+import { notReady, NotSentError, sendRefusal, UntrustedError } from "./trust-errors";
 
 /** How long a failure under an address that re-verified unchanged goes without another re-verification, in milliseconds. */
 const RECHECK_COOLDOWN_MS = 30_000;
@@ -205,7 +205,7 @@ export class NodeTrust {
 
   /** Ends a check on `refusal`, unless its own read of the node's word found the device clock wrong (a verdict other than `earlier`): that says more, and stays. */
   private refused(refusal: SignerRefusal, earlier: AttestationStatus): void {
-    if (this.current.kind !== "clock" || this.current === earlier) this.setStatus({ kind: "unverified", reason: refusal.reason }, refusal.vaultLifts);
+    if (this.current.kind !== "clock" || this.current === earlier) this.setStatus({ kind: "unverified", reason: refusal.reason, ...(refusal.notReady === true ? { notReady: true as const } : {}) }, refusal.vaultLifts);
   }
 
   private trust(address: string, judged: boolean): void {
@@ -294,7 +294,7 @@ export class NodeTrust {
       if (vault.kind === "read") this.setStatus({ kind: "verified", release: release ?? "", config: config ?? "", address });
       else this.setStatus({ kind: "attested", release: release ?? "", address, why: vault.kind === "none" ? CONNECT_TO_CHECK : vaultUnchecked(vault.reason) });
     } catch (error) {
-      this.setStatus({ kind: "unverified", reason: error instanceof Error ? error.message : "The server's verification data could not be read." });
+      this.setStatus({ kind: "unverified", reason: error instanceof Error ? error.message : "The server's verification data could not be read.", ...(notReady(error) ? { notReady: true as const } : {}) });
     }
   }
 }

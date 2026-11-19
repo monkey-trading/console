@@ -79,11 +79,13 @@ describe("a first check that cannot read the node's word on the signer", () => {
     const gate = { refuse: true };
     const refusingClaim: Verifier = { ...acceptAll, verifyResponse: (input) => (gate.refuse && input.pathAndQuery === OPERATOR_CLAIM ? { ok: false, reason: "wrong_signer" } : acceptAll.verifyResponse(input)) };
     const unread = { kind: "unverified", reason: expect.stringContaining(SIGNER_UNREAD) };
+    // A node that does not answer, answers unsigned, or is not ready is not serving yet: refused all the same, and a change of server waits on it.
+    const notServing = { ...unread, notReady: true };
     const failures: { failure: string; fail: (node: FakeNode) => void; verifier?: Verifier; verdict: object }[] = [
-      { failure: "no answer", fail: (node) => node.routes.set(OPERATOR_CLAIM, () => { throw new TypeError("Failed to fetch"); }), verdict: unread },
-      { failure: "an unsigned answer", fail: (node) => node.routes.set(OPERATOR_CLAIM, () => new Response("{}")), verdict: unread },
-      { failure: "an unsigned 404", fail: (node) => node.routes.set(OPERATOR_CLAIM, () => new Response('{"error":"not found"}', { status: 404 })), verdict: unread },
-      { failure: "a signed 503", fail: (node) => node.madeUp(OPERATOR_CLAIM, 503, '{"error":"not ready"}'), verdict: unread },
+      { failure: "no answer", fail: (node) => node.routes.set(OPERATOR_CLAIM, () => { throw new TypeError("Failed to fetch"); }), verdict: notServing },
+      { failure: "an unsigned answer", fail: (node) => node.routes.set(OPERATOR_CLAIM, () => new Response("{}")), verdict: notServing },
+      { failure: "an unsigned 404", fail: (node) => node.routes.set(OPERATOR_CLAIM, () => new Response('{"error":"not found"}', { status: 404 })), verdict: notServing },
+      { failure: "a signed 503", fail: (node) => node.madeUp(OPERATOR_CLAIM, 503, '{"error":"not ready"}'), verdict: notServing },
       { failure: "an answer that does not verify", fail: () => undefined, verifier: refusingClaim, verdict: unread },
       { failure: "a signed answer off the device clock", fail: (node) => node.signed(OPERATOR_CLAIM, () => ({ status: 200, body: "{}", signature: "0x", timeMs: 60_001, seq: 1 })), verdict: { kind: "clock", skewMs: 60_000 } },
     ];
@@ -109,7 +111,7 @@ describe("a clock verdict from an earlier check", () => {
     node.signed(OPERATOR_CLAIM, () => ({ status: 200, body: "{}", signature: "0x", timeMs: 60_001, seq: 1 }));
     await expect(live.verify()).resolves.toEqual({ kind: "clock", skewMs: 60_000 });
     node.routes.set(OPERATOR_CLAIM, () => { throw new TypeError("Failed to fetch"); });
-    await expect(live.verify()).resolves.toEqual({ kind: "unverified", reason: expect.stringContaining("The server did not respond.") });
+    await expect(live.verify()).resolves.toEqual({ kind: "unverified", reason: expect.stringContaining("The server did not respond."), notReady: true });
   });
 });
 

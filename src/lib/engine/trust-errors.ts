@@ -2,6 +2,7 @@
 
 import { asSentence } from "../format";
 import type { AttestationStatus } from "./attestation";
+import { EngineError } from "./client";
 import type { OperatorRoute } from "./stats-types";
 
 /** A signed request stopped before it left the page, because the node may not be signed for: unlike a request that went out, it cannot have run. */
@@ -30,8 +31,8 @@ export class UnsignedAnswer extends UntrustedError {
 
 /** A signed answer that verified but that the console refuses to take as the node's word on the vault's signer; `answer` is what it said, which can still say where the operator now runs. */
 export class RefusedAnswer extends UntrustedError {
-  constructor(reason: string, readonly answer: OperatorRoute) {
-    super(reason);
+  constructor(reason: string, readonly answer: OperatorRoute, options?: ErrorOptions) {
+    super(reason, options);
     this.name = "RefusedAnswer";
   }
 }
@@ -78,4 +79,15 @@ export function sendRefusal(status: AttestationStatus): string | null {
       throw new Error(`Unknown attestation status: ${String(unhandled)}`);
     }
   }
+}
+
+/**
+ * Whether `error` says the node is not serving yet rather than that it cannot be trusted: no answer, a gateway in front of it that could not
+ * reach it, or an answer it did not sign, as a node does until its time is confirmed. A server that has just taken over is like this for a
+ * moment; nothing it says is trusted either way.
+ */
+export function notReady(error: unknown): boolean {
+  // A refusal that carries what the node said last wraps the read's own failure, which decides.
+  if (error instanceof RefusedAnswer) return notReady(error.cause);
+  return error instanceof UnsignedAnswer || (error instanceof EngineError && (error.status === 0 || error.status === 502 || error.status === 503 || error.status === 504));
 }

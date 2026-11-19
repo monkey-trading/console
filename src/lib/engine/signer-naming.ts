@@ -7,6 +7,8 @@
  * operator follower puts to the client in use the highest signer other nodes' words named.
  */
 
+import { notReady } from "./trust-errors";
+
 /** A signer epoch and the key the vault names at it. */
 export interface NamedSigner {
   epoch: number;
@@ -27,8 +29,11 @@ export interface OperatorClaim {
 /** What `judge` weighs: a node's claim, or the highest signer another client heard, which may name two keys at its epoch. */
 export type SignerWord = { enclave?: string; signer?: Readonly<SignerFloor> };
 
-/** Why a check refuses a node for the signer the vault names, and whether a read of the vault naming its enclave would have taken it (`vaultLifts`). */
-export type SignerRefusal = { reason: string; vaultLifts: boolean };
+/**
+ * Why a check refuses a node for the signer the vault names, whether a read of the vault naming its enclave would have taken it
+ * (`vaultLifts`), and `notReady` when it is only that its word could not be read yet (`notReady` of the read's error).
+ */
+export type SignerRefusal = { reason: string; vaultLifts: boolean; notReady?: true };
 
 /** What the console says when the vault names a signer other than the enclave the node answers with. */
 export const SIGNER_SUPERSEDED = "The on-chain vault that holds deposits now uses a different signing key from this server, so the server cannot be trusted. The problem will not resolve until the server changes to the vault's signing key.";
@@ -118,7 +123,7 @@ export class SignerNaming {
     try {
       claim = (await this.operatorClaim?.(address)) ?? {};
     } catch (error) {
-      return { reason: `${SIGNER_UNREAD} ${error instanceof Error ? error.message : "The request failed."}`, vaultLifts: false };
+      return { reason: `${SIGNER_UNREAD} ${error instanceof Error ? error.message : "The request failed."}`, vaultLifts: false, ...(notReady(error) ? { notReady: true as const } : {}) };
     }
     const judged = this.judge(address, claim);
     if (judged !== null) return { reason: judged.reason, vaultLifts: false };

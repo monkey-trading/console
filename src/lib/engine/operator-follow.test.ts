@@ -89,7 +89,7 @@ describe("OperatorFollower.check", () => {
     trial.verdict = { kind: "unverified", reason: "not the vault's release" };
     await follower.check();
     expect(adopted).toEqual([]);
-    expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, reason: "not the vault's release" });
+    expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, stage: "refused", reason: "not the vault's release" });
   });
 
   it("pauses the moment the chain names another node, while its verification is still running, and leaves the pause by moving once it verifies", async () => {
@@ -100,14 +100,15 @@ describe("OperatorFollower.check", () => {
     trial.verify = () => new Promise((resolve) => { verified = resolve as typeof verified; });
     const checking = follower.check();
     await settle();
-    expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, reason: "The verification is in progress." });
+    // It answered with its verification data, which is being checked.
+    expect(follower.getSnapshot()).toEqual({ kind: "waiting", origin: BUILD, target: B, stage: "verifying", reason: null });
     expect(adopted).toEqual([]);
     verified(trial.verdict);
     await checking;
     expect(adopted).toEqual([B]);
     expect(follower.getSnapshot()).toEqual({ kind: "following", origin: B });
-    // Once into waiting and once out of it: one pause for the change.
-    expect(states.filter((kind) => kind === "waiting")).toHaveLength(1);
+    // Once into waiting, through its stages, and once out of it: one pause for the change.
+    expect(states.filter((kind, i) => kind === "waiting" && states[i - 1] !== "waiting")).toHaveLength(1);
   });
 
   it("does not pause for a node with rotation off, which the chain may name for the deployment's own", async () => {
@@ -125,7 +126,7 @@ describe("OperatorFollower.check", () => {
     trial.verdict = { kind: "attested", release: "r", address: "0xk", why: "the wallet could not read" };
     await follower.check();
     expect(adopted).toEqual([]);
-    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", reason: "the wallet could not read" });
+    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", stage: "verifying", reason: "the wallet could not read" });
   });
 
   it("does not move to an enclave that serves its attestation and signs nothing, as one the vault does not name does", async () => {
@@ -133,7 +134,7 @@ describe("OperatorFollower.check", () => {
     trial.signedRead = async () => { throw new Error("The node's answer was not signed by the attested enclave"); };
     await follower.check();
     expect(adopted).toEqual([]);
-    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", reason: expect.stringContaining("not signed") });
+    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", stage: "refused", reason: expect.stringContaining("not signed") });
   });
 
   it("moves to a node that signs its 404, one that predates the route", async () => {
@@ -148,7 +149,7 @@ describe("OperatorFollower.check", () => {
     held.busy = true;
     await follower.check();
     expect(adopted).toEqual([]);
-    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", reason: expect.stringContaining("waiting for your wallet") });
+    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", stage: "wallet", reason: null });
     held.busy = false;
     await follower.check();
     expect(adopted).toEqual([B]);

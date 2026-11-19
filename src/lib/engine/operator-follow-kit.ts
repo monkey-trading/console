@@ -1,7 +1,7 @@
 /** Tests only: a follower over a client whose verdict a test sets, and a chain read it can change. */
 
 import type { AttestationStatus } from "./attestation";
-import type { ClientEvent, EngineClient } from "./client";
+import { EngineError, type ClientEvent, type EngineClient } from "./client";
 import { OperatorFollower } from "./operator-follow";
 import type { DeploymentReads, NamedOperator, VaultFacts } from "./registry";
 import { SignerNaming, type OperatorClaim, type SignerFloor } from "./signer-naming";
@@ -21,12 +21,20 @@ export class TrialClient {
   signedRead: () => Promise<unknown> = async () => ({});
   chains: (DeploymentReads | null)[] = [];
   verifies = 0;
+  /** How many times the follower asked for the verification data: each attempt on the node. */
+  attestations = 0;
   watchers = new Set<(event: ClientEvent) => void>();
   subscribers = new Set<(message: StreamMessage) => void>();
   readChainThrough = async (chain: DeploymentReads | null) => { this.chains.push(chain); };
   heeded: VaultFacts[] = [];
   heedVault = async (facts: VaultFacts, _chain: DeploymentReads) => { void _chain; this.heeded.push(facts); };
   verify = async () => { this.verifies += 1; return this.verdict; };
+  /** The verification data, which a node not serving yet does not answer. */
+  attestation = async () => {
+    this.attestations += 1;
+    if (this.verdict.kind === "unverified" && this.verdict.notReady === true) throw new EngineError(0, "The server did not respond.");
+    return {};
+  };
   /** The node's signed `/v1/operators`, of which the follower reads each candidate's registered hostname. */
   operatorList: () => Promise<unknown> = async () => ({ candidates: [] });
   stats = { operator: () => this.operatorRead(), operators: () => this.operatorList() };

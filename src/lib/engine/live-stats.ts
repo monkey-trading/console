@@ -52,7 +52,7 @@ export function liveStats(get: (path: string) => Promise<unknown>, heedOperator:
           throw new RefusedAnswer(error.message, late);
         }
         // A node refused at its check cannot be asked again, but what it last said stays with the refusal: it still says which node the registry names now.
-        throw error instanceof UntrustedError && !(error instanceof RefusedAnswer) && seen.route !== null ? new RefusedAnswer(error.message, seen.route) : error;
+        throw error instanceof UntrustedError && !(error instanceof RefusedAnswer) && seen.route !== null ? new RefusedAnswer(error.message, seen.route, { cause: error }) : error;
       }
       seen.route = route;
       try {

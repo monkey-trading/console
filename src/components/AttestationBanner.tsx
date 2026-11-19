@@ -1,15 +1,22 @@
 "use client";
 
-/** Compact lines saying what the console found when it checked the node, what it cannot vouch for, and what the server says is wrong. */
+/**
+ * Compact lines saying what the console found when it checked the node, what it cannot vouch for, and what the server says is wrong.
+ * While trading is paused for a change of trading server, the trading page's panel says so and this says nothing; other pages carry
+ * one line. A move with no pause, as when a page load finds the current server elsewhere, is one calm line, and a drop the follower is
+ * still reading is not called an outage yet.
+ */
+
+import { usePathname } from "next/navigation";
 
 import { asSentence, shortHex } from "@/lib/format";
-import { serverLine } from "@/lib/server-status";
+import { pauseLine, serverLine, switchLine, type ServerLine } from "@/lib/server-status";
 import { CONNECT_TO_CHECK } from "@/lib/engine/trust-errors";
 import { describeMockAttestation, describeReverifying } from "@/lib/messages";
 
 import { recheckNode } from "@/lib/store/node-move";
 
-import { useConsole, useNodeFollow, useSession } from "./ConsoleProvider";
+import { useConsole, useNodeFollow, useSession, useTradingPause } from "./ConsoleProvider";
 
 const LINE = "border-b px-4 py-1 text-center text-label";
 const WARN = `${LINE} border-amber/40 bg-amber/10 text-amber`;
@@ -17,18 +24,31 @@ const BAD = `${LINE} border-ember/50 bg-ember/10 text-ember`;
 
 export function AttestationBanner() {
   const { attestation, stream, server, signatures, notices } = useConsole();
-  // A node that failed its check says so above, and nothing it said is shown.
-  const line = attestation.kind === "unverified" ? null : serverLine(stream, server, notices.feed?.text ?? null);
+  const follow = useNodeFollow();
+  const pause = useTradingPause();
+  const onTradingPage = usePathname() === "/";
+  // Nothing said of the server being left applies while the console moves.
+  const moving = pause.kind !== "none" ? (onTradingPage ? null : pauseLine(pause)) : switchLine(follow, stream === "live");
+  if (pause.kind !== "none" && moving === null) return null;
+  // The pause's own live region announces it, so its line here is not a second one.
+  if (moving !== null) return <section aria-label="Server verification"><Line line={moving} live={pause.kind === "none"} /></section>;
+  // A node that failed its check says so above, and nothing it said is shown; a drop is not an outage until the follower has read where the operator runs.
+  const line = attestation.kind === "unverified" || follow?.kind === "confirming" ? null : serverLine(stream, server, notices.feed?.text ?? null);
   return (
     <section aria-label="Server verification">
       <Status attestation={attestation} signatures={signatures} />
       <NodeLine />
-      {line !== null && (
-        <div role={line.role} className={line.role === "alert" ? BAD : WARN}>
-          <strong className="font-medium">{line.lead}</strong> {line.rest}
-        </div>
-      )}
+      {line !== null && <Line line={line} />}
     </section>
+  );
+}
+
+/** One line of the banner; `live` false when another region announces it. */
+function Line({ line, live = true }: { line: ServerLine; live?: boolean }) {
+  return (
+    <div role={live ? line.role : undefined} className={line.role === "alert" ? BAD : WARN}>
+      <strong className="font-medium">{line.lead}</strong> {line.rest}
+    </div>
   );
 }
 
@@ -39,13 +59,13 @@ function NodeLine() {
   switch (follow.kind) {
     case "pinned":
     case "following":
+    case "confirming":
+    case "waiting":
       return null;
     case "failed":
       return <div role="status" className={WARN}><strong className="font-medium">The app could not confirm which trading server is currently operating.</strong> You remain connected to {new URL(follow.origin).host}, and the app will check again automatically. {asSentence(follow.reason)}<CheckAgain /></div>;
     case "unlisted":
       return <div role="alert" className={BAD}><strong className="font-medium">This version of the app needs to be updated.</strong> {follow.hostname === null ? "The current trading server has not registered a web address" : `The current trading server is at ${follow.hostname}, which this version of the app does not recognise`}, so the app cannot connect to it.</div>;
-    case "waiting":
-      return <div role="status" className={WARN}><strong className="font-medium">A new operator is taking over the trading server.</strong> You will remain connected to {new URL(follow.origin).host} until {new URL(follow.target).host} has been verified. {follow.reason}</div>;
     default:
       return follow satisfies never;
   }

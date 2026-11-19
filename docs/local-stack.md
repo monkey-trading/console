@@ -336,9 +336,12 @@ each boundary:
 1. The turn's member takes the keys and the end of the log from the engine that held the previous
    turn, and that engine goes back to following. The first engine, which started with new keys,
    exits once it has handed them over, and the stack starts it again as a member.
-2. Within a minute, the console moves to the engine that holds the turn, with balances and
-   positions intact, and trading continues there. If the console does not move, open that engine's
-   `/v1/health` address once and accept its self-signed certificate.
+2. Once the engine that held the previous turn stops serving, the console pauses its trading view,
+   and a panel over the view shows each step as it completes. The console connects to the engine
+   that holds the turn and verifies it, then moves to it, with balances, positions and working
+   orders intact, restores live prices and resumes trading there, usually within seconds. If the
+   console does not move, open that engine's `/v1/health` address once and accept its self-signed
+   certificate.
 3. `./scripts/dev-local-stack-ctl.sh status` shows the turns around the present one and the engine
    each names, the operator in effect, the vault's signer, and whether each engine is serving,
    following or stopped.

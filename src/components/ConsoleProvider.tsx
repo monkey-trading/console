@@ -12,13 +12,16 @@ import { queuePage } from "@/lib/mock/funds";
 import { mockHistory } from "@/lib/mock/history";
 import { createMockNode, SIM_EPOCH_MS } from "@/lib/mock";
 import { connectWallet, storedKeyChanged } from "@/lib/store/actions";
-import { followNode, MoveAnnouncer } from "@/lib/store/node-move";
+import { followNode } from "@/lib/store/node-move";
 import { reconnectWallet } from "@/lib/store/reconnect";
 import { followAccountFeeds, quoteSyncKey, syncQuotes } from "@/lib/store/funds";
 import { ConsoleStore } from "@/lib/store/store";
 import type { ConsoleState } from "@/lib/store/state";
+import { holdsView, type PauseView, type TradingPause } from "@/lib/store/trading-pause";
 
 import { createPrefs, exitStorage, injectedProvider, scheduler, type Session } from "./session-env";
+import { focusPlace, pausePlace } from "./pause-focus";
+import { PauseAnnouncer } from "./PauseAnnouncer";
 
 const SessionContext = createContext<Session | null>(null);
 
@@ -46,7 +49,7 @@ function createMockSession(): Session | null {
       },
     },
   });
-  return { store, deploy, node, walletConnect: null, prefs: createPrefs(), follower: null, moves: 0, announcer: new MoveAnnouncer() };
+  return { store, deploy, node, walletConnect: null, prefs: createPrefs(), follower: null, moves: 0, pause: null };
 }
 
 /** The most simulated time one tick may add, so a stalled timer does not jump the prices. */
@@ -96,13 +99,13 @@ function LoadedConsole({ initial, children }: { initial: Session; children: Reac
       stop();
     };
   }, [follower]);
-  // After a move every screen has remounted: the notice row announces this, and focus that fell with the old screens goes somewhere deliberate.
+  // After a move every screen has remounted. While trading is paused focus goes back once the view is enabled again; otherwise focus that
+  // fell with the old screens goes somewhere deliberate.
   useEffect(() => {
-    if (session.moves === 0 || follower === null) return;
-    const notice = session.announcer.noticeFor(session.moves, new URL(follower.getSnapshot().origin).host);
-    if (notice !== null) store.notify("node", notice, "info");
+    if (session.moves === 0 || session.pause?.getSnapshot().kind !== "none") return;
     if (document.activeElement === null || document.activeElement === document.body) document.getElementById("main")?.focus();
-  }, [session.moves, session.announcer, store, follower]);
+  }, [session.moves, session.pause]);
+  usePauseFocus(session.pause, store, session.moves);
   useEffect(() => (follower === null ? undefined : followNode(store, follower)), [follower, store]);
   useEffect(() => {
     const stop = store.exit.follow({ scheduler, hidden: () => document.visibilityState === "hidden", nowMs: () => Date.now() });
@@ -190,7 +193,33 @@ function LoadedConsole({ initial, children }: { initial: Session; children: Reac
       store.deps.client.quotes(null);
     };
   }, [store, session.node]);
-  return <SessionContext value={session}><Fragment key={session.moves}>{children}</Fragment></SessionContext>;
+  return <SessionContext value={session}><Fragment key={session.moves}>{children}</Fragment>{session.pause !== null && <PauseAnnouncer />}</SessionContext>;
+}
+
+/**
+ * Where focus was as trading pauses for a change of trading server, on any page, kept by the pause before the paused view turns inert, and
+ * given back once the view is enabled again, after the screens that a move remounted have rendered.
+ */
+function usePauseFocus(pause: TradingPause | null, store: ConsoleStore, moves: number): void {
+  useEffect(() => pause?.subscribe(() => {
+    if (pause.getSnapshot().kind !== "paused") return;
+    // Closing a dialog is not the trader's cancel: what its request came to stays to be said, here and on the next server.
+    const { notices } = store.getSnapshot();
+    pause.holdFocus(pausePlace(document.getElementById("main"), () => store.patch({ notices: { ...notices, ...store.getSnapshot().notices } })));
+  }), [pause, store]);
+  // A page with no trading view holds nothing inert, so focus a move took is given back at once.
+  useEffect(() => {
+    const main = document.getElementById("main");
+    if (moves === 0 || main === null || main.querySelector("[data-pane]") !== null) return;
+    const kept = pause?.takeFocus() ?? null;
+    if (kept !== null) focusPlace(kept.place, main);
+  }, [moves, pause]);
+  const held = useSyncExternalStore(pause?.subscribe ?? NO_FOLLOW, () => holdsView(pause?.getSnapshot() ?? NOT_PAUSED), () => false);
+  useEffect(() => {
+    const main = document.getElementById("main");
+    const kept = held || main === null ? null : (pause?.takeFocus() ?? null);
+    if (kept !== null && main !== null) focusPlace(kept.place, main);
+  }, [held, pause]);
 }
 
 /** The session. Throws outside the provider. */
@@ -207,6 +236,15 @@ export function useNodeFollow(): FollowStatus | null {
   const { follower } = useSession();
   const read = () => follower?.getSnapshot() ?? null;
   return useSyncExternalStore(follower?.subscribe ?? NO_FOLLOW, read, read);
+}
+
+const NOT_PAUSED: PauseView = { kind: "none" };
+
+/** Whether trading is paused while the trading server changes, and how far the change has got; never for the mock. */
+export function useTradingPause(): PauseView {
+  const { pause } = useSession();
+  const read = () => pause?.getSnapshot() ?? NOT_PAUSED;
+  return useSyncExternalStore(pause?.subscribe ?? NO_FOLLOW, read, read);
 }
 
 /** The console's state, re-rendering on every change. */
