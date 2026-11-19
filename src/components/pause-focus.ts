@@ -24,11 +24,18 @@ export function pausePlace(within: Element | null): FocusPlace | null {
   return name === "" ? null : { tag: element.tagName, name, pane: element.closest("[data-pane]")?.getAttribute("data-pane") ?? null };
 }
 
-/** Focuses the first control inside `within` at `place`, or else `within` itself, unless the trader has put focus somewhere since. */
+/**
+ * Focuses the first control inside `within` at `place` that takes focus, as a phone card's hidden twin of a table's control does not, or
+ * else `within` itself, unless the trader has put focus somewhere since.
+ */
 export function focusPlace(place: FocusPlace | null, within: HTMLElement): void {
   if (document.activeElement !== null && document.activeElement !== document.body) return;
-  const match = place === null ? undefined : [...within.querySelectorAll(place.tag)].find((element) => nameOf(element) === place.name);
-  if (match instanceof HTMLElement) match.focus();
-  // A control that is gone, hidden or still inert takes no focus: the page's main region does.
-  if (document.activeElement !== match) within.focus();
+  if (place !== null) {
+    for (const element of within.querySelectorAll(place.tag)) {
+      if (!(element instanceof HTMLElement) || nameOf(element) !== place.name) continue;
+      element.focus();
+      if (document.activeElement === element) return;
+    }
+  }
+  within.focus();
 }

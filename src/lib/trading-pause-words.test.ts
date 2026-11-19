@@ -6,7 +6,7 @@ import { pauseLine, switchLine } from "./server-status";
 import type { PauseView, Steps } from "./store/trading-pause";
 import { LONG_PAUSE, pauseAnnouncement, PAUSE_TITLE } from "./trading-pause-words";
 
-const at = (steps: Partial<Steps>): Extract<PauseView, { kind: "paused" }> => ({ kind: "paused", steps: { connect: "done", verify: "done", prices: "done", resume: "done", ...steps }, long: false, failure: null });
+const at = (steps: Partial<Steps>): Extract<PauseView, { kind: "paused" }> => ({ kind: "paused", steps: { connect: "done", verify: "done", prices: "done", resume: "done", ...steps }, long: false, failure: null, hold: null });
 
 describe("pauseAnnouncement", () => {
   it("names the pause with its first step, then each step alone, then the resume", () => {
@@ -33,10 +33,18 @@ describe("the banner's lines for a change of server", () => {
   });
 
   it("says a page load could not verify the current server with no chain of reasons, and is calm while it is checked", () => {
-    expect(switchLine({ kind: "waiting", origin: "https://a.test", target: "https://b.test:8443", stage: "refused", reason: "not the vault's release" })).toEqual({
+    expect(switchLine({ kind: "waiting", origin: "https://a.test", target: "https://b.test:8443", stage: "refused", reason: "not the vault's release" }, false)).toEqual({
       role: "alert", lead: "The current trading server could not be verified, so the app has not connected to it.", rest: "The app will try again automatically.",
     });
-    expect(switchLine({ kind: "waiting", origin: "https://a.test", target: "https://b.test", stage: "connecting", reason: null })).toMatchObject({ role: "status", lead: "Connecting to the current trading server." });
-    expect(switchLine({ kind: "following", origin: "https://a.test" })).toBeNull();
+    expect(switchLine({ kind: "waiting", origin: "https://a.test", target: "https://b.test", stage: "connecting", reason: null }, false)).toMatchObject({ role: "status", lead: "Connecting to the current trading server." });
+    expect(switchLine({ kind: "following", origin: "https://a.test" }, true)).toBeNull();
+  });
+
+  it("says while the server in use still trades that only new orders wait, and what the trader must do about a clock", () => {
+    const waiting = (stage: "connecting" | "wallet" | "refused" | "clock") => switchLine({ kind: "waiting", origin: "https://a.test", target: "https://b.test", stage, reason: null }, true);
+    expect(waiting("connecting")).toEqual({ role: "status", lead: "The trading server is changing.", rest: "New orders are paused until the change is complete, but you can still close positions and cancel working orders." });
+    expect(waiting("wallet")).toMatchObject({ lead: "The trading server is changing." });
+    expect(waiting("refused")).toEqual({ role: "alert", lead: "The next trading server could not be verified, so the app has not connected to it.", rest: "New orders remain paused, and the app will try again automatically." });
+    expect(waiting("clock")).toEqual({ role: "alert", lead: "Your device clock is incorrect, so the trading server cannot be verified.", rest: "Correct the clock and reload the page." });
   });
 });

@@ -28,7 +28,7 @@ const render = (follow: FollowStatus | null, pause: PauseView, path = "/") => {
   return renderToStaticMarkup(createElement(ConsoleProvider, null, createElement(Dropped), createElement(AttestationBanner)));
 };
 
-const PAUSED: PauseView = { kind: "paused", steps: { connect: "current", verify: "waiting", prices: "waiting", resume: "waiting" }, long: false, failure: null };
+const PAUSED: PauseView = { kind: "paused", steps: { connect: "current", verify: "waiting", prices: "waiting", resume: "waiting" }, long: false, failure: null, hold: null };
 
 describe("the banner while the trading server changes", () => {
   it("keeps the outage line for a drop the follower has read as one, as before", () => {

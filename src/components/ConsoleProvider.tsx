@@ -17,11 +17,11 @@ import { reconnectWallet } from "@/lib/store/reconnect";
 import { followAccountFeeds, quoteSyncKey, syncQuotes } from "@/lib/store/funds";
 import { ConsoleStore } from "@/lib/store/store";
 import type { ConsoleState } from "@/lib/store/state";
-import type { PauseView, TradingPause } from "@/lib/store/trading-pause";
+import { holdsView, type PauseView, type TradingPause } from "@/lib/store/trading-pause";
 
 import { createPrefs, exitStorage, injectedProvider, scheduler, type Session } from "./session-env";
 import { focusPlace, pausePlace } from "./pause-focus";
-import { PauseAnnouncer } from "./TradingPausePanel";
+import { PauseAnnouncer } from "./PauseAnnouncer";
 
 const SessionContext = createContext<Session | null>(null);
 
@@ -105,7 +105,7 @@ function LoadedConsole({ initial, children }: { initial: Session; children: Reac
     if (session.moves === 0 || session.pause?.getSnapshot().kind !== "none") return;
     if (document.activeElement === null || document.activeElement === document.body) document.getElementById("main")?.focus();
   }, [session.moves, session.pause]);
-  usePauseFocus(session.pause);
+  usePauseFocus(session.pause, store, session.moves);
   useEffect(() => (follower === null ? undefined : followNode(store, follower)), [follower, store]);
   useEffect(() => {
     const stop = store.exit.follow({ scheduler, hidden: () => document.visibilityState === "hidden", nowMs: () => Date.now() });
@@ -200,22 +200,27 @@ function LoadedConsole({ initial, children }: { initial: Session; children: Reac
  * Where focus was as trading pauses for a change of trading server, on any page, kept by the pause before the paused view turns inert, and
  * given back once the view is enabled again, after the screens that a move remounted have rendered.
  */
-function usePauseFocus(pause: TradingPause | null): void {
+function usePauseFocus(pause: TradingPause | null, store: ConsoleStore, moves: number): void {
   useEffect(() => pause?.subscribe(() => {
-    if (pause.getSnapshot().kind === "paused") pause.holdFocus(pausePlace(document.getElementById("main")));
-  }), [pause]);
-  const held = useSyncExternalStore(pause?.subscribe ?? NO_FOLLOW, () => heldView(pause), () => false);
+    if (pause.getSnapshot().kind !== "paused") return;
+    // Closing a dialog is not the trader's cancel: what its request came to stays to be said on the next server.
+    const { notices } = store.getSnapshot();
+    pause.holdFocus(pausePlace(document.getElementById("main")));
+    if (store.getSnapshot().notices !== notices) store.patch({ notices: { ...notices, ...store.getSnapshot().notices } });
+  }), [pause, store]);
+  // A page with no trading view holds nothing inert, so focus a move took is given back at once.
+  useEffect(() => {
+    const main = document.getElementById("main");
+    if (moves === 0 || main === null || main.querySelector("[data-pane]") !== null) return;
+    const kept = pause?.takeFocus() ?? null;
+    if (kept !== null) focusPlace(kept.place, main);
+  }, [moves, pause]);
+  const held = useSyncExternalStore(pause?.subscribe ?? NO_FOLLOW, () => holdsView(pause?.getSnapshot() ?? NOT_PAUSED), () => false);
   useEffect(() => {
     const main = document.getElementById("main");
     const kept = held || main === null ? null : (pause?.takeFocus() ?? null);
     if (kept !== null && main !== null) focusPlace(kept.place, main);
   }, [held, pause]);
-}
-
-/** Whether the paused view is held inert: while paused, and while "Trading resumed" shows, until the panel fades. */
-export function heldView(pause: TradingPause | null): boolean {
-  const view = pause?.getSnapshot() ?? NOT_PAUSED;
-  return view.kind === "paused" || (view.kind === "resumed" && !view.leaving);
 }
 
 /** The session. Throws outside the provider. */

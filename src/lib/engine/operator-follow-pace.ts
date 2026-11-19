@@ -51,6 +51,11 @@ export class FollowPace {
     return this.dueAtMs === null ? null : Math.max(0, this.dueAtMs - this.nowMs());
   }
 
+  /** Whether `state` is a change of server under way, which is read again within seconds and whatever the node in use says of its turns. */
+  static switching(state: FollowStatus): boolean {
+    return (state.kind === "waiting" && state.stage !== "refused" && state.stage !== "clock") || (state.kind === "confirming" && state.scheduled);
+  }
+
   /** A drop or a hidden tab coming back is new evidence: the next waits start from the first again. */
   restart(): void {
     this.wait = RETRY_MS;
@@ -64,8 +69,7 @@ export class FollowPace {
    */
   next(state: FollowStatus, dropWindowEndMs: number | null): number {
     const nowMs = this.nowMs();
-    const switching = (state.kind === "waiting" && state.stage !== "refused") || (state.kind === "confirming" && state.scheduled);
-    if (switching) {
+    if (FollowPace.switching(state)) {
       const delay = this.switchWait;
       this.switchWait = Math.min(this.switchWait * 2, RETRY_MS);
       return dropWindowEndMs === null ? delay : Math.max(0, Math.min(delay, dropWindowEndMs - nowMs));

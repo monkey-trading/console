@@ -28,7 +28,7 @@ export function AttestationBanner() {
   const pause = useTradingPause();
   const onTradingPage = usePathname() === "/";
   // Nothing said of the server being left applies while the console moves.
-  const moving = pause.kind !== "none" ? (onTradingPage ? null : pauseLine(pause)) : switchLine(follow);
+  const moving = pause.kind !== "none" ? (onTradingPage ? null : pauseLine(pause)) : switchLine(follow, stream === "live");
   if (pause.kind !== "none" && moving === null) return null;
   // The pause's own live region announces it, so its line here is not a second one.
   if (moving !== null) return <section aria-label="Server verification"><Line line={moving} live={pause.kind === "none"} /></section>;

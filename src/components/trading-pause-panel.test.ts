@@ -10,7 +10,7 @@ import { TradingPausePanel } from "./TradingPausePanel";
 
 describe("TradingPausePanel", () => {
   it("says what is kept while trading is paused, and only the title over the ticked steps once it has resumed", () => {
-    const paused = renderToStaticMarkup(createElement(TradingPausePanel, { view: { kind: "paused", steps: { connect: "current", verify: "waiting", prices: "waiting", resume: "waiting" }, long: false, failure: null } }));
+    const paused = renderToStaticMarkup(createElement(TradingPausePanel, { view: { kind: "paused", steps: { connect: "current", verify: "waiting", prices: "waiting", resume: "waiting" }, long: false, failure: null, hold: null } }));
     expect(paused).toContain(PAUSE_TITLE);
     expect(paused).toContain(PAUSE_KEPT);
     const resumed = renderToStaticMarkup(createElement(TradingPausePanel, { view: { kind: "resumed", leaving: false } }));

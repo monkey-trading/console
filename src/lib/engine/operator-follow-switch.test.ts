@@ -66,4 +66,21 @@ describe("a change of server under way", () => {
     await settle();
     expect(kit.operatorReads.count).toBe(1);
   });
+
+  it("retries a successor within seconds while the read of the server being left hangs", async () => {
+    const successor = new TrialClient();
+    successor.verdict = NOT_ANSWERING;
+    const kit = rig({ clients: { [B]: successor } });
+    kit.trial.signedRead = () => new Promise(() => undefined); // the server being left neither answers nor refuses
+    kit.follower.watch(kit.trial as unknown as EngineClient);
+    kit.follower.start(() => false);
+    void kit.follower.check();
+    await settle();
+    expect(kit.follower.getSnapshot()).toMatchObject({ kind: "waiting", stage: "connecting" });
+    successor.verdict = VERIFIED;
+    kit.advance(SWITCH_RETRY_MS);
+    await settle();
+    expect(kit.adopted).toEqual([B]);
+  });
 });
+

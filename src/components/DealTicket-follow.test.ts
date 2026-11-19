@@ -33,13 +33,13 @@ const render = (status: FollowStatus | null) => {
 
 describe("the ticket while the operator moves", () => {
   it("pauses on a handover and on an operator whose node the build does not list, each in its own words", () => {
-    expect(render({ kind: "waiting", origin: "https://a.test", target: "https://b.test", stage: "connecting", reason: null })).toContain("Trading is paused while the trading server changes. Trading will resume automatically once the new server has been verified and live prices have returned.");
+    expect(render({ kind: "waiting", origin: "https://a.test", target: "https://b.test", stage: "connecting", reason: null })).toContain("New orders are paused while the trading server changes. They will be accepted again automatically once the new server has been verified and live prices have returned.");
     const unlisted = render({ kind: "unlisted", origin: "https://a.test", hostname: "c.test" });
     expect(unlisted).toContain("This version of the app does not recognise the next trading server, so trading has been suspended. Trading will resume once the app has been updated.");
   });
 
   it("pauses on a drop held as a change of server around a turn boundary, and not on one away from any", () => {
-    expect(render({ kind: "confirming", origin: "https://a.test", scheduled: true })).toContain("Trading is paused while the trading server changes.");
+    expect(render({ kind: "confirming", origin: "https://a.test", scheduled: true })).toContain("New orders are paused while the trading server changes.");
     expect(render({ kind: "confirming", origin: "https://a.test", scheduled: false })).not.toContain("trading server changes");
   });
 

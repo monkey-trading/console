@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { type FocusWhere, paneWhenNarrowed, rememberPane } from "@/lib/panes";
+import { holdsView } from "@/lib/store/trading-pause";
 
 import { BottomPanel } from "./BottomPanel";
 import { ChartPanel } from "./ChartPanel";
@@ -29,7 +30,8 @@ export function TradeWorkspace() {
   const [pane, setPane] = useState<PhonePane>(() => PHONE_PANES.find((p) => p.id === pause?.heldPane())?.id ?? "chart");
   const view = useTradingPause();
   // The view stays held while "Trading resumed" shows, and is enabled again as the panel fades.
-  const held = view.kind === "paused" || (view.kind === "resumed" && !view.leaving);
+  const held = holdsView(view);
+  useEffect(() => pause?.notePane(pane), [pause, pane]);
   const focusMarket = useRef(false);
   const root = useRef<HTMLDivElement>(null);
   const focused = useRef<{ pane: PhonePane | null; element: Element | null }>({ pane: null, element: null });

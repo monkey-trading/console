@@ -51,11 +51,13 @@ export async function moveToNode(old: ConsoleStore, next: ConsoleStore): Promise
 
 /**
  * Says on `next` what each request came to on `old`: what it said before the move, again the moment connecting the same wallet clears its
- * surfaces, and what it says after, as a request whose outcome lands only once its refresh ends, while the account is the same.
+ * surfaces, and what it says after, as a request whose outcome lands only once its refresh ends, while the account is the same and until
+ * the trader sends a request on `next`, whose own outcome a late one must never be read as.
  */
 function carryOutcomes(old: ConsoleStore, next: ConsoleStore): void {
   const account = old.getSnapshot().wallet?.address.toLowerCase();
   let carried = carriedNotices(old.getSnapshot().notices);
+  let sentOnNext = false;
   const sameAccount = () => next.getSnapshot().wallet?.address.toLowerCase() === account;
   const say = () => {
     const current = next.getSnapshot().notices;
@@ -69,12 +71,17 @@ function carryOutcomes(old: ConsoleStore, next: ConsoleStore): void {
     stopNext();
     say();
   });
+  const stopSent = next.subscribe(() => {
+    if (!next.getSnapshot().busy) return;
+    sentOnNext = true;
+    stopSent();
+  });
   // Never stopped: the listener goes with the old store, which nothing holds once its last request has ended.
   old.subscribe(() => {
     const later = carriedNotices(old.getSnapshot().notices);
     const fresh = Object.entries(later).filter(([surface, notice]) => carried[surface as NoticeSurface]?.id !== notice.id);
     carried = later;
-    if (fresh.length > 0 && (account === undefined || sameAccount())) next.patch({ notices: { ...next.getSnapshot().notices, ...Object.fromEntries(fresh) } });
+    if (fresh.length > 0 && !sentOnNext && (account === undefined || sameAccount())) next.patch({ notices: { ...next.getSnapshot().notices, ...Object.fromEntries(fresh) } });
   });
 }
 

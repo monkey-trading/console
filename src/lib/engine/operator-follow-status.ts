@@ -8,8 +8,11 @@ import { RefusedAnswer } from "./trust-errors";
 import type { DeploymentReads, NamedOperator } from "./registry";
 import type { SignerFloor } from "./signer-naming";
 
-/** How far a move to the node the chain names has got. */
-export type WaitingStage = "connecting" | "verifying" | "refused";
+/**
+ * How far a move to the node the chain names has got: not answering yet, being checked, verified but held by a wallet request in flight,
+ * refused, or refused because the device clock disagrees with it, which only the trader can correct.
+ */
+export type WaitingStage = "connecting" | "verifying" | "wallet" | "refused" | "clock";
 
 /** What the console knows of the node it should talk to; `origin` is the node it talks to now. */
 export type FollowStatus =
@@ -24,9 +27,8 @@ export type FollowStatus =
    */
   | { kind: "confirming"; origin: string; scheduled: boolean }
   /**
-   * The chain names `target`, which has not verified yet; the node in use stays. `stage` is `connecting` until the target answers,
-   * `verifying` once it has and its check or a wallet request holds the move, and `refused` once it failed its check; `reason` says why
-   * when that helps.
+   * The chain names `target`, which has not verified yet; the node in use stays. `stage` says how far the move has got (`WaitingStage`);
+   * `reason` says why when that helps.
    */
   | { kind: "waiting"; origin: string; target: string; stage: WaitingStage; reason: string | null }
   /** The chain names an operator whose hostname this build does not list; `hostname` is null when it is not even a plain host. */

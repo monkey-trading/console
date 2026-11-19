@@ -8,7 +8,7 @@
 import type { FeedStatus } from "./engine/attestation";
 import type { FollowStatus } from "./engine/operator-follow-status";
 import type { PauseView } from "./store/trading-pause";
-import { LONG_PAUSE, PAUSE_TITLE, RESUMES_WHEN } from "./trading-pause-words";
+import { CLOCK_FIX, CLOCK_WRONG, CLOSES_STILL_OPEN, LONG_PAUSE, NEXT_REFUSED, ORDERS_STILL_PAUSED, PAUSE_TITLE, RESUMES_WHEN } from "./trading-pause-words";
 import type { HoldCause, ServerRead, ServerStatus, UnpricedReason, VenueState } from "./engine/status-types";
 import { asSentence } from "./format";
 
@@ -134,16 +134,24 @@ export function serverLine(stream: FeedStatus, server: ServerRead | null, reason
 }
 
 /**
- * The one line while the console moves to the server the operator runs on with trading not paused, as when a page load finds it elsewhere,
- * or null when no move is under way: a calm status while that server is checked or has not yet answered, and an alert once it answered
- * and failed its check, when the console stays off it. While it shows, nothing said of the server being left applies.
+ * The one line while the console moves to the server the operator runs on with its view not paused, or null when no move is under way. While
+ * the server in use still `serving`, it still trades, so only new orders wait; otherwise, as when a page load finds the current server
+ * elsewhere, it is connecting. A refusal or a clock the next server disagrees with is an alert, with no chain of reasons.
  */
-export function switchLine(follow: FollowStatus | null): ServerLine | null {
+export function switchLine(follow: FollowStatus | null, serving: boolean): ServerLine | null {
   if (follow?.kind !== "waiting") return null;
-  const why = follow.reason === null ? "" : ` ${asSentence(follow.reason)}`;
-  // Why it was refused is the verifier's internal detail, which an error does not chain on.
-  if (follow.stage === "refused") return { role: "alert", lead: "The current trading server could not be verified, so the app has not connected to it.", rest: "The app will try again automatically." };
-  return { role: "status", lead: "Connecting to the current trading server.", rest: `Trading will be available once the server has been verified.${why}` };
+  switch (follow.stage) {
+    case "clock":
+      return { role: "alert", lead: CLOCK_WRONG, rest: CLOCK_FIX };
+    case "refused":
+      return serving ? { role: "alert", lead: NEXT_REFUSED, rest: ORDERS_STILL_PAUSED } : { role: "alert", lead: "The current trading server could not be verified, so the app has not connected to it.", rest: "The app will try again automatically." };
+    case "connecting":
+    case "verifying":
+    case "wallet":
+      return serving ? { role: "status", lead: "The trading server is changing.", rest: CLOSES_STILL_OPEN } : { role: "status", lead: "Connecting to the current trading server.", rest: "Trading will be available once the server has been verified." };
+    default:
+      return follow.stage satisfies never;
+  }
 }
 
 /** The one line on a page without the trading view while trading is paused for a change of trading server, or null once it has resumed; the pause's own live region announces it. */

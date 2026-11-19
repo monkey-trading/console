@@ -25,6 +25,8 @@ export async function runTrial(client: EngineClient, chain: DeploymentReads | nu
     await client.readChainThrough(chain);
     const status = await client.verify();
     if (status.kind === "unverified") return { kind: "failed", reason: status.reason, notReady: status.notReady === true };
+    // Its signed time is not the device's: nothing it signs can be judged until the trader corrects the clock.
+    if (status.kind === "clock") return { kind: "held", stage: "clock", reason: null };
     // With no wallet no verdict reads the vault, so an attested node is the best a visit without one can have; it reads, and never signs.
     if (status.kind === "attested" && chain !== null) return { kind: "held", stage: "verifying", reason: status.why };
     const said = await signedAnswer(client);

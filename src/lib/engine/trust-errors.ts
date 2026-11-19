@@ -31,8 +31,8 @@ export class UnsignedAnswer extends UntrustedError {
 
 /** A signed answer that verified but that the console refuses to take as the node's word on the vault's signer; `answer` is what it said, which can still say where the operator now runs. */
 export class RefusedAnswer extends UntrustedError {
-  constructor(reason: string, readonly answer: OperatorRoute) {
-    super(reason);
+  constructor(reason: string, readonly answer: OperatorRoute, options?: ErrorOptions) {
+    super(reason, options);
     this.name = "RefusedAnswer";
   }
 }
@@ -87,5 +87,7 @@ export function sendRefusal(status: AttestationStatus): string | null {
  * moment; nothing it says is trusted either way.
  */
 export function notReady(error: unknown): boolean {
+  // A refusal that carries what the node said last wraps the read's own failure, which decides.
+  if (error instanceof RefusedAnswer) return notReady(error.cause);
   return error instanceof UnsignedAnswer || (error instanceof EngineError && (error.status === 0 || error.status === 502 || error.status === 503 || error.status === 504));
 }

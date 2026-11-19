@@ -1,15 +1,16 @@
 /**
  * Trading paused while the trading server changes: when a pause begins, the steps it goes through, each from something the console
- * observes, and when trading resumes. A pause begins once trading was live and the follower finds the operator moving to another
- * server (`waiting`, or `unlisted`), or the stream drops around a turn boundary at which the member changes (a scheduled `confirming`),
- * and it lasts across the move to a fresh store. A drop the follower calls an outage ends it with no resume, and the outage line says so, as
+ * observes, and when trading resumes. A pause begins once trading was live and the server in use has stopped serving while the follower
+ * finds the operator moving to another server (`waiting`, or `unlisted`), or as the stream drops around a turn boundary at which the member
+ * changes (a scheduled `confirming`), and it lasts across the move to a fresh store. While the server in use still serves, it still
+ * trades, so the view stays as it is and only new orders wait, which the deal ticket and the banner say. A drop the follower calls an outage ends it with no resume, and the outage line says so, as
  * does a server that has taken over but whose prices do not come within `PRICE_WAIT_MS`: the server's own line then says why.
  */
 
 import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { FollowStatus } from "../engine/operator-follow-status";
 import type { Scheduler } from "../engine/live-stream";
-import { CLOCK_FAILED, NEXT_REFUSED, SERVER_REFUSED, STILL_PAUSED, UNLISTED_NEXT } from "../trading-pause-words";
+import { CLOCK_FAILED, NEXT_REFUSED, SERVER_REFUSED, STILL_PAUSED, UNLISTED_NEXT, WALLET_HOLD } from "../trading-pause-words";
 import { isPriced, isUnfed } from "../unpriced";
 import type { ConsoleState } from "./state";
 
@@ -23,11 +24,19 @@ export interface FocusPlace {
 export type StepState = "done" | "current" | "waiting" | "failed";
 export type Steps = Readonly<Record<PauseStep, StepState>>;
 
-/** What the trading view shows: nothing; the pause, its steps, whether it runs long and why a step failed; or trading resumed, then leaving. */
+/**
+ * What the trading view shows: nothing; the pause, its steps, whether it runs long, why a step failed, and what else holds it, such as a
+ * request waiting in the wallet; or trading resumed, then leaving.
+ */
 export type PauseView =
   | { kind: "none" }
-  | { kind: "paused"; steps: Steps; long: boolean; failure: string | null }
+  | { kind: "paused"; steps: Steps; long: boolean; failure: string | null; hold: string | null }
   | { kind: "resumed"; leaving: boolean };
+
+/** Whether `view` holds the trading view inert: while paused, and while "Trading resumed" shows, until the panel fades. */
+export function holdsView(view: PauseView): boolean {
+  return view.kind === "paused" || (view.kind === "resumed" && !view.leaving);
+}
 
 /** What the steps are read from. */
 export interface PauseInput {
@@ -63,27 +72,47 @@ export function pauses(follow: FollowStatus): boolean {
   return follow.kind === "waiting" || follow.kind === "unlisted" || (follow.kind === "confirming" && follow.scheduled);
 }
 
-/** The steps `input` shows and why one failed, or `outage` when the console stayed on its server and its stream is still down. */
-export function pauseSteps(input: PauseInput): { steps: Steps; failure: string | null } | "outage" {
-  const { follow, attestation } = input;
-  const trusted = attestation.kind === "mock" || attestation.kind === "verified" || attestation.kind === "attested";
+/** What a pause shows: its steps, why one failed, and what else holds it. */
+export interface PauseShown {
+  steps: Steps;
+  failure: string | null;
+  hold?: string;
+}
+
+/**
+ * What `input` shows, or that the pause ends with no resume: `outage` when the console stayed on its server or the server moved to and its
+ * stream is down, `serving` when the server in use serves again before any move, as it still trades.
+ */
+export function pauseSteps(input: PauseInput): PauseShown | "outage" | "serving" {
+  const { follow } = input;
   // Until a move, or again when the server moved to is itself being left, the follower says how far the change has got.
   if (!input.moved || follow.kind === "waiting" || follow.kind === "unlisted") {
+    if (!input.moved && follow.kind !== "confirming" && input.stream === "live") return follow.kind === "waiting" || follow.kind === "unlisted" ? "serving" : pauseStepsOnServer(input);
     switch (follow.kind) {
       case "confirming":
         return { steps: { ...NOT_YET, connect: "current" }, failure: null };
       case "unlisted":
         return { steps: { ...NOT_YET, connect: "failed" }, failure: UNLISTED_NEXT };
       case "waiting":
-        if (follow.stage === "connecting") return { steps: { ...NOT_YET, connect: "current" }, failure: null };
-        if (follow.stage === "verifying") return { steps: { ...NOT_YET, connect: "done", verify: "current" }, failure: null };
-        return { steps: { ...NOT_YET, connect: "done", verify: "failed" }, failure: `${NEXT_REFUSED} ${STILL_PAUSED}` };
+        switch (follow.stage) {
+          case "connecting":
+            return { steps: { ...NOT_YET, connect: "current" }, failure: null };
+          case "verifying":
+            return { steps: { ...NOT_YET, connect: "done", verify: "current" }, failure: null };
+          case "wallet":
+            return { steps: { ...NOT_YET, connect: "done", verify: "done", prices: "current" }, failure: null, hold: WALLET_HOLD };
+          case "refused":
+            return { steps: { ...NOT_YET, connect: "done", verify: "failed" }, failure: `${NEXT_REFUSED} ${STILL_PAUSED}` };
+          case "clock":
+            return { steps: { ...NOT_YET, connect: "done", verify: "failed" }, failure: CLOCK_FAILED };
+          default:
+            return follow.stage satisfies never;
+        }
       case "pinned":
       case "following":
       case "failed":
-        // The console stayed where it was: its own stream coming back resumes trading, and one that stays down is an outage.
-        if (input.stream !== "live") return "outage";
-        break;
+        // The console stayed where it was: its stream down is an outage (its stream back resumes trading, above).
+        return "outage";
       default:
         return follow satisfies never;
     }
@@ -91,6 +120,13 @@ export function pauseSteps(input: PauseInput): { steps: Steps; failure: string |
     // The server moved to dropped after it served, and the follower found the operator still there: an outage, which its line says.
     return "outage";
   }
+  return pauseStepsOnServer(input);
+}
+
+/** The steps once the console is on the server it will trade on: its verdict, then its prices, then the account and the market on screen. */
+function pauseStepsOnServer(input: PauseInput): PauseShown {
+  const { attestation } = input;
+  const trusted = attestation.kind === "mock" || attestation.kind === "verified" || attestation.kind === "attested";
   const failed = { connect: "done", verify: "failed", prices: "waiting", resume: "waiting" } as const;
   if (attestation.kind === "unverified") return { steps: failed, failure: `${SERVER_REFUSED} ${STILL_PAUSED}` };
   // A clock the server disagrees with stops every answer until the trader corrects it, which nothing automatic does.
@@ -100,10 +136,14 @@ export function pauseSteps(input: PauseInput): { steps: Steps; failure: string |
   return { steps: { connect: "done", verify: "done", prices: "done", resume: input.ready ? "done" : "current" }, failure: null };
 }
 
-/** Whether the server `state` reads prices its markets again: an open market has a live price, or none can have one, every open market being without a feed here. */
+/**
+ * Whether the server `state` reads prices its markets again: an open market has a live price, or none can have one, every open market
+ * being without a feed here, or the market on screen cannot have one for a reason of its own, closed or without a feed.
+ */
 export function pricesFlow(state: ConsoleState): boolean {
   const open = state.markets.filter((m) => m.open);
-  return open.some(isPriced) || open.every((m) => isUnfed(m.view.pricing));
+  const shown = state.markets.find((m) => m.id === state.selected);
+  return open.some(isPriced) || open.every((m) => isUnfed(m.view.pricing)) || (shown !== undefined && (!shown.open || isUnfed(shown.view.pricing)));
 }
 
 /**
@@ -139,6 +179,7 @@ export class TradingPause {
   private priceWait: unknown = null;
   /** Where focus was when the pause began (`place`, null when on nothing named), which the page restores once the view is enabled again; null with nothing to restore. */
   private focusBefore: { place: FocusPlace | null } | null = null;
+  private pane: string | null = null;
 
   constructor(private readonly follower: Source & { getSnapshot(): FollowStatus }, private readonly scheduler: Scheduler) {
     follower.subscribe(this.update);
@@ -164,9 +205,14 @@ export class TradingPause {
     this.focusBefore ??= { place };
   }
 
-  /** The phone pane focus was in when the pause began, which the trading view shows again as a move remounts it; null for none. */
+  /** The phone pane the trading view shows now, which a move's remount during a pause shows again. */
+  notePane(pane: string): void {
+    this.pane = pane;
+  }
+
+  /** During a pause, the pane focus was in when it began, or else the one the trading view showed; null with no pause. */
   heldPane(): string | null {
-    return this.focusBefore?.place?.pane ?? null;
+    return this.view.kind === "none" ? null : (this.focusBefore?.place?.pane ?? this.pane);
   }
 
   /** Where focus was when the pause began, given once after it ends: the view enabled again puts it back. */
@@ -186,17 +232,20 @@ export class TradingPause {
     if (state === undefined) return;
     const follow = this.follower.getSnapshot();
     if (state.stream === "live") this.wasLive = true;
-    if (pauses(follow) && this.wasLive && this.view.kind !== "paused") this.begin();
+    // A server that still serves still trades: the pause waits for it to stop, or for a drop at a boundary.
+    const stopped = state.stream !== "live" || follow.kind === "confirming";
+    if (pauses(follow) && this.wasLive && stopped && this.view.kind !== "paused") this.begin();
     if (this.view.kind !== "paused") return;
     const steps = pauseSteps({ follow, moved: this.startStore !== this.store, stream: state.stream, attestation: state.attestation, marketsRead: state.markets.length > 0, flowing: pricesFlow(state), ready: readyToTrade(state) });
-    if (steps === "outage") return this.end();
+    if (steps === "outage" || steps === "serving") return this.end();
     if (Object.values(steps.steps).every((step) => step === "done")) return this.resumed();
     this.waitForPrices(steps.steps.verify === "done" && state.stream === "live");
     const { view } = this;
     if (view.kind !== "paused") return;
     // Unchanged steps publish nothing: the store changes many times a second.
-    const same = view.failure === steps.failure && STEP_ORDER.every((step) => view.steps[step] === steps.steps[step]);
-    if (!same) this.set({ kind: "paused", steps: steps.steps, long: view.long, failure: steps.failure });
+    const hold = steps.hold ?? null;
+    const same = view.failure === steps.failure && view.hold === hold && STEP_ORDER.every((step) => view.steps[step] === steps.steps[step]);
+    if (!same) this.set({ kind: "paused", steps: steps.steps, long: view.long, failure: steps.failure, hold });
   };
 
   /** While a server that has taken over streams and is trusted but its prices have not come, the wait is bounded; otherwise it is not. */
@@ -216,7 +265,7 @@ export class TradingPause {
     this.clearTimers();
     this.startStore = this.store;
     this.focusBefore = null; // a place an earlier pause kept, which nothing took, is not this one's
-    this.set({ kind: "paused", steps: NOT_YET, long: false, failure: null });
+    this.set({ kind: "paused", steps: NOT_YET, long: false, failure: null, hold: null });
     this.long = this.scheduler.setTimeout(() => {
       this.long = null;
       if (this.view.kind === "paused") this.set({ ...this.view, long: true });

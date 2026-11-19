@@ -149,7 +149,7 @@ describe("OperatorFollower.check", () => {
     held.busy = true;
     await follower.check();
     expect(adopted).toEqual([]);
-    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", stage: "verifying", reason: expect.stringContaining("waiting for your wallet") });
+    expect(follower.getSnapshot()).toMatchObject({ kind: "waiting", stage: "wallet", reason: null });
     held.busy = false;
     await follower.check();
     expect(adopted).toEqual([B]);

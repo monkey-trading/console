@@ -3,15 +3,13 @@
 /**
  * The panel over the trading view while trading is paused for a change of trading server: what is happening, what is kept, and the steps
  * the change goes through, each in the state the console has observed; then the resumed title over the ticked steps for a moment before it
- * fades. The polite live region that announces each step is `PauseAnnouncer`, outside the screens a move remounts.
+ * fades. The polite live region that announces each step is `PauseAnnouncer`'s.
  */
 
 import { useId } from "react";
 
-import { LONG_PAUSE, PAUSE_KEPT, PAUSE_STEPS, PAUSE_TITLE, RESUMED_TITLE, STEP_STATE_WORDS, pauseAnnouncement } from "@/lib/trading-pause-words";
+import { LONG_PAUSE, PAUSE_KEPT, PAUSE_STEPS, PAUSE_TITLE, RESUMED_TITLE, STEP_STATE_WORDS } from "@/lib/trading-pause-words";
 import type { PauseView, StepState } from "@/lib/store/trading-pause";
-
-import { useTradingPause } from "./ConsoleProvider";
 
 const ALL_DONE = { connect: "done", verify: "done", prices: "done", resume: "done" } as const;
 
@@ -42,8 +40,10 @@ export function TradingPausePanel({ view }: { view: Exclude<PauseView, { kind: "
     <>
       {/* The scrim the app's dialogs use, over the paused view in its own colours; `inert` on the panes, not this, stops presses. */}
       <div aria-hidden="true" className={`pointer-events-none absolute inset-0 z-10 bg-ink/70 ${fade}`} />
-      <div className="pointer-events-none absolute inset-0 z-20 flex items-start justify-center p-4 lg:pt-[12vh]">
-        <section aria-labelledby={titleId} className={`pointer-events-auto w-full max-w-lg rounded border border-line-2 bg-ink-2 p-5 shadow-platform ${fade}`}>
+      {/* On a phone the page scrolls, so the panel stays in the viewport above the bar at the foot, and scrolls itself when text is enlarged. */}
+      <div className="pointer-events-none fixed inset-x-0 top-0 bottom-(--bar-height,var(--spacing-bar)) z-20 flex items-center justify-center p-4 lg:absolute lg:inset-0 lg:items-start lg:pt-[12vh]">
+        {/* A scrollable region the keyboard reaches; the lint rule allows a labelled region focus. */}
+        <div role="region" aria-labelledby={titleId} tabIndex={0} className={`pointer-events-auto max-h-full w-full max-w-lg overflow-y-auto rounded border border-line-2 bg-ink-2 p-5 shadow-platform focus-visible:outline-2 focus-visible:outline-glow ${fade}`}>
           <h2 id={titleId} className="text-lead font-medium text-fg">{view.kind === "resumed" ? RESUMED_TITLE : PAUSE_TITLE}</h2>
           {/* Once trading has resumed, what is kept while it is paused no longer applies. */}
           {view.kind === "paused" && <p className="mt-2 text-data leading-relaxed text-fg-2">{PAUSE_KEPT}</p>}
@@ -56,15 +56,10 @@ export function TradingPausePanel({ view }: { view: Exclude<PauseView, { kind: "
             ))}
           </ol>
           {view.kind === "paused" && view.failure !== null && <p className="mt-4 text-data leading-relaxed text-ember">{view.failure}</p>}
-          {view.kind === "paused" && view.failure === null && view.long && <p className="mt-4 text-data leading-relaxed text-amber">{LONG_PAUSE}</p>}
-        </section>
+          {view.kind === "paused" && view.failure === null && view.hold !== null && <p className="mt-4 text-data leading-relaxed text-amber">{view.hold}</p>}
+          {view.kind === "paused" && view.failure === null && view.hold === null && view.long && <p className="mt-4 text-data leading-relaxed text-amber">{LONG_PAUSE}</p>}
+        </div>
       </div>
     </>
   );
-}
-
-/** The one polite live region for the pause: mounted for the whole visit, so a move's remount does not drop what it says. */
-export function PauseAnnouncer() {
-  const view = useTradingPause();
-  return <p aria-live="polite" className="sr-only">{pauseAnnouncement(view)}</p>;
 }

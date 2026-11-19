@@ -46,4 +46,16 @@ describe("moveToNode", () => {
     old.store.notify("orders", "No live price is available, so the order was refused.");
     expect(next.store.getSnapshot().notices.orders?.text).toBe("No live price is available, so the order was refused.");
   });
+
+  it("says nothing late of the old server once the trader has sent a request on the new one, whose own outcome it must not be read as", async () => {
+    const storage = memoryStorage();
+    const old = await authorizedTab(storage);
+    const next = nextStore(storage);
+    await moveToNode(old.store, next.store);
+    next.store.patch({ busy: true });
+    next.store.patch({ busy: false });
+    old.store.notify("ticket", "No live price is available, so the order was refused.");
+    expect(next.store.getSnapshot().notices.ticket).toBeUndefined();
+  });
 });
+

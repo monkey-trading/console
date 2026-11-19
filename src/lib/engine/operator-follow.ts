@@ -168,7 +168,10 @@ export class OperatorFollower {
     try {
       await this.readChain(node);
     } finally {
-      this.pace.turnAtMs = this.current === reading || this.current === null ? (await node).turnAtMs : await this.word.nextTurn(this.current);
+      const turn = this.current === reading || this.current === null ? node.then((said) => said.turnAtMs) : this.word.nextTurn(this.current);
+      // A change under way is retried within seconds whatever the server being left says, which may not answer for a while.
+      if (FollowPace.switching(this.state)) void turn.then((at) => { this.pace.turnAtMs = at; });
+      else this.pace.turnAtMs = await turn;
     }
   }
 
@@ -268,7 +271,7 @@ export class OperatorFollower {
     if (end.kind === "failed") return failed(end.reason, end.error, end.notReady);
     if (end.kind === "held") return waiting(end.stage, end.reason);
     if (this.deps.chain() !== chain) return abandon();
-    if (this.deps.busy()) return waiting("verifying", "A request is waiting for your wallet. You will be moved to the new server once that request is complete.");
+    if (this.deps.busy()) return waiting("wallet");
     this.deps.adopt(client, target);
     // In use from now, before the provider watches it: a check the floor's refusal of the old node starts reads this one.
     this.current = client;

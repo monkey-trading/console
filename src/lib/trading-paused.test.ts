@@ -15,7 +15,7 @@ describe("tradingPaused", () => {
   it("names a handover first, whatever else holds", () => {
     const state = tradingPaused({ ...live, handover: true, open: false, priced: false, reduceOnly: true });
     expect(state?.cause).toBe("handover");
-    expect(state?.text).toBe("Trading is paused while the trading server changes. Trading will resume automatically once the new server has been verified and live prices have returned.");
+    expect(state?.text).toBe("New orders are paused while the trading server changes. They will be accepted again automatically once the new server has been verified and live prices have returned.");
     expect(state?.closesAllowed).toBe(true);
   });
 
