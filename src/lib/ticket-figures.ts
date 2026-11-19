@@ -119,7 +119,7 @@ export function ticketFigures(state: ConsoleState, market: MarketModel, order: T
   const quoted = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview: estimated, side: order.side, mark: market.mark, limits, bothWays: hedge !== null });
   // For an order that concerns a hedge, the server's preview of this exact size replaces the ladder's margin verdict and the
   // console's own estimate, which swaps one position's margin; while it is awaited neither is stated, and after a failed read both stand.
-  const offset = hedge === null ? null : offsetTicket(hedge.answer, state.account);
+  const offset = hedge === null ? null : offsetTicket(hedge.answer, state.account, market.id, shown.marginAfter);
   const overruled = hedge !== null && hedge.answer !== "failed";
   const preview = !overruled ? estimated : { ...estimated, problems: estimated.problems.filter((p) => !p.startsWith(MARGIN_SHORT)), marginUseBps: offset?.useBps ?? estimated.marginUseBps };
   const refusal = offset?.refusal ?? null;

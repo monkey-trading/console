@@ -8,7 +8,7 @@
 
 import { useEffect, useId } from "react";
 
-import { CLOSE_SLIPPAGE_BPS, planGroupClose, pressBatch, targetsKey, type HedgeMember } from "@/lib/close-all";
+import { planGroupClose, pressBatch, targetsKey, type HedgeMember } from "@/lib/close-all";
 import { CONFIRM_MIN_GAP_MS, CONFIRM_MS } from "@/lib/confirm-window";
 import { formatUsd } from "@/lib/fixed";
 import { CLOSE_ALL_REMOVES_LEVELS } from "@/lib/level-words";
@@ -32,7 +32,7 @@ export function HedgeHeading({ group, members, removesLevels, disabled, describe
   const id = useId();
   const { armed, state, arm, cancel } = useConfirmWindow(CONFIRM_MS, CONFIRM_MIN_GAP_MS);
   const { confirmBatch } = usePrefs().prefs;
-  const { targets, untradable } = planGroupClose(members);
+  const { targets, slippageBps, untradable } = planGroupClose(members);
   const count = targets.length;
   const confirming = armed && count > 0;
   const symbols = members.map((m) => m.symbol);
@@ -46,7 +46,7 @@ export function HedgeHeading({ group, members, removesLevels, disabled, describe
     if (action !== "send") return;
     cancel();
     keepFocus(event.currentTarget);
-    void closeAll(store, targets, CLOSE_SLIPPAGE_BPS);
+    void closeAll(store, targets, slippageBps);
   };
   // A held Enter repeats its click: only a separate press may confirm.
   const holdsDown = (event: { repeat: boolean; preventDefault: () => void }) => { if (event.repeat) event.preventDefault(); };
@@ -62,8 +62,8 @@ export function HedgeHeading({ group, members, removesLevels, disabled, describe
         </button>
       </div>
       <p role="status" className="sr-only">{confirming ? `Press again within ${CONFIRM_MS / 1000} seconds to close ${positions}.${removesLevels ? ` ${CLOSE_ALL_REMOVES_LEVELS}` : ""}` : ""}</p>
-      {confirming && removesLevels && <p className="mt-1 whitespace-normal text-label leading-relaxed text-fg-2">{CLOSE_ALL_REMOVES_LEVELS}</p>}
-      {note !== null && <p id={`${id}-note`} className="mt-1 whitespace-normal text-label leading-relaxed text-fg-3">{note}</p>}
+      {confirming && removesLevels && <p className="mt-1 max-w-[80ch] whitespace-normal text-label leading-relaxed text-fg-2">{CLOSE_ALL_REMOVES_LEVELS}</p>}
+      {note !== null && <p id={`${id}-note`} className="mt-1 max-w-[80ch] whitespace-normal text-label leading-relaxed text-fg-3">{note}</p>}
     </div>
   );
 }

@@ -16,10 +16,10 @@ export const NET_EXPOSURE_TIP = "The value of the hedge's long positions less it
 export const HEDGED_CLOSEOUT_TIP = "The price at which your account would be closed out, assuming your other positions remain at their current prices. Positions that hedge each other are closed together where possible, and a close-out may first close positions in other markets.";
 
 /** Under a limit or stop order that would reduce a hedged position. */
-export const TRIGGERED_ORDER_NOTE = "Once triggered, this order is executed even if reducing your hedge raises your margin requirement, and your account may then be closed out if its equity is below the close-out level. While the market is closed or has no price, the order waits for the first available price.";
+export const TRIGGERED_ORDER_NOTE = "Once triggered, this order is executed even if reducing your hedge raises your margin requirement, and your account may then be closed out. While the market is closed or has no price, the order waits for the first available price.";
 
 /** Under the take profit and stop loss of an order in a hedged market. */
-export const TRIGGERED_LEVELS_NOTE = "A take profit or stop loss is executed when triggered even if closing this hedged position raises your margin requirement, and your account may then be closed out if its equity is below the close-out level. While the market is closed or has no price, it waits for the first available price.";
+export const TRIGGERED_LEVELS_NOTE = "A take profit or stop loss on a hedged position is executed when triggered even if it raises your margin requirement, and your account may then be closed out. While the market is closed or has no price, it waits for the first available price.";
 
 /** The heading over positions that are in no hedge, shown only while a hedge is listed above them. */
 export const OTHER_POSITIONS = "Other positions";

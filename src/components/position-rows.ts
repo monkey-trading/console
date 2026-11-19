@@ -20,6 +20,7 @@ import type { LevelFields } from "@/lib/level-check";
 import { levelsWait } from "@/lib/level-words";
 import { editorReference } from "@/lib/ticket-levels";
 import type { PositionModel } from "@/lib/models";
+import { creditedGroupOf } from "@/lib/portfolio";
 import { describeLoneClose } from "@/lib/portfolio-words";
 import { closingPrice } from "@/lib/quotes";
 import { placeOrder } from "@/lib/store/actions";
@@ -98,7 +99,7 @@ export function positionRows(ctx: RowContext, positions: readonly PositionModel[
       market, position: p, ...editorReference(account, terms, market, p.qty, known === null ? null : quoted), noClosing: levelsWait(noPrice ?? houseTermsNote(snapshot)),
       limits: ticketLimits(account, p.market), toUsdDown, fields: draft?.fields ?? { takeProfit: "", stopLoss: "" }, onChange: levelsEditor.edit,
       onCancel: levelsEditor.cancel, onSend: (sent: Levels) => { if (draft !== null) levelsEditor.sending(draft.instance, p.market, sent); }, onSaved: (sent: LevelFields, words: string) => { if (draft !== null) levelsEditor.saved(draft.instance, sent, words); },
-      saving: levelsEditor.savingFor(p.market), onSettled: () => { if (draft !== null) levelsEditor.settled(draft.instance); }, onRemovedWithFocus: levelsEditor.removedWithFocus, announced: levelsEditor.announcedFor(p.market),
+      hedged: creditedGroupOf(account?.portfolio, p.market) !== null, saving: levelsEditor.savingFor(p.market), onSettled: () => { if (draft !== null) levelsEditor.settled(draft.instance); }, onRemovedWithFocus: levelsEditor.removedWithFocus, announced: levelsEditor.announcedFor(p.market),
     };
     return {
       key: p.market,
@@ -135,7 +136,7 @@ export function positionRows(ctx: RowContext, positions: readonly PositionModel[
       closable: !busy && !readOnly.readOnly && market?.open === true && known !== null && quoted !== null && loneRefused === null,
       loneRefused,
       // What Close hedge reads of the position: whether its market can trade, and its own Close button's price, else the mark.
-      member: { market: p.market, symbol: String(market?.symbol ?? p.market), open: market?.open === true && isPriced(market), quoted: known === null ? null : quoted, mark: known },
+      member: { market: p.market, symbol: String(market?.symbol ?? p.market), open: market?.open === true && isPriced(market), quoted: known === null ? null : quoted, mark: known, maxSlippageBps: market?.view.max_slippage_bps ?? CLOSE_SLIPPAGE_BPS },
       // The node quotes at most four markets at once, the selected one first; a held market left out has no closing price until it is selected.
       unquoted: signatures === "checked" && !asked.includes(p.market) && market?.open === true && known !== null,
       close,

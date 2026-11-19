@@ -57,7 +57,7 @@ const CELL_BUTTON = `${BUTTON} mt-1`;
 const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 
 /** What the Close-out value means, shared by the table's head and the phone rows' label. */
-const CLOSEOUT_TIP = "The price at which your account would be closed out, assuming your other positions remain at their current prices. Because margin is shared across your account, your largest losing position is closed first, and that may not be this one. Due means your account is already below the close-out level. None means no realistic price would close out your account.";
+const CLOSEOUT_TIP = "The price at which your account would be closed out, assuming your other positions remain at their current prices. Because margin is shared across your account, a close-out may first close positions in other markets.";
 
 /** What the P&L column means, shared by the table's head and the phone rows' labels. */
 const PNL_TIP = "The profit or loss you would realise by closing the entire position now, before the profit fee. It is calculated at the price at which the position would close (the bid for a long position, the offer for a short), so the spread is already taken into account. Details shows the profit or loss at the mark price.";
@@ -179,7 +179,7 @@ export function PositionsView() {
           <button type="button" disabled={!r.closable} className={CELL_BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy ?? loneId(r, "row")} onClick={r.close}>Close</button>
         </td>
       </tr>
-      {r.loneRefused !== null && <tr className="border-b border-line last:border-b-0"><td id={loneId(r, "row")} colSpan={8} className="px-1.5 pb-2 text-label leading-relaxed text-fg-3">{r.loneRefused}</td></tr>}
+      {r.loneRefused !== null && <tr className="border-b border-line last:border-b-0"><td id={loneId(r, "row")} colSpan={8} className="px-1.5 pb-2 text-label leading-relaxed text-fg-3"><p className="max-w-[80ch] whitespace-normal">{r.loneRefused}</p></td></tr>}
     </Fragment>
   );
   const othersHeading = hedges.length > 0 && others.length > 0;

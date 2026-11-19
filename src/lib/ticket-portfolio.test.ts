@@ -35,7 +35,7 @@ async function markets(): Promise<MarketModel[]> {
 async function state(account: AccountModel | null, extra: Partial<ConsoleState> = {}): Promise<ConsoleState> {
   const listed = await markets();
   const base = initialState(listed.map((m) => m.view), { cash: "0", nav: "0", gross_exposure: "0" }, 0, () => [], "checked");
-  return { ...base, markets: listed, account, wallet: { address: WALLET, label: "test" }, houseParams: { profitFeeBps: 1_000, closeoutLevelBps: 5_000, totalCapBps: 20_000, totalCapFloor: 0n, stressLevels: [], profitFeeCurve: [], portfolioGrid: GRID, seq: 1 }, ...extra };
+  return { ...base, markets: listed, account, protocolVersion: 84, wallet: { address: WALLET, label: "test" }, houseParams: { profitFeeBps: 1_000, closeoutLevelBps: 5_000, totalCapBps: 20_000, totalCapFloor: 0n, stressLevels: [], profitFeeCurve: [], portfolioGrid: GRID, seq: 1 }, ...extra };
 }
 
 const order = (side: "buy" | "sell", qty: string, resting = false) => ({ side, qty: q(qty), resting });
@@ -59,6 +59,12 @@ describe("which ticket orders the server previews", () => {
     expect(previewRequest(hedged, await marketOf(2), order("buy", "10"))?.side).toBe("buy");
   });
 
+  it("previews nothing for a server before V84, which admits orders position by position and serves no preview", async () => {
+    const hedged = holding([[1, "1"], [2, "-10"]], HEDGED);
+    expect(previewRequest(await state(hedged, { protocolVersion: 83 }), await marketOf(1), order("buy", "1"))).toBeNull();
+    expect(previewRequest(await state(hedged, { protocolVersion: null }), await marketOf(1), order("buy", "1"))).toBeNull();
+  });
+
   it("previews nothing for a resting order, an empty size, no wallet, or no grid to tell a new hedge by", async () => {
     const lone = holding([[1, "1"]], LONE);
     const eth = await marketOf(2);
@@ -76,46 +82,63 @@ const answer = (over: Partial<OrderPreviewWire>): OrderPreviewWire => ({
 
 describe("what the ticket shows from the server's preview", () => {
   const account = holding([[1, "1"], [2, "-10"]], HEDGED);
+  /** The initial margin the console estimates the order would leave with no offset. */
+  const PER_POSITION = fixedFromInt(30_000);
 
   it("shows nothing while the answer is awaited or after a failed read, so the other verdicts stand", () => {
-    expect(offsetTicket(undefined, account)).toEqual({ line: null, refusal: null, useBps: null, answered: false });
-    expect(offsetTicket("failed", account)).toEqual({ line: null, refusal: null, useBps: null, answered: false });
+    expect(offsetTicket(undefined, account, 1, PER_POSITION)).toEqual({ line: null, refusal: null, useBps: null, answered: false, awaited: true });
+    expect(offsetTicket("failed", account, 1, PER_POSITION)).toEqual({ line: null, refusal: null, useBps: null, answered: false, awaited: false });
   });
 
   it("states the initial margin and equity an admitted order leaves, and their ratio for the margin use", () => {
-    expect(offsetTicket(answer({}), account)).toEqual({ line: "After this order, your initial margin would be $20,000.00 and your equity $50,000.00.", refusal: null, useBps: 4_000, answered: true });
+    expect(offsetTicket(answer({}), account, 1, PER_POSITION)).toEqual({ line: "After this order, your initial margin would be $20,000.00 and your equity $50,000.00.", refusal: null, useBps: 4_000, answered: true, awaited: false });
+  });
+
+  it("states a hedge the order would create only when it earns a credit, the margin below the estimate without one", () => {
+    const lone = holding([[1, "1"]], LONE);
+    const creating = answer({ market: 2, initial_margin: "20000" });
+    expect(offsetTicket(creating, lone, 2, fixedFromInt(30_000)).line).toBe("After this order, your initial margin would be $20,000.00 and your equity $50,000.00.");
+    expect(offsetTicket(creating, lone, 2, q("20000.005")).line).toBeNull();
+    expect(offsetTicket(creating, lone, 2, fixedFromInt(20_000)).line).toBeNull();
   });
 
   it("says when an order that reduces a hedge raises the initial margin, from the account's own", () => {
     const reducing = answer({ fill: { qty: "1", price: "99990", mid: "100000", spread_bps: 1, increases: false }, initial_margin: "24000", equity: "49000" });
-    expect(offsetTicket(reducing, account).line).toBe("This order reduces a hedge, so your initial margin would rise from $10,000.00 to $24,000.00, with equity of $49,000.00.");
+    expect(offsetTicket(reducing, account, 1, PER_POSITION).line).toBe("This order reduces a hedge, so your initial margin would rise from $10,000.00 to $24,000.00, with equity of $49,000.00.");
   });
 
   it("refuses for margin with the exact figures, pointing a reducing order to Close hedge", () => {
     const refused = { kind: "insufficient_margin" as const, equity: "20000", required: "24000" };
     const reducing = answer({ fill: { qty: "1", price: "99990", mid: "100000", spread_bps: 1, increases: false }, refused });
-    expect(offsetTicket(reducing, account)).toMatchObject({ line: null, refusal: "Insufficient margin. This order requires $24,000.00 of margin, and your equity is $20,000.00. To close the whole hedge, use Close hedge in the positions panel.", answered: true });
-    expect(offsetTicket(answer({ refused }), account).refusal).toBe("Insufficient margin. This order requires $24,000.00 of margin, and your equity is $20,000.00.");
+    expect(offsetTicket(reducing, account, 1, PER_POSITION)).toMatchObject({ line: null, refusal: "Insufficient margin. This order requires $24,000.00 of margin, and your equity is $20,000.00. To close the whole hedge, use Close hedge in the positions panel.", answered: true });
+    expect(offsetTicket(answer({ refused }), account, 1, PER_POSITION).refusal).toBe("Insufficient margin. This order requires $24,000.00 of margin, and your equity is $20,000.00.");
   });
 
   it("leaves a refusal other than for margin to the ticket's own checks, stating no figures", () => {
-    expect(offsetTicket(answer({ fill: null, refused: { kind: "market_closed" } }), account)).toMatchObject({ line: null, refusal: null, answered: true });
+    expect(offsetTicket(answer({ fill: null, refused: { kind: "market_closed" } }), account, 1, PER_POSITION)).toMatchObject({ line: null, refusal: null, answered: true });
   });
 });
 
 describe("the note on an order that waits for a trigger", () => {
   const hedged = holding([[1, "1"], [2, "-10"]], HEDGED);
+  const resting = (side: "buy" | "sell", qty: string) => ({ side, qty: q(qty), resting: true });
 
-  it("explains a limit or stop that would reduce a hedged position, and levels on any order there", () => {
-    expect(triggeredNote(hedged, 1, { side: "sell", resting: true }, false)).toBe(TRIGGERED_ORDER_NOTE);
-    expect(triggeredNote(hedged, 1, { side: "buy", resting: true }, false)).toBeNull();
-    expect(triggeredNote(hedged, 1, { side: "buy", resting: true }, true)).toBe(TRIGGERED_LEVELS_NOTE);
-    expect(triggeredNote(hedged, 2, { side: "buy", resting: false }, true)).toBe(TRIGGERED_LEVELS_NOTE);
+  it("explains a limit or stop that would only reduce a hedged position, and levels on any order there", () => {
+    expect(triggeredNote(hedged, 1, resting("sell", "1"), false)).toBe(TRIGGERED_ORDER_NOTE);
+    expect(triggeredNote(hedged, 1, resting("buy", "1"), false)).toBeNull();
+    expect(triggeredNote(hedged, 1, resting("buy", "1"), true)).toBe(TRIGGERED_LEVELS_NOTE);
+    expect(triggeredNote(hedged, 2, { side: "buy", qty: q("1"), resting: false }, true)).toBe(TRIGGERED_LEVELS_NOTE);
   });
 
-  it("says nothing for an account that earns no offset, or a market outside its hedge", () => {
-    expect(triggeredNote(holding([[1, "1"]], LONE), 1, { side: "sell", resting: true }, true)).toBeNull();
-    expect(triggeredNote(hedged, 3, { side: "sell", resting: true }, true)).toBeNull();
+  it("does not promise a fill to an order that would turn the position round, whose added risk is checked", () => {
+    expect(triggeredNote(hedged, 1, resting("sell", "1.5"), false)).toBeNull();
+  });
+
+  it("explains levels on an order that would create a hedge, and says nothing else for an account that earns no offset", () => {
+    const lone = holding([[1, "1"]], LONE);
+    expect(triggeredNote(lone, 2, { side: "sell", qty: q("10"), resting: false }, true, true)).toBe(TRIGGERED_LEVELS_NOTE);
+    expect(triggeredNote(lone, 1, resting("sell", "1"), true)).toBeNull();
+    expect(triggeredNote(hedged, 3, resting("sell", "1"), true)).toBeNull();
   });
 });
 

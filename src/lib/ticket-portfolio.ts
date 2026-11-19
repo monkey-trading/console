@@ -27,7 +27,15 @@ export interface OffsetTicket {
   useBps: number | null;
   /** Whether the server has answered for this order, so its verdict replaces the ladder's and the console's own. */
   answered: boolean;
+  /** Whether the answer for this order is still awaited, which holds the order: no other verdict can say whether it is admitted. */
+  awaited: boolean;
 }
+
+/** The protocol version whose server previews orders and admits them under portfolio margin (monkey-trading/engine#916). */
+export const PREVIEW_PROTOCOL = 84;
+
+/** A cent, in `Fixed`: more than the engine's and the console's roundings of a margin apart. */
+const CENT = 10_000_000n;
 
 /** One preview's key: the same order for the same account asks once. */
 export const previewKey = (request: OrderPreviewRequest): string => `${request.account}|${request.market}|${request.side}|${request.qty}|${request.reduceOnly}`;
@@ -48,39 +56,49 @@ export const isMarginRefusal = (reject: Reject | null | undefined): boolean => r
 
 /**
  * The preview the ticket asks for a market order of `qty` on `side`, or null when the order does not concern portfolio margin
- * (`touchesOffset`), is not a market order, has no size, or there is no credited account to ask about.
+ * (`touchesOffset`), is not a market order, has no size, there is no credited account to ask about, or the server predates
+ * V84, which admits orders position by position and serves no preview.
  */
 export function previewRequest(state: ConsoleState, market: MarketModel, order: { side: Side; qty: Fixed; resting: boolean }): OrderPreviewRequest | null {
   const account = state.account;
-  if (order.resting || order.qty <= 0n || state.wallet === null || account === null) return null;
+  if (order.resting || order.qty <= 0n || state.wallet === null || account === null || (state.protocolVersion ?? 0) < PREVIEW_PROTOCOL) return null;
   const markOf = (id: MarketId) => state.markets.find((m) => m.id === id)?.mark ?? null;
   const delta = order.side === "buy" ? order.qty : -order.qty;
   const touches = touchesOffset({ portfolio: account.portfolio, grid: state.houseParams?.portfolioGrid, positions: account.positions, markOf, market: market.id, delta });
   return touches ? { account: state.wallet.address, market: market.id, side: order.side, qty: fixedToWire(order.qty), reduceOnly: false } : null;
 }
 
-/** What the ticket shows from `answer` for an account that holds `account` now. */
-export function offsetTicket(answer: PreviewAnswer, account: AccountModel | null): OffsetTicket {
-  if (answer === undefined || answer === "failed" || account === null) return { line: null, refusal: null, useBps: null, answered: false };
+/**
+ * What the ticket shows from `answer` for `account` as it is now. `perPosition` is the initial margin the order would leave
+ * with no offset, the console's own estimate, which the line is shown against unless the account earns an offset in the
+ * market's group already: an order that would match exposure but earn no credit states nothing.
+ */
+export function offsetTicket(answer: PreviewAnswer, account: AccountModel | null, market: MarketId, perPosition: Fixed): OffsetTicket {
+  if (answer === undefined || answer === "failed" || account === null) return { line: null, refusal: null, useBps: null, answered: false, awaited: answer === undefined && account !== null };
   const equity = fixedFromWire(answer.equity);
   const initial = fixedFromWire(answer.initial_margin);
   const reduces = answer.fill?.increases === false;
   const useBps = equity > 0n ? Number((initial * 10_000n) / equity) : null;
   if (isMarginRefusal(answer.refused) && answer.refused !== null) {
-    return { line: null, refusal: `${describeReject(answer.refused)}${reduces ? ` ${CLOSE_HEDGE_POINTER}` : ""}`, useBps, answered: true };
+    return { line: null, refusal: `${describeReject(answer.refused)}${reduces ? ` ${CLOSE_HEDGE_POINTER}` : ""}`, useBps, answered: true, awaited: false };
   }
-  return { line: answer.refused === null ? describeOrderMargin(requirementOf(account), initial, equity, reduces) : null, refusal: null, useBps, answered: true };
+  // A credit the order creates leaves the margin below its estimate without one by more than the engine's rounding.
+  const credited = creditedGroupOf(account.portfolio, market) !== null || initial + CENT < perPosition;
+  return { line: answer.refused === null && credited ? describeOrderMargin(requirementOf(account), initial, equity, reduces) : null, refusal: null, useBps, answered: true, awaited: false };
 }
 
 /**
- * The note for an order on a hedged position whose fill waits for a trigger (D14): a limit or stop that would reduce the
- * position, or a take profit or stop loss named on the order. Null in a market in no hedge that earns an offset.
+ * The note for an order on a hedged position whose fill waits for a trigger (D14): a limit or stop that would only reduce the
+ * position, since one that turns it round is checked on the risk it adds, or a take profit or stop loss named on an order in a
+ * market where the account earns an offset or the order would create one (`hedges`). Null otherwise.
  */
-export function triggeredNote(account: AccountModel | null, market: MarketId, order: { side: Side; resting: boolean }, levelsNamed: boolean): string | null {
-  if (account === null || creditedGroupOf(account.portfolio, market) === null) return null;
+export function triggeredNote(account: AccountModel | null, market: MarketId, order: { side: Side; qty: Fixed; resting: boolean }, levelsNamed: boolean, hedges = false): string | null {
+  if (account === null) return null;
+  const credited = creditedGroupOf(account.portfolio, market) !== null;
   const held = account.positions.find((p) => p.market === market)?.qty ?? 0n;
-  if (order.resting && held !== 0n && (order.side === "buy") === (held < 0n)) return TRIGGERED_ORDER_NOTE;
-  return levelsNamed ? TRIGGERED_LEVELS_NOTE : null;
+  const reduces = held !== 0n && (order.side === "buy") === (held < 0n) && order.qty <= (held < 0n ? -held : held);
+  if (credited && order.resting && reduces) return TRIGGERED_ORDER_NOTE;
+  return levelsNamed && (credited || hedges) ? TRIGGERED_LEVELS_NOTE : null;
 }
 
 /** The reason the node's exact close quote gives for refusing to close the whole position on `side` (V84), when it closes exactly `qty`. */
