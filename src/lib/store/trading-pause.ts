@@ -10,9 +10,10 @@
 import type { AttestationStatus, FeedStatus } from "../engine/attestation";
 import type { FollowStatus } from "../engine/operator-follow-status";
 import type { Scheduler } from "../engine/live-stream";
-import { CLOCK_FAILED, NEXT_REFUSED, SERVER_REFUSED, STILL_PAUSED, UNLISTED_NEXT, WALLET_HOLD } from "../trading-pause-words";
+import { CLOCK_FAILED, SERVER_REFUSED, STILL_PAUSED, UNLISTED_NEXT } from "../trading-pause-words";
 import { isPriced, isUnfed } from "../unpriced";
 import type { ConsoleState } from "./state";
+import { NOT_YET, waitingSteps } from "./trading-pause-steps";
 
 export type PauseStep = "connect" | "verify" | "prices" | "resume";
 /** Where focus was when trading paused, told by what a trader sees of the control, and the phone pane it sat in: no element survives a move. */
@@ -62,7 +63,6 @@ export const LEAVE_MS = 300;
 export const PRICE_WAIT_MS = 60_000;
 
 const STEP_ORDER: readonly PauseStep[] = ["connect", "verify", "prices", "resume"];
-const NOT_YET: Steps = { connect: "waiting", verify: "waiting", prices: "waiting", resume: "waiting" };
 
 /** Whether `follow` begins a pause: the operator moving to another server, or a drop held as one. */
 export function pauses(follow: FollowStatus): boolean {
@@ -91,20 +91,7 @@ export function pauseSteps(input: PauseInput): PauseShown | "outage" | "serving"
       case "unlisted":
         return { steps: { ...NOT_YET, connect: "failed" }, failure: UNLISTED_NEXT };
       case "waiting":
-        switch (follow.stage) {
-          case "connecting":
-            return { steps: { ...NOT_YET, connect: "current" }, failure: null };
-          case "verifying":
-            return { steps: { ...NOT_YET, connect: "done", verify: "current" }, failure: null };
-          case "wallet":
-            return { steps: { ...NOT_YET, connect: "done", verify: "done", prices: "current" }, failure: null, hold: WALLET_HOLD };
-          case "refused":
-            return { steps: { ...NOT_YET, connect: "done", verify: "failed" }, failure: `${NEXT_REFUSED} ${STILL_PAUSED}` };
-          case "clock":
-            return { steps: { ...NOT_YET, connect: "done", verify: "failed" }, failure: CLOCK_FAILED };
-          default:
-            return follow.stage satisfies never;
-        }
+        return waitingSteps(follow.stage);
       case "pinned":
       case "following":
       case "failed":

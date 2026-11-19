@@ -10,9 +10,19 @@ import type { SignerFloor } from "./signer-naming";
 
 /**
  * How far a move to the node the chain names has got: not answering yet, being checked, verified but held by a wallet request in flight,
- * refused, or refused because the device clock disagrees with it, which only the trader can correct.
+ * refused, refused because the device clock disagrees with it, which only the trader can correct, or held because the wallet's chain
+ * reads failed, which the trader may be able to put right.
  */
-export type WaitingStage = "connecting" | "verifying" | "wallet" | "refused" | "clock";
+export type WaitingStage = "connecting" | "verifying" | "wallet" | "refused" | "clock" | "unread";
+
+/**
+ * `state` held for a failed read of the chain through the wallet, with `reason`: a change that has neither been refused nor is held by the
+ * clock or a request in the wallet, whose own holds say more. Null for any other state.
+ */
+export function unread(state: FollowStatus, reason: string): FollowStatus | null {
+  if (state.kind !== "waiting" || state.stage === "refused" || state.stage === "clock" || state.stage === "wallet") return null;
+  return { ...state, stage: "unread", reason };
+}
 
 /** What the console knows of the node it should talk to; `origin` is the node it talks to now. */
 export type FollowStatus =
