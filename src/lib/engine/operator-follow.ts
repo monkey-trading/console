@@ -119,9 +119,9 @@ export class OperatorFollower {
     if (status === "live" && state.kind === "confirming") queueMicrotask(() => { if (this.state === state) this.set(this.drop.end(this.origin)); });
     if (status !== "stale") return;
     this.pace.restart(); // the successor, if this is a handover, serves within seconds
-    if (state.kind === "pinned" || state.kind === "following" || state.kind === "failed") this.set(this.drop.begin(state, this.origin, this.word.handoverWindow(this.deps.nowMs(), this.inUseSinceMs)));
-    if (this.drop.readsAtOnce() || this.drop.holds(this.state)) void this.check();
-    else this.poke();
+    const { show, check } = this.drop.dropped(state, this.origin, this.word.handoverWindow(this.deps.nowMs(), this.inUseSinceMs));
+    if (show !== null) this.set(show);
+    if (check) void this.check(); else this.poke();
   }
 
   /** Reads now, unless it read within `RETRY_MS`, when the read waits out the rest; a check running now may have read before this, so it runs again. */

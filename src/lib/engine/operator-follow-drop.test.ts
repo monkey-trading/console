@@ -52,6 +52,22 @@ describe("a dropped stream", () => {
     expect(kit.adopted).toEqual([B]);
   });
 
+  it("leaves what was concluded before a second drop that is not read now, so the outage shows at once, and reads it at the slower pace", async () => {
+    const kit = await handover();
+    kit.drop(); // read at once and found no move
+    await settle();
+    for (const watcher of kit.trial.watchers) watcher({ type: "feed", status: "live" });
+    kit.advance(10_000); // within RETRY_MS of that read, away from any boundary
+    kit.operatorReads.count = 0;
+    kit.drop();
+    expect(kit.follower.getSnapshot()).toEqual({ kind: "following", origin: BUILD });
+    await settle();
+    expect(kit.operatorReads.count).toBe(0);
+    kit.advance(RETRY_MS - 10_000);
+    await settle();
+    expect(kit.operatorReads.count).toBe(1);
+  });
+
   it("moves to the successor the chain names as soon as it answers, without waiting for the slow read", async () => {
     const kit = await handover();
     kit.setOperator(async () => named({ hostname: "b.example" }));
