@@ -13,11 +13,17 @@ function nameOf(element: Element): string {
 }
 
 /**
- * As trading pauses: closes a dialog open over the page, which the paused view's `inert` does not reach and whose draft the move would drop
- * anyway, and gives the place focus is in then, or null when it is on nothing named.
+ * As trading pauses: closes a dialog open over the trading view, which the paused view's `inert` does not reach and whose draft the move
+ * would drop anyway, telling `closed` once each has run its own close handling, and gives the place focus is in then, or null when it is
+ * on nothing named.
  */
-export function pausePlace(within: Element | null): FocusPlace | null {
-  for (const dialog of within?.querySelectorAll("dialog[open]") ?? []) if (dialog instanceof HTMLDialogElement) dialog.close();
+export function pausePlace(within: Element | null, closed: () => void): FocusPlace | null {
+  for (const dialog of within?.querySelectorAll("dialog[open]") ?? []) {
+    if (!(dialog instanceof HTMLDialogElement)) continue;
+    // After the dialog's own listener, which React added when it rendered: the close event is queued, so it runs later.
+    dialog.addEventListener("close", closed, { once: true });
+    dialog.close();
+  }
   const element = document.activeElement;
   if (element === null || within === null || !within.contains(element) || element === within) return null;
   const name = nameOf(element);
@@ -26,10 +32,11 @@ export function pausePlace(within: Element | null): FocusPlace | null {
 
 /**
  * Focuses the first control inside `within` at `place` that takes focus, as a phone card's hidden twin of a table's control does not, or
- * else `within` itself, unless the trader has put focus somewhere since.
+ * else `within` itself, unless the trader has put focus somewhere since; the pause panel, about to leave, is not somewhere.
  */
 export function focusPlace(place: FocusPlace | null, within: HTMLElement): void {
-  if (document.activeElement !== null && document.activeElement !== document.body) return;
+  const active = document.activeElement;
+  if (active !== null && active !== document.body && active.closest("[data-pause-panel]") === null) return;
   if (place !== null) {
     for (const element of within.querySelectorAll(place.tag)) {
       if (!(element instanceof HTMLElement) || nameOf(element) !== place.name) continue;

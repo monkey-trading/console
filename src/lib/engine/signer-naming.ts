@@ -29,8 +29,10 @@ export interface OperatorClaim {
 /** What `judge` weighs: a node's claim, or the highest signer another client heard, which may name two keys at its epoch. */
 export type SignerWord = { enclave?: string; signer?: Readonly<SignerFloor> };
 
-/** Why a check refuses a node for the signer the vault names, and whether a read of the vault naming its enclave would have taken it (`vaultLifts`). */
-/** Why an enclave is refused; `notReady` when it is only that its word could not be read yet (`notReady` of the read's error). */
+/**
+ * Why a check refuses a node for the signer the vault names, whether a read of the vault naming its enclave would have taken it
+ * (`vaultLifts`), and `notReady` when it is only that its word could not be read yet (`notReady` of the read's error).
+ */
 export type SignerRefusal = { reason: string; vaultLifts: boolean; notReady?: true };
 
 /** What the console says when the vault names a signer other than the enclave the node answers with. */

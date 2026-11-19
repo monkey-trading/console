@@ -6,6 +6,7 @@
 import { RETRY_MS } from "./operator-follow-pace";
 import type { FollowStatus } from "./operator-follow-status";
 
+/** Holds one unexplained drop at a time for the follower. */
 export class DropHold {
   private before: FollowStatus | null = null;
   private windowEndMs: number | null = null;

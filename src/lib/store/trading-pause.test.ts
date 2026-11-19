@@ -105,6 +105,16 @@ describe("TradingPause", () => {
     expect(pause.getSnapshot()).toEqual({ kind: "none" });
   });
 
+  it("says trading resumed when the stream comes back during a drop held at a boundary, as the store hears it before the follower explains it", () => {
+    const { follower, store, pause } = sources();
+    store.set(state({ stream: "stale" }));
+    follower.set({ kind: "confirming", origin: A, scheduled: true });
+    store.set(state({ stream: "live" }));
+    expect(pause.getSnapshot()).toMatchObject({ kind: "paused" });
+    follower.set({ kind: "following", origin: A });
+    expect(pause.getSnapshot()).toEqual({ kind: "resumed", leaving: false });
+  });
+
   it("says once the pause has run longer than usual, and not before", () => {
     const { follower, store, scheduler, pause } = sources();
     store.set(state({ stream: "stale" }));

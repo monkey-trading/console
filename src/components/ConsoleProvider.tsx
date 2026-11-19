@@ -203,10 +203,9 @@ function LoadedConsole({ initial, children }: { initial: Session; children: Reac
 function usePauseFocus(pause: TradingPause | null, store: ConsoleStore, moves: number): void {
   useEffect(() => pause?.subscribe(() => {
     if (pause.getSnapshot().kind !== "paused") return;
-    // Closing a dialog is not the trader's cancel: what its request came to stays to be said on the next server.
+    // Closing a dialog is not the trader's cancel: what its request came to stays to be said, here and on the next server.
     const { notices } = store.getSnapshot();
-    pause.holdFocus(pausePlace(document.getElementById("main")));
-    if (store.getSnapshot().notices !== notices) store.patch({ notices: { ...notices, ...store.getSnapshot().notices } });
+    pause.holdFocus(pausePlace(document.getElementById("main"), () => store.patch({ notices: { ...notices, ...store.getSnapshot().notices } })));
   }), [pause, store]);
   // A page with no trading view holds nothing inert, so focus a move took is given back at once.
   useEffect(() => {

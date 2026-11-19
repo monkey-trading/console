@@ -43,6 +43,7 @@ export function AttestationBanner() {
   );
 }
 
+/** One line of the banner; `live` false when another region announces it. */
 function Line({ line, live = true }: { line: ServerLine; live?: boolean }) {
   return (
     <div role={live ? line.role : undefined} className={line.role === "alert" ? BAD : WARN}>

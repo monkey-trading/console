@@ -8,7 +8,7 @@
 import type { FeedStatus } from "./engine/attestation";
 import type { FollowStatus } from "./engine/operator-follow-status";
 import type { PauseView } from "./store/trading-pause";
-import { CLOCK_FIX, CLOCK_WRONG, CLOSES_STILL_OPEN, LONG_PAUSE, NEXT_REFUSED, ORDERS_STILL_PAUSED, PAUSE_TITLE, RESUMES_WHEN } from "./trading-pause-words";
+import { CLOCK_FIX, CLOCK_WRONG, CLOSES_STILL_OPEN, LONG_PAUSE, NEXT_REFUSED, ORDERS_STILL_PAUSED, PAUSE_TITLE, RESUMES_WHEN, WALLET_HOLD } from "./trading-pause-words";
 import type { HoldCause, ServerRead, ServerStatus, UnpricedReason, VenueState } from "./engine/status-types";
 import { asSentence } from "./format";
 
@@ -145,9 +145,10 @@ export function switchLine(follow: FollowStatus | null, serving: boolean): Serve
       return { role: "alert", lead: CLOCK_WRONG, rest: CLOCK_FIX };
     case "refused":
       return serving ? { role: "alert", lead: NEXT_REFUSED, rest: ORDERS_STILL_PAUSED } : { role: "alert", lead: "The current trading server could not be verified, so the app has not connected to it.", rest: "The app will try again automatically." };
+    case "wallet":
+      return { role: "status", lead: serving ? "The trading server is changing." : "Connecting to the current trading server.", rest: WALLET_HOLD };
     case "connecting":
     case "verifying":
-    case "wallet":
       return serving ? { role: "status", lead: "The trading server is changing.", rest: CLOSES_STILL_OPEN } : { role: "status", lead: "Connecting to the current trading server.", rest: "Trading will be available once the server has been verified." };
     default:
       return follow.stage satisfies never;
@@ -158,5 +159,5 @@ export function switchLine(follow: FollowStatus | null, serving: boolean): Serve
 export function pauseLine(view: PauseView): ServerLine | null {
   if (view.kind !== "paused") return null;
   if (view.failure !== null) return { role: "alert", lead: `${PAUSE_TITLE}.`, rest: view.failure };
-  return { role: "status", lead: `${PAUSE_TITLE}.`, rest: view.long ? LONG_PAUSE : RESUMES_WHEN };
+  return { role: "status", lead: `${PAUSE_TITLE}.`, rest: view.hold ?? (view.long ? LONG_PAUSE : RESUMES_WHEN) };
 }

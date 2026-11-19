@@ -32,6 +32,7 @@ function StepMark({ state }: { state: StepState }) {
 
 const NAME_TONE: Readonly<Record<StepState, string>> = { done: "text-fg-2", current: "font-medium text-fg", waiting: "text-fg-3", failed: "font-medium text-ember" };
 
+/** The panel and its scrim over the paused trading view, for `view`. */
 export function TradingPausePanel({ view }: { view: Exclude<PauseView, { kind: "none" }> }) {
   const titleId = useId();
   const steps = view.kind === "paused" ? view.steps : ALL_DONE;
@@ -41,7 +42,7 @@ export function TradingPausePanel({ view }: { view: Exclude<PauseView, { kind: "
       {/* The scrim the app's dialogs use, over the paused view in its own colours; `inert` on the panes, not this, stops presses. */}
       <div aria-hidden="true" className={`pointer-events-none absolute inset-0 z-10 bg-ink/70 ${fade}`} />
       {/* On a phone the page scrolls, so the panel stays in the viewport above the bar at the foot, and scrolls itself when text is enlarged. */}
-      <div className="pointer-events-none fixed inset-x-0 top-0 bottom-(--bar-height,var(--spacing-bar)) z-20 flex items-center justify-center p-4 lg:absolute lg:inset-0 lg:items-start lg:pt-[12vh]">
+      <div data-pause-panel="" className="pointer-events-none fixed inset-x-0 top-0 bottom-(--bar-height,var(--spacing-bar)) z-20 flex items-center justify-center p-4 lg:absolute lg:inset-0 lg:items-start lg:pt-[12vh]">
         {/* A scrollable region the keyboard reaches; the lint rule allows a labelled region focus. */}
         <div role="region" aria-labelledby={titleId} tabIndex={0} className={`pointer-events-auto max-h-full w-full max-w-lg overflow-y-auto rounded border border-line-2 bg-ink-2 p-5 shadow-platform focus-visible:outline-2 focus-visible:outline-glow ${fade}`}>
           <h2 id={titleId} className="text-lead font-medium text-fg">{view.kind === "resumed" ? RESUMED_TITLE : PAUSE_TITLE}</h2>

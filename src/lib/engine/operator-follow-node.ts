@@ -9,7 +9,7 @@ import type { EngineClient } from "./client";
 import type { Scheduler } from "./live-stream";
 import { bounded, nodeSaid, NOTHING_SAID, type NodeSaid, type SaidTurn } from "./operator-follow-status";
 import { CLOCK_TOLERANCE_MS } from "./transport";
-import { RefusedAnswer } from "./trust-errors";
+import { notReady, RefusedAnswer } from "./trust-errors";
 
 /**
  * How long after a turn's boundary its member may take to serve, in milliseconds: the engine's own allowance for a member coming up
@@ -38,7 +38,8 @@ export class NodeWord {
     try {
       return this.heard(nodeSaid(await bounded(this.scheduler, current.stats.operator({ limit: 1 })), this.nowMs()));
     } catch (error) {
-      if (!(error instanceof RefusedAnswer)) return NOTHING_SAID;
+      // A node not serving yet says nothing, and its turns stay as they were heard.
+      if (!(error instanceof RefusedAnswer) || notReady(error)) return NOTHING_SAID;
       // A node the vault no longer names still says where the registry now runs the operator (the signed route the refusal carries), but
       // its own turns are not the operator's: a node promoted past has stopped mirroring them, so the registry's word decides.
       this.turns = [];
@@ -77,13 +78,14 @@ export class NodeWord {
 
   /**
    * The end of the stretch around a turn boundary at which the member changes that `nowMs` falls in, or null for none: from the device
-   * clock's tolerance before the boundary to the time its member may take to serve. A boundary whose earlier member is unknown counts.
+   * clock's tolerance before the boundary to the time its member may take to serve. A boundary whose earlier member is unknown counts; one
+   * the node in use came into use at or after (`inUseSinceMs`), as the member it brought, does not.
    */
-  handoverWindow(nowMs: number): number | null {
+  handoverWindow(nowMs: number, inUseSinceMs: number): number | null {
     for (const [i, turn] of this.boundaries.entries()) {
       const before = this.boundaries[i - 1];
       const after = this.boundaries[i + 1];
-      if (before?.candidate === turn.candidate) continue;
+      if (before?.candidate === turn.candidate || inUseSinceMs >= turn.atMs) continue;
       // Turns are all one length, read from the boundary after this one or, before that is drawn, the one before.
       const length = after !== undefined ? after.atMs - turn.atMs : before !== undefined ? turn.atMs - before.atMs : null;
       const end = turn.atMs + Math.min(COMING_UP_MS, length === null ? COMING_UP_MS : length / 2);

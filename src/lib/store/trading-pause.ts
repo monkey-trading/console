@@ -45,12 +45,9 @@ export interface PauseInput {
   moved: boolean;
   stream: FeedStatus;
   attestation: AttestationStatus;
-  /** Whether the server's markets have been read. */
-  marketsRead: boolean;
-  /** Whether the server prices its markets again (`pricesFlow`). */
-  flowing: boolean;
-  /** Whether prices reach the market on screen again (`readyToTrade`). */
-  ready: boolean;
+  marketsRead: boolean; // whether the server's markets have been read
+  flowing: boolean; // whether the server prices its markets again (`pricesFlow`)
+  ready: boolean; // whether prices reach the market on screen again (`readyToTrade`)
 }
 
 /** How long a pause runs before it says it is taking longer than usual, in milliseconds: the successor serves within seconds of the drop, as measured on a local stack, so this is several times that. */
@@ -164,6 +161,7 @@ interface Source {
   subscribe(listener: () => void): () => void;
 }
 
+/** Watches the follower and the store in use for a pause, its steps and its resume, across the moves the session makes. */
 export class TradingPause {
   private view: PauseView = { kind: "none" };
   private readonly listeners = new Set<() => void>();
@@ -180,6 +178,7 @@ export class TradingPause {
   /** Where focus was when the pause began (`place`, null when on nothing named), which the page restores once the view is enabled again; null with nothing to restore. */
   private focusBefore: { place: FocusPlace | null } | null = null;
   private pane: string | null = null;
+  private paneChosen: string | null = null;
 
   constructor(private readonly follower: Source & { getSnapshot(): FollowStatus }, private readonly scheduler: Scheduler) {
     follower.subscribe(this.update);
@@ -205,14 +204,15 @@ export class TradingPause {
     this.focusBefore ??= { place };
   }
 
-  /** The phone pane the trading view shows now, which a move's remount during a pause shows again. */
+  /** The phone pane the trading view shows now, which a move's remount during a pause shows again; one chosen during the pause wins. */
   notePane(pane: string): void {
+    if (this.view.kind !== "none" && pane !== this.pane) this.paneChosen = pane;
     this.pane = pane;
   }
 
-  /** During a pause, the pane focus was in when it began, or else the one the trading view showed; null with no pause. */
+  /** During a pause, a pane chosen in it, else the pane focus was in when it began, else the one shown; null with no pause. */
   heldPane(): string | null {
-    return this.view.kind === "none" ? null : (this.focusBefore?.place?.pane ?? this.pane);
+    return this.view.kind === "none" ? null : (this.paneChosen ?? this.focusBefore?.place?.pane ?? this.pane);
   }
 
   /** Where focus was when the pause began, given once after it ends: the view enabled again puts it back. */
@@ -232,8 +232,9 @@ export class TradingPause {
     if (state === undefined) return;
     const follow = this.follower.getSnapshot();
     if (state.stream === "live") this.wasLive = true;
-    // A server that still serves still trades: the pause waits for it to stop, or for a drop at a boundary.
-    const stopped = state.stream !== "live" || follow.kind === "confirming";
+    // A server that still serves still trades: the pause waits for it to stop, or for a drop at a boundary; a store a move has just brought,
+    // not yet connected, is no stop, as the server moved away from was serving.
+    const stopped = state.stream === "stale" || follow.kind === "confirming";
     if (pauses(follow) && this.wasLive && stopped && this.view.kind !== "paused") this.begin();
     if (this.view.kind !== "paused") return;
     const steps = pauseSteps({ follow, moved: this.startStore !== this.store, stream: state.stream, attestation: state.attestation, marketsRead: state.markets.length > 0, flowing: pricesFlow(state), ready: readyToTrade(state) });
@@ -264,7 +265,7 @@ export class TradingPause {
   private begin(): void {
     this.clearTimers();
     this.startStore = this.store;
-    this.focusBefore = null; // a place an earlier pause kept, which nothing took, is not this one's
+    this.focusBefore = this.paneChosen = null; // what an earlier pause kept, which nothing took, is not this one's
     this.set({ kind: "paused", steps: NOT_YET, long: false, failure: null, hold: null });
     this.long = this.scheduler.setTimeout(() => {
       this.long = null;

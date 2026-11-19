@@ -1,10 +1,8 @@
 /**
- * Which node the console talks to: the one whose hostname the operator the vault names registered
- * (monkey-trading/engine#359 §9), found through the connected wallet's chain reads. The reads are a
- * claim, so they only ever choose among the origins the build lists; a move then re-runs the whole
- * trust path on a new client, whose attestation, release and signer must verify and whose enclave
- * must answer a signed read, before anything leaves the node in use. Until then the node in use
- * stays: the incumbent keeps sequencing until the successor's enclave has taken the keys.
+ * Which node the console talks to: the one whose hostname the operator the vault names registered (monkey-trading/engine#359 §9), found
+ * through the connected wallet's chain reads. The reads are a claim, so they only ever choose among the origins the build lists; a move then
+ * re-runs the whole trust path on a new client, whose attestation, release and signer must verify and whose enclave must answer a signed
+ * read, before anything leaves the node in use. Until then the node in use stays: the incumbent sequences until the successor has the keys.
  *
  * Chain reads cost the wallet's provider money, so nothing here polls: it reads when a wallet connects, on an election event in the
  * stream, when the enclave fails, at once when the stream of the node in use drops (a handover takes that node's API down, so a drop is
@@ -36,6 +34,7 @@ export class OperatorFollower {
   private lastCheckAt = 0;
   private isHidden: (() => boolean) | null = null;
   private readonly pace: FollowPace;
+  private inUseSinceMs: number; // since the page load or the last move: a boundary before it is the one being left
   /** A drop of the stream of the node in use that no read has explained yet. */
   private readonly drop: DropHold;
   /** The client being tried, kept between attempts so its verifier loads once; dropped when the target changes. */
@@ -44,17 +43,15 @@ export class OperatorFollower {
   private current: EngineClient | null = null;
   /** The highest signer any signed route this visit read named, from the node in use, a node tried or a node moved away from, refused or not: no node is moved to whose own word lags it, and the node in use is judged against it (monkey-trading/console#373, #374, #377). */
   private readonly floor = new SignerFloorWatch(() => this.current);
-  /** Whether the node in use has lost its verdict. */
-  private refused = false;
-  /** Whether a timed read was skipped in a hidden tab, and is owed when the tab is seen. */
-  private skipped = false;
-  /** What the node in use says of where the operator runs. */
-  private readonly word: NodeWord;
+  private refused = false; // whether the node in use has lost its verdict
+  private skipped = false; // whether a timed read was skipped in a hidden tab, and is owed when the tab is seen
+  private readonly word: NodeWord; // what the node in use says of where the operator runs
 
   constructor(private readonly deps: FollowerDeps) {
     this.word = new NodeWord(deps.scheduler, deps.nowMs);
     this.drop = new DropHold(deps.nowMs);
     this.pace = new FollowPace(deps.scheduler, deps.nowMs);
+    this.inUseSinceMs = deps.nowMs();
     this.origin = deps.origin;
     this.state = { kind: "pinned", origin: deps.origin };
   }
@@ -118,11 +115,12 @@ export class OperatorFollower {
   private feed(status: FeedStatus): void {
     const { state } = this;
     this.pace.streamDown = status === "stale";
-    if (status === "live" && state.kind === "confirming") this.set(this.drop.end(this.origin));
+    // Once the store has heard the same frame, so what watches both sees the stream back with the drop explained.
+    if (status === "live" && state.kind === "confirming") queueMicrotask(() => { if (this.state === state) this.set(this.drop.end(this.origin)); });
     if (status !== "stale") return;
     this.pace.restart(); // the successor, if this is a handover, serves within seconds
-    if (state.kind === "pinned" || state.kind === "following" || state.kind === "failed") this.set(this.drop.begin(state, this.origin, this.word.handoverWindow(this.deps.nowMs())));
-    if (this.drop.readsAtOnce()) void this.check();
+    if (state.kind === "pinned" || state.kind === "following" || state.kind === "failed") this.set(this.drop.begin(state, this.origin, this.word.handoverWindow(this.deps.nowMs(), this.inUseSinceMs)));
+    if (this.drop.readsAtOnce() || this.drop.holds(this.state)) void this.check();
     else this.poke();
   }
 
@@ -178,6 +176,12 @@ export class OperatorFollower {
   private async readChain(node: Promise<NodeSaid>): Promise<void> {
     this.lastCheckAt = this.deps.nowMs();
     const chain = this.deps.chain();
+    const { state } = this; // a successor already named is tried at once, as the server being left may not answer for a while; then its word, if it came
+    if (chain === null && state.kind === "waiting" && FollowPace.switching(state)) {
+      await this.tryNode(state.target, null, true);
+      const said = await Promise.race([node, Promise.resolve(null)]);
+      return said?.read === true && this.state.kind === "waiting" ? this.followNode(said, state.target) : undefined;
+    }
     if (chain === null) return this.followNode(await node);
     const reason = (error: unknown) => (error instanceof Error ? error.message : "the request failed");
     // First, whatever the registry goes on to answer: a retirement or a promotion's `setSigner` ends
@@ -187,7 +191,9 @@ export class OperatorFollower {
     try {
       const facts = await bounded(this.deps.scheduler, chain.vault());
       if (this.deps.chain() !== chain) return; // another wallet came while this ran; `check` runs again for it
-      await this.current?.heedVault(facts, chain);
+      const heeding = this.current?.heedVault(facts, chain) ?? Promise.resolve(); // the server being left may re-verify slowly during a change
+      if (FollowPace.switching(this.state)) heeding.catch(() => undefined); // its verdict, failed or not, is its own client's, not the successor's
+      else await heeding;
     } catch (error) {
       vaultFailed = reason(error);
     }
@@ -212,16 +218,16 @@ export class OperatorFollower {
   }
 
   /**
-   * With no wallet to read a chain, the node's own word chooses among the origins the build lists, as the chain's would: the member its
-   * schedule names for the turn under way, or the operator the registry names. A node that cannot be read says nothing against either.
+   * With no wallet to read a chain, the node's own word chooses among the origins the build lists, as the chain's would: the member its schedule
+   * names for the turn under way, or the operator the registry names. A node that cannot be read says nothing against either; `tried` was just tried.
    */
-  private async followNode(said: NodeSaid): Promise<void> {
+  private async followNode(said: NodeSaid, tried: string | null = null): Promise<void> {
     if (said.read) await this.word.learn(this.current);
     if (!said.read && this.state.kind === "waiting") return this.tryNode(this.state.target, null, true);
     const hostname = this.word.hostname(said, this.deps.nowMs());
     const target = hostname === null ? { origin: this.origin } : operatorTarget(this.deps.deploy, { hostname, rotationEnabled: said.rotationEnabled });
     if ("unlisted" in target) return this.settled({ kind: "unlisted", origin: this.origin, hostname: target.unlisted });
-    if (target.origin !== null && target.origin !== this.origin) return this.tryNode(target.origin, null, said.rotationEnabled);
+    if (target.origin !== null && target.origin !== this.origin) return target.origin === tried ? undefined : this.tryNode(target.origin, null, said.rotationEnabled);
     this.unmoved({ kind: "pinned", origin: this.origin });
   }
 
@@ -241,9 +247,8 @@ export class OperatorFollower {
   }
 
   /**
-   * Runs the whole trust path against the node at `target`, and moves to it only if it holds. Until
-   * it does the node in use stays; with rotation off that is no change of operator on its way, as
-   * governance may have installed a fallback on the deployment's own node, so it is not told as one.
+   * Runs the whole trust path against the node at `target`, and moves to it only if it holds. Until it does the node in use stays; with rotation
+   * off that is no change of operator on its way, as governance may have installed a fallback on the deployment's own node, so it is not told as one.
    */
   private async tryNode(target: string, chain: DeploymentReads | null, rotationEnabled: boolean, tried: readonly string[] = [this.origin]): Promise<void> {
     const before = this.state; // trading pauses the moment the chain names another node, as its verification takes the time (monkey-trading/console#280)
@@ -277,6 +282,7 @@ export class OperatorFollower {
     this.current = client;
     this.floor.inUse(client);
     this.origin = target;
+    this.inUseSinceMs = this.deps.nowMs();
     this.settled({ kind: "following", origin: target });
   }
 
