@@ -3,43 +3,38 @@
 /**
  * Open positions with their profit and loss at the closing price, hold, profit fee, take profit and stop loss, and what a close keeps, a Close
  * button each and a Close all above them: a table of one row each from 1024 px, cards below. A row's cells hold two lines each, so the table
- * fits the 740 px centre pane of a 1280 px screen with its buttons in view. The levels, or Add, open the levels' dialog.
+ * fits the 740 px centre pane of a 1280 px screen with its buttons in view. The levels, or Add, open the levels' dialog. Positions that hedge
+ * each other and earn a margin offset (V81) are listed together under their hedge's heading, the others after them.
  */
 
-import { useEffect, useId } from "react";
+import { Fragment, useEffect, useId } from "react";
 
 import { CONFIRM_MIN_GAP_MS, CONFIRM_MS } from "@/lib/confirm-window";
-import { describeLeftOut, planCloseAll, pressBatch, targetsKey } from "@/lib/close-all";
-import { describeNextFall, describeNextFallShort, describeSchedule, formatHold } from "@/lib/fee-words";
-import { formatRate } from "@/lib/format";
-import { describeDetails, describeNoClose, describeNoPrice, describePnl, type CloseGaps } from "@/lib/pnl-words";
-import { stressTermsAt } from "@/lib/pricing";
-import { formatCloseout, formatMark } from "@/lib/price-format";
-import { absFixed, formatFixedPlaces, formatUsd } from "@/lib/fixed";
-import { roundToPlaces } from "@/lib/fixed-rounding";
-import { realisedAt } from "@/lib/close-preview";
-import { formatLevel, NO_LEVELS, offeredLevelDistance, type Levels } from "@/lib/levels";
-import type { LevelFields } from "@/lib/level-check";
-import { CLOSE_ALL_REMOVES_LEVELS, levelsWait } from "@/lib/level-words";
-import { editorReference } from "@/lib/ticket-levels";
+import { CLOSE_SLIPPAGE_BPS, describeLeftOut, planCloseAll, pressBatch, targetsKey } from "@/lib/close-all";
+import { describeSchedule } from "@/lib/fee-words";
+import { NO_LEVELS } from "@/lib/levels";
+import { CLOSE_ALL_REMOVES_LEVELS } from "@/lib/level-words";
 import type { PositionModel } from "@/lib/models";
-import { closingPrice } from "@/lib/quotes";
-import { placeOrder } from "@/lib/store/actions";
+import { creditedGroups } from "@/lib/portfolio";
+import { HEDGED_CLOSEOUT_TIP, OTHER_POSITIONS } from "@/lib/portfolio-words";
 import { closeAll } from "@/lib/store/batch-actions";
-import { previewTicket, unrealisedPnl, usdConverter } from "@/lib/ticket";
-import { accountFeeTerms, CLOSE_WAITS, currentParams, houseTermsNote, positionClose, positionFeeNow } from "@/lib/ticket-figures";
-import { accountPricing, ticketLimits } from "@/lib/tier-view";
+import { accountFeeTerms, currentParams } from "@/lib/ticket-figures";
+import { closeRequests, previewKey } from "@/lib/ticket-portfolio";
 
 import { useConsole, useSession } from "./ConsoleProvider";
+import { HedgeHeading } from "./HedgeHeading";
 import { keepFocus } from "./keep-focus";
 import { LevelsControl, LEVEL_W } from "./LevelsControl";
 import { LevelsEditor } from "./LevelsEditor";
 import { Notice } from "./Notice";
+import { positionRows, type PositionRow } from "./position-rows";
 import { useReadOnlyNote } from "./SignGate";
 import { Term } from "./house/Panel";
 import { useConfirmWindow } from "./use-confirm-window";
 import { levelsControlIds, useLevelsEditor } from "./use-levels-editor";
+import { useOrderPreviews } from "./use-order-previews";
 import { usePrefs } from "./use-prefs";
+
 
 const TH = "whitespace-nowrap px-1.5 py-2 text-left align-bottom text-label font-normal tracking-caps text-fg-3 uppercase";
 /** A body cell: at most two lines, each always mounted, so a row's height never depends on its figures. */
@@ -74,12 +69,9 @@ const FEE_USD_TIP = "The profit fee, in USD, that you would pay by closing the e
 const CLOSE_TIP = "The amount that closing the entire position now would add to or deduct from your balance, which is the profit or loss at the closing price less the profit fee. This figure changes as prices move. A ≥ sign means the fee rate is about to fall, so you may keep more.";
 const LEVELS_TIP = "The levels at which the entire position is closed automatically. A take profit or stop loss is triggered when the price at which the position would close reaches it.";
 
-/** The slippage bound a Close sends, capped at the market's own. */
-const CLOSE_SLIPPAGE_BPS = 25;
-
 export function PositionsView() {
   const snapshot = useConsole();
-  const { account, markets, busy, signatures, quotes, house, quoted: asked, notices, now } = snapshot;
+  const { account, busy, notices } = snapshot;
   // The house state's terms, only while current: a change to the fee may otherwise be unread.
   const terms = currentParams(snapshot);
   // What a close pays: the base less the account's tier's fee discount (V68), under the same curve.
@@ -94,91 +86,19 @@ export function PositionsView() {
   const heldOf = (p: PositionModel) => ({ market: p.market, levels: p.levels ?? NO_LEVELS });
   const held = positions.map(heldOf);
   const levelsEditor = useLevelsEditor(store, id, snapshot.wallet?.address.toLowerCase() ?? null, held);
+  // A simulated build has no close quotes: the in-browser node previews each hedged position's close instead (V84, D7).
+  const closes = closeRequests(snapshot);
+  const verdicts = useOrderPreviews(store, closes, account, snapshot.now);
+  const simulatedDecline = (market: number) => {
+    const request = closes.find((c) => c.market === market);
+    const answer = request === undefined ? undefined : verdicts.get(previewKey(request));
+    return answer === undefined || answer === "failed" ? null : answer.refused;
+  };
   const feeTip = `This is the fee rate paid on a winning trade. ${feeTerms === null ? "The fee rate falls the longer the position is held." : describeSchedule(feeTerms)}`;
-  const rows = positions.map((p) => {
-    const market = markets.find((m) => m.id === p.market);
-    // An unpriced market shows no mark and no profit, not the entry price as if it were the mark.
-    const known = market?.mark ?? null;
-    const atMark = known === null || market === undefined ? null : unrealisedPnl(market.view, p.qty, p.entry, known);
-    const places = market?.places ?? 2;
-    const side = p.qty > 0n ? "sell" : "buy";
-    const qty = absFixed(p.qty);
-    // A live node quotes the price of closing the whole position; the mock's is the console's own estimate.
-    const quote = quotes[p.market];
-    // The rate a close pays now runs on the node's clock; before V55 a close pays the base.
-    const fee = positionFeeNow(snapshot, p);
-    const falls = fee === null ? null : describeNextFall(fee, feeTerms?.profitFeeBps ?? null, now);
-    const fallsShort = fee === null ? null : describeNextFallShort(fee, feeTerms?.profitFeeBps ?? null, now);
-    const feeBps = fee?.feeBps ?? feeTerms?.profitFeeBps ?? null;
-    const quoted = signatures === "checked"
-      ? (quote === undefined ? null : closingPrice(quote, side, qty))
-      : market === undefined ? null : (previewTicket({ market, side, qty, slippageBps: CLOSE_SLIPPAGE_BPS, account, houseNav: house.nav, stress: stressTermsAt(terms?.stressLevels, market.stress), closeFeeBps: feeBps ?? undefined, ...accountPricing(account, terms, market.view) }).quote?.price ?? null);
-    // The node's whole-close quote is exact, as is the mock's own price, which its fill uses.
-    const { close: closeNow, why: withheld } = positionClose(snapshot, market, p, quoted);
-    // The P&L is what the close realises at its price, whatever the fee's terms: a close that has no price shows none, and the figure at the mark stays in its explanation.
-    const toUsdDown = market === undefined || known === null ? null : usdConverter(market.view, known, "down");
-    const pnl = market?.open === true && quoted !== null && toUsdDown !== null ? realisedAt(p.qty, p.entry, qty, quoted, toUsdDown) : null;
-    const gaps: CloseGaps = {
-      symbol: String(market?.symbol ?? p.market), open: market?.open === true, marked: known !== null, converts: toUsdDown !== null, quoted: quoted !== null,
-      asked: signatures !== "checked" || asked.includes(p.market), termsCurrent: snapshot.pricingCurrent, houseNote: withheld, rateRead: feeBps !== null,
-    };
-    // Why a figure that needs a price, or the fee's terms, is withheld.
-    const noPrice = describeNoPrice(gaps);
-    const noClose = closeNow === null ? describeNoClose(gaps) ?? CLOSE_WAITS : null;
-    const noFee = closeNow !== null && closeNow.fee === 0n && closeNow.realised <= 0n;
-    const slippageBps = Math.min(CLOSE_SLIPPAGE_BPS, market?.view.max_slippage_bps ?? CLOSE_SLIPPAGE_BPS);
-    const close = (event: { currentTarget: HTMLElement }) => {
-      if (quoted === null) return;
-      keepFocus(event.currentTarget);
-      void placeOrder(store, { market: p.market, side, qty, kind: { kind: "market", quoted, slippageBps }, reduceOnly: true }, "positions");
-    };
-    // From V79 a position in a market that takes levels shows them and a dialog to set, move or remove them, measured from its closing price.
-    const levels = p.levels ?? NO_LEVELS;
-    const draft = levelsEditor.draftFor(p.market);
-    const editor = market === undefined || offeredLevelDistance(market.view, snapshot.protocolVersion) === null ? null : {
-      market, position: p, ...editorReference(account, terms, market, p.qty, known === null ? null : quoted), noClosing: levelsWait(noPrice ?? houseTermsNote(snapshot)),
-      limits: ticketLimits(account, p.market), toUsdDown, fields: draft?.fields ?? { takeProfit: "", stopLoss: "" }, onChange: levelsEditor.edit,
-      onCancel: levelsEditor.cancel, onSend: (sent: Levels) => { if (draft !== null) levelsEditor.sending(draft.instance, p.market, sent); }, onSaved: (sent: LevelFields, words: string) => { if (draft !== null) levelsEditor.saved(draft.instance, sent, words); },
-      saving: levelsEditor.savingFor(p.market), onSettled: () => { if (draft !== null) levelsEditor.settled(draft.instance); }, onRemovedWithFocus: levelsEditor.removedWithFocus, announced: levelsEditor.announcedFor(p.market),
-    };
-    return {
-      key: p.market,
-      symbol: String(market?.symbol ?? p.market),
-      long: p.qty > 0n,
-      size: formatFixedPlaces(absFixed(p.qty), 6),
-      entry: formatMark(p.entry, places),
-      mark: known === null ? "—" : formatMark(known, places),
-      pnl: pnl === null ? "—" : formatUsd(pnl),
-      // A fee that may still change is an upper bound, rounded up the way "at most" reads.
-      feeUsd: closeNow === null ? "—" : closeNow.exact || closeNow.fee === 0n ? formatUsd(closeNow.fee) : `≤ ${formatUsd(roundToPlaces(closeNow.fee, 2, "up"))}`,
-      noFee,
-      // One static-named explanation per row, so no live figure is the name of a control.
-      details: describeDetails({ pnl: describePnl(atMark === null ? null : formatUsd(atMark), pnl === null ? noPrice : null), noClose, noFee }),
-      closeout: formatCloseout(p.closeout, places),
-      holdsLevels: p.levels !== undefined,
-      editor,
-      editing: editor !== null && draft !== null,
-      // The levels, or Add, open the dialog; a market that takes no levels shows dashes, as its card leaves them out.
-      control: {
-        symbol: String(market?.symbol ?? p.market), long: p.qty > 0n, takeProfit: levels.takeProfit === null ? null : formatLevel(levels.takeProfit, places),
-        stopLoss: levels.stopLoss === null ? null : formatLevel(levels.stopLoss, places), disabled: busy || readOnly.readOnly, describedBy: readOnly.describedBy, onClick: () => levelsEditor.openFor(heldOf(p)),
-      },
-      hold: fee === null ? "—" : formatHold(fee.holdMs),
-      fee: feeBps === null ? "—" : formatRate(feeBps),
-      falls,
-      fallsShort,
-      // A bound's figure rounds down, the way "at least" reads.
-      proceeds: closeNow === null ? "—" : closeNow.exact ? formatUsd(closeNow.net) : `≥ ${formatUsd(roundToPlaces(closeNow.net, 2, "down"))}`,
-      loss: pnl !== null && pnl < 0n,
-      open: market?.open === true,
-      // An unpriced market has no closing price, whatever a quote says.
-      quoted: known === null ? null : quoted,
-      closable: !busy && !readOnly.readOnly && market?.open === true && known !== null && quoted !== null,
-      // The node quotes at most four markets at once, the selected one first; a held market left out has no closing price until it is selected.
-      unquoted: signatures === "checked" && !asked.includes(p.market) && market?.open === true && known !== null,
-      close,
-    };
-  });
+  const rows = positionRows({ snapshot, store, readOnly, levelsEditor, heldOf, terms, feeTerms, simulatedDecline }, positions);
+  // Each hedge that earns a margin offset, with its positions in the grid's order; every other position follows them.
+  const hedges = creditedGroups(account?.portfolio).map((group) => ({ group, rows: group.members.flatMap((m) => rows.filter((r) => r.key === m)) }));
+  const others = rows.filter((r) => !hedges.some((h) => h.rows.includes(r)));
   // Close all sends what each Close button would: its market and its quote, under the same bound.
   const { targets, leftOut } = planCloseAll(rows.map((r) => ({ market: r.key, symbol: r.symbol, open: r.open, quoted: r.quoted, select: r.unquoted })));
   const count = targets.length;
@@ -204,6 +124,65 @@ export function PositionsView() {
   const noteId = `${id}-left-out`;
   const describedBy = readOnly.describedBy ?? (leftOutNote === null ? undefined : noteId);
   const editing = rows.find((r) => r.editing)?.editor ?? null;
+  const closeoutTerm = hedges.length > 0 ? <Term label="Close-out" tip={HEDGED_CLOSEOUT_TIP} /> : <Term label="Close-out" tip={CLOSEOUT_TIP} />;
+  const heading = (hedge: (typeof hedges)[number]) => <HedgeHeading group={hedge.group} members={hedge.rows.map((r) => r.member)} removesLevels={hedge.rows.some((r) => r.holdsLevels)} disabled={busy || readOnly.readOnly} describedBy={readOnly.describedBy} />;
+  // A hedged position whose close alone would be refused says so at its Close button, which it describes.
+  const loneId = (r: PositionRow, layout: "card" | "row") => (r.loneRefused === null ? undefined : `${id}-lone-${layout}-${r.key}`);
+  const card = (r: PositionRow) => (
+    <li key={r.key} className="border-b border-line px-4 py-3 text-caption last:border-b-0">
+      <div className="flex items-center justify-between gap-3">
+        <p><span className="text-fg">{r.symbol}</span> <span className={r.long ? "text-glow" : "text-ember"}>{r.long ? "Long" : "Short"}</span></p>
+        <p className={r.loss ? "text-ember" : "text-glow"}><span className="sr-only">Profit and loss </span>{r.pnl} <span className="ml-2 text-label text-fg-3"><Term label="Details" tip={r.details} /></span></p>
+      </div>
+      <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-fg-2">
+        <div><dt className="text-label text-fg-3">Size</dt><dd>{r.size}</dd></div>
+        <div><dt className="text-label text-fg-3">Entry</dt><dd>{r.entry}</dd></div>
+        <div><dt className="text-label text-fg-3">Mark</dt><dd>{r.mark}</dd></div>
+        <div><dt className="text-label text-fg-3">{closeoutTerm}</dt><dd>{r.closeout}</dd></div>
+        {r.editor !== null && <div><dt className="text-label text-fg-3"><Term label="Take profit / Stop loss" tip={LEVELS_TIP} /></dt><dd className="mt-1.5"><LevelsControl {...r.control} layout="card" id={levelsControlIds(id, r.key)[1]} /></dd></div>}
+        <div><dt className="text-label text-fg-3"><Term label="Held" tip={HOLD_TIP} /></dt><dd>{r.hold}</dd></div>
+        <div><dt className="text-label text-fg-3"><Term label="Profit fee" tip={feeTip} /></dt><dd>{r.fee}<span className={SUB}>{r.falls}</span></dd></div>
+        <div><dt className="text-label text-fg-3"><Term label="Fee (USD)" tip={FEE_USD_TIP} /></dt><dd>{r.feeUsd}<span aria-hidden={!r.noFee} className={`block text-label ${r.noFee ? "text-fg-3" : "invisible"}`}>{NO_FEE_NOTE}</span></dd></div>
+        <div><dt className="text-label text-fg-3"><Term label="Close now" tip={CLOSE_TIP} /></dt><dd>{r.proceeds}</dd></div>
+      </dl>
+      <div className="mt-3 flex gap-2">
+        <button type="button" disabled={!r.closable} className={`${BUTTON} flex-1`} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy ?? loneId(r, "card")} onClick={r.close}>Close</button>
+      </div>
+      {r.loneRefused !== null
+        ? <p id={loneId(r, "card")} className="mt-2 text-label leading-relaxed text-fg-3">{r.loneRefused}</p>
+        : <p aria-hidden={!r.unquoted} className={`mt-2 text-label ${r.unquoted ? "text-fg-3" : "invisible"}`}>Select {r.symbol} in the watchlist to load its closing price.</p>}
+    </li>
+  );
+  const tableRow = (r: PositionRow) => (
+    <Fragment key={r.key}>
+      <tr className={r.loneRefused === null ? "border-b border-line last:border-b-0" : ""}>
+        <td className={TD}><span className="block text-fg">{r.symbol}</span><span className={`block min-h-lh text-label ${r.long ? "text-glow" : "text-ember"}`}>{r.long ? "Long" : "Short"}</span></td>
+        <td className={TD}><span className="block">{r.size}</span><span className={SUB}><span className="sr-only">Held </span>{r.hold}</span></td>
+        <td className={TD}><span className="block">{r.entry}</span><span className={SUB}><span className="sr-only">Mark </span>{r.mark}</span></td>
+        <td className={TD}>{r.editor === null
+          ? <><span className={`block ${LEVEL_W}`}>—</span><span className={`${SUB} ${LEVEL_W}`}><span className="sr-only">Stop loss </span>—</span></>
+          : <LevelsControl {...r.control} layout="row" id={levelsControlIds(id, r.key)[0]} />}</td>
+        <td className={`${TD} ${r.loss ? "text-ember" : "text-glow"}`}>
+          <span className={`block ${PNL_W}`}>{r.pnl}</span>
+          <span className={SUB}><Term label="Details" tip={r.details} /></span>
+        </td>
+        <td className={TD}>
+          <span className="block min-w-[8ch]">{r.fee}</span>
+          <span className={`${SUB} ${RATE_W}`}>
+            <span aria-hidden="true">{r.fallsShort}</span>
+            {r.falls !== null && <span className="sr-only">{r.falls}</span>}
+          </span>
+        </td>
+        <td className={`${TD} ${FEE_W}`}><span className="block">{r.feeUsd}</span><span className={SUB}><span className="sr-only">Close-out </span>{r.closeout}</span></td>
+        <td className={`${TD} ${CLOSE_W}`}>
+          <span className="block">{r.proceeds}</span>
+          <button type="button" disabled={!r.closable} className={CELL_BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy ?? loneId(r, "row")} onClick={r.close}>Close</button>
+        </td>
+      </tr>
+      {r.loneRefused !== null && <tr className="border-b border-line last:border-b-0"><td id={loneId(r, "row")} colSpan={8} className="px-1.5 pb-2 text-label leading-relaxed text-fg-3">{r.loneRefused}</td></tr>}
+    </Fragment>
+  );
+  const othersHeading = hedges.length > 0 && others.length > 0;
   return (
     <>
       {readOnly.note}
@@ -218,29 +197,9 @@ export function PositionsView() {
       <div className="px-4 has-[p]:border-b has-[p]:border-line has-[p]:pb-3"><Notice surface="positions" />{!levelsEditor.open && <Notice surface="levels" />}</div>
       <p role="status" className="sr-only">{levelsEditor.announced}</p>
       <ul className="lg:hidden">
-        {rows.map((r) => (
-          <li key={r.key} className="border-b border-line px-4 py-3 text-caption last:border-b-0">
-            <div className="flex items-center justify-between gap-3">
-              <p><span className="text-fg">{r.symbol}</span> <span className={r.long ? "text-glow" : "text-ember"}>{r.long ? "Long" : "Short"}</span></p>
-              <p className={r.loss ? "text-ember" : "text-glow"}><span className="sr-only">Profit and loss </span>{r.pnl} <span className="ml-2 text-label text-fg-3"><Term label="Details" tip={r.details} /></span></p>
-            </div>
-            <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-fg-2">
-              <div><dt className="text-label text-fg-3">Size</dt><dd>{r.size}</dd></div>
-              <div><dt className="text-label text-fg-3">Entry</dt><dd>{r.entry}</dd></div>
-              <div><dt className="text-label text-fg-3">Mark</dt><dd>{r.mark}</dd></div>
-              <div><dt className="text-label text-fg-3"><Term label="Close-out" tip={CLOSEOUT_TIP} /></dt><dd>{r.closeout}</dd></div>
-              {r.editor !== null && <div><dt className="text-label text-fg-3"><Term label="Take profit / Stop loss" tip={LEVELS_TIP} /></dt><dd className="mt-1.5"><LevelsControl {...r.control} layout="card" id={levelsControlIds(id, r.key)[1]} /></dd></div>}
-              <div><dt className="text-label text-fg-3"><Term label="Held" tip={HOLD_TIP} /></dt><dd>{r.hold}</dd></div>
-              <div><dt className="text-label text-fg-3"><Term label="Profit fee" tip={feeTip} /></dt><dd>{r.fee}<span className={SUB}>{r.falls}</span></dd></div>
-              <div><dt className="text-label text-fg-3"><Term label="Fee (USD)" tip={FEE_USD_TIP} /></dt><dd>{r.feeUsd}<span aria-hidden={!r.noFee} className={`block text-label ${r.noFee ? "text-fg-3" : "invisible"}`}>{NO_FEE_NOTE}</span></dd></div>
-              <div><dt className="text-label text-fg-3"><Term label="Close now" tip={CLOSE_TIP} /></dt><dd>{r.proceeds}</dd></div>
-            </dl>
-            <div className="mt-3 flex gap-2">
-              <button type="button" disabled={!r.closable} className={`${BUTTON} flex-1`} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-            </div>
-            <p aria-hidden={!r.unquoted} className={`mt-2 text-label ${r.unquoted ? "text-fg-3" : "invisible"}`}>Select {r.symbol} in the watchlist to load its closing price.</p>
-          </li>
-        ))}
+        {hedges.map((hedge) => <Fragment key={hedge.group.name}><li className="border-b border-line px-4 py-3">{heading(hedge)}</li>{hedge.rows.map(card)}</Fragment>)}
+        {othersHeading && <li className="border-b border-line px-4 py-2 text-label tracking-caps text-fg-3 uppercase">{OTHER_POSITIONS}</li>}
+        {others.map(card)}
       </ul>
       <div role="region" aria-label="Open positions" tabIndex={0} className="relative hidden overflow-x-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow lg:block">
         <table className="w-full min-w-max text-caption">
@@ -250,36 +209,18 @@ export function PositionsView() {
               <th className={TH}><span className="block">Size</span><span className="block"><Term label="Held" tip={HOLD_TIP} /></span></th>
               <th className={TH}><span className="block">Entry</span><span className="block">Mark</span></th>
               <th className={TH}><span className="block"><Term label="Take profit" tip={LEVELS_TIP} /></span><span className="block">Stop loss</span></th><th className={TH}><Term label="P&L" tip={PNL_TIP} /></th>
-              <th className={TH}><Term label="Profit fee" tip={feeTip} /></th><th className={TH}><span className="block"><Term label="Fee (USD)" tip={FEE_USD_TIP} /></span><span className="block"><Term label="Close-out" tip={CLOSEOUT_TIP} /></span></th><th className={TH}><Term label="Close now" tip={CLOSE_TIP} /></th>
+              <th className={TH}><Term label="Profit fee" tip={feeTip} /></th><th className={TH}><span className="block"><Term label="Fee (USD)" tip={FEE_USD_TIP} /></span><span className="block">{closeoutTerm}</span></th><th className={TH}><Term label="Close now" tip={CLOSE_TIP} /></th>
             </tr>
           </thead>
+          {hedges.map((hedge) => (
+            <tbody key={hedge.group.name} className="border-b border-line">
+              <tr className="border-b border-line"><th scope="rowgroup" colSpan={8} className="px-1.5 py-2">{heading(hedge)}</th></tr>
+              {hedge.rows.map(tableRow)}
+            </tbody>
+          ))}
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.key} className="border-b border-line last:border-b-0">
-                <td className={TD}><span className="block text-fg">{r.symbol}</span><span className={`block min-h-lh text-label ${r.long ? "text-glow" : "text-ember"}`}>{r.long ? "Long" : "Short"}</span></td>
-                <td className={TD}><span className="block">{r.size}</span><span className={SUB}><span className="sr-only">Held </span>{r.hold}</span></td>
-                <td className={TD}><span className="block">{r.entry}</span><span className={SUB}><span className="sr-only">Mark </span>{r.mark}</span></td>
-                <td className={TD}>{r.editor === null
-                  ? <><span className={`block ${LEVEL_W}`}>—</span><span className={`${SUB} ${LEVEL_W}`}><span className="sr-only">Stop loss </span>—</span></>
-                  : <LevelsControl {...r.control} layout="row" id={levelsControlIds(id, r.key)[0]} />}</td>
-                <td className={`${TD} ${r.loss ? "text-ember" : "text-glow"}`}>
-                  <span className={`block ${PNL_W}`}>{r.pnl}</span>
-                  <span className={SUB}><Term label="Details" tip={r.details} /></span>
-                </td>
-                <td className={TD}>
-                  <span className="block min-w-[8ch]">{r.fee}</span>
-                  <span className={`${SUB} ${RATE_W}`}>
-                    <span aria-hidden="true">{r.fallsShort}</span>
-                    {r.falls !== null && <span className="sr-only">{r.falls}</span>}
-                  </span>
-                </td>
-                <td className={`${TD} ${FEE_W}`}><span className="block">{r.feeUsd}</span><span className={SUB}><span className="sr-only">Close-out </span>{r.closeout}</span></td>
-                <td className={`${TD} ${CLOSE_W}`}>
-                  <span className="block">{r.proceeds}</span>
-                  <button type="button" disabled={!r.closable} className={CELL_BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
-                </td>
-              </tr>
-            ))}
+            {othersHeading && <tr className="border-b border-line"><th scope="rowgroup" colSpan={8} className={TH}>{OTHER_POSITIONS}</th></tr>}
+            {others.map(tableRow)}
           </tbody>
         </table>
       </div>

@@ -53,13 +53,13 @@ describe("closingPrice", () => {
 
 describe("ticketPrices", () => {
   it("shows a live node's bid and offer for the size, sends the price on the order's side, and spreads them over the mark", () => {
-    expect(live("3", "buy")).toEqual({ bid: f("99.7"), offer: f("100.3"), price: f("100.3"), exactClose: false, toxicityBps: 0, spreadTenths: 600, problem: null, problemIsSize: false });
+    expect(live("3", "buy")).toEqual({ bid: f("99.7"), offer: f("100.3"), price: f("100.3"), exactClose: false, toxicityBps: 0, spreadTenths: 600, problem: null, problemIsSize: false, marginDeclined: false });
     expect(live("3", "sell")).toMatchObject({ price: f("99.7"), problem: null });
   });
 
   it("prices an order that closes exactly the whole position at the node's close quote, on its side only, and spreads to the tenth of a bp", () => {
     // The step covering 2 would sell at 99.7; the close quote is the exact 99.8.
-    expect(live("2", "sell")).toEqual({ bid: f("99.8"), offer: f("100.3"), price: f("99.8"), exactClose: true, toxicityBps: 0, spreadTenths: 500, problem: null, problemIsSize: false });
+    expect(live("2", "sell")).toEqual({ bid: f("99.8"), offer: f("100.3"), price: f("99.8"), exactClose: true, toxicityBps: 0, spreadTenths: 500, problem: null, problemIsSize: false, marginDeclined: false });
     expect(live("2", "buy")).toMatchObject({ bid: f("99.8"), price: f("100.3"), exactClose: false });
     expect(live("1.5", "sell")).toMatchObject({ price: f("99.7"), exactClose: false });
     // 0.08 apart on a mark of 100.01 is 7.99 bps, truncated to 79 tenths.
@@ -67,7 +67,7 @@ describe("ticketPrices", () => {
   });
 
   it("says why a live order has no price: no quote yet, an account not yet credited, no market price, too large, or declined", () => {
-    expect(live("1", "buy", null)).toEqual({ bid: null, offer: null, price: null, exactClose: false, toxicityBps: 0, spreadTenths: null, problem: "Waiting for a live price for this market.", problemIsSize: false });
+    expect(live("1", "buy", null)).toEqual({ bid: null, offer: null, price: null, exactClose: false, toxicityBps: 0, spreadTenths: null, problem: "Waiting for a live price for this market.", problemIsSize: false, marginDeclined: false });
     expect(live("1", "buy", null, UNCREDITED).problem).toBe("Live prices for your account will be shown once your first deposit has been credited.");
     expect(live("1", "buy", null, "unknown market 9").problem).toBe("No live price is currently available for this market. Please reload the page to try again.");
     expect(live("1", "buy", { ...QUOTE, unavailable: { kind: "market_closed" }, ask: [], bid: [] })).toMatchObject({ price: null, problem: "This market is closed.", problemIsSize: false });
@@ -76,7 +76,7 @@ describe("ticketPrices", () => {
   });
 
   it("shows the mock's own estimate, which needs no quote", () => {
-    expect(ticketPrices({ live: false, quote: null, quoteError: null, preview: preview("1"), side: "buy", mark: f("100") })).toEqual({ bid: f("99"), offer: f("101"), price: f("101"), exactClose: false, toxicityBps: 0, spreadTenths: 2_000, problem: null, problemIsSize: false });
+    expect(ticketPrices({ live: false, quote: null, quoteError: null, preview: preview("1"), side: "buy", mark: f("100") })).toEqual({ bid: f("99"), offer: f("101"), price: f("101"), exactClose: false, toxicityBps: 0, spreadTenths: 2_000, problem: null, problemIsSize: false, marginDeclined: false });
   });
 });
 
@@ -150,5 +150,13 @@ describe("the toxicity add-on and the tier's leverage in a live quote", () => {
     expect(withLimits.problem).toBe("Insufficient margin for this order size. With your current equity, the largest order you can place is approximately 2 contracts. Volume tier 0 allows leverage of up to 20x in this market.");
     const none: MarketQuote = { ...QUOTE, ask: [{ qty: "1", price: "100.1", declined: margin }] };
     expect(ticketPrices({ live: true, quote: none, quoteError: null, preview: preview("1"), side: "buy", mark: f("100"), limits }).problem).toBe("Insufficient margin. Your equity does not cover the margin this order requires. Volume tier 0 allows leverage of up to 20x in this market.");
+  });
+});
+
+describe("a whole close the node declines, from V84", () => {
+  it("reads the exact close quote's reason as a margin decline of the order's size", () => {
+    const declined = { ...QUOTE, close: { ...QUOTE.close, side: "sell" as const, qty: "2", price: "99.8", declined: { kind: "insufficient_margin" as const, equity: "10", required: "40" } } };
+    expect(live("2", "sell", declined)).toMatchObject({ price: f("99.8"), exactClose: true, problemIsSize: true, marginDeclined: true, problem: "Insufficient margin for this order size. With your current equity, the largest order you can place is approximately 5 contracts." });
+    expect(ticketPrices({ live: true, quote: declined, quoteError: null, preview: preview("2"), side: "sell", mark: f("100"), bothWays: true }).problem).toBe("Insufficient margin. Your equity does not cover the margin this order requires.");
   });
 });

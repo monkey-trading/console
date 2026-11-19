@@ -21,6 +21,7 @@ import { formatTenthBpsFixed, formatTenthPercent } from "@/lib/spread-bands";
 import { belowMinimum, contractUnit, MARGIN_SHORT, MARKET_CLOSED, NO_FUNDS, NO_SIZE, parseSize, REDUCE_ONLY, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
 import { currentParams, houseTermsNote, ticketFigures } from "@/lib/ticket-figures";
 import { ticketLevels } from "@/lib/ticket-levels";
+import { previewKey, previewRequest, triggeredNote } from "@/lib/ticket-portfolio";
 import { describeBestPrice } from "@/lib/tier-view";
 import { tradingPaused } from "@/lib/trading-paused";
 import { isPriced, isUnfed, unpricedWhy } from "@/lib/unpriced";
@@ -32,6 +33,7 @@ import { LevelInputs } from "./LevelInputs";
 import { MarketInfo } from "./MarketInfo";
 import { Notice } from "./Notice";
 import { SigningFor } from "./SigningFor";
+import { useOrderPreviews } from "./use-order-previews";
 import { usePrefs } from "./use-prefs";
 
 type Kind = OrderType;
@@ -60,6 +62,10 @@ export function DealTicket() {
   const [levelFields, setLevelFields] = useState<LevelFields>(EMPTY_FIELDS);
   const follow = useNodeFollow();
   const market = state.markets.find((m) => m.id === state.selected);
+  // A market order that concerns a hedge is previewed by the server at its exact size (#916); asked here, before any return, as a hook must be.
+  const marketSize = market === undefined || kind !== "market" ? null : parseSize(sizeShown(typedSize, market, null, prefs.size === "last" ? (sizes[market.id] ?? null) : null));
+  const hedgeRequest = market === undefined || marketSize?.kind !== "qty" ? null : previewRequest(state, market, { side, qty: marketSize.qty, resting: false });
+  const previews = useOrderPreviews(store, hedgeRequest === null ? [] : [hedgeRequest], state.account, state.now);
   if (!market) return null;
   // One plain-words state for a paused market: a handover in progress, an operator on a node this build does not list, a
   // closed market, no usable price, or reduce-only. A node the console does not trust is the gate below, which comes first.
@@ -82,10 +88,11 @@ export function DealTicket() {
   // The stress levels' terms and the listing notices show only while the house state is current.
   const terms = currentParams(state);
   const order = { side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice };
-  const { preview, prices, limits, spreadTiers, ownBands, orderProblem, close, closing, closeWithheld } = ticketFigures(state, market, order);
+  const { preview, prices, limits, spreadTiers, ownBands, orderProblem, close, closing, closeWithheld, offset } = ticketFigures(state, market, order, hedgeRequest === null ? null : { answer: previews.get(previewKey(hedgeRequest)) });
   // From V79 the order may name a take profit and a stop loss; a market that takes none shows no fields.
   const levels = ticketLevels(state, market, order, levelFields, { prices, limits });
   const named = levels === null || noLevels(levels.named) ? undefined : levels.named;
+  const triggered = triggeredNote(state.account, market.id, order, named !== undefined);
   // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
   // A size the field refuses says why, so the generic prompt would only repeat it.
   const listed = preview.problems.filter((p) => (!live || p !== MARGIN_SHORT) && (parsedSize.kind !== "refused" || p !== NO_SIZE));
@@ -172,6 +179,7 @@ export function DealTicket() {
           <p id={`${id}-size-note`} className="mt-1 text-label text-fg-3">
             1 contract = 1 {contractUnit(market)} · {preview.notional === null || qty === 0n ? "Notional value —" : `Notional value ≈ $${formatFixedPlaces(preview.notional, 2)}`}{preview.notional !== null && qty > 0n && kind !== "market" && triggerPrice !== null && triggerPrice > 0n ? " at the trigger price" : ""}
           </p>
+          {offset?.line != null && <p className="mt-1 text-label leading-relaxed text-fg-2">{offset.line}</p>}
           <div id={`${id}-size-problems`} aria-live="polite" className="space-y-1 text-label leading-relaxed text-ember">
             {sizeMissing && <p className="mt-1 text-fg-3">{NO_SIZE}</p>}
             {sizeProblems.map((p) => <p key={p} className="mt-1">{p}</p>)}
@@ -179,6 +187,7 @@ export function DealTicket() {
         </div>
         {closing !== null && <CloseSummary shape={closing} close={close} why={closeWithheld} side={side} places={market.places} converts={market.view.quote_currency !== undefined} />}
         {levels !== null && <LevelInputs title="Take profit and stop loss (optional)" check={levels} fields={levelFields} onChange={setLevelFields} />}
+        {triggered !== null && <p className="mt-2 text-label leading-relaxed text-fg-3">{triggered}</p>}
         <details className="mt-4 rounded border border-line-2">
           <summary className="px-3 py-3.5 text-caption lg:py-2 text-fg-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-glow">Advanced</summary>
           <fieldset className="px-3 pb-3">

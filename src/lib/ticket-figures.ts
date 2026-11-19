@@ -17,6 +17,7 @@ import type { ConsoleState } from "./store/state";
 import { accountPricing, leverageReason, orderLimitProblem, ticketLimits, type TicketLimits } from "./tier-view";
 import { weekendFloorBps } from "./volume-tier";
 import { MARGIN_SHORT, previewTicket, usdConverter, type TicketPreview } from "./ticket";
+import { offsetTicket, type OffsetTicket, type PreviewAnswer } from "./ticket-portfolio";
 
 /** The order the ticket holds: its side and size, its slippage bound, and for a limit or stop its trigger price. */
 export interface TicketOrder {
@@ -44,6 +45,8 @@ export interface TicketFigures {
   closing: CloseShape | null;
   /** Why a closing order's figures are withheld; null while they are shown or the order closes nothing. */
   closeWithheld: string | null;
+  /** For an order that concerns a hedge, what the server's preview of it says; null for any other order. */
+  offset: OffsetTicket | null;
 }
 
 /** Why closing figures are withheld when no other reason applies: the price or the fee rate has not arrived. */
@@ -92,7 +95,7 @@ export function accountFeeTerms(state: ConsoleState): FeeTerms | null {
  * moved against the trader by the engine's rounding slack (`ladderSlack`). While the house state held is
  * not current, a change to the fee may be unread, so no close preview is stated.
  */
-export function ticketFigures(state: ConsoleState, market: MarketModel, order: TicketOrder): TicketFigures {
+export function ticketFigures(state: ConsoleState, market: MarketModel, order: TicketOrder, hedge: { answer: PreviewAnswer } | null = null): TicketFigures {
   const live = state.signatures === "checked";
   const params = currentParams(state);
   const position = state.account?.positions.find((p) => p.market === market.id) ?? null;
@@ -112,8 +115,15 @@ export function ticketFigures(state: ConsoleState, market: MarketModel, order: T
     houseNav: state.house.nav, estimates: !live, stress: stressTermsAt(params?.stressLevels, market.stress), closeFeeBps: feeBps ?? undefined,
   });
   // The in-browser node's refusal for margin names the leverage the tier allows, as a live node's declined quote does.
-  const preview = live ? shown : { ...shown, problems: shown.problems.map((p) => (p === MARGIN_SHORT ? `${p}${leverageReason(limits)}` : p)) };
-  const prices = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview, side: order.side, mark: market.mark, limits });
+  const estimated = live ? shown : { ...shown, problems: shown.problems.map((p) => (p === MARGIN_SHORT ? `${p}${leverageReason(limits)}` : p)) };
+  const quoted = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview: estimated, side: order.side, mark: market.mark, limits, bothWays: hedge !== null });
+  // For an order that concerns a hedge, the server's preview of this exact size replaces the ladder's margin verdict and the
+  // console's own estimate, which swaps one position's margin; while it is awaited neither is stated, and after a failed read both stand.
+  const offset = hedge === null ? null : offsetTicket(hedge.answer, state.account);
+  const overruled = hedge !== null && hedge.answer !== "failed";
+  const preview = !overruled ? estimated : { ...estimated, problems: estimated.problems.filter((p) => !p.startsWith(MARGIN_SHORT)), marginUseBps: offset?.useBps ?? estimated.marginUseBps };
+  const refusal = offset?.refusal ?? null;
+  const prices = !overruled || (!quoted.marginDeclined && refusal === null) ? quoted : { ...quoted, problem: refusal ?? (quoted.marginDeclined ? null : quoted.problem), problemIsSize: refusal !== null || quoted.problemIsSize };
   const exactPrice = live ? prices.exactClose : true;
   const stress = stressTermsAt(params?.stressLevels, market.stress) ?? CALM;
   const conversion = market.mark === null ? USD : conversionAt(market.view, market.mark) ?? USD;
@@ -125,7 +135,7 @@ export function ticketFigures(state: ConsoleState, market: MarketModel, order: T
   });
   const closing = order.resting || position === null || preview.qty <= 0n ? null : closeShape(position.qty, order.side, preview.qty);
   const closeWithheld = closing === null || close !== null ? null : houseTermsNote(state) ?? CLOSE_WAITS;
-  return { preview, prices, limits, spreadTiers: pricing.spreadTiers ?? market.view.spread_tiers, ownBands: pricing.spreadTiers !== undefined, orderProblem: orderLimitProblem(limits, order.resting), close, closing, closeWithheld };
+  return { preview, prices, limits, spreadTiers: pricing.spreadTiers ?? market.view.spread_tiers, ownBands: pricing.spreadTiers !== undefined, orderProblem: orderLimitProblem(limits, order.resting), close, closing, closeWithheld, offset };
 }
 
 /**

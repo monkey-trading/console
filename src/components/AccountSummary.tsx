@@ -5,6 +5,8 @@
 import { formatFixedPlaces, type Fixed } from "@/lib/fixed";
 import { shortHex } from "@/lib/format";
 import { freeCash, requirementOf, withdrawableOf } from "@/lib/account-figures";
+import { creditedGroups } from "@/lib/portfolio";
+import { describeOffsetSummary } from "@/lib/portfolio-words";
 
 import { useConsole } from "./ConsoleProvider";
 import { Notice } from "./Notice";
@@ -13,6 +15,8 @@ const usd = (value: Fixed) => `$${formatFixedPlaces(value, 2)}`;
 
 export function AccountSummary() {
   const { account, wallet } = useConsole();
+  // Only an account whose hedges earn a margin offset (V81) is told what it saves and where it closes out.
+  const hedged = account?.portfolio !== undefined && creditedGroups(account.portfolio).length > 0 ? account.portfolio : null;
   const cells: [string, string][] = [
     ["Balance", account ? usd(account.balance) : "—"],
     ["Equity", account ? usd(account.equity) : "—"],
@@ -32,6 +36,7 @@ export function AccountSummary() {
           </div>
         ))}
       </dl>
+      {account !== null && hedged !== null && <p className="border-t border-line bg-ink-1 px-4 py-2 text-label leading-relaxed text-fg-2">{describeOffsetSummary(account.margin, hedged)}</p>}
       <div className="bg-ink-1 px-4 has-[p]:pb-3"><Notice surface="accountRead" /></div>
       {wallet && <p className="bg-ink-1 px-4 py-2 text-caption text-fg-3 sm:hidden">Wallet <span className="text-fg-2">{shortHex(wallet.address)}</span></p>}
     </section>

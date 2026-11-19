@@ -4,6 +4,9 @@ import type { MarketId } from "./engine/types";
 import type { ConfirmState } from "./confirm-window";
 import type { Fixed } from "./fixed";
 
+/** The slippage bound a Close, Close all and Close hedge send, capped at the market's own. */
+export const CLOSE_SLIPPAGE_BPS = 25;
+
 /** One open position as its row shows it: `quoted` is the price its own Close button would send, null when it has none. */
 export interface CloseRow {
   market: MarketId;
@@ -37,6 +40,31 @@ export function planCloseAll(rows: readonly CloseRow[]): { targets: CloseTarget[
     else targets.push({ market: row.market, quoted: row.quoted });
   }
   return { targets, leftOut };
+}
+
+/** One position of a hedge as its row shows it: `quoted` is its own Close button's price, null when it has none, and `mark` its market's latest mark. */
+export interface HedgeMember {
+  market: MarketId;
+  symbol: string;
+  open: boolean;
+  quoted: Fixed | null;
+  mark: Fixed | null;
+}
+
+/**
+ * What Close hedge sends (monkey-trading/engine#913, D7): one close-all entry for each position of the hedge whose market can
+ * trade, in row order, priced at its own Close button's quote where the console has one and otherwise at its mark, since the
+ * node quotes at most four markets at once; the symbols of those whose market is closed or has no price, which it leaves out.
+ */
+export function planGroupClose(members: readonly HedgeMember[]): { targets: CloseTarget[]; untradable: string[] } {
+  const targets: CloseTarget[] = [];
+  const untradable: string[] = [];
+  for (const member of members) {
+    const reference = member.quoted ?? member.mark;
+    if (member.open && member.mark !== null && reference !== null) targets.push({ market: member.market, quoted: reference });
+    else untradable.push(member.symbol);
+  }
+  return { targets, untradable };
 }
 
 /** The sentence under the button that names what a Close all leaves out, or null when it leaves nothing. */
