@@ -172,11 +172,16 @@ describe("the levels dialog", () => {
     expect(html).toContain("The price at which your entire position would close is currently estimated at 99,980.00, and the market price is 100,000.00. A new or moved stop loss must be at least 0.3% below that closing price, and a new or moved take profit at least 0.3% above the market price.");
   });
 
-  it("keeps Cancel and Save from acting while a request is signed and sent, so its answer shows in the editor", () => {
+  it("holds Save but leaves Cancel available while a request waits on the wallet, so the dialog can always be closed", () => {
     const html = render(editor({ fields: { takeProfit: "102000", stopLoss: "98000" } }), { busy: true });
-    // Save says it is signing only for its own request; while another is signed it is simply unavailable.
+    // Save says it is signing only for a save of this position's; while another request is signed it is simply unavailable.
     expect(html).toMatch(/<button type="submit" aria-disabled="true"[^>]*>Save<\/button>/);
-    expect(html).toMatch(/<button type="button" disabled=""[^>]*>Cancel<\/button>/);
+    expect(html).toMatch(/<button type="button" class="[^"]*">Cancel<\/button>/);
+    expect(html).not.toMatch(/<button type="button" disabled=""[^>]*>Cancel<\/button>/);
+  });
+
+  it("holds Save and says it is signing in a dialog opened again while the earlier save is still on its way", () => {
+    expect(render(editor({ fields: { takeProfit: "102000", stopLoss: "98000" }, saving: true }), { busy: true })).toMatch(/<button type="submit" aria-disabled="true"[^>]*>Signing…<\/button>/);
   });
 
   it("shows each level's problem under its own field, which it describes", () => {

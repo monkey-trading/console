@@ -10,7 +10,8 @@ import { fixedFromInt, parseFixed } from "../fixed";
 import type { Levels } from "../levels";
 import { placeOrder } from "./actions";
 import { setPositionLevels } from "./level-actions";
-import { ActionClient, keyed, NODE_TIME, signerOf, VAULT } from "./live-kit";
+import { settle } from "../engine/test-kit";
+import { ActionClient, connected, keyed, NODE_TIME, signerOf, VAULT } from "./live-kit";
 import { REQUEST_TTL_MS } from "./signing";
 
 const DOMAIN = requestDomain(vectors.chain_id, VAULT);
@@ -116,5 +117,44 @@ describe("an order naming levels", () => {
     const { auth, ...order } = withLevels;
     expect(await signerOf(orderTypedData(DOMAIN, order, { nonce: auth.nonce, expiresAt: auth.expires_at }), auth.signature)).toBe(store.sessionKey?.address.toLowerCase());
     expect(orderTypedData(DOMAIN, order, TERMS).primaryType).toBe("OrderWithLevels");
+  });
+});
+
+describe("a levels request closed over while the wallet is asked", () => {
+  /** The trader pressed Save with no session key held, then closed the dialog (which clears the dialog's notice) before answering the wallet. */
+  async function asked() {
+    const kit = await connected();
+    kit.store.patch({ sessionRefusal: { kind: "unknown_market" } });
+    const sign = kit.wallet.sign.bind(kit.wallet);
+    let release!: (outcome: "sign" | "decline") => void;
+    const gate = new Promise<"sign" | "decline">((resolve) => { release = resolve; });
+    kit.wallet.sign = async (request) => {
+      if ((await gate) === "decline") throw Object.assign(new Error("You declined in your wallet."), { code: 4001 });
+      return sign(request);
+    };
+    const saving = setPositionLevels(kit.store, 1, LEVELS);
+    await settle();
+    expect(kit.store.getSnapshot().busy).toBe(true);
+    kit.store.clearNotice("levels");
+    return { ...kit, saving, release };
+  }
+
+  it("shows the wallet's decline on the levels surface, above the positions, once it answers", async () => {
+    const { store, saving, release } = await asked();
+    expect(store.getSnapshot().notices.levels?.tone).not.toBe("error");
+    release("decline");
+    expect(await saving).toBe(false);
+    expect(store.getSnapshot().busy).toBe(false);
+    expect(store.getSnapshot().notices.levels).toMatchObject({ tone: "error", text: "You declined in your wallet." });
+  });
+
+  it("sends nothing while the wallet is asked, and shows the node's refusal on the levels surface once it answers", async () => {
+    const { client, store, saving, release } = await asked();
+    client.answer = () => ({ seq: 5, events: [{ type: "order_rejected", account: ME, client_id: 0, reason: { kind: "level_too_close", level: "105000", min_distance_bps: 30, reference: "99980" } }] });
+    expect(posted(client, "levels")).toHaveLength(0);
+    release("sign");
+    expect(await saving).toBe(false);
+    expect(posted(client, "levels")).toHaveLength(1);
+    expect(store.getSnapshot().notices.levels).toMatchObject({ tone: "error", field: "take_profit" });
   });
 });

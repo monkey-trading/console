@@ -138,7 +138,7 @@ export function PositionsView() {
     const editor = market === undefined || offeredLevelDistance(market.view, snapshot.protocolVersion) === null ? null : {
       market, position: p, ...editorReference(account, terms, market, p.qty, known === null ? null : quoted), noClosing: levelsWait(noPrice ?? houseTermsNote(snapshot)),
       limits: ticketLimits(account, p.market), toUsdDown, fields: draft?.fields ?? { takeProfit: "", stopLoss: "" }, onChange: levelsEditor.edit,
-      onCancel: levelsEditor.cancel, onSend: (sent: Levels) => { if (draft !== null) levelsEditor.sending(draft.instance, sent); }, onSaved: (sent: LevelFields, words: string) => { if (draft !== null) levelsEditor.saved(draft.instance, sent, words); },
+      onCancel: levelsEditor.cancel, onSend: (sent: Levels) => { if (draft !== null) levelsEditor.sending(draft.instance, p.market, sent); }, onSaved: (sent: LevelFields, words: string) => { if (draft !== null) levelsEditor.saved(draft.instance, sent, words); },
       saving: levelsEditor.savingFor(p.market), onSettled: () => { if (draft !== null) levelsEditor.settled(draft.instance); }, onRemovedWithFocus: levelsEditor.removedWithFocus, announced: levelsEditor.announcedFor(p.market),
     };
     return {

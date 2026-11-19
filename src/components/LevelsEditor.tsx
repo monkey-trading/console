@@ -35,13 +35,13 @@ interface Props {
   capped: Fixed | null;
   limits: TicketLimits | null;
   toUsdDown: ((amount: Fixed) => Fixed) | null;
-  /** Closes the dialog without saving: Cancel, or Escape. */
+  /** Closes the dialog without saving: Cancel, or Escape, even while a save waits on the wallet, which the request then carries on with. */
   onCancel: () => void;
   /** Save sends `levels`. */
   onSend: (levels: Levels) => void;
   /** The node took `sent`, and `words` say what the position now holds. */
   onSaved: (sent: LevelFields, words: string) => void;
-  /** Whether this dialog's own save is being signed, sent and read back, which alone its Save button says; and what ends it. */
+  /** Whether a save of this position's levels, from this dialog or one closed before it, is being signed, sent and read back, which holds Save and its button says; and what ends this dialog's own. */
   saving: boolean;
   onSettled: () => void;
   readOnly: boolean;
@@ -110,10 +110,8 @@ export function LevelsEditor({ market, position, fields, onChange, closing, noCl
       if (saved) onSaved(sent, words);
     });
   };
-  // While a request is signed and sent, Escape does nothing, as Cancel does; the browser may still close it on a second Escape.
-  const cancel = () => {
-    if (!busy) onCancel();
-  };
+  // Cancel and Escape close the dialog at any time, the wallet's request included: its answer then shows above the positions.
+  const cancel = onCancel;
   return (
     <dialog ref={dialog} aria-modal="true" aria-labelledby={title} aria-describedby={help} className={SHEET}
       onCancel={(event) => { event.preventDefault(); cancel(); }} onClose={onCancel}>
@@ -127,7 +125,7 @@ export function LevelsEditor({ market, position, fields, onChange, closing, noCl
             : `A new or moved stop loss must be at least ${rate} ${long ? "below" : "above"} that closing price, and a new or moved take profit at least ${rate} ${long ? "above" : "below"} the market price.`}</p>}
           <div className="mt-4 flex gap-2">
             <button type="submit" aria-disabled={!canSave} aria-describedby={describedBy} className={`${BUTTON} border-glow bg-glow/10 text-glow hover:bg-glow/20 aria-disabled:cursor-not-allowed aria-disabled:opacity-40`}>{saving ? "Signing…" : "Save"}</button>
-            <button type="button" disabled={busy} className={`${BUTTON} border-line-2 text-fg-2 hover:border-glow hover:text-glow disabled:opacity-40`} onClick={cancel}>Cancel</button>
+            <button type="button" className={`${BUTTON} border-line-2 text-fg-2 hover:border-glow hover:text-glow`} onClick={cancel}>Cancel</button>
           </div>
           <Notice surface="levels" shown={refusedAt === null} />
           {/* The account panel behind the modal is inert, so a read that fails while the dialog is open is said here too. */}

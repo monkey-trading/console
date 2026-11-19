@@ -6,15 +6,17 @@
  * open while that account holds a position there, whatever its size or side, and is dropped once it does not,
  * the panel saying why when the position closed. Each opening is a new instance, and a save that lands later closes
  * only the instance and draft it was sent from. While an instance's save is signed, sent and its account read back,
- * its Save is held. However the dialog goes, focus returns to the position's levels control, or to the Positions
- * panel once the position is gone or while the control is unavailable.
+ * its Save is held. The dialog closes at any time, a save waiting on the wallet included: that save carries on, holds
+ * Save in a dialog opened again meanwhile, and says its result above the positions. However the dialog goes, focus returns
+ * to the position's levels control, or to the Positions panel once the position is gone, and from there to the control once
+ * it is available again, unless focus has moved.
  */
 
 import { useEffect, useRef, useState } from "react";
 
 import type { MarketId } from "@/lib/engine/types";
 import type { LevelFields } from "@/lib/level-check";
-import { dialogAnnouncement, fieldsOf, landedSave, openDraft, positionClosed, sentFrom, type HeldPosition, type LevelsDraft, type SaveWords } from "@/lib/level-draft";
+import { dialogAnnouncement, fieldsOf, focusUnmoved, landedSave, openDraft, positionClosed, savePending, sentFrom, type HeldPosition, type LevelsDraft, type SaveWords } from "@/lib/level-draft";
 import { levelsDialogClosedWords } from "@/lib/level-words";
 import type { Levels } from "@/lib/levels";
 import type { ConsoleStore } from "@/lib/store/store";
@@ -27,8 +29,9 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
   const [draft, setDraft] = useState<LevelsDraft | null>(null);
   // The last save's words, which the panel reads out, and the dialog that sent it while it stays open.
   const [announced, setAnnounced] = useState<SaveWords | null>(null);
-  // The instance whose save is being signed, sent and read back; null with none.
-  const [saving, setSaving] = useState<number | null>(null);
+  // The instance whose save is being signed, sent and read back, and its market; null with none. Closing the dialog does not end the
+  // save, so a dialog opened again meanwhile holds its Save for the same market until this one settles.
+  const [saving, setSaving] = useState<{ instance: number; market: MarketId } | null>(null);
   // The last draft dropped because the account no longer holds its position, which the panel's notice names once.
   const [closed, setClosed] = useState<LevelsDraft | null>(null);
   const said = useRef<LevelsDraft | null>(null);
@@ -37,6 +40,8 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
   const opened = useRef(0);
   // Where focus goes once a dialog removed while it held focus has left the page: set as it is removed, taken once committed.
   const dropped = useRef<{ market: MarketId; dialog: HTMLElement; panel: HTMLElement | null } | null>(null);
+  // A removed dialog's control that was unavailable, as while the wallet is asked: focus waits on the panel for it, unless it moves elsewhere.
+  const waiting = useRef<{ market: MarketId; panel: HTMLElement | null } | null>(null);
   const set = (next: LevelsDraft | null) => {
     latest.current = next;
     setDraft(next);
@@ -68,14 +73,24 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
   useEffect(() => {
     const target = dropped.current;
     dropped.current = null;
-    if (target === null || target.dialog.isConnected) return;
-    if (!refocus(target.market)) target.panel?.focus();
+    if (target !== null && !target.dialog.isConnected) {
+      waiting.current = null;
+      if (!refocus(target.market)) {
+        target.panel?.focus();
+        waiting.current = { market: target.market, panel: target.panel };
+      }
+      return;
+    }
+    const held = waiting.current;
+    if (held === null) return;
+    // Once the control is available again, focus goes to it, unless the trader has moved it somewhere else meanwhile.
+    if (!focusUnmoved(document.activeElement, document.body, held.panel) || refocus(held.market)) waiting.current = null;
   });
   return {
     /** The draft of `market`'s dialog while it is open; null while it is closed. */
     draftFor: (market: MarketId): LevelsDraft | null => (current?.market === market ? current : null),
     /** Whether `market`'s open dialog has a save on its way, its account read included. */
-    savingFor: (market: MarketId): boolean => current?.market === market && current.instance === saving,
+    savingFor: (market: MarketId): boolean => savePending(saving, current, market),
     /** Whether the dialog is open for any position. */
     open: current !== null,
     announced: announced?.text ?? "",
@@ -85,6 +100,7 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
     openFor: (position: HeldPosition) => {
       if (owner === null) return;
       store.clearNotice("levels");
+      waiting.current = null;
       opened.current += 1;
       set({ market: position.market, owner, base: position.levels, sent: [], fields: fieldsOf(position.levels), instance: opened.current });
     },
@@ -92,12 +108,12 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
       if (latest.current !== null) set({ ...latest.current, fields });
     },
     /** Dialog `instance` sends `levels`, which the position may hold before the answer lands. */
-    sending: (instance: number, levels: Levels) => {
-      setSaving(instance);
+    sending: (instance: number, market: MarketId, levels: Levels) => {
+      setSaving({ instance, market });
       if (latest.current?.instance === instance) set(sentFrom(latest.current, levels));
     },
     /** Dialog `instance`'s save has finished, its account read included, whether or not it was taken. */
-    settled: (instance: number) => setSaving((now) => (now === instance ? null : now)),
+    settled: (instance: number) => setSaving((now) => (now?.instance === instance ? null : now)),
     /** Closes the dialog without saving. */
     cancel: () => {
       store.clearNotice("levels");
@@ -110,7 +126,10 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
     /** A save of `sent` from `instance` landed: what it does to the dialog open now is `landedSave`'s. */
     saved: (instance: number, sent: LevelFields, words: string) => {
       const outcome = landedSave(latest.current, instance, sent);
-      if (outcome === "ignore") return;
+      if (outcome === "report") {
+        store.notify("levels", words, "info");
+        return;
+      }
       setAnnounced({ text: words, instance });
       if (outcome === "close") set(null);
     },

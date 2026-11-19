@@ -78,12 +78,21 @@ export function sentFrom(draft: LevelsDraft, levels: Levels): LevelsDraft {
 }
 
 /**
- * What a save of `sent` from editor `instance` does once it lands, given the draft open now: nothing for an
- * editor closed, reopened or dropped since; say what was saved while it is open, leaving the draft as it is,
- * since its levels count as the position's until the account shows them; and close it too while it still holds
- * the fields sent.
+ * What a save of `sent` from editor `instance` does once it lands, given the draft open now: for an editor closed or
+ * reopened since, report what was saved above the positions, or in the dialog open now; say what was saved while it is
+ * open, leaving the draft as it is, since its levels count as the position's until the account shows them; and close it
+ * too while it still holds the fields sent.
  */
-export function landedSave(latest: LevelsDraft | null, instance: number, sent: LevelFields): "ignore" | "announce" | "close" {
-  if (latest === null || latest.instance !== instance) return "ignore";
+export function landedSave(latest: LevelsDraft | null, instance: number, sent: LevelFields): "report" | "announce" | "close" {
+  if (latest === null || latest.instance !== instance) return "report";
   return latest.fields === sent ? "close" : "announce";
 }
+
+/**
+ * Whether a save of `market`'s levels is on its way, from the open dialog or from one closed before it, so that Save is held and a
+ * second request for the same levels is never sent while the first waits on the wallet.
+ */
+export const savePending = (saving: { market: MarketId } | null, open: { market: MarketId } | null, market: MarketId): boolean => open?.market === market && saving?.market === market;
+
+/** Whether focus is still where a closed dialog left it, on the page or the Positions panel, rather than moved by the trader to a control of their own. */
+export const focusUnmoved = (active: unknown, page: unknown, panel: unknown): boolean => active === null || active === page || active === panel;

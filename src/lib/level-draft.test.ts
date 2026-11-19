@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
-import { dialogAnnouncement, fieldsOf, landedSave, openDraft, positionClosed, sentFrom, type HeldPosition, type LevelsDraft } from "./level-draft";
+import { dialogAnnouncement, fieldsOf, focusUnmoved, landedSave, openDraft, positionClosed, savePending, sentFrom, type HeldPosition, type LevelsDraft } from "./level-draft";
 import { NO_LEVELS } from "./levels";
 
 const OWNER = "0xabc";
@@ -99,8 +99,33 @@ describe("landedSave", () => {
     expect(landedSave({ ...DRAFT, fields: { takeProfit: "106000", stopLoss: "94000" } }, 3, DRAFT.fields)).toBe("announce");
   });
 
-  it("does nothing to an editor closed, or closed and opened again, since it was sent", () => {
-    expect(landedSave(null, 3, DRAFT.fields)).toBe("ignore");
-    expect(landedSave({ ...DRAFT, instance: 4 }, 3, DRAFT.fields)).toBe("ignore");
+  it("reports the save of an editor closed, or closed and opened again, since it was sent, above the positions", () => {
+    expect(landedSave(null, 3, DRAFT.fields)).toBe("report");
+    expect(landedSave({ ...DRAFT, instance: 4 }, 3, DRAFT.fields)).toBe("report");
+  });
+});
+
+describe("savePending", () => {
+  it("holds Save in a dialog opened again for the market whose save is still on its way", () => {
+    expect(savePending({ market: 1 }, { market: 1 }, 1)).toBe(true);
+  });
+
+  it("holds nothing for another market, a closed dialog or a save that has settled", () => {
+    expect(savePending({ market: 2 }, { market: 1 }, 1)).toBe(false);
+    expect(savePending({ market: 1 }, null, 1)).toBe(false);
+    expect(savePending(null, { market: 1 }, 1)).toBe(false);
+  });
+});
+
+describe("focusUnmoved", () => {
+  const [page, panel, other] = [{}, {}, {}];
+  it("lets focus go to the levels control while it is on the page or the panel", () => {
+    expect(focusUnmoved(null, page, panel)).toBe(true);
+    expect(focusUnmoved(page, page, panel)).toBe(true);
+    expect(focusUnmoved(panel, page, panel)).toBe(true);
+  });
+
+  it("leaves focus where the trader moved it", () => {
+    expect(focusUnmoved(other, page, panel)).toBe(false);
   });
 });
