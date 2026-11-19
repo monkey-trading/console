@@ -77,4 +77,28 @@ describe("markersFor", () => {
     expect(titles(false)).toEqual(["Close-out"]);
     expect(markersFor(withAccount(base, account(0n, [order(1, "sell", "limit")])), market, false)).toEqual([]);
   });
+
+  it("draws the take profit green and the stop loss red, solid, on a long or a short, and neither with lines off", async () => {
+    const { market, base } = await fixture();
+    for (const [qty, take, stop] of [[fixedFromInt(1), 62_000, 58_500], [fixedFromInt(-1), 58_000, 61_500]] as const) {
+      const held = account(qty, []);
+      const position = held.positions[0];
+      if (position === undefined) throw new Error("no position");
+      const state = withAccount(base, { ...held, positions: [{ ...position, levels: { takeProfit: fixedFromInt(take), stopLoss: fixedFromInt(stop) } }] });
+      const levels = markersFor(state, market).filter((l) => l.style === "solid");
+      expect(levels).toEqual([{ price: take, tone: "glow", style: "solid", title: "Take profit" }, { price: stop, tone: "ember", style: "solid", title: "Stop loss" }]);
+      expect(markersFor(state, market, false).map((l) => l.title)).toEqual(["Close-out"]);
+    }
+  });
+
+  it("draws one level alone, and no line for a level another market's position holds", async () => {
+    const { market, base } = await fixture();
+    const held = account(fixedFromInt(1), []);
+    const position = held.positions[0];
+    if (position === undefined) throw new Error("no position");
+    const stopOnly = withAccount(base, { ...held, positions: [{ ...position, levels: { takeProfit: null, stopLoss: fixedFromInt(58_000) } }] });
+    expect(markersFor(stopOnly, market).map((l) => l.title)).toEqual(["Long entry", "Stop loss", "Close-out"]);
+    const elsewhere = withAccount(base, { ...held, positions: [{ ...position, market: 2, levels: { takeProfit: fixedFromInt(1), stopLoss: null } }] });
+    expect(markersFor(elsewhere, market)).toEqual([]);
+  });
 });

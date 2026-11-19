@@ -42,6 +42,8 @@ export interface ListingNotice {
   spread_tiers?: SpreadTier[];
   margin_tiers?: Tier[];
   markup_bps?: number;
+  /** From V79, the market's minimum distance for take-profit and stop-loss levels, in bps. */
+  min_level_distance_bps?: number;
   effective_at: number;
 }
 

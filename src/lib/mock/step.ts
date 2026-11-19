@@ -6,6 +6,7 @@ import { closeOutUnderwater } from "./closeout";
 import { closeEmissionPeriods } from "./emissions";
 import { closeDistributionEpochs } from "./monkey";
 import { creditFinal, payQueue } from "./funds";
+import { triggerLevels } from "./levels";
 import { triggerResting } from "./orders";
 import { isOpen } from "../schedule";
 import { MAX_STRESS, type MarketRuntime, type MockState } from "./state";
@@ -89,7 +90,7 @@ function chargeFinancing(state: MockState, previous: number): EngineEvent[] {
 
 /**
  * Advances the node to `ms`: each market moves and publishes a `prices` command; then one `tick`
- * command carries the resulting events (market hours, stress, triggered orders, close-outs,
+ * command carries the resulting events (market hours, stress, triggered orders and levels, close-outs,
  * credited deposits, and queue payments).
  */
 export function advance(state: MockState, ms: number, options: { liquidity?: boolean } = {}): void {
@@ -105,7 +106,7 @@ export function advance(state: MockState, ms: number, options: { liquidity?: boo
   // Emission periods finalise before the command's other effects, as the engine's apply does, so a
   // charge this tick lands cannot forfeit a weight the account held at the period's cutoff.
   events.push(...closeEmissionPeriods(state), ...closeDistributionEpochs(state));
-  events.push(...chargeFinancing(state, previous), ...triggerResting(state), ...closeOutUnderwater(state), ...creditFinal(state));
+  events.push(...chargeFinancing(state, previous), ...triggerResting(state), ...triggerLevels(state), ...closeOutUnderwater(state), ...creditFinal(state));
   const bucket = (t: number) => Math.floor(t / LIQUIDITY_EVERY_MS);
   events.push(...payQueue(state, options.liquidity !== false && bucket(ms) > bucket(previous) ? LIQUIDITY_STEP : 0n));
   state.emit({ type: "tick" }, events);

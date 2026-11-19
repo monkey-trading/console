@@ -134,7 +134,7 @@ describe("the toxicity add-on and the tier's leverage in a live quote", () => {
   });
 
   it("treats a weekend-margin decline as a size problem like a margin one, naming what sets the leverage", () => {
-    const limits = { tier: 0, bestPriceBound: null, leverage: f("13.333333333"), weekendSets: true, orderLimit: 25, resting: 0 };
+    const limits = { tier: 0, bestPriceBound: null, leverage: f("13.333333333"), weekendSets: true, orderLimit: 25, resting: 0, levelSlots: 0 };
     const weekend = { kind: "weekend_margin" as const, equity: "1", required: "9" };
     const ladder: MarketQuote = { ...QUOTE, ask: [{ qty: "2", price: "100.1" }, { qty: "30", price: "100.5", declined: weekend }] };
     const result = ticketPrices({ live: true, quote: ladder, quoteError: null, preview: preview("29"), side: "buy", mark: f("100"), limits });
@@ -143,7 +143,7 @@ describe("the toxicity add-on and the tier's leverage in a live quote", () => {
   });
 
   it("explains a margin decline with the leverage the account's tier allows in the market", () => {
-    const limits = { tier: 0, bestPriceBound: null, leverage: f("20"), weekendSets: false, orderLimit: 25, resting: 0 };
+    const limits = { tier: 0, bestPriceBound: null, leverage: f("20"), weekendSets: false, orderLimit: 25, resting: 0, levelSlots: 0 };
     const margin = { kind: "insufficient_margin" as const, equity: "1", required: "9" };
     const ladder: MarketQuote = { ...QUOTE, ask: [{ qty: "2", price: "100.1" }, { qty: "30", price: "100.5", declined: margin }] };
     const withLimits = ticketPrices({ live: true, quote: ladder, quoteError: null, preview: preview("29"), side: "buy", mark: f("100"), limits });

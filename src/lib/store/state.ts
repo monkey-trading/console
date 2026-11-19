@@ -20,7 +20,7 @@ export type BlockReason = "united_states" | "sanctioned_jurisdiction";
 
 /** Where a message shows: beside the control the trader used, or in the one place its subject has on the page. */
 export const NOTICE_SURFACES = [
-  "ticket", "orders", "positions", "accountRead", "account", "deposit", "withdraw", "faucet", "setup", "payouts", "payoutReads", "payoutVault",
+  "ticket", "orders", "positions", "levels", "accountRead", "account", "deposit", "withdraw", "faucet", "setup", "payouts", "payoutReads", "payoutVault",
   "emissions", "distribution", "stake", "operator", "governance", "settings", "wallet", "node", "feed", "chart", "exit",
 ] as const;
 export type NoticeSurface = (typeof NOTICE_SURFACES)[number];

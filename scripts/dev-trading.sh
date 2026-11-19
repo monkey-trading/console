@@ -18,6 +18,12 @@
 # and withdraws, its fee discount, financing discount and emissions boost are read, and each figure the panel, the ticket and the
 # withdraw form show equals the account read.
 #
+# TRADING_SCENARIO=levels runs the take-profit and stop-loss scenario instead (scripts/live/dev-levels.live.test.ts): a BTC-USD
+# long opened from the ticket with both levels, a stop loss inside the minimum distance stopped at the ticket and refused by the
+# node, the stop loss moved from the position row, a limit order rested and Cancel all leaving both levels, then a restart with
+# BTC-USD's mock mid under the stop loss closing the position in one fill below it, and a new long's take profit filling at its
+# level or better after a restart past it.
+#
 # Needs Node, curl, python3 (3.11 or later), and either ENGINE_BIN (a built `engine` binary with
 # the access_source example built beside it) with ENGINE_DIR (the engine checkout holding
 # config/dev.toml), or just ENGINE_DIR to build and run them with Cargo; set CARGO_CMD to prefix
@@ -42,7 +48,8 @@ scenario="${TRADING_SCENARIO:-trading}"
 case "$scenario" in
   trading) test_file=scripts/live/dev-trading.live.test.ts ;;
   tiers) test_file=scripts/live/dev-volume-tier.live.test.ts ;;
-  *) echo "FAIL: TRADING_SCENARIO is trading or tiers, not $scenario" >&2; exit 1 ;;
+  levels) test_file=scripts/live/dev-levels.live.test.ts ;;
+  *) echo "FAIL: TRADING_SCENARIO is trading, tiers or levels, not $scenario" >&2; exit 1 ;;
 esac
 api_port="${TRADING_API_PORT:-18080}"
 access_port="${TRADING_ACCESS_PORT:-28846}"
@@ -176,6 +183,10 @@ if ! ENGINE_NODE_URL="$api" ENGINE_BIN="$engine_bin" NODE_CONFIG="$node_config" 
   echo "--- the last lines of $work/access-source.log ---" >&2
   tail -n 20 "$work/access-source.log" >&2
   exit 1
+fi
+if [[ "$scenario" == levels ]]; then
+  echo "PASS: a long's take profit and stop loss from the ticket, a close stop loss stopped at the ticket and refused by the node, the stop loss moved from the position row and kept through Cancel all, the position closed in one fill below its stop loss, and a take profit filled at its level or better"
+  exit 0
 fi
 if [[ "$scenario" == tiers ]]; then
   echo "PASS: a fresh wallet's tier 0 limits at the ticket, stopped past its leverage and order limit and over its request rate, traded to tier 1 and withdrew, every figure equal to the account read"

@@ -5,6 +5,7 @@
 import { TIMEFRAMES } from "@/lib/bars";
 import { fixedToNumber, moveBps } from "@/lib/fixed";
 import { formatMovePercent } from "@/lib/format";
+import { NO_LEVELS } from "@/lib/levels";
 import { closeOutMarker } from "@/lib/liquidation";
 import type { MarketModel } from "@/lib/models";
 import { formatMark, splitDecimals } from "@/lib/price-format";
@@ -17,16 +18,19 @@ import { PriceChart, type PriceMarker } from "./PriceChart";
 import { usePrefs } from "./use-prefs";
 
 /**
- * The lines drawn across the chart: the open position's entry and close-out price, and resting orders.
+ * The lines drawn across the chart: the open position's entry, take profit, stop loss and close-out price, and resting orders.
  * Each line's colour follows its direction: a buy order or a long's entry is green, a sell order or a
- * short's entry is red. The close-out is grey and dashed. With `lines` off (a Settings preference) the entry and the orders are not
- * drawn; the close-out is a risk figure and stays.
+ * short's entry is red. The take profit is a solid green line and the stop loss a solid red one, on either side. The close-out is grey
+ * and dashed. With `lines` off (a Settings preference) the entry, the levels and the orders are not drawn; the close-out is a risk figure and stays.
  */
 export function markersFor(state: ConsoleState, market: MarketModel, lines = true): PriceMarker[] {
   const out: PriceMarker[] = [];
   const position = state.account?.positions.find((p) => p.market === market.id);
   if (state.account && position) {
     if (lines) out.push({ price: fixedToNumber(position.entry), tone: position.qty > 0n ? "glow" : "ember", style: "dotted", title: `${position.qty > 0n ? "Long" : "Short"} entry` });
+    const { takeProfit, stopLoss } = position.levels ?? NO_LEVELS;
+    if (lines && takeProfit !== null) out.push({ price: fixedToNumber(takeProfit), tone: "glow", style: "solid", title: "Take profit" });
+    if (lines && stopLoss !== null) out.push({ price: fixedToNumber(stopLoss), tone: "ember", style: "solid", title: "Stop loss" });
     const liq = closeOutMarker(state.account, market);
     if (liq !== null) out.push({ price: fixedToNumber(liq), tone: "fg-3", style: "dashed", title: "Close-out" });
   }

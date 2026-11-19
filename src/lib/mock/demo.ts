@@ -6,12 +6,15 @@
  */
 
 import type { EngineEvent, Side } from "../engine/types";
+import { metaFor } from "../engine/meta";
 import { fixedFromInt, fixedToWire, divFixed, SCALE, type Fixed } from "../fixed";
+import { roundToPlaces } from "../fixed-rounding";
 import { equityOf, marginOf } from "./accounts";
 import { advance } from "./step";
 import { mockHex } from "./client";
 import { chainDeposit, withdraw, withdrawable } from "./funds";
 import { liveQuote } from "./execute";
+import { setPositionLevels } from "./level-request";
 import { attestEligibility, placeOrder } from "./orders";
 import { registerSessionKey } from "./session-keys";
 import type { MockState } from "./state";
@@ -80,6 +83,15 @@ class Script {
     });
   }
 
+  /** A take profit and a stop loss on the long held in `market`, `percent` above and below the index, at the market's places as a trader types them. */
+  levels(market: number, percent: number): void {
+    const runtime = this.state.markets.get(market);
+    const mid = runtime?.mid ?? 1n;
+    const places = metaFor(runtime?.listed.spec.symbol ?? "").places;
+    const at = (away: number) => fixedToWire(roundToPlaces(mid + (mid * BigInt(Math.round(away * 100))) / 10_000n, places, "toward-zero"));
+    setPositionLevels(this.state, { account: DEMO_ADDRESS, market, take_profit: at(percent), stop_loss: at(-percent), auth: this.auth() });
+  }
+
   /** Moves a market's index by `bps` at the next step, then lets one step pass. */
   shock(market: number, bps: number): void {
     const runtime = this.state.markets.get(market);
@@ -136,6 +148,7 @@ export function seedDemoAccount(state: MockState, endMs: number): void {
   s.at(t0 + 24 * HOUR);
   s.deposit(100_000);
   s.trade(BTC, "buy", 55_000);
+  s.levels(BTC, 6);
   s.at(t0 + 25 * HOUR);
   s.trade(ETH, "sell", 30_000);
   s.at(t0 + 26 * HOUR);

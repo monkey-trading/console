@@ -3,8 +3,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
 
 import vectors from "./eip712-vectors.json";
-import { cancelAllTypedData, cancelTypedData, closeAllTypedData, eligibilityTypedData, orderTypedData, registerSessionKeyTypedData, requestDomain, reissueTypedData, revokeSessionKeyTypedData, withdrawalTypedData, type TypedRequest } from "./eip712";
-import type { CloseAllRequest, EligibilityClass, OrderRequest } from "./types";
+import { cancelAllTypedData, cancelTypedData, closeAllTypedData, eligibilityTypedData, orderTypedData, positionLevelsTypedData, registerSessionKeyTypedData, requestDomain, reissueTypedData, revokeSessionKeyTypedData, withdrawalTypedData, type TypedRequest } from "./eip712";
+import type { CloseAllRequest, EligibilityClass, OrderRequest, PositionLevelsRequest } from "./types";
 
 // The vectors are the engine's own fixtures: typed data a wallet signs, and the signature
 // `cast wallet sign --data` (or the engine's signer) made with Anvil's public account 0.
@@ -33,6 +33,7 @@ function fromVector(request: (typeof vectors.requests)[number]): TypedRequest {
     case "withdrawal": return withdrawalTypedData(domain, String(body.account), String(body.amount), terms);
     case "register_session_key": return registerSessionKeyTypedData(domain, String(body.account), String(body.session_key), Number(body.expires_at), terms);
     case "revoke_session_key": return revokeSessionKeyTypedData(domain, String(body.account), String(body.session_key), terms);
+    case "position_levels": return positionLevelsTypedData(domain, body as unknown as PositionLevelsRequest, terms);
     default: throw new Error(`unknown vector kind ${request.kind}`);
   }
 }
@@ -88,6 +89,26 @@ describe("client request typed data", () => {
     const swapped = closeAllTypedData(domain, { ...body, closes: [...body.closes].reverse() }, { nonce: request.nonce, expiresAt: request.expires_at });
     const recovered = await recoverTypedDataAddress({ ...(swapped as unknown as Parameters<typeof recoverTypedDataAddress>[0]), signature: request.signature as `0x${string}` });
     expect(recovered.toLowerCase()).not.toBe(vectors.account);
+  });
+
+  it("replays the engine's vectors for both level structs", () => {
+    expect(vectors.requests.map((r) => r.typed_data.primaryType)).toEqual(expect.arrayContaining(["OrderWithLevels", "SetPositionLevels"]));
+  });
+
+  it("signs an order naming one level as OrderWithLevels, the other not named and 0, and one naming none as OrderRequest", () => {
+    const order = { account: vectors.account, client_id: 3, market: 1, side: "buy", qty: "1", kind: { kind: "limit", price: "100" } } as const;
+    const data = orderTypedData(domain, { ...order, stop_loss: "97.5" }, { nonce: 1, expiresAt: 2 });
+    expect(data.primaryType).toBe("OrderWithLevels");
+    expect(data.message).toMatchObject({ hasTakeProfit: false, takeProfit: 0n, hasStopLoss: true, stopLoss: 97_500_000_000n });
+    expect(orderTypedData(domain, order, { nonce: 1, expiresAt: 2 }).primaryType).toBe("OrderRequest");
+  });
+
+  it("signs a levels request that names neither, which removes both, with both flags false", () => {
+    const data = positionLevelsTypedData(domain, { account: vectors.account, market: 2 }, { nonce: 4, expiresAt: 5 });
+    expect(data).toEqual({
+      domain, primaryType: "SetPositionLevels", types: { SetPositionLevels: expect.any(Array) },
+      message: { account: vectors.account, nonce: 4n, expiresAt: 5n, market: 2, hasTakeProfit: false, takeProfit: 0n, hasStopLoss: false, stopLoss: 0n },
+    });
   });
 
   it("builds the reissue request the node checks: account, payout nonce and the replaced expiry", () => {

@@ -1,6 +1,7 @@
 /** The account read's shape, `GET /v1/accounts/{address}`. */
 
 import type { CloseFee } from "./pricing-types";
+import type { PositionLevelsWire } from "./level-types";
 import type { MarketId, Position, RestingOrder } from "./types";
 import type { MarginStandingWire, ToxicityStandingWire, VolumeStandingWire } from "./volume-types";
 
@@ -28,4 +29,6 @@ export interface AccountView extends MarginStandingWire {
   toxicity?: ToxicityStandingWire;
   /** From V59, the volume tier, counted and pending volume, progress towards each tier and best-price bounds; from V66 the tier's order limit and request rate. */
   volume?: VolumeStandingWire;
+  /** From V79, each position's take profit and stop loss, keyed by market id; absent while no position holds one. */
+  levels?: Record<string, PositionLevelsWire>;
 }

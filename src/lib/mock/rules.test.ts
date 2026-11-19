@@ -95,7 +95,7 @@ describe("engine rules the mock follows", () => {
     expect(account.balance).toBe(0n);
     // The write-off comes out of the house's cash: it ends below what it held before the debt.
     expect(state.houseCash).toBeLessThan(houseAfterFirst);
-    expect(types(fillEvents(second.fill, second.badDebt))).toEqual(["fill", "bad_debt"]);
+    expect(types(fillEvents(second))).toEqual(["fill", "bad_debt"]);
   });
 
   it("treats a flip as added risk, but clamps an oversized reduce-only order to what it can reduce", async () => {

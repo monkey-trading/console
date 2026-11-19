@@ -61,9 +61,11 @@ export interface TicketLimits {
   leverage: Fixed | null;
   /** Whether the market's weekend margin, not the tier's floor, sets that leverage now. */
   weekendSets: boolean;
-  /** The resting orders the tier allows and the account rests now; the limit is null where the tier names none. */
+  /** The working orders the tier allows, null where it names none, and the slots the account uses now: one per working order and, from V79, one per position holding levels. */
   orderLimit: number | null;
   resting: number;
+  /** How many of those slots are positions' levels. */
+  levelSlots: number;
 }
 
 /** The limits the account's read gives for `market`, or null from a node that predates volume tiers. */
@@ -73,14 +75,22 @@ export function ticketLimits(account: AccountModel | null, market: MarketId, mar
   return {
     tier: volume.tier, bestPriceBound: volume.bestPriceBounds.get(market) ?? null, leverage: account.requirements?.maxLeverage.get(market) ?? null,
     weekendSets: margin.weekendBps > 0 && margin.weekendBps > (margin.floorBps ?? 0),
-    orderLimit: volume.maxRestingOrders, resting: account.orders.length,
+    orderLimit: volume.maxRestingOrders, ...slotsOf(account),
   };
+}
+
+/** The working order slots an account uses: one per working order and, from V79, one per position holding levels (#900, D7). */
+function slotsOf(account: AccountModel): { resting: number; levelSlots: number } {
+  const levelSlots = account.positions.filter((p) => p.levels !== undefined).length;
+  return { resting: account.orders.length + levelSlots, levelSlots };
 }
 
 /** The reason a limit or stop order is stopped at the ticket: the account already rests its tier's most. Null for a market order or while there is room. */
 export function orderLimitProblem(limits: TicketLimits | null, resting: boolean): string | null {
   if (limits === null || !resting || limits.orderLimit === null || limits.resting < limits.orderLimit) return null;
-  return `Working order limit reached. Volume tier ${limits.tier} allows up to ${limits.orderLimit} working orders at a time, and you have ${limits.resting}. Cancel a working order to place a new one, or trade more to reach a higher tier.`;
+  const counting = limits.levelSlots > 0 ? ", counting the take profit and stop loss on each position as one" : "";
+  const remedy = limits.levelSlots > 0 ? "Cancel a working order or remove the levels from a position to place a new one, or trade more to reach a higher tier." : "Cancel a working order to place a new one, or trade more to reach a higher tier.";
+  return `Working order limit reached. Volume tier ${limits.tier} allows up to ${limits.orderLimit} working orders at a time, and you have ${limits.resting}${counting}. ${remedy}`;
 }
 
 /** Why the leverage limit applies, for a size the node declines for margin: the tier's limit, named. */

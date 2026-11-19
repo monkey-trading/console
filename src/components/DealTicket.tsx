@@ -7,6 +7,8 @@ import { useId, useState } from "react";
 
 import { signBlock } from "@/lib/engine/attestation";
 import { formatFixedPlaces, parseFixed } from "@/lib/fixed";
+import { EMPTY_FIELDS, type LevelFields } from "@/lib/level-check";
+import { noLevels } from "@/lib/levels";
 import { ORDER_LABELS, ORDER_TYPES, type OrderType } from "@/lib/prefs";
 import { formatMark } from "@/lib/price-format";
 import { describeSchedule } from "@/lib/schedule";
@@ -18,6 +20,7 @@ import { openSetup } from "@/lib/store/setup";
 import { formatTenthBps, formatTenthPercent } from "@/lib/spread-bands";
 import { belowMinimum, contractUnit, MARGIN_SHORT, MARKET_CLOSED, NO_FUNDS, NO_SIZE, parseSize, REDUCE_ONLY, SLIPPAGE_CHOICES, slippageBound, sizeShown } from "@/lib/ticket";
 import { currentParams, houseTermsNote, ticketFigures } from "@/lib/ticket-figures";
+import { ticketLevels } from "@/lib/ticket-levels";
 import { describeBestPrice } from "@/lib/tier-view";
 import { tradingPaused } from "@/lib/trading-paused";
 import { isPriced, isUnfed, unpricedWhy } from "@/lib/unpriced";
@@ -25,6 +28,7 @@ import { formatLeverage } from "@/lib/volume-tier";
 
 import { CloseSummary } from "./CloseSummary";
 import { useConsole, useNodeFollow, useSession } from "./ConsoleProvider";
+import { LevelInputs } from "./LevelInputs";
 import { MarketInfo } from "./MarketInfo";
 import { Notice } from "./Notice";
 import { SigningFor } from "./SigningFor";
@@ -53,6 +57,7 @@ export function DealTicket() {
   const [typedSize, setTypedSize] = useState<string | null>(null);
   const [price, setPrice] = useState("");
   const [chosenSlippage, setSlippage] = useState<number | null>(null);
+  const [levelFields, setLevelFields] = useState<LevelFields>(EMPTY_FIELDS);
   const follow = useNodeFollow();
   const market = state.markets.find((m) => m.id === state.selected);
   if (!market) return null;
@@ -76,7 +81,11 @@ export function DealTicket() {
   const live = state.signatures === "checked";
   // The stress levels' terms and the listing notices show only while the house state is current.
   const terms = currentParams(state);
-  const { preview, prices, limits, spreadTiers, ownBands, orderProblem, close, closing, closeWithheld } = ticketFigures(state, market, { side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice });
+  const order = { side, qty, slippageBps: slippage, resting: kind !== "market", triggerPrice };
+  const { preview, prices, limits, spreadTiers, ownBands, orderProblem, close, closing, closeWithheld } = ticketFigures(state, market, order);
+  // From V79 the order may name a take profit and a stop loss; a market that takes none shows no fields.
+  const levels = ticketLevels(state, market, order, levelFields, { prices, limits });
+  const named = levels === null || noLevels(levels.named) ? undefined : levels.named;
   // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
   // A size the field refuses says why, so the generic prompt would only repeat it.
   const listed = preview.problems.filter((p) => (!live || p !== MARGIN_SHORT) && (parsedSize.kind !== "refused" || p !== NO_SIZE));
@@ -100,17 +109,18 @@ export function DealTicket() {
   const gate = unfed ?? (!state.wallet ? "Connect a wallet to trade." : null) ?? blockSentence(readOnlyWhy) ?? setupNote ?? paused?.text ?? null;
   const folded = paused?.cause === "closed" ? MARKET_CLOSED : paused?.cause === "reduce_only" ? REDUCE_ONLY : null;
   const shownProblems = folded === null ? problems : problems.filter((p) => p !== folded);
-  const canPlace = gate === null && shownProblems.length === 0 && sizeProblems.length === 0 && !sizeMissing && !state.busy;
+  const canPlace = gate === null && shownProblems.length === 0 && sizeProblems.length === 0 && !sizeMissing && !state.busy && levels?.blocked !== true;
   const places = market.places;
   const show = (value: bigint | null) => (value === null ? "—" : formatMark(value, places));
   const submit = () => {
-    const base = { market: market.id, side, qty: preview.qty, reduceOnly: false };
+    const base = { market: market.id, side, qty: preview.qty, reduceOnly: false, ...(named === undefined ? {} : { levels: named }) };
     // Only what was sent clears: a value the trader changed while the wallet was asking stays.
     const clearSent = (placed: boolean) => {
       if (!placed) return;
       prefStore.rememberSize(market.id, size);
       setTypedSize((now) => (now === typedSize ? null : now));
       setPrice((now) => (now === price ? "" : now));
+      setLevelFields((now) => (now === levelFields ? EMPTY_FIELDS : now));
     };
     // A market order is sent at exactly the price the ticket shows for its side.
     if (kind === "market" && prices.price !== null) void placeOrder(store, { ...base, kind: { kind: "market", quoted: prices.price, slippageBps: slippage } }).then(clearSent);
@@ -168,6 +178,7 @@ export function DealTicket() {
           </div>
         </div>
         {closing !== null && <CloseSummary shape={closing} close={close} why={closeWithheld} side={side} places={market.places} converts={market.view.quote_currency !== undefined} />}
+        {levels !== null && <LevelInputs title="Take profit and stop loss (optional)" check={levels} fields={levelFields} onChange={setLevelFields} />}
         <details className="mt-4 rounded border border-line-2">
           <summary className="px-3 py-3.5 text-caption lg:py-2 text-fg-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-glow">Advanced</summary>
           <fieldset className="px-3 pb-3">

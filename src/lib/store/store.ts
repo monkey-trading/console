@@ -13,7 +13,8 @@ import { creditDeposits } from "./deposits";
 import { tickBars } from "./bars-tick";
 import { BarsSeed } from "./bars-seed";
 import { ExitWatch } from "./exit";
-import { eventAccount, FEED_LIMIT, feedFrom, isMine } from "./feed";
+import { accountNotice } from "./account-notice";
+import { eventAccount, FEED_LIMIT, feedFrom } from "./feed";
 import { LedgerReads } from "./ledger";
 import { initialState, KEPT_ON_WALLET_CHANGE, seedAllBars, type ConsoleState, type Notice, type NoticeSurface } from "./state";
 import { readHousePanelSoon, stalePricing } from "./house";
@@ -232,11 +233,8 @@ export class ConsoleStore {
 
   private onMessage(message: StreamMessage): void {
     const viewer = this.snapshot.wallet?.address ?? this.viewer;
-    // A close-out, or a resting order the node cancels later on a tick, leaves the user with less than they placed and no control to say why.
-    const closedOut = message.events.some((event) => event.type === "close_out" && isMine(event, viewer));
-    const cancelled = message.events.flatMap((event) => (event.type === "order_cancelled" && event.reason !== "client" && isMine(event, viewer) ? [event.order_id] : []));
-    if (closedOut) this.notify("account", `Your positions were closed out because your equity fell below the close-out level${this.snapshot.houseParams === null ? "" : ` of ${this.snapshot.houseParams.closeoutLevelBps / 100}% of your margin requirement`}. They were closed at the market price, and the details are shown in History.`);
-    else if (cancelled.length > 0) this.notify("account", `${cancelled.length === 1 ? `Order ${cancelled[0]}` : `Orders ${cancelled.join(", ")}`} could not be filled, so ${cancelled.length === 1 ? "it has" : "they have"} been cancelled.`);
+    const said = accountNotice(message, viewer, this.snapshot.houseParams, (id) => this.snapshot.markets.find((m) => m.id === id)?.symbol ?? `market ${id}`);
+    if (said !== null) this.notify("account", said.text, said.tone);
     this.pacing?.observe(message);
     if (message.events.some((event) => event.type === "admin_applied")) stalePricing(this); // parameters, listings or notices may have changed
     this.ledger.ingest(message);

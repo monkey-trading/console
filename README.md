@@ -264,6 +264,8 @@ preview of each partial close is a bound that its execution meets, and that the 
 whole close equals its execution. It also trades through a close-out after a restart with moved
 prices. It ends with a line that begins `PASS: funded, declared, filled at the streamed
 quote`. `TRADING_SCENARIO=tiers` runs the volume tier scenario instead, which takes a few minutes.
+`TRADING_SCENARIO=levels` runs the take-profit and stop-loss scenario instead, in which the server
+restarts twice with moved prices so that a stop loss and then a take profit close a position.
 
 Neither script loads the browser build. To check how the page loads the verifier, and its Content
 Security Policy, run `npm run dev:live`, or a production build with the same variables, against a

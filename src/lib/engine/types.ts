@@ -11,6 +11,8 @@ import type { HouseScanView } from "./stats-types";
 import type { CurvePoint, MarketPricing, SpreadTier, StressLevel } from "./pricing-types";
 import type { VolumeTierWire } from "./volume-types";
 export type { VolumeTierWire } from "./volume-types";
+import type { LevelReject } from "./level-types";
+export type { LevelEvent, LevelKind, LevelReject, LevelsRemovedReason, PositionLevelsRequest, PositionLevelsWire } from "./level-types";
 export type { CloseFee, CurvePoint, ListingNotice, ListingNotices, MarketPricing, SpreadTier, StressLevel } from "./pricing-types";
 
 export type Address = string;
@@ -67,6 +69,8 @@ export interface MarketView {
   stress_level: number;
   /** From V60, for a market with a weekend margin, when it applies: from `from` until `reopen`, with the least rate each margin band charges meanwhile. */
   weekend_margin?: { weekend_margin_bps: number; from: number; close: number; reopen: number };
+  /** From V79, how far beyond its reference price a take profit or stop loss must lie, in bps; absent before V79, where a position takes no levels. */
+  min_level_distance_bps?: number;
 }
 
 /** `GET /v1/house`. */
@@ -95,6 +99,9 @@ export interface RestingOrder {
   qty: string;
   kind: OrderKind;
   reduce_only: boolean;
+  /** From V79, the levels an entry order's fill attaches to its position. */
+  take_profit?: string;
+  stop_loss?: string;
 }
 
 /** The account's signature, nonce, and expiry. */
@@ -112,6 +119,9 @@ export interface OrderRequest {
   qty: string;
   kind: OrderKind;
   reduce_only?: boolean;
+  /** From V79, the levels the position the order leaves on its side takes, each in place of its own. */
+  take_profit?: string;
+  stop_loss?: string;
   auth?: RequestAuth;
 }
 
@@ -191,7 +201,8 @@ export type Reject =
   | { kind: "expiry_too_far"; latest: number }
   | { kind: "too_many_session_keys"; max: number }
   /** A cancel-all or close-all sequenced before the node's protocol reached V44; it used no nonce. */
-  | { kind: "batch_unsupported" };
+  | { kind: "batch_unsupported" }
+  | LevelReject;
 
 export interface Fill {
   account: Address;
@@ -237,7 +248,7 @@ export type EngineCommand =
   | { type: "tick" }
   | ({ type: "admin"; action?: string } & UpsertMarket)
   | { type: "signed_admin"; command?: { action?: string } & UpsertMarket }
-  | { type: "place_order" | "cancel_order" | "cancel_all" | "close_all" | "withdraw" | "deposit" | "attest_eligibility" | "register_session_key" | "revoke_session_key" };
+  | { type: "place_order" | "cancel_order" | "cancel_all" | "close_all" | "withdraw" | "deposit" | "attest_eligibility" | "register_session_key" | "revoke_session_key" | "access_set_position_levels" };
 
 /** The `set_params` fields of an `AdminCommand::SetParams` as the log serializes them, flat beside `action`. */
 export interface SetParams {

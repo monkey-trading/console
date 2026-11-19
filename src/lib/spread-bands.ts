@@ -5,6 +5,7 @@
 
 import { formatCompactUsd } from "./chart-format";
 import type { ListingNotice, SpreadTier, Tier } from "./engine/types";
+import { spokenRate } from "./fee-words";
 import { fixedFromWire, fixedToNumber, maxFixed, minFixed, ZERO, type Fixed } from "./fixed";
 import { mulTenthBpsRounded, type Rounding } from "./fixed-rounding";
 import { formatRate } from "./format";
@@ -94,5 +95,6 @@ export function describeNotice(notice: ListingNotice): string[] {
   if (notice.spread_tiers !== undefined) lines.push(`${from}, the spreads in this market may change to ${words(bandRows(notice.spread_tiers, spreadRate))}.`);
   if (notice.margin_tiers !== undefined) lines.push(`${from}, the margin rates in this market may change to ${words(bandRows(notice.margin_tiers, marginRate))}.`);
   if (notice.markup_bps !== undefined) lines.push(`${from}, the overnight financing markup in this market may change to ${notice.markup_bps} bps per year.`);
+  if (notice.min_level_distance_bps !== undefined) lines.push(`${from}, the minimum distance for take-profit and stop-loss levels in this market may change to ${spokenRate(notice.min_level_distance_bps)}.`);
   return lines;
 }

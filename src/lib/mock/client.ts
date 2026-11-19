@@ -4,7 +4,7 @@ import { checkAttestation, type AttestationStatus } from "../engine/attestation"
 import { EngineError, type ActionResult, type ClientEvent, type EngineClient, type SignatureChecks, type Unsubscribe } from "../engine/client";
 import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
-import type { EligibilityClass, AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
+import type { EligibilityClass, AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PositionLevelsRequest, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage, MarkResolution } from "../engine/mark-types";
 import type { HouseState } from "../engine/house-state";
 import type { StatusNotice } from "../engine/notice-types";
@@ -16,6 +16,7 @@ import { MockVaultExit } from "./exit";
 import { accountViewOf } from "./account-view";
 import { mockHex } from "./hex";
 import { cancelAll, closeAll } from "./batch";
+import { setPositionLevels } from "./level-request";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";
 import { mockTotals, queuePage, withdraw } from "./funds";
 import { postedStanding } from "./monkey-state";
@@ -219,9 +220,8 @@ export class MockEngineClient implements EngineClient {
     return cancelAll(this.state, request);
   }
 
-  async closeAll(request: CloseAllRequest): Promise<ActionResult> {
-    return closeAll(this.state, request);
-  }
+  async closeAll(request: CloseAllRequest): Promise<ActionResult> { return closeAll(this.state, request); }
+  async setPositionLevels(request: PositionLevelsRequest): Promise<ActionResult> { return setPositionLevels(this.state, request); }
 
   async withdraw(request: WithdrawalRequest): Promise<ActionResult> {
     return withdraw(this.state, request);

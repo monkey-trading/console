@@ -24,7 +24,7 @@ export interface Prefs {
   size: SizePreference;
   /** Whether Cancel all and Close all ask for a second press. */
   confirmBatch: boolean;
-  /** Whether the chart draws the position's entry and the resting orders. */
+  /** Whether the chart draws the position's entry, its take profit and stop loss, and the resting orders. */
   chartLines: boolean;
 }
 
