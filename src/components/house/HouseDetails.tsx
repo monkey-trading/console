@@ -80,7 +80,7 @@ export function Parameters() {
   const simulated = useSession().store.deps.client.signatures === "none";
   const source = params === null ? null : paramsSource(params, simulated);
   return (
-    <Panel title="Trading terms" tip="Changes to these terms take effect only after at least seven days' public notice. The exception is a fast change approved by the operators' vote while operator rotation is active, which can raise the close-out level immediately, but only to reduce risk and only for a limited time. The profit fee can never be set below its launch rates, and its base rate can rise by no more than half of its launch value. The close-out level can move by no more than half of its launch value in either direction.">
+    <Panel title="Trading terms" tip="Changes to these terms take effect after at least seven days' public notice. The only exception is a temporary rise in the close-out level, which the operators can approve at once to reduce risk.">
       {params === null ? (
         <Quiet>{unread(status, "The trading terms have not yet been set.")}</Quiet>
       ) : (

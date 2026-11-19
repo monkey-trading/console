@@ -173,7 +173,7 @@ export function CloseoutMap({ className }: { className?: string }) {
   return (
     <Panel
       title="Close-out map"
-      tip="The price levels at which traders' positions would be closed out. Each band covers a price range, and its shading shows the total size of the positions that would be closed out if the price reached that range. Long positions close out below the current price, and short positions above it."
+      tip="The prices at which traders' positions would be closed out, in bands whose shading shows the total size closed out if the price reached that band. Long positions close out below the current price, and short positions above it."
       className={className}
       controls={
         <>

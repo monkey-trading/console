@@ -49,13 +49,9 @@ const OVER_LIMIT: readonly string[] = [
   "src/components/PositionsView.tsx FEE_USD_TIP",
   "src/components/PositionsView.tsx CLOSE_TIP",
   "src/components/PositionsView.tsx <Term label=\"Details\">",
-  "src/components/house/Charts.tsx <SeriesPanel title=\"House value\">",
-  "src/components/house/CloseoutMap.tsx <Panel title=\"Close-out map\">",
   "src/components/house/HouseDetails.tsx <Panel title=\"Market limits\">",
-  "src/components/house/HouseDetails.tsx <Panel title=\"Trading terms\">",
   "src/components/house/PositionMap.tsx <Panel title=\"Position map\">",
   "src/components/house/Stats.tsx <Row label=\"Distributed\">",
-  "src/lib/ledger-cell.ts COLUMN_NOTE",
 ];
 
 interface Site {
