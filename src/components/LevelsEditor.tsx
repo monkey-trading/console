@@ -7,6 +7,8 @@
  * (`useLevelsEditor`), so the table's and the card's editors are one.
  */
 
+import { useEffectEvent, useLayoutEffect, useRef } from "react";
+
 import { spokenRate } from "@/lib/fee-words";
 import type { Fixed } from "@/lib/fixed";
 import { checkEditorLevels, type LevelFields } from "@/lib/level-check";
@@ -47,10 +49,21 @@ interface Props {
   readOnly: boolean;
   /** Why Save is unavailable to this session, as the row's Close button says it. */
   describedBy: string | undefined;
+  /** The editor is being removed while it holds focus, inside `panel`, its tab panel. */
+  onRemovedWithFocus: (market: MarketModel["id"], panel: HTMLElement | null) => void;
 }
 
-export function LevelsEditor({ id, market, position, fields, onChange, closing, noClosing, capped, limits, toUsdDown, onCancel, onSend, onSaved, saving, onSettled, readOnly, describedBy }: Props) {
+export function LevelsEditor({ id, market, position, fields, onChange, closing, noClosing, capped, limits, toUsdDown, onCancel, onSend, onSaved, saving, onSettled, readOnly, describedBy, onRemovedWithFocus }: Props) {
   const { store } = useSession();
+  const form = useRef<HTMLFormElement>(null);
+  const removedWithFocus = useEffectEvent((panel: HTMLElement | null) => onRemovedWithFocus(market.id, panel));
+  // A layout cleanup runs while the form is still on the page, so it can tell whether the form held focus as it goes.
+  useLayoutEffect(() => {
+    const element = form.current;
+    return () => {
+      if (element !== null && element.contains(document.activeElement)) removedWithFocus(element.closest<HTMLElement>('[role="tabpanel"]'));
+    };
+  }, []);
   const busy = useConsoleValue((state) => state.busy);
   const long = position.qty > 0n;
   const check = checkEditorLevels({ market, qty: position.qty, entry: position.entry, held: position.levels ?? NO_LEVELS, closing, noClosing, capped, limits, fields, toUsdDown });
@@ -68,7 +81,7 @@ export function LevelsEditor({ id, market, position, fields, onChange, closing, 
     });
   };
   return (
-    <form id={id} data-levels-editor className="px-4 py-3 lg:px-1.5" onSubmit={(event) => { event.preventDefault(); save(); }}>
+    <form ref={form} id={id} data-levels-editor className="px-4 py-3 lg:px-1.5" onSubmit={(event) => { event.preventDefault(); save(); }}>
       <LevelInputs title={`Take profit and stop loss for your ${market.symbol} ${long ? "long" : "short"} position`} check={check} fields={fields} onChange={onChange} />
       {closing !== null && <p className="mt-1 text-label leading-relaxed text-fg-3">The price at which your entire position would close is currently {capped === null ? "" : "estimated at "}{formatMark(closing, market.places)}. {capped === null
         ? `A new or moved take profit must be at least ${rate} ${long ? "above" : "below"} that closing price, and a new or moved stop loss at least ${rate} ${long ? "below" : "above"} it.`

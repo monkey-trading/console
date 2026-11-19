@@ -120,7 +120,7 @@ describe("Market info's minimum distance", () => {
 describe("the levels editor", () => {
   const editor = (patch: Partial<Parameters<typeof LevelsEditor>[0]> = {}) => createElement(LevelsEditor, {
     id: "editor", market, position, fields: { takeProfit: "102000", stopLoss: "97500" }, onChange: () => undefined, closing: fixedFromInt(99_980), noClosing: "No closing price is available.", capped: null, limits: null, toUsdDown: (x) => x,
-    onCancel: () => undefined, onSend: () => undefined, onSaved: () => undefined, saving: false, onSettled: () => undefined, readOnly: false, describedBy: undefined, ...patch,
+    onCancel: () => undefined, onSend: () => undefined, onSaved: () => undefined, saving: false, onSettled: () => undefined, readOnly: false, describedBy: undefined, onRemovedWithFocus: () => undefined, ...patch,
   });
 
   it("opens with the position's levels, their estimates and the closing price they are measured from, and offers no save until they change", () => {

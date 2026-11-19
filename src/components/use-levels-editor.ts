@@ -7,7 +7,8 @@
  * dropped once that position is no longer the one held, so a later position in the market, a changed one
  * or another account never inherits it. Each opening is a new instance, and a save that lands later closes
  * only the instance and draft it was sent from, returning focus to the row's Edit button when it held focus. While an
- * instance's save is signed, sent and its account read back, both its editors hold Save.
+ * instance's save is signed, sent and its account read back, both its editors hold Save. An editor a live update removes
+ * while it holds focus gives focus to the row's Edit button too, or to the Positions panel once the row is gone.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -36,6 +37,8 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
   // The draft as the handlers last set it, which a save that lands later compares with; written only in handlers and effects.
   const latest = useRef<LevelsDraft | null>(null);
   const opened = useRef(0);
+  // Where focus goes once an editor removed while it held focus has left the page: set as it is removed, taken once committed.
+  const dropped = useRef<{ market: MarketId; panel: HTMLElement | null } | null>(null);
   const set = (next: LevelsDraft | null) => {
     latest.current = next;
     setDraft(next);
@@ -53,10 +56,18 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
     const active = document.activeElement;
     return active === null || active === document.body || active.closest("[data-levels-editor]") !== null;
   };
+  /** Focuses `market`'s Edit button on screen; false when focus did not land there, as once its row is gone or while it is held. */
   const refocus = (market: MarketId) => {
     const shown = editButtonIds(id, market).map((key) => document.getElementById(key)).find((el) => el !== null && el.offsetParent !== null);
     shown?.focus();
+    return shown !== undefined && document.activeElement === shown;
   };
+  // After every commit, as an editor goes with its row or alone: whatever removed it, its row's Edit button or the panel takes focus.
+  useEffect(() => {
+    const target = dropped.current;
+    dropped.current = null;
+    if (target !== null && !refocus(target.market)) target.panel?.focus();
+  });
   return {
     /** The draft of `market`'s editor while it is open; null while it is closed. */
     draftFor: (market: MarketId): LevelsDraft | null => (current?.market === market ? current : null),
@@ -88,6 +99,10 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
       const refocusing = focusInEditor();
       set(null);
       if (refocusing) refocus(market);
+    },
+    /** `market`'s editor is being removed while it holds focus, inside `panel`: once it is gone, focus moves on. */
+    removedWithFocus: (market: MarketId, panel: HTMLElement | null) => {
+      dropped.current = { market, panel };
     },
     /** A save of `sent` from `instance` landed: what it does to the editor open now is `landedSave`'s. */
     saved: (instance: number, sent: LevelFields, market: MarketId, words: string) => {
