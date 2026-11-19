@@ -36,11 +36,12 @@ describe("ProviderExit's transactions", () => {
     /** The contract's own selectors, from `forge inspect Vault methodIdentifiers`: they fail here if a struct's fields drift from Solidity's. */
     it.each([
       ["0x388ad794", { kind: "start", terms: proof.terms }],
-      ["0xa7f2f3a3", { kind: "account", proof: account, amount: 1n }],
+      ["0xa7f2f3a3", { kind: "account", proof: account, amount: 1n, withCredits: false }],
       ["0x0456f49a", { kind: "approval", proof: approval, amount: 1n }],
       ["0x497ce3cf", { kind: "queued", proof: queued, amount: 1n }],
       ["0xde190295", { kind: "distribution", proof: distribution, amount: 1n }],
-      ["0xdfa0eac4", { kind: "refund", proof: pending, amount: 1n }],
+      ["0x66dbacab", { kind: "credits", account: ACCOUNT, proofs: [pending], part: 1, parts: 1, amount: null }],
+      ["0x18b3a38c", { kind: "refund", proof: pending, amount: 1n }],
       ["0x6de0de7e", { kind: "refund-unheld", id: 7, amount: 1n }],
       ["0x720747c6", { kind: "claim" }],
     ] as const)("calls %s on the vault", async (selector, step) => {
@@ -51,7 +52,7 @@ describe("ProviderExit's transactions", () => {
     });
 
     it("carries the account's values in the vault's raw units", async () => {
-      await exit.send({ kind: "account", proof: account, amount: 1n });
+      await exit.send({ kind: "account", proof: account, amount: 1n, withCredits: false });
       const { args } = decodeFunctionData({ abi: EXIT_VAULT, data: chain.sentData[0]?.data ?? "0x" });
       const [to, state, positions, markets] = args as unknown as [string, { balance: bigint; openPositions: number; siblings: readonly string[] }, { qty: bigint; entry: bigint }[], { marked: boolean; mark: bigint; quoteCurrency: number; fxMarked: boolean }[]];
       expect(to.toLowerCase()).toBe(ACCOUNT);
@@ -72,14 +73,14 @@ describe("ProviderExit's transactions", () => {
     it("carries a pending deposit's reference as its UTF-8 bytes", async () => {
       await exit.send({ kind: "refund", proof: pending, amount: 1n });
       const { args } = decodeFunctionData({ abi: EXIT_VAULT, data: chain.sentData[0]?.data ?? "0x" });
-      expect((args as unknown as [Hex])[0]).toBe("0x3078666565643a31"); // "0xfeed:1"
+      expect(args as unknown as [{ chainRef: Hex; depositId: bigint }, number]).toEqual([expect.objectContaining({ chainRef: "0x3078666565643a31", depositId: 2n }), 34]); // "0xfeed:1", as a pending deposit's leaf
     });
 
     it("carries a queued request's ticket and a market's quote currency", async () => {
       await exit.send({ kind: "queued", proof: queued, amount: 1n });
       expect((decodeFunctionData({ abi: EXIT_VAULT, data: chain.sentData[0]?.data ?? "0x" }).args as unknown as [{ ticket: bigint }])[0].ticket).toBe(7n);
       const jpy = { ...account, markets: account.markets.map((market) => ({ ...market, leaf: { ...market.leaf, quote_currency: { currency: "jpy" as const, fx_market: 9 }, fx_mark: "150" } })) };
-      await exit.send({ kind: "account", proof: jpy, amount: 1n });
+      await exit.send({ kind: "account", proof: jpy, amount: 1n, withCredits: false });
       const [, , , markets] = decodeFunctionData({ abi: EXIT_VAULT, data: chain.sentData[1]?.data ?? "0x" }).args as unknown as [unknown, unknown, unknown, { quoteCurrency: number; fxMarket: number; fxMarked: boolean; fxMark: bigint }[]];
       expect(markets[0]).toMatchObject({ quoteCurrency: 3, fxMarket: 9, fxMarked: true, fxMark: 150_000_000_000n });
     });

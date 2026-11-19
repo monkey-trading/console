@@ -62,9 +62,10 @@ export default function Page() {
           the app sends it through your wallet to your wallet&apos;s chain provider, as a query of the
           vault&apos;s verifier, and a claim that you register publishes it on chain. The proof is sent nowhere
           else unless you export it to a file. It remains after you disconnect, until a later proof replaces it,
-          the server shows that your account holds nothing, the vault rejects it, or you clear this site&apos;s
-          data. Anyone who can read this browser&apos;s storage or the exported file can see the figures in the
-          proof, but cannot use them to move your funds.
+          the server shows at a later snapshot that your account holds nothing, or you clear this site&apos;s
+          data. A proof that the vault rejects also remains, unused, because a rejection can come from a
+          mismatch between this app and the vault&apos;s contracts rather than from the proof. Anyone who can read this browser&apos;s storage or
+          the exported file can see the figures in the proof, but cannot use them to move your funds.
         </p>
         <p className={P}>
           Your activity in the app leaves your browser only for the party that needs it. Your account&apos;s

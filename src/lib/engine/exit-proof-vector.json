@@ -168,5 +168,76 @@
     ]
    }
   ]
+ },
+ "credited": {
+  "seq": 18,
+  "root": "0x9d69d4e04f04d23c6448b7731307cd8d07769ed566c817b8fb6e2a575bc617e6",
+  "terms": {
+   "seq": 18,
+   "root": "0x9d69d4e04f04d23c6448b7731307cd8d07769ed566c817b8fb6e2a575bc617e6",
+   "terms": {
+    "deposit_cursor": 4,
+    "deposit_base": 0,
+    "pending": "52",
+    "held": "30",
+    "unheld": "0",
+    "held_receipts": "182",
+    "gaps": []
+   },
+   "siblings": [
+    "0xf417fe82243625ea76c852f5b3b6d1ea1eb0371f906b9d4c4c0e19289f3896f8",
+    "0x5cd576071cd5166d923b53fd3a3d4fcacb1820a2cb210ed169c744c0de423e8c",
+    "0x7fdf0b66a172d384913ade8e1c104ddaee87235dffecc61fd870118da403bcee",
+    "0xf25bf1ea37036e7fb548ed4efcf8fabeb59d40cb97e46c089bb342b035b97062"
+   ]
+  },
+  "account": {
+   "seq": 18,
+   "root": "0x9d69d4e04f04d23c6448b7731307cd8d07769ed566c817b8fb6e2a575bc617e6",
+   "account": "0x1a642f0e3c3af545e7acbd38b07251b3990914f1",
+   "leaf": {
+    "balance": "100",
+    "unfinalised_deposits": "100",
+    "withdrawal_nonce": 0,
+    "toxicity_bps": 0,
+    "open_positions": 0
+   },
+   "siblings": [
+    "0x7a946ae7dd5ca5cad19d1a1d9f1644f88a18c5ee7ce768cc2d0d60ad24e2e832",
+    "0xe0a73ee564735b5d82b4f85f4510812b3ca1d3a93449d54ecad0a370f5d00323",
+    "0xed64a0688623715cd7273de78a5aa919172ccf5235dc1a3c396ddbd611dbb04a",
+    "0xfd32f452d3205e95c29a65c36dbe9cac231591dd3578286fb617aea6a13b0991",
+    "0x4c14259f7905ab1f1c787228a29aca8379887930f7e1437d146e218e01c8e33b"
+   ],
+   "positions": [],
+   "markets": []
+  },
+  "approvals": [],
+  "queued": [],
+  "distribution": null,
+  "pending_deposits": [],
+  "unfinalised_credits": [
+   {
+    "seq": 18,
+    "root": "0x9d69d4e04f04d23c6448b7731307cd8d07769ed566c817b8fb6e2a575bc617e6",
+    "chain_ref": "00000000000000000100:0x0101010101010101010101010101010101010101010101010101010101010101:0x4040404040404040404040404040404040404040404040404040404040404040:0",
+    "deposit": {
+     "deposit_id": 0,
+     "account": "0x1a642f0e3c3af545e7acbd38b07251b3990914f1",
+     "payer": "0x1a642f0e3c3af545e7acbd38b07251b3990914f1",
+     "amount": "100"
+    },
+    "siblings": [
+     "0xf417fe82243625ea76c852f5b3b6d1ea1eb0371f906b9d4c4c0e19289f3896f8",
+     "0x2ad8ee150743b57c154b1a0adeba5f546f843d7cf2cbcebf45b14d44df304bb6",
+     "0xdeccb6886db818a2af91eba94295f378d0b176d9f27754f446eaaf49da453dcf",
+     "0xe4ee3f236d504156a0c1ef4f977e01275540098e86099682a3d603b015d556e1",
+     "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "0xf2cd4584d6628c32c2df08206a7df089dfc2815befce4c5e1bf0ac23c6ed40eb",
+     "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "0xf2eddab8be61dae8fec72df3c349702580ac0c7b26863c95558d240fa42d4e66"
+    ]
+   }
+  ]
  }
 }

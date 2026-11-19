@@ -4,11 +4,11 @@
  * node, and every read is the wallet's own, so a value is as good as the chain the wallet reads.
  */
 
-import { decodeAbiParameters, decodeEventLog, encodeFunctionData, type Hex } from "viem";
+import { decodeAbiParameters, encodeFunctionData, type Hex } from "viem";
 
-import { fixedFromWire } from "../fixed";
-import { USDC_UNIT } from "../vault";
-import { accountArgs, approvalArgs, EXIT_STAKING, EXIT_VAULT, EXIT_VERIFIER, pendingArgs, queuedArgs, termsArgs } from "./exit-abi";
+import { approvalArgs, EXIT_STAKING, EXIT_VAULT, EXIT_VERIFIER, PENDING_DEPOSIT_LEAF, previewArgs, queuedArgs, receiptLeaf, termsArgs, UNFINALISED_CREDIT_LEAF } from "./exit-abi";
+import { exitPaidIn, stepAction, stepCalldata } from "./exit-calldata";
+import { verifierRefusal } from "./exit-refusal";
 import type { ExitCheck, ExitClaimFacts, ExitPendingProof, ExitProof, ExitStep, ExitWallet, VaultExitFacts } from "./exit-types";
 import { isRevert } from "./provider-errors";
 import { hexOf, type Eip1193Provider, type WalletChain } from "./provider-wallet";
@@ -22,36 +22,6 @@ const BLOCK_TIMESTAMP: Hex = "0x4260005260206000f3";
 const DEPOSIT_SCAN = 1_024;
 
 type SendVault = (data: Hex, action: string, progress: Progress) => Promise<string>;
-
-/** What a step asks the wallet to do, finishing "Confirm the request in your wallet to …". */
-function stepAction(step: ExitStep): string {
-  switch (step.kind) {
-    case "start": return "start the vault's exit";
-    case "account": return "register your balance and positions";
-    case "approval": return `register withdrawal ${step.proof.approval.nonce}`;
-    case "queued": return "register your queued withdrawal";
-    case "distribution": return "register your distribution";
-    case "refund": return `refund deposit ${step.proof.deposit.deposit_id}`;
-    case "refund-unheld": return `refund deposit ${step.id}`;
-    case "claim": return "claim your funds from the vault";
-    default: return step satisfies never;
-  }
-}
-
-/** A step's call on the vault. */
-function stepCalldata(step: ExitStep, account: Hex): Hex {
-  switch (step.kind) {
-    case "start": return encodeFunctionData({ abi: EXIT_VAULT, functionName: "startExit", args: termsArgs(step.terms) });
-    case "account": return encodeFunctionData({ abi: EXIT_VAULT, functionName: "registerExit", args: accountArgs(step.proof) });
-    case "approval": return encodeFunctionData({ abi: EXIT_VAULT, functionName: "registerExitWithdrawal", args: approvalArgs(step.proof) });
-    case "queued": return encodeFunctionData({ abi: EXIT_VAULT, functionName: "registerExitQueued", args: queuedArgs(step.proof) });
-    case "distribution": return encodeFunctionData({ abi: EXIT_VAULT, functionName: "registerExitDistribution", args: [hexOf(step.proof.account), BigInt(step.proof.entitled), step.proof.siblings.map(hexOf)] });
-    case "refund": return encodeFunctionData({ abi: EXIT_VAULT, functionName: "refundPendingDeposit", args: pendingArgs(step.proof) });
-    case "refund-unheld": return encodeFunctionData({ abi: EXIT_VAULT, functionName: "refundDeposit", args: [BigInt(step.id)] });
-    case "claim": return encodeFunctionData({ abi: EXIT_VAULT, functionName: "claimExit", args: [account] });
-    default: return step satisfies never;
-  }
-}
 
 export class ProviderExit implements ExitWallet {
   private verifier: Hex | null = null;
@@ -140,7 +110,7 @@ export class ProviderExit implements ExitWallet {
   /**
    * Error cases:
    * - a read fails or the wallet moves chain; a verifier that refuses, by answering false or by
-   *   reverting `accountClaim`, is an `ok: false` outcome
+   *   reverting `previewClaim`, is an `ok: false` outcome, whose reason names the error it reverted with
    */
   async check(proof: ExitProof, root: string): Promise<ExitCheck> {
     await this.onChain();
@@ -153,10 +123,10 @@ export class ProviderExit implements ExitWallet {
     let accountClaim = 0n;
     if (proof.account !== null) {
       try {
-        accountClaim = await this.uint(verifier, encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "accountClaim", args: [bytes, ...accountArgs(proof.account)] }));
+        accountClaim = await this.previewRead(verifier, root, proof);
       } catch (error) {
         if (!isRevert(error)) throw error;
-        return refused("balance and positions");
+        return { ok: false, reason: verifierRefusal("balance and positions", error) };
       }
     }
     const paidApprovals: number[] = [];
@@ -182,10 +152,30 @@ export class ProviderExit implements ExitWallet {
       finalDistributionOwed = entitled > finalPaid ? entitled - finalPaid : 0n;
     }
     for (const held of proof.pending_deposits) {
-      if (!(await proves(encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "provesPending", args: [bytes, ...pendingArgs(held)] })))) return refused(`pending deposit ${held.deposit.deposit_id}`);
+      if (!(await this.receipt(verifier, root, held)).proven) return refused(`pending deposit ${held.deposit.deposit_id}`);
     }
     await this.onChain();
     return { ok: true, paidApprovals, accountClaim, distributionOwed, finalPaidApprovals: paidApprovals.filter((nonce) => this.finallyPaid.has(nonce)), finalDistributionOwed };
+  }
+
+  /** The verifier's `previewClaim` of `proof`'s account, which a revert refuses. */
+  private previewRead(verifier: Hex, root: string, proof: ExitProof): Promise<bigint> {
+    return proof.account === null ? Promise.resolve(0n) : this.uint(verifier, encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "previewClaim", args: previewArgs(root, proof.account, proof.unfinalised_credits) }));
+  }
+
+  /**
+   * Error cases:
+   * - a read fails or the wallet moves chain; a verifier that reverts is a null answer
+   */
+  async preview(proof: ExitProof, root: string): Promise<bigint | null> {
+    await this.onChain();
+    const verifier = await this.verifierAddress();
+    try {
+      return await this.previewRead(verifier, root, proof);
+    } catch (error) {
+      if (!isRevert(error)) throw error;
+      return null;
+    }
   }
 
   /** Whether the vault shows approval `nonce` paid at the chain's head; a wallet that cannot read a finalized block only costs the read being asked again. */
@@ -208,10 +198,11 @@ export class ProviderExit implements ExitWallet {
     return record;
   }
 
-  /** Whether the vault's record of a pending deposit is what `refundPendingDeposit` compares it with: a reorganisation can put another payer or amount at its id. */
-  private async recordMatches(deposit: ExitPendingProof["deposit"]): Promise<boolean> {
-    const record = await this.depositRecord(deposit.deposit_id);
-    return record.payer === deposit.payer && record.amount * USDC_UNIT === fixedFromWire(deposit.amount);
+  /** The verifier's word on a pending deposit's receipt at `root`: whether it proves, and whether the vault's record of its deposit has its account, payer and amount, as `refundReceipt` compares them: a reorganisation can put another deposit at its id. */
+  private async receipt(verifier: Hex, root: string, held: ExitPendingProof, kind = PENDING_DEPOSIT_LEAF): Promise<{ proven: boolean; matched: boolean }> {
+    const answer = await this.call(verifier, encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "provesReceipt", args: [hexOf(root), receiptLeaf(held), kind] }));
+    const [proven, matched] = decodeAbiParameters([{ type: "bool" }, { type: "bool" }], answer);
+    return { proven, matched };
   }
 
   /** The account's deposits the exit root does not hold, which `refundDeposit` takes by id alone: from the exit's cursor on, and the gaps below it that `proof` names. */
@@ -243,16 +234,37 @@ export class ProviderExit implements ExitWallet {
     for (const { queued } of proof?.queued ?? []) if (await this.bool(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "exitQueuedRegistered", args: [BigInt(queued.requested_seq)] }))) queuedRegistered.push(queued.requested_seq);
     const approvalsUsed: number[] = [];
     for (const { approval } of proof?.approvals ?? []) if (await this.paid(account, approval.nonce)) approvalsUsed.push(approval.nonce);
+    const verifier = await this.verifierAddress();
     const refunded: number[] = [];
     const mismatched: number[] = [];
-    for (const { deposit } of proof?.pending_deposits ?? []) {
-      if (await this.bool(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "depositRefunded", args: [BigInt(deposit.deposit_id)] }))) refunded.push(deposit.deposit_id);
-      else if (!(await this.recordMatches(deposit))) mismatched.push(deposit.deposit_id);
+    const receiptRefunds: ExitClaimFacts["receiptRefunds"] = [];
+    // A receipt the vault's records do not match refunds the vault's own deposit at its id to whoever paid it, which is worth offering when this account did.
+    const unmatched = async (held: ExitPendingProof, leafKind: number): Promise<boolean> => {
+      const id = held.deposit.deposit_id;
+      if (proof === null || (await this.receipt(verifier, proof.root, held, leafKind)).matched) return false;
+      const record = await this.depositRecord(id);
+      if (record.payer === this.address.toLowerCase() && record.amount > 0n) receiptRefunds.push({ id, amount: record.amount, proof: held, leafKind });
+      return true;
+    };
+    const refundedAt = (id: number) => this.bool(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "depositRefunded", args: [BigInt(id)] }));
+    for (const held of proof?.pending_deposits ?? []) {
+      const id = held.deposit.deposit_id;
+      if (await refundedAt(id)) refunded.push(id);
+      else if (await unmatched(held, PENDING_DEPOSIT_LEAF)) mismatched.push(id);
+    }
+    const creditsCounted: number[] = [];
+    const creditsUnmatched: number[] = [];
+    for (const held of proof?.unfinalised_credits ?? []) {
+      const id = held.deposit.deposit_id;
+      if (await this.bool(verifier, encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "creditCounted", args: [BigInt(id)] }))) creditsCounted.push(id);
+      // Registering counts every credit, matched or not, and the vault's deposit behind an unmatched one stays refundable while claims register.
+      if (!(await refundedAt(id)) && (await unmatched(held, UNFINALISED_CREDIT_LEAF))) creditsUnmatched.push(id);
     }
     return {
-      accountRegistered: await this.bool(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "exitAccountRegistered", args: [account] })),
+      accountRegistered: await this.bool(verifier, encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "exitRegistered", args: [account] })),
       distributionRegistered: await this.bool(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "exitDistributionRegistered", args: [account] })),
-      queuedRegistered, approvalsUsed, refunded, mismatched,
+      queuedRegistered, approvalsUsed, refunded, mismatched, receiptRefunds, creditsUnmatched, creditsCounted,
+      accountClaimed: await this.uint(verifier, encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "exitClaimed", args: [account] })),
       exitClaim: await this.uint(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "exitClaims", args: [account] })),
       exitDistributionClaim: await this.uint(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "exitDistributionClaims", args: [account] })),
       distributionPaid: await this.uint(vault, encodeFunctionData({ abi: EXIT_VAULT, functionName: "distributionsClaimed", args: [account] })),
@@ -270,25 +282,8 @@ export class ProviderExit implements ExitWallet {
     return (await this.uint(staking, encodeFunctionData({ abi: EXIT_STAKING, functionName: "unstakes", args: [account] }))) > 0n;
   }
 
-  /** The vault's `ExitPaid` amount for this account in a mined `claimExit`; null when the receipt does not show one, which says nothing of the payment. */
-  private async paidBy(hash: string): Promise<bigint | null> {
-    const receipt = await withinMs(this.provider, { method: "eth_getTransactionReceipt", params: [hash] }, WALLET_READ_MS).catch(() => null);
-    // A receipt's shape is the JSON-RPC spec's; each field read below is checked before use.
-    const logs = (typeof receipt === "object" && receipt !== null && "logs" in receipt && Array.isArray(receipt.logs) ? receipt.logs : []) as { address?: string; topics?: [Hex, ...Hex[]]; data?: Hex }[];
-    for (const log of logs) {
-      if (log.address?.toLowerCase() !== this.chain.vault.toLowerCase() || log.topics === undefined || log.data === undefined) continue;
-      try {
-        const event = decodeEventLog({ abi: EXIT_VAULT, topics: log.topics, data: log.data });
-        if (event.eventName === "ExitPaid" && event.args.account.toLowerCase() === this.address) return event.args.amount;
-      } catch {
-        continue; // another of the vault's events, which this ABI does not list
-      }
-    }
-    return null;
-  }
-
   async send(step: ExitStep, progress: Progress = () => undefined): Promise<{ hash: string; paid: bigint | null }> {
     const hash = await this.sendVault(stepCalldata(step, hexOf(this.address)), stepAction(step), progress);
-    return { hash, paid: step.kind === "claim" ? await this.paidBy(hash) : null };
+    return { hash, paid: step.kind === "claim" ? await exitPaidIn(this.provider, this.chain.vault, this.address, hash) : null };
   }
 }

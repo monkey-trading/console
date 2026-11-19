@@ -1,7 +1,7 @@
 /** What the exit panel says, from the store's state: its lines in plain words, what it offers, and the one line every page shows when something needs the trader. */
 
 import type { ExitRecord } from "../engine/exit-file";
-import { claimWindowEnd, exitPhase, provenTotal, refundSteps, registeredTotal, registerSteps } from "../engine/exit-steps";
+import { claimWindowEnd, exitPhase, provenTotal, refundSteps, registeredTotal, registerSteps, type RefundStep } from "../engine/exit-steps";
 import type { ExitClaimFacts, ExitPhase, ExitStep } from "../engine/exit-types";
 import { asSentence, groupThousands, shortHex } from "../format";
 import { formatSpanWords, formatStamp } from "../time";
@@ -28,7 +28,7 @@ export interface ExitView {
   canStart: boolean;
   /** What is left to register, in order. */
   register: ExitStep[];
-  refunds: Extract<ExitStep, { kind: "refund" | "refund-unheld" }>[];
+  refunds: RefundStep[];
   /** What the vault holds registered and unpaid, in USDC base units; null before it is read. */
   registered: bigint | null;
   /** Whether the vault would pay a claim now. */
@@ -55,8 +55,8 @@ function attemptLine(attempt: ExitAttempt, started: boolean): ExitLine {
     case "not-covered": return { tone: "calm", text: started ? "The vault's final snapshot predates this account's current holdings, so it does not include any of them. Any deposit that the snapshot does not include can be refunded below." : "The vault's latest snapshot predates this account's current holdings, so the proof will be available with the next snapshot." };
     case "node-failed": return { tone: "calm", text: `The proof could not be obtained from the server. ${asSentence(attempt.reason)} The app will try again automatically.` };
     case "node-away": return { tone: "warn", text: `A proof cannot be obtained from the server at the moment. ${asSentence(attempt.reason)}` };
-    case "refused": return { tone: "bad", text: `The server's proof failed the vault's check, so it was not saved. ${asSentence(attempt.reason)}` };
-    case "saved-refused": return { tone: "bad", text: `The proof saved in this browser failed the vault's check, so it was removed. ${asSentence(attempt.reason)}` };
+    case "refused": return { tone: "bad", text: `${attempt.unread === true ? "The server's proof could not be read" : "The server's proof failed the vault's check"}, so it was not saved. ${asSentence(attempt.reason)}` };
+    case "saved-refused": return { tone: "bad", text: `The proof saved in this browser failed the vault's check, so it is kept but not used until a later check passes. ${asSentence(attempt.reason)}` };
     case "wallet-failed": return { tone: "calm", text: `Your wallet could not check the proof. ${asSentence(attempt.reason)} The app will try again automatically.` };
     default: return attempt satisfies never;
   }
@@ -105,10 +105,16 @@ function nothingLine(unheld: number): string {
   return `There is no proof to save, because this account's only holding in the vault is the ${unheld === 1 ? "deposit below, which needs" : "deposits below, which need"} no proof.`;
 }
 
-/** What the panel says of pending deposits the vault's record disagrees with, which its refund would revert on. */
+/** What the panel says of pending deposits the vault's records disagree with, whose refund through the proof would pay whoever made the vault's deposit at that number. */
 function mismatchLine(ids: readonly number[]): ExitLine {
   const one = ids.length === 1;
-  return { tone: "warn", text: `${one ? "Deposit" : "Deposits"} ${ids.join(", ")} ${one ? "does" : "do"} not match the vault's record, so the vault would reject ${one ? "its refund" : "their refunds"}. The proof remains saved.` };
+  return { tone: "warn", text: `${one ? "Deposit" : "Deposits"} ${ids.join(", ")} ${one ? "does" : "do"} not match the vault's ${one ? "record of that deposit, so this proof cannot be used to refund it" : "records of those deposits, so this proof cannot be used to refund them"}. The proof remains saved.` };
+}
+
+/** What the panel says of unconfirmed deposits the vault's records disagree with, which add nothing to the claim. */
+function unmatchedCreditsLine(ids: readonly number[]): ExitLine {
+  const one = ids.length === 1;
+  return { tone: "warn", text: `${one ? "Unconfirmed deposit" : "Unconfirmed deposits"} ${ids.join(", ")} ${one ? "does not match the vault's record of that deposit, so it does" : "do not match the vault's records of those deposits, so they do"} not count towards your claim.` };
 }
 
 /** Whether the browser's storage has nothing to keep for the account: one known to hold nothing, with no proof in the page. */
@@ -126,10 +132,14 @@ function noticeOf(exit: ExitState, phase: ExitPhase, current: boolean, standing:
   const age = record === null ? 0 : vault.chainNow - record.checkpointAt;
   const missingFor = exit.missingSince === null ? 0 : vault.chainNow - exit.missingSince;
   if (record === null && !exit.nothing && vault.hasCheckpoint && missingFor >= BEHIND_NOTICE_SECONDS) notice = { tone: "warn", text: "This browser has no exit proof for the vault's latest snapshot." };
-  if (attempt?.kind === "refused" || attempt?.kind === "saved-refused") notice = { tone: "warn", text: "Your exit proof failed the vault's check." };
+  const refusal: ExitLine | null = attempt?.kind === "refused" || attempt?.kind === "saved-refused" ? { tone: "warn", text: attempt.kind === "refused" && attempt.unread === true ? "The server's exit proof could not be read." : `Your exit proof failed the vault's check. ${asSentence(attempt.reason)}` } : null;
+  notice = refusal ?? notice;
+  const unaccepted = acceptedRecord(exit) === null;
   if (current && acceptedRecord(exit) === null && exit.checkFailures >= FAILURES_NOTICED) notice = { tone: "warn", text: "Your wallet could not check your exit proof against the vault." };
   // Its age alone is no alarm: the first checkpoint after a quiet spell leaves an old proof behind for only as long as the next read takes.
   if (record !== null && !current && age >= BEHIND_NOTICE_SECONDS && !exit.nothing && behindLasts(exit)) notice = { tone: "warn", text: `Your exit proof is ${spanOf(age)} old and does not reflect the vault's latest snapshot.` };
+  // Why the latest proof failed says more than that the one kept is old.
+  if (refusal !== null && unaccepted) notice = refusal;
   // An account known to hold nothing has no part in the exit, so no page interrupts it; the panel still says where the vault stands.
   const windowEnd = vault.exitStartedAt === 0 ? null : claimWindowEnd(vault);
   if (phase === "due" && !exit.nothing) notice = { tone: "warn", text: `The vault has not recorded a snapshot for ${spanOf(vault.chainNow - vault.lastCheckpointAt)}, so the vault's exit can now be started.` };
@@ -138,6 +148,8 @@ function noticeOf(exit: ExitState, phase: ExitPhase, current: boolean, standing:
     if (exit.nothing || nothingToRegister) notice = refundable ?? notice;
     else notice = allRegistered ? { tone: "warn", text: `Your claim is registered, and the vault will pay it after ${stamp(windowEnd)}.` } : { tone: "bad", text: `The vault's exit has started. Register your claim by ${stamp(windowEnd)}.` };
   }
+  // Without a proof the vault accepts, nothing can be registered, so why the proof failed outranks the exit's start and its deadline.
+  if (refusal !== null && (phase === "due" || phase === "open") && unaccepted) notice = phase === "open" ? { tone: "bad", text: `The vault's exit has started, but ${refusal.text.charAt(0).toLowerCase()}${refusal.text.slice(1)}` } : refusal;
   if (phase === "closed") notice = canClaim ? { tone: "bad", text: `The vault's claim window has closed. ${claims === null ? "You can now collect your registered claim." : `You can now collect the ${usdc(registeredTotal(claims))} you registered.`}` } : refundable ?? notice;
   return notice;
 }
@@ -173,6 +185,7 @@ export function exitView(exit: ExitState, wallet: { address: string; readOnly?: 
     if (current || !warnBehind) lines.push({ tone: "calm", text: `A proof for snapshot ${groupThousands(record.proof.seq)}, which the vault recorded ${spanOf(age)} ago, is saved in this browser.${savedFigures(exit, record, current)}` });
     else lines.push({ tone: "warn", text: `Your saved proof is for snapshot ${groupThousands(record.proof.seq)}, which the vault recorded ${spanOf(age)} ago. ${phase === "none" ? `The proof has been behind the vault's latest snapshot, ${groupThousands(vault.latestSeq)}, for more than ${spanOf(BEHIND_NOTICE_SECONDS)}, so the vault would reject a claim based on it if the server stopped now.` : `The vault's latest snapshot is ${groupThousands(vault.latestSeq)}, so the vault would reject a claim based on the saved proof.`}` });
   } else if (exit.nothing) lines.push({ tone: "calm", text: nothingLine(claims?.unheld.length ?? 0) });
+  else if (exit.refused !== null) lines.push({ tone: "warn", text: "No proof that passes the vault's check is saved in this browser for this account." });
   else if (attempt === null || (attempt.kind === "node-ahead" && !warnBehind)) lines.push({ tone: "calm", text: "No proof is saved in this browser yet." });
   else lines.push({ tone: attempt.kind === "node-ahead" || attempt.kind === "node-away" || attempt.kind === "refused" || attempt.kind === "saved-refused" ? "warn" : "calm", text: "No proof is saved in this browser for this account." });
   // A read that failed says so even of an account known to hold nothing: that is what it was reading to check.
@@ -180,14 +193,17 @@ export function exitView(exit: ExitState, wallet: { address: string; readOnly?: 
   if (!exit.reading && !exit.importing && (!exit.nothing || failedRead) && attempt !== null && (!current || attempt.kind === "wallet-failed") && (attempt.kind !== "node-ahead" || warnBehind)) lines.push(attemptLine(attempt, vault.exitStartedAt !== 0));
   if (exit.vaultProblem !== null) lines.push({ tone: readTone, text: `Your wallet could not reach the vault just now, so the figures shown are from the last successful check. ${asSentence(exit.vaultProblem)} The app will try again automatically.` });
   const started = phase === "open" || phase === "closed";
-  if (started && accepted !== null && claims !== null && claims.mismatched.length > 0) lines.push(mismatchLine(claims.mismatched));
+  // A receipt's refund is taken only while claims register.
+  const refunds = started && claims !== null ? refundSteps(accepted, claims).filter((step) => step.kind !== "refund-receipt" || phase === "open") : [];
+  const unrefundable = claims?.mismatched.filter((id) => !refunds.some((step) => step.kind === "refund-receipt" && step.id === id)) ?? [];
+  if (started && accepted !== null && unrefundable.length > 0) lines.push(mismatchLine(unrefundable));
+  if (started && accepted !== null && claims !== null && claims.creditsUnmatched.length > 0) lines.push(unmatchedCreditsLine(claims.creditsUnmatched));
   // `Vault._settle` fills client claims first, and distribution claims from what is left.
   if (started && ((accepted?.distributionOwed ?? 0n) > 0n || (claims?.exitDistributionClaim ?? 0n) > 0n)) lines.push({ tone: "calm", text: "Staking distributions are paid only from the funds that remain after traders' claims have been paid." });
   const canClaim = phase === "closed" && registered !== null && registered > 0n && !exit.claimed;
   const left = phase === "open" && accepted !== null && claims !== null ? registerSteps(accepted, claims) : [];
   const allRegistered = phase === "open" && accepted !== null && claims !== null && left.length === 0 && registered !== null && registered > 0n;
   const nothingToRegister = phase === "open" && accepted !== null && claims !== null && left.length === 0 && registered === 0n;
-  const refunds = started && claims !== null ? refundSteps(accepted, claims) : [];
   return {
     ...base, phase, windowEnd, lines: [...lines, ...extras],
     rebuild: phase !== "none" && vault.hasCheckpoint && !current && !exit.nothing ? `engine exit-proof --log <copy of the public log> --seq ${vault.latestSeq} --account ${wallet.address}` : null,
@@ -206,10 +222,12 @@ export function stepKey(step: ExitStep): string {
     case "account":
     case "distribution":
     case "claim": return step.kind;
+    case "credits": return `credits-${step.part}`;
     case "approval": return `approval-${step.proof.approval.nonce}`;
     case "queued": return `queued-${step.proof.queued.requested_seq}`;
     case "refund": return `refund-${step.proof.deposit.deposit_id}`;
-    case "refund-unheld": return `refund-${step.id}`;
+    case "refund-unheld":
+    case "refund-receipt": return `refund-${step.id}`;
     default: return step satisfies never;
   }
 }
@@ -218,12 +236,17 @@ export function stepKey(step: ExitStep): string {
 export function stepLabel(step: ExitStep): string {
   switch (step.kind) {
     case "start": return "Start the vault's exit";
-    case "account": return `Balance and positions: ${usdc(step.amount)}`;
+    case "account": return `Balance and positions${step.withCredits ? ", including unconfirmed deposits" : ""}: ${usdc(step.amount)}`;
+    case "credits": {
+      const name = step.parts === 1 ? "Unconfirmed deposits" : `Unconfirmed deposits, part ${step.part} of ${step.parts}`;
+      return step.amount === null ? name : `${name}: ${usdc(step.amount)}${step.parts === 1 ? "" : " in all"}`;
+    }
     case "approval": return `Withdrawal ${step.proof.approval.nonce}: ${usdc(step.amount)}`;
     case "queued": return `Queued withdrawal: ${usdc(step.amount)}`;
     case "distribution": return `Staking distribution: ${usdc(step.amount)}`;
     case "refund": return `Deposit ${step.proof.deposit.deposit_id}: ${usdc(step.amount)} refunded to ${step.proof.deposit.payer === null ? "the address that paid it" : shortHex(step.proof.deposit.payer)}`;
-    case "refund-unheld": return `Deposit ${step.id}: ${usdc(step.amount)} refunded to your wallet`;
+    case "refund-unheld":
+    case "refund-receipt": return `Deposit ${step.id}: ${usdc(step.amount)} refunded to your wallet`;
     case "claim": return "Claim from the vault";
     default: return step satisfies never;
   }

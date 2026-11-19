@@ -95,10 +95,13 @@ describe("exitView, when the proof has gone stale", () => {
     const view = exitView({ ...NO_EXIT, vault: factsAt(100), record: recordAt(100), attempt: { kind: "wallet-failed", reason: "no answer" } }, WALLET);
     expect(view.lines.at(-1)).toEqual({ tone: "calm", text: "Your wallet could not check the proof. No answer. The app will try again automatically." });
   });
-  it("says a saved proof the vault refused was removed", () => {
-    const view = exitView({ ...NO_EXIT, vault: factsAt(100), attempt: { kind: "saved-refused", reason: "the root does not prove it" } }, WALLET);
-    expect(view.lines.at(-1)).toEqual({ tone: "bad", text: "The proof saved in this browser failed the vault's check, so it was removed. The root does not prove it." });
-    expect(view.notice?.text).toBe("Your exit proof failed the vault's check.");
+  it("says a saved proof the vault refused remains saved but unused", () => {
+    const view = exitView({ ...NO_EXIT, vault: factsAt(100), refused: recordAt(100), attempt: { kind: "saved-refused", reason: "the root does not prove it" } }, WALLET);
+    expect(view.lines).toEqual([
+      { tone: "warn", text: "No proof that passes the vault's check is saved in this browser for this account." },
+      { tone: "bad", text: "The proof saved in this browser failed the vault's check, so it is kept but not used until a later check passes. The root does not prove it." },
+    ]);
+    expect(view.notice?.text).toBe("Your exit proof failed the vault's check. The root does not prove it.");
   });
   it("is calm when the vault's latest checkpoint is only older than the account's funds", () => {
     const view = exitView({ ...NO_EXIT, vault: factsAt(100), attempt: { kind: "not-covered" } }, WALLET);
@@ -120,8 +123,14 @@ describe("exitView, when the proof has gone stale", () => {
     expect(exitView({ ...behind, attempt: { kind: "node-failed", reason: "x" } }, WALLET).lines.at(-1)).toEqual({ tone: "calm", text: "The proof could not be obtained from the server. X. The app will try again automatically." });
     expect(exitView({ ...NO_EXIT, vault: factsAt(100), attempt: { kind: "node-failed", reason: "x" } }, WALLET).lines[0]?.tone).toBe("calm");
   });
-  it("tells every page when the node's proof fails the vault's check", () => {
-    expect(exitView({ ...behind, attempt: { kind: "refused", reason: "x" } }, WALLET).notice?.text).toBe("Your exit proof failed the vault's check.");
+  it("tells every page that the node's proof could not be read, leaving why to the panel", () => {
+    const view = exitView({ ...behind, attempt: { kind: "refused", reason: "seq is not a whole number", unread: true } }, WALLET);
+    expect(view.notice?.text).toBe("The server's exit proof could not be read.");
+    expect(view.lines.at(-1)).toEqual({ tone: "bad", text: "The server's proof could not be read, so it was not saved. Seq is not a whole number." });
+  });
+  it("tells every page when the node's proof fails the vault's check, and why", () => {
+    const reason = "the vault's contract accepts that check only from the vault itself, which means that this version of the app does not match the vault's contracts. Reload the page to use the latest version of the app";
+    expect(exitView({ ...behind, attempt: { kind: "refused", reason } }, WALLET).notice?.text).toBe("Your exit proof failed the vault's check. The vault's contract accepts that check only from the vault itself, which means that this version of the app does not match the vault's contracts. Reload the page to use the latest version of the app.");
   });
   it("still shows the proof when the vault's read fails, saying it is from the last read", () => {
     expect(text({ ...NO_EXIT, vault: factsAt(100), record: recordAt(100), vaultProblem: "no answer" })).toMatch(/could not reach the vault just now, so the figures shown are from the last successful check\. No answer\./);
