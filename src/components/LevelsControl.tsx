@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * A position's take profit and stop loss as the control that opens its levels editor (from V79): "Add" while it holds
+ * A position's take profit and stop loss as the control that opens its levels dialog (from V79): "Add" while it holds
  * neither, else the levels themselves, the take profit over the stop loss in the table's cell and on one line on the card.
- * One button in every state, so focus stays on it when a save adds or removes the levels.
+ * One button in every state, so focus returns to it when a save adds or removes the levels.
  */
 
 /**
@@ -23,15 +23,12 @@ interface Props {
   takeProfit: string | null;
   stopLoss: string | null;
   layout: "row" | "card";
-  /** Whether the editor is open, and its id while it is. */
-  expanded: boolean;
-  controls: string | undefined;
   disabled: boolean;
   describedBy: string | undefined;
   onClick: () => void;
 }
 
-export function LevelsControl({ id, symbol, long, takeProfit, stopLoss, layout, expanded, controls, disabled, describedBy, onClick }: Props) {
+export function LevelsControl({ id, symbol, long, takeProfit, stopLoss, layout, disabled, describedBy, onClick }: Props) {
   const none = takeProfit === null && stopLoss === null;
   const position = `your ${symbol} ${long ? "long" : "short"} position`;
   // The name holds the levels shown, so the control is named by what it shows (WCAG 2.5.3).
@@ -43,7 +40,7 @@ export function LevelsControl({ id, symbol, long, takeProfit, stopLoss, layout, 
       : <><span className={`block ${LEVEL_W}`}>{takeProfit ?? "—"}</span><span className={`block min-h-lh text-label ${LEVEL_W}`}>{stopLoss ?? "—"}</span></>;
   return (
     <>
-      <button type="button" id={id} disabled={disabled} aria-describedby={describedBy} aria-expanded={expanded} aria-controls={controls} aria-label={name} onClick={onClick}
+      <button type="button" id={id} disabled={disabled} aria-describedby={describedBy} aria-haspopup="dialog" aria-label={name} onClick={onClick}
         className={`${LINK} ${layout === "card" ? "inline-block min-h-6 min-w-6 [overflow-wrap:anywhere]" : "block w-fit"}`}>
         {shown}
       </button>

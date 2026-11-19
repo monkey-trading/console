@@ -7,6 +7,7 @@ import { orderTypedData, positionLevelsTypedData, requestDomain } from "../engin
 import vectors from "../engine/eip712-vectors.json";
 import type { EngineEvent, OrderRequest, PositionLevelsRequest } from "../engine/types";
 import { fixedFromInt, parseFixed } from "../fixed";
+import type { Levels } from "../levels";
 import { placeOrder } from "./actions";
 import { setPositionLevels } from "./level-actions";
 import { ActionClient, keyed, NODE_TIME, signerOf, VAULT } from "./live-kit";
@@ -52,6 +53,19 @@ describe("setting a position's levels", () => {
     const { store } = await setup([other, mine]);
     expect(await setPositionLevels(store, 1, LEVELS)).toBe(false);
     expect(store.getSnapshot().notices.levels).toMatchObject({ tone: "error", text: expect.stringContaining("The level 100,100 was not accepted.") });
+  });
+
+  it("names on the refusal the field a level too close concerns, by the level as the node writes it, so the dialog shows it under that field", async () => {
+    const tooClose = (level: string): EngineEvent => ({ type: "order_rejected", account: ME, client_id: 0, reason: { kind: "level_too_close", level, min_distance_bps: 30, reference: "99980" } });
+    const refusal = async (level: string, levels: Levels = LEVELS) => {
+      const { store } = await setup([tooClose(level)]);
+      expect(await setPositionLevels(store, 1, levels)).toBe(false);
+      return store.getSnapshot().notices.levels;
+    };
+    expect(await refusal("105000")).toMatchObject({ tone: "error", field: "take_profit" });
+    expect(await refusal("95000.500")).toMatchObject({ tone: "error", field: "stop_loss" });
+    // With no stop loss sent, a refusal naming another level concerns neither field.
+    expect(await refusal("95000", { ...LEVELS, stopLoss: null })).not.toHaveProperty("field");
   });
 
   it("says a levels request refused for the working order limit was refused because the levels take a slot", async () => {

@@ -101,9 +101,9 @@ export class ConsoleStore {
 
   id = (): number => this.nextId++;
 
-  /** Puts `text` on `surface`, in place of what it held. It stays until the next action on that control or a change that makes it stale clears it. */
-  notify(surface: NoticeSurface, text: string, tone: Notice["tone"] = "error"): void {
-    this.patch({ notices: { ...this.snapshot.notices, [surface]: { id: this.id(), tone, text } } });
+  /** Puts `text` on `surface`, in place of what it held, with the level `field` it concerns, if any. It stays until the next action on that control or a change that makes it stale clears it. */
+  notify(surface: NoticeSurface, text: string, tone: Notice["tone"] = "error", field?: Notice["field"]): void {
+    this.patch({ notices: { ...this.snapshot.notices, [surface]: { id: this.id(), tone, text, ...(field === undefined ? {} : { field }) } } });
   }
 
   /** Clears what `surfaces` hold; nothing changes, and nothing is notified, when they hold nothing. */

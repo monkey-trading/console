@@ -3,10 +3,10 @@
 /**
  * Open positions with their profit and loss at the closing price, hold, profit fee, take profit and stop loss, and what a close keeps, a Close
  * button each and a Close all above them: a table of one row each from 1024 px, cards below. A row's cells hold two lines each, so the table
- * fits the 740 px centre pane of a 1280 px screen with its buttons in view. The levels, or Add, open the levels' editor under their row.
+ * fits the 740 px centre pane of a 1280 px screen with its buttons in view. The levels, or Add, open the levels' dialog.
  */
 
-import { Fragment, useEffect, useId } from "react";
+import { useEffect, useId } from "react";
 
 import { CONFIRM_MIN_GAP_MS, CONFIRM_MS } from "@/lib/confirm-window";
 import { describeLeftOut, planCloseAll, pressBatch, targetsKey } from "@/lib/close-all";
@@ -90,8 +90,8 @@ export function PositionsView() {
   const { armed, state, arm, cancel } = useConfirmWindow(CONFIRM_MS, CONFIRM_MIN_GAP_MS);
   const { confirmBatch } = usePrefs().prefs;
   const positions = account?.positions ?? [];
-  // The one levels editor, under the row of the position it is open for, and its draft, which that position as it was opened owns.
-  const heldOf = (p: PositionModel) => ({ market: p.market, long: p.qty > 0n, entry: p.entry, opened: p.closeFee?.openedAt ?? null, levels: p.levels ?? NO_LEVELS });
+  // The one levels dialog, for the position it is open for, and its draft, which the account's position in that market owns.
+  const heldOf = (p: PositionModel) => ({ market: p.market, levels: p.levels ?? NO_LEVELS });
   const held = positions.map(heldOf);
   const levelsEditor = useLevelsEditor(store, id, snapshot.wallet?.address.toLowerCase() ?? null, held);
   const feeTip = `This is the fee rate paid on a winning trade. ${feeTerms === null ? "The fee rate falls the longer the position is held." : describeSchedule(feeTerms)}`;
@@ -132,14 +132,14 @@ export function PositionsView() {
       keepFocus(event.currentTarget);
       void placeOrder(store, { market: p.market, side, qty, kind: { kind: "market", quoted, slippageBps }, reduceOnly: true }, "positions");
     };
-    // From V79 a position in a market that takes levels shows them and an editor to set, move or remove them, measured from its closing price.
+    // From V79 a position in a market that takes levels shows them and a dialog to set, move or remove them, measured from its closing price.
     const levels = p.levels ?? NO_LEVELS;
     const draft = levelsEditor.draftFor(p.market);
     const editor = market === undefined || offeredLevelDistance(market.view, snapshot.protocolVersion) === null ? null : {
       market, position: p, ...editorReference(account, terms, market, p.qty, known === null ? null : quoted), noClosing: levelsWait(noPrice ?? houseTermsNote(snapshot)),
       limits: ticketLimits(account, p.market), toUsdDown, fields: draft?.fields ?? { takeProfit: "", stopLoss: "" }, onChange: levelsEditor.edit,
-      onCancel: () => levelsEditor.cancel(p.market), onSend: (sent: Levels) => { if (draft !== null) levelsEditor.sending(draft.instance, sent); }, onSaved: (sent: LevelFields, words: string) => { if (draft !== null) levelsEditor.saved(draft.instance, sent, p.market, words); },
-      saving: levelsEditor.savingFor(p.market), onSettled: () => { if (draft !== null) levelsEditor.settled(draft.instance); }, onRemovedWithFocus: levelsEditor.removedWithFocus,
+      onCancel: levelsEditor.cancel, onSend: (sent: Levels) => { if (draft !== null) levelsEditor.sending(draft.instance, sent); }, onSaved: (sent: LevelFields, words: string) => { if (draft !== null) levelsEditor.saved(draft.instance, sent, words); },
+      saving: levelsEditor.savingFor(p.market), onSettled: () => { if (draft !== null) levelsEditor.settled(draft.instance); }, onRemovedWithFocus: levelsEditor.removedWithFocus, announced: levelsEditor.announcedFor(p.market),
     };
     return {
       key: p.market,
@@ -158,12 +158,10 @@ export function PositionsView() {
       holdsLevels: p.levels !== undefined,
       editor,
       editing: editor !== null && draft !== null,
-      // The levels, or Add, open the editor; a market that takes no levels shows dashes, as its card leaves them out. While a request is
-      // signed and sent, the editor stays as it is, so its answer is shown in it.
+      // The levels, or Add, open the dialog; a market that takes no levels shows dashes, as its card leaves them out.
       control: {
         symbol: String(market?.symbol ?? p.market), long: p.qty > 0n, takeProfit: levels.takeProfit === null ? null : formatLevel(levels.takeProfit, places),
-        stopLoss: levels.stopLoss === null ? null : formatLevel(levels.stopLoss, places), expanded: editor !== null && draft !== null,
-        disabled: busy || readOnly.readOnly, describedBy: readOnly.describedBy, onClick: () => levelsEditor.toggle(heldOf(p)),
+        stopLoss: levels.stopLoss === null ? null : formatLevel(levels.stopLoss, places), disabled: busy || readOnly.readOnly, describedBy: readOnly.describedBy, onClick: () => levelsEditor.openFor(heldOf(p)),
       },
       hold: fee === null ? "—" : formatHold(fee.holdMs),
       fee: feeBps === null ? "—" : formatRate(feeBps),
@@ -205,6 +203,7 @@ export function PositionsView() {
   const holdsDown = (event: { repeat: boolean; preventDefault: () => void }) => { if (event.repeat) event.preventDefault(); };
   const noteId = `${id}-left-out`;
   const describedBy = readOnly.describedBy ?? (leftOutNote === null ? undefined : noteId);
+  const editing = rows.find((r) => r.editing)?.editor ?? null;
   return (
     <>
       {readOnly.note}
@@ -230,7 +229,7 @@ export function PositionsView() {
               <div><dt className="text-label text-fg-3">Entry</dt><dd>{r.entry}</dd></div>
               <div><dt className="text-label text-fg-3">Mark</dt><dd>{r.mark}</dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Close-out" tip={CLOSEOUT_TIP} /></dt><dd>{r.closeout}</dd></div>
-              {r.editor !== null && <div><dt className="text-label text-fg-3"><Term label="Take profit / Stop loss" tip={LEVELS_TIP} /></dt><dd className="mt-1.5"><LevelsControl {...r.control} layout="card" id={levelsControlIds(id, r.key)[1]} controls={r.editing ? `${id}-levels-card` : undefined} /></dd></div>}
+              {r.editor !== null && <div><dt className="text-label text-fg-3"><Term label="Take profit / Stop loss" tip={LEVELS_TIP} /></dt><dd className="mt-1.5"><LevelsControl {...r.control} layout="card" id={levelsControlIds(id, r.key)[1]} /></dd></div>}
               <div><dt className="text-label text-fg-3"><Term label="Held" tip={HOLD_TIP} /></dt><dd>{r.hold}</dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Profit fee" tip={feeTip} /></dt><dd>{r.fee}<span className={SUB}>{r.falls}</span></dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Fee (USD)" tip={FEE_USD_TIP} /></dt><dd>{r.feeUsd}<span aria-hidden={!r.noFee} className={`block text-label ${r.noFee ? "text-fg-3" : "invisible"}`}>{NO_FEE_NOTE}</span></dd></div>
@@ -240,7 +239,6 @@ export function PositionsView() {
               <button type="button" disabled={!r.closable} className={`${BUTTON} flex-1`} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
             </div>
             <p aria-hidden={!r.unquoted} className={`mt-2 text-label ${r.unquoted ? "text-fg-3" : "invisible"}`}>Select {r.symbol} in the watchlist to load its closing price.</p>
-            {r.editing && r.editor !== null && <LevelsEditor id={`${id}-levels-card`} {...r.editor} readOnly={readOnly.readOnly} describedBy={readOnly.describedBy} />}
           </li>
         ))}
       </ul>
@@ -257,14 +255,13 @@ export function PositionsView() {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <Fragment key={r.key}>
-              <tr className="border-b border-line last:border-b-0">
+              <tr key={r.key} className="border-b border-line last:border-b-0">
                 <td className={TD}><span className="block text-fg">{r.symbol}</span><span className={`block min-h-lh text-label ${r.long ? "text-glow" : "text-ember"}`}>{r.long ? "Long" : "Short"}</span></td>
                 <td className={TD}><span className="block">{r.size}</span><span className={SUB}><span className="sr-only">Held </span>{r.hold}</span></td>
                 <td className={TD}><span className="block">{r.entry}</span><span className={SUB}><span className="sr-only">Mark </span>{r.mark}</span></td>
                 <td className={TD}>{r.editor === null
                   ? <><span className={`block ${LEVEL_W}`}>—</span><span className={`${SUB} ${LEVEL_W}`}><span className="sr-only">Stop loss </span>—</span></>
-                  : <LevelsControl {...r.control} layout="row" id={levelsControlIds(id, r.key)[0]} controls={r.editing ? `${id}-levels-row` : undefined} />}</td>
+                  : <LevelsControl {...r.control} layout="row" id={levelsControlIds(id, r.key)[0]} />}</td>
                 <td className={`${TD} ${r.loss ? "text-ember" : "text-glow"}`}>
                   <span className={`block ${PNL_W}`}>{r.pnl}</span>
                   <span className={SUB}><Term label="Details" tip={r.details} /></span>
@@ -282,12 +279,11 @@ export function PositionsView() {
                   <button type="button" disabled={!r.closable} className={CELL_BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy} onClick={r.close}>Close</button>
                 </td>
               </tr>
-              {r.editing && r.editor !== null && <tr className="border-b border-line"><td colSpan={8}><div className="[contain:inline-size]"><LevelsEditor id={`${id}-levels-row`} {...r.editor} readOnly={readOnly.readOnly} describedBy={readOnly.describedBy} /></div></td></tr>}
-              </Fragment>
             ))}
           </tbody>
         </table>
       </div>
+      {editing !== null && <LevelsEditor {...editing} readOnly={readOnly.readOnly} describedBy={readOnly.describedBy} />}
     </>
   );
 }
