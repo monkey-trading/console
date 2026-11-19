@@ -176,11 +176,11 @@ export class OperatorFollower {
   private async readChain(node: Promise<NodeSaid>): Promise<void> {
     this.lastCheckAt = this.deps.nowMs();
     const chain = this.deps.chain();
-    const { state } = this; // a successor already named is tried at once, as the server being left may not answer for a while; then its word, if it came
-    if (chain === null && state.kind === "waiting" && FollowPace.switching(state)) {
-      await this.tryNode(state.target, null, true);
+    const first = chain === null ? this.word.firstTarget(this.deps.deploy, this.state, this.origin, this.deps.nowMs()) : null; // tried at once, as the server being left may not answer for a while; then its word, if it came
+    if (first !== null) {
+      await this.tryNode(first, null, true);
       const said = await Promise.race([node, Promise.resolve(null)]);
-      return said?.read === true && this.state.kind === "waiting" ? this.followNode(said, state.target) : undefined;
+      return said?.read === true && this.state.kind === "waiting" ? this.followNode(said, first) : undefined;
     }
     if (chain === null) return this.followNode(await node);
     const reason = (error: unknown) => (error instanceof Error ? error.message : "the request failed");
