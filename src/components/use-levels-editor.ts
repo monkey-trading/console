@@ -6,9 +6,9 @@
  * save says to a screen reader. A draft belongs to the position it was opened for (`openDraft`) and is
  * dropped once that position is no longer the one held, so a later position in the market, a changed one
  * or another account never inherits it. Each opening is a new instance, and a save that lands later closes
- * only the instance and draft it was sent from, returning focus to the row's Edit button when it held focus. While an
+ * only the instance and draft it was sent from, returning focus to the row's levels control when it held focus. While an
  * instance's save is signed, sent and its account read back, both its editors hold Save. An editor a live update removes
- * while it holds focus gives focus to the row's Edit button too, or to the Positions panel once the row is gone.
+ * while it holds focus gives focus to the row's levels control too, or to the Positions panel once the row is gone.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -25,8 +25,8 @@ function fieldsOf(levels: Levels): LevelFields {
   return { takeProfit: wire.take_profit ?? "", stopLoss: wire.stop_loss ?? "" };
 }
 
-/** The ids of a row's Edit buttons, in the table and on the card: a closing editor gives focus back to the one on screen. */
-export const editButtonIds = (id: string, market: MarketId) => [`${id}-edit-${market}`, `${id}-edit-card-${market}`];
+/** The ids of a row's levels controls, in the table and on the card: a closing editor gives focus back to the one on screen. */
+export const levelsControlIds = (id: string, market: MarketId) => [`${id}-levels-control-${market}`, `${id}-levels-control-card-${market}`] as const;
 
 /** The editor for the positions `held` by the account `owner` (lowercased; null with none connected). */
 export function useLevelsEditor(store: ConsoleStore, id: string, owner: string | null, held: readonly HeldPosition[]) {
@@ -56,13 +56,13 @@ export function useLevelsEditor(store: ConsoleStore, id: string, owner: string |
     const active = document.activeElement;
     return active === null || active === document.body || active.closest("[data-levels-editor]") !== null;
   };
-  /** Focuses `market`'s Edit button on screen; false when focus did not land there, as once its row is gone or while it is held. */
+  /** Focuses `market`'s levels control on screen; false when focus did not land there, as once its row is gone or while it is held. */
   const refocus = (market: MarketId) => {
-    const shown = editButtonIds(id, market).map((key) => document.getElementById(key)).find((el) => el !== null && el.offsetParent !== null);
+    const shown = levelsControlIds(id, market).map((key) => document.getElementById(key)).find((el) => el !== null && el.offsetParent !== null);
     shown?.focus();
     return shown !== undefined && document.activeElement === shown;
   };
-  // After every commit, as an editor goes with its row or alone: whatever removed it, its row's Edit button or the panel takes focus.
+  // After every commit, as an editor goes with its row or alone: whatever removed it, its row's levels control or the panel takes focus.
   useEffect(() => {
     const target = dropped.current;
     dropped.current = null;

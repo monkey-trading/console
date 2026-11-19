@@ -59,36 +59,57 @@ describe("the deal ticket's levels", () => {
 });
 
 describe("the position row's levels", () => {
-  it("shows the take profit over the stop loss and an Edit button that opens the editor", () => {
+  const CHANGE = "Change take profit and stop loss for your BTC-USD long position: take profit 102,000.00, stop loss 97,500.00";
+  const ADD = "Add take profit and stop loss for your BTC-USD long position";
+  /** The table's first row, and each control on the page that opens the levels editor, by its name and what it shows. */
+  const row = (html: string) => (html.split("<tbody>")[1] ?? "").split("</tr>")[0] ?? "";
+  const controls = (html: string) => [...html.matchAll(/<button type="button" id="[^"]*-levels-control-[^"]*"[^>]*aria-label="([^"]*)"[^>]*>(.*?)<\/button>/g)].map((m) => [m[1], m[2]?.replace(/<[^>]*>/g, "|")]);
+
+  it("shows the take profit over the stop loss as the one control that opens the editor, named for the position, in the table and on the card", () => {
     const html = render(createElement(PositionsView), { account: account([position]) });
-    const row = (html.split("<tbody>")[1] ?? "").split("</tr>")[0] ?? "";
-    expect(row).toContain(`<span class="block ${LEVEL}">102,000.00</span><span class="block min-h-lh text-label text-fg-3 ${LEVEL}"><span class="sr-only">Stop loss </span>97,500.00</span>`);
-    expect(row).toMatch(/<button[^>]*aria-expanded="false"[^>]*aria-label="Edit take profit and stop loss for BTC-USD position"[^>]*>Edit<\/button>/);
-    expect(html).toMatch(/<dt[^>]*>.*?Take profit.*?<\/dt><dd>102,000.00<\/dd>/);
+    expect(row(html)).toContain(`aria-expanded="false" aria-label="${CHANGE}" class="`);
+    expect(row(html)).toContain(`><span class="block ${LEVEL}">102,000.00</span><span class="block min-h-lh text-label ${LEVEL}">97,500.00</span></button>`);
+    expect(controls(html)).toEqual([[CHANGE, "102,000.00 / 97,500.00"], [CHANGE, "|102,000.00||97,500.00|"]]);
+    expect(html).toMatch(/<dt[^>]*>(?:<[^>]*>)*Take profit \/ Stop loss<\/button>.*?<\/dt><dd class="mt-1"><button/);
+  });
+
+  it("names a level not set as none, and shows a dash for it", () => {
+    const html = render(createElement(PositionsView), { account: account([{ ...position, levels: { takeProfit: null, stopLoss: fixedFromInt(97_500) } }]) });
+    const name = "Change take profit and stop loss for your BTC-USD long position: no take profit, stop loss 97,500.00";
+    expect(controls(html)).toEqual([[name, "— / 97,500.00"], [name, "|—||97,500.00|"]]);
+    const short = render(createElement(PositionsView), { account: account([{ ...position, qty: fixedFromInt(-1), levels: { takeProfit: fixedFromInt(97_000), stopLoss: null } }]) });
+    expect(controls(short)[0]?.[0]).toBe("Change take profit and stop loss for your BTC-USD short position: take profit 97,000.00, no stop loss");
+  });
+
+  it("shows Add for a position with none, keeping the cell's second line, and nothing beside Close", () => {
+    const html = render(createElement(PositionsView), { account: account([{ ...position, levels: undefined }]) });
+    expect(controls(html)).toEqual([[ADD, "Add"], [ADD, "Add"]]);
+    expect(row(html)).toMatch(/>Add<\/button><span class="block min-h-lh text-label"><\/span><\/td>/);
+    expect(row(html)).toMatch(/aria-label="Close BTC-USD position"[^>]*>Close<\/button><\/td>$/);
+    expect(html).not.toContain("Edit");
   });
 
   it("shows a level of the most digits the engine accepts whole, wrapping inside the column's bounded width, so the table keeps to the 740 px pane", () => {
     const longest = { takeProfit: parseFixed("999999999.999999999") ?? 0n, stopLoss: parseFixed("1.000000001") ?? 0n };
-    const row = (render(createElement(PositionsView), { account: account([{ ...position, levels: longest }]) }).split("<tbody>")[1] ?? "").split("</tr>")[0] ?? "";
-    expect(row).toContain(`<span class="block ${LEVEL}">999,999,999.999999999</span><span class="block min-h-lh text-label text-fg-3 ${LEVEL}"><span class="sr-only">Stop loss </span>1.000000001</span>`);
+    const html = render(createElement(PositionsView), { account: account([{ ...position, levels: longest }]) });
+    expect(row(html)).toContain(`<span class="block ${LEVEL}">999,999,999.999999999</span><span class="block min-h-lh text-label ${LEVEL}">1.000000001</span>`);
+    expect(html).toMatch(/class="[^"]*\[overflow-wrap:anywhere\][^"]*">999,999,999\.999999999 \/ 1\.000000001<\/button>/);
   });
 
-  it("shows dashes for a position with none, and neither levels nor Edit from a node that predates them", () => {
+  it("shows dashes and no control from a node that predates levels", () => {
     const dashes = `<span class="block ${LEVEL}">—</span><span class="block min-h-lh text-label text-fg-3 ${LEVEL}"><span class="sr-only">Stop loss </span>—</span>`;
-    const bare = render(createElement(PositionsView), { account: account([{ ...position, levels: undefined }]) });
-    expect(bare).toContain(dashes);
     const old = render(createElement(PositionsView), { markets: [older], account: account([position]) });
     expect(old).toContain(dashes);
     expect(old).not.toContain("102,000.00");
-    expect(old).not.toContain(">Edit<");
-    expect(old).not.toContain("Edit take profit and stop loss");
+    expect(controls(old)).toEqual([]);
+    expect(old).not.toContain("take profit and stop loss for");
     expect(old).not.toMatch(/<dt[^>]*>(?:<[^>]*>)*Take profit/);
   });
 
-  it("offers no Edit before the node runs V79, though the market's listing names a distance", () => {
+  it("offers no control before the node runs V79, though the market's listing names a distance", () => {
     const html = render(createElement(PositionsView), { account: account([{ ...position, levels: undefined }]), protocolVersion: 78 });
-    expect(html).not.toContain("Edit take profit and stop loss");
-    expect(render(createElement(PositionsView), { account: account([{ ...position, levels: undefined }]), protocolVersion: 79 })).toContain("Edit take profit and stop loss");
+    expect(controls(html)).toEqual([]);
+    expect(controls(render(createElement(PositionsView), { account: account([{ ...position, levels: undefined }]), protocolVersion: 79 }))).toEqual([[ADD, "Add"], [ADD, "Add"]]);
   });
 });
 
@@ -103,10 +124,12 @@ describe("a levels request's answer with no editor open", () => {
 });
 
 describe("a read-only account's positions", () => {
-  it("offer no editor: Edit is unavailable and says why", () => {
-    const html = render(createElement(PositionsView), { account: account([position]), wallet: { address: "0xabc", label: "Watched", readOnly: true } });
+  it("offer no editor: the levels and Add are unavailable and say why, the levels shown as plain text", () => {
+    const watched = { wallet: { address: "0xabc", label: "Watched", readOnly: true } };
+    const html = render(createElement(PositionsView), { account: account([position]), ...watched });
     expect(html).toContain("Closing a position or editing its take profit and stop loss is unavailable because you are viewing this account in read-only mode.");
-    expect(html).toMatch(/<button type="button" id="[^"]*-edit-1" disabled="" aria-describedby="[^"]+"[^>]*>Edit<\/button>/);
+    expect(html).toMatch(/<button type="button" id="[^"]*-levels-control-1" disabled="" aria-describedby="[^"]+"[^>]*disabled:text-inherit disabled:no-underline[^>]*><span[^>]*>102,000.00</);
+    expect(render(createElement(PositionsView), { account: account([{ ...position, levels: undefined }]), ...watched })).toMatch(/<button type="button" id="[^"]*-levels-control-1" disabled="" aria-describedby="[^"]+"[^>]*>Add<\/button>/);
   });
 });
 
