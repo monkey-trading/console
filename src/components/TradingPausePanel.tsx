@@ -39,8 +39,8 @@ export function TradingPausePanel({ view }: { view: Exclude<PauseView, { kind: "
   const steps = view.kind === "paused" ? view.steps : ALL_DONE;
   const leaving = view.kind === "resumed" && view.leaving;
   return (
-    <div className="pointer-events-none absolute inset-0 z-20 flex items-start justify-center p-4 pt-[12vh]">
-      <section aria-labelledby={titleId} className={`pointer-events-auto sticky top-[12vh] w-full max-w-lg rounded border border-line-2 bg-ink-2 p-5 shadow-platform transition-opacity duration-300 ${leaving ? "opacity-0" : "opacity-100"}`}>
+    <div className="pointer-events-none absolute inset-0 z-20 flex items-start justify-center p-4 lg:pt-[12vh]">
+      <section aria-labelledby={titleId} className={`pointer-events-auto w-full max-w-lg rounded border border-line-2 bg-ink-2 p-5 shadow-platform transition-opacity duration-300 ${leaving ? "opacity-0" : "opacity-100"}`}>
         <h2 id={titleId} className="text-lead font-medium text-fg">{view.kind === "resumed" ? RESUMED_TITLE : PAUSE_TITLE}</h2>
         <p className="mt-2 text-data leading-relaxed text-fg-2">{PAUSE_KEPT}</p>
         <ol className="mt-4 flex flex-col gap-2.5">
