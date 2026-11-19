@@ -28,9 +28,12 @@ export function NoticeView({ notice, prompt }: { notice: NoticeMessage | undefin
   );
 }
 
-/** The notice on `surface`, with the wallet's request while it is asked from there. */
-export function Notice({ surface }: { surface: NoticeSurface }) {
+/**
+ * The notice on `surface`, with the wallet's request while it is asked from there. A place that does not show it
+ * now (`shown` false) keeps its regions mounted and empty, so a message that moves there is announced.
+ */
+export function Notice({ surface, shown = true }: { surface: NoticeSurface; shown?: boolean }) {
   const notice = useConsoleValue((state) => state.notices[surface]);
   const prompt = useConsoleValue((state) => (state.promptAt === surface ? state.prompt : null));
-  return <NoticeView notice={notice} prompt={prompt} />;
+  return <NoticeView notice={shown ? notice : undefined} prompt={shown ? prompt : null} />;
 }

@@ -182,7 +182,7 @@ describe("the levels dialog", () => {
   it("shows each level's problem under its own field, which it describes", () => {
     const html = render(editor({ fields: { takeProfit: "1o2000", stopLoss: "99970" } }));
     const [take, stop] = html.split('id="').filter((part) => /^[^"]*-(take_profit|stop_loss)-problem"/.test(part));
-    expect(take).toMatch(/^[^"]*-take_profit-problem" class="text-label leading-relaxed text-ember"><p class="mt-1">Enter the take profit in digits, such as [\d.]+\.<\/p><\/div>/);
+    expect(take).toMatch(/^[^"]*-take_profit-problem" class="text-label leading-relaxed text-ember"><p class="mt-1">Enter the take profit in digits, such as [\d.]+\.<\/p><div role="status" class="empty:hidden"><\/div><div role="alert" class="empty:hidden"><\/div><\/div>/);
     expect(stop).toMatch(/^[^"]*-stop_loss-problem" class="text-label leading-relaxed text-ember"><p class="mt-1">Stop loss too close to the closing price\./);
     expect(html).toMatch(/<input[^>]*aria-invalid="true" aria-describedby="[^" ]*-stop_loss-estimate [^" ]*-stop_loss-problem [^" ]*-problems"/);
   });
@@ -208,13 +208,23 @@ describe("the levels dialog", () => {
     expect(shown("error").indexOf(">Cancel</button>")).toBeLessThan(shown("error").indexOf("A message the trader must read."));
   });
 
-  it("shows a refusal that names a field once, under that field and not under the buttons", () => {
-    for (const field of ["stop_loss", "take_profit"] as const) {
+  it("shows a refusal that names a field once, under that field, every other place keeping its regions mounted and empty", () => {
+    const EMPTY = '<div role="status" class="empty:hidden"></div><div role="alert" class="empty:hidden"></div>';
+    for (const [field, other] of [["stop_loss", "take_profit"], ["take_profit", "stop_loss"]] as const) {
       const html = shown("error", field);
       expect(html).toMatch(new RegExp(`-${field}-problem" class="[^"]*"><div role="status" class="empty:hidden"></div><div role="alert" class="empty:hidden"><p class="[^"]*">A message the trader must read\\.</p></div></div>`));
       expect(html.split("A message the trader must read.").length).toBe(2);
-      expect(html.indexOf("A message the trader must read.")).toBeLessThan(html.indexOf(">Cancel</button>"));
+      // The other field's place and the place under the buttons stay on the page, empty, so a refusal that moves there is announced;
+      // under the buttons the levels notice's place comes before the account read's.
+      expect(html).toMatch(new RegExp(`-${other}-problem" class="[^"]*">${EMPTY}</div>`));
+      expect(html).toContain(`>Cancel</button></div>${EMPTY}${EMPTY}<p role="status" class="sr-only">`);
     }
+  });
+
+  it("says an account read that failed inside itself, as the account panel behind it is inert", () => {
+    const failed = "Your account could not be loaded. The server did not respond. The app will try again automatically.";
+    const html = render(editor(), { notices: { accountRead: { id: 1, text: failed, tone: "error" } } });
+    expect(html).toMatch(new RegExp(`<div role="alert" class="empty:hidden"><p class="[^"]*">${failed.replaceAll(".", "\\.")}</p></div>(?:(?!</dialog>).)*</dialog>`));
   });
 
   it("reads out from inside itself what its own save said while it stays open", () => {

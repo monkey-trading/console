@@ -20,7 +20,7 @@ describe("fieldsOf", () => {
 });
 
 describe("openDraft", () => {
-  it("keeps the draft, unchanged, while its account holds a position in its market with the levels it opened with, whatever the position's size or side", () => {
+  it("keeps the draft, unchanged, while its account holds a position in its market with the levels it opened with", () => {
     expect(openDraft(DRAFT, OWNER, [{ ...HELD, market: 2 }, HELD])).toBe(DRAFT);
     expect(openDraft(null, OWNER, [HELD])).toBeNull();
   });

@@ -7,7 +7,7 @@
  * the panel saying why when the position closed. Each opening is a new instance, and a save that lands later closes
  * only the instance and draft it was sent from. While an instance's save is signed, sent and its account read back,
  * its Save is held. However the dialog goes, focus returns to the position's levels control, or to the Positions
- * panel once the position is gone.
+ * panel once the position is gone or while the control is unavailable.
  */
 
 import { useEffect, useRef, useState } from "react";

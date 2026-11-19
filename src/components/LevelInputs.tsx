@@ -12,10 +12,9 @@ import { describeEstimate, headline, LEVELS_HELP, levelName } from "@/lib/level-
 import { AMOUNT_INPUT } from "./amount-input";
 import { Term } from "./house/Panel";
 
-/** In the levels dialog: its notice, shown here under the field `at` names; with none, the dialog shows it itself. */
+/** In the levels dialog: its notice's place under each field, which shows it while a refusal names that field. */
 interface InDialog {
-  notice: ReactNode;
-  at: LevelKind | null;
+  notice: (kind: LevelKind) => ReactNode;
 }
 
 const INPUT = "mt-1 min-h-11 w-full rounded border border-edge bg-ink px-2 py-2 text-base text-fg lg:min-h-0 lg:text-data focus-visible:outline-2 focus-visible:outline-glow aria-invalid:border-ember";
@@ -50,7 +49,7 @@ export function LevelInputs({ title, check, fields, onChange, dialog }: { title:
               {dialog !== undefined && (
                 <div id={`${id}-${kind}-problem`} className="text-label leading-relaxed text-ember">
                   {check.problems[kind] !== null && <p className="mt-1">{check.problems[kind]}</p>}
-                  {dialog.at === kind && dialog.notice}
+                  {dialog.notice(kind)}
                 </div>
               )}
             </div>
