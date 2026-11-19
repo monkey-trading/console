@@ -4,7 +4,7 @@ import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { fixedFromInt } from "@/lib/fixed";
+import { fixedFromInt, parseFixed } from "@/lib/fixed";
 import type { AccountModel, MarketModel, PositionModel } from "@/lib/models";
 import type { ConsoleState } from "@/lib/store/state";
 import { btcAt } from "@/lib/ticket-fixtures";
@@ -20,6 +20,8 @@ const market = await btcAt(100_000);
 const older: MarketModel = { ...market, view: { ...market.view, min_level_distance_bps: undefined } };
 const position: PositionModel = { market: 1, qty: fixedFromInt(1), entry: fixedFromInt(99_000), closeout: null, closeFee: null, levels: { takeProfit: fixedFromInt(102_000), stopLoss: fixedFromInt(97_500) } };
 const account = (positions: PositionModel[], orders: AccountModel["orders"] = []): AccountModel => ({ balance: fixedFromInt(10_000), unfinalised: 0n, equity: fixedFromInt(10_000), margin: 0n, positions, orders });
+/** The levels column's bounded width, inside which a long level wraps. */
+const LEVEL = "max-w-[12ch] whitespace-normal [overflow-wrap:anywhere]";
 
 function Seed({ patch }: { patch: Partial<ConsoleState> }) {
   const { store } = useSession();
@@ -60,13 +62,19 @@ describe("the position row's levels", () => {
   it("shows the take profit over the stop loss and an Edit button that opens the editor", () => {
     const html = render(createElement(PositionsView), { account: account([position]) });
     const row = (html.split("<tbody>")[1] ?? "").split("</tr>")[0] ?? "";
-    expect(row).toContain('<span class="block">102,000.00</span><span class="block min-h-lh text-label text-fg-3"><span class="sr-only">Stop loss </span>97,500.00</span>');
+    expect(row).toContain(`<span class="block ${LEVEL}">102,000.00</span><span class="block min-h-lh text-label text-fg-3 ${LEVEL}"><span class="sr-only">Stop loss </span>97,500.00</span>`);
     expect(row).toMatch(/<button[^>]*aria-expanded="false"[^>]*aria-label="Edit take profit and stop loss for BTC-USD position"[^>]*>Edit<\/button>/);
     expect(html).toMatch(/<dt[^>]*>.*?Take profit.*?<\/dt><dd>102,000.00<\/dd>/);
   });
 
+  it("shows a level of the most digits the engine accepts whole, wrapping inside the column's bounded width, so the table keeps to the 740 px pane", () => {
+    const longest = { takeProfit: parseFixed("999999999.999999999") ?? 0n, stopLoss: parseFixed("1.000000001") ?? 0n };
+    const row = (render(createElement(PositionsView), { account: account([{ ...position, levels: longest }]) }).split("<tbody>")[1] ?? "").split("</tr>")[0] ?? "";
+    expect(row).toContain(`<span class="block ${LEVEL}">999,999,999.999999999</span><span class="block min-h-lh text-label text-fg-3 ${LEVEL}"><span class="sr-only">Stop loss </span>1.000000001</span>`);
+  });
+
   it("shows dashes for a position with none, and neither levels nor Edit from a node that predates them", () => {
-    const dashes = '<span class="block">—</span><span class="block min-h-lh text-label text-fg-3"><span class="sr-only">Stop loss </span>—</span>';
+    const dashes = `<span class="block ${LEVEL}">—</span><span class="block min-h-lh text-label text-fg-3 ${LEVEL}"><span class="sr-only">Stop loss </span>—</span>`;
     const bare = render(createElement(PositionsView), { account: account([{ ...position, levels: undefined }]) });
     expect(bare).toContain(dashes);
     const old = render(createElement(PositionsView), { markets: [older], account: account([position]) });

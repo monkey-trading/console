@@ -54,6 +54,12 @@ const PNL_W = "min-w-[12ch]";
 const FEE_W = "min-w-[calc(13ch+0.75rem)]";
 const CLOSE_W = "min-w-[calc(14ch+0.75rem)]";
 const RATE_W = "min-w-[16ch]";
+/**
+ * The take profit and stop loss: as wide as a six-digit price with two decimals and its separators ("100,300.00", 10 characters),
+ * plus two characters' room. A level set with more digits, up to "999,999,999.999999999", wraps inside the column, every digit
+ * shown, so the table keeps to the 740 px pane; it is the one cell whose height a figure can grow.
+ */
+const LEVEL_W = "max-w-[12ch] whitespace-normal [overflow-wrap:anywhere]";
 const BUTTON = "min-h-11 rounded border border-line-2 px-3 py-1 text-caption text-fg-2 hover:border-glow hover:text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 /** The table's Close button sits under its figure, with the gap a second line would take. */
 const CELL_BUTTON = `${BUTTON} mt-1`;
@@ -263,7 +269,7 @@ export function PositionsView() {
                 <td className={TD}><span className="block text-fg">{r.symbol}</span><span className={`block min-h-lh text-label ${r.long ? "text-glow" : "text-ember"}`}>{r.long ? "Long" : "Short"}</span></td>
                 <td className={TD}><span className="block">{r.size}</span><span className={SUB}><span className="sr-only">Held </span>{r.hold}</span></td>
                 <td className={TD}><span className="block">{r.entry}</span><span className={SUB}><span className="sr-only">Mark </span>{r.mark}</span></td>
-                <td className={TD}><span className="block">{r.takeProfit}</span><span className={SUB}><span className="sr-only">Stop loss </span>{r.stopLoss}</span></td>
+                <td className={TD}><span className={`block ${LEVEL_W}`}>{r.takeProfit}</span><span className={`${SUB} ${LEVEL_W}`}><span className="sr-only">Stop loss </span>{r.stopLoss}</span></td>
                 <td className={`${TD} ${r.loss ? "text-ember" : "text-glow"}`}>
                   <span className={`block ${PNL_W}`}>{r.pnl}</span>
                   <span className={SUB}><Term label="Details" tip={r.details} /></span>
