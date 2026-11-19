@@ -68,8 +68,9 @@ export function TradeWorkspace() {
   }, [pause]);
   useEffect(() => {
     if (held || pause === null || root.current === null) return;
-    const place = pause.takeFocus();
-    if (place !== null) focusPlace(place, root.current);
+    const kept = pause.takeFocus();
+    // Focus outside the panes, or on a control that is gone, falls back to the page, as after any move to another server.
+    if (kept !== null) focusPlace(kept.place, root.current);
   }, [held, pause]);
   useEffect(() => {
     // The watchlist the user tapped is hidden now; focus goes to the heading of the market they chose.

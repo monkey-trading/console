@@ -19,9 +19,10 @@ export function placeOf(element: Element | null, within: Element | null): FocusP
   return name === "" ? null : { tag: element.tagName, name };
 }
 
-/** Focuses the first control inside `within` at `place`, unless the trader has put focus somewhere since. */
-export function focusPlace(place: FocusPlace, within: Element): void {
+/** Focuses the first control inside `within` at `place`, or else the page's main region, unless the trader has put focus somewhere since. */
+export function focusPlace(place: FocusPlace | null, within: Element): void {
   if (document.activeElement !== null && document.activeElement !== document.body) return;
-  const match = [...within.querySelectorAll(place.tag)].find((element) => nameOf(element) === place.name);
+  const match = place === null ? undefined : [...within.querySelectorAll(place.tag)].find((element) => nameOf(element) === place.name);
   if (match instanceof HTMLElement) match.focus();
+  else document.getElementById("main")?.focus();
 }

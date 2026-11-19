@@ -116,8 +116,8 @@ export class TradingPause {
   private wasLive = false;
   private long: unknown = null;
   private leave: unknown = null;
-  /** Where focus was in the trading view when the pause began, which the view restores once it is enabled again. */
-  private focusBefore: FocusPlace | null = null;
+  /** Where focus was in the trading view when the pause began (`place`, null when it was elsewhere), which the view restores once it is enabled again; null with nothing to restore. */
+  private focusBefore: { place: FocusPlace | null } | null = null;
 
   constructor(private readonly follower: Source & { getSnapshot(): FollowStatus }, private readonly scheduler: Scheduler) {
     follower.subscribe(this.update);
@@ -138,13 +138,13 @@ export class TradingPause {
     this.update();
   }
 
-  /** Keeps where focus was as a pause begins, unless a place is kept already: the first is where the trader was. */
+  /** Keeps where focus was as a pause begins, unless it is kept already: the first is where the trader was. */
   holdFocus(place: FocusPlace | null): void {
-    this.focusBefore ??= place;
+    this.focusBefore ??= { place };
   }
 
-  /** Where focus was when the pause began, given once: the view enabled again puts it back. */
-  takeFocus(): FocusPlace | null {
+  /** Where focus was when the pause began, given once after it ends: the view enabled again puts it back. */
+  takeFocus(): { place: FocusPlace | null } | null {
     const place = this.focusBefore;
     this.focusBefore = null;
     return place;
