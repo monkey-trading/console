@@ -40,6 +40,18 @@ describe("a dropped stream", () => {
     expect(kit.follower.getSnapshot()).toEqual({ kind: "following", origin: BUILD });
   });
 
+  it("tries the successor the chain names at once, though the re-check of the node whose stream is down never finishes", async () => {
+    const kit = await handover();
+    kit.setOperator(async () => named({ hostname: "b.example" }));
+    kit.successor.verdict = VERIFIED;
+    kit.trial.heedVault = () => new Promise(() => undefined); // the node in use stalls rather than refusing
+    kit.advance(RETRY_MS); // away from any boundary, and past the wait between event-driven reads
+    kit.drop();
+    expect(kit.follower.getSnapshot()).toEqual({ kind: "confirming", origin: BUILD, scheduled: false });
+    await settle();
+    expect(kit.adopted).toEqual([B]);
+  });
+
   it("moves to the successor the chain names as soon as it answers, without waiting for the slow read", async () => {
     const kit = await handover();
     kit.setOperator(async () => named({ hostname: "b.example" }));
