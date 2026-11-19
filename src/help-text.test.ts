@@ -31,6 +31,7 @@ const DYNAMIC: Record<string, (() => string[]) | null> = {
     describeDetails({ pnl: describePnl("$120.00", null), noClose: null, noFee: false }),
     describeDetails({ pnl: describePnl("-$80.00", null), noClose: null, noFee: true }),
     describeDetails({ pnl: describePnl("$120.00", "No price is available for this market yet."), noClose: "No price is available for this market yet.", noFee: false }),
+    describeDetails({ pnl: describePnl("$120.00", null), noClose: "The trading terms have changed, and the new terms could not be loaded. The app will try again automatically.", noFee: false }),
   ],
   "src/components/PositionsView.tsx: describeSchedule(feeTerms)": () => [describeSchedule({ profitFeeBps: 1_000, profitFeeCurve: LAUNCH_CURVE }), describeSchedule({ profitFeeBps: 1_000, profitFeeCurve: [] })],
   "src/components/house/Stats.tsx: formatStamp(scan.volumeSinceMs)": () => [formatStamp(Date.UTC(2026, 10, 19, 8))],
@@ -86,7 +87,8 @@ function scan(): { sites: Site[]; unlisted: string[]; used: Set<string> } {
     return symbol?.valueDeclaration ?? symbol?.declarations?.[0];
   };
   const unwrap = (node: ts.Expression): ts.Expression => (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isSatisfiesExpression(node) ? unwrap(node.expression) : node);
-  const named = (declaration: ts.Declaration | undefined) => declaration !== undefined && ts.isVariableDeclaration(declaration) && NAMES.some(([pattern]) => pattern.test(declaration.name.getText()));
+  const kindOf = (declaration: ts.Node | undefined) => (declaration !== undefined && ts.isVariableDeclaration(declaration) ? NAMES.find(([pattern]) => pattern.test(declaration.name.getText()))?.[1] : undefined);
+  const named = (declaration: ts.Node | undefined) => kindOf(declaration) !== undefined;
   // The text a property read such as `TIPS.share` names in the object a constant holds, if any.
   const memberOf = (node: ts.PropertyAccessExpression): ts.Expression | undefined => {
     const holder = declarationOf(node.expression);
@@ -150,11 +152,12 @@ function scan(): { sites: Site[]; unlisted: string[]; used: Set<string> } {
         const holder = node.parent.parent;
         const where = label(node.parent.properties) || (ts.isVariableDeclaration(holder) ? ` in ${holder.name.getText()}` : "");
         add(`{${where} ${node.name.getText()} }`, key, siteTexts(ts.isPropertyAssignment(node) ? node.initializer : node.name));
-      } else if (ts.isVariableDeclaration(node) && node.initializer !== undefined && named(node)) {
-        const kind = NAMES.find(([pattern]) => pattern.test(node.name.getText()))?.[1] ?? "note";
+      } else if (ts.isVariableDeclaration(node) && node.initializer !== undefined) {
+        const kind = kindOf(node);
         const value = unwrap(node.initializer);
-        if (!ts.isObjectLiteralExpression(value)) add(node.name.getText(), kind, evaluate(value));
-        else for (const member of value.properties) if (ts.isPropertyAssignment(member)) add(`${node.name.getText()}.${member.name.getText()}`, kind, evaluate(member.initializer));
+        // An object of help texts, such as `TIPS`, holds one per member.
+        const members = ts.isObjectLiteralExpression(value) ? value.properties.filter(ts.isPropertyAssignment).map((member) => [`${node.name.getText()}.${member.name.getText()}`, member.initializer] as const) : [[node.name.getText(), value] as const];
+        if (kind !== undefined) for (const [name, text] of members) add(name, kind, evaluate(text));
       }
       ts.forEachChild(node, visit);
     };
