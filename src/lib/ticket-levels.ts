@@ -5,14 +5,15 @@
  */
 
 import type { SpreadTier } from "./engine/types";
-import { absFixed, fixedFromWire, mulFixed, type Fixed } from "./fixed";
+import { absFixed, type Fixed } from "./fixed";
 import { checkTicketLevels, type LevelCheck, type LevelFields } from "./level-check";
+import { levelsWait } from "./level-words";
 import { NO_LEVELS } from "./levels";
 import type { HouseParams } from "./house";
 import type { AccountModel, MarketModel } from "./models";
 import { CALM, conversionAt, priceOrder, stressTermsAt, type StressTerms } from "./pricing";
 import type { ConsoleState } from "./store/state";
-import { CLOSE_WAITS, currentParams, houseTermsNote, type TicketFigures, type TicketOrder } from "./ticket-figures";
+import { currentParams, houseTermsNote, type TicketFigures, type TicketOrder } from "./ticket-figures";
 import { usdConverter } from "./ticket";
 import { accountPricing } from "./tier-view";
 import { isPriced } from "./unpriced";
@@ -32,19 +33,13 @@ export function closingAt(market: MarketModel, held: Fixed, terms: { tiers: read
 }
 
 /**
- * Whether the console's own closing price for a whole position of `held` is the engine's: with the market's
- * close-spread cap known (the mock), or a close that stays within the account's first spread band (`tiers`),
- * whose charge the engine's cap always covers, since a cap is at least the market's launch close charge: the
- * widest stress minimum and the top toxicity add-on plus the first band at the widest multiplier
- * (`close_spread::launch_close_charge_tenth_bps`). A live node serves no cap, so past the first band its
- * closing price may sit nearer the mark than the console's.
+ * Whether the console's own closing price in `market` is the engine's: only with the market's close-spread cap
+ * known, as the mock's is. A live node serves no cap, and a noticed rise in spreads or stress can take even the
+ * first band's charge past it, since the cap only ever falls (`close_spread.rs`), so the engine's close may sit
+ * nearer the mark than any the console prices for a live node, whatever the position's size.
  */
-export function closingExact(market: MarketModel, held: Fixed, tiers: readonly SpreadTier[]): boolean {
-  if (market.ceilingBps !== null) return true;
-  const bound = tiers[0]?.up_to;
-  if (bound === undefined || bound === null) return true;
-  const toUsd = market.mark === null ? null : usdConverter(market.view, market.mark);
-  return toUsd !== null && market.mark !== null && toUsd(mulFixed(absFixed(held), market.mark)) <= fixedFromWire(bound);
+export function closingExact(market: MarketModel): boolean {
+  return market.ceilingBps !== null;
 }
 
 /**
@@ -60,7 +55,7 @@ export function editorReference(account: AccountModel | null, params: HouseParam
   if (params === null || market.mark === null || (market.open && !isPriced(market))) return { closing: null, capped: null };
   const tiers = accountPricing(account, params, market.view).spreadTiers ?? market.view.spread_tiers;
   const closing = closingAt(market, held, { tiers, stress: stressTermsAt(params.stressLevels, market.stress) ?? CALM, toxicityBps: account?.toxicity?.addOnBps ?? 0 });
-  return { closing, capped: closing !== null && !closingExact(market, held, tiers) ? market.mark : null };
+  return { closing, capped: closing !== null && !closingExact(market) ? market.mark : null };
 }
 
 /**
@@ -78,9 +73,9 @@ export function ticketLevels(state: ConsoleState, market: MarketModel, order: Ti
   const stress = stressTermsAt(params?.stressLevels, market.stress) ?? CALM;
   // Its own close needs the stress level's terms and the account's bands, which only current parameters give.
   const closing = order.resting || params === null ? null : closingAt(market, left, { tiers, stress, toxicityBps: figures.prices.toxicityBps });
-  const unmeasured = order.resting || params !== null ? null : `The take profit and stop loss cannot be checked at the moment. ${houseTermsNote(state) ?? CLOSE_WAITS}`;
+  const unmeasured = order.resting || params !== null ? null : levelsWait(houseTermsNote(state));
   // Where the closing price may be capped nearer the mark, a take profit is measured from the mark, so none the engine refuses passes.
-  const capped = closing !== null && !closingExact(market, left, tiers) ? market.mark : null;
+  const capped = closing !== null && !closingExact(market) ? market.mark : null;
   return checkTicketLevels({
     market, side: order.side, qty: order.qty, resting: order.resting, price: order.resting ? order.triggerPrice : figures.prices.price,
     held, heldLevels: position?.levels ?? NO_LEVELS, closing, capped, unmeasured, limits: figures.limits, fields,

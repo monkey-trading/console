@@ -20,7 +20,7 @@ import { roundToPlaces } from "@/lib/fixed-rounding";
 import { realisedAt } from "@/lib/close-preview";
 import { formatLevel, minLevelDistance, NO_LEVELS, type Levels } from "@/lib/levels";
 import type { LevelFields } from "@/lib/level-check";
-import { CLOSE_ALL_REMOVES_LEVELS } from "@/lib/level-words";
+import { CLOSE_ALL_REMOVES_LEVELS, levelsWait } from "@/lib/level-words";
 import { editorReference } from "@/lib/ticket-levels";
 import type { PositionModel } from "@/lib/models";
 import { closingPrice } from "@/lib/quotes";
@@ -137,7 +137,7 @@ export function PositionsView() {
     const levels = p.levels ?? NO_LEVELS;
     const draft = levelsEditor.draftFor(p.market);
     const editor = market === undefined || minLevelDistance(market.view) === null ? null : {
-      market, position: p, ...editorReference(account, terms, market, p.qty, known === null ? null : quoted), noClosing: `The take profit and stop loss cannot be checked at the moment. ${noPrice ?? houseTermsNote(snapshot) ?? CLOSE_WAITS}`,
+      market, position: p, ...editorReference(account, terms, market, p.qty, known === null ? null : quoted), noClosing: levelsWait(noPrice ?? houseTermsNote(snapshot)),
       limits: ticketLimits(account, p.market), toUsdDown, fields: draft?.fields ?? { takeProfit: "", stopLoss: "" }, onChange: levelsEditor.edit,
       onCancel: () => levelsEditor.cancel(p.market), onSend: (sent: Levels) => { if (draft !== null) levelsEditor.sending(draft.instance, sent); }, onSaved: (sent: LevelFields, words: string) => { if (draft !== null) levelsEditor.saved(draft.instance, sent, p.market, words); },
     };

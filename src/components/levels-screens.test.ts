@@ -113,9 +113,9 @@ describe("the levels editor", () => {
     expect(html).toContain("Leave a field empty to remove that level.");
   });
 
-  it("says a take profit is measured from the market price where the closing price may be capped nearer it", () => {
+  it("says a take profit is measured from the market price while the closing price is an estimate", () => {
     const html = render(editor({ capped: fixedFromInt(100_000) }));
-    expect(html).toContain("The price at which your entire position would close is currently 99,980.00. A new or moved stop loss must be at least 0.3% below that closing price. For a position of this size, a new or moved take profit must be at least 0.3% above the market price, which is currently 100,000.00.");
+    expect(html).toContain("The price at which your entire position would close is currently estimated at 99,980.00. A new or moved stop loss must be at least 0.3% below that closing price. While the closing price is an estimate, a new or moved take profit must be at least 0.3% above the market price, which is currently 100,000.00.");
   });
 
   it("keeps Cancel and Save from acting while a request is signed and sent, so its answer shows in the editor", () => {
