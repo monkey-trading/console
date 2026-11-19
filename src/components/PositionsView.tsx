@@ -230,7 +230,7 @@ export function PositionsView() {
               <div><dt className="text-label text-fg-3">Entry</dt><dd>{r.entry}</dd></div>
               <div><dt className="text-label text-fg-3">Mark</dt><dd>{r.mark}</dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Close-out" tip={CLOSEOUT_TIP} /></dt><dd>{r.closeout}</dd></div>
-              {r.editor !== null && <div><dt className="text-label text-fg-3"><Term label="Take profit / Stop loss" tip={LEVELS_TIP} /></dt><dd className="mt-1"><LevelsControl {...r.control} layout="card" id={levelsControlIds(id, r.key)[1]} controls={r.editing ? `${id}-levels-card` : undefined} /></dd></div>}
+              {r.editor !== null && <div><dt className="text-label text-fg-3"><Term label="Take profit / Stop loss" tip={LEVELS_TIP} /></dt><dd className="mt-1.5"><LevelsControl {...r.control} layout="card" id={levelsControlIds(id, r.key)[1]} controls={r.editing ? `${id}-levels-card` : undefined} /></dd></div>}
               <div><dt className="text-label text-fg-3"><Term label="Held" tip={HOLD_TIP} /></dt><dd>{r.hold}</dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Profit fee" tip={feeTip} /></dt><dd>{r.fee}<span className={SUB}>{r.falls}</span></dd></div>
               <div><dt className="text-label text-fg-3"><Term label="Fee (USD)" tip={FEE_USD_TIP} /></dt><dd>{r.feeUsd}<span aria-hidden={!r.noFee} className={`block text-label ${r.noFee ? "text-fg-3" : "invisible"}`}>{NO_FEE_NOTE}</span></dd></div>

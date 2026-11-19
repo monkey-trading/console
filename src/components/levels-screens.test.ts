@@ -70,7 +70,7 @@ describe("the position row's levels", () => {
     expect(row(html)).toContain(`aria-expanded="false" aria-label="${CHANGE}" class="`);
     expect(row(html)).toContain(`><span class="block ${LEVEL}">102,000.00</span><span class="block min-h-lh text-label ${LEVEL}">97,500.00</span></button>`);
     expect(controls(html)).toEqual([[CHANGE, "102,000.00 / 97,500.00"], [CHANGE, "|102,000.00||97,500.00|"]]);
-    expect(html).toMatch(/<dt[^>]*>(?:<[^>]*>)*Take profit \/ Stop loss<\/button>.*?<\/dt><dd class="mt-1"><button/);
+    expect(html).toMatch(/<dt[^>]*>(?:<[^>]*>)*Take profit \/ Stop loss<\/button>.*?<\/dt><dd class="mt-1.5"><button/);
   });
 
   it("names a level not set as none, and shows a dash for it", () => {
