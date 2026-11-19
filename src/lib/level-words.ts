@@ -16,20 +16,15 @@ export function headline(problem: string): string {
 }
 
 /** What the levels are, in the ticket's and the position editor's help. */
-export const LEVELS_HELP = [
-  "A take profit or stop loss closes your entire position when the price at which it would close reaches the level you set. That closing price is the bid for a long position and the offer for a short position, so a wider spread can trigger a level even when the market price has not moved.",
-  "A stop loss is then executed at the next available closing price, which may be worse than your level if the market gaps or reopens after a closure. A take profit is executed at your level or at a better price.",
-  "Both differ from a stop order, which opens or adds to a position when the market's reference price reaches its trigger price.",
-  "The take profit and stop loss on a position together count as one working order towards your limit.",
-] as const;
+export const LEVELS_HELP = "A take profit or stop loss closes your entire position when its closing price reaches the level you set. A stop loss may be executed at a worse price than your level if the market gaps.";
 
 /** What the ticket's level fields do to the position an order leaves, by what the order does to the position held: an add keeps a level left empty, a reversal removes the old levels, and a working order's levels apply only once it is executed. */
 export const TICKET_LEVELS_NOTES = {
-  adds: "This order adds to your position. Each level entered here replaces the position's current level, and a field left empty keeps the current level.",
-  reverses: "This order reverses your position, so the position's current take profit and stop loss are removed, and only the levels entered here apply to the new position.",
-  rests: "The levels entered here apply only once the order is executed. If the order then adds to your position, each level replaces the position's current level, and a field left empty keeps the current level.",
-  restsReversing: "The levels entered here apply only once the order is executed. If your position is then still smaller than the order, the order reverses it, so the position's current take profit and stop loss are removed, and only the levels entered here apply to the new position.",
-  restsReducing: "The levels entered here are attached only if this order, when it is executed, leaves you a position in its own direction. If your current position is then still at least as large as the order, the order only reduces it, and the levels are discarded.",
+  adds: "This order adds to your position, so each level entered here replaces the current one, and a field left empty keeps it.",
+  reverses: "This order reverses your position, so the position's current take profit and stop loss are removed and only the levels entered here apply to the new position.",
+  rests: "When this order is executed and adds to your position, each level entered here replaces the current one, and a field left empty keeps it.",
+  restsReversing: "When this order is executed and reverses your position, the position's current take profit and stop loss are removed and only the levels entered here apply to the new position.",
+  restsReducing: "If this order only reduces your position when it is executed, the levels entered here are discarded.",
 } as const;
 
 /** What the position editor's fields do. */
@@ -57,9 +52,9 @@ export const levelName = (kind: LevelKind, start = false): string => (start ? TI
 export type LevelBasis = "closing" | "trigger" | "mark";
 
 const BASES: Record<LevelBasis, { name: string; text: (price: string) => string; rule: string }> = {
-  closing: { name: "closing price", text: (price) => `the price at which the position would close, which is currently ${price}`, rule: "In this market" },
+  closing: { name: "closing price", text: (price) => `the current closing price of ${price}`, rule: "In this market" },
   trigger: { name: "trigger price", text: (price) => `the order's trigger price of ${price}`, rule: "In this market" },
-  mark: { name: "market price", text: (price) => `the market price, which is currently ${price}`, rule: "While the closing price is an estimate" },
+  mark: { name: "market price", text: (price) => `the current market price of ${price}`, rule: "While the closing price is an estimate" },
 };
 
 /**
@@ -101,7 +96,7 @@ function decimal(wire: string, places = 9): string {
  */
 export function describeLevelReject(reject: LevelReject): string {
   if (reject.kind === "levels_unsupported") return "This server does not support take-profit and stop-loss levels yet.";
-  return `The level ${decimal(reject.level)} was not accepted. In this market, a take profit or stop loss must be at least ${spokenRate(reject.min_distance_bps)} beyond the price it is measured from: above it for a long position's take profit or a short position's stop loss, and below it otherwise. That price was ${decimal(reject.reference, 5)} when your request was processed, so set the level further from it, on the correct side.`;
+  return `The level ${decimal(reject.level)} was not accepted. In this market, a take profit or stop loss must be at least ${spokenRate(reject.min_distance_bps)} beyond the price it is measured from, which was ${decimal(reject.reference, 5)} when your request was processed. Set the level further from that price, on the correct side.`;
 }
 
 /** A levels request refused for want of a working order slot, in words that say the levels take one. */

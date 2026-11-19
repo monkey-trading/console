@@ -26,7 +26,7 @@ export function LevelInputs({ title, check, fields, onChange }: { title: string;
   const problems = [check.problems.take_profit, check.problems.stop_loss, check.general].filter((p) => p !== null);
   return (
     <fieldset className="mt-4">
-      <legend className="text-caption text-fg-2"><Term label={title} tip={LEVELS_HELP.join(" ")} /></legend>
+      <legend className="text-caption text-fg-2"><Term label={title} tip={LEVELS_HELP} /></legend>
       <div className="mt-1 grid grid-cols-2 gap-2">
         {KINDS.map((kind) => {
           const estimate = check.estimates[kind];

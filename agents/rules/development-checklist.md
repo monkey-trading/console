@@ -263,7 +263,8 @@ README.
   buttons, `aria-label`s, and messages built in `src/lib/` — follow
   [interface-copy](interface-copy.md)? Is explanatory text written as a broker's help text, in
   complete, formal sentences with the standard trading terms, and are labels and buttons concise?
-  Was each changed string checked against the owner's two examples?
+  Is each tooltip, note and error within its length limit there? Was each changed string checked
+  against the owner's two examples?
 
 ## 13. Rollout
 
