@@ -7,6 +7,10 @@
 import type { MarketId } from "./engine/types";
 import type { OffsetGroupGridWire, PortfolioGridWire, PortfolioMarginWire } from "./engine/portfolio-types";
 import { parseFixed, type Fixed } from "./fixed";
+import { mulRounded } from "./fixed-rounding";
+import { groupCredit, type CreditLeg } from "./portfolio-credit";
+import type { Tier } from "./engine/types";
+import { flooredMargin } from "./volume-tier";
 
 /** One offset group the account holds a member of, at the market's bands. */
 export interface OffsetGroupModel {
@@ -84,10 +88,43 @@ function matchedExposure(group: OffsetGroupGridWire, qtyOf: (market: MarketId) =
 }
 
 /**
+ * What the console reads to tell whether a group could earn a credit: the close-out level, and each market's margin bands with
+ * the floor its initial bands carry now (the account's tier floor or an applying weekend margin), null while either is unread.
+ */
+export interface CreditTerms {
+  levelBps: number;
+  bandsOf: (market: MarketId) => { tiers: readonly Tier[]; initialFloorBps: number } | null;
+}
+
+/**
+ * Whether `group`, held as `qtyOf` says, could earn a credit at the market's bands or at initial bands. Each leg is charged for
+ * its residual shock only, since the node serves no close-spread ceiling: that charge is never above the engine's, so a group
+ * this finds no credit for earns none, and one it cannot value (a missing mark, loading or bands) is taken to earn one.
+ */
+function couldEarnCredit(group: OffsetGroupGridWire, qtyOf: (market: MarketId) => Fixed, markOf: (market: MarketId) => Fixed | null, terms: CreditTerms): boolean {
+  const held = group.members.filter((member) => qtyOf(member.market) !== 0n);
+  const inputs = held.map((member) => ({ member, mark: markOf(member.market), loading: parseFixed(member.loading), bands: terms.bandsOf(member.market) }));
+  const legsAt = (initial: boolean): CreditLeg[] | null => {
+    const legs: CreditLeg[] = [];
+    for (const { member, mark, loading, bands } of inputs) {
+      if (mark === null || loading === null || bands === null) return null;
+      const qty = qtyOf(member.market);
+      const notional = mulRounded(qty < 0n ? -qty : qty, mark < 0n ? -mark : mark, "up");
+      legs.push({ qty, price: mark, loading, bands: flooredMargin(bands.tiers, notional, initial ? bands.initialFloorBps : 0), notional, residualShockBps: member.residual_shock_bps, ceilingBps: 0 });
+    }
+    return legs;
+  };
+  return [false, true].some((initial) => {
+    const legs = legsAt(initial);
+    return legs === null || groupCredit(legs, group.floor_share_bps, terms.levelBps).offset > 0n;
+  });
+}
+
+/**
  * Whether an order that moves the account's position in `market` by `delta` concerns portfolio margin, so the ticket asks the
  * server what it would do: the account earns a credit in the market's group, or the order would create one, change one or
- * remove one, its group's matched exposure at the marks moving. An order in no group's markets, or one that matches nothing
- * before or after, does not.
+ * remove one, its group's matched exposure at the marks moving. An order in no group's markets, one that matches nothing
+ * before or after, and, given `terms`, one whose group earns no credit afterwards, at either basis, does not.
  */
 export function touchesOffset(input: {
   portfolio: PortfolioModel | undefined;
@@ -96,13 +133,15 @@ export function touchesOffset(input: {
   markOf: (market: MarketId) => Fixed | null;
   market: MarketId;
   delta: Fixed;
+  terms?: CreditTerms;
 }): boolean {
   if (creditedGroupOf(input.portfolio, input.market) !== null) return true;
   const group = gridGroupOf(input.grid, input.market);
   // A group whose floor share keeps all of its matched exposure's margin gives no credit.
   if (group === null || input.delta === 0n || group.floor_share_bps >= 10_000) return false;
   const held = (market: MarketId) => input.positions.find((p) => p.market === market)?.qty ?? 0n;
-  const before = matchedExposure(group, held, input.markOf);
-  const after = matchedExposure(group, (market) => held(market) + (market === input.market ? input.delta : 0n), input.markOf);
-  return before !== null && after !== null && before !== after;
+  const after = (market: MarketId) => held(market) + (market === input.market ? input.delta : 0n);
+  const [matchedBefore, matchedAfter] = [matchedExposure(group, held, input.markOf), matchedExposure(group, after, input.markOf)];
+  if (matchedBefore === null || matchedAfter === null || matchedBefore === matchedAfter) return false;
+  return input.terms === undefined || couldEarnCredit(group, after, input.markOf, input.terms);
 }

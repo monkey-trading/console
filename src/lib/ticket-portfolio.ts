@@ -9,9 +9,11 @@ import type { MarketId, MarketQuote, Reject, Side } from "./engine/types";
 import { fixedFromWire, fixedToWire, type Fixed } from "./fixed";
 import { describeReject } from "./messages";
 import type { AccountModel, MarketModel } from "./models";
-import { creditedGroupOf, touchesOffset } from "./portfolio";
+import { creditedGroupOf, touchesOffset, type CreditTerms } from "./portfolio";
 import { CLOSE_HEDGE_POINTER, describeOrderMargin, PREVIEW_FAILED, TRIGGERED_LEVELS_NOTE, TRIGGERED_ORDER_NOTE } from "./portfolio-words";
 import { requirementOf } from "./account-figures";
+import { accountPricing } from "./tier-view";
+import { weekendFloorBps } from "./volume-tier";
 import type { ConsoleState } from "./store/state";
 
 /** The server's answer for a request: its preview, `"failed"` when the read failed or the server predates the route, or undefined while awaited. */
@@ -69,7 +71,21 @@ export function concernsHedge(state: ConsoleState, market: MarketId, order: { si
   const account = state.account;
   if (order.qty <= 0n || account === null) return false;
   const markOf = (id: MarketId) => state.markets.find((m) => m.id === id)?.mark ?? null;
-  return touchesOffset({ portfolio: account.portfolio, grid: state.houseParams?.portfolioGrid, positions: account.positions, markOf, market, delta: order.side === "buy" ? order.qty : -order.qty });
+  return touchesOffset({ portfolio: account.portfolio, grid: state.houseParams?.portfolioGrid, positions: account.positions, markOf, market, delta: order.side === "buy" ? order.qty : -order.qty, terms: creditTerms(state) });
+}
+
+/** What `touchesOffset` needs to tell whether a group could earn a credit, or none while the close-out level or the tier's floor is unread. */
+function creditTerms(state: ConsoleState): CreditTerms | undefined {
+  const params = state.houseParams;
+  if (params === null || params === undefined) return undefined;
+  return {
+    levelBps: params.closeoutLevelBps,
+    bandsOf: (market) => {
+      const view = state.markets.find((m) => m.id === market)?.view;
+      const floorBps = view === undefined ? undefined : accountPricing(state.account, params, view).marginFloorBps;
+      return view === undefined || floorBps === undefined ? null : { tiers: view.margin_tiers, initialFloorBps: Math.max(floorBps, weekendFloorBps(view.weekend_margin, state.now)) };
+    },
+  };
 }
 
 /**
