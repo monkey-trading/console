@@ -10,6 +10,7 @@ import type { PortfolioModel } from "./portfolio";
 import { PREVIEW_FAILED, TRIGGERED_LEVELS_NOTE, TRIGGERED_ORDER_NOTE } from "./portfolio-words";
 import { initialState, type ConsoleState } from "./store/state";
 import { btcAt, q } from "./ticket-fixtures";
+import { decodeVolume } from "./volume-tier";
 import { closeDeclined, closeRequests, concernsHedge, offsetTicket, previewKey, previewRequest, requestOfKey, triggeredNote } from "./ticket-portfolio";
 
 const WALLET = "0x00000000000000000000000000000000000000aa";
@@ -66,6 +67,22 @@ describe("which ticket orders the server previews", () => {
     const kept = { ...GRID, groups: GRID.groups.map((g) => ({ ...g, floor_share_bps: 10_000 })) };
     const params = (await state(lone)).houseParams;
     expect(concernsHedge(await state(lone, params === null ? {} : { houseParams: { ...params, portfolioGrid: kept } }), 2, { side: "sell", qty: q("10") })).toBe(false);
+  });
+
+  it("previews and notes nothing for a matched order whose grid charge leaves its credit at zero, as with no portfolio margin", async () => {
+    const volume = decodeVolume({ tier: 0, matured: "0", pending: "0", progress: [], best_price_bounds: {} });
+    const tiered = (shockBps: number) => async () => {
+      const account = { ...holding([[1, "1"]], LONE), ...(volume === null ? {} : { volume }) };
+      const params = (await state(account)).houseParams;
+      const grid = { groups: GRID.groups.map((g) => ({ ...g, members: g.members.map((m) => ({ ...m, residual_shock_bps: shockBps })) })) };
+      const read = await state(account, params === null ? {} : { houseParams: { ...params, portfolioGrid: grid, volumeTiers: [{ threshold: "0", day_divisor: 1, best_price_share_bps: 10_000, margin_floor_bps: 0 }] } });
+      return { read, request: previewRequest(read, await marketOf(2), order("sell", "10")), note: triggeredNote(account, 2, order("sell", "10"), true, concernsHedge(read, 2, { side: "sell", qty: q("10") })) };
+    };
+    // A shock of 5,000 bps charges the matched part more than its bands at either basis; one of 20 bps leaves a credit.
+    const none = await tiered(5_000)();
+    expect([none.request, none.note]).toEqual([null, null]);
+    const earns = await tiered(20)();
+    expect([earns.request?.market, earns.note]).toEqual([2, TRIGGERED_LEVELS_NOTE]);
   });
 
   it("previews nothing for a server before V84, which admits orders position by position and serves no preview", async () => {

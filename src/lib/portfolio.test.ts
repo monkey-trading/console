@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { PortfolioGridWire, PortfolioMarginWire } from "./engine/portfolio-types";
 import { fixedFromInt, parseFixed } from "./fixed";
-import { creditedGroupOf, creditedGroups, decodePortfolio, totalOffset, touchesOffset } from "./portfolio";
+import { creditedGroupOf, creditedGroups, decodePortfolio, totalOffset, touchesOffset, type CreditTerms } from "./portfolio";
 
 /** The engine's worked example (`a_hedged_pair_takes_its_matched_exposures_credit`): oil and gold hedged, BTC alone. */
 const COMMODITIES = { members: [32, 30], net_notional: "70000", matched_notional: "1260000", worst_loss: "2660", binding_direction: "down", offset: "3990" } as const;
@@ -76,5 +76,31 @@ describe("which orders change a hedge", () => {
   it("cannot tell, and so passes over, a group whose held market has no mark or no grid", () => {
     expect(touches([[1, "1"]], 2, "-10", new Map([[1, fixedFromInt(100_000)]]))).toBe(false);
     expect(touchesOffset({ portfolio: undefined, grid: undefined, positions: [{ market: 1, qty: f("1") }], markOf: (id) => MARKS.get(id) ?? null, market: 2, delta: f("-10") })).toBe(false);
+  });
+});
+
+/** Gold (30) and silver (32), each at loading 1, with residual shocks `gold` and `silver` bps: a group's launch shocks, or its bounds. */
+const metals = (gold: number, silver: number): PortfolioGridWire => ({ groups: [{ name: "metals", floor_share_bps: 1_000, max_floor_share_bps: 10_000, members: [{ market: 30, loading: "1", residual_shock_bps: gold, max_residual_shock_bps: 167 }, { market: 32, loading: "1", residual_shock_bps: silver, max_residual_shock_bps: 73 }] }] });
+const METAL_MARKS = new Map([[30, fixedFromInt(2_000)], [32, fixedFromInt(25)]]);
+const TIERS = [{ up_to: "1000000", bps: 100 }, { up_to: null, bps: 200 }];
+
+describe("which matched orders earn a credit", () => {
+  /** A tier 2 account holding 100 oz of gold long, preparing 4,000 oz of silver short: $200,000 against $100,000. */
+  const silverShort = (grid: PortfolioGridWire, initialFloorBps: number, bandsOf?: CreditTerms["bandsOf"]) =>
+    touchesOffset({ portfolio: undefined, grid, positions: [{ market: 30, qty: f("100") }], markOf: (id) => METAL_MARKS.get(id) ?? null, market: 32, delta: f("-4000"), terms: { levelBps: 5_000, bandsOf: bandsOf ?? (() => ({ tiers: TIERS, initialFloorBps })) } });
+
+  it("passes over an order whose group's grid charge meets its matched bands at both bases", () => {
+    // At the bounds the charge is 2.4% of the matched notional against bands of 2%, before any close cost.
+    expect(silverShort(metals(167, 73), 0)).toBe(false);
+  });
+
+  it("keeps an order whose group earns a credit at either basis", () => {
+    expect(silverShort(metals(20, 20), 0)).toBe(true);
+    // Initial bands that carry a floor can earn the credit the market's bands do not.
+    expect(silverShort(metals(167, 73), 500)).toBe(true);
+  });
+
+  it("keeps an order it cannot value, which the server must tell", () => {
+    expect(silverShort(metals(167, 73), 0, (market) => (market === 32 ? null : { tiers: TIERS, initialFloorBps: 0 }))).toBe(true);
   });
 });
