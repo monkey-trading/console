@@ -43,12 +43,6 @@ const KINDS = ORDER_TYPES.map((value) => ({ value, label: ORDER_LABELS[value] })
 const LONGEST_HEDGE_LINE = describeOrderMargin(999_999_999_999_990_000n, 999_999_999_999_990_000n + 1n, 999_999_999_999_990_000n, true);
 const INPUT = "mt-1 min-h-11 w-full rounded border border-edge bg-ink px-2 py-2 text-base text-fg lg:min-h-0 lg:text-data focus-visible:outline-2 focus-visible:outline-glow";
 
-/** Whether `element` is rendered: `checkVisibility` where the browser has it, else whether it has a box. */
-function isShown(element: HTMLElement | null): boolean {
-  if (element === null) return false;
-  return typeof element.checkVisibility === "function" ? element.checkVisibility() : element.getClientRects().length > 0;
-}
-
 /** Links to the Funding page. */
 function FundingLink() {
   return <Link href="/funding" className="-my-3.5 inline-flex min-h-11 items-center text-glow underline focus-visible:outline-2 focus-visible:outline-glow lg:my-0 lg:min-h-0">Go to Funding</Link>;
@@ -76,7 +70,7 @@ export function DealTicket() {
   const hedgeRequest = market === undefined || marketSize?.kind !== "qty" ? null : previewRequest(state, market, { side, qty: marketSize.qty, resting: false });
   // The ticket is not asked about while it is off screen, as in a phone layout's other panes.
   const form = useRef<HTMLFormElement>(null);
-  const previews = useOrderPreviews(store, hedgeRequest === null ? [] : [hedgeRequest], state.account, state.now, () => isShown(form.current));
+  const previews = useOrderPreviews(store, hedgeRequest === null ? [] : [hedgeRequest], state.account, state.now, form);
   if (!market) return null;
   // One plain-words state for a paused market: a handover in progress, an operator on a node this build does not list, a
   // closed market, no usable price, or reduce-only. A node the console does not trust is the gate below, which comes first.
