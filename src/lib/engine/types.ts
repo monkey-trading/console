@@ -12,6 +12,7 @@ import type { CurvePoint, MarketPricing, SpreadTier, StressLevel } from "./prici
 import type { VolumeTierWire } from "./volume-types";
 export type { VolumeTierWire } from "./volume-types";
 import type { LevelReject } from "./level-types";
+import type { PortfolioGridWire } from "./portfolio-types";
 export type { LevelEvent, LevelKind, LevelReject, LevelsRemovedReason, PositionLevelsRequest, PositionLevelsWire } from "./level-types";
 export type { CloseFee, CurvePoint, ListingNotice, ListingNotices, MarketPricing, SpreadTier, StressLevel } from "./pricing-types";
 
@@ -262,6 +263,7 @@ export interface SetParams {
   profit_fee_curve?: CurvePoint[];
   /** From V59, the volume tiers; the margin floors, order limits and request rates are from V64 and V66. */
   volume_tiers?: VolumeTierWire[];
+  /** From V81, the offset groups portfolio margin reads; absent while it names none. */ portfolio_grid?: PortfolioGridWire;
 }
 
 /** One message of the WebSocket stream at `/v1/stream`: a sequenced command with its events. */
@@ -293,8 +295,6 @@ export interface HistoryPage {
   events: HistoryEvent[];
   next: string | null;
 }
-
 export type { CancelAllRequest, CloseAllRequest, CloseEntry } from "./batch-types";
 export type { PayoutEntry, PayoutsPage, QueuedWithdrawal, SignedWithdrawal, WithdrawalAuthorization, WithdrawalPage } from "./withdrawal-types";
-
 export type { MarketQuote, QuoteStep } from "./quote-types";

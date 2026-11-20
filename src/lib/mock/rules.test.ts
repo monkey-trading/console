@@ -20,28 +20,29 @@ describe("close-out of several positions", () => {
     return { node, account };
   }
 
-  it("closes the largest tradable loser first, skips a halted market, and announces once", async () => {
+  it("closes BTC-USD and ETH-USD as their offset group, skips a halted market, and announces once", async () => {
     const { node, account } = await setup(2_000);
     node.controls.setHalted(3, true);
     const seen: EngineEvent[] = [];
     node.client.subscribe((m) => seen.push(...m.events));
     node.client.tick(START + 9_000);
-    expect(seen.filter((e) => e.type === "fill")[0]).toMatchObject({ market: 1, liquidation: true });
+    // The group closes whole, BTC-USD then ETH-USD, each a close-out's fill.
+    expect(seen.flatMap((e) => (e.type === "fill" ? [[e.market, e.liquidation]] : []))).toEqual([[1, true], [2, true]]);
     expect(types(seen).filter((t) => t === "close_out")).toHaveLength(1);
-    expect(account.positions.has(3)).toBe(true); // a halted market's position waits
+    expect([...account.positions.keys()]).toEqual([3]); // a halted market's position waits
     node.client.tick(START + 10_000);
     expect(types(seen).filter((t) => t === "close_out")).toHaveLength(1); // not repeated while nothing can trade
   });
 
   it("stops as soon as the account is healthy again, leaving the other positions open", async () => {
-    // BTC's 1,500 loss puts equity under half the margin; with BTC closed, equity covers what is left.
+    // BTC's 1,500 loss puts equity under half the margin; closing EUR-USD alone would not restore it, and the crypto group, closed together, does.
     const { node, account } = await setup(1_500);
     const seen: EngineEvent[] = [];
     node.client.subscribe((m) => seen.push(...m.events));
     node.client.tick(START + 9_000);
     const closed = seen.filter((e) => e.type === "fill").map((e) => (e.type === "fill" ? e.market : 0));
-    expect(closed).toEqual([1]);
-    expect([...account.positions.keys()].sort()).toEqual([2, 3]);
+    expect(closed).toEqual([1, 2]);
+    expect([...account.positions.keys()].sort()).toEqual([3]);
   });
 });
 

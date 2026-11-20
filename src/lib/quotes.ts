@@ -62,6 +62,8 @@ export interface TicketPrices {
   problem: string | null;
   /** Whether that problem is about the order's size, so it belongs under the size field. */
   problemIsSize: boolean;
+  /** Whether the node declines the order's size for margin, which under portfolio margin its own preview may overrule. */
+  marginDeclined: boolean;
 }
 
 /**
@@ -73,9 +75,9 @@ export interface TicketPrices {
 export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; quoteError: string | null; preview: TicketPreview; side: Side; mark: Fixed | null; limits?: TicketLimits | null }): TicketPrices {
   const { preview, side } = input;
   if (!input.live) {
-    return { bid: preview.bid, offer: preview.offer, price: preview.quote?.price ?? null, exactClose: false, toxicityBps: 0, spreadTenths: preview.spreadTenths, problem: null, problemIsSize: false };
+    return { bid: preview.bid, offer: preview.offer, price: preview.quote?.price ?? null, exactClose: false, toxicityBps: 0, spreadTenths: preview.spreadTenths, problem: null, problemIsSize: false, marginDeclined: false };
   }
-  const none = (problem: string): TicketPrices => ({ bid: null, offer: null, price: null, exactClose: false, toxicityBps: 0, spreadTenths: null, problem, problemIsSize: false });
+  const none = (problem: string): TicketPrices => ({ bid: null, offer: null, price: null, exactClose: false, toxicityBps: 0, spreadTenths: null, problem, problemIsSize: false, marginDeclined: false });
   const { quote } = input;
   if (quote === null) {
     if (input.quoteError === null) return none("Waiting for a live price for this market.");
@@ -85,7 +87,7 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
   // The side that closes the whole position, when the order is that size, prices at the node's exact close quote.
   const exact = (s: Side): ExecutablePrice | null => {
     const price = closingPrice(quote, s, preview.qty);
-    return price === null ? executablePrice(quote, s, preview.qty) : { price, declined: null };
+    return price === null ? executablePrice(quote, s, preview.qty) : { price, declined: quote.close?.declined ?? null };
   };
   const ask = exact("buy");
   const bid = exact("sell");
@@ -93,8 +95,9 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
   const spreadTenths = ask !== null && bid !== null && input.mark !== null && input.mark > 0n ? tenthBpsOfValue(ask.price - bid.price, input.mark) : null;
   const problem = mine === null ? "This order is too large to be priced. Please try a smaller order size." : mine.declined === null ? null : declinedProblem(quote, side, mine.declined, input.limits ?? null);
   // The node declining for margin or the house's capacity, or having no step this large, is a matter of the size.
-  const problemIsSize = mine === null || (mine.declined !== null && (isMarginDecline(mine.declined) || mine.declined.kind === "house_capacity"));
-  return { bid: bid?.price ?? null, offer: ask?.price ?? null, price: mine?.price ?? null, exactClose: closingPrice(quote, side, preview.qty) !== null, toxicityBps: quote.toxicity_bps ?? 0, spreadTenths, problem, problemIsSize };
+  const marginDeclined = mine?.declined != null && isMarginDecline(mine.declined);
+  const problemIsSize = mine === null || marginDeclined || mine.declined?.kind === "house_capacity";
+  return { bid: bid?.price ?? null, offer: ask?.price ?? null, price: mine?.price ?? null, exactClose: closingPrice(quote, side, preview.qty) !== null, toxicityBps: quote.toxicity_bps ?? 0, spreadTenths, problem, problemIsSize, marginDeclined };
 }
 
 /** Whether the node declined a size for equity: against the initial requirement at the tier's floor, or, from V60, with a weekend margin that applies. */
@@ -106,7 +109,9 @@ function isMarginDecline(reject: Reject): boolean {
  * The message for a size the node's ladder declines. An `insufficient_margin` decline's equity and
  * margin figures are computed for the probe at the declined step's top, not for the order's size
  * (the ladder's steps sit at spread-tier tops, monkey-trading/engine#290), so they cannot be shown
- * as the order's; the largest step that still fills is the size the account can open.
+ * as the order's; the largest step that still fills is the size the account can open. An order that
+ * concerns a hedge, whose admission can depend on its size either way, takes the server's preview instead
+ * (`ticketFigures`).
  */
 function declinedProblem(quote: MarketQuote, side: Side, declined: Reject, limits: TicketLimits | null): string {
   if (!isMarginDecline(declined)) return describeReject(declined);

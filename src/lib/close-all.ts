@@ -4,6 +4,9 @@ import type { MarketId } from "./engine/types";
 import type { ConfirmState } from "./confirm-window";
 import type { Fixed } from "./fixed";
 
+/** The slippage bound a Close, Close all and Close hedge send, capped at the market's own. */
+export const CLOSE_SLIPPAGE_BPS = 25;
+
 /** One open position as its row shows it: `quoted` is the price its own Close button would send, null when it has none. */
 export interface CloseRow {
   market: MarketId;
@@ -37,6 +40,41 @@ export function planCloseAll(rows: readonly CloseRow[]): { targets: CloseTarget[
     else targets.push({ market: row.market, quoted: row.quoted });
   }
   return { targets, leftOut };
+}
+
+/**
+ * One position of a hedge as its row shows it: `quoted` is its own Close button's price, null when it has none, `mark` its
+ * market's latest mark, and `maxSlippageBps` the most slippage its market allows.
+ */
+export interface HedgeMember {
+  market: MarketId;
+  symbol: string;
+  open: boolean;
+  quoted: Fixed | null;
+  mark: Fixed | null;
+  maxSlippageBps: number;
+}
+
+/**
+ * What Close hedge sends (monkey-trading/engine#913, D7): one close-all entry for each position of the hedge whose market can
+ * trade, in row order, priced at its own Close button's quote where the console has one and otherwise at its mark, since the
+ * node quotes at most four markets at once; the maximum slippage, Close's own while every entry is quoted, and otherwise the
+ * most its markets allow, since a close priced at the mark pays its spread from it; and the symbols of those whose market is
+ * closed or has no price, which it leaves out.
+ */
+export function planGroupClose(members: readonly HedgeMember[]): { targets: CloseTarget[]; slippageBps: number; untradable: string[] } {
+  const targets: CloseTarget[] = [];
+  const untradable: string[] = [];
+  let slippageBps = CLOSE_SLIPPAGE_BPS;
+  for (const member of members) {
+    const reference = member.quoted ?? member.mark;
+    if (!member.open || member.mark === null || reference === null) untradable.push(member.symbol);
+    else {
+      targets.push({ market: member.market, quoted: reference });
+      if (member.quoted === null) slippageBps = Math.max(slippageBps, member.maxSlippageBps);
+    }
+  }
+  return { targets, slippageBps, untradable };
 }
 
 /** The sentence under the button that names what a Close all leaves out, or null when it leaves nothing. */

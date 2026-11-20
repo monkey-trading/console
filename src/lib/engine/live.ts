@@ -217,6 +217,8 @@ export class LiveEngineClient implements EngineClient {
   cancelAll(request: CancelAllRequest): Promise<ActionResult> { return this.action("POST", "/v1/orders/cancel-all", request); }
   closeAll(request: CloseAllRequest): Promise<ActionResult> { return this.action("POST", "/v1/positions/close-all", request); }
   setPositionLevels(request: PositionLevelsRequest): Promise<ActionResult> { return this.action("POST", "/v1/positions/levels", request); }
+  /** From V84, an exact market order's verdict: the request is unsigned, and the enclave signs the answer for it. */
+  async preview(r: import("./portfolio-types").OrderPreviewRequest): Promise<import("./portfolio-types").OrderPreviewWire> { return (await this.transport.get(`/v1/accounts/${r.account}/preview?${new URLSearchParams({ market: String(r.market), side: r.side, qty: r.qty, reduce_only: String(r.reduceOnly) })}`)) as import("./portfolio-types").OrderPreviewWire; }
 
   withdraw(request: WithdrawalRequest): Promise<ActionResult> {
     return this.action("POST", "/v1/withdrawals", request);

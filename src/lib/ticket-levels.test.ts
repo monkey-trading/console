@@ -43,7 +43,7 @@ describe("closingAt", () => {
 });
 
 describe("ticketLevels", () => {
-  const prices = (price: bigint | null) => ({ bid: null, offer: null, price, exactClose: false, toxicityBps: 0, spreadTenths: null, problem: null, problemIsSize: false });
+  const prices = (price: bigint | null) => ({ bid: null, offer: null, price, exactClose: false, toxicityBps: 0, spreadTenths: null, problem: null, problemIsSize: false, marginDeclined: false });
 
   it("offers no levels before the node runs V79, though the market's listing names a distance, nor before its version is read", async () => {
     const { node, state, market } = await fixture();

@@ -93,6 +93,7 @@ export class ActionClient implements EngineClient {
   cancelAll(body: CancelAllRequest) { return this.act("cancel_all", body); }
   closeAll(body: CloseAllRequest) { return this.act("close_all", body); }
   setPositionLevels(body: PositionLevelsRequest) { return this.act("levels", body); }
+  preview = this.absent;
   withdraw(body: WithdrawalRequest) { return this.act("withdraw", body); }
   registerSessionKey(body: SessionKeyRequest) { return this.act("session_key", body); }
   revokeSessionKey(body: SessionKeyRevocationRequest) { return this.act("session_key_revoke", body); }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { describeLeftOut, planCloseAll, pressBatch, pressCloseAll, targetsKey, type CloseRow } from "./close-all";
+import { CLOSE_SLIPPAGE_BPS, describeLeftOut, planCloseAll, planGroupClose, pressBatch, pressCloseAll, targetsKey, type CloseRow, type HedgeMember } from "./close-all";
 
 const row = (market: number, symbol: string, over: Partial<CloseRow> = {}): CloseRow => ({ market, symbol, open: true, quoted: 1_000_000_000n * BigInt(market), ...over });
 
@@ -85,5 +85,28 @@ describe("the list a confirm window is armed for", () => {
     expect(at(1, 2)).not.toBe(at(1, 2, 3));
     expect(at(1, 2)).not.toBe(at(1, 3));
     expect(at()).toBe("");
+  });
+});
+
+describe("planning a hedge's close", () => {
+  const member = (market: number, over: Partial<HedgeMember> = {}): HedgeMember => ({ market, symbol: `M${market}`, open: true, quoted: 1_000_000_000n * BigInt(market), mark: 900_000_000n * BigInt(market), maxSlippageBps: 50 + market, ...over });
+
+  it("sends a hedge of more than four positions whole, at each quote where the node quotes it and at the mark where it does not", () => {
+    // The node quotes at most four markets at once, so the fifth has no closing price of its own, and pays its spread from the mark.
+    const plan = planGroupClose([member(1), member(2), member(3), member(4), member(5, { quoted: null })]);
+    expect(plan).toEqual({ targets: [1, 2, 3, 4].map((m) => ({ market: m, quoted: 1_000_000_000n * BigInt(m) })).concat({ market: 5, quoted: 4_500_000_000n }), slippageBps: 55, untradable: [] });
+  });
+
+  it("sends Close's own maximum slippage while every position is quoted", () => {
+    expect(planGroupClose([member(1), member(2)]).slippageBps).toBe(CLOSE_SLIPPAGE_BPS);
+  });
+
+  it("leaves out and names a position whose market is closed or has no price, and closes the rest", () => {
+    const plan = planGroupClose([member(1), member(2, { open: false }), member(3, { quoted: null, mark: null })]);
+    expect(plan).toEqual({ targets: [{ market: 1, quoted: 1_000_000_000n }], slippageBps: CLOSE_SLIPPAGE_BPS, untradable: ["M2", "M3"] });
+  });
+
+  it("sends nothing when no position of the hedge can trade", () => {
+    expect(planGroupClose([member(1, { open: false }), member(2, { open: false })])).toEqual({ targets: [], slippageBps: CLOSE_SLIPPAGE_BPS, untradable: ["M1", "M2"] });
   });
 });

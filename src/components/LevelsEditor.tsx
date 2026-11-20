@@ -18,6 +18,7 @@ import type { MarketModel, PositionModel } from "@/lib/models";
 import { formatMark } from "@/lib/price-format";
 import { setPositionLevels } from "@/lib/store/level-actions";
 import type { TicketLimits } from "@/lib/tier-view";
+import { TRIGGERED_LEVELS_NOTE } from "@/lib/portfolio-words";
 
 import { useConsoleValue, useSession } from "./ConsoleProvider";
 import { LevelInputs } from "./LevelInputs";
@@ -51,13 +52,15 @@ interface Props {
   onRemovedWithFocus: (market: MarketModel["id"], dialog: HTMLElement, panel: HTMLElement | null) => void;
   /** What a save of this dialog's said while it stayed open, read out from inside it. */
   announced: string;
+  /** Whether the position is part of a hedge that earns a margin offset, whose levels then fill even if the margin rises (V84, D14). */
+  hedged: boolean;
 }
 
 const BUTTON = "min-h-11 rounded border px-4 py-1.5 text-caption focus-visible:outline-2 focus-visible:outline-glow";
 /** A full-screen sheet on a phone; from 1024 px, a dialog centred over the page. */
 const SHEET = "m-0 h-dvh max-h-none w-full max-w-none overflow-y-auto bg-ink-1 p-0 text-fg backdrop:bg-ink/70 lg:m-auto lg:h-fit lg:max-h-[calc(100dvh-2rem)] lg:w-[calc(100%-2rem)] lg:max-w-md lg:rounded-xl lg:border lg:border-line-2";
 
-export function LevelsEditor({ market, position, fields, onChange, closing, noClosing, capped, limits, toUsdDown, onCancel, onSend, onSaved, saving, onSettled, readOnly, describedBy, onRemovedWithFocus, announced }: Props) {
+export function LevelsEditor({ market, position, fields, onChange, closing, noClosing, capped, limits, toUsdDown, onCancel, onSend, onSaved, saving, onSettled, readOnly, describedBy, onRemovedWithFocus, announced, hedged }: Props) {
   const { store } = useSession();
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useId();
@@ -123,6 +126,7 @@ export function LevelsEditor({ market, position, fields, onChange, closing, noCl
           {closing !== null && <p className="mt-2 text-label leading-relaxed text-fg-3">The price at which your entire position would close is currently {capped === null ? "" : "estimated at "}{formatMark(closing, market.places)}{capped === null ? "" : `, and the market price is ${formatMark(capped, market.places)}`}. {capped === null
             ? `A new or moved take profit must be at least ${rate} ${long ? "above" : "below"} that closing price, and a new or moved stop loss at least ${rate} ${long ? "below" : "above"} it.`
             : `A new or moved stop loss must be at least ${rate} ${long ? "below" : "above"} that closing price, and a new or moved take profit at least ${rate} ${long ? "above" : "below"} the market price.`}</p>}
+          {hedged && <p className="mt-2 text-label leading-relaxed text-fg-3">{TRIGGERED_LEVELS_NOTE}</p>}
           <div className="mt-4 flex gap-2">
             <button type="submit" aria-disabled={!canSave} aria-describedby={describedBy} className={`${BUTTON} border-glow bg-glow/10 text-glow hover:bg-glow/20 aria-disabled:cursor-not-allowed aria-disabled:opacity-40`}>{saving ? "Signing…" : "Save"}</button>
             <button type="button" className={`${BUTTON} border-line-2 text-fg-2 hover:border-glow hover:text-glow`} onClick={cancel}>Cancel</button>

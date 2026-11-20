@@ -1,5 +1,6 @@
 /** The House solvency page's figures: caps from the engine's own rules, parameters, and the withdrawal queue's totals. */
 
+import type { PortfolioGridWire } from "./engine/portfolio-types";
 import type { CurvePoint, EngineCommand, SetParams, StressLevel, VolumeTierWire } from "./engine/types";
 import { maxFixed, bpsOf, parseFixed, type Fixed } from "./fixed";
 
@@ -19,6 +20,8 @@ export interface HouseParams {
   profitFeeCurve: CurvePoint[];
   /** From V59, the volume tiers: what each earns and what it brings; empty or absent before it. */
   volumeTiers?: VolumeTierWire[];
+  /** From V81, the offset groups portfolio margin reads; absent while the parameters name none. */
+  portfolioGrid?: PortfolioGridWire;
   /** The seq of the `set_params` these values come from; null in the mock, which logs none, and from a node restored from an older snapshot. */
   seq: number | null;
 }
@@ -56,10 +59,10 @@ export function setParamsOf(cmd: EngineCommand, events: readonly { type: string 
   const payload = cmd.type === "admin" ? cmd : cmd.type === "signed_admin" ? cmd.command : undefined;
   if (payload === undefined || payload.action !== "set_params") return null;
   const entry = payload as SetParams;
-  const { profit_fee_bps, closeout_level_bps, house_total_cap_bps, stress_levels, profit_fee_curve, volume_tiers } = entry;
+  const { profit_fee_bps, closeout_level_bps, house_total_cap_bps, stress_levels, profit_fee_curve, volume_tiers, portfolio_grid } = entry;
   const floor = typeof entry.house_total_cap_floor === "string" ? entry.house_total_cap_floor : "0";
   if (parseFixed(floor) === null) return null;
-  return { profit_fee_bps, closeout_level_bps, house_total_cap_bps, house_total_cap_floor: floor, stress_levels, profit_fee_curve, volume_tiers };
+  return { profit_fee_bps, closeout_level_bps, house_total_cap_bps, house_total_cap_floor: floor, stress_levels, profit_fee_curve, volume_tiers, portfolio_grid };
 }
 
 /**

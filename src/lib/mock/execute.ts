@@ -5,11 +5,12 @@ import { metaFor } from "../engine/meta";
 import type { EngineEvent, Fill, MarketId, Reject, Side } from "../engine/types";
 import { mulRounded, roundDiv } from "../fixed-rounding";
 import { feeAt, lastHold, openedAfter, profitFee } from "../holding-fee";
-import { equityOf, feeBaseOf, houseNav, houseNetNotional, initialMarginOf, marginFloorOf, tierOfAccount } from "./accounts";
+import { feeBaseOf, houseNav, houseNetNotional, marginFloorOf, tierOfAccount } from "./accounts";
 import { recordEmissionResult } from "./emissions";
-import { adverseBps, executionCost, exceedsSlippage, notionalOf, priceOrder, USD, type Priced } from "../pricing";
-import { accountSpreadTiers, flooredMargin } from "../volume-tier";
+import { adverseBps, exceedsSlippage, notionalOf, priceOrder, USD, type Priced } from "../pricing";
+import { accountSpreadTiers } from "../volume-tier";
 import { settleLevels, type FillCause } from "./level-state";
+import { requirementOf, type Book } from "./portfolio";
 import type { AccountState, Holding, MockState } from "./state";
 import { recordFill } from "./volume";
 
@@ -28,6 +29,8 @@ export interface FillRequest {
   cause?: FillCause;
   /** A last check on the priced fill before it is booked, as the engine's `execute_checked` runs a market order's levels; its refusal refuses the fill. */
   check?: () => Reject | null;
+  /** An ordinary order, whose fill that only reduces is checked when it raises the initial requirement (V84, `Exec::close_checked`); absent for a close-all entry, a triggered order, a level or a close-out. */
+  closeChecked?: boolean;
 }
 
 /** A filled order, with any loss beyond the balance that the house wrote off because the account is flat, and the levels it removed. */
@@ -42,23 +45,30 @@ const signed = (side: Side, qty: Fixed): Fixed => (side === "buy" ? qty : -qty);
  * another holding than the account's own, such as the position a fill would leave. Null for a market the mock does not list.
  */
 export function liveQuote(state: MockState, address: string, market: MarketId, side: Side, qty: Fixed, held?: Fixed): Priced | null {
+  const account = state.account(address);
+  // From V59 the account's first band ends at its tier's share of the market's, so a higher tier trades more size at the best price.
+  return quoteAtShare(state, market, side, qty, held ?? account.positions.get(market)?.qty ?? 0n, tierOfAccount(state, account).terms?.bestPriceShareBps);
+}
+
+/**
+ * The price `qty` of `market` on `side` pays against a holding of `held` at a best-price share of `shareBps` (the listed bands
+ * without one), as `liveQuote` prices it. Error cases:
+ * - the mock's parameters list no stress level, which they always do
+ */
+export function quoteAtShare(state: MockState, market: MarketId, side: Side, qty: Fixed, held: Fixed, shareBps: number | undefined): Priced | null {
   const runtime = state.markets.get(market);
   if (!runtime) return null;
   const level = state.params.stressLevels[runtime.stress] ?? state.params.stressLevels[0];
   if (level === undefined) throw new Error("the mock's parameters list no stress level");
-  const account = state.account(address);
-  // From V59 the account's first band ends at its tier's share of the market's, so a higher tier trades more size at the best price.
-  const share = tierOfAccount(state, account).terms?.bestPriceShareBps;
   return priceOrder({
-    mid: runtime.mid, side, held: held ?? account.positions.get(market)?.qty ?? 0n, qty, tiers: share === undefined ? runtime.listed.spec.spread_tiers : accountSpreadTiers(runtime.listed.spec.spread_tiers, share),
+    mid: runtime.mid, side, held, qty, tiers: shareBps === undefined ? runtime.listed.spec.spread_tiers : accountSpreadTiers(runtime.listed.spec.spread_tiers, shareBps),
     stress: { minSpreadBps: level.min_spread_bps, sizeMultiplierBps: level.size_spread_multiplier_bps }, toxicityBps: 0,
     ceilingBps: metaFor(runtime.listed.spec.symbol).closeCeilingBps, conversion: USD,
   });
 }
 
-/** The profit fee rate a close of `holding` pays `account` at `now`, as the engine's `close_fee_terms` reads it: the base less the account's tier's fee discount, and the curve past it; that base with nothing held. */
-export function closeFeeBps(state: MockState, account: AccountState, holding: Holding | undefined, now: number): number {
-  const base = feeBaseOf(state, account);
+/** The profit fee rate a close of `holding` pays `account` at `now`, as the engine's `close_fee_terms` reads it: the base less the account's tier's fee discount, or `base` given, and the curve past it; that base with nothing held. */
+export function closeFeeBps(state: MockState, account: AccountState, holding: Holding | undefined, now: number, base: number = feeBaseOf(state, account)): number {
   return holding === undefined ? base : feeAt(base, state.params.profitFeeCurve, now - holding.openedAt);
 }
 
@@ -81,44 +91,70 @@ function applyToHolding(held: Holding, delta: Fixed, price: Fixed): Fixed {
   return pnl;
 }
 
+/** A fill that has priced: the request as clamped, its price at the market's index, and the account's holding before it. */
+export interface FillPlan {
+  req: FillRequest;
+  priced: { price: Fixed; spread: Fixed; increases: boolean };
+  mid: Fixed;
+  before: Holding | undefined;
+  held: Fixed;
+  delta: Fixed;
+  feeBps: number;
+}
+
+/** A plan that passed every check; or a refusal of the order or its pricing, with no plan; or a refusal of the plan's risk, margin or house capacity. */
+export type CheckedFill = { ok: true; plan: FillPlan } | { ok: false; reject: Reject; plan: FillPlan | null };
+
 /**
- * Checks an order against the market, the quote, the account's margin, and the house's cap; then
- * fills it, charging a realised gain the fee at the closed slice's hold and moving the position's open
- * time as the engine's hold clock does. Every refusal is a typed `Reject`, as the engine logs it.
+ * Checks an order against the market, the quote, the account's margin, and the house's cap, without changing anything. Every
+ * refusal is a typed `Reject`, as the engine logs it; a refusal of the account's margin or the house's capacity keeps the plan,
+ * as the engine's preview prices the fill it declines.
  */
-export function fillOrder(state: MockState, order: FillRequest): FillOutcome {
+export function checkFill(state: MockState, order: FillRequest): CheckedFill {
   const runtime = state.markets.get(order.market);
   const heldNow = state.account(order.address).positions.get(order.market)?.qty ?? 0n;
+  const refused = (reject: Reject): CheckedFill => ({ ok: false, reject, plan: null });
   // A reduce-only order is clamped to what it can reduce, and refused when it would reduce nothing.
   const reducible = (order.side === "buy") === (heldNow < 0n) ? absFixed(heldNow) : 0n;
-  if (order.reduceOnly && !order.liquidation && reducible === 0n) return { ok: false, reject: { kind: "reduce_only" } };
+  if (order.reduceOnly && !order.liquidation && reducible === 0n) return refused({ kind: "reduce_only" });
   const req = order.reduceOnly && order.qty > reducible ? { ...order, qty: reducible } : order;
   const account = state.account(req.address);
-  if (!runtime) return { ok: false, reject: { kind: "unknown_market" } };
-  if (!runtime.open || runtime.halted) return { ok: false, reject: { kind: "market_closed" } };
+  if (!runtime) return refused({ kind: "unknown_market" });
+  if (!runtime.open || runtime.halted) return refused({ kind: "market_closed" });
   const priced = liveQuote(state, req.address, req.market, req.side, req.qty);
-  if (!priced) return { ok: false, reject: { kind: "no_price" } };
-  if (priced.kind === "refused") return { ok: false, reject: priced.reject };
-  const before = account.positions.get(req.market);
-  const held = before?.qty ?? 0n;
-  const delta = signed(req.side, req.qty);
-  const feeBps = closeFeeBps(state, account, before, state.now);
+  if (!priced) return refused({ kind: "no_price" });
+  if (priced.kind === "refused") return refused(priced.reject);
   if (req.slippage) {
     const cap = Math.min(req.slippage.maxBps, runtime.listed.spec.max_slippage_bps);
     const bps = adverseBps(req.side, req.slippage.quoted, priced.price);
-    if (exceedsSlippage(req.side, req.slippage.quoted, priced.price, cap)) {
-      const reject: Reject = { kind: "slippage", quoted: fixedToWire(req.slippage.quoted), live: fixedToWire(priced.price), slippage_bps: bps };
-      return { ok: false, reject };
-    }
+    if (exceedsSlippage(req.side, req.slippage.quoted, priced.price, cap)) return refused({ kind: "slippage", quoted: fixedToWire(req.slippage.quoted), live: fixedToWire(priced.price), slippage_bps: bps });
   }
-  if (!req.liquidation && priced.increases) {
-    // The account as the fill leaves it: the spread just paid, and the fee on a profit a reversal realises.
-    const spreadLoss = executionCost({ held, entry: before?.entry ?? null, delta, price: priced.price, index: runtime.mid, feeBps });
-    const refusal = riskRefusal(state, req, runtime.reduceOnly || state.governance.reduceOnlyAt(req.market, state.now), delta, held, spreadLoss);
-    if (refusal) return { ok: false, reject: refusal };
+  const before = account.positions.get(req.market);
+  const plan: FillPlan = { req, priced, mid: runtime.mid, before, held: before?.qty ?? 0n, delta: signed(req.side, req.qty), feeBps: closeFeeBps(state, account, before, state.now) };
+  if (req.liquidation) return { ok: true, plan };
+  if (priced.increases) {
+    const form = orderableRefusal(state, req, runtime.reduceOnly || state.governance.reduceOnlyAt(req.market, state.now));
+    if (form) return refused(form);
   }
-  const checked = req.check?.() ?? null;
-  if (checked !== null) return { ok: false, reject: checked };
+  const reject = riskRefusal(state, plan);
+  return reject === null ? { ok: true, plan } : { ok: false, reject, plan };
+}
+
+/**
+ * Checks an order as `checkFill` does, then fills it, charging a realised gain the fee at the closed slice's hold and moving the
+ * position's open time as the engine's hold clock does.
+ */
+export function fillOrder(state: MockState, order: FillRequest): FillOutcome {
+  const checked = checkFill(state, order);
+  if (!checked.ok) return { ok: false, reject: checked.reject };
+  const refused = order.check?.() ?? null;
+  return refused === null ? book(state, checked.plan) : { ok: false, reject: refused };
+}
+
+/** Books a checked plan's fill: the holding, the volume, the levels it removes, the fee and any write-off. */
+function book(state: MockState, plan: FillPlan): FillOutcome {
+  const { req, priced, before, held, delta, feeBps } = plan;
+  const account = state.account(req.address);
   const holding = before ?? { qty: 0n, entry: 0n, openedAt: state.now };
   const pnl = applyToHolding(holding, delta, priced.price);
   recordFill(account.volume, { market: req.market, held, delta, price: priced.price, now: state.now, liquidation: req.liquidation ?? false });
@@ -147,35 +183,62 @@ export function fillOrder(state: MockState, order: FillRequest): FillOutcome {
     removed,
     fill: {
       account: req.address, order_id: req.orderId, market: req.market, side: req.side,
-      qty: fixedToWire(req.qty), price: fixedToWire(priced.price), index: fixedToWire(runtime.mid),
+      qty: fixedToWire(req.qty), price: fixedToWire(priced.price), index: fixedToWire(plan.mid),
       // Whole bps of the index, truncated, as the engine's `spread_bps` is; the price less the index is exact.
-      spread_bps: Number((priced.spread * 10_000n) / runtime.mid), realised_pnl: fixedToWire(pnl), profit_fee: fixedToWire(fee),
+      spread_bps: Number((priced.spread * 10_000n) / plan.mid), realised_pnl: fixedToWire(pnl), profit_fee: fixedToWire(fee),
       ...(closedHold === null ? {} : { hold_ms: closedHold, profit_fee_bps: feeBps }),
       position: fixedToWire(holding.qty), liquidation: req.liquidation ?? false,
     },
   };
 }
 
-/** The refusal for an order that adds risk, or `null` when margin, capacity, and the flags allow it. */
-function riskRefusal(state: MockState, req: FillRequest, reduceOnly: boolean, delta: Fixed, held: Fixed, spreadLoss: Fixed): Reject | null {
+/** The account's cash and positions as a plan's fill would leave them, its realised result less the fee booked (`account_after`). */
+export function bookAfter(state: MockState, plan: FillPlan): Book {
+  const account = state.account(plan.req.address);
+  const positions = new Map(account.positions);
+  const holding = { ...(plan.before ?? { qty: 0n, entry: 0n, openedAt: state.now }) };
+  const pnl = applyToHolding(holding, plan.delta, plan.priced.price);
+  if (holding.qty === 0n) positions.delete(plan.req.market);
+  else positions.set(plan.req.market, holding);
+  return { balance: account.balance + pnl - profitFee(pnl, plan.feeBps), positions };
+}
+
+/** The refusal of an order that adds risk in a reduce-only market or below the minimum order, or `null`. */
+function orderableRefusal(state: MockState, req: FillRequest, reduceOnly: boolean): Reject | null {
   const runtime = state.markets.get(req.market);
-  const account = state.account(req.address);
   if (!runtime) return { kind: "unknown_market" };
   if (reduceOnly || req.reduceOnly) return { kind: "reduce_only" };
   const spec = runtime.listed.spec;
-  if (notionalOf(req.qty, runtime.mid) < fixedFromWire(spec.min_order_notional)) {
-    return { kind: "invalid_order", reason: `below the minimum order of ${spec.min_order_notional} USD` };
+  if (notionalOf(req.qty, runtime.mid) < fixedFromWire(spec.min_order_notional)) return { kind: "invalid_order", reason: `below the minimum order of ${spec.min_order_notional} USD` };
+  return null;
+}
+
+/**
+ * The refusal of a fill's margin or the house's capacity, or `null` (`check_risk`, `check_close`): a fill that adds risk must leave
+ * equity at the initial requirement after it, at the tier floor less each group's credit (V64, V84), and the house within its cap;
+ * from V84 an ordinary order whose fill only reduces is held to it too when it raises that requirement, judged with every group's
+ * credit kept, as closing one leg of a hedge can. Close-alls, triggered orders, levels and close-outs never are (`close_checked`).
+ */
+function riskRefusal(state: MockState, plan: FillPlan): Reject | null {
+  const { req, priced, delta } = plan;
+  const account = state.account(req.address);
+  const floorBps = marginFloorOf(state, account);
+  const after = bookAfter(state, plan);
+  // The check runs on the account as the fill leaves it (`account_after`), valued as the preview gives it: its averaged entry, its
+  // realised result less the fee, and each position's profit or loss at the index rounded down.
+  const { equity } = requirementOf(state, after, { kind: "market" });
+  const initial = (book: Book, shutCredited: boolean) => requirementOf(state, book, { kind: "initial", floorBps, shutCredited }).requirement;
+  if (!priced.increases) {
+    if (req.closeChecked !== true || initial(after, true) <= initial(account, true)) return null;
+    const required = initial(after, false);
+    return equity < required ? { kind: "insufficient_margin", equity: fixedToWire(equity), required: fixedToWire(required) } : null;
   }
-  // From V64 each band charges at least the account's tier's floor in the requirement a fill must meet.
-  const floor = marginFloorOf(state, account);
-  const current = flooredMargin(spec.margin_tiers, mulFixed(held, runtime.mid), floor);
-  const after = initialMarginOf(state, account) - current + flooredMargin(spec.margin_tiers, mulFixed(held + delta, runtime.mid), floor);
-  // The check runs on the account as the fill leaves it: the spread just paid comes off equity first.
-  const equity = equityOf(state, account) - spreadLoss;
-  if (equity < after) return { kind: "insufficient_margin", equity: fixedToWire(equity), required: fixedToWire(after) };
+  const required = initial(after, false);
+  if (equity < required) return { kind: "insufficient_margin", equity: fixedToWire(equity), required: fixedToWire(required) };
+  const spec = state.markets.get(req.market)?.listed.spec;
   const net = houseNetNotional(state, req.market);
-  const netAfter = net - mulFixed(delta, runtime.mid);
-  const cap = bpsOf(houseNav(state), spec.house_cap_bps);
+  const netAfter = net - mulFixed(delta, plan.mid);
+  const cap = spec === undefined ? 0n : bpsOf(houseNav(state), spec.house_cap_bps);
   if (absFixed(netAfter) > absFixed(net) && absFixed(netAfter) > cap) return { kind: "house_capacity" };
   return null;
 }

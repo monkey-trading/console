@@ -44,7 +44,6 @@ const DYNAMIC: Record<string, (() => string[]) | null> = {
 
 /** Help text over the limits when they were set (monkey-trading/console#477), each to be cut to them and taken off this list. */
 const OVER_LIMIT: readonly string[] = [
-  "src/components/PositionsView.tsx CLOSEOUT_TIP",
   "src/components/PositionsView.tsx PNL_TIP",
   "src/components/PositionsView.tsx HOLD_TIP",
   "src/components/PositionsView.tsx FEE_USD_TIP",

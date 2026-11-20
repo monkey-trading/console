@@ -144,7 +144,7 @@ describe("Market info's minimum distance", () => {
 describe("the levels dialog", () => {
   const editor = (patch: Partial<Parameters<typeof LevelsEditor>[0]> = {}) => createElement(LevelsEditor, {
     market, position, fields: { takeProfit: "102000", stopLoss: "97500" }, onChange: () => undefined, closing: fixedFromInt(99_980), noClosing: "No closing price is available.", capped: null, limits: null, toUsdDown: (x) => x,
-    onCancel: () => undefined, onSend: () => undefined, onSaved: () => undefined, saving: false, onSettled: () => undefined, readOnly: false, describedBy: undefined, onRemovedWithFocus: () => undefined, announced: "", ...patch,
+    onCancel: () => undefined, onSend: () => undefined, onSaved: () => undefined, saving: false, onSettled: () => undefined, readOnly: false, describedBy: undefined, onRemovedWithFocus: () => undefined, announced: "", hedged: false, ...patch,
   });
 
   it("is a modal dialog titled for the position, described by the levels' help, its fields one under the other", () => {
@@ -165,6 +165,11 @@ describe("the levels dialog", () => {
     expect(html).toContain("The price at which your entire position would close is currently 99,980.00. A new or moved take profit must be at least 0.3% above that closing price, and a new or moved stop loss at least 0.3% below it.");
     expect(html).toMatch(/<button type="submit" aria-disabled="true"[^>]*>Save<\/button>/);
     expect(html).toContain("Leave a field empty to remove that level.");
+  });
+
+  it("says a level on a hedged position fills even if the margin rises, only for a position in a hedge that earns an offset", () => {
+    expect(render(editor({ hedged: true }))).toContain(">A take profit or stop loss on a hedged position is executed when triggered even if it raises your margin requirement");
+    expect(render(editor())).not.toContain("hedged position");
   });
 
   it("says a take profit is measured from the market price while the closing price is an estimate", () => {

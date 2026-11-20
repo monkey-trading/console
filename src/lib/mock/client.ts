@@ -6,6 +6,7 @@ import type { EmissionSchedule } from "../engine/emission-schedule";
 import type { EntitlementProof } from "../engine/emissions";
 import type { EligibilityClass, AccountView, Address, Attestation, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityRequest, EligibilityView, HistoryPage, HouseView, OrderRequest, PayoutsPage, PositionLevelsRequest, SessionKeyRequest, SessionKeyRevocationRequest, StreamMessage, WithdrawalPage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage, MarkResolution } from "../engine/mark-types";
+import type { OrderPreviewRequest, OrderPreviewWire } from "../engine/portfolio-types";
 import type { HouseState } from "../engine/house-state";
 import type { StatusNotice } from "../engine/notice-types";
 import type { StatsReads } from "../engine/stats-types";
@@ -17,6 +18,7 @@ import { accountViewOf } from "./account-view";
 import { mockHex } from "./hex";
 import { cancelAll, closeAll } from "./batch";
 import { setPositionLevels } from "./level-request";
+import { previewOrder } from "./preview";
 import { attestEligibility, cancelOrder, checkAccess, placeOrder } from "./orders";
 import { mockTotals, queuePage, withdraw } from "./funds";
 import { postedStanding } from "./monkey-state";
@@ -218,12 +220,10 @@ export class MockEngineClient implements EngineClient {
     return cancelOrder(this.state, request);
   }
 
-  async cancelAll(request: CancelAllRequest): Promise<ActionResult> {
-    return cancelAll(this.state, request);
-  }
-
+  async cancelAll(request: CancelAllRequest): Promise<ActionResult> { return cancelAll(this.state, request); }
   async closeAll(request: CloseAllRequest): Promise<ActionResult> { return closeAll(this.state, request); }
   async setPositionLevels(request: PositionLevelsRequest): Promise<ActionResult> { return setPositionLevels(this.state, request); }
+  async preview(request: OrderPreviewRequest): Promise<OrderPreviewWire> { return previewOrder(this.state, request); }
 
   async withdraw(request: WithdrawalRequest): Promise<ActionResult> {
     return withdraw(this.state, request);

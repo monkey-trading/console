@@ -41,6 +41,7 @@ export function houseParamsOf(entry: Omit<SetParams, "house_total_cap_floor"> & 
     stressLevels: entry.stress_levels ?? [],
     profitFeeCurve: entry.profit_fee_curve ?? [],
     ...(entry.volume_tiers === undefined ? {} : { volumeTiers: entry.volume_tiers }),
+    ...(entry.portfolio_grid === undefined || entry.portfolio_grid.groups.length === 0 ? {} : { portfolioGrid: entry.portfolio_grid }),
     seq,
   };
 }
