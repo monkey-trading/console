@@ -16,6 +16,7 @@ import { ACCOUNT } from "../../src/lib/engine/wallet-kit";
 import { absFixed, fixedFromWire, fixedToWire, formatUsd, parseFixed, type Fixed } from "../../src/lib/fixed";
 import { roundToPlaces } from "../../src/lib/fixed-rounding";
 import { creditedGroups } from "../../src/lib/portfolio";
+import { closingPrice } from "../../src/lib/quotes";
 import { describeOffsetSummary, TRIGGERED_ORDER_NOTE } from "../../src/lib/portfolio-words";
 import { attestEligibility, authorizeBrowser, placeOrder } from "../../src/lib/store/actions";
 import { closeAll } from "../../src/lib/store/batch-actions";
@@ -128,19 +129,25 @@ describe("portfolio margin against a dev node", () => {
   }, 180_000);
 
   it("closes a reopened pair whole from Close hedge", async () => {
-    const markOf = (id: number) => marketOf(rig.store, id).mark;
-    await closeAll(rig.store, planGroupClose([{ market: BTC, symbol: "BTC-USD", open: true, quoted: null, mark: markOf(BTC), maxSlippageBps: CLOSE_SLIPPAGE_BPS }]).targets, CLOSE_SLIPPAGE_BPS);
+    // A position's own Close price: the node's quote for closing all of it.
+    const closeOf = (id: number): Fixed | null => {
+      const quote = snapshot().quotes[id];
+      const qty = held(id);
+      return quote === undefined || qty === 0n ? null : closingPrice(quote, qty > 0n ? "sell" : "buy", absFixed(qty));
+    };
+    await closeAll(rig.store, planGroupClose([{ market: BTC, symbol: "BTC-USD", open: true, quoted: closeOf(BTC) }]).targets, CLOSE_SLIPPAGE_BPS);
     await wait(() => held(BTC) === 0n, 30_000, "the BTC-USD close");
     await quoted(BTC);
     await trade(BTC, "buy", sizeFor(marketOf(rig.store, BTC), 100_000));
     await quoted(ETH);
     await trade(ETH, "sell", sizeFor(marketOf(rig.store, ETH), 80_000));
     await wait(() => creditedGroups(snapshot().account?.portfolio).length === 1, 30_000, "the credited hedge");
-    // Each member at its mark, as Close hedge prices a member the node does not quote.
-    const members = [BTC, ETH].map((id) => ({ market: id, symbol: String(id), open: true, quoted: null, mark: markOf(id), maxSlippageBps: marketOf(rig.store, id).view.max_slippage_bps }));
-    const { targets, slippageBps, untradable } = planGroupClose(members);
-    expect([targets.length, untradable]).toEqual([2, []]);
-    await closeAll(rig.store, targets, slippageBps);
+    // The hedge's markets are quoted ahead of the others held, so each member closes at its own quote.
+    await wait(() => closeOf(BTC) !== null && closeOf(ETH) !== null, 60_000, "the hedge's closing quotes");
+    const members = [BTC, ETH].map((id) => ({ market: id, symbol: String(id), open: true, quoted: closeOf(id) }));
+    const { targets, untradable, unquoted } = planGroupClose(members);
+    expect([targets.length, untradable, unquoted]).toEqual([2, [], []]);
+    await closeAll(rig.store, targets, CLOSE_SLIPPAGE_BPS);
     await wait(() => (snapshot().account?.positions.length ?? 1) === 0, 30_000, "Close hedge");
   });
 });

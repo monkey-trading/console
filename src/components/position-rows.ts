@@ -135,8 +135,8 @@ export function positionRows(ctx: RowContext, positions: readonly PositionModel[
       quoted: known === null ? null : quoted,
       closable: !busy && !readOnly.readOnly && market?.open === true && known !== null && quoted !== null && loneRefused === null,
       loneRefused,
-      // What Close hedge reads of the position: whether its market can trade, and its own Close button's price, else the mark.
-      member: { market: p.market, symbol: String(market?.symbol ?? p.market), open: market?.open === true && isPriced(market), quoted: known === null ? null : quoted, mark: known, maxSlippageBps: market?.view.max_slippage_bps ?? CLOSE_SLIPPAGE_BPS },
+      // What Close hedge reads of the position: whether its market can trade, and its own Close button's price.
+      member: { market: p.market, symbol: String(market?.symbol ?? p.market), open: market?.open === true && isPriced(market), quoted: known === null ? null : quoted },
       // The node quotes at most four markets at once, the selected one first; a held market left out has no closing price until it is selected.
       unquoted: signatures === "checked" && !asked.includes(p.market) && market?.open === true && known !== null,
       close,

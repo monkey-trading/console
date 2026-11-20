@@ -25,6 +25,11 @@ describe("quoteMarkets", () => {
     expect(quoteMarkets(9, [1, 2, 3, 4, 5])).toEqual([9, 1, 2, 3]);
     expect(quoteMarkets(9, [1, 2, 3, 4, 5])).toHaveLength(MAX_QUOTED_MARKETS);
   });
+
+  it("asks the markets of a held hedge ahead of the other markets held, and for none a hedge names but the account does not hold", () => {
+    expect(quoteMarkets(9, [1, 2, 3, 4, 5], [4, 5])).toEqual([9, 4, 5, 1]);
+    expect(quoteMarkets(4, [1, 2, 3, 4, 5], [5, 4, 8])).toEqual([4, 5, 1, 2]);
+  });
 });
 
 describe("executablePrice", () => {

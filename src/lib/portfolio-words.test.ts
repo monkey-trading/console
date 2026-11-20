@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
-import { describeLoneClose, describeOffsetSummary, describeOrderMargin, describeUntradable, formatNetExposure, hedgeTitle, listSymbols } from "./portfolio-words";
+import { describeLoneClose, describeOffsetSummary, describeOrderMargin, describeUnquoted, describeUntradable, formatNetExposure, hedgeTitle, listSymbols } from "./portfolio-words";
 
 describe("portfolio margin's words", () => {
   it("lists a hedge's markets as a sentence names them", () => {
@@ -24,6 +24,11 @@ describe("portfolio margin's words", () => {
     expect(describeUntradable(["ETH-USD"], 2)).toBe("ETH-USD cannot be traded at present, so Close hedge leaves it open. Until it can be traded again, this hedge does not reduce the margin required for new orders or withdrawals.");
     expect(describeUntradable(["US100", "US30"], 3)).toBe("US100 and US30 cannot be traded at present, so Close hedge leaves them open. Until they can be traded again, this hedge does not reduce the margin required for new orders or withdrawals.");
     expect(describeUntradable(["XAU-USD", "XAG-USD"], 2)).toBe("None of the positions in this hedge can be traded at present. Until they can, this hedge does not reduce the margin required for new orders or withdrawals.");
+  });
+
+  it("names the positions of a hedge with no closing price, which Close hedge waits for", () => {
+    expect(describeUnquoted(["ETH-USD"])).toBe("Close hedge is unavailable because ETH-USD has no closing price yet. Selecting it in the watchlist loads its closing price.");
+    expect(describeUnquoted(["US100", "US30"])).toBe("Close hedge is unavailable because US100 and US30 have no closing price yet. Selecting them in the watchlist loads their closing price.");
   });
 
   it("says when an order that reduces a hedge raises the initial margin, and otherwise what it leaves", () => {

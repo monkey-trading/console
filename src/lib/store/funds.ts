@@ -3,6 +3,7 @@
 import type { ClientEvent } from "../engine/client";
 import { sameNotice } from "../engine/notice-types";
 import type { SignedWithdrawal } from "../engine/types";
+import { creditedGroups } from "../portfolio";
 import { quoteMarkets } from "../quotes";
 import type { ConsoleState } from "./state";
 import type { ConsoleStore } from "./store";
@@ -54,7 +55,12 @@ export function followAccountFeeds(store: ConsoleStore): () => void {
  * The request is sent again only when this changes.
  */
 export function quoteSyncKey(state: ConsoleState): string {
-  return JSON.stringify([state.wallet?.address ?? null, state.selected, state.account?.positions.map((p) => p.market) ?? [], state.account !== null]);
+  return JSON.stringify([state.wallet?.address ?? null, state.selected, state.account?.positions.map((p) => p.market) ?? [], hedgedMarkets(state), state.account !== null]);
+}
+
+/** The markets of the account's credited hedges, which are quoted ahead of the other markets it holds. */
+function hedgedMarkets(state: ConsoleState): number[] {
+  return creditedGroups(state.account?.portfolio).flatMap((group) => group.members);
 }
 
 /**
@@ -63,7 +69,7 @@ export function quoteSyncKey(state: ConsoleState): string {
  */
 export function syncQuotes(store: ConsoleStore): void {
   const { wallet, selected, account, quotes } = store.getSnapshot();
-  const markets = wallet === null ? [] : quoteMarkets(selected, account?.positions.map((p) => p.market) ?? []);
+  const markets = wallet === null ? [] : quoteMarkets(selected, account?.positions.map((p) => p.market) ?? [], hedgedMarkets(store.getSnapshot()));
   const kept = Object.fromEntries(Object.entries(quotes).filter(([market]) => markets.includes(Number(market))));
   store.patch({ quoted: markets, quotes: kept });
   store.deps.client.quotes(wallet === null ? null : { account: wallet.address, markets });

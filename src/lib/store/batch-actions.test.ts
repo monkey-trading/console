@@ -141,17 +141,16 @@ describe("close all", () => {
     expect(store.getSnapshot().notices.positions).toMatchObject({ tone: "error", text: "1 of 2 positions was closed. The ETH-USD position was not closed, because the price moved by more than your maximum slippage." });
   });
 
-  it("closes a hedge of five positions on one request, the unquoted one at its mark under its market's bound, and names an entry refused mid-close", async () => {
+  it("closes a hedge of five positions on one request, each at its own quote, and names an entry refused mid-close", async () => {
     const { client, store } = await setup(() => () => ({ seq: 6, events: [fill(1), fill(2), rejected(2, slippage), fill(4), fill(5)] }));
     const [btc] = store.getSnapshot().markets;
     if (btc === undefined) throw new Error("no market");
     const listed = ["BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "LTC-USD"].map((symbol, index) => ({ ...btc, id: index + 1, symbol, view: { ...btc.view, id: index + 1, symbol } }));
     store.patch({ markets: listed });
-    // The node quotes four markets at once, so the fifth closes from its mark.
-    const members = listed.map((m) => ({ market: m.id, symbol: m.symbol, open: true, quoted: m.id === 5 ? null : fixedFromInt(m.id), mark: fixedFromInt(10 * m.id), maxSlippageBps: 50 }));
-    const { targets, slippageBps } = planGroupClose(members);
-    await closeAll(store, targets, slippageBps);
-    expect(client.posted.at(-1)?.body).toMatchObject({ closes: [1, 2, 3, 4].map((m) => ({ market: m, quoted: String(m) })).concat({ market: 5, quoted: "50" }), max_slippage_bps: 50 });
+    const members = listed.map((m) => ({ market: m.id, symbol: m.symbol, open: true, quoted: fixedFromInt(m.id) }));
+    const { targets } = planGroupClose(members);
+    await closeAll(store, targets, BPS);
+    expect(client.posted.at(-1)?.body).toMatchObject({ closes: [1, 2, 3, 4, 5].map((m) => ({ market: m, quoted: String(m) })), max_slippage_bps: BPS });
     expect(store.getSnapshot().notices.positions).toMatchObject({ tone: "error", text: "4 of 5 positions were closed. The SOL-USD position was not closed, because the price moved by more than your maximum slippage." });
   });
 

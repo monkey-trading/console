@@ -78,6 +78,18 @@ describe("quoteSyncKey", () => {
 });
 
 describe("syncQuotes", () => {
+  it("asks the markets of a credited hedge ahead of the other markets held, and again when a hedge starts or ends", async () => {
+    const { client, store } = await connected();
+    const held = [1, 2, 3, 4, 5].map((market) => ({ market, qty: 1n, entry: 1n, closeout: null, closeFee: null }));
+    const account = { balance: 0n, unfinalised: 0n, equity: 0n, margin: 0n, positions: held, orders: [] };
+    const group = { name: "g", members: [4, 5], netNotional: 0n, matchedNotional: 2n, offset: 1n };
+    store.patch({ selected: 9, account: { ...account, portfolio: { margin: 0n, initialMargin: 0n, maintenanceMargin: 0n, groups: [group] } } });
+    syncQuotes(store);
+    expect(client.quoteRequests.at(-1)).toEqual({ account: ACCOUNT, markets: [9, 4, 5, 1] });
+    const [alone, hedged] = [{ ...store.getSnapshot(), account }, store.getSnapshot()];
+    expect(quoteSyncKey(alone)).not.toBe(quoteSyncKey(hedged));
+  });
+
   it("asks for the selected market and those held, and drops the quotes of markets it no longer asks about", async () => {
     const { client, store } = await connected();
     store.patch({ selected: 2, quotes: { 1: quote(ME, 1), 2: quote(ME, 2) } });
