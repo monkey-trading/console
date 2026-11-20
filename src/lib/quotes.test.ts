@@ -157,6 +157,5 @@ describe("a whole close the node declines, from V84", () => {
   it("reads the exact close quote's reason as a margin decline of the order's size", () => {
     const declined = { ...QUOTE, close: { ...QUOTE.close, side: "sell" as const, qty: "2", price: "99.8", declined: { kind: "insufficient_margin" as const, equity: "10", required: "40" } } };
     expect(live("2", "sell", declined)).toMatchObject({ price: f("99.8"), exactClose: true, problemIsSize: true, marginDeclined: true, problem: "Insufficient margin for this order size. With your current equity, the largest order you can place is approximately 5 contracts." });
-    expect(ticketPrices({ live: true, quote: declined, quoteError: null, preview: preview("2"), side: "sell", mark: f("100"), bothWays: true }).problem).toBe("Insufficient margin. Your equity does not cover the margin this order requires.");
   });
 });

@@ -116,11 +116,11 @@ export function ticketFigures(state: ConsoleState, market: MarketModel, order: T
   });
   // The in-browser node's refusal for margin names the leverage the tier allows, as a live node's declined quote does.
   const estimated = live ? shown : { ...shown, problems: shown.problems.map((p) => (p === MARGIN_SHORT ? `${p}${leverageReason(limits)}` : p)) };
-  const quoted = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview: estimated, side: order.side, mark: market.mark, limits, bothWays: hedge !== null });
-  // For an order that concerns a hedge, the server's preview of this exact size replaces the ladder's margin verdict and the
-  // console's own estimate, which swaps one position's margin; while it is awaited neither is stated, and after a failed read both stand.
+  const quoted = ticketPrices({ live, quote: state.quotes[market.id] ?? null, quoteError: state.quoteError, preview: estimated, side: order.side, mark: market.mark, limits });
+  // For an order that concerns a hedge, admission can depend on its size either way, so only the server's preview of this exact
+  // size states a margin verdict: never the ladder's, nor the console's own estimate, which swaps one position's margin.
   const offset = hedge === null ? null : offsetTicket(hedge.answer, state.account, market.id, shown.marginAfter);
-  const overruled = hedge !== null && hedge.answer !== "failed";
+  const overruled = hedge !== null;
   const preview = !overruled ? estimated : { ...estimated, problems: estimated.problems.filter((p) => !p.startsWith(MARGIN_SHORT)), marginUseBps: offset?.useBps ?? estimated.marginUseBps };
   const refusal = offset?.refusal ?? null;
   const prices = !overruled || (!quoted.marginDeclined && refusal === null) ? quoted : { ...quoted, problem: refusal ?? (quoted.marginDeclined ? null : quoted.problem), problemIsSize: refusal !== null || quoted.problemIsSize };

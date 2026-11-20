@@ -22,7 +22,7 @@ import { belowMinimum, contractUnit, MARGIN_SHORT, MARKET_CLOSED, NO_FUNDS, NO_S
 import { currentParams, houseTermsNote, ticketFigures } from "@/lib/ticket-figures";
 import { ticketLevels } from "@/lib/ticket-levels";
 import { describeOrderMargin } from "@/lib/portfolio-words";
-import { previewKey, previewRequest, triggeredNote } from "@/lib/ticket-portfolio";
+import { concernsHedge, previewKey, previewRequest, triggeredNote } from "@/lib/ticket-portfolio";
 import { describeBestPrice } from "@/lib/tier-view";
 import { tradingPaused } from "@/lib/trading-paused";
 import { isPriced, isUnfed, unpricedWhy } from "@/lib/unpriced";
@@ -42,6 +42,12 @@ const KINDS = ORDER_TYPES.map((value) => ({ value, label: ORDER_LABELS[value] })
 /** The longest form the ticket's hedge line takes, whose height it keeps. */
 const LONGEST_HEDGE_LINE = describeOrderMargin(999_999_999_999_990_000n, 999_999_999_999_990_000n + 1n, 999_999_999_999_990_000n, true);
 const INPUT = "mt-1 min-h-11 w-full rounded border border-edge bg-ink px-2 py-2 text-base text-fg lg:min-h-0 lg:text-data focus-visible:outline-2 focus-visible:outline-glow";
+
+/** Whether `element` is rendered: `checkVisibility` where the browser has it, else whether it has a box. */
+function isShown(element: HTMLElement | null): boolean {
+  if (element === null) return false;
+  return typeof element.checkVisibility === "function" ? element.checkVisibility() : element.getClientRects().length > 0;
+}
 
 /** Links to the Funding page. */
 function FundingLink() {
@@ -70,7 +76,7 @@ export function DealTicket() {
   const hedgeRequest = market === undefined || marketSize?.kind !== "qty" ? null : previewRequest(state, market, { side, qty: marketSize.qty, resting: false });
   // The ticket is not asked about while it is off screen, as in a phone layout's other panes.
   const form = useRef<HTMLFormElement>(null);
-  const previews = useOrderPreviews(store, hedgeRequest === null ? [] : [hedgeRequest], state.account, state.now, () => form.current?.checkVisibility() ?? false);
+  const previews = useOrderPreviews(store, hedgeRequest === null ? [] : [hedgeRequest], state.account, state.now, () => isShown(form.current));
   if (!market) return null;
   // One plain-words state for a paused market: a handover in progress, an operator on a node this build does not list, a
   // closed market, no usable price, or reduce-only. A node the console does not trust is the gate below, which comes first.
@@ -97,7 +103,7 @@ export function DealTicket() {
   // From V79 the order may name a take profit and a stop loss; a market that takes none shows no fields.
   const levels = ticketLevels(state, market, order, levelFields, { prices, limits });
   const named = levels === null || noLevels(levels.named) ? undefined : levels.named;
-  const triggered = triggeredNote(state.account, market.id, order, named !== undefined, hedgeRequest !== null);
+  const triggered = triggeredNote(state.account, market.id, order, named !== undefined, concernsHedge(state, market.id, order));
   // A live node's quote already says whether it would decline for margin; the console's own estimate does not know its toxicity spread.
   // A size the field refuses says why, so the generic prompt would only repeat it.
   const listed = preview.problems.filter((p) => (!live || p !== MARGIN_SHORT) && (parsedSize.kind !== "refused" || p !== NO_SIZE));

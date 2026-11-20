@@ -99,7 +99,8 @@ export function touchesOffset(input: {
 }): boolean {
   if (creditedGroupOf(input.portfolio, input.market) !== null) return true;
   const group = gridGroupOf(input.grid, input.market);
-  if (group === null || input.delta === 0n) return false;
+  // A group whose floor share keeps all of its matched exposure's margin gives no credit.
+  if (group === null || input.delta === 0n || group.floor_share_bps >= 10_000) return false;
   const held = (market: MarketId) => input.positions.find((p) => p.market === market)?.qty ?? 0n;
   const before = matchedExposure(group, held, input.markOf);
   const after = matchedExposure(group, (market) => held(market) + (market === input.market ? input.delta : 0n), input.markOf);

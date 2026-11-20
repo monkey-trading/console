@@ -7,10 +7,10 @@ import type { MarketQuote } from "./engine/types";
 import { fixedFromInt } from "./fixed";
 import type { AccountModel, MarketModel } from "./models";
 import type { PortfolioModel } from "./portfolio";
-import { TRIGGERED_LEVELS_NOTE, TRIGGERED_ORDER_NOTE } from "./portfolio-words";
+import { PREVIEW_FAILED, TRIGGERED_LEVELS_NOTE, TRIGGERED_ORDER_NOTE } from "./portfolio-words";
 import { initialState, type ConsoleState } from "./store/state";
 import { btcAt, q } from "./ticket-fixtures";
-import { closeDeclined, closeRequests, offsetTicket, previewKey, previewRequest, requestOfKey, triggeredNote } from "./ticket-portfolio";
+import { closeDeclined, closeRequests, concernsHedge, offsetTicket, previewKey, previewRequest, requestOfKey, triggeredNote } from "./ticket-portfolio";
 
 const WALLET = "0x00000000000000000000000000000000000000aa";
 /** The dev genesis's fixture group: BTC-USD loading 1 and ETH-USD loading 1.25. */
@@ -59,6 +59,15 @@ describe("which ticket orders the server previews", () => {
     expect(previewRequest(hedged, await marketOf(2), order("buy", "10"))?.side).toBe("buy");
   });
 
+  it("finds a working order that would create a hedge, though no preview is asked for it, and none where the group gives no credit", async () => {
+    const lone = holding([[1, "1"]], LONE);
+    expect(concernsHedge(await state(lone), 2, { side: "sell", qty: q("10") })).toBe(true);
+    expect(previewRequest(await state(lone), await marketOf(2), order("sell", "10", true))).toBeNull();
+    const kept = { ...GRID, groups: GRID.groups.map((g) => ({ ...g, floor_share_bps: 10_000 })) };
+    const params = (await state(lone)).houseParams;
+    expect(concernsHedge(await state(lone, params === null ? {} : { houseParams: { ...params, portfolioGrid: kept } }), 2, { side: "sell", qty: q("10") })).toBe(false);
+  });
+
   it("previews nothing for a server before V84, which admits orders position by position and serves no preview", async () => {
     const hedged = holding([[1, "1"], [2, "-10"]], HEDGED);
     expect(previewRequest(await state(hedged, { protocolVersion: 83 }), await marketOf(1), order("buy", "1"))).toBeNull();
@@ -87,7 +96,7 @@ describe("what the ticket shows from the server's preview", () => {
 
   it("shows nothing while the answer is awaited or after a failed read, so the other verdicts stand", () => {
     expect(offsetTicket(undefined, account, 1, PER_POSITION)).toEqual({ line: null, refusal: null, useBps: null, answered: false, awaited: true });
-    expect(offsetTicket("failed", account, 1, PER_POSITION)).toEqual({ line: null, refusal: null, useBps: null, answered: false, awaited: false });
+    expect(offsetTicket("failed", account, 1, PER_POSITION)).toEqual({ line: PREVIEW_FAILED, refusal: null, useBps: null, answered: false, awaited: false });
   });
 
   it("states the initial margin and equity an admitted order leaves, and their ratio for the margin use", () => {
@@ -112,6 +121,11 @@ describe("what the ticket shows from the server's preview", () => {
     const reducing = answer({ fill: { qty: "1", price: "99990", mid: "100000", spread_bps: 1, increases: false }, refused });
     expect(offsetTicket(reducing, account, 1, PER_POSITION)).toMatchObject({ line: null, refusal: "Insufficient margin. This order requires $24,000.00 of margin, and your equity is $20,000.00. To close the whole hedge, use Close hedge in the positions panel.", answered: true });
     expect(offsetTicket(answer({ refused }), account, 1, PER_POSITION).refusal).toBe("Insufficient margin. This order requires $24,000.00 of margin, and your equity is $20,000.00.");
+  });
+
+  it("refuses for the house's capacity, which depends on the size, without the pointer to Close hedge", () => {
+    const reducing = { qty: "1", price: "99990", mid: "100000", spread_bps: 1, increases: false };
+    expect(offsetTicket(answer({ fill: reducing, refused: { kind: "house_capacity" } }), account, 1, PER_POSITION).refusal).toBe("The house has reached its exposure limit in this market. Please try a smaller order size.");
   });
 
   it("leaves a refusal other than for margin to the ticket's own checks, stating no figures", () => {

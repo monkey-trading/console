@@ -7,7 +7,7 @@
  * each other and earn a margin offset (V81) are listed together under their hedge's heading, the others after them.
  */
 
-import { Fragment, useEffect, useId } from "react";
+import { useEffect, useId } from "react";
 
 import { CONFIRM_MIN_GAP_MS, CONFIRM_MS } from "@/lib/confirm-window";
 import { CLOSE_SLIPPAGE_BPS, describeLeftOut, planCloseAll, pressBatch, targetsKey } from "@/lib/close-all";
@@ -34,7 +34,6 @@ import { useConfirmWindow } from "./use-confirm-window";
 import { levelsControlIds, useLevelsEditor } from "./use-levels-editor";
 import { useOrderPreviews } from "./use-order-previews";
 import { usePrefs } from "./use-prefs";
-
 
 const TH = "whitespace-nowrap px-1.5 py-2 text-left align-bottom text-label font-normal tracking-caps text-fg-3 uppercase";
 /** A body cell: at most two lines, each always mounted, so a row's height never depends on its figures. */
@@ -129,7 +128,7 @@ export function PositionsView() {
   // A hedged position whose close alone would be refused says so at its Close button, which it describes.
   const loneId = (r: PositionRow, layout: "card" | "row") => (r.loneRefused === null ? undefined : `${id}-lone-${layout}-${r.key}`);
   const card = (r: PositionRow) => (
-    <li key={r.key} className="border-b border-line px-4 py-3 text-caption last:border-b-0">
+    <li key={`row-${r.key}`} className="border-b border-line px-4 py-3 text-caption last:border-b-0">
       <div className="flex items-center justify-between gap-3">
         <p><span className="text-fg">{r.symbol}</span> <span className={r.long ? "text-glow" : "text-ember"}>{r.long ? "Long" : "Short"}</span></p>
         <p className={r.loss ? "text-ember" : "text-glow"}><span className="sr-only">Profit and loss </span>{r.pnl} <span className="ml-2 text-label text-fg-3"><Term label="Details" tip={r.details} /></span></p>
@@ -153,35 +152,33 @@ export function PositionsView() {
         : <p aria-hidden={!r.unquoted} className={`mt-2 text-label ${r.unquoted ? "text-fg-3" : "invisible"}`}>Select {r.symbol} in the watchlist to load its closing price.</p>}
     </li>
   );
-  const tableRow = (r: PositionRow) => (
-    <Fragment key={r.key}>
-      <tr className={r.loneRefused === null ? "border-b border-line last:border-b-0" : ""}>
-        <td className={TD}><span className="block text-fg">{r.symbol}</span><span className={`block min-h-lh text-label ${r.long ? "text-glow" : "text-ember"}`}>{r.long ? "Long" : "Short"}</span></td>
-        <td className={TD}><span className="block">{r.size}</span><span className={SUB}><span className="sr-only">Held </span>{r.hold}</span></td>
-        <td className={TD}><span className="block">{r.entry}</span><span className={SUB}><span className="sr-only">Mark </span>{r.mark}</span></td>
-        <td className={TD}>{r.editor === null
-          ? <><span className={`block ${LEVEL_W}`}>—</span><span className={`${SUB} ${LEVEL_W}`}><span className="sr-only">Stop loss </span>—</span></>
-          : <LevelsControl {...r.control} layout="row" id={levelsControlIds(id, r.key)[0]} />}</td>
-        <td className={`${TD} ${r.loss ? "text-ember" : "text-glow"}`}>
-          <span className={`block ${PNL_W}`}>{r.pnl}</span>
-          <span className={SUB}><Term label="Details" tip={r.details} /></span>
-        </td>
-        <td className={TD}>
-          <span className="block min-w-[8ch]">{r.fee}</span>
-          <span className={`${SUB} ${RATE_W}`}>
-            <span aria-hidden="true">{r.fallsShort}</span>
-            {r.falls !== null && <span className="sr-only">{r.falls}</span>}
-          </span>
-        </td>
-        <td className={`${TD} ${FEE_W}`}><span className="block">{r.feeUsd}</span><span className={SUB}><span className="sr-only">Close-out </span>{r.closeout}</span></td>
-        <td className={`${TD} ${CLOSE_W}`}>
-          <span className="block">{r.proceeds}</span>
-          <button type="button" disabled={!r.closable} className={CELL_BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy ?? loneId(r, "row")} onClick={r.close}>Close</button>
-        </td>
-      </tr>
-      {r.loneRefused !== null && <tr className="border-b border-line last:border-b-0"><td id={loneId(r, "row")} colSpan={8} className="px-1.5 pb-2 text-label leading-relaxed text-fg-3"><p className="max-w-[80ch] whitespace-normal">{r.loneRefused}</p></td></tr>}
-    </Fragment>
-  );
+  const tableRow = (r: PositionRow) => [
+    <tr key={`row-${r.key}`} className={r.loneRefused === null ? "border-b border-line last:border-b-0" : ""}>
+      <td className={TD}><span className="block text-fg">{r.symbol}</span><span className={`block min-h-lh text-label ${r.long ? "text-glow" : "text-ember"}`}>{r.long ? "Long" : "Short"}</span></td>
+      <td className={TD}><span className="block">{r.size}</span><span className={SUB}><span className="sr-only">Held </span>{r.hold}</span></td>
+      <td className={TD}><span className="block">{r.entry}</span><span className={SUB}><span className="sr-only">Mark </span>{r.mark}</span></td>
+      <td className={TD}>{r.editor === null
+        ? <><span className={`block ${LEVEL_W}`}>—</span><span className={`${SUB} ${LEVEL_W}`}><span className="sr-only">Stop loss </span>—</span></>
+        : <LevelsControl {...r.control} layout="row" id={levelsControlIds(id, r.key)[0]} />}</td>
+      <td className={`${TD} ${r.loss ? "text-ember" : "text-glow"}`}>
+        <span className={`block ${PNL_W}`}>{r.pnl}</span>
+        <span className={SUB}><Term label="Details" tip={r.details} /></span>
+      </td>
+      <td className={TD}>
+        <span className="block min-w-[8ch]">{r.fee}</span>
+        <span className={`${SUB} ${RATE_W}`}>
+          <span aria-hidden="true">{r.fallsShort}</span>
+          {r.falls !== null && <span className="sr-only">{r.falls}</span>}
+        </span>
+      </td>
+      <td className={`${TD} ${FEE_W}`}><span className="block">{r.feeUsd}</span><span className={SUB}><span className="sr-only">Close-out </span>{r.closeout}</span></td>
+      <td className={`${TD} ${CLOSE_W}`}>
+        <span className="block">{r.proceeds}</span>
+        <button type="button" disabled={!r.closable} className={CELL_BUTTON} aria-label={`Close ${r.symbol} position`} aria-describedby={readOnly.describedBy ?? loneId(r, "row")} onClick={r.close}>Close</button>
+      </td>
+    </tr>,
+    r.loneRefused === null ? null : <tr key={`note-${r.key}`} className="border-b border-line last:border-b-0"><td id={loneId(r, "row")} colSpan={8} className="px-1.5 pb-2 text-label leading-relaxed text-fg-3"><p className="max-w-[80ch] whitespace-normal">{r.loneRefused}</p></td></tr>,
+  ];
   const othersHeading = hedges.length > 0 && others.length > 0;
   return (
     <>
@@ -197,8 +194,9 @@ export function PositionsView() {
       <div className="px-4 has-[p]:border-b has-[p]:border-line has-[p]:pb-3"><Notice surface="positions" />{!levelsEditor.open && <Notice surface="levels" />}</div>
       <p role="status" className="sr-only">{levelsEditor.announced}</p>
       <ul className="lg:hidden">
-        {hedges.map((hedge) => <Fragment key={hedge.group.name}><li className="border-b border-line px-4 py-3">{heading(hedge)}</li>{hedge.rows.map(card)}</Fragment>)}
-        {othersHeading && <li className="border-b border-line px-4 py-2 text-label tracking-caps text-fg-3 uppercase">{OTHER_POSITIONS}</li>}
+        {/* One list of headings and rows, each row keyed by its market, so a row that moves into or out of a hedge keeps its element and focus. */}
+        {hedges.flatMap((hedge) => [<li key={`hedge-${hedge.group.name}`} className="border-b border-line px-4 py-3">{heading(hedge)}</li>, ...hedge.rows.map(card)])}
+        {othersHeading && <li key="others" className="border-b border-line px-4 py-2 text-label tracking-caps text-fg-3 uppercase">{OTHER_POSITIONS}</li>}
         {others.map(card)}
       </ul>
       <div role="region" aria-label="Open positions" tabIndex={0} className="relative hidden overflow-x-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow lg:block">
@@ -212,15 +210,10 @@ export function PositionsView() {
               <th className={TH}><Term label="Profit fee" tip={feeTip} /></th><th className={TH}><span className="block"><Term label="Fee (USD)" tip={FEE_USD_TIP} /></span><span className="block">{closeoutTerm}</span></th><th className={TH}><Term label="Close now" tip={CLOSE_TIP} /></th>
             </tr>
           </thead>
-          {hedges.map((hedge) => (
-            <tbody key={hedge.group.name} className="border-b border-line">
-              <tr className="border-b border-line"><th scope="rowgroup" colSpan={8} className="px-1.5 py-2">{heading(hedge)}</th></tr>
-              {hedge.rows.map(tableRow)}
-            </tbody>
-          ))}
           <tbody>
-            {othersHeading && <tr className="border-b border-line"><th scope="rowgroup" colSpan={8} className={TH}>{OTHER_POSITIONS}</th></tr>}
-            {others.map(tableRow)}
+            {hedges.flatMap((hedge) => [<tr key={`hedge-${hedge.group.name}`} className="border-b border-line"><th colSpan={8} className="px-1.5 py-2">{heading(hedge)}</th></tr>, ...hedge.rows.flatMap(tableRow)])}
+            {othersHeading && <tr key="others" className="border-b border-line"><th colSpan={8} className={TH}>{OTHER_POSITIONS}</th></tr>}
+            {others.flatMap(tableRow)}
           </tbody>
         </table>
       </div>

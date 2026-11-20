@@ -31,7 +31,6 @@ function state(market: MarketModel, live: boolean): ConsoleState {
 
 const BUY_3 = { side: "buy" as const, qty: q("3"), slippageBps: 25, resting: false, triggerPrice: null };
 const LARGEST = "Insufficient margin for this order size. With your current equity, the largest order you can place is approximately 1 contract.";
-const GENERIC = "Insufficient margin. Your equity does not cover the margin this order requires.";
 
 describe("a live ticket's margin verdict", () => {
   it("names the largest order the ladder admits for an order that concerns no hedge, as before", async () => {
@@ -51,19 +50,20 @@ describe("a live ticket's margin verdict", () => {
     expect(ticketFigures(state(market, true), market, BUY_3, { answer: REFUSED }).prices).toMatchObject({ problem: "Insufficient margin. This order requires $6,000.00 of margin, and your equity is $940.00.", problemIsSize: true });
   });
 
-  it("falls back to the ladder's decline without naming a largest size after a failed preview", async () => {
+  it("says a failed preview could not check the margin, and states no margin verdict of the ladder's", async () => {
     const market = await btcAt(100_000);
-    expect(ticketFigures(state(market, true), market, BUY_3, { answer: "failed" }).prices).toMatchObject({ problem: GENERIC, problemIsSize: true });
+    const failed = ticketFigures(state(market, true), market, BUY_3, { answer: "failed" });
+    expect([failed.prices.problem, failed.offset?.line, failed.offset?.awaited]).toEqual([null, "The margin this order would leave could not be checked, and the check is being retried. The trading server checks the margin again when you place the order.", false]);
   });
 });
 
 describe("a simulated ticket's margin verdict", () => {
   const ownEstimate = (problems: readonly string[]) => problems.filter((p) => p.startsWith(MARGIN_SHORT));
 
-  it("keeps its own estimate for an order that concerns no hedge, and after a failed preview", async () => {
+  it("keeps its own estimate for an order that concerns no hedge, and drops it for one that does, whatever the preview", async () => {
     const market = await btcAt(100_000);
     expect(ownEstimate(ticketFigures(state(market, false), market, BUY_3).preview.problems)).toHaveLength(1);
-    expect(ownEstimate(ticketFigures(state(market, false), market, BUY_3, { answer: "failed" }).preview.problems)).toHaveLength(1);
+    expect(ownEstimate(ticketFigures(state(market, false), market, BUY_3, { answer: "failed" }).preview.problems)).toEqual([]);
   });
 
   it("drops its own estimate, which swaps one position's margin, for the in-browser node's preview", async () => {

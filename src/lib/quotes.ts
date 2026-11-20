@@ -72,7 +72,7 @@ export interface TicketPrices {
  * ceiling: an order that closes the whole position takes the exact close quote on its side, and any
  * other the ladder's step. The mock's are the console's own prices, which its fills use.
  */
-export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; quoteError: string | null; preview: TicketPreview; side: Side; mark: Fixed | null; limits?: TicketLimits | null; bothWays?: boolean }): TicketPrices {
+export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; quoteError: string | null; preview: TicketPreview; side: Side; mark: Fixed | null; limits?: TicketLimits | null }): TicketPrices {
   const { preview, side } = input;
   if (!input.live) {
     return { bid: preview.bid, offer: preview.offer, price: preview.quote?.price ?? null, exactClose: false, toxicityBps: 0, spreadTenths: preview.spreadTenths, problem: null, problemIsSize: false, marginDeclined: false };
@@ -93,7 +93,7 @@ export function ticketPrices(input: { live: boolean; quote: MarketQuote | null; 
   const bid = exact("sell");
   const mine = side === "buy" ? ask : bid;
   const spreadTenths = ask !== null && bid !== null && input.mark !== null && input.mark > 0n ? tenthBpsOfValue(ask.price - bid.price, input.mark) : null;
-  const problem = mine === null ? "This order is too large to be priced. Please try a smaller order size." : mine.declined === null ? null : declinedProblem(quote, side, mine.declined, input.limits ?? null, input.bothWays === true);
+  const problem = mine === null ? "This order is too large to be priced. Please try a smaller order size." : mine.declined === null ? null : declinedProblem(quote, side, mine.declined, input.limits ?? null);
   // The node declining for margin or the house's capacity, or having no step this large, is a matter of the size.
   const marginDeclined = mine?.declined != null && isMarginDecline(mine.declined);
   const problemIsSize = mine === null || marginDeclined || mine.declined?.kind === "house_capacity";
@@ -109,13 +109,12 @@ function isMarginDecline(reject: Reject): boolean {
  * The message for a size the node's ladder declines. An `insufficient_margin` decline's equity and
  * margin figures are computed for the probe at the declined step's top, not for the order's size
  * (the ladder's steps sit at spread-tier tops, monkey-trading/engine#290), so they cannot be shown
- * as the order's; the largest step that still fills is the size the account can open, unless
- * admission depends on size in both directions (`bothWays`, an order that concerns a hedge, #916),
- * when a smaller size can be declined where a larger one fills.
+ * as the order's; the largest step that still fills is the size the account can open. An order that
+ * concerns a hedge, whose admission can depend on its size either way, takes the server's preview instead
+ * (`ticketFigures`).
  */
-function declinedProblem(quote: MarketQuote, side: Side, declined: Reject, limits: TicketLimits | null, bothWays: boolean): string {
+function declinedProblem(quote: MarketQuote, side: Side, declined: Reject, limits: TicketLimits | null): string {
   if (!isMarginDecline(declined)) return describeReject(declined);
-  if (bothWays) return `Insufficient margin. Your equity does not cover the margin this order requires.${leverageReason(limits)}`;
   const steps = side === "buy" ? quote.ask : quote.bid;
   const fitting = [...steps].reverse().find((s) => s.declined === undefined);
   // In contracts, cut to the size field's step so it can be typed as it reads; a smaller size still fits.

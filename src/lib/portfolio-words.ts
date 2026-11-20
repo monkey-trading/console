@@ -10,7 +10,7 @@ import type { PortfolioModel } from "./portfolio";
 export const OFFSET_TIP = "Positions that hedge each other need less margin, because a loss on one side is expected to be partly offset by a gain on the other. The offset is the amount by which this hedge reduces your margin requirement.";
 
 /** What a hedge's net exposure is, beside the figure. */
-export const NET_EXPOSURE_TIP = "The value of the hedge's long positions less its short positions, each weighted by how far its market typically moves relative to the others.";
+export const NET_EXPOSURE_TIP = "The value of the hedge's long positions less its short positions, each weighted by how far its market typically moves with the group as a whole.";
 
 /** The close-out price's help for an account with a hedge, in place of the per-position text. */
 export const HEDGED_CLOSEOUT_TIP = "The price at which your account would be closed out, assuming your other positions remain at their current prices. Positions that hedge each other are closed together where possible, and a close-out may first close positions in other markets.";
@@ -63,6 +63,9 @@ export function describeOrderMargin(before: Fixed, after: Fixed, equity: Fixed, 
   if (reduces && after > before) return `This order reduces a hedge, so your initial margin would rise from ${formatUsd(before)} to ${formatUsd(after)}, with equity of ${formatUsd(equity)}.`;
   return `After this order, your initial margin would be ${formatUsd(after)} and your equity ${formatUsd(equity)}.`;
 }
+
+/** In the ticket's hedge line when the server's check of the order could not be read. */
+export const PREVIEW_FAILED = "The margin this order would leave could not be checked, and the check is being retried. The trading server checks the margin again when you place the order.";
 
 /** What follows a margin refusal of an order that reduces a hedge: the control that closes it whole. */
 export const CLOSE_HEDGE_POINTER = "To close the whole hedge, use Close hedge in the positions panel.";

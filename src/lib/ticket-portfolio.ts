@@ -10,7 +10,7 @@ import { fixedFromWire, fixedToWire, type Fixed } from "./fixed";
 import { describeReject } from "./messages";
 import type { AccountModel, MarketModel } from "./models";
 import { creditedGroupOf, touchesOffset } from "./portfolio";
-import { CLOSE_HEDGE_POINTER, describeOrderMargin, TRIGGERED_LEVELS_NOTE, TRIGGERED_ORDER_NOTE } from "./portfolio-words";
+import { CLOSE_HEDGE_POINTER, describeOrderMargin, PREVIEW_FAILED, TRIGGERED_LEVELS_NOTE, TRIGGERED_ORDER_NOTE } from "./portfolio-words";
 import { requirementOf } from "./account-figures";
 import type { ConsoleState } from "./store/state";
 
@@ -27,7 +27,7 @@ export interface OffsetTicket {
   useBps: number | null;
   /** Whether the server has answered for this order, so its verdict replaces the ladder's and the console's own. */
   answered: boolean;
-  /** Whether the answer for this order is still awaited, which holds the order: no other verdict can say whether it is admitted. */
+  /** Whether the answer for this order is still awaited, which holds the order: no other verdict can say whether it is admitted. A failed read says so in `line` and holds nothing, leaving the verdict to the server. */
   awaited: boolean;
 }
 
@@ -60,12 +60,16 @@ export const isMarginRefusal = (reject: Reject | null | undefined): boolean => r
  * V84, which admits orders position by position and serves no preview.
  */
 export function previewRequest(state: ConsoleState, market: MarketModel, order: { side: Side; qty: Fixed; resting: boolean }): OrderPreviewRequest | null {
+  if (order.resting || state.wallet === null || (state.protocolVersion ?? 0) < PREVIEW_PROTOCOL || !concernsHedge(state, market.id, order)) return null;
+  return { account: state.wallet.address, market: market.id, side: order.side, qty: fixedToWire(order.qty), reduceOnly: false };
+}
+
+/** Whether an order of `qty` on `side` in `market`, of any kind, concerns a hedge of the credited account (`touchesOffset`). */
+export function concernsHedge(state: ConsoleState, market: MarketId, order: { side: Side; qty: Fixed }): boolean {
   const account = state.account;
-  if (order.resting || order.qty <= 0n || state.wallet === null || account === null || (state.protocolVersion ?? 0) < PREVIEW_PROTOCOL) return null;
+  if (order.qty <= 0n || account === null) return false;
   const markOf = (id: MarketId) => state.markets.find((m) => m.id === id)?.mark ?? null;
-  const delta = order.side === "buy" ? order.qty : -order.qty;
-  const touches = touchesOffset({ portfolio: account.portfolio, grid: state.houseParams?.portfolioGrid, positions: account.positions, markOf, market: market.id, delta });
-  return touches ? { account: state.wallet.address, market: market.id, side: order.side, qty: fixedToWire(order.qty), reduceOnly: false } : null;
+  return touchesOffset({ portfolio: account.portfolio, grid: state.houseParams?.portfolioGrid, positions: account.positions, markOf, market, delta: order.side === "buy" ? order.qty : -order.qty });
 }
 
 /**
@@ -74,13 +78,16 @@ export function previewRequest(state: ConsoleState, market: MarketModel, order: 
  * market's group already: an order that would match exposure but earn no credit states nothing.
  */
 export function offsetTicket(answer: PreviewAnswer, account: AccountModel | null, market: MarketId, perPosition: Fixed): OffsetTicket {
-  if (answer === undefined || answer === "failed" || account === null) return { line: null, refusal: null, useBps: null, answered: false, awaited: answer === undefined && account !== null };
+  if (answer === "failed") return { line: PREVIEW_FAILED, refusal: null, useBps: null, answered: false, awaited: false };
+  if (answer === undefined || account === null) return { line: null, refusal: null, useBps: null, answered: false, awaited: answer === undefined && account !== null };
   const equity = fixedFromWire(answer.equity);
   const initial = fixedFromWire(answer.initial_margin);
   const reduces = answer.fill?.increases === false;
   const useBps = equity > 0n ? Number((initial * 10_000n) / equity) : null;
-  if (isMarginRefusal(answer.refused) && answer.refused !== null) {
-    return { line: null, refusal: `${describeReject(answer.refused)}${reduces ? ` ${CLOSE_HEDGE_POINTER}` : ""}`, useBps, answered: true, awaited: false };
+  // The checks whose verdict depends on the order's size and the account: margin, and the house's capacity, which the in-browser node's ticket does not check itself.
+  if (answer.refused !== null && (isMarginRefusal(answer.refused) || answer.refused.kind === "house_capacity")) {
+    const pointer = reduces && isMarginRefusal(answer.refused) ? ` ${CLOSE_HEDGE_POINTER}` : "";
+    return { line: null, refusal: `${describeReject(answer.refused)}${pointer}`, useBps, answered: true, awaited: false };
   }
   // A credit the order creates leaves the margin below its estimate without one by more than the engine's rounding.
   const credited = creditedGroupOf(account.portfolio, market) !== null || initial + CENT < perPosition;
