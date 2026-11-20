@@ -22,6 +22,7 @@ import { accountFeeTerms, currentParams } from "@/lib/ticket-figures";
 import { closeRequests, previewKey } from "@/lib/ticket-portfolio";
 
 import { useConsole, useSession } from "./ConsoleProvider";
+import { flatPositions } from "./flat-positions";
 import { HedgeHeading } from "./HedgeHeading";
 import { keepFocus } from "./keep-focus";
 import { LevelsControl, LEVEL_W } from "./LevelsControl";
@@ -194,10 +195,8 @@ export function PositionsView() {
       <div className="px-4 has-[p]:border-b has-[p]:border-line has-[p]:pb-3"><Notice surface="positions" />{!levelsEditor.open && <Notice surface="levels" />}</div>
       <p role="status" className="sr-only">{levelsEditor.announced}</p>
       <ul className="lg:hidden">
-        {/* One list of headings and rows, each row keyed by its market, so a row that moves into or out of a hedge keeps its element and focus. */}
-        {hedges.flatMap((hedge) => [<li key={`hedge-${hedge.group.name}`} className="border-b border-line px-4 py-3">{heading(hedge)}</li>, ...hedge.rows.map(card)])}
-        {othersHeading && <li key="others" className="border-b border-line px-4 py-2 text-label tracking-caps text-fg-3 uppercase">{OTHER_POSITIONS}</li>}
-        {others.map(card)}
+        {/* One flat list of headings and rows, each row keyed by its market, so a row that moves into or out of a hedge keeps its element and focus. */}
+        {flatPositions(hedges.map((hedge) => ({ heading: <li key={`hedge-${hedge.group.name}`} className="border-b border-line px-4 py-3">{heading(hedge)}</li>, rows: hedge.rows })), { heading: othersHeading ? <li key="others" className="border-b border-line px-4 py-2 text-label tracking-caps text-fg-3 uppercase">{OTHER_POSITIONS}</li> : null, rows: others }, card)}
       </ul>
       <div role="region" aria-label="Open positions" tabIndex={0} className="relative hidden overflow-x-auto outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-glow lg:block">
         <table className="w-full min-w-max text-caption">
@@ -211,9 +210,7 @@ export function PositionsView() {
             </tr>
           </thead>
           <tbody>
-            {hedges.flatMap((hedge) => [<tr key={`hedge-${hedge.group.name}`} className="border-b border-line"><th colSpan={8} className="px-1.5 py-2">{heading(hedge)}</th></tr>, ...hedge.rows.flatMap(tableRow)])}
-            {othersHeading && <tr key="others" className="border-b border-line"><th colSpan={8} className={TH}>{OTHER_POSITIONS}</th></tr>}
-            {others.flatMap(tableRow)}
+            {flatPositions(hedges.map((hedge) => ({ heading: <tr key={`hedge-${hedge.group.name}`} className="border-b border-line"><th colSpan={8} className="px-1.5 py-2">{heading(hedge)}</th></tr>, rows: hedge.rows })), { heading: othersHeading ? <tr key="others" className="border-b border-line"><th colSpan={8} className={TH}>{OTHER_POSITIONS}</th></tr> : null, rows: others }, tableRow)}
           </tbody>
         </table>
       </div>
