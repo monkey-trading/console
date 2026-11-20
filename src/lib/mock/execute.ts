@@ -5,9 +5,9 @@ import { metaFor } from "../engine/meta";
 import type { EngineEvent, Fill, MarketId, Reject, Side } from "../engine/types";
 import { mulRounded, roundDiv } from "../fixed-rounding";
 import { feeAt, lastHold, openedAfter, profitFee } from "../holding-fee";
-import { equityOf, feeBaseOf, houseNav, houseNetNotional, marginFloorOf, tierOfAccount } from "./accounts";
+import { feeBaseOf, houseNav, houseNetNotional, marginFloorOf, tierOfAccount } from "./accounts";
 import { recordEmissionResult } from "./emissions";
-import { adverseBps, executionCost, exceedsSlippage, notionalOf, priceOrder, USD, type Priced } from "../pricing";
+import { adverseBps, exceedsSlippage, notionalOf, priceOrder, USD, type Priced } from "../pricing";
 import { accountSpreadTiers } from "../volume-tier";
 import { settleLevels, type FillCause } from "./level-state";
 import { requirementOf, type Book } from "./portfolio";
@@ -220,12 +220,13 @@ function orderableRefusal(state: MockState, req: FillRequest, reduceOnly: boolea
  * credit kept, as closing one leg of a hedge can. Close-alls, triggered orders, levels and close-outs never are (`close_checked`).
  */
 function riskRefusal(state: MockState, plan: FillPlan): Reject | null {
-  const { req, priced, held, delta } = plan;
+  const { req, priced, delta } = plan;
   const account = state.account(req.address);
   const floorBps = marginFloorOf(state, account);
   const after = bookAfter(state, plan);
-  // The check runs on the account as the fill leaves it: the spread just paid, and the fee on a gain it realises, come off equity first.
-  const equity = equityOf(state, account) - executionCost({ held, entry: plan.before?.entry ?? null, delta, price: priced.price, index: plan.mid, feeBps: plan.feeBps });
+  // The check runs on the account as the fill leaves it (`account_after`), valued as the preview gives it: its averaged entry, its
+  // realised result less the fee, and each position's profit or loss at the index rounded down.
+  const { equity } = requirementOf(state, after, { kind: "market" });
   const initial = (book: Book, shutCredited: boolean) => requirementOf(state, book, { kind: "initial", floorBps, shutCredited }).requirement;
   if (!priced.increases) {
     if (req.closeChecked !== true || initial(after, true) <= initial(account, true)) return null;
