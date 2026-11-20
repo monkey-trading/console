@@ -22,11 +22,12 @@ export interface ExecutablePrice {
 }
 
 /**
- * The markets to ask quotes for: the selected one first, then those the account holds positions
- * in, for their closing prices, up to the node's limit.
+ * The markets to ask quotes for: the selected one first, then those the account holds that earn a hedge's
+ * offset, which Close hedge sends at their closing prices, then the others it holds, for theirs, up to the
+ * node's limit.
  */
-export function quoteMarkets(selected: MarketId, held: readonly MarketId[]): MarketId[] {
-  return [...new Set([selected, ...held])].slice(0, MAX_QUOTED_MARKETS);
+export function quoteMarkets(selected: MarketId, held: readonly MarketId[], hedged: readonly MarketId[] = []): MarketId[] {
+  return [...new Set([selected, ...hedged.filter((market) => held.includes(market)), ...held])].slice(0, MAX_QUOTED_MARKETS);
 }
 
 /**

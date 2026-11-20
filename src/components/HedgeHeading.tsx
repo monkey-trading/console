@@ -8,12 +8,12 @@
 
 import { useEffect, useId } from "react";
 
-import { planGroupClose, pressBatch, targetsKey, type HedgeMember } from "@/lib/close-all";
+import { CLOSE_SLIPPAGE_BPS, planGroupClose, pressBatch, targetsKey, type HedgeMember } from "@/lib/close-all";
 import { CONFIRM_MIN_GAP_MS, CONFIRM_MS } from "@/lib/confirm-window";
 import { formatUsd } from "@/lib/fixed";
 import { CLOSE_ALL_REMOVES_LEVELS } from "@/lib/level-words";
 import type { OffsetGroupModel } from "@/lib/portfolio";
-import { describeUntradable, formatNetExposure, hedgeTitle, listSymbols, NET_EXPOSURE_TIP, OFFSET_TIP } from "@/lib/portfolio-words";
+import { describeUnquoted, describeUntradable, formatNetExposure, hedgeTitle, listSymbols, NET_EXPOSURE_TIP, OFFSET_TIP } from "@/lib/portfolio-words";
 import { closeAll } from "@/lib/store/batch-actions";
 
 import { useSession } from "./ConsoleProvider";
@@ -32,11 +32,11 @@ export function HedgeHeading({ group, members, removesLevels, disabled, describe
   const id = useId();
   const { armed, state, arm, cancel } = useConfirmWindow(CONFIRM_MS, CONFIRM_MIN_GAP_MS);
   const { confirmBatch } = usePrefs().prefs;
-  const { targets, slippageBps, untradable } = planGroupClose(members);
+  const { targets, untradable, unquoted } = planGroupClose(members);
   const count = targets.length;
   const confirming = armed && count > 0;
   const symbols = members.map((m) => m.symbol);
-  const note = untradable.length === 0 ? null : describeUntradable(untradable, members.length);
+  const notes = [untradable.length === 0 ? null : describeUntradable(untradable, members.length), unquoted.length === 0 ? null : describeUnquoted(unquoted)].filter((n) => n !== null);
   // The window confirms the list it was armed for, as Close all's does.
   const listed = targetsKey(targets);
   useEffect(() => cancel(), [listed, cancel]);
@@ -46,7 +46,7 @@ export function HedgeHeading({ group, members, removesLevels, disabled, describe
     if (action !== "send") return;
     cancel();
     keepFocus(event.currentTarget);
-    void closeAll(store, targets, slippageBps);
+    void closeAll(store, targets, CLOSE_SLIPPAGE_BPS);
   };
   // A held Enter repeats its click: only a separate press may confirm.
   const holdsDown = (event: { repeat: boolean; preventDefault: () => void }) => { if (event.repeat) event.preventDefault(); };
@@ -57,13 +57,13 @@ export function HedgeHeading({ group, members, removesLevels, disabled, describe
         <span className="text-caption text-fg">{hedgeTitle(symbols)}</span>
         <span className="text-label text-fg-3"><Term label="Net exposure" tip={NET_EXPOSURE_TIP} /> <span className="text-fg-2">{formatNetExposure(group.netNotional)}</span></span>
         <span className="text-label text-fg-3"><Term label="Margin offset" tip={OFFSET_TIP} /> <span className="text-fg-2">{formatUsd(group.offset)}</span></span>
-        <button type="button" disabled={disabled || count === 0} className={confirming ? ARMED : BUTTON} aria-label={confirming ? undefined : `Close hedge: ${listSymbols(symbols)}`} aria-describedby={describedBy ?? (note === null ? undefined : `${id}-note`)} onClick={press} onKeyDown={holdsDown}>
+        <button type="button" disabled={disabled || count === 0} className={confirming ? ARMED : BUTTON} aria-label={confirming ? undefined : `Close hedge: ${listSymbols(symbols)}`} aria-describedby={describedBy ?? (notes.length === 0 ? undefined : `${id}-note`)} onClick={press} onKeyDown={holdsDown}>
           {confirming ? `Confirm: close ${positions}` : "Close hedge"}
         </button>
       </div>
       <p role="status" className="sr-only">{confirming ? `Press again within ${CONFIRM_MS / 1000} seconds to close ${positions}.${removesLevels ? ` ${CLOSE_ALL_REMOVES_LEVELS}` : ""}` : ""}</p>
       {confirming && removesLevels && <p className="mt-1 max-w-[80ch] whitespace-normal text-label leading-relaxed text-fg-2">{CLOSE_ALL_REMOVES_LEVELS}</p>}
-      {note !== null && <p id={`${id}-note`} className="mt-1 max-w-[80ch] whitespace-normal text-label leading-relaxed text-fg-3">{note}</p>}
+      {notes.length > 0 && <p id={`${id}-note`} className="mt-1 max-w-[80ch] whitespace-normal text-label leading-relaxed text-fg-3">{notes.join(" ")}</p>}
     </div>
   );
 }

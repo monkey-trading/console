@@ -53,6 +53,12 @@ export function describeUntradable(untradable: readonly string[], members: numbe
   return `${listSymbols(untradable)} cannot be traded at present, so Close hedge leaves ${one ? "it" : "them"} open. Until ${one ? "it" : "they"} can be traded again, this hedge does not reduce the margin required for new orders or withdrawals.`;
 }
 
+/** Under a hedge whose positions have no closing price yet: Close hedge closes none of them rather than leave the others open alone. */
+export function describeUnquoted(unquoted: readonly string[]): string {
+  const one = unquoted.length === 1;
+  return `Close hedge is unavailable because ${listSymbols(unquoted)} ${one ? "has" : "have"} no closing price yet. Selecting ${one ? "it" : "them"} in the watchlist loads ${one ? "its" : "their"} closing price.`;
+}
+
 /** At a position's Close button when closing it alone would be rejected for margin. */
 export function describeLoneClose(symbol: string): string {
   return `Closing ${symbol} on its own would raise your initial margin above your equity, so the order would be rejected. Close hedge closes all of the hedge's positions together.`;
