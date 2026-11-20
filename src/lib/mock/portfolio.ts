@@ -10,7 +10,6 @@ import { metaFor } from "../engine/meta";
 import type { PortfolioMarginWire } from "../engine/portfolio-types";
 import type { MarketId } from "../engine/types";
 import { closeoutShareOf, groupCredit, type CreditLeg, type GroupCredit } from "../portfolio-credit";
-import { tieredMargin } from "../pricing";
 import { flooredMargin } from "../volume-tier";
 import type { Holding, MockState } from "./state";
 
@@ -89,10 +88,10 @@ function valueBook(state: MockState, book: Book, basis: Basis, without: readonly
     const runtime = state.markets.get(id);
     if (runtime === undefined || without.includes(id)) continue;
     const price = priceOf?.(id) ?? runtime.mid;
-    // As the engine values a position for margin (`valued_positions`): its notional rounded up, its profit or loss rounded down.
+    // As the engine values a position for margin (`valued_positions`, `band_charge`): its notional rounded up, each band's charge
+    // rounded up at the basis's floor (none at the market's bands), and its profit or loss rounded down.
     const notional = mulRounded(absFixed(held.qty), price, "up");
-    const tiers = runtime.listed.spec.margin_tiers;
-    const band = basis.kind === "market" ? tieredMargin(tiers, notional) : flooredMargin(tiers, notional, basis.floorBps);
+    const band = flooredMargin(runtime.listed.spec.margin_tiers, notional, basis.kind === "market" ? 0 : basis.floorBps);
     equity += mulRounded(held.qty, price - held.entry, "down");
     perPosition += band;
     valued.set(id, { qty: held.qty, price, notional, band });

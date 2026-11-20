@@ -8,7 +8,7 @@ import type { PositionCloseout } from "../engine/account-types";
 import type { MarketId } from "../engine/types";
 import { divRounded, mulRounded } from "../fixed-rounding";
 import { closeoutShareOf } from "../portfolio-credit";
-import { tieredMargin } from "../pricing";
+import { flooredMargin } from "../volume-tier";
 import { closeoutRequirementOf, equityOf, marginOf } from "./accounts";
 import { closeoutShare, groupIndexOf, heldOnBothSides, requirementOf } from "./portfolio";
 import type { AccountState, Holding, MockState } from "./state";
@@ -51,11 +51,11 @@ export function closeoutsOf(state: MockState, account: AccountState): PositionCl
  * with the price inside a margin band, so the walk from the mark meets the bands' bounds in order and interpolates where the
  * slack turns negative.
  */
-function walk(tiers: Parameters<typeof tieredMargin>[0], mark: Fixed, held: Holding, equity: Fixed, margin: Fixed, levelBps: number): Omit<PositionCloseout, "market"> {
+function walk(tiers: Parameters<typeof flooredMargin>[0], mark: Fixed, held: Holding, equity: Fixed, margin: Fixed, levelBps: number): Omit<PositionCloseout, "market"> {
   const long = held.qty > ZERO;
   const size = absFixed(held.qty);
-  // The position's own band at its notional rounded up, and the level's share rounded up, as the close-out check takes them.
-  const band = (price: Fixed) => tieredMargin(tiers, mulRounded(size, price, "up"));
+  // The position's own band at its notional rounded up, each band's charge rounded up, and the level's share rounded up, as the close-out check takes them.
+  const band = (price: Fixed) => flooredMargin(tiers, mulRounded(size, price, "up"), 0);
   const others = margin - band(mark);
   const slack = (price: Fixed): Fixed => equity + mulFixed(held.qty, price - mark) - closeoutShareOf(others + band(price), levelBps);
   if (slack(mark) < ZERO) return { reach: "due", price: null };

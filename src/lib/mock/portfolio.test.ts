@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { EngineError } from "../engine/client";
 import { fixedFromInt, fixedFromWire, type Fixed } from "../fixed";
 import { closeOutUnderwater } from "./closeout";
+import { closeoutsOf } from "./closeout-price";
 import { withdrawable } from "./funds";
 import { createMockNode, type MockNode } from "./index";
 import { auth, funded, ME, order, START, types } from "./test-helpers";
@@ -129,16 +130,18 @@ describe("the mock's order preview", () => {
 });
 
 describe("the mock's roundings, as the engine's", () => {
-  // 3 nano-BTC at 100,016.5 entered at 100,017: $0.0003000495 of notional and -$0.0000000015 of profit or loss, neither a whole nano-dollar.
-  const tiny = (balance: Fixed) => {
+  /** A fresh state with BTC-USD at `mid` and `ME` holding `qty` of it entered at `entry` on `balance`. */
+  const single = (mid: string, qty: string, entry: string, balance: Fixed) => {
     const { state } = createMockNode(START).client;
     const btc = state.markets.get(1);
-    if (btc !== undefined) btc.mid = fixedFromWire("100016.5");
+    if (btc !== undefined) btc.mid = fixedFromWire(mid);
     const account = state.account(ME);
     account.balance = balance;
-    account.positions.set(1, { qty: fixedFromWire("0.000000003"), entry: fixedFromInt(100_017), openedAt: START });
+    account.positions.set(1, { qty: fixedFromWire(qty), entry: fixedFromWire(entry), openedAt: START });
     return state;
   };
+  // 3 nano-BTC at 100,016.5 entered at 100,017: $0.0003000495 of notional and -$0.0000000015 of profit or loss, neither a whole nano-dollar.
+  const tiny = (balance: Fixed) => single("100016.5", "0.000000003", "100017", balance);
 
   it("round a notional up, a profit or loss down and the close-out level's share up, in the account read and the preview", async () => {
     // The notional rounds up to 0.00030005: 2% of it is 0.000006001, 5% at tier 0's floor 0.0000150025 rounded up, and half of the margin 0.0000030005 rounded up.
@@ -156,5 +159,37 @@ describe("the mock's roundings, as the engine's", () => {
     const under = tiny(fixedFromWire("0.000003002"));
     expect(closeOutUnderwater(under)[0]).toEqual({ type: "close_out", account: ME, equity: "0.000003", margin: "0.000006001" });
     expect(closeOutUnderwater(tiny(fixedFromWire("0.000003003")))).toEqual([]);
+  });
+
+  it("round each band's charge up at the market's bands, in the margin, the close-out price and the close-out", async () => {
+    // 0.001 BTC at 100,000.000001 is $100.000000001 of notional, whose 2% band charges $2.00000000002, rounded up to $2.000000001.
+    const node = await book(100, []);
+    node.client.state.account(ME).positions.set(1, { qty: fixedFromWire("0.001"), entry: fixedFromWire("100000.000001"), openedAt: START });
+    const btc = node.client.state.markets.get(1);
+    if (btc !== undefined) btc.mid = fixedFromWire("100000.000001");
+    const view = await node.client.account(ME);
+    expect([view.margin, view.maintenance_margin, view.portfolio_margin?.margin]).toEqual(["2.000000001", "1.000000001", "2.000000001"]);
+    // On $1 of equity the account is below half of that margin: due, and closed out.
+    const poor = single("100000.000001", "0.001", "100000.000001", fixedFromInt(1));
+    expect(closeoutsOf(poor, poor.account(ME))).toEqual([{ market: 1, reach: "due", price: null }]);
+    expect(closeOutUnderwater(poor)[0]).toEqual({ type: "close_out", account: ME, equity: "1", margin: "2.000000001" });
+    // Equity of exactly the position's notional leaves the long's slack at zero when its price reaches zero, its own band rounded as
+    // the margin's: no price in the range closes it out, where a band truncated at the mark leaves a nano-dollar short there.
+    const exact = single("100000.000001", "0.001", "100000.000001", fixedFromWire("100.000000001"));
+    expect(closeoutsOf(exact, exact.account(ME))).toEqual([{ market: 1, reach: "beyond", price: null }]);
+  });
+
+  it("admit new risk on the equity the fill leaves, as the preview gives it, and say so in agreement with its own figures", async () => {
+    // 1 BTC at 100,000 and a buy of 0.001 at 100,020: its averaged entry rounds up, so $5,005.02 leaves $5,004.999999999 against tier 0's $5,005.
+    const at = async (balance: string) => {
+      const node = await book(10, [[1, 1]]);
+      node.client.state.account(ME).balance = fixedFromWire(balance);
+      return { node, preview: await node.client.preview({ account: ME, market: 1, side: "buy", qty: "0.001", reduceOnly: false }) };
+    };
+    const short = await at("5005.02");
+    expect(short.preview).toMatchObject({ fill: { price: "100020" }, equity: "5004.999999999", initial_margin: "5005", refused: { kind: "insufficient_margin", equity: "5004.999999999", required: "5005" } });
+    expect((await order(short.node, "0.001", "buy")).events[0]).toMatchObject({ type: "order_rejected", reason: { kind: "insufficient_margin", required: "5005" } });
+    const enough = await at("5005.020000001");
+    expect(enough.preview).toMatchObject({ equity: "5005", initial_margin: "5005", refused: null });
   });
 });
