@@ -1,17 +1,4 @@
-/** The words behind a position's P&L: its basis, the figure at the mark it replaces, and why a figure is withheld. */
-
-/** How the P&L figure is priced, the sentence every explanation with a closing price starts with. */
-const AT_CLOSE = "This figure is calculated at the price at which the entire position would close.";
-
-/**
- * The explanation of one position's P&L. A close at the closing price has `atMark`, the gain at the
- * mark, which the exit spread takes from; a position with no closing price has `reason` instead, and
- * `atMark` as the only figure there is.
- */
-export function describePnl(atMark: string | null, reason: string | null): string {
-  if (reason !== null) return atMark === null ? reason : `${reason} At the mark price, the unrealised profit or loss is ${atMark}.`;
-  return atMark === null ? AT_CLOSE : `${AT_CLOSE} At the mark price, before the spread, the unrealised profit or loss is ${atMark}.`;
-}
+/** The words behind a position's P&L: the figure at the mark it replaces, and why a figure is withheld. */
 
 /** What stands between a position and a closing price, in the order a close needs them. */
 export interface CloseGaps {
@@ -47,8 +34,12 @@ export function describeNoClose(g: CloseGaps): string | null {
   return g.rateRead ? null : "The profit fee rate has not loaded yet.";
 }
 
-/** A row's details in one explanation: the P&L's basis, and what the fee and the close keep come to. */
-export function describeDetails(parts: { pnl: string; noClose: string | null; noFee: boolean }): string {
-  const close = parts.noClose !== null ? `The profit fee and closing figures are not yet available. ${parts.noClose}` : parts.noFee ? "No profit fee applies, because closing the position now would not realise a profit." : null;
-  return [parts.pnl, close].filter((x) => x !== null).join(" ");
+/**
+ * A row's details in one explanation, in at most two sentences: why a figure is withheld, or that no profit fee applies,
+ * then the profit or loss at the mark, which the closing price's spread takes from. A position with no price has `noPrice`.
+ */
+export function describeDetails(parts: { atMark: string | null; noPrice: string | null; noClose: string | null; noFee: boolean }): string {
+  const status = parts.noPrice ?? (parts.noClose !== null ? "The profit fee and closing figures are not yet available." : parts.noFee ? "No profit fee applies, because closing the position now would not realise a profit." : null);
+  const mark = parts.atMark === null ? null : `At the mark price${parts.noPrice === null ? ", before the spread," : ","} the unrealised profit or loss is ${parts.atMark}.`;
+  return [status, mark].filter((x) => x !== null).join(" ");
 }

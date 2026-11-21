@@ -57,8 +57,7 @@ professional sentences, using the standard terms of trading.
 - **The guard:** `src/help-text.test.ts` fails when a tooltip exceeds two sentences or 40 words, or a
   note exceeds two sentences. It reads every `tip` and `note`, as a JSX attribute or an object's
   property, and every constant named `…TIP`, `…TIPS`, `…HELP`, `…NOTE` or `…NOTES`, so name help text
-  that way. Text built at run time is listed there with what it can say. Its list of help text
-  already over the limits only shrinks: cut a listed string to the limits and take it off the list.
+  that way. Text built at run time is listed there with what it can say.
 
 ### Example: the take-profit and stop-loss tooltip
 

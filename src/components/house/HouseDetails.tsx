@@ -68,7 +68,7 @@ export function CapPanel() {
 export function MarketCaps() {
   const { nav, rows } = useSelected(selectRows);
   return (
-    <Panel title="Market limits" tip="Each market has its own exposure limit, which is a set percentage of the house value or a fixed dollar minimum, whichever is higher. The table also shows the house's net exposure in each market as at the most recent update.">
+    <Panel title="Market limits" tip="Each market's exposure limit is the larger of a set percentage of the house value and a fixed dollar minimum. The table also shows the house's net exposure in each market.">
       <HouseCaps rows={rows} nav={nav} />
     </Panel>
   );

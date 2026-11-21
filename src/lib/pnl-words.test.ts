@@ -1,20 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { describeDetails, describeNoClose, describeNoPrice, describePnl, type CloseGaps } from "./pnl-words";
+import { describeDetails, describeNoClose, describeNoPrice, type CloseGaps } from "./pnl-words";
 
 const OK: CloseGaps = { symbol: "BTC-USD", open: true, marked: true, converts: true, quoted: true, asked: true, termsCurrent: true, houseNote: null, rateRead: true };
-
-describe("describePnl", () => {
-  it("keeps the figure at the mark in the explanation of a figure at the closing price", () => {
-    expect(describePnl("$20.00", null)).toBe("This figure is calculated at the price at which the entire position would close. At the mark price, before the spread, the unrealised profit or loss is $20.00.");
-    expect(describePnl(null, null)).toBe("This figure is calculated at the price at which the entire position would close.");
-  });
-
-  it("says why a figure is withheld, with the mark's as the only one there is", () => {
-    expect(describePnl("$20.00", "The market is closed, so no closing price is available.")).toBe("The market is closed, so no closing price is available. At the mark price, the unrealised profit or loss is $20.00.");
-    expect(describePnl(null, "The closing price for this position is still loading.")).toBe("The closing price for this position is still loading.");
-  });
-});
 
 describe("describeNoPrice and describeNoClose", () => {
   it("name the first thing a close lacks, in the order it needs them", () => {
@@ -36,9 +24,14 @@ describe("describeNoPrice and describeNoClose", () => {
 });
 
 describe("describeDetails", () => {
-  it("joins the basis and what the fee and the close come to", () => {
-    expect(describeDetails({ pnl: "Basis.", noClose: null, noFee: true })).toBe("Basis. No profit fee applies, because closing the position now would not realise a profit.");
-    expect(describeDetails({ pnl: "Basis.", noClose: "Why.", noFee: false })).toBe("Basis. The profit fee and closing figures are not yet available. Why.");
-    expect(describeDetails({ pnl: "Basis.", noClose: null, noFee: false })).toBe("Basis.");
+  it("gives the profit or loss at the mark, before the spread, and what the fee comes to", () => {
+    expect(describeDetails({ atMark: "$20.00", noPrice: null, noClose: null, noFee: false })).toBe("At the mark price, before the spread, the unrealised profit or loss is $20.00.");
+    expect(describeDetails({ atMark: "-$20.00", noPrice: null, noClose: null, noFee: true })).toBe("No profit fee applies, because closing the position now would not realise a profit. At the mark price, before the spread, the unrealised profit or loss is -$20.00.");
+  });
+
+  it("says why the closing figures are withheld, with the mark's as the only figure there is", () => {
+    expect(describeDetails({ atMark: "$20.00", noPrice: null, noClose: "The trading terms have not loaded yet.", noFee: false })).toBe("The profit fee and closing figures are not yet available. At the mark price, before the spread, the unrealised profit or loss is $20.00.");
+    expect(describeDetails({ atMark: "$20.00", noPrice: "The market is closed, so no closing price is available.", noClose: "The market is closed, so no closing price is available.", noFee: false })).toBe("The market is closed, so no closing price is available. At the mark price, the unrealised profit or loss is $20.00.");
+    expect(describeDetails({ atMark: null, noPrice: "No price is available for this market yet.", noClose: "No price is available for this market yet.", noFee: false })).toBe("No price is available for this market yet.");
   });
 });
