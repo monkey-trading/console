@@ -7,7 +7,7 @@ import { CLOSE_SLIPPAGE_BPS } from "@/lib/close-all";
 import type { Reject } from "@/lib/engine/types";
 import { describeNextFall, describeNextFallShort, formatHold, type FeeTerms } from "@/lib/fee-words";
 import { formatRate } from "@/lib/format";
-import { describeDetails, describeNoClose, describeNoPrice, describePnl, type CloseGaps } from "@/lib/pnl-words";
+import { describeDetails, describeNoClose, describeNoPrice, type CloseGaps } from "@/lib/pnl-words";
 import { stressTermsAt } from "@/lib/pricing";
 import { formatCloseout, formatMark } from "@/lib/price-format";
 import { absFixed, formatFixedPlaces, formatUsd } from "@/lib/fixed";
@@ -113,7 +113,7 @@ export function positionRows(ctx: RowContext, positions: readonly PositionModel[
       feeUsd: closeNow === null ? "—" : closeNow.exact || closeNow.fee === 0n ? formatUsd(closeNow.fee) : `≤ ${formatUsd(roundToPlaces(closeNow.fee, 2, "up"))}`,
       noFee,
       // One static-named explanation per row, so no live figure is the name of a control.
-      details: describeDetails({ pnl: describePnl(atMark === null ? null : formatUsd(atMark), pnl === null ? noPrice : null), noClose, noFee }),
+      details: describeDetails({ atMark: atMark === null ? null : formatUsd(atMark), noPrice: pnl === null ? noPrice : null, noClose, noFee }),
       closeout: formatCloseout(p.closeout, places),
       holdsLevels: p.levels !== undefined,
       editor,

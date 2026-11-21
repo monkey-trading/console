@@ -34,7 +34,7 @@ export function PositionMap({ className }: { className?: string }) {
   return (
     <Panel
       title="Position map"
-      tip="Traders' positions in the selected market, grouped by their unrealised profit or loss. Short positions are on the left and long positions on the right, with profits at the top and losses at the bottom. The length of each bar shows the total size of the positions in that group."
+      tip="Traders' positions in the selected market, grouped by their profit or loss as a share of the entry price at the current market price. The length of each bar shows the total size of the positions in that group."
       className={className}
       controls={<Pick label="Position map market" value={market ?? 0} options={markets.map((m) => ({ value: m.id, label: m.label }))} onChange={setPicked} />}
     >

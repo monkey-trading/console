@@ -60,13 +60,13 @@ const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-g
 const CLOSEOUT_TIP = "The price at which your account would be closed out if only this market moved, or Due if it is below the close-out level. Because margin is shared, a close-out may close another of your positions first.";
 
 /** What the P&L column means, shared by the table's head and the phone rows' labels. */
-const PNL_TIP = "The profit or loss you would realise by closing the entire position now, before the profit fee. It is calculated at the price at which the position would close (the bid for a long position, the offer for a short), so the spread is already taken into account. Details shows the profit or loss at the mark price.";
+const PNL_TIP = "The profit or loss you would realise by closing the entire position now, before the profit fee. It is calculated at the price at which the position would close, so the spread is already included.";
 
 /** What the hold, fee and close columns mean, shared by the table's head and the phone rows' labels. */
-const HOLD_TIP = "The length of time the position has been open, which determines its profit fee rate. Adding to a position reduces its holding time in proportion to the size added. Reducing a position leaves it unchanged.";
+const HOLD_TIP = "The length of time the position has been open, which sets its profit fee rate. Adding to a position shortens this time in proportion to the size added, while reducing it leaves the time unchanged.";
 const NO_FEE_NOTE = "No fee without a profit";
-const FEE_USD_TIP = "The profit fee, in USD, that you would pay by closing the entire position now. No fee is charged when a position is closed without a profit. A ≤ sign means the fee rate is about to fall, so the fee may be lower if the price holds.";
-const CLOSE_TIP = "The amount that closing the entire position now would add to or deduct from your balance, which is the profit or loss at the closing price less the profit fee. This figure changes as prices move. A ≥ sign means the fee rate is about to fall, so you may keep more.";
+const FEE_USD_TIP = "The profit fee you would pay by closing the entire position now, which is nothing without a profit. A ≤ sign means the fee rate is about to fall, so the fee may be lower if the price holds.";
+const CLOSE_TIP = "The change to your balance from closing the position now: the profit or loss at the closing price, less any profit fee. A ≥ sign means the fee rate is about to fall, so you may keep more.";
 const LEVELS_TIP = "The levels at which the entire position is closed automatically. A take profit or stop loss is triggered when the price at which the position would close reaches it.";
 
 export function PositionsView() {

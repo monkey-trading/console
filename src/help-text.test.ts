@@ -3,7 +3,7 @@
  * thing in at most two sentences and 40 words, and a note under a control is at most two sentences. It reads the
  * source for every `tip` and `note`, as a JSX attribute or an object's property, and every constant named `…TIP`,
  * `…TIPS`, `…HELP`, `…NOTE` or `…NOTES`, following each name to the text it holds. Text built at run time is listed
- * in `DYNAMIC` with what it can say, and the help text already over the limits in `OVER_LIMIT`, which only shrinks.
+ * in `DYNAMIC` with what it can say.
  */
 
 import { readdirSync } from "node:fs";
@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import { overLimit, type HelpKind } from "@/lib/copy-length";
 import { describeSchedule } from "@/lib/fee-words";
 import { LAUNCH_CURVE } from "@/lib/holding-fee";
-import { describeDetails, describePnl } from "@/lib/pnl-words";
+import { describeDetails } from "@/lib/pnl-words";
 import { formatStamp } from "@/lib/time";
 
 const ROOT = process.cwd();
@@ -28,10 +28,10 @@ const NAMES: [RegExp, HelpKind][] = [[/(^|_)(TIP|TIPS|HELP)$/, "tooltip"], [/(^|
  */
 const DYNAMIC: Record<string, (() => string[]) | null> = {
   "src/components/PositionsView.tsx: r.details": () => [
-    describeDetails({ pnl: describePnl("$120.00", null), noClose: null, noFee: false }),
-    describeDetails({ pnl: describePnl("-$80.00", null), noClose: null, noFee: true }),
-    describeDetails({ pnl: describePnl("$120.00", "No price is available for this market yet."), noClose: "No price is available for this market yet.", noFee: false }),
-    describeDetails({ pnl: describePnl("$120.00", null), noClose: "The trading terms have changed, and the new terms could not be loaded. The app will try again automatically.", noFee: false }),
+    describeDetails({ atMark: "$120.00", noPrice: null, noClose: null, noFee: false }),
+    describeDetails({ atMark: "-$80.00", noPrice: null, noClose: null, noFee: true }),
+    describeDetails({ atMark: "$120.00", noPrice: "The exchange rate for this market's quote currency is not yet available, so the profit or loss cannot be shown in USD.", noClose: "", noFee: false }),
+    describeDetails({ atMark: "$120.00", noPrice: null, noClose: "The profit fee rate has not loaded yet.", noFee: false }),
   ],
   "src/components/PositionsView.tsx: describeSchedule(feeTerms)": () => [describeSchedule({ profitFeeBps: 1_000, profitFeeCurve: LAUNCH_CURVE }), describeSchedule({ profitFeeBps: 1_000, profitFeeCurve: [] })],
   "src/components/house/Stats.tsx: formatStamp(scan.volumeSinceMs)": () => [formatStamp(Date.UTC(2026, 10, 19, 8))],
@@ -41,18 +41,6 @@ const DYNAMIC: Record<string, (() => string[]) | null> = {
   "src/components/SignGate.tsx: chainAway(walletChain, deploy.chainId)": null,
   "src/components/SignGate.tsx: action": null,
 };
-
-/** Help text over the limits when they were set (monkey-trading/console#477), each to be cut to them and taken off this list. */
-const OVER_LIMIT: readonly string[] = [
-  "src/components/PositionsView.tsx PNL_TIP",
-  "src/components/PositionsView.tsx HOLD_TIP",
-  "src/components/PositionsView.tsx FEE_USD_TIP",
-  "src/components/PositionsView.tsx CLOSE_TIP",
-  "src/components/PositionsView.tsx <Term label=\"Details\">",
-  "src/components/house/HouseDetails.tsx <Panel title=\"Market limits\">",
-  "src/components/house/PositionMap.tsx <Panel title=\"Position map\">",
-  "src/components/house/Stats.tsx <Row label=\"Distributed\">",
-];
 
 interface Site {
   id: string;
@@ -182,11 +170,7 @@ describe("the console's help text", () => {
     expect(Object.keys(DYNAMIC).filter((key) => !used.has(key))).toEqual([]);
   });
 
-  it("holds each tooltip to two sentences and 40 words, and each note to two sentences, but those listed as over", () => {
-    expect(over.filter((entry) => !OVER_LIMIT.includes(entry.id)).map((entry) => `${entry.id}, a ${entry.kind} of ${entry.counted}: ${entry.text}`)).toEqual([]);
-  });
-
-  it("lists only help text still over the limits", () => {
-    expect(OVER_LIMIT.filter((id) => !over.some((entry) => entry.id === id))).toEqual([]);
+  it("holds each tooltip to two sentences and 40 words, and each note to two sentences", () => {
+    expect(over.map((entry) => `${entry.id}, a ${entry.kind} of ${entry.counted}: ${entry.text}`)).toEqual([]);
   });
 });

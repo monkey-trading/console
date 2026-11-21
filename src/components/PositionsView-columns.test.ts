@@ -59,7 +59,7 @@ describe("a position whose mark gain is smaller than its exit spread", () => {
     const html = render({ account: holding(2, 100_990), quotes: { 1: closing("sell", "100979.8") } });
     const [row] = rows(html);
     expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["-$20.40Details", "$0.00Close-out —", "-$20.40Close"]);
-    expect(details(html)).toBe("This figure is calculated at the price at which the entire position would close. At the mark price, before the spread, the unrealised profit or loss is $20.00. No profit fee applies, because closing the position now would not realise a profit.");
+    expect(details(html)).toBe("No profit fee applies, because closing the position now would not realise a profit. At the mark price, before the spread, the unrealised profit or loss is $20.00.");
     expect(html).toContain('aria-hidden="false" class="block text-label text-fg-3">No fee without a profit');
   });
 
@@ -68,7 +68,7 @@ describe("a position whose mark gain is smaller than its exit spread", () => {
     const html = render({ account: holding(-2, 101_010), quotes: { 1: closing("buy", "101020") } });
     const [row] = rows(html);
     expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["-$20.00Details", "$0.00Close-out —", "-$20.00Close"]);
-    expect(details(html)).toContain("At the mark price, before the spread, the unrealised profit or loss is $20.00. No profit fee applies, because closing the position now would not realise a profit.");
+    expect(details(html)).toContain("No profit fee applies, because closing the position now would not realise a profit. At the mark price, before the spread, the unrealised profit or loss is $20.00.");
   });
 });
 
@@ -78,7 +78,7 @@ describe("a position at a gain after the exit spread", () => {
     const html = render(GAIN);
     const [row] = rows(html);
     expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["$1,959.60Details", "$195.96Close-out —", "$1,763.64Close"]);
-    expect(details(html)).toBe("This figure is calculated at the price at which the entire position would close. At the mark price, before the spread, the unrealised profit or loss is $2,000.00.");
+    expect(details(html)).toBe("At the mark price, before the spread, the unrealised profit or loss is $2,000.00.");
     // The card reserves the note's line, hidden from view and from a screen reader.
     expect(html).toContain('aria-hidden="true" class="block text-label invisible">No fee without a profit');
   });
@@ -101,7 +101,7 @@ describe("the table's one row per position", () => {
     const html = render({ ...GAIN, pricingCurrent: false, houseStateStatus: "read" });
     const [row] = rows(html);
     expect([row?.[PNL], row?.[FEE_USD], row?.[CLOSE_NOW]]).toEqual(["$1,959.60Details", "—Close-out —", "—Close"]);
-    expect(details(html)).toContain("The profit fee and closing figures are not yet available. The trading terms have changed. The new terms are loading.");
+    expect(details(html)).toContain("The profit fee and closing figures are not yet available. At the mark price, before the spread, the unrealised profit or loss is $2,000.00.");
   });
 
   it("withholds every figure that needs a price while the node has quoted none, naming the market to select", () => {
