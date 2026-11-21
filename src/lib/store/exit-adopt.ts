@@ -47,7 +47,7 @@ export class ExitAdopter {
     // The refused proof stays saved, as it may be the trader's only one: a wrong network or a contract change refuses a good proof too. Only a proof that passes replaces it.
     const refuse = (reason: string): "refused" => {
       const held = this.store.getSnapshot().exit.record;
-      this.patch({ record: held !== null && sameProof(held, record) ? null : held, refused: record, attempt: { kind: "saved-refused", reason }, checkFailures: 0 });
+      this.patch({ record: held !== null && sameProof(held, record) ? null : held, refused: record, refusedReason: reason, attempt: { kind: "saved-refused", reason }, checkFailures: 0 });
       return "refused";
     };
     try {
@@ -108,7 +108,7 @@ export class ExitAdopter {
     const record: ExitRecord = { ...scope, proof, checkpointAt: lastCheckpointAt, accountClaim, distributionOwed, paidApprovals };
     const storageProblem = writeStoredExit(this.storage, record);
     if (this.store.liveWallet === wallet) {
-      this.patch({ record, checked: record, refused: null, checkFailures: 0, storageProblem, attempt: null, nothing: false });
+      this.patch({ record, checked: record, refused: null, refusedReason: null, checkFailures: 0, storageProblem, attempt: null, nothing: false });
       if (vault.exitStartedAt !== 0) await this.store.exit.readClaims();
     }
     return { kind: "saved", record, storageProblem };

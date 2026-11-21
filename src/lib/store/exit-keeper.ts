@@ -274,7 +274,7 @@ export class ExitKeeper {
     const removed = stored !== null && stored.proof.root !== proof.root;
     if (removed) removeStoredExit(this.storage, scope);
     const { refused } = now.exit;
-    this.patch({ attempt: null, nothing: true, record: now.exit.record?.proof.root === proof.root ? now.exit.record : null, refused: removed && refused !== null && sameProof(refused, stored) ? null : refused });
+    this.patch({ attempt: null, nothing: true, record: now.exit.record?.proof.root === proof.root ? now.exit.record : null, ...(removed && refused !== null && sameProof(refused, stored) ? { refused: null, refusedReason: null } : {}) });
   }
 
   /** Takes up the answer held, from what the vault was just read to say: ahead of the vault it waits, with no read of the wallet; at the vault's latest it is checked and saved; passed, it can never be claimed from, and the settle after this asks for the next. */

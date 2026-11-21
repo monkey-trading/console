@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { EngineError } from "../engine/client";
 import { accepts, emptyProof, factsAt, fullProof, SCOPE } from "../engine/exit-kit";
 import { exitStorageKey, parseExitFile, writeStoredExit } from "../engine/exit-file";
 import { parseExitProof } from "../engine/exit-proof";
 import { settle } from "../engine/test-kit";
+import { exitView } from "./exit-view";
 import { exitWatchKit } from "./exit-watch-kit";
 
 const parsed = (seq: number) => parseExitProof(fullProof(seq));
@@ -78,6 +80,44 @@ describe("ExitKeeper, and what a browser keeps", () => {
       await kit.store.exit.refresh();
       expect(kit.exit.checks.length).toBe(1); // judged once per connection
       expect(kit.storage.held.get(exitStorageKey(SCOPE))).toBe(saved);
+    });
+
+    describe("a refused stored proof, once the replacement read does not bring a proof", () => {
+      const REASON = "the root does not prove it";
+      const WALLET = { address: SCOPE.account };
+      const open = (exit: ReturnType<typeof kit.store.getSnapshot>["exit"]) => ({ ...exit, vault: factsAt(100, { exitStartedAt: 5_000, chainNow: 6_000 }) });
+      beforeEach(() => {
+        writeStoredExit(() => kit.storage, { ...SCOPE, proof: parsed(100), checkpointAt: 900, accountClaim: 1n, distributionOwed: 0n, paidApprovals: [] });
+        kit.exit.verdict = () => ({ ok: false, reason: REASON });
+      });
+
+      it("keeps the verifier's reason when the server read fails, and the notice gives it ahead of the request to register", async () => {
+        kit.client.exitError = new EngineError(0, "The server did not respond.");
+        await kit.connect();
+        const { exit } = kit.store.getSnapshot();
+        expect(exit.attempt?.kind).toBe("node-failed");
+        expect(exit.refusedReason).toBe(REASON);
+        const view = exitView(open(exit), WALLET);
+        expect(view.notice?.text).toBe("The vault's exit has started, but your exit proof failed the vault's check. The root does not prove it.");
+        expect(view.lines.map((line) => line.text)).toContain("The proof saved in this browser failed the vault's check, so it is kept but not used until a later check passes. The root does not prove it.");
+      });
+
+      it("keeps the verifier's reason when the server has no proof", async () => {
+        kit.client.exitAnswer = null;
+        await kit.connect();
+        const { exit } = kit.store.getSnapshot();
+        expect(exit.attempt).toEqual({ kind: "no-proof" });
+        expect(exitView(open(exit), WALLET).notice?.text).toBe("The vault's exit has started, but your exit proof failed the vault's check. The root does not prove it.");
+      });
+
+      it("drops the reason once a proof that passes replaces the refused one", async () => {
+        kit.exit.verdict = (_proof, root) => (kit.exit.checks.length === 1 ? { ok: false, reason: `the root ${root} does not prove it` } : accepts({ accountClaim: 7n }));
+        await kit.connect();
+        const { exit } = kit.store.getSnapshot();
+        expect(exit.refused).toBeNull();
+        expect(exit.refusedReason).toBeNull();
+        expect(exitView(open(exit), WALLET).notice?.text).not.toContain("failed the vault's check");
+      });
     });
 
     it("replaces a refused stored proof with one that passes though it holds less", async () => {
