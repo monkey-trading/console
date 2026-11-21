@@ -120,9 +120,21 @@ function unmatchedCreditsLine(ids: readonly number[]): ExitLine {
 /** Whether the browser's storage has nothing to keep for the account: one known to hold nothing, with no proof in the page. */
 const nothingToKeep = (exit: Pick<ExitState, "nothing" | "record">): boolean => exit.nothing && exit.record === null;
 
+/**
+ * What the last attempt says, except that a read of the node which found nothing to replace a refused saved proof does not
+ * replace the reason it was refused: that reason holds until a proof that passes does.
+ */
+function standingAttempt(exit: ExitState): ExitAttempt | null {
+  const { attempt, refused, refusedReason } = exit;
+  if (refused === null || refusedReason === null || acceptedRecord(exit) !== null) return attempt;
+  const nodeRead = attempt === null || attempt.kind === "node-failed" || attempt.kind === "no-proof" || attempt.kind === "node-behind" || attempt.kind === "node-away";
+  return nodeRead ? { kind: "saved-refused", reason: refusedReason } : attempt;
+}
+
 /** The one line every page shows for `exit`, or null; the later rules outrank the earlier. */
 function noticeOf(exit: ExitState, phase: ExitPhase, current: boolean, standing: Standing): ExitLine | null {
-  const { vault, record, attempt, claims } = exit;
+  const { vault, record, claims } = exit;
+  const attempt = standingAttempt(exit);
   const { canClaim, allRegistered, nothingToRegister, refunds } = standing;
   let notice: ExitLine | null = null;
   if (exit.vaultFailures >= FAILURES_NOTICED) notice = { tone: "warn", text: "Your wallet could not reach the vault, so your exit proof may be out of date." };
@@ -158,7 +170,8 @@ function noticeOf(exit: ExitState, phase: ExitPhase, current: boolean, standing:
 export function exitView(exit: ExitState, wallet: { address: string; readOnly?: boolean } | null): ExitView {
   if (wallet === null) return { ...NOTHING, lines: [{ tone: "calm", text: "Connect a wallet to see your exit proof." }] };
   if (wallet.readOnly === true) return { ...NOTHING, lines: [{ tone: "calm", text: "No exit proof is kept for an account viewed in read-only mode, because a connected wallet is needed to check the proof against the vault." }] };
-  const { vault, record, attempt, claims } = exit;
+  const { vault, record, claims } = exit;
+  const attempt = standingAttempt(exit);
   const extras: ExitLine[] = [];
   if (exit.storageProblem !== null && !nothingToKeep(exit)) extras.push({ tone: "bad", text: record !== null ? `This browser did not save your proof. ${asSentence(exit.storageProblem)} Export the proof now, or it will be lost when you close this page.` : `Your proof cannot be saved. ${asSentence(exit.storageProblem)}` });
   const base = { ...NOTHING, canImport: true };

@@ -56,6 +56,8 @@ export interface ExitState {
   checked: ExitRecord | null;
   /** The saved record the vault's verifier refused in this connection: it stays in storage, unused, until a proof that passes replaces it. */
   refused: ExitRecord | null;
+  /** The verifier's reason for refusing `refused`, kept with it so a later failed read of the node does not hide it; null when `refused` is. */
+  refusedReason: string | null;
   /** How many checks of the saved proof have failed in a row since one last answered. */
   checkFailures: number;
   /** The exit terms of the last proof the verifier accepted, which start the exit even from a proof that gives this account nothing. */
@@ -85,7 +87,7 @@ export interface ExitState {
 }
 
 /** The state for a connection nothing has been read for. */
-export const NO_EXIT: ExitState = { vault: null, vaultProblem: null, vaultFailures: 0, missingSince: null, record: null, checked: null, refused: null, checkFailures: 0, terms: null, storageProblem: null, attempt: null, reading: false, importing: false, nothing: false, claims: null, claimsProblem: null, claimsFailures: 0, paid: null, claimed: false, announced: "" };
+export const NO_EXIT: ExitState = { vault: null, vaultProblem: null, vaultFailures: 0, missingSince: null, record: null, checked: null, refused: null, refusedReason: null, checkFailures: 0, terms: null, storageProblem: null, attempt: null, reading: false, importing: false, nothing: false, claims: null, claimsProblem: null, claimsFailures: 0, paid: null, claimed: false, announced: "" };
 
 /** `exit`'s record once this connection's verifier has accepted it at the vault's latest root: only then does anything in it count for a claim, a refund or a figure. */
 export function acceptedRecord(exit: Pick<ExitState, "vault" | "record" | "checked">): ExitRecord | null {
