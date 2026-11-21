@@ -63,6 +63,19 @@ describe("a 429 that names the account's volume tier", () => {
   });
 });
 
+describe("a refusal of the screening step", () => {
+  it("tells a trader at the ticket to try again, without the node's own words, and not that the request may have run", async () => {
+    const busy = await keyed();
+    busy.client.answer = (posted) => (posted.route === "session_key" ? new ActionClient().answer(posted) : (() => { const error = new EngineError(503, "screening is at capacity"); error.screening = "busy"; throw error; })());
+    expect(await order(busy.store)).toBe(false);
+    expectOnly(busy.store, "ticket", "Your request could not be checked at the moment because the server is handling a high number of requests. Please try again in a few seconds.");
+    const twice = await keyed();
+    twice.client.answer = (posted) => (posted.route === "session_key" ? new ActionClient().answer(posted) : (() => { const error = new EngineError(409, "the same request is already being screened"); error.screening = "duplicate"; throw error; })());
+    expect(await order(twice.store)).toBe(false);
+    expectOnly(twice.store, "ticket", "This request has already been sent and is being checked. Please wait for the result before sending it again.");
+  });
+});
+
 describe("a refused or failed action lands on its own surface", () => {
   it("ticket: a node refusal, and a wallet signature declined on the wallet-signed path", async () => {
     const refused = await refusing();
