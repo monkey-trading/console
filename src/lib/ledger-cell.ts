@@ -11,7 +11,7 @@ import type { LedgerState } from "./store/ledger";
 export const NO_ALLOCATION = "You earned no MONKEY in this reward period. This happens when a loss was written off, when an earlier write-off is still being repaid, or when your balance was negative at the end of the period.";
 export const ACCRUES = "The MONKEY earned by this loss. In each ten-minute reward period, a fixed amount of MONKEY is distributed among the traders who realised a loss in that period, in proportion to the size of their losses. Your MONKEY accumulates until you claim it.";
 /** What the column's other words mean, shown under the ledger. */
-export const COLUMN_NOTE = "Each realised loss earns a share of the MONKEY distributed in its ten-minute reward period, and your MONKEY accumulates until you claim it. Pending means the reward period has not yet ended, and Loading means its figures are still loading. A value of 0 means you earned nothing in that period, for example because a loss was written off or your balance was negative when the period ended.";
+export const COLUMN_NOTE = "Each realised loss earns a share of the MONKEY distributed in its ten-minute reward period, and your MONKEY accumulates until you claim it. Pending means the period has not yet ended, and 0 means the loss earned nothing, for example because it was written off.";
 
 export interface MonkeyCell {
   text: string;

@@ -57,7 +57,7 @@ const CELL_BUTTON = `${BUTTON} mt-1`;
 const ARMED = "min-h-11 rounded border border-glow px-3 py-1 text-caption text-glow focus-visible:outline-2 focus-visible:outline-glow disabled:opacity-40 lg:min-h-0 lg:px-2";
 
 /** What the Close-out value means, shared by the table's head and the phone rows' label. */
-const CLOSEOUT_TIP = "The price at which your account would be closed out, assuming your other positions remain at their current prices. Because margin is shared across your account, a close-out may first close positions in other markets.";
+const CLOSEOUT_TIP = "The price at which your account would be closed out if only this market moved, or Due if it is below the close-out level. Because margin is shared, a close-out may close another of your positions first.";
 
 /** What the P&L column means, shared by the table's head and the phone rows' labels. */
 const PNL_TIP = "The profit or loss you would realise by closing the entire position now, before the profit fee. It is calculated at the price at which the position would close (the bid for a long position, the offer for a short), so the spread is already taken into account. Details shows the profit or loss at the mark price.";

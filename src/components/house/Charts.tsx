@@ -43,7 +43,7 @@ export function NavChart({ range, className, floor, pending }: { range?: RangeId
   return (
     <SeriesPanel
       title="House value"
-      tip="The value of the house over time, made up of its cash balance plus its profit or loss on traders' open positions at current prices. The shaded area lies below the house's reserve, and distributions to stakers are paid only from value above the reserve."
+      tip="The value of the house over time: its cash balance plus its profit or loss on traders' open positions at current prices. The shaded area lies below the reserve, and distributions to stakers are paid only from value above it."
       lines={NAV_LINES}
       markets={null}
       range={range}
