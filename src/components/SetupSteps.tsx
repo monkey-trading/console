@@ -100,5 +100,5 @@ function AuthorizeStep() {
 function DepositStep() {
   const { setup } = useConsole();
   if (setup.deposit === null) return <DepositForm embedded />;
-  return <p role="status" className={NOTE}>Your deposit is on its way. It will be credited to your account a few blocks after the transaction is confirmed on chain. You can close this window now: the deposit will still be processed, and the Funding page shows its progress.</p>;
+  return <p role="status" className={NOTE}>Your deposit is on its way. It will usually be credited to your account within a minute of the transaction being confirmed on chain. You can close this window now: the deposit will still be processed, and the Funding page shows its progress.</p>;
 }
