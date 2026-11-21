@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { EXIT_VAULT } from "./exit-abi";
 import { ACCOUNT, fullProof, NO_CLAIMS, OTHER, recordAt, VAULT } from "./exit-kit";
 import { parseExitProof } from "./exit-proof";
-import { refundSteps } from "./exit-steps";
+import { refundSteps, registerSteps } from "./exit-steps";
 import type { ExitPendingProof, ExitProof } from "./exit-types";
 import { ProviderExit } from "./provider-exit";
 import { Chain, STAKING, word } from "./provider-exit-kit";
@@ -73,5 +73,17 @@ describe("refunds through an unmatched receipt", () => {
     chain.deposits.set(5n, { payer: ACCOUNT as Hex, amount: 7_000_000n });
     chain.vault.depositRefunded = word("bool", true);
     expect((await exit.claims({ ...proof, pending_deposits: [] })).receiptRefunds).toEqual([]);
+  });
+
+  it("lists no credits step for an unmatched credit whose deposit was refunded", async () => {
+    chain.unmatched.add(5n);
+    chain.deposits.set(5n, { payer: ACCOUNT as Hex, amount: 7_000_000n });
+    chain.vault.depositRefunded = word("bool", true);
+    const creditsProof = { ...proof, pending_deposits: [] };
+    const facts = await exit.claims(creditsProof);
+    expect(facts.refunded).toContain(5);
+    const steps = registerSteps({ ...recordAt(100), proof: creditsProof }, facts);
+    expect(steps.filter((step) => step.kind === "credits")).toEqual([]);
+    expect(steps.find((step) => step.kind === "account")).toMatchObject({ withCredits: false });
   });
 });

@@ -112,7 +112,7 @@ export interface ExitClaimFacts {
   queuedRegistered: number[];
   /** The approvals the vault has paid or registered, by nonce. */
   approvalsUsed: number[];
-  /** The pending deposits refunded, by `deposit_id`. */
+  /** The deposits refunded, by `deposit_id`: those of the proof's pending deposits and unfinalised credits the vault has refunded. */
   refunded: number[];
   /** The pending deposits not refunded whose record on the vault is not the proof's account, payer and amount, by `deposit_id`: `refundReceipt` would refund the vault's own deposit there to whoever paid it. */
   mismatched: number[];

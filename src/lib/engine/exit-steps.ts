@@ -31,8 +31,8 @@ export const CREDITS_PER_STEP = 32;
 export function registerSteps(record: ExitRecord, claims: ExitClaimFacts): ExitStep[] {
   const { proof, accountClaim } = record;
   const steps: ExitStep[] = [];
-  // A credit the vault's records do not match adds nothing, so registering it would only spend gas.
-  const uncounted = proof.unfinalised_credits.filter(({ deposit }) => !claims.creditsCounted.includes(deposit.deposit_id) && !claims.creditsUnmatched.includes(deposit.deposit_id));
+  // A credit the vault's records do not match, or whose deposit is refunded, adds nothing, so registering it would only spend gas.
+  const uncounted = proof.unfinalised_credits.filter(({ deposit }) => ![claims.creditsCounted, claims.creditsUnmatched, claims.refunded].some((ids) => ids.includes(deposit.deposit_id)));
   if (proof.account !== null && accountClaim > 0n && !claims.accountRegistered) steps.push({ kind: "account", proof: proof.account, amount: accountClaim, withCredits: uncounted.length > 0 });
   // The credits follow the account's equity, and are worth sending while the claim previewed holds more than it has come to so far.
   if (proof.account !== null && uncounted.length > 0 && accountClaim > claims.accountClaimed) {

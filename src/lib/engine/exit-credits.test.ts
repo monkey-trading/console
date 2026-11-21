@@ -55,6 +55,11 @@ describe("registerSteps, for an account with credits", () => {
     expect(kinds({ ...NO_CLAIMS, creditsUnmatched: [3, 4] })).toEqual([{ kind: "account", proof: record.proof.account, amount: 5_010_000_000n, withCredits: false }]);
   });
 
+  it("leaves out a credit whose deposit is refunded, and does not name it among the unconfirmed deposits the account step includes", () => {
+    expect(kinds({ ...NO_CLAIMS, refunded: [3] }).flatMap((step) => (step.kind === "credits" ? step.proofs.map((held) => held.deposit.deposit_id) : []))).toEqual([4]);
+    expect(kinds({ ...NO_CLAIMS, refunded: [3, 4] })).toEqual([{ kind: "account", proof: record.proof.account, amount: 5_010_000_000n, withCredits: false }]);
+  });
+
   it("leaves them out once counted, or when they would add nothing", () => {
     expect(kinds({ ...NO_CLAIMS, accountRegistered: true, accountClaimed: 5_000_000_000n, creditsCounted: [3, 4] })).toEqual([]);
     expect(kinds({ ...NO_CLAIMS, accountRegistered: true, accountClaimed: 5_010_000_000n })).toEqual([]);

@@ -258,7 +258,10 @@ export class ProviderExit implements ExitWallet {
       const id = held.deposit.deposit_id;
       if (await this.bool(verifier, encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "creditCounted", args: [BigInt(id)] }))) creditsCounted.push(id);
       // Registering counts every credit, matched or not, and the vault's deposit behind an unmatched one stays refundable while claims register.
-      if (!(await refundedAt(id)) && (await unmatched(held, UNFINALISED_CREDIT_LEAF))) creditsUnmatched.push(id);
+      // A refunded deposit is paid back and its credit is left out of the registrations, so it is noted as refunded and not asked about again.
+      if (await refundedAt(id)) {
+        if (!refunded.includes(id)) refunded.push(id);
+      } else if (await unmatched(held, UNFINALISED_CREDIT_LEAF)) creditsUnmatched.push(id);
     }
     return {
       accountRegistered: await this.bool(verifier, encodeFunctionData({ abi: EXIT_VERIFIER, functionName: "exitRegistered", args: [account] })),
