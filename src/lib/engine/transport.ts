@@ -58,6 +58,9 @@ function refusal(status: number, text: string, retryAfter: string | null = null)
   if (status === 409 && Number.isSafeInteger(expected)) return new EngineError(status, message, { kind: "invalid_nonce", expected: expected as number });
   if (status === 401) return new EngineError(status, message, { kind: message === "missing signature" ? "missing_signature" : "invalid_signature" });
   const refused = new EngineError(status, message);
+  // The screening step's own refusals, which the node words in its terms; neither used the nonce, and neither reached the log.
+  if (status === 503 && (message === "screening is at capacity" || message === "declaration screening is at capacity")) refused.screening = "busy";
+  if (status === 409 && message === "the same request is already being screened") refused.screening = "duplicate";
   // A credited account over its volume tier's request rate: the signed body names the tier and its rate.
   // `Number.isSafeInteger` held for both, so they are numbers.
   if (status === 429 && Number.isSafeInteger(tier) && Number.isSafeInteger(perSecond)) refused.tierLimit = { tier: tier as number, requestsPerSecond: perSecond as number };

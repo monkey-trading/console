@@ -34,6 +34,8 @@ export class EngineError extends Error {
   tierLimit: TierRateLimit | null = null;
   /** Set on a 503 that carries a whole-second `Retry-After`, in milliseconds; null on every other error. */
   retryAfterMs: number | null = null;
+  /** Set on a refusal of the screening step before the log: every screening slot in use (503), or a copy of the request still being screened (409); null on every other error. */
+  screening: "busy" | "duplicate" | null = null;
 
   constructor(status: number, message: string, reject: Reject | null = null, options?: ErrorOptions) {
     super(message, options);

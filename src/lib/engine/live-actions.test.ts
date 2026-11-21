@@ -86,6 +86,20 @@ describe("signed actions", () => {
     await expect(client.placeOrder({} as OrderRequest)).rejects.toMatchObject({ status: 429, tierLimit: null });
   });
 
+  it("reads the screening step's refusals before the log, and leaves a nonce conflict and an unrelated 503 alone", async () => {
+    const { client, reply } = accepting();
+    reply("/v1/orders", 503, { error: "screening is at capacity" });
+    await expect(client.placeOrder({} as OrderRequest)).rejects.toMatchObject({ status: 503, screening: "busy" });
+    reply("/v1/eligibility", 503, { error: "declaration screening is at capacity" });
+    await expect(client.attestEligibility({} as never)).rejects.toMatchObject({ status: 503, screening: "busy" });
+    reply("/v1/orders", 409, { error: "the same request is already being screened" });
+    await expect(client.placeOrder({} as OrderRequest)).rejects.toMatchObject({ status: 409, screening: "duplicate", reject: null });
+    reply("/v1/orders", 409, { error: "nonce", expected: 4 });
+    await expect(client.placeOrder({} as OrderRequest)).rejects.toMatchObject({ status: 409, screening: null, reject: { kind: "invalid_nonce", expected: 4 } });
+    reply("/v1/orders", 503, { error: "history is catching up with the log" });
+    await expect(client.placeOrder({} as OrderRequest)).rejects.toMatchObject({ status: 503, screening: null });
+  });
+
   it("reads a signed 404 from a node without the batch routes as an engine error with no refusal kind", async () => {
     const { node, client } = accepting();
     // An older node's router answers an unknown route with an empty signed 404.

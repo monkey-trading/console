@@ -142,6 +142,8 @@ export function mayHaveRun(error: unknown): boolean {
 export function errorText(error: unknown): string {
   // The node limits how fast new wallets are set up, and answers 429 to the ones over it: nothing was recorded, so trying again later is the whole answer.
   if (error instanceof EngineError && error.status === 429) return error.tierLimit === null ? "Too many requests have been sent from your account in a short time. Please try again later." : describeTierRate(error.tierLimit);
+  if (error instanceof EngineError && error.screening === "busy") return "Your request could not be checked at the moment because the server is handling a high number of requests. Please try again in a few seconds.";
+  if (error instanceof EngineError && error.screening === "duplicate") return "This request has already been sent and is being checked. Please wait for the result before sending it again.";
   if (error instanceof EngineError) return error.reject ? describeReject(error.reject) : error.message;
   return error instanceof Error ? error.message : "An unexpected error occurred. Please try again.";
 }
