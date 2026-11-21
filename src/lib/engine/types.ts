@@ -4,6 +4,7 @@
  * identifiers numbers, and every enum is snake_case.
  */
 
+import type { AccessReject } from "./access-types";
 import type { EngineEvent } from "./event-types";
 export type { EngineEvent } from "./event-types";
 export type { AccountView } from "./account-types";
@@ -166,8 +167,6 @@ export interface EligibilityView {
   class: EligibilityClass | null;
   statement: string | null;
 }
-
-export type AccessReject = "united_states" | "sanctioned_jurisdiction" | "eligibility_required" | "already_attested";
 
 /** Tagged by `kind`, as the engine serializes it. */
 export type Reject =

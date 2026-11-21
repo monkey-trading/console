@@ -2,6 +2,7 @@
 
 import type { TierRateLimit } from "./engine/client";
 import { MAX_SESSION_KEYS_PER_ACCOUNT } from "./engine/session-key-limits";
+import type { AccessReject } from "./engine/access-types";
 import type { EngineEvent, MarketId, Reject } from "./engine/types";
 import { formatHold } from "./fee-words";
 import { absFixed, fixedFromWire, formatFixedPlaces, formatUsd } from "./fixed";
@@ -33,11 +34,22 @@ export function describeReverifying(): { lead: string; rest: string } {
   };
 }
 
+/** The screening refusals that say the request could not be checked, which a later attempt can pass, rather than a decision about the trader. */
+const UNCHECKED: ReadonlySet<AccessReject> = new Set(["protocol_inactive", "policy_missing", "evidence_missing", "source_not_configured", "peer_unknown", "source_unavailable", "source_invalid", "evidence_mismatch", "evidence_stale"]);
+
+/** What a screening refusal says: the eligibility steps, a request that could not be checked at the moment, or else the region refusal. */
+function describeAccessReject(reason: AccessReject): string {
+  if (reason === "eligibility_required") return "Your eligibility has not been declared. Sign the eligibility declaration to continue.";
+  if (reason === "already_attested") return "Your eligibility declaration has already been recorded.";
+  if (UNCHECKED.has(reason)) return "Your eligibility could not be confirmed at the moment, so the request was not accepted. Please try again in a few moments.";
+  return "This service is not available in your region.";
+}
+
 /** One sentence for a typed refusal. */
 export function describeReject(reject: Reject): string {
   switch (reject.kind) {
     case "access":
-      return reject.reason === "eligibility_required" ? "Your eligibility has not been declared. Sign the eligibility declaration to continue." : reject.reason === "already_attested" ? "Your eligibility declaration has already been recorded." : "This service is not available in your region.";
+      return describeAccessReject(reject.reason);
     case "market_closed": return "This market is closed.";
     case "reduce_only": return "This market is currently accepting only orders that reduce an existing position.";
     case "no_price": return noPriceRefusal(undefined);
