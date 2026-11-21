@@ -19,6 +19,23 @@ describe("order-limit and rate refusals", () => {
   });
 });
 
+describe("screening refusals", () => {
+  const UNCHECKED = "Your eligibility could not be confirmed at the moment, so the request was not accepted. Please try again in a few moments.";
+
+  it("says a request the source could not check is not a refusal of the trader's region", () => {
+    for (const reason of ["source_unavailable", "source_invalid", "evidence_stale", "evidence_mismatch", "evidence_missing", "peer_unknown", "source_not_configured", "policy_missing", "protocol_inactive"] as const) {
+      expect(describeReject({ kind: "access", reason })).toBe(UNCHECKED);
+    }
+  });
+
+  it("keeps the region and eligibility wording for the source's own decisions", () => {
+    expect(describeReject({ kind: "access", reason: "united_states" })).toBe("This service is not available in your region.");
+    expect(describeReject({ kind: "access", reason: "sanctioned_jurisdiction" })).toBe("This service is not available in your region.");
+    expect(describeReject({ kind: "access", reason: "eligibility_required" })).toBe("Your eligibility has not been declared. Sign the eligibility declaration to continue.");
+    expect(describeReject({ kind: "access", reason: "already_attested" })).toBe("Your eligibility declaration has already been recorded.");
+  });
+});
+
 describe("describeReject", () => {
   it("tells the live-key cap from the budget of new keys, which a revocation does not refill", () => {
     expect(describeReject({ kind: "too_many_session_keys", max: 10 })).toBe("This account already has the maximum number of session keys.");
