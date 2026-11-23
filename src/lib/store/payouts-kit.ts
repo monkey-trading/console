@@ -1,7 +1,7 @@
 /** Tests only: fixtures for the payout tests. */
 
 import vectors from "../engine/eip712-vectors.json";
-import type { HistoryEvent, PayoutsPage, SignedWithdrawal } from "../engine/types";
+import type { HistoryEvent, PayoutEntry, PayoutsPage, SignedWithdrawal } from "../engine/types";
 import { ACCOUNT } from "../engine/wallet-kit";
 import { VAULT } from "./live-kit";
 
@@ -12,6 +12,6 @@ export const signed = (nonce: number, expiresAt: number): SignedWithdrawal => ({
   authorization: { signer: OTHER, signer_epoch: 1, issued_at: expiresAt - 86_400, expires_at: expiresAt, checkpoint_seq: 64, checkpoint_root: `0x${"33".repeat(32)}`, siblings: [] },
 });
 /** A node page of unpaid approvals, at seq 100 and loaded unless `extra` says otherwise. */
-export const page = (payouts: { nonce: number; withdrawal?: SignedWithdrawal; check?: { turn: number; boundary_ms: number } }[], extra: Partial<PayoutsPage> = {}): PayoutsPage => ({
+export const page = (payouts: { nonce: number; withdrawal?: SignedWithdrawal; check?: PayoutEntry["check"] }[], extra: Partial<PayoutsPage> = {}): PayoutsPage => ({
   seq: 100, loaded: true, next: null, ...extra, payouts: payouts.map((p) => ({ nonce: p.nonce, amount: "10", withdrawal: p.withdrawal ?? null, ...(p.check === undefined ? {} : { check: p.check }) })),
 });

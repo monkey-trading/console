@@ -37,7 +37,7 @@ export type PayoutStatus =
   /** Its last authorization expired unclaimed, at `expiresAt`; a fresh one can be asked for. */
   | { kind: "expired"; expiresAt: number }
   /** Not signed yet: a checkpoint covering the approval comes first, and the stream then delivers the authorization; `checkAtMs` is the boundary of the log check it also waits for, when the node names one. */
-  | { kind: "waiting"; checkAtMs?: number };
+  | { kind: "waiting"; checkAtMs?: number; installation?: true };
 
 export interface Payout {
   nonce: number;
@@ -64,7 +64,7 @@ function statusOf(state: ConsoleState, nonce: number, approvedSeq: number, nowSe
   const held = signed?.authorization?.expires_at ?? 0;
   const check = state.payoutChecks[nonce];
   // The node names a check only while no usable authorization exists: the one held when it named it (an expired one, or one of an earlier signer epoch) waits on the check for its replacement, and only a later, unexpired one decides.
-  if (check !== undefined && !(held > nowSeconds && laterThan(signed?.authorization, check.held))) return { kind: "waiting", checkAtMs: check.atMs };
+  if (check !== undefined && !(held > nowSeconds && laterThan(signed?.authorization, check.held))) return check.atMs === null ? { kind: "waiting", installation: true } : { kind: "waiting", checkAtMs: check.atMs };
   if (signed === null || held === 0) return { kind: "waiting" };
   return held > nowSeconds ? { kind: "claimable", withdrawal: signed, expiresAt: held } : { kind: "expired", expiresAt: held };
 }

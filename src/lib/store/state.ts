@@ -41,8 +41,8 @@ export interface PayoutsRead {
 
 /** A log check an approval's next signature waits for (monkey-trading/console#280). */
 export interface PayoutCheck {
-  /** The time of the boundary it waits for, in milliseconds. */
-  atMs: number;
+  /** The time of the boundary it waits for, in milliseconds; null when it waits for an installation, which has no known time. */
+  atMs: number | null;
   /** The signer epoch and expiry of the authorization held when the node named the check, which the node says is not usable; null when none was held. */
   held: { epoch: number; expiresAt: number } | null;
 }

@@ -22,8 +22,11 @@ export interface PayoutEntry {
   nonce: number;
   amount: string;
   withdrawal: SignedWithdrawal | null;
-  /** From the engine's daily turns (monkey-trading/engine#594): the boundary whose log check the approval's next signature waits for; absent once a check covers it or while its authorization is usable. */
-  check?: { turn: number; boundary_ms: number };
+  /**
+   * From the engine's daily turns (monkey-trading/engine#594): what the approval's next signature waits for; absent once a check covers it or while its authorization is usable.
+   * `waits` is "boundary" (the default, for nodes that do not send it) with the boundary's time, or "installation" with the last drawn turn only (monkey-trading/console#521).
+   */
+  check?: { turn: number; waits?: "boundary"; boundary_ms: number } | { turn: number; waits: "installation" };
 }
 
 /**
