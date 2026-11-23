@@ -43,6 +43,22 @@ describe("the node's payouts", () => {
     ]);
   });
 
+  it("shows an approval that waits for an installation with no time, reads a check with no waits as a boundary, and keeps both kinds apart (monkey-trading/console#521)", async () => {
+    const { client, store } = await connected();
+    store.patch({ now: NOW_MS, approvals: [approved(5, 90), approved(4, 80), approved(3, 70), approved(2, 60)] });
+    client.payoutsPage = page([
+      { nonce: 5, check: { turn: 9, waits: "installation" } },
+      { nonce: 4, check: { turn: 9, waits: "boundary", boundary_ms: NOW_MS + 3_600_000 } },
+      { nonce: 3, check: { turn: 9, boundary_ms: NOW_MS + 3_600_000 } },
+      // A boundary check with no time is a bad answer, as before.
+      { nonce: 2, check: { turn: 9, waits: "boundary", boundary_ms: 0 } },
+    ]);
+    await loadPayouts(store);
+    expect(payoutsOf(store.getSnapshot()).map((p) => [p.nonce, p.status])).toEqual([
+      [5, { kind: "waiting", installation: true }], [4, { kind: "waiting", checkAtMs: NOW_MS + 3_600_000 }], [3, { kind: "waiting", checkAtMs: NOW_MS + 3_600_000 }], [2, { kind: "waiting" }],
+    ]);
+  });
+
   it("keeps the check an answer names while the node is still loading, without taking an approval it omits as paid, and replaces it by the next complete answer", async () => {
     const { client, store } = await connected();
     store.patch({ now: NOW_MS, approvals: [approved(6, 100), approved(5, 90), approved(4, 80)] });

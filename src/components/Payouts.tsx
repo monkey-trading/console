@@ -5,7 +5,7 @@
 import { useEffect, useId, useRef } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
-import { checkReadDelay, earliestCheck } from "@/lib/store/payout-checks";
+import { checkReadDelay, earliestCheck, STILL_WAITING_MS, waitsForInstallation } from "@/lib/store/payout-checks";
 import { waitingWords } from "@/lib/store/payout-words";
 import { checkPaid, claim, loadApprovals, loadPayouts, payoutsOf, reissue, unreadPayouts, type Payout } from "@/lib/store/payouts";
 import { formatStamp } from "@/lib/time";
@@ -36,24 +36,26 @@ export function Payouts() {
     void loadPayouts(store);
   }, [store, address, latest, trusted]);
   // An unsigned approval waits for a log check at a boundary the node names: its payouts are read again just after it, and while the node still names it, so the row never keeps saying a past boundary is next.
+  // One waiting for an operator's installation has no time, so it is read at the slow pace.
   const checkAt = earliestCheck(payouts);
+  const installing = waitsForInstallation(payouts);
   const nowMs = state.now;
   // Each attempt, failed or partial ones included, changes the generation, so each arms the next.
   const attempt = state.payoutsGeneration;
   useEffect(() => {
-    if (checkAt === null || !trusted) return;
+    if ((checkAt === null && !installing) || !trusted) return;
     const load = () => void loadPayouts(store);
     // The node's clock as it is when the timer is set, so a clock that moves on never sets it again.
     const timer = setTimeout(() => {
       // A hidden tab reads once it is seen again, as the other paced reads do.
       if (document.visibilityState === "hidden") document.addEventListener("visibilitychange", load, { once: true });
       else load();
-    }, checkReadDelay(checkAt, store.getSnapshot().now));
+    }, checkAt === null ? STILL_WAITING_MS : Math.min(checkReadDelay(checkAt, store.getSnapshot().now), installing ? STILL_WAITING_MS : Infinity));
     return () => {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", load);
     };
-  }, [store, checkAt, trusted, attempt]);
+  }, [store, checkAt, installing, trusted, attempt]);
   useEffect(() => {
     // The vault's own record says whether it has paid each payout the page can act on, including by a claim made elsewhere before the read.
     if (unread !== "") void checkPaid(store);
@@ -107,10 +109,10 @@ function PayoutRow({ payout, nowMs, idle, signs, describedBy, problem, act }: { 
           <button type="button" aria-disabled={!idle || !signs} aria-describedby={describedBy} onClick={() => signs && act(() => reissue(store, nonce, status.expiresAt))} className={BUTTON}>Renew the claim</button>
         </>
       )}
-      {status.kind === "waiting" && !payout.read && status.checkAtMs === undefined && (
+      {status.kind === "waiting" && !payout.read && status.checkAtMs === undefined && status.installation !== true && (
         <p className="mt-2 text-fg-3">{signs ? "Checking the vault…" : "The vault cannot be checked for the withdrawal while you are viewing this account in read-only mode."}</p>
       )}
-      {status.kind === "waiting" && (payout.read || status.checkAtMs !== undefined) && <p className="mt-2 text-fg-3">{waitingWords(status.checkAtMs, nowMs)}</p>}
+      {status.kind === "waiting" && (payout.read || status.checkAtMs !== undefined || status.installation === true) && <p className="mt-2 text-fg-3">{waitingWords(status.checkAtMs, nowMs, status.installation === true)}</p>}
       {problem !== null && (status.kind === "waiting" || status.kind === "expired") && <p className="mt-2 text-fg-3">{problem}</p>}
     </li>
   );
