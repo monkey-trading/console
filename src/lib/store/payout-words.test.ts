@@ -27,7 +27,7 @@ describe("waitingWords", () => {
 
   it("names the operator's confirmation, with no time, while a withdrawal waits for an installation (monkey-trading/console#521)", () => {
     const words = waitingWords(undefined, BOUNDARY, true);
-    expect(words).toBe("The withdrawal is waiting for the exchange's operator to be confirmed. You can claim the withdrawal here once that has happened and the vault has recorded the next snapshot.");
+    expect(words).toBe("The withdrawal is waiting for the platform's operator to be confirmed. You can claim the withdrawal here once that has happened and the vault has recorded the next snapshot.");
     expect(words).not.toMatch(/UTC|due/);
   });
 });
