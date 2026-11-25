@@ -9,7 +9,7 @@ import { formatMonkeyFigure } from "@/lib/format";
 import { allocationsShort, atBound, rowsRemain } from "@/lib/ledger";
 import { ACCRUES, COLUMN_NOTE, ledgerHeader } from "@/lib/ledger-cell";
 import { viewOf } from "@/lib/ledger-share";
-import { emptySince, historyBeginsNote, historyBeginsOf } from "@/lib/store/history-begins";
+import { emptySince, historyBeginsNote } from "@/lib/store/history-begins";
 import type { ConsoleStore } from "@/lib/store/store";
 
 import { useSession } from "./ConsoleProvider";
@@ -38,7 +38,7 @@ export function PnlLedger() {
     const [id = "", symbol = "", places = "2"] = entry.split("|");
     return [Number(id), { symbol, places: Number(places) }] as const;
   })), [markets]);
-  const begins = useSyncExternalStore(subscribe, () => historyBeginsOf(store.getSnapshot()), () => null);
+  const { begins } = ledger;
   const view = useMemo(() => viewOf(ledger.data, ledger.schedule), [ledger.data, ledger.schedule]);
 
   if (address === "") return <p className="px-4 py-6 text-caption text-fg-3">Connect a wallet to view your realised profit and loss.</p>;
@@ -74,7 +74,7 @@ export function PnlLedger() {
       <div className="px-4 py-3 text-label text-fg-3">
         {ledger.status === "failed" && <button type="button" className={BUTTON} onClick={(event) => { keepFocus(event.currentTarget); store.ledger.open(address); }}>Try again</button>}
         {ready && more && !full && <button type="button" className={BUTTON} disabled={ledger.more} onClick={(event) => { keepFocus(event.currentTarget); void store.ledger.loadMore(); }}>{ledger.more ? "Loading" : "Load more"}</button>}
-        {begins !== null && <p className="mt-2">{historyBeginsNote("results", begins)}</p>}
+        {ready && begins !== null && items.length > 0 && <p className="mt-2">{historyBeginsNote("results", begins)}</p>}
         <p className="mt-2">{COLUMN_NOTE}</p>
       </div>
     </div>

@@ -33,6 +33,7 @@ function createMockSession(): Session | null {
   const deploy = parseDeploy(rawDeploy());
   if (deploy.mode !== "mock") return null;
   const node = createMockNode(SIM_EPOCH_MS, true);
+  const seeded = node.client.historyPage(DEMO_ADDRESS, { limit: 100 });
   const store = new ConsoleStore({
     client: node.client,
     wallets: node.wallets,
@@ -45,7 +46,8 @@ function createMockSession(): Session | null {
         account: node.client.accountView(DEMO_ADDRESS),
         eligibility: node.client.eligibilityClass(DEMO_ADDRESS),
         queue: queuePage(node.client.state, DEMO_ADDRESS).queue,
-        history: node.client.historyPage(DEMO_ADDRESS, { limit: 100 }).events,
+        history: seeded.events,
+        historyBegins: seeded.retained_from_ms,
       },
     },
   });

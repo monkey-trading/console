@@ -43,7 +43,7 @@ export interface StoreDeps {
   historyScan?: (store: ConsoleStore, markets: readonly MarketModel[]) => boolean;
   initial: { markets: MarketView[]; house: HouseView; startMs: number; recent?: StreamMessage[]; /** The account whose events the activity log shows before a wallet connects. */ viewer?: string; /** The house panel's state, read synchronously by a mock session; absent for a live node. */ housePanel?: HousePanelInit;
     /** A wallet already connected when the page loads, with what the node holds for it. */
-    session?: { wallet: { address: string; label: string; readOnly?: boolean }; account: AccountView | null; eligibility: EligibilityClass | null; queue: QueuedWithdrawal[]; history: HistoryEvent[] };
+    session?: { wallet: { address: string; label: string; readOnly?: boolean }; account: AccountView | null; eligibility: EligibilityClass | null; queue: QueuedWithdrawal[]; history: HistoryEvent[]; /** Where the served history begins, as the page the history came from stated it. */ historyBegins?: number | null };
   };
   /** Price history for the chart, ending at the current mark. */
   history: HistorySource;

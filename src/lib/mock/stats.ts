@@ -233,8 +233,3 @@ export function marksPage(state: MockState, id: MarketId, resolution: "1s" | "1m
   const entries = bars.filter((bar) => bar.time * 1_000 >= fromMs && bar.time * 1_000 <= toMs).map((bar) => ({ ts: bar.time * 1_000, open: wire(bar.open, 6), high: wire(bar.high, 6), low: wire(bar.low, 6), close: wire(bar.close, 6), provenance: "log_derived" as const }));
   return { entries, next: null };
 }
-
-/** When the history the mock serves begins: where its clock started, or the 30 days it keeps before now, whichever is later. */
-export function mockHistoryBegins(startMs: number, nowMs: number): number {
-  return Math.max(startMs, nowMs - 30 * 86_400_000);
-}

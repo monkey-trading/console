@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import type { HistoryPage } from "../engine/types";
 import { settle } from "../engine/test-kit";
 import { createMockNode } from "../mock";
 import { DEMO_ADDRESS } from "../mock/demo";
@@ -45,6 +46,32 @@ describe("the start of the served history", () => {
   });
 });
 
+describe("a wallet switch", () => {
+  it("records the new account's start even when it equals the old one", async () => {
+    const { client, store } = await connected();
+    client.historyAnswer = () => ({ events: [], next: null, retained_from_ms: START });
+    await readHistory(store, ACCOUNT, {});
+    store.setWallet({ address: OTHER, label: "other" });
+    await settle();
+    await readHistory(store, OTHER, {});
+    expect(historyBeginsOf(store.getSnapshot())).toBe(START);
+  });
+
+  it("is not undone by an answer for the account it left that lands afterwards", async () => {
+    const { client, store } = await connected();
+    let release: (page: HistoryPage) => void = () => {};
+    client.history = () => new Promise<HistoryPage>((resolve) => { release = resolve; });
+    const late = readHistory(store, ACCOUNT, {});
+    store.setWallet({ address: OTHER, label: "other" });
+    await settle();
+    client.history = async () => ({ events: [], next: null, retained_from_ms: START });
+    await readHistory(store, OTHER, {});
+    release({ events: [], next: null, retained_from_ms: START + 5000 });
+    await late;
+    expect(historyBeginsOf(store.getSnapshot())).toBe(START);
+  });
+});
+
 describe("a late answer for another account", () => {
   it("leaves the connected account's start in place", async () => {
     const { client, store } = await connected();
@@ -57,9 +84,9 @@ describe("a late answer for another account", () => {
 });
 
 describe("the words that say where history begins", () => {
-  it("name the start in UTC and say that older entries are not shown", () => {
-    expect(historyBeginsNote("history", START)).toBe("Your account history is available from 2026-10-26 13:52 UTC. Older history is not shown here.");
-    expect(historyBeginsNote("withdrawals", START)).toBe("Your approved withdrawals are available from 2026-10-26 13:52 UTC. Older withdrawals are not shown here.");
+  it("name the start in UTC and say that entries before it are not available", () => {
+    expect(historyBeginsNote("history", START)).toBe("Account history before 2026-10-26 13:52 UTC is not available here.");
+    expect(historyBeginsNote("withdrawals", START)).toBe("Approved withdrawals before 2026-10-26 13:52 UTC are not available here.");
   });
 
   it("tell an empty list that older history is not shown, never that there is none", () => {
@@ -74,12 +101,11 @@ describe("the words that say where history begins", () => {
 });
 
 describe("the mock's history pages", () => {
-  it("begin where the mock's clock started while that is within the period it keeps, and at the period's edge after", () => {
+  it("begin where the mock's clock started", () => {
     const node = createMockNode(START);
     expect(node.client.historyPage(ACCOUNT, {}).retained_from_ms).toBe(START);
-    const day = 86_400_000;
-    node.client.tick(START + 40 * day);
-    expect(node.client.historyPage(ACCOUNT, {}).retained_from_ms).toBe(START + 10 * day);
+    node.client.tick(START + 40 * 86_400_000);
+    expect(node.client.historyPage(ACCOUNT, {}).retained_from_ms).toBe(START);
   });
 });
 
