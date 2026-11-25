@@ -50,7 +50,7 @@ describe("the stream's first frame", () => {
   it("reads the account and its history once, for an event between the first reads and the stream's start", async () => {
     const { client, store } = setup();
     let histories = 0;
-    client.history = async () => { histories++; return { events: [], next: null }; };
+    client.history = async () => { histories++; return { events: [], next: null, retained_from_ms: null }; };
     store.start(0);
     await settle();
     await connectWallet(store, "watch", true);

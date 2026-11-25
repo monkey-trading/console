@@ -5,6 +5,7 @@
 import { useEffect, useId, useRef } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
+import { emptySince, historyBeginsNote, historyBeginsOf } from "@/lib/store/history-begins";
 import { checkReadDelay, earliestCheck, STILL_WAITING_MS, waitsForInstallation } from "@/lib/store/payout-checks";
 import { waitingWords } from "@/lib/store/payout-words";
 import { checkPaid, claim, loadApprovals, loadPayouts, payoutsOf, reissue, unreadPayouts, type Payout } from "@/lib/store/payouts";
@@ -25,6 +26,7 @@ export function Payouts() {
   const readOnly = useReadOnlyNote(useId(), "Claiming and renewing withdrawals");
   const payouts = payoutsOf(state);
   const address = state.wallet?.address;
+  const begins = historyBeginsOf(state);
   // A new approval reaches the recent history first; it prompts a fresh read of every approval and of the node's payouts.
   const latest = state.history.find((e) => e.type === "withdrawal_approved")?.cursor ?? "";
   const unread = unreadPayouts(state).join(",");
@@ -73,13 +75,14 @@ export function Payouts() {
       <Notice surface="payoutReads" />
       <Notice surface="payoutVault" />
       {payouts.length === 0 ? (
-        <p className="mt-3 text-caption text-fg-3">{state.wallet ? "You have no approved withdrawals yet." : "Connect a wallet to see your withdrawals."}</p>
+        <p className="mt-3 text-caption text-fg-3">{state.wallet ? (begins === null ? "You have no approved withdrawals yet." : emptySince("withdrawals", begins)) : "Connect a wallet to see your withdrawals."}</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {payouts.map((payout) => <PayoutRow key={payout.nonce} payout={payout} nowMs={nowMs} idle={idle} signs={!readOnly.readOnly} describedBy={readOnly.describedBy} problem={state.payoutsProblem} act={act} />)}
         </ul>
       )}
       <Notice surface="payouts" />
+      {begins !== null && payouts.length > 0 && <p className="mt-3 text-label text-fg-3">{historyBeginsNote("withdrawals", begins)}</p>}
       {state.approvalsNext !== null && (
         <button type="button" aria-disabled={!idle} onClick={() => act(() => loadApprovals(store, true))} className={BUTTON}>Load older withdrawals</button>
       )}

@@ -8,7 +8,7 @@ import type { EntitlementProof } from "./emissions";
 import { setParamsOf, type QueueTotals } from "../house";
 import { HouseFold, readHouseState, readProtocolVersion, type HouseState } from "./house-state";
 import { QueueTotalsWalk } from "./live-queue";
-import { historyPath, readEmissionSchedule } from "./live-ledger";
+import { historyPageOf, historyPath, readEmissionSchedule } from "./live-ledger";
 import type { EmissionSchedule } from "./emission-schedule";
 import { liveStats, readClaim } from "./live-stats";
 import type { OperatorRoute } from "./stats-types";
@@ -189,7 +189,7 @@ export class LiveEngineClient implements EngineClient {
   }
 
   async history(address: Address, params: { limit?: number; before?: string; kind?: string }): Promise<HistoryPage> {
-    return (await this.transport.get(historyPath(address, params))) as HistoryPage;
+    return historyPageOf(await this.transport.get(historyPath(address, params)));
   }
 
   emissionSchedule(): Promise<EmissionSchedule | null> { return readEmissionSchedule(() => this.stats.monkey()); }

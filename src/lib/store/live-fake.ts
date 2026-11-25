@@ -161,7 +161,7 @@ export class FakeClient implements EngineClient {
   quotes() {}
   async withdrawalQueue() { this.queueReads++; return { seq: 1, queue: [], next: null }; }
   /** Canned history, replaced by a test: what each `history` read answers, and the reads made. */
-  historyAnswer: (params: { kind?: string; before?: string; limit?: number }) => HistoryPage = () => ({ events: [], next: null });
+  historyAnswer: (params: { kind?: string; before?: string; limit?: number }) => HistoryPage = () => ({ events: [], next: null, retained_from_ms: null });
   historyReads: { address: string; kind?: string; before?: string; limit?: number }[] = [];
   async history(address: string, params: { kind?: string; before?: string; limit?: number } = {}) { this.historyReads.push({ address, ...params }); return this.historyAnswer(params); }
   /** What `emissionSchedule` answers: a schedule, null for a node without the route, or an error. */

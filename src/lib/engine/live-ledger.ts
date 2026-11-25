@@ -1,6 +1,7 @@
 /** The live client's reads for the P&L ledger: the history query and the emission schedule, which comes from the one `/v1/monkey` read. */
 
 import { EngineError } from "./client";
+import type { HistoryPage } from "./types";
 import { decodeSchedule, type EmissionSchedule, type EmissionsWire } from "./emission-schedule";
 
 /** The path of `GET /v1/accounts/{address}/history` with the query a page asks for. */
@@ -10,6 +11,12 @@ export function historyPath(address: string, params: { limit?: number; before?: 
   if (params.limit !== undefined) query.set("limit", String(params.limit));
   if (params.before !== undefined) query.set("before", params.before);
   return `/v1/accounts/${address}/history${query.size > 0 ? `?${query}` : ""}`;
+}
+
+/** A history answer as a page: `retained_from_ms` is the server's start of what it serves, or null when it states none. */
+export function historyPageOf(answer: unknown): HistoryPage {
+  const page = answer as Omit<HistoryPage, "retained_from_ms"> & { retained_from_ms?: unknown };
+  return { ...page, retained_from_ms: typeof page.retained_from_ms === "number" ? page.retained_from_ms : null };
 }
 
 /**

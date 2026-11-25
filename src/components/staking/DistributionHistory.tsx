@@ -12,6 +12,7 @@ import { failureText, groupThousands } from "@/lib/format";
 import { usdcFixed } from "@/lib/monkey/figures";
 import { emptyHistoryText, epochsLeftOut, hasOperatorShare, MAX_EPOCHS, moreRemain, shownRows } from "@/lib/staking/distribution-history";
 import type { DistributionHistoryReads } from "@/lib/staking/history-reads";
+import { historyBeginsNote, historyBeginsOf } from "@/lib/store/history-begins";
 import { formatStamp } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
 
@@ -33,6 +34,7 @@ const when = (ms: number) => formatStamp(ms).slice(0, -3);
 export function DistributionHistory({ history }: { history: DistributionHistoryReads }) {
   const state = useSyncExternalStore(history.subscribe, history.getSnapshot, history.getSnapshot);
   const account = useConsoleSelect((s) => s.wallet?.address ?? null);
+  const begins = useConsoleSelect(historyBeginsOf);
   // The epochs are for the account they name: while another account's are held, none show.
   const mine = account !== null && state.account === account;
   const rows = mine ? shownRows(state.data) : [];
@@ -90,6 +92,7 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
       )}
       {more && <button type="button" aria-disabled={state.more} onClick={loadMore} className={LOAD}>{state.more ? "Loading" : "Load more"}<span className="sr-only"> periods</span></button>}
       <p role="status" className="text-caption leading-relaxed text-amber empty:hidden">{problem}</p>
+      {mine && begins !== null && state.status === "ready" && <p className={NOTE}>{historyBeginsNote("distributions", begins)}</p>}
       {bounded && <p className={NOTE}>Only the most recent {groupThousands(MAX_EPOCHS)} staking periods are retained in this list.</p>}
     </Card>
   );

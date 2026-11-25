@@ -19,6 +19,7 @@ import type { HistoryPage } from "../engine/types";
 import { Backoff } from "../monkey/live-reads";
 import { NODE_READ_MS } from "../monkey/panel";
 import { EnclaveBinding } from "../store/enclave-binding";
+import { readHistory } from "../store/history-begins";
 import type { ConsoleStore } from "../store/store";
 import { addMessage, addNewest, addPage, emptyHistory, gapBehind, HISTORY_KINDS, limitingKinds, moreRemain, type DistributionHistory, type HistoryKind, type StopMark } from "./distribution-history";
 
@@ -161,9 +162,9 @@ export class DistributionHistoryReads {
    */
   private async page(account: string, kind: HistoryKind, before: string | null): Promise<HistoryPage> {
     try {
-      return await this.store.deps.client.history(account, { kind, limit: HISTORY_PAGE, ...(before === null ? {} : { before }) });
+      return await readHistory(this.store, account, { kind, limit: HISTORY_PAGE, ...(before === null ? {} : { before }) });
     } catch (error) {
-      if (kind === "operator_share_allocated" && error instanceof EngineError && error.status === 400) return { events: [], next: null };
+      if (kind === "operator_share_allocated" && error instanceof EngineError && error.status === 400) return { events: [], next: null, retained_from_ms: null };
       throw error;
     }
   }
@@ -178,7 +179,7 @@ export class DistributionHistoryReads {
       this.backoff.record(false);
       // A full tick after this read landed, whatever the timer's phase.
       this.recheck = { cycle, after: Date.now() + RETRY_TICK_MS };
-      this.set({ status: "ready", data: HISTORY_KINDS.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null }), this.state.data) });
+      this.set({ status: "ready", data: HISTORY_KINDS.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null, retained_from_ms: null }), this.state.data) });
     } catch (error) {
       if (cycle !== this.cycle) return;
       this.backoff.record(true);
@@ -235,7 +236,7 @@ export class DistributionHistoryReads {
       const kinds = limitingKinds(data);
       const pages = await Promise.all(kinds.map((kind) => this.page(account, kind, data.cover[kind].next)));
       if (cycle !== this.cycle) return;
-      this.set({ more: false, data: kinds.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null }), this.state.data) });
+      this.set({ more: false, data: kinds.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null, retained_from_ms: null }), this.state.data) });
     } catch (error) {
       if (cycle === this.cycle) this.set({ more: false, error: describe(error) });
     }

@@ -55,7 +55,7 @@ describe("a house deposit's event on a tick", () => {
     await settle();
     store.setWallet({ address: WATCHED, label: "test" });
     client.credited = true;
-    client.historyAnswer = () => ({ events: [{ type: "deposited", account: WATCHED, amount: "5", cursor: "1:0", ts: 1 }], next: null });
+    client.historyAnswer = () => ({ events: [{ type: "deposited", account: WATCHED, amount: "5", cursor: "1:0", ts: 1 }], next: null, retained_from_ms: null });
     await store.refresh(true);
     const reads = client.historyReads.length;
     client.onMessage?.({ ...deposit([house("deposit_held")]), cmd: { type: "tick" } });

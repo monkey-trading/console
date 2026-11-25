@@ -16,7 +16,7 @@ import { approved, OTHER, page, signed } from "./payouts-kit";
 describe("approvals and paid payouts", () => {
   it("reads every approval by kind, apart from the recent history, and keeps it only for the account that asked", async () => {
     const { client, store } = await connected();
-    client.historyPage = { events: [approved(2, 50), approved(1, 40)], next: null };
+    client.historyPage = { events: [approved(2, 50), approved(1, 40)], next: null, retained_from_ms: null };
     await loadApprovals(store);
     expect(client.historyReads.at(-1)).toEqual({ kind: "withdrawal_approved" });
     expect(store.getSnapshot().approvals.map((e) => e.type === "withdrawal_approved" && e.nonce)).toEqual([2, 1]);
@@ -41,7 +41,7 @@ describe("approvals and paid payouts", () => {
 
   it("follows every page of approvals the node returns", async () => {
     const { client, store } = await connected();
-    client.historyPages = { "": { events: [approved(3, 60)], next: "60:0" }, "60:0": { events: [approved(2, 50)], next: "50:0" }, "50:0": { events: [approved(1, 40)], next: null } };
+    client.historyPages = { "": { events: [approved(3, 60)], next: "60:0", retained_from_ms: null }, "60:0": { events: [approved(2, 50)], next: "50:0", retained_from_ms: null }, "50:0": { events: [approved(1, 40)], next: null, retained_from_ms: null } };
     await loadApprovals(store);
     expect(store.getSnapshot().approvals.map((e) => e.type === "withdrawal_approved" && e.nonce)).toEqual([3, 2, 1]);
     expect(client.historyReads).toHaveLength(3);
@@ -106,12 +106,12 @@ describe("approvals and paid payouts", () => {
 describe("approvals paging", () => {
   it("drops an approvals read that a later one overtook", async () => {
     const { client, store } = await connected();
-    const slow = { events: [approved(1, 40)], next: null };
+    const slow = { events: [approved(1, 40)], next: null, retained_from_ms: null };
     let release: () => void = () => undefined;
     client.history = async () => { await new Promise<void>((resolve) => { release = resolve; }); return slow; };
     const first = loadApprovals(store);
     const holdFirst = release;
-    client.history = async () => ({ events: [approved(2, 50), approved(1, 40)], next: null });
+    client.history = async () => ({ events: [approved(2, 50), approved(1, 40)], next: null, retained_from_ms: null });
     await loadApprovals(store);
     holdFirst();
     await first;
@@ -120,7 +120,7 @@ describe("approvals paging", () => {
 
   it("keeps the cursor of older approvals past the page budget, and reads on from it", async () => {
     const { client, store } = await connected();
-    client.historyPages = Object.fromEntries(Array.from({ length: 21 }, (_, i) => [i === 0 ? "" : `${100 - i}:0`, { events: [approved(100 - i, 100 - i)], next: `${99 - i}:0` }]));
+    client.historyPages = Object.fromEntries(Array.from({ length: 21 }, (_, i) => [i === 0 ? "" : `${100 - i}:0`, { events: [approved(100 - i, 100 - i)], next: `${99 - i}:0`, retained_from_ms: null }]));
     await loadApprovals(store);
     expect(store.getSnapshot().approvals).toHaveLength(20);
     expect(store.getSnapshot().approvalsNext).toBe("80:0");

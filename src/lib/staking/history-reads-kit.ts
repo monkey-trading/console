@@ -25,7 +25,7 @@ function serveEpochs(node: Node, epochs: number) {
     if (params.kind !== "distribution_allocated") return real(address, params);
     const older = events.filter((event) => params.before === undefined || Number(event.cursor.split(":")[0]) < Number(params.before.split(":")[0]));
     const page = older.slice(0, params.limit ?? 50);
-    return { events: page, next: older.length > page.length ? (page[page.length - 1]?.cursor ?? null) : null };
+    return { events: page, next: older.length > page.length ? (page[page.length - 1]?.cursor ?? null) : null, retained_from_ms: null };
   });
 }
 

@@ -2,13 +2,14 @@
 
 import { describe, expect, it } from "vitest";
 
+import type { HistoryPage } from "../engine/types";
 import { settle } from "../engine/test-kit";
 import { ACCOUNT, setup } from "./live-fake";
 
 const OTHER = "0x00000000000000000000000000000000000000bb";
 
 /** A started store with the account connected, its history answering as `answer` does. */
-async function connected(answer: () => { events: never[]; next: null }) {
+async function connected(answer: () => HistoryPage) {
   const made = setup();
   made.store.start(0);
   await settle();
@@ -17,7 +18,7 @@ async function connected(answer: () => { events: never[]; next: null }) {
   return made;
 }
 
-const EMPTY = () => ({ events: [] as never[], next: null });
+const EMPTY = () => ({ events: [] as never[], next: null, retained_from_ms: null });
 const FAILS = () => { throw new Error("The node did not answer."); };
 
 describe("the account's first read of its history", () => {

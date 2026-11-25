@@ -11,6 +11,7 @@ import {
   addMessage, addPage, allocationsShort, atBound, closedBefore, emptyLedger, LEDGER_KINDS, ROW_KINDS,
   type LedgerData, type LedgerKind,
 } from "../ledger";
+import { readHistory } from "./history-begins";
 import type { ConsoleStore } from "./store";
 
 export interface LedgerState {
@@ -106,7 +107,7 @@ export class LedgerReads {
   }
 
   private page(account: string, kind: LedgerKind, before: string | null): Promise<HistoryPage> {
-    return this.store.deps.client.history(account, { kind, limit: PAGE[kind], ...(before === null ? {} : { before }) });
+    return readHistory(this.store, account, { kind, limit: PAGE[kind], ...(before === null ? {} : { before }) });
   }
 
   private async first(account: string): Promise<void> {
@@ -116,7 +117,7 @@ export class LedgerReads {
     try {
       const pages = await Promise.all(LEDGER_KINDS.map((kind) => this.page(account, kind, null)));
       if (!this.live(account, epoch)) return;
-      const data = LEDGER_KINDS.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null }), this.state.data);
+      const data = LEDGER_KINDS.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null, retained_from_ms: null }), this.state.data);
       this.set({ data, status: "ready" });
     } catch (error) {
       if (this.live(account, epoch)) this.set({ status: "failed", error: describe(error) });
@@ -157,7 +158,7 @@ export class LedgerReads {
       const kinds = ROW_KINDS.filter((kind) => !data.cover[kind].done && data.cover[kind].next !== null);
       const pages = await Promise.all(kinds.map((kind) => this.page(account, kind, data.cover[kind].next)));
       if (!this.live(account, epoch)) return;
-      this.set({ data: kinds.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null }), this.state.data), more: false });
+      this.set({ data: kinds.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null, retained_from_ms: null }), this.state.data), more: false });
     } catch (error) {
       if (this.live(account, epoch)) this.set({ more: false, error: describe(error) });
       return;

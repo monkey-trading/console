@@ -20,7 +20,7 @@ function route(events: HistoryEvent[], size = 100): { read: ReadHistory; calls: 
     const matching = events.filter((e) => e.type === kind && (before === undefined || compareCursors(e.cursor, before) < 0));
     const page = matching.slice(0, Math.min(size, limit));
     const more = matching.length > page.length;
-    const result: HistoryPage = { events: page, next: more ? (page.at(-1)?.cursor ?? null) : null };
+    const result: HistoryPage = { events: page, next: more ? (page.at(-1)?.cursor ?? null) : null, retained_from_ms: null };
     return result;
   };
   return { read, calls };
@@ -87,7 +87,7 @@ describe("readLiveKeys", () => {
 
   it("ignores an event of another kind that the route returns", async () => {
     const other: EngineEvent = { type: "deposited", account: ACCOUNT, amount: "1" };
-    const read: ReadHistory = async () => ({ events: [{ ...other, cursor: "1:0", ts: NOW }], next: null });
+    const read: ReadHistory = async () => ({ events: [{ ...other, cursor: "1:0", ts: NOW }], next: null, retained_from_ms: null });
     expect((await readLiveKeys(read, NOW)).keys).toEqual([]);
   });
 

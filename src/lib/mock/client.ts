@@ -24,7 +24,7 @@ import { mockTotals, queuePage, withdraw } from "./funds";
 import { postedStanding } from "./monkey-state";
 import { registerSessionKey, revokeSessionKey } from "./session-keys";
 import { advance } from "./step";
-import { emissionScheduleOf, houseFigures, marksPage, mockStats } from "./stats";
+import { emissionScheduleOf, houseFigures, marksPage, mockHistoryBegins, mockStats } from "./stats";
 import { CHECKPOINT_EVERY, MOCK_PROTOCOL, type MockState } from "./state";
 
 export { mockHex };
@@ -288,7 +288,7 @@ export class MockEngineClient implements EngineClient {
     const older = items.filter((item) => item.seq < beforeSeq || (item.seq === beforeSeq && item.index < beforeIndex)).reverse();
     const page = older.slice(0, limit);
     const last = page[page.length - 1];
-    return { events: page.map((item) => ({ ...item.event, cursor: item.cursor, ts: item.ts })), next: older.length > limit && last ? last.cursor : null };
+    return { events: page.map((item) => ({ ...item.event, cursor: item.cursor, ts: item.ts })), next: older.length > limit && last ? last.cursor : null, retained_from_ms: mockHistoryBegins(this.state.rotationFromMs, this.state.now) };
   }
 
   subscribe(onMessage: (message: StreamMessage) => void): Unsubscribe {

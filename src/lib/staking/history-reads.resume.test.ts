@@ -45,7 +45,7 @@ describe("DistributionHistoryReads stop and restart", () => {
       if (params.kind !== "distribution_allocated") return real(address, params);
       const older = events().filter((event) => params.before === undefined || Number(event.cursor.split(":")[0]) < Number(params.before.split(":")[0]));
       const served = older.slice(0, params.limit ?? 50);
-      return { events: served, next: older.length > served.length ? (served[served.length - 1]?.cursor ?? null) : null };
+      return { events: served, next: older.length > served.length ? (served[served.length - 1]?.cursor ?? null) : null, retained_from_ms: null };
     });
     const history = new DistributionHistoryReads(kit.store);
     const stop = history.start(() => false);
@@ -102,7 +102,7 @@ describe("DistributionHistoryReads stop and restart", () => {
       const events = () => Array.from({ length: count }, (_, i) => ({ type: "distribution_allocated" as const, account: DEMO_ADDRESS, epoch: count - i, amount: "1000", cursor: `${10 * (count - i)}:0`, ts: count - i }));
       const older = events().filter((event) => params.before === undefined || Number(event.cursor.split(":")[0]) < Number(params.before.split(":")[0]));
       const served = older.slice(0, params.limit ?? 50);
-      return { events: served, next: older.length > served.length ? (served[served.length - 1]?.cursor ?? null) : null };
+      return { events: served, next: older.length > served.length ? (served[served.length - 1]?.cursor ?? null) : null, retained_from_ms: null };
     });
     const history = new DistributionHistoryReads(kit.store);
     const stop = history.start(() => false);
@@ -136,7 +136,7 @@ describe("DistributionHistoryReads stop and restart", () => {
       const events = () => Array.from({ length: count }, (_, i) => ({ type: "distribution_allocated" as const, account: DEMO_ADDRESS, epoch: count - i, amount: "1000", cursor: `${count - i}:0`, ts: count - i }));
       const older = events().filter((event) => params.before === undefined || Number(event.cursor.split(":")[0]) < Number(params.before.split(":")[0]));
       const served = older.slice(0, params.limit ?? 50);
-      return { events: served, next: older.length > served.length ? (served[served.length - 1]?.cursor ?? null) : null };
+      return { events: served, next: older.length > served.length ? (served[served.length - 1]?.cursor ?? null) : null, retained_from_ms: null };
     });
     const history = new DistributionHistoryReads(kit.store);
     const stop = history.start(() => false);
@@ -170,7 +170,7 @@ describe("DistributionHistoryReads stop and restart", () => {
       const events = () => Array.from({ length: count }, (_, i) => ({ type: "distribution_allocated" as const, account: DEMO_ADDRESS, epoch: count - i, amount: "1000", cursor: `${count - i}:0`, ts: count - i }));
       const older = events().filter((event) => params.before === undefined || Number(event.cursor.split(":")[0]) < Number(params.before.split(":")[0]));
       const served = older.slice(0, params.limit ?? 50);
-      return { events: served, next: older.length > served.length ? (served[served.length - 1]?.cursor ?? null) : null };
+      return { events: served, next: older.length > served.length ? (served[served.length - 1]?.cursor ?? null) : null, retained_from_ms: null };
     });
     const history = new DistributionHistoryReads(kit.store);
     const stop = history.start(() => false);

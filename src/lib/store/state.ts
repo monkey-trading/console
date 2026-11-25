@@ -142,6 +142,8 @@ export interface ConsoleState {
   accountRead: boolean;
   /** How the connected account's first read of its history went: `history` is known to hold what the node holds only once it is `read`, and it stays so while later reads fail. */
   accountHistory: "waiting" | "read" | "failed";
+  /** Where the connected account's served history begins, as its latest read stated it; null until a read states one. */
+  historyBegins: { account: string; ms: number } | null;
   /** When this browser's session key expires by the node's clock, or 0 with no registered key; the key itself never enters the snapshot. */
   sessionExpiresAt: number;
   /** Why the last registration the node answered was refused, or null: orders and cancels then ask the wallet instead. */
@@ -251,6 +253,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     queue: [],
     accountRead: false,
     accountHistory: "waiting",
+    historyBegins: null,
     sessionExpiresAt: 0,
     sessionRefusal: null,
     setup: NO_SETUP,
