@@ -46,7 +46,7 @@ export function PnlLedger() {
   const ready = ledger.status === "ready";
   const more = rowsRemain(ledger.data) || allocationsShort(ledger.data, ledger.schedule);
   const full = atBound(ledger.data);
-  const { blank, status } = ledgerHeader(ledger, items.length, totals, more, full);
+  const { blank, status } = ledgerHeader(ledger, items.length, totals, more, full, begins);
   const rowFor = (item: (typeof items)[number]) => ({ item, symbol: names.get(item.row.market)?.symbol ?? `market ${item.row.market}`, places: names.get(item.row.market)?.places ?? 2, scheduleStatus: ledger.scheduleStatus });
   const empty = !ready ? (ledger.status === "failed" ? "Your realised results could not be loaded." : "Loading your realised results…") : more ? "The results loaded so far include no realised profit or loss. Select Load more to see older results." : `${begins === null ? "You have no realised profit or loss yet." : emptySince("results", begins)} Closed positions, close-outs and cash paid in lieu after a stock split will be listed here.`;
 

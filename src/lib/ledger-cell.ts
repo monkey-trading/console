@@ -3,6 +3,7 @@
 import { formatFixedPlaces, formatUsd } from "./fixed";
 import { formatMonkeyFigure, groupThousands } from "./format";
 import { formatMark } from "./price-format";
+import { historyStart } from "./store/history-begins";
 import { formatStamp } from "./time";
 import type { LedgerItem, LedgerTotals, Share } from "./ledger-share";
 import type { LedgerState } from "./store/ledger";
@@ -43,11 +44,11 @@ export function scheduleNotice(status: LedgerState["scheduleStatus"]): string | 
 }
 
 /** What the header's totals cover, so a total over a part of the history says so. */
-export function coverageNote(held: number, totals: LedgerTotals, more: boolean, full: boolean): string {
+export function coverageNote(held: number, totals: LedgerTotals, more: boolean, full: boolean, begins: number | null = null): string {
   const results = `${groupThousands(held)} result${held === 1 ? "" : "s"}`;
   const covers = full
     ? `The totals cover the ${results} loaded, which is the maximum this list can hold. Older results are not included.`
-    : more ? `The totals cover the ${results} loaded so far. Select Load more to include older results.` : "The totals cover all of your realised results.";
+    : more ? `The totals cover the ${results} loaded so far. Select Load more to include older results.` : begins === null ? "The totals cover all of your realised results." : `The totals cover all of your realised results since ${historyStart(begins)}.`;
   return totals.monkeyShort ? `${covers} The MONKEY total excludes losses shown as Pending, Loading or —.` : covers;
 }
 
@@ -56,9 +57,9 @@ export function coverageNote(held: number, totals: LedgerTotals, more: boolean, 
  * that one row), and the status line gives a read's error together with the coverage note, so a failed
  * "Load more" leaves the totals qualified.
  */
-export function ledgerHeader(state: Pick<LedgerState, "status" | "error" | "scheduleStatus">, held: number, totals: LedgerTotals, more: boolean, full: boolean): { blank: boolean; status: string } {
+export function ledgerHeader(state: Pick<LedgerState, "status" | "error" | "scheduleStatus">, held: number, totals: LedgerTotals, more: boolean, full: boolean, begins: number | null = null): { blank: boolean; status: string } {
   const ready = state.status === "ready";
-  const parts = [state.error ?? "", ready ? coverageNote(held, totals, more, full) : "", scheduleNotice(state.scheduleStatus) ?? ""];
+  const parts = [state.error ?? "", ready ? coverageNote(held, totals, more, full, begins) : "", scheduleNotice(state.scheduleStatus) ?? ""];
   return { blank: !ready, status: parts.filter(Boolean).join(" ") };
 }
 

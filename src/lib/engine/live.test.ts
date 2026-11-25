@@ -145,8 +145,12 @@ describe("the other reads", () => {
     ok("/v1/accounts/0xabc/history?limit=100&before=5%3A0", { events: [], next: null, retained_from_ms: null });
     ok("/v1/accounts/0xabc/history?limit=1", { events: [], next: null, retained_from_ms: 1_792_000_000_000 });
     ok("/v1/accounts/0xabc/history?limit=2", { events: [], next: null });
+    ok("/v1/accounts/0xabc/history?limit=3", { events: [], next: null, retained_from_ms: 1e20 });
+    ok("/v1/accounts/0xabc/history?limit=4", { events: [], next: null, retained_from_ms: "1792000000000" });
     await expect(client.history("0xabc", { limit: 1 })).resolves.toMatchObject({ retained_from_ms: 1_792_000_000_000 });
     await expect(client.history("0xabc", { limit: 2 })).resolves.toMatchObject({ retained_from_ms: null });
+    await expect(client.history("0xabc", { limit: 3 })).resolves.toMatchObject({ retained_from_ms: null });
+    await expect(client.history("0xabc", { limit: 4 })).resolves.toMatchObject({ retained_from_ms: null });
     const proof = { seq: 40, root: `0x${"11".repeat(32)}`, account: "0xabc", entitled: "5000000000000000000", siblings: [`0x${"22".repeat(32)}`] };
     ok("/v1/accounts/0xabc/emissions", proof);
     await expect(client.nonce("0xabc")).resolves.toEqual({ next_nonce: 3, time_ms: markets.time_ms });

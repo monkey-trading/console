@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { settle } from "../engine/test-kit";
 import { createMockNode } from "../mock";
+import { DEMO_ADDRESS } from "../mock/demo";
 import { emptySince, historyBeginsNote, historyBeginsOf, readHistory } from "./history-begins";
 import { ACCOUNT, setup } from "./live-fake";
 
@@ -44,10 +45,21 @@ describe("the start of the served history", () => {
   });
 });
 
+describe("a late answer for another account", () => {
+  it("leaves the connected account's start in place", async () => {
+    const { client, store } = await connected();
+    client.historyAnswer = () => ({ events: [], next: null, retained_from_ms: START });
+    await readHistory(store, ACCOUNT, {});
+    client.historyAnswer = () => ({ events: [], next: null, retained_from_ms: START + 5000 });
+    await readHistory(store, OTHER, {});
+    expect(historyBeginsOf(store.getSnapshot())).toBe(START);
+  });
+});
+
 describe("the words that say where history begins", () => {
   it("name the start in UTC and say that older entries are not shown", () => {
-    expect(historyBeginsNote("history", START)).toBe("Your account history is shown from 2026-10-26 13:52 UTC. Older history is not shown here.");
-    expect(historyBeginsNote("withdrawals", START)).toBe("Your approved withdrawals are shown from 2026-10-26 13:52 UTC. Older withdrawals are not shown here.");
+    expect(historyBeginsNote("history", START)).toBe("Your account history is available from 2026-10-26 13:52 UTC. Older history is not shown here.");
+    expect(historyBeginsNote("withdrawals", START)).toBe("Your approved withdrawals are available from 2026-10-26 13:52 UTC. Older withdrawals are not shown here.");
   });
 
   it("tell an empty list that older history is not shown, never that there is none", () => {
@@ -56,7 +68,8 @@ describe("the words that say where history begins", () => {
   });
 
   it("hold no period of their own", () => {
-    for (const list of ["history", "results", "withdrawals", "distributions"] as const) expect(historyBeginsNote(list, START) + emptySince(list, START)).not.toMatch(/\b30\b|thirty/i);
+    for (const list of ["history", "results", "withdrawals", "distributions"] as const) expect(historyBeginsNote(list, START)).not.toMatch(/\b30\b|thirty/i);
+    for (const list of ["history", "results", "withdrawals"] as const) expect(emptySince(list, START)).not.toMatch(/\b30\b|thirty/i);
   });
 });
 
@@ -67,5 +80,16 @@ describe("the mock's history pages", () => {
     const day = 86_400_000;
     node.client.tick(START + 40 * day);
     expect(node.client.historyPage(ACCOUNT, {}).retained_from_ms).toBe(START + 10 * day);
+  });
+});
+
+describe("the demo's history pages", () => {
+  it("begin no later than the oldest event they serve", () => {
+    const node = createMockNode(START, true);
+    const page = node.client.historyPage(DEMO_ADDRESS, { limit: 200 });
+    expect(page.events.length).toBeGreaterThan(0);
+    const oldest = Math.min(...page.events.map((e) => e.ts));
+    expect(page.retained_from_ms).not.toBeNull();
+    expect(page.retained_from_ms ?? Infinity).toBeLessThanOrEqual(oldest);
   });
 });

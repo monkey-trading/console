@@ -13,10 +13,10 @@ export function historyPath(address: string, params: { limit?: number; before?: 
   return `/v1/accounts/${address}/history${query.size > 0 ? `?${query}` : ""}`;
 }
 
-/** A history answer as a page: `retained_from_ms` is the server's start of what it serves, or null when it states none. */
+/** A history answer as a page, from a signed answer: `retained_from_ms` is the server's start of what it serves, or null when it states none or a time no date can show. */
 export function historyPageOf(answer: unknown): HistoryPage {
   const page = answer as Omit<HistoryPage, "retained_from_ms"> & { retained_from_ms?: unknown };
-  return { ...page, retained_from_ms: typeof page.retained_from_ms === "number" ? page.retained_from_ms : null };
+  return { ...page, retained_from_ms: typeof page.retained_from_ms === "number" && Number.isSafeInteger(page.retained_from_ms) && page.retained_from_ms >= 0 && page.retained_from_ms <= 8.64e15 ? page.retained_from_ms : null };
 }
 
 /**

@@ -191,10 +191,13 @@ export class MockState {
 
   /** Where the rotation's set times are counted from: the node's clock start, which a demo's backstory begins before. */
   rotationFromMs: number;
+  /** Where the mock's history begins: its clock's start, which a demo's backstory plays from. */
+  readonly historyFromMs: number;
 
   /** Starts at `startMs` with every market at its starting index; open per its schedule. */
   constructor(startMs: number) {
     this.rotationFromMs = startMs;
+    this.historyFromMs = startMs;
     this.now = startMs;
     this.monkey = new MockMonkey(startMs);
     this.operators = new MockOperators(startMs);
