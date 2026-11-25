@@ -288,7 +288,7 @@ export class MockEngineClient implements EngineClient {
     const older = items.filter((item) => item.seq < beforeSeq || (item.seq === beforeSeq && item.index < beforeIndex)).reverse();
     const page = older.slice(0, limit);
     const last = page[page.length - 1];
-    return { events: page.map((item) => ({ ...item.event, cursor: item.cursor, ts: item.ts })), next: older.length > limit && last ? last.cursor : null };
+    return { events: page.map((item) => ({ ...item.event, cursor: item.cursor, ts: item.ts })), next: older.length > limit && last ? last.cursor : null, retained_from_ms: this.state.historyFromMs };
   }
 
   subscribe(onMessage: (message: StreamMessage) => void): Unsubscribe {

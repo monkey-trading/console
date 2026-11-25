@@ -16,7 +16,7 @@ function event(kind: HistoryKind, epoch: number, amount: string, index = 0): His
 /** A page of `epochs`, newest first, with `next` when more lie below. */
 function page(kind: HistoryKind, epochs: number[], more: boolean): HistoryPage {
   const events = epochs.map((epoch) => event(kind, epoch, `${epoch}000`, kind === "distribution_allocated" ? 0 : 1));
-  return { events, next: more ? (events[events.length - 1]?.cursor ?? null) : null };
+  return { events, next: more ? (events[events.length - 1]?.cursor ?? null) : null, retained_from_ms: null };
 }
 
 const epochs = (rows: readonly { epoch: number }[]) => rows.map((row) => row.epoch);
@@ -60,10 +60,10 @@ describe("the distribution history's pages", () => {
   });
 
   it("keeps the oldest seq read when a later page comes back empty, and ignores amounts that are not whole base units", () => {
-    let data = addPage(emptyHistory(), "distribution_allocated", { events: [event("distribution_allocated", 3, "1.5"), event("distribution_allocated", 2, "-4"), event("distribution_allocated", 1, "70")], next: null });
-    data = addPage(data, "operator_share_allocated", { events: [], next: null });
+    let data = addPage(emptyHistory(), "distribution_allocated", { events: [event("distribution_allocated", 3, "1.5"), event("distribution_allocated", 2, "-4"), event("distribution_allocated", 1, "70")], next: null, retained_from_ms: null });
+    data = addPage(data, "operator_share_allocated", { events: [], next: null, retained_from_ms: null });
     expect(shownRows(data)).toEqual([{ epoch: 1, seq: 10, ts: 1_000, staker: 70n, operator: null }]);
-    expect(addPage(data, "distribution_allocated", { events: [], next: null }).cover.distribution_allocated.oldestSeq).toBe(10);
+    expect(addPage(data, "distribution_allocated", { events: [], next: null, retained_from_ms: null }).cover.distribution_allocated.oldestSeq).toBe(10);
   });
 });
 
@@ -110,7 +110,7 @@ describe("paging toward the bound", () => {
     return (before: string | null): HistoryPage => {
       const older = events.filter((entry) => before === null || seqOfCursor(entry.cursor) < seqOfCursor(before));
       const page = older.slice(0, 50);
-      return { events: page, next: older.length > page.length ? (page[page.length - 1]?.cursor ?? null) : null };
+      return { events: page, next: older.length > page.length ? (page[page.length - 1]?.cursor ?? null) : null, retained_from_ms: null };
     };
   }
   const seqOfCursor = (cursor: string) => Number(cursor.split(":")[0]);
@@ -152,7 +152,7 @@ describe("what is held and left out", () => {
     for (let epoch = 1; epoch <= 2 * MAX_EPOCHS + 5; epoch += 1) data = addMessage(data, arrival(epoch), ME);
     expect(data.rows).toHaveLength(2 * MAX_EPOCHS);
     expect(data.rows.at(-1)?.epoch).toBe(6);
-    data = addPage(addPage(data, "distribution_allocated", { events: [], next: null }), "operator_share_allocated", { events: [], next: null });
+    data = addPage(addPage(data, "distribution_allocated", { events: [], next: null, retained_from_ms: null }), "operator_share_allocated", { events: [], next: null, retained_from_ms: null });
     expect(shownRows(data)).toHaveLength(MAX_EPOCHS);
     expect(epochsLeftOut(data)).toBe(true);
   });

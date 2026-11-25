@@ -6,6 +6,7 @@ import { UntrustedError } from "../engine/trust-errors";
 import { asSentence } from "../format";
 import { decodeAccount } from "../models";
 import { emptyHistoryKey, NOT_CREDITED_MS, uncreditedKey, UNTIL_EVENT } from "./quiet-reads";
+import { readHistory } from "./history-begins";
 import { decideSetup } from "./setup";
 import type { ConsoleStore } from "./store";
 
@@ -47,7 +48,7 @@ export async function loadAccount(store: ConsoleStore, withHistory: boolean): Pr
     store.patch({ eligibility: eligibility.class, queue: queue.queue, accountRead: true, account, entitlement: entitlement === null ? null : carryAccrued(store.getSnapshot().entitlement, entitlement) });
     decideSetup(store, keyAtRead);
     if (withHistory || (store.getSnapshot().history.length === 0 && quiet?.resting(emptyHistory) !== true)) {
-      const history = await client.history(wallet.address, { limit: 100 }).then((page) => page.events, (error: unknown) => {
+      const history = await readHistory(store, wallet.address, { limit: 100 }).then((page) => page.events, (error: unknown) => {
         if (store.getSnapshot().wallet?.address === wallet.address && store.getSnapshot().accountHistory !== "read") store.patch({ accountHistory: "failed" });
         throw error;
       });

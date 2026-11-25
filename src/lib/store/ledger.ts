@@ -11,6 +11,7 @@ import {
   addMessage, addPage, allocationsShort, atBound, closedBefore, emptyLedger, LEDGER_KINDS, ROW_KINDS,
   type LedgerData, type LedgerKind,
 } from "../ledger";
+import { earliestStart, readHistory } from "./history-begins";
 import type { ConsoleStore } from "./store";
 
 export interface LedgerState {
@@ -19,13 +20,15 @@ export interface LedgerState {
   /** `unavailable` is a node that reports no schedule (a 404); `failed` one that did not answer. */
   scheduleStatus: "idle" | "ready" | "unavailable" | "failed";
   status: "idle" | "reading" | "ready" | "failed";
+  /** The earliest start the server stated with any page the rows came from, or null. */
+  begins: number | null;
   /** Whether a read of older pages runs. */
   more: boolean;
   error: string | null;
 }
 
 export function emptyLedgerState(): LedgerState {
-  return { data: emptyLedger(), schedule: null, scheduleStatus: "idle", status: "idle", more: false, error: null };
+  return { data: emptyLedger(), schedule: null, scheduleStatus: "idle", status: "idle", begins: null, more: false, error: null };
 }
 
 /** Events per read: the engine caps a page at 200. Fills outnumber the rest, and about half realise nothing. */
@@ -106,7 +109,7 @@ export class LedgerReads {
   }
 
   private page(account: string, kind: LedgerKind, before: string | null): Promise<HistoryPage> {
-    return this.store.deps.client.history(account, { kind, limit: PAGE[kind], ...(before === null ? {} : { before }) });
+    return readHistory(this.store, account, { kind, limit: PAGE[kind], ...(before === null ? {} : { before }) });
   }
 
   private async first(account: string): Promise<void> {
@@ -116,8 +119,8 @@ export class LedgerReads {
     try {
       const pages = await Promise.all(LEDGER_KINDS.map((kind) => this.page(account, kind, null)));
       if (!this.live(account, epoch)) return;
-      const data = LEDGER_KINDS.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null }), this.state.data);
-      this.set({ data, status: "ready" });
+      const data = LEDGER_KINDS.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null, retained_from_ms: null }), this.state.data);
+      this.set({ data, status: "ready", begins: earliestStart(this.state.begins, pages) });
     } catch (error) {
       if (this.live(account, epoch)) this.set({ status: "failed", error: describe(error) });
       return;
@@ -157,7 +160,7 @@ export class LedgerReads {
       const kinds = ROW_KINDS.filter((kind) => !data.cover[kind].done && data.cover[kind].next !== null);
       const pages = await Promise.all(kinds.map((kind) => this.page(account, kind, data.cover[kind].next)));
       if (!this.live(account, epoch)) return;
-      this.set({ data: kinds.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null }), this.state.data), more: false });
+      this.set({ data: kinds.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null, retained_from_ms: null }), this.state.data), begins: earliestStart(this.state.begins, pages), more: false });
     } catch (error) {
       if (this.live(account, epoch)) this.set({ more: false, error: describe(error) });
       return;
@@ -185,7 +188,7 @@ export class LedgerReads {
       try {
         const page = await this.page(account, "emission_allocated", cover.next);
         if (!this.live(account, epoch)) return;
-        this.set({ data: addPage(this.state.data, "emission_allocated", page), error: null });
+        this.set({ data: addPage(this.state.data, "emission_allocated", page), begins: earliestStart(this.state.begins, [page]), error: null });
       } catch (error) {
         if (this.live(account, epoch)) this.set({ error: describe(error) });
         return;

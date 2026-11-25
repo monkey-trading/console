@@ -4,6 +4,7 @@
 
 import type { EngineEvent } from "@/lib/engine/types";
 import { describeEvent } from "@/lib/messages";
+import { emptySince, historyBeginsNote, historyBeginsOf } from "@/lib/store/history-begins";
 import { formatStamp } from "@/lib/time";
 
 import { useConsole } from "./ConsoleProvider";
@@ -16,7 +17,9 @@ const KIND: Partial<Record<EngineEvent["type"], string>> = {
 };
 
 export function HistoryList() {
-  const { history, markets, wallet } = useConsole();
+  const state = useConsole();
+  const { history, markets, wallet } = state;
+  const begins = historyBeginsOf(state);
   const symbolOf = (id: number) => markets.find((m) => m.id === id)?.symbol ?? `market ${id}`;
   const rows = history.flatMap((entry) => {
     const text = describeEvent(entry, symbolOf);
@@ -25,7 +28,7 @@ export function HistoryList() {
   return (
     <div>
       {rows.length === 0 ? (
-        <p className="px-4 py-6 text-caption text-fg-3">{wallet ? "You have no account history yet. Your trades, deposits and withdrawals will be listed here." : "Connect a wallet to view your account history."}</p>
+        <p className="px-4 py-6 text-caption text-fg-3">{wallet ? (begins === null ? "You have no account history yet. Your trades, deposits and withdrawals will be listed here." : `${emptySince("history", begins)} Your trades, deposits and withdrawals will be listed here.`) : "Connect a wallet to view your account history."}</p>
       ) : (
         <ol>
           {rows.map(({ entry, text }) => (
@@ -37,6 +40,7 @@ export function HistoryList() {
           ))}
         </ol>
       )}
+      {begins !== null && rows.length > 0 && <p className="px-4 py-3 text-label text-fg-3">{historyBeginsNote("history", begins)}</p>}
     </div>
   );
 }

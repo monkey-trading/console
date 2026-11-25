@@ -293,6 +293,7 @@ export type HistoryEvent = EngineEvent & { cursor: string; ts: number };
 export interface HistoryPage {
   events: HistoryEvent[];
   next: string | null;
+  retained_from_ms: number | null; // when the served history begins, in ms: older events are not served; null while none is held
 }
 export type { CancelAllRequest, CloseAllRequest, CloseEntry } from "./batch-types";
 export type { PayoutEntry, PayoutsPage, QueuedWithdrawal, SignedWithdrawal, WithdrawalAuthorization, WithdrawalPage } from "./withdrawal-types";

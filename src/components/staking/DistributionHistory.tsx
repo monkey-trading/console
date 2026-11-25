@@ -12,6 +12,7 @@ import { failureText, groupThousands } from "@/lib/format";
 import { usdcFixed } from "@/lib/monkey/figures";
 import { emptyHistoryText, epochsLeftOut, hasOperatorShare, MAX_EPOCHS, moreRemain, shownRows } from "@/lib/staking/distribution-history";
 import type { DistributionHistoryReads } from "@/lib/staking/history-reads";
+import { historyBeginsNote } from "@/lib/store/history-begins";
 import { formatStamp } from "@/lib/time";
 import { formatUsdc } from "@/lib/vault";
 
@@ -90,6 +91,7 @@ export function DistributionHistory({ history }: { history: DistributionHistoryR
       )}
       {more && <button type="button" aria-disabled={state.more} onClick={loadMore} className={LOAD}>{state.more ? "Loading" : "Load more"}<span className="sr-only"> periods</span></button>}
       <p role="status" className="text-caption leading-relaxed text-amber empty:hidden">{problem}</p>
+      {mine && state.begins !== null && state.status === "ready" && <p className={NOTE}>{historyBeginsNote("distributions", state.begins)}</p>}
       {bounded && <p className={NOTE}>Only the most recent {groupThousands(MAX_EPOCHS)} staking periods are retained in this list.</p>}
     </Card>
   );

@@ -28,7 +28,7 @@ export function allocated(cursor: string, ts: number, period: number, amount: bi
 }
 
 /** A page of newest-first events with the cursor of the next older page, or none when `next` is null. */
-export const page = (events: HistoryEvent[], next: string | null = null): HistoryPage => ({ events, next });
+export const page = (events: HistoryEvent[], next: string | null = null): HistoryPage => ({ events, next, retained_from_ms: null });
 
 /** A stream message at `seq` stamped `ts` carrying `events` (as the node sequences them). */
 export function message(seq: number, ts: number, events: StreamMessage["events"]): StreamMessage {

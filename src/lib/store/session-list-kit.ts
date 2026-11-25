@@ -34,7 +34,7 @@ export function serve(client: ActionClient, events: () => HistoryEvent[]) {
   client.history = async (_address, params) => {
     reads.push(params.kind ?? "");
     const matching = events().filter((e) => e.type === params.kind && (params.before === undefined || compareCursors(e.cursor, params.before) < 0));
-    const page: HistoryPage = { events: matching, next: null };
+    const page: HistoryPage = { events: matching, next: null, retained_from_ms: null };
     return page;
   };
   return reads;

@@ -12,6 +12,7 @@ import { asSentence } from "../format";
 import { formatUsdc } from "../vault";
 import { abandoned, awaitsTrust, domainOf, errorText, notBusy, prompting, usableWallet } from "./signing";
 import { authorizationFor, keepLatest } from "./funds";
+import { readHistory } from "./history-begins";
 import { checksKept, checksOf } from "./payout-checks";
 import type { ConsoleState, PayoutCheck } from "./state";
 import type { ConsoleStore } from "./store";
@@ -107,7 +108,7 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
     let before = older ? (store.getSnapshot().approvalsNext ?? undefined) : undefined;
     let next: string | null = null;
     for (let page = 0; page < APPROVAL_PAGES; page++) {
-      const read = await store.deps.client.history(address, { kind: "withdrawal_approved", limit: APPROVALS_LIMIT, ...(before === undefined ? {} : { before }) });
+      const read = await readHistory(store, address, { kind: "withdrawal_approved", limit: APPROVALS_LIMIT, ...(before === undefined ? {} : { before }) });
       approvals.push(...read.events);
       next = read.next;
       if (next === null) break;

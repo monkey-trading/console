@@ -42,7 +42,7 @@ describe("deposits on their way", () => {
 
   it("finds one still waiting after a reload, from the vault's events the node has no receipt for", async () => {
     const reloaded = await connected({ deposits: [vaultEvent(4n, 50n), vaultEvent(5n, 100n)] });
-    reloaded.client.historyPage = { events: [{ ...receipt(4), cursor: "3:0", ts: 1 }], next: null };
+    reloaded.client.historyPage = { events: [{ ...receipt(4), cursor: "3:0", ts: 1 }], next: null, retained_from_ms: null };
     await readPendingDeposits(reloaded.store);
     expect(pending(reloaded.store)).toEqual([{ id: "5", amount: fixedFromInt(100) }]);
     expect(reloaded.client.historyReads.at(-1)).toEqual({ kind: "custody_deposit_changed" });

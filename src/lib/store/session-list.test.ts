@@ -141,7 +141,7 @@ describe("the session list", () => {
     await settle();
     expect(waiting).toHaveLength(2); // the registrations and the revocations
     store.patch({ stream: "stale" });
-    for (const release of waiting) release({ events: [registered("20:0", OTHER_KEY, NODE_TIME, NODE_TIME + H)], next: null });
+    for (const release of waiting) release({ events: [registered("20:0", OTHER_KEY, NODE_TIME, NODE_TIME + H)], next: null, retained_from_ms: null });
     await settle();
     expect(list.getSnapshot().status.kind).toBe("waiting");
     expect(list.getSnapshot().keys.map((k) => k.startedAt)).not.toContain(NODE_TIME);
@@ -159,7 +159,7 @@ describe("the session list", () => {
     store.liveWallet = { ...wallet, address: other };
     store.setWallet({ address: other, label: "Other" });
     expect(list.getSnapshot().keys).toEqual([]);
-    for (const release of waiting) release({ events: [registered("20:0", OTHER_KEY, NODE_TIME, NODE_TIME + H)], next: null });
+    for (const release of waiting) release({ events: [registered("20:0", OTHER_KEY, NODE_TIME, NODE_TIME + H)], next: null, retained_from_ms: null });
     await settle();
     expect(list.getSnapshot().keys).toEqual([]);
     expect(waiting.length).toBeGreaterThan(2); // the next account's own read was asked for
@@ -182,7 +182,7 @@ describe("the session list", () => {
     const { client, list, scheduler } = await opened();
     let page = 0;
     const ordinary = client.history.bind(client);
-    client.history = async () => ({ events: [registered(`${10_000 - page}:0`, OTHER_KEY, NODE_TIME - H, NODE_TIME + H)], next: `${10_000 - page++}:0` });
+    client.history = async () => ({ events: [registered(`${10_000 - page}:0`, OTHER_KEY, NODE_TIME - H, NODE_TIME + H)], next: `${10_000 - page++}:0`, retained_from_ms: null });
     scheduler.fire();
     await settle();
     expect(list.getSnapshot()).toMatchObject({ status: { kind: "ready" }, complete: false });
@@ -195,7 +195,7 @@ describe("the session list", () => {
   it("forgets that a read stopped short when the wallet is disconnected, and under the next account", async () => {
     const { client, store, list, scheduler, wallet } = await opened();
     let page = 0;
-    const stoppedShort = async () => ({ events: [registered(`${10_000 - page}:0`, OTHER_KEY, NODE_TIME - H, NODE_TIME + H)], next: `${10_000 - page++}:0` });
+    const stoppedShort = async () => ({ events: [registered(`${10_000 - page}:0`, OTHER_KEY, NODE_TIME - H, NODE_TIME + H)], next: `${10_000 - page++}:0`, retained_from_ms: null });
     client.history = stoppedShort;
     scheduler.fire();
     await settle();
@@ -210,7 +210,7 @@ describe("the session list", () => {
     store.setWallet({ address: "0x00000000000000000000000000000000000000bb", label: "Other" });
     await settle();
     expect(list.getSnapshot().complete).toBe(true);
-    release({ events: [], next: null });
+    release({ events: [], next: null, retained_from_ms: null });
   });
 
   it("makes no timed read in a hidden tab, and one when it returns", async () => {

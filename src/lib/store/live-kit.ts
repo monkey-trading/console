@@ -36,7 +36,7 @@ export class ActionClient implements EngineClient {
   marketReads = 0;
   quoteRequests: (QuoteRequest | null)[] = [];
   historyReads: { kind?: string | undefined }[] = [];
-  historyPage: HistoryPage = { events: [], next: null };
+  historyPage: HistoryPage = { events: [], next: null, retained_from_ms: null };
   /** Pages by `before` cursor, when a test needs more than one; `historyPage` answers otherwise. */
   historyPages: Record<string, HistoryPage> | null = null;
   /** Pages of the node's payouts by `after` cursor, when a test needs more than one; `payoutsPage` answers otherwise. */

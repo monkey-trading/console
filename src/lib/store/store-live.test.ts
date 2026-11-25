@@ -105,7 +105,7 @@ describe("a live client's trust and feed", () => {
   it("refreshes the watched account's history for an event of its own from any command, and for no other account's", async () => {
     const { client, store } = setup();
     let histories = 0;
-    client.history = async () => { histories++; return { events: [], next: null }; };
+    client.history = async () => { histories++; return { events: [], next: null, retained_from_ms: null }; };
     store.start(0);
     await settle();
     await connectWallet(store, "watch", true);

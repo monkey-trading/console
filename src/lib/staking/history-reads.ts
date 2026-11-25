@@ -19,6 +19,7 @@ import type { HistoryPage } from "../engine/types";
 import { Backoff } from "../monkey/live-reads";
 import { NODE_READ_MS } from "../monkey/panel";
 import { EnclaveBinding } from "../store/enclave-binding";
+import { earliestStart, readHistory } from "../store/history-begins";
 import type { ConsoleStore } from "../store/store";
 import { addMessage, addNewest, addPage, emptyHistory, gapBehind, HISTORY_KINDS, limitingKinds, moreRemain, type DistributionHistory, type HistoryKind, type StopMark } from "./distribution-history";
 
@@ -27,6 +28,8 @@ export interface HistoryState {
   account: string | null;
   data: DistributionHistory;
   status: "idle" | "reading" | "ready" | "failed";
+  /** The earliest start the server stated with any page the epochs came from, or null. */
+  begins: number | null;
   /** Whether an older page is being read. */
   more: boolean;
   /** Why the last read failed; null after one that landed. */
@@ -40,7 +43,7 @@ export const HISTORY_PAGE = 50;
 /** How often a failed first read, or a second read of the newest pages still due, is considered again; the backoff decides whether it is made. */
 export const RETRY_TICK_MS = 5_000;
 
-const IDLE: HistoryState = { account: null, data: emptyHistory(), status: "idle", more: false, error: null, recheckError: null };
+const IDLE: HistoryState = { account: null, data: emptyHistory(), status: "idle", begins: null, more: false, error: null, recheckError: null };
 
 /** The text of a failed read for the card. */
 function describe(error: unknown): string {
@@ -161,9 +164,9 @@ export class DistributionHistoryReads {
    */
   private async page(account: string, kind: HistoryKind, before: string | null): Promise<HistoryPage> {
     try {
-      return await this.store.deps.client.history(account, { kind, limit: HISTORY_PAGE, ...(before === null ? {} : { before }) });
+      return await readHistory(this.store, account, { kind, limit: HISTORY_PAGE, ...(before === null ? {} : { before }) });
     } catch (error) {
-      if (kind === "operator_share_allocated" && error instanceof EngineError && error.status === 400) return { events: [], next: null };
+      if (kind === "operator_share_allocated" && error instanceof EngineError && error.status === 400) return { events: [], next: null, retained_from_ms: null };
       throw error;
     }
   }
@@ -178,7 +181,7 @@ export class DistributionHistoryReads {
       this.backoff.record(false);
       // A full tick after this read landed, whatever the timer's phase.
       this.recheck = { cycle, after: Date.now() + RETRY_TICK_MS };
-      this.set({ status: "ready", data: HISTORY_KINDS.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null }), this.state.data) });
+      this.set({ status: "ready", begins: earliestStart(this.state.begins, pages), data: HISTORY_KINDS.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null, retained_from_ms: null }), this.state.data) });
     } catch (error) {
       if (cycle !== this.cycle) return;
       this.backoff.record(true);
@@ -211,7 +214,7 @@ export class DistributionHistoryReads {
       this.recheck = { cycle, after: Date.now() + NODE_READ_MS };
       this.unreconciled = false;
       this.backoff.record(false);
-      this.set({ recheckError: null, data: pages.reduce((held, page) => addNewest(held, page), this.state.data) });
+      this.set({ recheckError: null, begins: earliestStart(this.state.begins, pages), data: pages.reduce((held, page) => addNewest(held, page), this.state.data) });
       // The fold extended what the reads hold: the mark moves to the top of it, so the next recheck
       // measures against this read rather than the stop's.
       const top = this.state.data.rows.reduce((newest, row) => Math.max(newest, row.seq), 0);
@@ -235,7 +238,7 @@ export class DistributionHistoryReads {
       const kinds = limitingKinds(data);
       const pages = await Promise.all(kinds.map((kind) => this.page(account, kind, data.cover[kind].next)));
       if (cycle !== this.cycle) return;
-      this.set({ more: false, data: kinds.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null }), this.state.data) });
+      this.set({ more: false, begins: earliestStart(this.state.begins, pages), data: kinds.reduce((held, kind, i) => addPage(held, kind, pages[i] ?? { events: [], next: null, retained_from_ms: null }), this.state.data) });
     } catch (error) {
       if (cycle === this.cycle) this.set({ more: false, error: describe(error) });
     }

@@ -81,7 +81,7 @@ export class ConsoleStore {
       ...state,
       feed: feedFrom(deps.initial.recent ?? [], state.markets, this.viewer, () => this.id()),
       ...(session
-        ? { wallet: session.wallet, account: session.account ? decodeAccount(session.account) : null, eligibility: session.eligibility, queue: session.queue, accountRead: true, accountHistory: "read" as const, history: session.history }
+        ? { wallet: session.wallet, account: session.account ? decodeAccount(session.account) : null, eligibility: session.eligibility, queue: session.queue, accountRead: true, accountHistory: "read" as const, history: session.history, historyBegins: typeof session.historyBegins === "number" ? { account: session.wallet.address, ms: session.historyBegins } : null }
         : {}),
     };
   }

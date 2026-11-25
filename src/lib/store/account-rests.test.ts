@@ -117,7 +117,7 @@ describe("a credited account with no history yet", () => {
 
   it("does not read a history that has rows again without an event", async () => {
     const { client, store } = await credited();
-    client.historyAnswer = () => ({ events: [{ type: "deposited", account: ACCOUNT, amount: "5", cursor: "20:0", ts: 20 }], next: null });
+    client.historyAnswer = () => ({ events: [{ type: "deposited", account: ACCOUNT, amount: "5", cursor: "20:0", ts: 20 }], next: null, retained_from_ms: null });
     client.onMessage?.(message(22, [{ type: "deposited", account: ACCOUNT, amount: "5" }]));
     await settle();
     expect(store.getSnapshot().history).toHaveLength(1);

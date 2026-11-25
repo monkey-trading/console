@@ -9,6 +9,7 @@ import { formatMonkeyFigure } from "@/lib/format";
 import { allocationsShort, atBound, rowsRemain } from "@/lib/ledger";
 import { ACCRUES, COLUMN_NOTE, ledgerHeader } from "@/lib/ledger-cell";
 import { viewOf } from "@/lib/ledger-share";
+import { emptySince, historyBeginsNote } from "@/lib/store/history-begins";
 import type { ConsoleStore } from "@/lib/store/store";
 
 import { useSession } from "./ConsoleProvider";
@@ -37,6 +38,7 @@ export function PnlLedger() {
     const [id = "", symbol = "", places = "2"] = entry.split("|");
     return [Number(id), { symbol, places: Number(places) }] as const;
   })), [markets]);
+  const { begins } = ledger;
   const view = useMemo(() => viewOf(ledger.data, ledger.schedule), [ledger.data, ledger.schedule]);
 
   if (address === "") return <p className="px-4 py-6 text-caption text-fg-3">Connect a wallet to view your realised profit and loss.</p>;
@@ -44,9 +46,9 @@ export function PnlLedger() {
   const ready = ledger.status === "ready";
   const more = rowsRemain(ledger.data) || allocationsShort(ledger.data, ledger.schedule);
   const full = atBound(ledger.data);
-  const { blank, status } = ledgerHeader(ledger, items.length, totals, more, full);
+  const { blank, status } = ledgerHeader(ledger, items.length, totals, more, full, begins);
   const rowFor = (item: (typeof items)[number]) => ({ item, symbol: names.get(item.row.market)?.symbol ?? `market ${item.row.market}`, places: names.get(item.row.market)?.places ?? 2, scheduleStatus: ledger.scheduleStatus });
-  const empty = !ready ? (ledger.status === "failed" ? "Your realised results could not be loaded." : "Loading your realised results…") : more ? "The results loaded so far include no realised profit or loss. Select Load more to see older results." : "You have no realised profit or loss yet. Closed positions, close-outs and cash paid in lieu after a stock split will be listed here.";
+  const empty = !ready ? (ledger.status === "failed" ? "Your realised results could not be loaded." : "Loading your realised results…") : more ? "The results loaded so far include no realised profit or loss. Select Load more to see older results." : `${begins === null ? "You have no realised profit or loss yet." : emptySince("results", begins)} Closed positions, close-outs and cash paid in lieu after a stock split will be listed here.`;
 
   return (
     <div>
@@ -72,6 +74,7 @@ export function PnlLedger() {
       <div className="px-4 py-3 text-label text-fg-3">
         {ledger.status === "failed" && <button type="button" className={BUTTON} onClick={(event) => { keepFocus(event.currentTarget); store.ledger.open(address); }}>Try again</button>}
         {ready && more && !full && <button type="button" className={BUTTON} disabled={ledger.more} onClick={(event) => { keepFocus(event.currentTarget); void store.ledger.loadMore(); }}>{ledger.more ? "Loading" : "Load more"}</button>}
+        {ready && begins !== null && items.length > 0 && <p className="mt-2">{historyBeginsNote("results", begins)}</p>}
         <p className="mt-2">{COLUMN_NOTE}</p>
       </div>
     </div>

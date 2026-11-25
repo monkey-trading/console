@@ -138,7 +138,7 @@ describe("DistributionHistoryReads", () => {
     const real = kit.node.client.history.bind(kit.node.client);
     let lagging = true;
     // The index has not taken the account's one allocation when the page first reads it, nor at the first read again.
-    const pages = vi.spyOn(kit.node.client, "history").mockImplementation(async (address, params) => (lagging && params.kind === "distribution_allocated" ? { events: [], next: null } : real(address, params)));
+    const pages = vi.spyOn(kit.node.client, "history").mockImplementation(async (address, params) => (lagging && params.kind === "distribution_allocated" ? { events: [], next: null, retained_from_ms: null } : real(address, params)));
     const history = new DistributionHistoryReads(kit.store);
     const stop = history.start(() => false);
     await flush();
@@ -202,7 +202,7 @@ describe("DistributionHistoryReads", () => {
     let phase: "lagging" | "failing" | "answering" = "lagging";
     const pages = vi.spyOn(kit.node.client, "history").mockImplementation(async (address, params) => {
       if (params.kind !== "distribution_allocated") return real(address, params);
-      if (phase === "lagging") return { events: [], next: null };
+      if (phase === "lagging") return { events: [], next: null, retained_from_ms: null };
       if (phase === "failing") throw new Error("the node did not answer");
       return real(address, params);
     });

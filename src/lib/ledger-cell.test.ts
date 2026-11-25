@@ -43,6 +43,10 @@ describe("coverageNote", () => {
     expect(coverageNote(7, totals(false), false, false)).toBe("The totals cover all of your realised results.");
   });
 
+  it("names where the results begin once the server states it, so the totals are not read as all-time", () => {
+    expect(coverageNote(7, totals(false), false, false, Date.UTC(2026, 9, 26, 13, 52))).toBe("The totals cover all of your realised results since 2026-10-26 13:52 UTC.");
+  });
+
   it("says the totals cover only what is loaded, with the singular for one result", () => {
     expect(coverageNote(1, totals(false), true, false)).toBe("The totals cover the 1 result loaded so far. Select Load more to include older results.");
     expect(coverageNote(1_500, totals(false), true, false)).toContain("the 1,500 results loaded");
