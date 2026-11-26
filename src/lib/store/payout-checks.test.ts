@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromWire } from "../fixed";
-import { AFTER_BOUNDARY_MS, checkReadDelay, MAX_DELAY_MS, earliestCheck, STILL_WAITING_MS, waitsForInstallation } from "./payout-checks";
+import { AFTER_BOUNDARY_MS, checkReadDelay, MAX_DELAY_MS, earliestCheck, STILL_WAITING_MS, waitsForInstallation, waitsForRoutineCheck } from "./payout-checks";
 import type { Payout, PayoutStatus } from "./payouts";
 
 const payout = (nonce: number, status: PayoutStatus): Payout => ({ nonce, amount: fixedFromWire("10"), status, read: true });
@@ -36,5 +36,14 @@ describe("waitsForInstallation", () => {
     expect(waitsForInstallation([payout(2, { kind: "waiting", checkAtMs: 500 }), installing])).toBe(true);
     expect(waitsForInstallation([payout(2, { kind: "waiting", checkAtMs: 500 }), payout(3, { kind: "waiting" })])).toBe(false);
     expect(earliestCheck([installing])).toBeNull();
+  });
+});
+
+describe("waitsForRoutineCheck", () => {
+  it("is true only while an unsigned payout waits for a routine check, which sets no boundary (monkey-trading/console#535)", () => {
+    const routine = payout(1, { kind: "waiting", routine: true });
+    expect(waitsForRoutineCheck([payout(2, { kind: "waiting", checkAtMs: 500 }), routine])).toBe(true);
+    expect(waitsForRoutineCheck([payout(2, { kind: "waiting", installation: true }), payout(3, { kind: "waiting" })])).toBe(false);
+    expect(earliestCheck([routine])).toBeNull();
   });
 });
