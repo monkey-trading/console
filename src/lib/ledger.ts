@@ -46,11 +46,15 @@ export interface Allocation {
   amount: bigint;
 }
 
-/** How far down one kind's stream was read: `oldest` is the stamp of the oldest event read, `next` the cursor to read on from. */
+/**
+ * How far down one kind's stream was read: `oldest` is the stamp of the oldest event read, `next` the cursor to read on from,
+ * and `start` the start the server stated with the latest page read, kept when a page states none.
+ */
 export interface LedgerCover {
   oldest: number | null;
   next: string | null;
   done: boolean;
+  start: number | null;
 }
 
 export interface LedgerData {
@@ -63,7 +67,7 @@ export interface LedgerData {
   closedThrough: number;
 }
 
-const UNREAD: LedgerCover = { oldest: null, next: null, done: false };
+const UNREAD: LedgerCover = { oldest: null, next: null, done: false, start: null };
 
 /** A ledger with nothing read. */
 export function emptyLedger(): LedgerData {
@@ -119,8 +123,8 @@ function fold(data: LedgerData, entries: readonly Entry[]): LedgerData {
 }
 
 /** The cover after items were dropped to stay in bounds: events strictly newer than the newest dropped one (`newest`, of this kind) are all held, and reading resumes below it. */
-function trimmedCover(newest: { cursor: string; ts: number }): LedgerCover {
-  return { oldest: newest.ts, next: newest.cursor, done: false };
+function trimmedCover(newest: { cursor: string; ts: number }, start: number | null): LedgerCover {
+  return { oldest: newest.ts, next: newest.cursor, done: false, start };
 }
 
 /** Drops the oldest rows and allocations past the bounds. */
@@ -133,13 +137,13 @@ function bound(data: LedgerData): LedgerData {
     rows = rows.slice(0, MAX_ROWS);
     for (const kind of ROW_KINDS) {
       const newest = dropped.find((r) => r.kind === kind);
-      if (newest !== undefined) cover = { ...cover, [kind]: trimmedCover(newest) };
+      if (newest !== undefined) cover = { ...cover, [kind]: trimmedCover(newest, cover[kind].start) };
     }
   }
   const newestAllocation = allocations[MAX_ALLOCATIONS];
   if (newestAllocation !== undefined) {
     allocations = allocations.slice(0, MAX_ALLOCATIONS);
-    cover = { ...cover, emission_allocated: trimmedCover(newestAllocation) };
+    cover = { ...cover, emission_allocated: trimmedCover(newestAllocation, cover.emission_allocated.start) };
   }
   return { ...data, rows, allocations, cover };
 }
@@ -149,7 +153,7 @@ export function addPage(data: LedgerData, kind: LedgerKind, page: HistoryPage): 
   const last = page.events[page.events.length - 1];
   const was = data.cover[kind];
   const oldest = last === undefined ? was.oldest : Math.min(last.ts, was.oldest ?? last.ts);
-  const cover: LedgerCover = { oldest, next: page.next, done: page.next === null };
+  const cover: LedgerCover = { oldest, next: page.next, done: page.next === null, start: page.retained_from_ms ?? was.start };
   return bound(fold({ ...data, cover: { ...data.cover, [kind]: cover } }, page.events));
 }
 
@@ -192,6 +196,17 @@ export function allocationsHeldFrom(data: LedgerData): number {
 /** The stamp above which a stream's events are all read. */
 function coverFrom(cover: LedgerCover): number {
   return cover.done ? Number.NEGATIVE_INFINITY : (cover.oldest ?? Number.POSITIVE_INFINITY);
+}
+
+/**
+ * Where the realised results held are complete from, once both row streams are read to their ends: the latest of the starts their
+ * last pages stated, since a start that moved forward between pages leaves out what lay between. Null while a stream has more
+ * below it, or when no page states a start.
+ */
+export function completeFrom(data: LedgerData): number | null {
+  if (rowsRemain(data)) return null;
+  const starts = ROW_KINDS.flatMap((kind) => (data.cover[kind].start === null ? [] : [data.cover[kind].start]));
+  return starts.length === 0 ? null : Math.max(...starts);
 }
 
 /** Whether another read can add rows: a row stream has more below it. */

@@ -61,9 +61,9 @@ describe("addPage", () => {
 
   it("records how far each stream was read: its oldest stamp, where to read on, and whether it ended", () => {
     const data = addPage(emptyLedger(), "fill", page([fill("10:0", 100, usd(-1)), fill("8:0", 80, 0n)], "8:0"));
-    expect(data.cover.fill).toEqual({ oldest: 80, next: "8:0", done: false });
+    expect(data.cover.fill).toEqual({ oldest: 80, next: "8:0", done: false, start: null });
     const ended = addPage(data, "fill", page([fill("3:0", 30, usd(1))], null));
-    expect(ended.cover.fill).toEqual({ oldest: 30, next: null, done: true });
+    expect(ended.cover.fill).toEqual({ oldest: 30, next: null, done: true, start: null });
   });
 
   it("counts a fill that realised nothing toward how far the stream was read, though it makes no row", () => {
@@ -201,7 +201,7 @@ describe("what is held stays bounded", () => {
     for (let i = 1; i <= MAX_ROWS + 1; i += 1) data = addMessage(data, message(i, i * 1_000, [fill("x", 0, usd(-1))]), ME);
     expect(data.rows).toHaveLength(MAX_ROWS);
     expect(data.rows[data.rows.length - 1]?.cursor).toBe("2:0");
-    expect(data.cover.fill).toEqual({ oldest: 1_000, next: "1:0", done: false });
+    expect(data.cover.fill).toEqual({ oldest: 1_000, next: "1:0", done: false, start: null });
     expect(atBound(data)).toBe(true);
   });
 
@@ -213,7 +213,7 @@ describe("what is held stays bounded", () => {
     data = addPage(data, "fill", page(fills(MAX_ROWS)));
     expect(data.rows).toHaveLength(MAX_ROWS);
     expect(data.rows.some((r) => r.kind === "corporate_cash_in_lieu")).toBe(false);
-    expect(data.cover.corporate_cash_in_lieu).toEqual({ oldest: 1_000, next: "1:0", done: false });
+    expect(data.cover.corporate_cash_in_lieu).toEqual({ oldest: 1_000, next: "1:0", done: false, start: null });
     expect(data.cover.fill.done).toBe(true);
     expect(rowsHeldFrom(data)).toBe(1_000);
   });
@@ -223,7 +223,7 @@ describe("what is held stays bounded", () => {
     data = addPage(data, "fill", page(fills(MAX_ROWS - 1)));
     expect(data.rows).toHaveLength(MAX_ROWS);
     expect(data.rows[0]?.cursor).toBe("5000:0");
-    expect(data.cover.corporate_cash_in_lieu).toEqual({ oldest: 1_000, next: "1:0", done: false });
+    expect(data.cover.corporate_cash_in_lieu).toEqual({ oldest: 1_000, next: "1:0", done: false, start: null });
     expect(rowsHeldFrom(data)).toBe(1_000);
   });
 
@@ -231,7 +231,7 @@ describe("what is held stays bounded", () => {
     let data = addPage(emptyLedger(), "corporate_cash_in_lieu", page([lieu("1500:5", 1_500_000, usd(-1))]));
     for (let i = 1; i <= MAX_ROWS + 1; i += 1) data = addMessage(data, message(i, i * 1_000, [fill("x", 0, usd(-1))]), ME);
     expect(data.rows).toHaveLength(MAX_ROWS);
-    expect(data.cover.corporate_cash_in_lieu).toEqual({ oldest: 1_500_000, next: null, done: true });
+    expect(data.cover.corporate_cash_in_lieu).toEqual({ oldest: 1_500_000, next: null, done: true, start: null });
     expect(data.cover.fill.done).toBe(false);
   });
 
@@ -245,6 +245,6 @@ describe("what is held stays bounded", () => {
     let data = emptyLedger();
     for (let i = 1; i <= MAX_ALLOCATIONS + 1; i += 1) data = addMessage(data, message(i, i * 600_000, [allocated("x", 0, i, 1n)]), ME);
     expect(data.allocations).toHaveLength(MAX_ALLOCATIONS);
-    expect(data.cover.emission_allocated).toEqual({ oldest: 600_000, next: "1:0", done: false });
+    expect(data.cover.emission_allocated).toEqual({ oldest: 600_000, next: "1:0", done: false, start: null });
   });
 });
