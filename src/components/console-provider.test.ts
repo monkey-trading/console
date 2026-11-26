@@ -31,6 +31,7 @@ describe("ConsoleProvider", () => {
     vi.stubEnv("NEXT_PUBLIC_ENGINE_DEV_ORIGINS", "https://127.0.0.1:8080");
     vi.stubEnv("NEXT_PUBLIC_ENGINE_CHAIN_ID", "31337");
     vi.stubEnv("NEXT_PUBLIC_ENGINE_VAULT", "0x0000000000000000000000000000000000000000");
+    vi.stubEnv("NEXT_PUBLIC_ENGINE_MINTER", "0x0000000000000000000000000000000000000000");
     const html = render();
     expect(html).toContain('role="status"');
     expect(html).toContain("Loading…");

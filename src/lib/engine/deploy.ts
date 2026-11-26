@@ -18,7 +18,7 @@ export interface Deploy {
   usdc: string | null;
   /** The staking contract the Staking page stakes into, lowercase `0x` hex; null leaves staking out. */
   staking: string | null;
-  /** The MONKEY minter that mints emissions claims and names the MONKEY token, lowercase `0x` hex; null leaves MONKEY claims out. */
+  /** The MONKEY minter that mints emissions claims and names the MONKEY token the Staking page stakes, lowercase `0x` hex; null only for the mock. */
   minter: string | null;
   /** The MONKEY token the MONKEY page shows with a copy button; null when the build does not name it. */
   monkey: string | null;
@@ -140,7 +140,7 @@ function address(value: string | undefined, name: string): string {
 }
 
 /**
- * The deployment `raw` describes. A live mode needs the node's origin, chain id and vault, since
+ * The deployment `raw` describes. A live mode needs the node's origin, chain id, vault and MONKEY minter, since
  * the node's answers are only trusted for the deployment the build pins.
  * Error cases:
  * - an unknown mode, or a live mode missing or misspelling a pinned value
@@ -169,7 +169,7 @@ export function parseDeploy(raw: RawDeploy): Deploy {
     mode, origin, chainId: chain, vault: address(raw.vault, "NEXT_PUBLIC_ENGINE_VAULT"),
     usdc: raw.usdc === undefined ? null : address(raw.usdc, "NEXT_PUBLIC_ENGINE_USDC"),
     staking: raw.staking === undefined ? null : address(raw.staking, "NEXT_PUBLIC_ENGINE_STAKING"),
-    minter: raw.minter === undefined ? null : address(raw.minter, "NEXT_PUBLIC_ENGINE_MINTER"), monkey: raw.monkey === undefined ? null : address(raw.monkey, "NEXT_PUBLIC_ENGINE_MONKEY"), heartbeatMs, devOrigins,
+    minter: address(raw.minter, "NEXT_PUBLIC_ENGINE_MINTER"), monkey: raw.monkey === undefined ? null : address(raw.monkey, "NEXT_PUBLIC_ENGINE_MONKEY"), heartbeatMs, devOrigins,
     rpcUrl: raw.rpcUrl === undefined || raw.rpcUrl === "" ? null : httpUrl(raw.rpcUrl, "NEXT_PUBLIC_ENGINE_RPC_URL"), walletConnectProjectId: projectId,
     registry: raw.registry === undefined || raw.registry === "" ? null : address(raw.registry, "NEXT_PUBLIC_ENGINE_REGISTRY"), candidateOrigins: listOf(raw.candidateOrigins).map(candidateOrigin), devLaunchDigests,
   };

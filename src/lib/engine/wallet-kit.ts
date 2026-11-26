@@ -8,7 +8,7 @@ import type { KeyStorage } from "./session-key-store";
 
 /** Anvil's public account 0, the key the engine's EIP-712 vectors sign with. */
 export const KEY: Hex = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
-/** The MONKEY minter the test chains name: it answers `emissionsClaimed`, which the vault no longer does. */
+/** The MONKEY minter the test chains name: it answers `emissionsClaimed`, and the vault `latestSeq`. */
 export const MINTER = "0x00000000000000000000000000000000000000ee";
 export const ACCOUNT = privateKeyToAccount(KEY).address.toLowerCase();
 

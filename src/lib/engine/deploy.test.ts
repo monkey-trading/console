@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { acceptsMockAttestation, hostnameOrigin, listedOrigins, parseDeploy, streamOrigin, type RawDeploy } from "./deploy";
 
 const live: RawDeploy = {
-  mode: "live-dev", origin: "https://127.0.0.1:8080", chainId: "31337", vault: "0x5FbDB2315678afecb367f032d93F642f64180aa3", devOrigins: "https://127.0.0.1:8080",
+  mode: "live-dev", origin: "https://127.0.0.1:8080", chainId: "31337", vault: "0x5FbDB2315678afecb367f032d93F642f64180aa3", minter: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0", devOrigins: "https://127.0.0.1:8080",
 };
 
 describe("parseDeploy", () => {
@@ -44,9 +44,9 @@ describe("parseDeploy", () => {
     expect(parseDeploy({})).toMatchObject({ staking: null, monkey: null });
   });
 
-  it("reads the optional MONKEY minter, lowercased, refusing a malformed one", () => {
-    expect(parseDeploy(live)).toMatchObject({ minter: null });
-    expect(parseDeploy({ ...live, minter: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0" })).toMatchObject({ minter: "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0" });
+  it("requires the MONKEY minter in a live build, lowercased, refusing a missing or malformed one", () => {
+    expect(parseDeploy(live)).toMatchObject({ minter: "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0" });
+    expect(() => parseDeploy({ ...live, minter: undefined })).toThrow("NEXT_PUBLIC_ENGINE_MINTER");
     expect(() => parseDeploy({ ...live, minter: "0x12" })).toThrow("NEXT_PUBLIC_ENGINE_MINTER");
     expect(parseDeploy({})).toMatchObject({ minter: null });
   });

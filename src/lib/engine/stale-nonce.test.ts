@@ -12,7 +12,7 @@ import { ACCOUNT, StubProvider } from "./wallet-kit";
 
 const RPC = "http://127.0.0.1:8545";
 const HASH = `0x${"ab".repeat(32)}`;
-const LIVE_DEV: RawDeploy = { mode: "live-dev", origin: "https://127.0.0.1:8080", chainId: "31337", vault: "0x5fbdb2315678afecb367f032d93f642f64180aa3", usdc: "0x00000000000000000000000000000000000000cc", devOrigins: "https://127.0.0.1:8080", rpcUrl: RPC };
+const LIVE_DEV: RawDeploy = { mode: "live-dev", origin: "https://127.0.0.1:8080", chainId: "31337", vault: "0x5fbdb2315678afecb367f032d93f642f64180aa3", minter: "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0", usdc: "0x00000000000000000000000000000000000000cc", devOrigins: "https://127.0.0.1:8080", rpcUrl: RPC };
 
 /** A post stub that answers by method name and records every request body. */
 function stub(answers: Record<string, unknown>) {

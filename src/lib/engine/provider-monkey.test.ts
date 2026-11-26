@@ -8,7 +8,7 @@ import { ACCOUNT, MINTER, StubProvider } from "./wallet-kit";
 
 const CLAIM = parseAbi(["function claimEmissions(address account, uint256 entitled, uint64 checkpointSeq, bytes32[] siblings) returns (uint256)"]);
 const TOKEN = "0x00000000000000000000000000000000000000bb";
-const proof: EntitlementProof = { account: ACCOUNT, entitled: "5000000000000000000", seq: 40, root: `0x${"11".repeat(32)}`, siblings: [] } as unknown as EntitlementProof;
+const proof: EntitlementProof = { account: ACCOUNT, entitled: "5000000000000000000", seq: 40, root: `0x${"11".repeat(32)}`, siblings: [] };
 
 describe("the MONKEY claim", () => {
   it("is sent to the minter, not the vault", async () => {
@@ -46,22 +46,28 @@ describe("the MONKEY record", () => {
 });
 
 describe("offering the MONKEY token", () => {
-  const token = (to: string[]) => ({ async request({ method, params }: { method: string; params?: unknown }) {
+  const token = (to: string[], asked: unknown[]) => ({ async request({ method, params }: { method: string; params?: unknown }) {
     if (method === "eth_call") { to.push(((params as { to: string }[])[0] as { to: string }).to); return encodeAbiParameters([{ type: "address" }], [TOKEN]); }
+    if (method !== "wallet_watchAsset") throw new Error(`unexpected ${method}`);
+    asked.push(params);
     return true;
   } });
 
-  it("reads the token from the minter and offers it to the wallet", async () => {
+  it("reads the token from the minter and offers that token to the wallet", async () => {
     const to: string[] = [];
-    await expect(suggestMonkeyToken(async () => undefined, CHAIN, token(to))).resolves.toBe(true);
+    const asked: unknown[] = [];
+    await expect(suggestMonkeyToken(async () => undefined, CHAIN, token(to, asked))).resolves.toBe(true);
     expect(to).toEqual([MINTER]);
+    expect(asked).toEqual([{ type: "ERC20", options: { address: TOKEN, symbol: "MONKEY", decimals: 18 } }]);
   });
 
   it("offers nothing, and asks nothing of the wallet, when the build names no minter", async () => {
     const to: string[] = [];
+    const asked: unknown[] = [];
     let switched = false;
-    await expect(suggestMonkeyToken(async () => { switched = true; }, { ...CHAIN, minter: null }, token(to))).resolves.toBe(false);
+    await expect(suggestMonkeyToken(async () => { switched = true; }, { ...CHAIN, minter: null }, token(to, asked))).resolves.toBe(false);
     expect(to).toEqual([]);
+    expect(asked).toEqual([]);
     expect(switched).toBe(false);
   });
 });

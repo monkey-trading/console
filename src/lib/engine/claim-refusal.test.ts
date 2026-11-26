@@ -58,7 +58,7 @@ describe("emissionsFailure", () => {
   });
 
   it("says the claim did not match the proof for a revert it has no name for, and leaves a declined request alone", () => {
-    expect((emissionsFailure(revert("execution reverted: custom error 0xdeadbeef")) as Error).message).toBe("Your claim was not sent, because it did not match the proof provided by the server. Please try again shortly.");
+    expect((emissionsFailure(revert("execution reverted: custom error 0xdeadbeef")) as Error).message).toBe("Your claim was not sent, because the MONKEY contract did not accept the proof provided by the server. Please try again shortly.");
     const declined = walletError(Object.assign(new Error("no"), { code: 4001 }), "claim");
     expect(emissionsFailure(declined)).toBe(declined);
   });

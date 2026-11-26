@@ -1438,7 +1438,7 @@ Mock USDC          $usdc
 Genesis            $genesis_label
                    $genesis_summary
 Vault              $vault (house capital $house_usdc USDC)
-MONKEY minter      $minter (mints MONKEY against the vault's emissions claims)
+MONKEY minter      $minter (mints MONKEY against the vault's checkpoints)
 MONKEY token       $monkey (minted by the minter)
 Staking contract   $staking (deployed by the operator registry $registry, $rotation_state)
 Staking values     $staking_values

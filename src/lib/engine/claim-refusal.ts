@@ -63,7 +63,7 @@ const VOTE_GENERIC = "Your vote was rejected and has not been recorded. Please t
 const WITHDRAWAL_GENERIC = "Your claim was not sent, because the vault did not accept this withdrawal's approval. Please try again shortly, or select Renew the claim if it is offered.";
 
 /** The refusal of a MONKEY claim for any revert whose error is not named above. */
-const EMISSIONS_GENERIC = "Your claim was not sent, because it did not match the proof provided by the server. Please try again shortly.";
+const EMISSIONS_GENERIC = "Your claim was not sent, because the MONKEY contract did not accept the proof provided by the server. Please try again shortly.";
 
 /** The vault's refusal for any revert whose error is not named above. */
 const GENERIC = "Your claim was not sent, because the vault's records do not match the proof provided by the server. Please try again shortly.";
