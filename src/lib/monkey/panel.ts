@@ -182,7 +182,7 @@ export class MonkeyPanel {
 
   /**
    * Reads what the page shows of the connected wallet: on the Staking page its stake on chain and the
-   * node's distribution proof for it, on the MONKEY page the vault's record of its MONKEY claims.
+   * node's distribution proof for it, on the MONKEY page the minter's record of its MONKEY claims.
    * Called when the page opens (its stop cleared them), when the wallet changes and after a transaction; it reads nothing while the page is closed. It queues behind the
    * wallet's earlier work ([WalletQueue]): a read already waiting or running serves this one too,
    * unless `fresh` asks for one that starts after what is running now, which a transaction needs.
@@ -205,7 +205,7 @@ export class MonkeyPanel {
     }
     // The node's proof needs nothing from the wallet, so it is not held up behind a call the wallet has not answered.
     const proof = this.page === "staking" ? this.readProof(wallet, cycle) : Promise.resolve();
-    // The page's wallet read (the stake, or the vault's record) still waiting for the wallet to answer an earlier call says so once the time limit has passed, instead of reading "Reading…" with no reason.
+    // The page's wallet read (the stake, or the minter's record) still waiting for the wallet to answer an earlier call says so once the time limit has passed, instead of reading "Reading…" with no reason.
     let started = false;
     const waiting = setTimeout(() => {
       const { position, record } = this.state.wallet;
@@ -281,7 +281,7 @@ export class MonkeyPanel {
       }
       if (current()) this.set({ wallet: { ...this.state.wallet, address: wallet.address, position } });
     }
-    // The vault's record of this account's MONKEY claims, for the emissions card: read here so it
+    // The minter's record of this account's MONKEY claims, for the emissions card: read here so it
     // follows the same queue and never runs on the node's clock.
     // Any call the wallet has not answered is settled before the next is asked.
     await Promise.all(outstanding);

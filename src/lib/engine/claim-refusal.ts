@@ -1,4 +1,4 @@
-/** What a contract's refusal says in plain words: the vault's refusal of the MONKEY and USDC distribution claims and of a withdrawal's claim, and the vote contract's refusal of a vote. */
+/** What a contract's refusal says in plain words: the MONKEY minter's and the vault's refusal of the MONKEY claims, the vault's refusal of the USDC distribution claims and of a withdrawal's claim, and the vote contract's refusal of a vote. */
 
 import { toFunctionSelector } from "viem";
 
@@ -18,6 +18,18 @@ const REFUSALS = [
 type Table = { name: string; text: string; selector: string }[];
 const tableOf = (refusals: readonly (readonly [string, string])[]): Table => refusals.map(([signature, text]) => ({ name: signature.slice(0, signature.indexOf("(")), text, selector: toFunctionSelector(`function ${signature}`).slice(2).toLowerCase() }));
 const SELECTORS = tableOf(REFUSALS);
+
+/**
+ * The custom errors a MONKEY claim can end in: the minter's own, and the vault's, which the minter
+ * passes on when the vault will not give it the root of the checkpoint the proof names.
+ */
+const EMISSIONS_REFUSALS = [
+  ...REFUSALS.slice(0, 3),
+  ["VaultNotSet()", "Your claim was not sent, because MONKEY claims have not yet been opened. Please try again once they have."],
+  ["NothingToClaim(uint256,uint256)", "Your claim was not sent, because you have already claimed everything your proof covers."],
+  ["InvalidEntitlementProof()", "Your claim was not sent, because the proof provided by the server was not accepted. Please try again shortly."],
+] as const;
+const EMISSIONS_SELECTORS = tableOf(EMISSIONS_REFUSALS);
 
 /**
  * The vault's custom errors a withdrawal's claim can end in. What the withdrawal flow offers next is
@@ -50,6 +62,9 @@ const VOTE_GENERIC = "Your vote was rejected and has not been recorded. Please t
 /** The vault's refusal of a withdrawal's claim for any revert whose error is not named above. */
 const WITHDRAWAL_GENERIC = "Your claim was not sent, because the vault did not accept this withdrawal's approval. Please try again shortly, or select Renew the claim if it is offered.";
 
+/** The refusal of a MONKEY claim for any revert whose error is not named above. */
+const EMISSIONS_GENERIC = "Your claim was not sent, because it did not match the proof provided by the server. Please try again shortly.";
+
 /** The vault's refusal for any revert whose error is not named above. */
 const GENERIC = "Your claim was not sent, because the vault's records do not match the proof provided by the server. Please try again shortly.";
 
@@ -80,6 +95,9 @@ function refusal(error: unknown, table: Table, generic: string): unknown {
  * a revert pass through unchanged.
  */
 export const claimFailure = (error: unknown): unknown => refusal(error, SELECTORS, GENERIC);
+
+/** `claimFailure` for a MONKEY claim, whose refusals are the minter's and the vault's. */
+export const emissionsFailure = (error: unknown): unknown => refusal(error, EMISSIONS_SELECTORS, EMISSIONS_GENERIC);
 
 /** `claimFailure` for a withdrawal's claim, whose errors and next steps differ. */
 export const withdrawalFailure = (error: unknown): unknown => refusal(error, WITHDRAWAL_SELECTORS, WITHDRAWAL_GENERIC);

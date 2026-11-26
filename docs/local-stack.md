@@ -29,7 +29,7 @@ npm ci
 
 The script builds the trading server, then starts:
 
-- an Anvil chain, chain id 31337, on port 8545, with a mock USDC token and the vault;
+- an Anvil chain, chain id 31337, on port 8545, with a mock USDC token, the vault and the MONKEY minter, which mints MONKEY against the vault's checkpoints;
 - the operator registry, which deploys the MONKEY staking contract as the launch deployment does,
   with operator rotation off;
 - 5,000,000 mock USDC of house capital in the vault, and 100,000 mock USDC in a development wallet;
@@ -38,7 +38,7 @@ The script builds the trading server, then starts:
   at `http://127.0.0.1:9464/metrics`, and, when mkcert's root exists, its API again at
   `https://127.0.0.1:8480` under a locally trusted certificate;
 - the console's development server at `http://localhost:3000`, built against that trading server
-  and the stack's MONKEY token and staking contract.
+  and the stack's MONKEY minter, MONKEY token and staking contract.
 
 The trading server prices BTC-USD and ETH-USD from the live crypto venues. The other markets of the
 development genesis have no price, because their sources are market-data vendors that need keys. The

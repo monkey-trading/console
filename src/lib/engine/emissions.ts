@@ -23,7 +23,7 @@ export interface ClaimStanding {
   claimable?: boolean;
 }
 
-/** `GET /v1/accounts/{address}/emissions`: the proof the vault's `claimEmissions` takes, against the vault's accepted checkpoint when the node kept it, else its newest. */
+/** `GET /v1/accounts/{address}/emissions`: the proof the minter's `claimEmissions` takes, against the vault's accepted checkpoint when the node kept it, else its newest. */
 export interface EntitlementProof extends ClaimStanding {
   /** The seq of the last command applied when the root was computed, which a claim names; it works once the vault's `latestSeq` has reached it. */
   seq: number;

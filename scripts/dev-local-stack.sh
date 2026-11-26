@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs a local trading stack for the console, from a fresh chain and a fresh node log each time:
-#   1. Anvil (chain 31337) with the mock USDC and the vault at the addresses config/anvil.toml
-#      names, the vault signed for by the node's published mock enclave key;
+#   1. Anvil (chain 31337) with the mock USDC, the vault and the MONKEY minter at the addresses
+#      config/anvil.toml names, the vault signed for by the node's published mock enclave key;
 #   2. the operator registry, which deploys the MONKEY staking contract as the launch deployment
 #      does, with operator rotation off; the house's capital deposited into the vault; and mock USDC
 #      minted to a dev wallet;
@@ -172,7 +172,7 @@ staking_floor_usdc=4900000
 # 10,000, which `dev-local-stack-ctl.sh fund-house` or clients' losses pass.
 staking_floor_launch_usdc=10000
 if [[ "$second_engine" == 1 ]]; then staking_floor_usdc=$house_usdc; fi
-# The vault's timings and the MONKEY period budget: development values, replaced by the launch ones in
+# The vault's timings and the minter's MONKEY period budget: development values, replaced by the launch ones in
 # launch mode. The exit period, claim window and deposit staleness are thirty days each, past anything this
 # waits for, and past the timelock's one-second delay as the vault's constructor requires.
 # The MONKEY period budget is 190,258 MONKEY, which caps the supply at about 10 billion (twice 26,280 periods of it).
@@ -191,7 +191,7 @@ if [[ "$parameter_votes" == 1 ]]; then registry_epoch_secs=86400; fi
 vote_normal_window=86400
 vote_fast_window=3600
 candidate_bond_monkey=1
-# Each staking wallet's MONKEY, minted by the vault in place of emission claims; the token's cap,
+# Each staking wallet's MONKEY, minted by the minter in place of emission claims; the token's cap,
 # which follows the period budget, bounds the total. The election's thresholds are shares of the
 # stake, not of the supply, so they need no scaling with the budget.
 wallet_monkey=20000
@@ -467,10 +467,10 @@ fi
 # checks checkpoints and withdrawal authorizations against it.
 enclave="$(address 0x4343434343434343434343434343434343434343434343434343434343434343)"
 
-# The deployer's third transaction deploys the operator registry, and the registry's first creation
-# is the staking contract it owns, so the node's config can name both before they exist; the deploy
-# step checks them.
-registry="$(cast compute-address "$deployer" --nonce 2 | awk '{print $NF}')"
+# The deployer's third transaction deploys the MONKEY minter, at the address config/anvil.toml names
+# (`custody.evm.minter`), and its fourth the operator registry, whose first creation is the staking
+# contract it owns, so the node's config can name all three before they exist; the deploy step checks them.
+registry="$(cast compute-address "$deployer" --nonce 3 | awk '{print $NF}')"
 staking="$(cast compute-address "$registry" --nonce 1 | awk '{print $NF}')"
 # The registry lens the node reads GET /v1/operators through: account 8's first transaction.
 lens_key="$(key 8)"
@@ -593,21 +593,22 @@ Path(work, "genesis-summary").write_text(
     f"{len(markets)} markets, house cap floors summing to {cap_floor:,.0f} USD "
     f"(total floor {Decimal(genesis['params'].get('house_total_cap_floor', '0')):,.0f} USD), "
     f"{len(genesis.get('close_spread_ceilings', []))} close-spread ceilings, {len(crypto)} crypto markets on live venues\n")
-# The launch deployment's values, for a launch genesis: the vault's constructor values (the node refuses
+# The launch deployment's values, for a launch genesis: the minter's and the vault's constructor values (the node refuses
 # an emissions budget or staking epoch other than the contracts hold) and the ones the stack shortens.
 if launch == "1":
     d = tomllib.loads(Path(deployment).read_text())
     Path(work, "launch-values").write_text(" ".join(str(v) for v in (
-        d["vault"]["period_budget"], d["vault"]["exit_period"], d["vault"]["claim_window"], d["vault"]["stale_after"],
+        d["minter"]["period_budget"], d["vault"]["exit_period"], d["vault"]["claim_window"], d["vault"]["stale_after"],
         d["timelock"]["min_delay"], d["staking"]["epoch"], d["staking"]["cooldown"], d["init_staking"]["liquidity_floor"],
         d["start"])) + "\n")
 heartbeat = re.fullmatch(r"(\d+)(ms|s)", cfg["api"]["heartbeat_interval"])
 assert heartbeat, "api.heartbeat_interval is not whole seconds or milliseconds"
 ms = int(heartbeat[1]) * (1 if heartbeat[2] == "ms" else 1000)
 venues = sorted({s["market"] for c in cfg["feeds"].get("venues", {}).get("connections", []) for s in c["symbols"]})
-print(cfg["custody"]["vault"].lower(), evm["usdc"].lower(), ms, json.dumps(venues, separators=(",", ":")))
+assert evm.get("minter"), "the engine's config names no custody.evm.minter: update the engine checkout"
+print(cfg["custody"]["vault"].lower(), evm["usdc"].lower(), evm["minter"].lower(), ms, json.dumps(venues, separators=(",", ":")))
 PY
-read -r vault usdc heartbeat_ms venue_markets <"$work/config-values"
+read -r vault usdc minter heartbeat_ms venue_markets <"$work/config-values"
 genesis_summary="$(<"$work/genesis-summary")"
 if [[ "$launch" == 1 ]]; then
   read -r monkey_period_budget vault_exit_period vault_claim_window vault_stale_after launch_timelock_delay launch_epoch \
@@ -658,7 +659,7 @@ rpc_up() {
 }
 poll 30 rpc_up || die "Anvil did not answer on $rpc"
 
-step "Deploy the mock USDC, a governance timelock and the vault"
+step "Deploy the mock USDC, a governance timelock, the vault and the MONKEY minter"
 step_log="$work/deploy.log"
 # `--constructor-args` takes every argument after it, so the contract and its arguments go last.
 create() {
@@ -672,15 +673,21 @@ governance="$(create --private-key "$house_key" \
   --constructor-args 1 "[$deployer]" '[0x0000000000000000000000000000000000000000]' \
   0x0000000000000000000000000000000000000000)"
 deployed_vault="$(create --private-key "$deployer_key" src/Vault.sol:Vault \
-  --constructor-args "$deployed_usdc" "$enclave" "$governance" "$governance" "$monkey_period_budget" \
+  --constructor-args "$deployed_usdc" "$enclave" "$governance" "$governance" \
   "$vault_exit_period" "$vault_claim_window" "$vault_stale_after")"
+# The minter deploys the MONKEY token, which only it mints, and mints it against the vault's checkpoints
+# once the timelock names the vault.
+deployed_minter="$(create --private-key "$deployer_key" src/MonkeyMinter.sol:MonkeyMinter \
+  --constructor-args "$governance" "$monkey_period_budget")"
 [[ "$(lower "$deployed_usdc")" == "$usdc" ]] || die "the mock USDC deployed at $deployed_usdc, not at $usdc as config/anvil.toml names"
 [[ "$(lower "$deployed_vault")" == "$vault" ]] || die "the vault deployed at $deployed_vault, not at $vault as config/anvil.toml names"
+[[ "$(lower "$deployed_minter")" == "$minter" ]] || die "the minter deployed at $deployed_minter, not at $minter as config/anvil.toml names"
 usdc="$deployed_usdc"
 vault="$deployed_vault"
+minter="$deployed_minter"
 signer="$(cast call "$vault" 'checkpointSigner()(address)' --rpc-url "$rpc")"
 [[ "$(lower "$signer")" == "$(lower "$enclave")" ]] || die "the vault's signer is $signer, not the mock enclave $enclave"
-monkey="$(cast call "$vault" 'monkey()(address)' --rpc-url "$rpc")"
+monkey="$(cast call "$minter" 'monkey()(address)' --rpc-url "$rpc")"
 
 step "Deploy the operator registry, which deploys the MONKEY staking contract, and its lens"
 # The deployer is the initial operator, and rotation is off at deployment: no election moves the
@@ -730,6 +737,21 @@ if [[ -n "${DEV_WALLET:-}" ]]; then
   # 100 ETH for gas.
   cast rpc anvil_setBalance "$dev_wallet" 0x56bc75e2d63100000 --rpc-url "$rpc" >>"$step_log" 2>&1
 fi
+# Has the timelock call `$1` with `$2`: scheduled by the deployer, executed by anyone once its
+# one-second delay has passed in a mined block.
+govern_salt=0
+govern() {
+  local target="$1" data="$2" none salt
+  none="$(hex_bytes 00 32)"
+  salt="$(printf '0x%064x' $((++govern_salt)))"
+  send "$governance" 'schedule(address,uint256,bytes,bytes32,bytes32,uint256)' "$target" 0 "$data" "$none" "$salt" 1 \
+    --private-key "$deployer_key"
+  try_execute() { send "$governance" 'execute(address,uint256,bytes,bytes32,bytes32)' "$target" 0 "$data" "$none" "$salt" --private-key "${payer_key:-$deployer_key}"; }
+  poll 30 try_execute || die "the timelock did not execute a call to $target"
+}
+# The minter mints MONKEY only against the roots of the vault the timelock names.
+step "Have the timelock name the vault the minter mints against"
+govern "$minter" "$(cast calldata 'setVault(address)' "$vault")"
 # The node's custody startup reads the vault at the withdrawal finality tag, which trails the head.
 vault_finalized() {
   local code
@@ -752,20 +774,8 @@ if [[ "$second_engine" == 1 ]]; then
     cast rpc anvil_stopImpersonatingAccount "$from" --rpc-url "$rpc" >>"$step_log" 2>&1
     return "$status"
   }
-  # Has the timelock call `$1` with `$2`: scheduled by the deployer, executed by anyone once its
-  # one-second delay has passed in a mined block.
-  govern_salt=0
-  govern() {
-    local target="$1" data="$2" none salt
-    none="$(hex_bytes 00 32)"
-    salt="$(printf '0x%064x' $((++govern_salt)))"
-    send "$governance" 'schedule(address,uint256,bytes,bytes32,bytes32,uint256)' "$target" 0 "$data" "$none" "$salt" 1 \
-      --private-key "$deployer_key"
-    try_execute() { send "$governance" 'execute(address,uint256,bytes,bytes32,bytes32)' "$target" 0 "$data" "$none" "$salt" --private-key "$payer_key"; }
-    poll 30 try_execute || die "the timelock did not execute a call to $target"
-  }
-  # Mints `$2` MONKEY base units to `$1` as the vault, the token's only minter, in place of a proven emission claim.
-  mint_monkey() { send_as "$vault" "$monkey" 'mint(address,uint256)' "$1" "$2"; }
+  # Mints `$2` MONKEY base units to `$1` as the minter, the token's only minter, in place of a proven emission claim.
+  mint_monkey() { send_as "$minter" "$monkey" 'mint(address,uint256)' "$1" "$2"; }
   # Registers `$1` as a candidate with admin key `$2` (which authorizes it), the release `$3` and `$4`
   # (launch measurement and config hash), and the API hostname `$5` and handover endpoint `$6`;
   # the timelock approves the release. The enclave address starts as the admin address, which the
@@ -783,7 +793,7 @@ if [[ "$second_engine" == 1 ]]; then
       "($admin,$admin,$bond,$3,$4,\"$5\",\"$6\")" "$signature"
     govern "$registry" "$(cast calldata 'setReleaseApproval(address,bytes,bytes32,bool)' "$candidate" "$3" "$4" true)"
   }
-  govern "$registry" "$(cast calldata 'setVault(address)' "$vault")"
+  govern "$registry" "$(cast calldata 'setCustody(address,address)' "$vault" 0x0000000000000000000000000000000000000000)"
   govern "$vault" "$(cast calldata 'setRegistry(address)' "$registry")"
   register_candidate "$operator" "$operator_key" "$first_digest" "$first_config_hash" \
     "$console_api_host" "127.0.0.1:$handover_port"
@@ -838,7 +848,7 @@ if [[ "$second_engine" == 1 ]]; then
       cast rpc anvil_setCode 0x0000000000000000000000000000000000000064 "$(cast code "$arb_sys" --rpc-url "$rpc")" --rpc-url "$rpc" >>"$step_log" 2>&1
     fi
     register_candidate "$third_candidate" "$third_candidate_key" "${third_release[@]}"
-    govern "$registry" "$(cast calldata 'setSchedule(address)' "$schedule")"
+    govern "$registry" "$(cast calldata 'setCustody(address,address)' "$vault" "$schedule")"
     # A close adopts only candidates holding a standby key the vault's signer vouched for. The published mock key signs each
     # vouch while the vault still names it, before the first engine's sealed key takes its place. Each is the address of a
     # stand-in key, 32 bytes of `$4`, which nothing ever uses: no promotion runs without ROTATION=1, and with it each engine
@@ -1122,7 +1132,7 @@ genesis_wait=120
 if [[ "$rotation" == 1 ]]; then genesis_wait=300; fi
 poll "$genesis_wait" genesis_applied || die "genesis did not apply within $((genesis_wait / 60)) minutes"
 # The operator's signed schedule, taken once by a fresh log: period 0 at the next whole minute
-# with the period budget the vault deployed with, which the node reconciles against the MONKEY
+# with the period budget the minter deployed with, which the node reconciles against the MONKEY
 # cap before it sequences this (a budget the cap was not derived from is refused). The operator
 # key is the published local test key 0x4242...42 (config/test-keys.toml).
 tls_pin="$(curl -sk --max-time 5 "$api/v1/attestation" | jq -r '.tls_public_key_sha256')"
@@ -1210,6 +1220,7 @@ export NEXT_PUBLIC_ENGINE_ORIGIN="$console_api"
 export NEXT_PUBLIC_ENGINE_DEV_ORIGINS="$console_api"
 export NEXT_PUBLIC_ENGINE_CHAIN_ID=31337
 export NEXT_PUBLIC_ENGINE_VAULT="$vault"
+export NEXT_PUBLIC_ENGINE_MINTER="$minter"
 export NEXT_PUBLIC_ENGINE_USDC="$usdc"
 export NEXT_PUBLIC_ENGINE_STAKING="$staking"
 export NEXT_PUBLIC_ENGINE_REGISTRY="$registry"
@@ -1245,7 +1256,7 @@ console_up() {
 poll 300 console_up || die "the console did not answer on $console_url"
 
 if [[ -n "${STACK_INFO_FILE:-}" ]]; then
-  jq -n --arg consoleUrl "$console_url" --arg apiOrigin "$console_api" --arg rpcUrl "$rpc" --arg vault "$vault" \
+  jq -n --arg consoleUrl "$console_url" --arg apiOrigin "$console_api" --arg rpcUrl "$rpc" --arg vault "$vault" --arg minter "$minter" \
     --arg usdc "$usdc" --arg monkey "$monkey" --arg staking "$staking" --arg registry "$registry" \
     --arg devWallet "$dev_wallet" --arg devWalletKey "$dev_wallet_key" --arg houseKey "$house_key" \
     --arg deployerKey "$deployer_key" --arg workDir "$work" --arg nodeLog "$work/node.log" --arg metricsUrl "$metrics_url" \
@@ -1258,7 +1269,7 @@ if [[ -n "${STACK_INFO_FILE:-}" ]]; then
     --arg secondCandidateKey "${second_candidate_key:-}" --arg thirdCandidateKey "${third_candidate_key:-}" \
     --arg rotation "$rotation" --arg thirdApiOrigin "$console_third_api" --arg thirdNodeLog "$work/third.log" \
     --arg secondMetricsUrl "http://127.0.0.1:$second_metrics_port/metrics" --arg thirdMetricsUrl "http://127.0.0.1:$third_metrics_port/metrics" \
-    '{consoleUrl: $consoleUrl, apiOrigin: $apiOrigin, rpcUrl: $rpcUrl, chainId: 31337, vault: $vault, usdc: $usdc,
+    '{consoleUrl: $consoleUrl, apiOrigin: $apiOrigin, rpcUrl: $rpcUrl, chainId: 31337, vault: $vault, minter: $minter, usdc: $usdc,
       monkey: $monkey, staking: $staking, registry: $registry,
       devWallet: $devWallet, devWalletKey: (if $devWalletKey == "" then null else $devWalletKey end),
       houseKey: $houseKey, deployerKey: $deployerKey, genesisFile: $genesisFile, genesisSummary: $genesisSummary, houseUsdc: $houseUsdc, workDir: $workDir, nodeLog: $nodeLog, metricsUrl: $metricsUrl}
@@ -1427,7 +1438,8 @@ Mock USDC          $usdc
 Genesis            $genesis_label
                    $genesis_summary
 Vault              $vault (house capital $house_usdc USDC)
-MONKEY token       $monkey (the vault mints it against emissions claims)
+MONKEY minter      $minter (mints MONKEY against the vault's emissions claims)
+MONKEY token       $monkey (minted by the minter)
 Staking contract   $staking (deployed by the operator registry $registry, $rotation_state)
 Staking values     $staking_values
 Enclave signer     $signer_line

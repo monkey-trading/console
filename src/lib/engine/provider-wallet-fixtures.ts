@@ -4,10 +4,10 @@ import { decodeFunctionData, parseAbi, type Hex } from "viem";
 
 import vectors from "./eip712-vectors.json";
 import { ProviderWallet, type WalletChain } from "./provider-wallet";
-import { ACCOUNT, StubProvider, type StubOptions } from "./wallet-kit";
+import { ACCOUNT, MINTER, StubProvider, type StubOptions } from "./wallet-kit";
 
 export const USDC = "0x00000000000000000000000000000000000000cc";
-export const CHAIN: WalletChain = { chainId: vectors.chain_id, vault: vectors.vault, usdc: USDC, add: { name: "Anvil", rpcUrl: "http://127.0.0.1:8545/" } };
+export const CHAIN: WalletChain = { chainId: vectors.chain_id, vault: vectors.vault, usdc: USDC, minter: MINTER, add: { name: "Anvil", rpcUrl: "http://127.0.0.1:8545/" } };
 
 const ABI = parseAbi([
   "function approve(address spender, uint256 amount) returns (bool)",

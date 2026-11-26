@@ -34,7 +34,7 @@ export interface WalletFigures {
   position: Read<StakingPosition>;
   /** The account's distribution proof; null when the node holds none. */
   proof: Read<DistributionProof | null>;
-  /** Whether the MONKEY page's read of the vault's record of the account's MONKEY claims landed; the record itself goes to the console's store. */
+  /** Whether the MONKEY page's read of the minter's record of the account's MONKEY claims landed; the record itself goes to the console's store. */
   record: Read<true>;
 }
 

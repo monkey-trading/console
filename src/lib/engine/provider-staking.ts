@@ -12,7 +12,7 @@ import { WALLET_READ_MS, withinMs } from "./serialized-provider";
 import type { StakeDelegations, StakingPosition, StakingWallet } from "./staking";
 import type { Progress } from "./wallet";
 
-/** The vault that has not deployed its token yet names the zero address. */
+/** A minter that has not deployed its token yet names the zero address. */
 const NO_TOKEN = "0x0000000000000000000000000000000000000000";
 
 const ERC20 = parseAbi([
@@ -39,8 +39,9 @@ const VAULT = parseAbi([
   "function claimDistribution(address account, uint256 entitled, uint64 checkpointSeq, bytes32[] siblings) returns (uint256)",
   "function distributionsClaimed(address account) view returns (uint256)",
   "function latestSeq() view returns (uint64)",
-  "function monkey() view returns (address)",
 ]);
+
+const MINTER = parseAbi(["function monkey() view returns (address)"]);
 
 /** How the wallet sends a transaction and waits for it to mine, and puts itself on the deployment's chain. */
 export interface StakingTransport {
@@ -49,7 +50,7 @@ export interface StakingTransport {
 }
 
 export class ProviderStaking implements StakingWallet {
-  /** The MONKEY token, read from the vault once it has one. */
+  /** The MONKEY token, read from the minter once it has one. */
   private token: Hex | null = null;
 
   constructor(
@@ -72,11 +73,13 @@ export class ProviderStaking implements StakingWallet {
     return hexOf(await withinMs(this.provider, { method: "eth_call", params: [{ to, data }, "latest"] }, WALLET_READ_MS));
   }
 
-  /** The vault's MONKEY token, or null while it names the zero address (no token deployed yet), which is read again next time. */
+  /** The minter's MONKEY token, or null while the build names no minter or the minter names the zero address, which is read again next time. */
   private async tokenAddress(): Promise<Hex | null> {
     if (this.token === null) {
-      const data = encodeFunctionData({ abi: VAULT, functionName: "monkey" });
-      const token = decodeFunctionResult({ abi: VAULT, functionName: "monkey", data: await this.call(this.chain.vault, data) });
+      const minter = this.chain.minter ?? null;
+      if (minter === null) return null;
+      const data = encodeFunctionData({ abi: MINTER, functionName: "monkey" });
+      const token = decodeFunctionResult({ abi: MINTER, functionName: "monkey", data: await this.call(minter, data) });
       if (token === NO_TOKEN) return null;
       this.token = token;
     }

@@ -18,6 +18,8 @@ export interface Deploy {
   usdc: string | null;
   /** The staking contract the Staking page stakes into, lowercase `0x` hex; null leaves staking out. */
   staking: string | null;
+  /** The MONKEY minter that mints emissions claims and names the MONKEY token, lowercase `0x` hex; null leaves MONKEY claims out. */
+  minter: string | null;
   /** The MONKEY token the MONKEY page shows with a copy button; null when the build does not name it. */
   monkey: string | null;
   /** The node's `[api] heartbeat_interval`, which the attestation binds. */
@@ -44,6 +46,7 @@ export interface RawDeploy {
   vault?: string | undefined;
   usdc?: string | undefined;
   staking?: string | undefined;
+  minter?: string | undefined;
   monkey?: string | undefined;
   heartbeatMs?: string | undefined;
   devOrigins?: string | undefined;
@@ -71,6 +74,7 @@ export function rawDeploy(): RawDeploy {
     vault: process.env.NEXT_PUBLIC_ENGINE_VAULT,
     usdc: process.env.NEXT_PUBLIC_ENGINE_USDC,
     staking: process.env.NEXT_PUBLIC_ENGINE_STAKING,
+    minter: process.env.NEXT_PUBLIC_ENGINE_MINTER,
     monkey: process.env.NEXT_PUBLIC_ENGINE_MONKEY,
     heartbeatMs: process.env.NEXT_PUBLIC_ENGINE_HEARTBEAT_MS,
     devOrigins: process.env.NEXT_PUBLIC_ENGINE_DEV_ORIGINS,
@@ -147,7 +151,7 @@ function address(value: string | undefined, name: string): string {
 export function parseDeploy(raw: RawDeploy): Deploy {
   const mode = raw.mode === undefined || raw.mode === "" ? "mock" : raw.mode;
   if (mode !== "mock" && mode !== "live-dev" && mode !== "live") throw new Error(`NEXT_PUBLIC_ENGINE_MODE must be mock, live-dev or live: ${mode}`);
-  if (mode === "mock") return { mode, origin: null, chainId: null, vault: null, usdc: null, staking: null, monkey: null, heartbeatMs: DEFAULT_HEARTBEAT_MS, devOrigins: [], rpcUrl: null, walletConnectProjectId: null, registry: null, candidateOrigins: [], devLaunchDigests: [] };
+  if (mode === "mock") return { mode, origin: null, chainId: null, vault: null, usdc: null, staking: null, minter: null, monkey: null, heartbeatMs: DEFAULT_HEARTBEAT_MS, devOrigins: [], rpcUrl: null, walletConnectProjectId: null, registry: null, candidateOrigins: [], devLaunchDigests: [] };
   if (raw.origin === undefined) throw new Error(`NEXT_PUBLIC_ENGINE_ORIGIN is required in ${mode} mode`);
   const origin = httpsOrigin(raw.origin, "NEXT_PUBLIC_ENGINE_ORIGIN");
   const chain = Number(raw.chainId);
@@ -164,7 +168,8 @@ export function parseDeploy(raw: RawDeploy): Deploy {
   return {
     mode, origin, chainId: chain, vault: address(raw.vault, "NEXT_PUBLIC_ENGINE_VAULT"),
     usdc: raw.usdc === undefined ? null : address(raw.usdc, "NEXT_PUBLIC_ENGINE_USDC"),
-    staking: raw.staking === undefined ? null : address(raw.staking, "NEXT_PUBLIC_ENGINE_STAKING"), monkey: raw.monkey === undefined ? null : address(raw.monkey, "NEXT_PUBLIC_ENGINE_MONKEY"), heartbeatMs, devOrigins,
+    staking: raw.staking === undefined ? null : address(raw.staking, "NEXT_PUBLIC_ENGINE_STAKING"),
+    minter: raw.minter === undefined ? null : address(raw.minter, "NEXT_PUBLIC_ENGINE_MINTER"), monkey: raw.monkey === undefined ? null : address(raw.monkey, "NEXT_PUBLIC_ENGINE_MONKEY"), heartbeatMs, devOrigins,
     rpcUrl: raw.rpcUrl === undefined || raw.rpcUrl === "" ? null : httpUrl(raw.rpcUrl, "NEXT_PUBLIC_ENGINE_RPC_URL"), walletConnectProjectId: projectId,
     registry: raw.registry === undefined || raw.registry === "" ? null : address(raw.registry, "NEXT_PUBLIC_ENGINE_REGISTRY"), candidateOrigins: listOf(raw.candidateOrigins).map(candidateOrigin), devLaunchDigests,
   };

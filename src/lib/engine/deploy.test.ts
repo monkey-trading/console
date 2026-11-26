@@ -44,6 +44,13 @@ describe("parseDeploy", () => {
     expect(parseDeploy({})).toMatchObject({ staking: null, monkey: null });
   });
 
+  it("reads the optional MONKEY minter, lowercased, refusing a malformed one", () => {
+    expect(parseDeploy(live)).toMatchObject({ minter: null });
+    expect(parseDeploy({ ...live, minter: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0" })).toMatchObject({ minter: "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0" });
+    expect(() => parseDeploy({ ...live, minter: "0x12" })).toThrow("NEXT_PUBLIC_ENGINE_MINTER");
+    expect(parseDeploy({})).toMatchObject({ minter: null });
+  });
+
   it("allows only a bare https origin", () => {
     for (const origin of ["http://node.example", "https://node.example/v1", "https://node.example?x=1", "https://user@node.example", "wss://node.example", "node.example"]) {
       expect(() => parseDeploy({ ...live, origin, devOrigins: origin })).toThrow();

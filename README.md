@@ -202,7 +202,7 @@ the engine repository beside this one, with its contracts' dependencies installe
 ./scripts/dev-local-stack.sh
 ```
 
-The script starts an Anvil chain on port 8545 with the vault and a mock USDC token, a trading server
+The script starts an Anvil chain on port 8545 with the vault, a MONKEY minter and a mock USDC token, a trading server
 at `https://127.0.0.1:8080` that prices BTC-USD and ETH-USD from live crypto venues, and the console
 at `http://localhost:3000`. It then prints the settings for adding the chain to a browser wallet and
 the key of a funded development wallet. The first run builds the trading server with Cargo, which
@@ -224,6 +224,7 @@ values in the bundle:
 | `NEXT_PUBLIC_ENGINE_ORIGIN` | The trading server's `https://` origin, with no path. The stream is on the same host over `wss:` |
 | `NEXT_PUBLIC_ENGINE_CHAIN_ID`, `NEXT_PUBLIC_ENGINE_VAULT` | The chain and vault that every signature names |
 | `NEXT_PUBLIC_ENGINE_USDC` | The USDC token the vault accepts. Without it, the build cannot deposit |
+| `NEXT_PUBLIC_ENGINE_MINTER` | The MONKEY minter, which mints a claim and names the MONKEY token. Without it, the build cannot claim MONKEY |
 | `NEXT_PUBLIC_ENGINE_STAKING` | The staking contract. Without it, the Staking page cannot stake |
 | `NEXT_PUBLIC_ENGINE_MONKEY` | The MONKEY token's address, which the MONKEY page shows. Optional |
 | `NEXT_PUBLIC_ENGINE_REGISTRY` | The operator registry. Without it, the build does not follow a change of operator, and the Staking page lists no operators |

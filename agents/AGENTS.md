@@ -195,7 +195,7 @@ Run from the repo root, with Node.js from `.nvmrc` and npm, and Python 3 for the
   `npm run dev:live` (see the README's "Against an engine development server")
 - Local trading stack: `./scripts/dev-local-stack.sh` (Anvil, Forge, Cast, Cargo, Node and npm, `curl`, `jq`, Python 3.11+; the engine
   checkout from `ENGINE_DIR`, default the `engine` beside the main checkout, with `forge soldeer install` run in its
-  `contracts/`; deploys the vault and, as the launch deployment does, the operator registry that deploys the MONKEY staking
+  `contracts/`; deploys the vault, the MONKEY minter (which the timelock points at the vault) and, as the launch deployment does, the operator registry that deploys the MONKEY staking
   contract, and sequences emissions and staking (five-minute epochs, an equal cooldown and a floor under the house's capital:
   development values it prints) so the MONKEY and Staking pages can claim, stake and unstake; its checkpoints land every 1000 commands, which
   the vault can keep up with; prints the wallet setup and runs until Ctrl-C; ports, the funded wallet and

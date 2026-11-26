@@ -8,6 +8,8 @@ import type { KeyStorage } from "./session-key-store";
 
 /** Anvil's public account 0, the key the engine's EIP-712 vectors sign with. */
 export const KEY: Hex = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+/** The MONKEY minter the test chains name: it answers `emissionsClaimed`, which the vault no longer does. */
+export const MINTER = "0x00000000000000000000000000000000000000ee";
 export const ACCOUNT = privateKeyToAccount(KEY).address.toLowerCase();
 
 /** A browser storage in a map, with the map to look at; two stores given one share it as two tabs do. */
@@ -53,7 +55,7 @@ export interface StubOptions {
   balance?: bigint;
   allowance?: bigint;
   paid?: boolean;
-  /** What the vault has minted to the account against its MONKEY entitlement. */
+  /** What the minter has minted to the account against its MONKEY entitlement. */
   emissionsClaimed?: bigint;
   /** The vault's latest posted checkpoint seq. */
   latestSeq?: number;
@@ -75,7 +77,7 @@ export class StubProvider implements Eip1193Provider {
   readonly calls: { method: string; params: readonly unknown[] | { type: string; options: Record<string, unknown> } }[] = [];
   chainId: number;
   private receiptPolls = 0;
-  /** The vault's MONKEY record, read on each call; a test may move it between reads. */
+  /** The minter's MONKEY record and the vault's checkpoint, read on each call; a test may move it between reads. */
   readonly vault: { claimed: bigint; latestSeq: number };
 
   constructor(readonly options: StubOptions = {}) {
@@ -112,7 +114,7 @@ export class StubProvider implements Eip1193Provider {
       }
       case "eth_blockNumber": return `0x${(this.options.blockNumber ?? 1_000_000n).toString(16)}`;
       case "eth_getLogs": return this.logs((list[0] as { topics: (string | null)[] }).topics[2]);
-      case "eth_call": return this.call((list[0] as { data: Hex }).data);
+      case "eth_call": return this.call((list[0] as { to: string; data: Hex }));
       case "wallet_watchAsset": {
         // The request contract is the asset object itself; an array-wrapped param is refused.
         if (typeof params !== "object" || params === null || Array.isArray(params)) throw new Error("wallet_watchAsset takes the asset object as its param");
@@ -130,8 +132,11 @@ export class StubProvider implements Eip1193Provider {
     });
   }
 
-  private call(data: Hex): Hex {
+  private call({ to, data }: { to: string; data: Hex }): Hex {
     const { functionName } = decodeFunctionData({ abi: ABI, data });
+    // The minter keeps the claimed record and the vault keeps the checkpoint; a read sent to the other contract reverts.
+    const atMinter = to.toLowerCase() === MINTER;
+    if ((functionName === "emissionsClaimed" && !atMinter) || (functionName === "latestSeq" && atMinter)) throw Object.assign(new Error("execution reverted"), { code: 3 });
     if (functionName === "usedNonces") return encodeAbiParameters([{ type: "bool" }], [this.options.paid ?? false]);
     if (functionName === "latestSeq") return encodeAbiParameters([{ type: "uint64" }], [BigInt(this.vault.latestSeq)]);
     if (functionName === "emissionsClaimed") return encodeAbiParameters([{ type: "uint256" }], [this.vault.claimed]);

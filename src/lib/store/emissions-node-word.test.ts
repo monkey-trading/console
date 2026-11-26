@@ -9,7 +9,7 @@ import { MONKEY_UNIT } from "../format";
 import { claimEmissions, emissionsPosition, WAITING_ON_VAULT } from "./emissions";
 import { connected } from "./live-kit";
 
-const VAULT_ABI = parseAbi(["function claimEmissions(address account, uint256 entitled, uint64 checkpointSeq, bytes32[] siblings) returns (uint256)"]);
+const MINTER_ABI = parseAbi(["function claimEmissions(address account, uint256 entitled, uint64 checkpointSeq, bytes32[] siblings) returns (uint256)"]);
 
 const proof = (entitled: bigint, seq = 40): EntitlementProof => ({
   seq, root: `0x${"11".repeat(32)}`, account: ACCOUNT, entitled: entitled.toString(), siblings: [],
@@ -23,7 +23,7 @@ describe("claimEmissions on the node's word", () => {
     client.entitlement = accepted(5n * MONKEY_UNIT, 41);
     store.patch({ entitlement: client.entitlement });
     await claimEmissions(store);
-    const decoded = decodeFunctionData({ abi: VAULT_ABI, data: provider.sent.at(-1)?.data ?? "0x" });
+    const decoded = decodeFunctionData({ abi: MINTER_ABI, data: provider.sent.at(-1)?.data ?? "0x" });
     expect(decoded.args.slice(1)).toEqual([5n * MONKEY_UNIT, 41n, []]);
     expect(store.getSnapshot().notices.emissions).toBeUndefined();
   });

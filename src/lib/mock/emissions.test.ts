@@ -184,7 +184,7 @@ describe("MONKEY emissions", () => {
     expect(closed.cancelled).toBe(EMISSION_PERIOD_BUDGET.toString());
   });
 
-  it("lets the wallet claim what the proof proves, settles the vault's record, and refuses a claim with nothing new", async () => {
+  it("lets the wallet claim what the proof proves, settles the minter's record, and refuses a claim with nothing new", async () => {
     const node = createMockNode(START);
     const wallet = await node.wallets.connect("browser");
     await losingAccount(node, wallet.address, 10_000, "0.05");
@@ -195,7 +195,7 @@ describe("MONKEY emissions", () => {
     expect(await wallet.emissionsClaimed?.()).toEqual({ claimed: 0n, latestSeq: node.client.state.postedSeq });
     await wallet.claimEmissions?.(proof);
     expect(await wallet.emissionsClaimed?.()).toEqual({ claimed: EMISSION_PERIOD_BUDGET, latestSeq: node.client.state.postedSeq });
-    await expect(wallet.claimEmissions?.(proof)).rejects.toThrow("already paid");
+    await expect(wallet.claimEmissions?.(proof)).rejects.toThrow("already claimed");
   });
 
   it("drops an account's pending period weight when the account is reset", async () => {

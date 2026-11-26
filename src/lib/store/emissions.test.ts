@@ -1,4 +1,4 @@
-/** Tests for the MONKEY emissions position, the vault-record read, and the claim action. */
+/** Tests for the MONKEY emissions position, the minter-record read, and the claim action. */
 
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, parseAbi } from "viem";
@@ -6,13 +6,13 @@ import { decodeFunctionData, parseAbi } from "viem";
 import type { AttestationStatus } from "../engine/attestation";
 import { carryAccrued } from "../engine/claim-standing";
 import type { EntitlementProof } from "../engine/emissions";
-import { ACCOUNT } from "../engine/wallet-kit";
+import { ACCOUNT, MINTER } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
 import { MONKEY_UNIT } from "../format";
 import { checkEmissionsClaimed, claimEmissions, emissionsPosition, WAITING_ON_VAULT } from "./emissions";
-import { connected, VAULT } from "./live-kit";
+import { connected } from "./live-kit";
 
-const VAULT_ABI = parseAbi(["function claimEmissions(address account, uint256 entitled, uint64 checkpointSeq, bytes32[] siblings) returns (uint256)"]);
+const MINTER_ABI = parseAbi(["function claimEmissions(address account, uint256 entitled, uint64 checkpointSeq, bytes32[] siblings) returns (uint256)"]);
 
 const proof = (entitled: bigint, seq = 40): EntitlementProof => ({
   seq, root: `0x${"11".repeat(32)}`, account: ACCOUNT, entitled: entitled.toString(), siblings: [],
@@ -112,7 +112,7 @@ describe("checkEmissionsClaimed", () => {
 });
 
 describe("claimEmissions", () => {
-  it("sends the vault's claimEmissions for the gap the proof proves and settles the line after", async () => {
+  it("sends the minter's claimEmissions for the gap the proof proves and settles the line after", async () => {
     const { client, provider, store } = await connected({ emissionsClaimed: 2n * MONKEY_UNIT, latestSeq: 40 });
     const at = proof(5n * MONKEY_UNIT);
     client.entitlement = at;
@@ -120,8 +120,8 @@ describe("claimEmissions", () => {
     await checkEmissionsClaimed(store); // reads the record
     await claimEmissions(store);
     const tx = provider.sent.at(-1);
-    expect(tx?.to).toBe(VAULT);
-    const decoded = decodeFunctionData({ abi: VAULT_ABI, data: tx?.data ?? "0x" });
+    expect(tx?.to).toBe(MINTER);
+    const decoded = decodeFunctionData({ abi: MINTER_ABI, data: tx?.data ?? "0x" });
     expect(decoded.functionName).toBe("claimEmissions");
     expect(String(decoded.args[0]).toLowerCase()).toBe(ACCOUNT);
     expect(decoded.args.slice(1)).toEqual([5n * MONKEY_UNIT, 40n, []]);
@@ -141,8 +141,8 @@ describe("claimEmissions", () => {
     provider.vault.latestSeq = 41;
     await claimEmissions(store);
     const tx = provider.sent.at(-1);
-    expect(tx?.to).toBe(VAULT);
-    const decoded = decodeFunctionData({ abi: VAULT_ABI, data: tx?.data ?? "0x" });
+    expect(tx?.to).toBe(MINTER);
+    const decoded = decodeFunctionData({ abi: MINTER_ABI, data: tx?.data ?? "0x" });
     expect(decoded.functionName).toBe("claimEmissions");
     // The fresh proof's cumulative entitlement, less the fresh record's claimed: 8 - 2.
     expect(decoded.args.slice(1)).toEqual([8n * MONKEY_UNIT, 41n, []]);
@@ -154,7 +154,7 @@ describe("claimEmissions", () => {
     client.entitlement = proof(5n * MONKEY_UNIT, 40);
     store.patch({ entitlement: client.entitlement });
     await claimEmissions(store);
-    const decoded = decodeFunctionData({ abi: VAULT_ABI, data: provider.sent.at(-1)?.data ?? "0x" });
+    const decoded = decodeFunctionData({ abi: MINTER_ABI, data: provider.sent.at(-1)?.data ?? "0x" });
     expect(decoded.args.slice(1)).toEqual([5n * MONKEY_UNIT, 40n, []]);
     expect(store.getSnapshot().notices.emissions).toBeUndefined();
   });
