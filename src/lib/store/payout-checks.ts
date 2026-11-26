@@ -4,11 +4,6 @@ import type { PayoutEntry, SignedWithdrawal } from "../engine/types";
 import type { Payout } from "./payouts";
 import type { PayoutCheck } from "./state";
 
-/** Whether an unsigned payout waits for a routine check within the turn in effect, which no time is known for. */
-export function waitsForRoutineCheck(payouts: readonly Payout[]): boolean {
-  return payouts.some(({ status }) => status.kind === "waiting" && status.routine === true);
-}
-
 /** How long after a boundary the payouts are read, so the node has had its check, in milliseconds. */
 export const AFTER_BOUNDARY_MS = 5_000;
 /** The longest wait before a read, in milliseconds. */
@@ -28,6 +23,11 @@ export function earliestCheck(payouts: readonly Payout[]): number | null {
 /** Whether an unsigned payout waits for an operator's installation, which no time is known for. */
 export function waitsForInstallation(payouts: readonly Payout[]): boolean {
   return payouts.some(({ status }) => status.kind === "waiting" && status.installation === true);
+}
+
+/** Whether an unsigned payout waits for a routine check within the turn in effect, which no time is known for. */
+export function waitsForRoutineCheck(payouts: readonly Payout[]): boolean {
+  return payouts.some(({ status }) => status.kind === "waiting" && status.routine === true);
 }
 
 /** How long until the payouts are read for a check at `checkAtMs`, at the node's clock `nowMs`: just after a boundary ahead, and at the slow pace once it has passed. */

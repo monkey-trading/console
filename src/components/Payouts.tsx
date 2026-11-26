@@ -41,24 +41,24 @@ export function Payouts() {
   // One waiting for an operator's installation has no time, so it is read at the slow pace.
   const checkAt = earliestCheck(payouts);
   // One waiting for a routine check within the turn has none either, and is read at the slow pace as well (monkey-trading/console#535).
-  const installing = waitsForInstallation(payouts) || waitsForRoutineCheck(payouts);
+  const untimed = waitsForInstallation(payouts) || waitsForRoutineCheck(payouts);
   const nowMs = state.now;
   // Each attempt, failed or partial ones included, changes the generation, so each arms the next.
   const attempt = state.payoutsGeneration;
   useEffect(() => {
-    if ((checkAt === null && !installing) || !trusted) return;
+    if ((checkAt === null && !untimed) || !trusted) return;
     const load = () => void loadPayouts(store);
     // The node's clock as it is when the timer is set, so a clock that moves on never sets it again.
     const timer = setTimeout(() => {
       // A hidden tab reads once it is seen again, as the other paced reads do.
       if (document.visibilityState === "hidden") document.addEventListener("visibilitychange", load, { once: true });
       else load();
-    }, checkAt === null ? STILL_WAITING_MS : Math.min(checkReadDelay(checkAt, store.getSnapshot().now), installing ? STILL_WAITING_MS : Infinity));
+    }, checkAt === null ? STILL_WAITING_MS : Math.min(checkReadDelay(checkAt, store.getSnapshot().now), untimed ? STILL_WAITING_MS : Infinity));
     return () => {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", load);
     };
-  }, [store, checkAt, installing, trusted, attempt]);
+  }, [store, checkAt, untimed, trusted, attempt]);
   useEffect(() => {
     // The vault's own record says whether it has paid each payout the page can act on, including by a claim made elsewhere before the read.
     if (unread !== "") void checkPaid(store);
