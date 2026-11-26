@@ -7,9 +7,9 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { formatUsd } from "@/lib/fixed";
 import { formatMonkeyFigure } from "@/lib/format";
 import { allocationsShort, atBound, completeFrom, rowsRemain } from "@/lib/ledger";
-import { ACCRUES, COLUMN_NOTE, ledgerHeader } from "@/lib/ledger-cell";
+import { ACCRUES, COLUMN_NOTE, ledgerHeader, startNote } from "@/lib/ledger-cell";
 import { viewOf } from "@/lib/ledger-share";
-import { emptySince, historyBeginsNote } from "@/lib/store/history-begins";
+import { emptySince } from "@/lib/store/history-begins";
 import type { ConsoleStore } from "@/lib/store/store";
 
 import { useSession } from "./ConsoleProvider";
@@ -47,6 +47,7 @@ export function PnlLedger() {
   const more = rowsRemain(ledger.data) || allocationsShort(ledger.data, ledger.schedule);
   const full = atBound(ledger.data);
   const complete = completeFrom(ledger.data);
+  const start = startNote(begins, items.length, more);
   const { blank, status } = ledgerHeader(ledger, items.length, totals, more, full, complete);
   const rowFor = (item: (typeof items)[number]) => ({ item, symbol: names.get(item.row.market)?.symbol ?? `market ${item.row.market}`, places: names.get(item.row.market)?.places ?? 2, scheduleStatus: ledger.scheduleStatus });
   const empty = !ready ? (ledger.status === "failed" ? "Your realised results could not be loaded." : "Loading your realised results…") : more ? "The results loaded so far include no realised profit or loss. Select Load more to see older results." : `${complete === null ? "You have no realised profit or loss yet." : emptySince("results", complete)} Closed positions, close-outs and cash paid in lieu after a stock split will be listed here.`;
@@ -75,7 +76,7 @@ export function PnlLedger() {
       <div className="px-4 py-3 text-label text-fg-3">
         {ledger.status === "failed" && <button type="button" className={BUTTON} onClick={(event) => { keepFocus(event.currentTarget); store.ledger.open(address); }}>Try again</button>}
         {ready && more && !full && <button type="button" className={BUTTON} disabled={ledger.more} onClick={(event) => { keepFocus(event.currentTarget); void store.ledger.loadMore(); }}>{ledger.more ? "Loading" : "Load more"}</button>}
-        {ready && begins !== null && items.length > 0 && <p className="mt-2">{historyBeginsNote("results", begins)}</p>}
+        {ready && start !== null && <p className="mt-2">{start}</p>}
         <p className="mt-2">{COLUMN_NOTE}</p>
       </div>
     </div>

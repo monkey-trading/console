@@ -3,7 +3,7 @@
 import { formatFixedPlaces, formatUsd } from "./fixed";
 import { formatMonkeyFigure, groupThousands } from "./format";
 import { formatMark } from "./price-format";
-import { historyStart } from "./store/history-begins";
+import { historyBeginsNote, historyStart } from "./store/history-begins";
 import { formatStamp } from "./time";
 import type { LedgerItem, LedgerTotals, Share } from "./ledger-share";
 import type { LedgerState } from "./store/ledger";
@@ -50,6 +50,11 @@ export function coverageNote(held: number, totals: LedgerTotals, more: boolean, 
     ? `The totals cover the ${results} loaded, which is the maximum this list can hold. Older results are not included.`
     : more ? `The totals cover the ${results} loaded so far. Select Load more to include older results.` : begins === null ? "The totals cover all of your realised results." : `The totals cover all of your realised results since ${historyStart(begins)}.`;
   return totals.monkeyShort ? `${covers} The MONKEY total excludes losses shown as Pending, Loading or —.` : covers;
+}
+
+/** The line under the rows saying that older results are not available: with the rows held, or while older pages remain behind a tab whose loaded rows realise nothing; null when no page has stated a start, or nothing is held and nothing remains, which the empty state says. */
+export function startNote(begins: number | null, held: number, more: boolean): string | null {
+  return begins !== null && (held > 0 || more) ? historyBeginsNote("results", begins) : null;
 }
 
 /**
