@@ -2,86 +2,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { HistoryPage } from "../engine/types";
-import { settle } from "../engine/test-kit";
 import { createMockNode } from "../mock";
 import { DEMO_ADDRESS } from "../mock/demo";
-import { emptySince, historyBeginsNote, historyBeginsOf, readHistory } from "./history-begins";
-import { ACCOUNT, setup } from "./live-fake";
+import { ACCOUNT } from "./live-fake";
+import { emptySince, historyBeginsNote, withdrawalsBegin } from "./history-begins";
 
-const OTHER = "0x00000000000000000000000000000000000000bb";
 const START = Date.UTC(2026, 9, 26, 13, 52);
-
-async function connected() {
-  const made = setup();
-  made.store.start(0);
-  await settle();
-  made.store.setWallet({ address: ACCOUNT, label: "test" });
-  await settle();
-  return made;
-}
-
-describe("the start of the served history", () => {
-  it("is kept from the page a read answers, and moves only forward", async () => {
-    const { client, store } = await connected();
-    client.historyAnswer = () => ({ events: [], next: null, retained_from_ms: START });
-    await readHistory(store, ACCOUNT, { limit: 1 });
-    expect(historyBeginsOf(store.getSnapshot())).toBe(START);
-    client.historyAnswer = () => ({ events: [], next: null, retained_from_ms: START + 1000 });
-    await readHistory(store, ACCOUNT, { limit: 1 });
-    expect(historyBeginsOf(store.getSnapshot())).toBe(START + 1000);
-    client.historyAnswer = () => ({ events: [], next: null, retained_from_ms: START });
-    await readHistory(store, ACCOUNT, { limit: 1 });
-    expect(historyBeginsOf(store.getSnapshot())).toBe(START + 1000);
-  });
-
-  it("is not kept from a page that states none, and belongs to the account it was read for", async () => {
-    const { client, store } = await connected();
-    client.historyAnswer = () => ({ events: [], next: null, retained_from_ms: null });
-    await readHistory(store, ACCOUNT, {});
-    expect(historyBeginsOf(store.getSnapshot())).toBeNull();
-    client.historyAnswer = () => ({ events: [], next: null, retained_from_ms: START });
-    await readHistory(store, OTHER, {});
-    expect(historyBeginsOf(store.getSnapshot())).toBeNull();
-  });
-});
-
-describe("a wallet switch", () => {
-  it("records the new account's start even when it equals the old one", async () => {
-    const { client, store } = await connected();
-    client.historyAnswer = () => ({ events: [], next: null, retained_from_ms: START });
-    await readHistory(store, ACCOUNT, {});
-    store.setWallet({ address: OTHER, label: "other" });
-    await settle();
-    await readHistory(store, OTHER, {});
-    expect(historyBeginsOf(store.getSnapshot())).toBe(START);
-  });
-
-  it("is not undone by an answer for the account it left that lands afterwards", async () => {
-    const { client, store } = await connected();
-    let release: (page: HistoryPage) => void = () => {};
-    client.history = () => new Promise<HistoryPage>((resolve) => { release = resolve; });
-    const late = readHistory(store, ACCOUNT, {});
-    store.setWallet({ address: OTHER, label: "other" });
-    await settle();
-    client.history = async () => ({ events: [], next: null, retained_from_ms: START });
-    await readHistory(store, OTHER, {});
-    release({ events: [], next: null, retained_from_ms: START + 5000 });
-    await late;
-    expect(historyBeginsOf(store.getSnapshot())).toBe(START);
-  });
-});
-
-describe("a late answer for another account", () => {
-  it("leaves the connected account's start in place", async () => {
-    const { client, store } = await connected();
-    client.historyAnswer = () => ({ events: [], next: null, retained_from_ms: START });
-    await readHistory(store, ACCOUNT, {});
-    client.historyAnswer = () => ({ events: [], next: null, retained_from_ms: START + 5000 });
-    await readHistory(store, OTHER, {});
-    expect(historyBeginsOf(store.getSnapshot())).toBe(START);
-  });
-});
 
 describe("the words that say where history begins", () => {
   it("name the start in UTC and say that entries before it are not available", () => {
@@ -117,5 +43,14 @@ describe("the demo's history pages", () => {
     const oldest = Math.min(...page.events.map((e) => e.ts));
     expect(page.retained_from_ms).not.toBeNull();
     expect(page.retained_from_ms ?? Infinity).toBeLessThanOrEqual(oldest);
+  });
+});
+
+describe("where the withdrawals list begins", () => {
+  it("is the earliest start of the reads its rows came from, or none while neither states one", () => {
+    expect(withdrawalsBegin({ historyBegins: START + 5000, approvalsBegins: START })).toBe(START);
+    expect(withdrawalsBegin({ historyBegins: START, approvalsBegins: START + 5000 })).toBe(START);
+    expect(withdrawalsBegin({ historyBegins: null, approvalsBegins: START })).toBe(START);
+    expect(withdrawalsBegin({ historyBegins: null, approvalsBegins: null })).toBeNull();
   });
 });

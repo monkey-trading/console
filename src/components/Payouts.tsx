@@ -5,7 +5,7 @@
 import { useEffect, useId, useRef } from "react";
 
 import { readBlock } from "@/lib/engine/attestation";
-import { emptySince, historyBeginsNote, historyBeginsOf } from "@/lib/store/history-begins";
+import { emptySince, historyBeginsNote, withdrawalsBegin } from "@/lib/store/history-begins";
 import { checkReadDelay, earliestCheck, STILL_WAITING_MS, waitsForInstallation } from "@/lib/store/payout-checks";
 import { waitingWords } from "@/lib/store/payout-words";
 import { checkPaid, claim, loadApprovals, loadPayouts, payoutsOf, reissue, unreadPayouts, type Payout } from "@/lib/store/payouts";
@@ -26,7 +26,7 @@ export function Payouts() {
   const readOnly = useReadOnlyNote(useId(), "Claiming and renewing withdrawals");
   const payouts = payoutsOf(state);
   const address = state.wallet?.address;
-  const begins = historyBeginsOf(state);
+  const begins = withdrawalsBegin(state);
   // A new approval reaches the recent history first; it prompts a fresh read of every approval and of the node's payouts.
   const latest = state.history.find((e) => e.type === "withdrawal_approved")?.cursor ?? "";
   const unread = unreadPayouts(state).join(",");

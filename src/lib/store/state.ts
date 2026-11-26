@@ -142,8 +142,8 @@ export interface ConsoleState {
   accountRead: boolean;
   /** How the connected account's first read of its history went: `history` is known to hold what the node holds only once it is `read`, and it stays so while later reads fail. */
   accountHistory: "waiting" | "read" | "failed";
-  /** Where the connected account's served history begins, as its latest read stated it; null until a read states one. */
-  historyBegins: { account: string; ms: number } | null;
+  /** Where the served history begins, as the read that produced `history` stated it; null while that read states none. */
+  historyBegins: number | null;
   /** When this browser's session key expires by the node's clock, or 0 with no registered key; the key itself never enters the snapshot. */
   sessionExpiresAt: number;
   /** Why the last registration the node answered was refused, or null: orders and cancels then ask the wallet instead. */
@@ -171,6 +171,8 @@ export interface ConsoleState {
   approvals: HistoryEvent[];
   /** The cursor of the next page of older approvals, when the reads so far stopped short of them. */
   approvalsNext: string | null;
+  /** Where the served history begins, as the earliest of the pages `approvals` was read from stated it; null while none states one. */
+  approvalsBegins: number | null;
   /** The node's latest complete list of the account's unpaid approvals; null until a read of it finished loaded. */
   payoutsRead: PayoutsRead | null;
   /** For each approval waiting on a log check (monkey-trading/console#280), the check the node's latest answer named, complete and loaded or not; absent when none waits. */
@@ -270,6 +272,7 @@ export function initialState(markets: MarketView[], house: HouseView, startMs: n
     authorizations: [],
     approvals: [],
     approvalsNext: null,
+    approvalsBegins: null,
     payoutsRead: null,
     payoutChecks: {},
     payoutsProblem: null,

@@ -19,7 +19,7 @@ import type { HistoryPage } from "../engine/types";
 import { Backoff } from "../monkey/live-reads";
 import { NODE_READ_MS } from "../monkey/panel";
 import { EnclaveBinding } from "../store/enclave-binding";
-import { earliestStart, readHistory } from "../store/history-begins";
+import { earliestStart } from "../store/history-begins";
 import type { ConsoleStore } from "../store/store";
 import { addMessage, addNewest, addPage, emptyHistory, gapBehind, HISTORY_KINDS, limitingKinds, moreRemain, type DistributionHistory, type HistoryKind, type StopMark } from "./distribution-history";
 
@@ -164,7 +164,7 @@ export class DistributionHistoryReads {
    */
   private async page(account: string, kind: HistoryKind, before: string | null): Promise<HistoryPage> {
     try {
-      return await readHistory(this.store, account, { kind, limit: HISTORY_PAGE, ...(before === null ? {} : { before }) });
+      return await this.store.deps.client.history(account, { kind, limit: HISTORY_PAGE, ...(before === null ? {} : { before }) });
     } catch (error) {
       if (kind === "operator_share_allocated" && error instanceof EngineError && error.status === 400) return { events: [], next: null, retained_from_ms: null };
       throw error;

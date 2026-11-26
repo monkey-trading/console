@@ -1,24 +1,12 @@
 /**
  * Where the served history of the connected account begins (monkey-trading/console#526). The reads that
- * feed a list of history (`readHistory`) keep the start the server stated with the page, so a view that
+ * feed a list of history keep the start the server stated with the page, with the rows it produced, so a view that
  * lists history says from when it does, and never a fixed period.
  */
 
 import type { HistoryPage } from "../engine/types";
 import { formatStampWithYear } from "../time";
 import type { ConsoleState } from "./state";
-import type { ConsoleStore } from "./store";
-
-type Params = { limit?: number; before?: string; kind?: string };
-
-/** Reads one page of `account`'s history and keeps the start it states, the latest one, while `account` is the connected wallet's: a late answer for an account left behind changes nothing. */
-export async function readHistory(store: ConsoleStore, account: string, params: Params): Promise<HistoryPage> {
-  const page = await store.deps.client.history(account, params);
-  const ms = page.retained_from_ms;
-  const { historyBegins: held, wallet } = store.getSnapshot();
-  if (typeof ms === "number" && wallet?.address.toLowerCase() === account.toLowerCase() && (held === null || held.account.toLowerCase() !== account.toLowerCase() || ms > held.ms)) store.patch({ historyBegins: { account, ms } });
-  return page;
-}
 
 /** The earliest start `current` and the pages state: what a list that keeps its rows across reads says, since rows read at an earlier start may stay. */
 export function earliestStart(current: number | null, pages: readonly HistoryPage[]): number | null {
@@ -26,10 +14,10 @@ export function earliestStart(current: number | null, pages: readonly HistoryPag
   return stated.length === 0 ? current : Math.min(current ?? Infinity, ...stated);
 }
 
-/** When the connected account's served history begins, or null before a read states it. */
-export function historyBeginsOf(state: Pick<ConsoleState, "historyBegins" | "wallet">): number | null {
-  const { historyBegins, wallet } = state;
-  return historyBegins !== null && wallet !== null && historyBegins.account.toLowerCase() === wallet.address.toLowerCase() ? historyBegins.ms : null;
+/** Where the withdrawals list begins: the earliest start of the reads its rows came from, the recent history and the approvals. */
+export function withdrawalsBegin(state: Pick<ConsoleState, "historyBegins" | "approvalsBegins">): number | null {
+  const stated = [state.historyBegins, state.approvalsBegins].flatMap((ms) => (ms === null ? [] : [ms]));
+  return stated.length === 0 ? null : Math.min(...stated);
 }
 
 /** The start as a trader reads it: UTC, with the year. */
