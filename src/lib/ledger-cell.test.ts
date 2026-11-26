@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixedFromInt } from "./fixed";
-import { ACCRUES, coverageNote, ledgerHeader, monkeyCell, NO_ALLOCATION, scheduleNotice } from "./ledger-cell";
+import { ACCRUES, coverageNote, ledgerHeader, monkeyCell, NO_ALLOCATION, scheduleNotice, startNote } from "./ledger-cell";
 import { monkey } from "./ledger-kit";
 import type { LedgerTotals, Share } from "./ledger-share";
 
@@ -35,6 +35,25 @@ describe("scheduleNotice", () => {
   it("is null for a schedule that was read or is yet to be", () => {
     expect(scheduleNotice("ready")).toBeNull();
     expect(scheduleNotice("idle")).toBeNull();
+  });
+});
+
+describe("startNote", () => {
+  const START = Date.UTC(2026, 9, 26, 13, 52);
+  const NOTE = "Realised results before 2026-10-26 13:52 UTC are not available here.";
+
+  it("is shown with the rows held", () => {
+    expect(startNote(START, 3, false)).toBe(NOTE);
+    expect(startNote(START, 3, true)).toBe(NOTE);
+  });
+
+  it("is shown while older pages remain behind loaded rows that realise nothing", () => {
+    expect(startNote(START, 0, true)).toBe(NOTE);
+  });
+
+  it("is left to the empty state when nothing is held and nothing remains, and absent while no page states a start", () => {
+    expect(startNote(START, 0, false)).toBeNull();
+    expect(startNote(null, 3, true)).toBeNull();
   });
 });
 
