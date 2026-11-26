@@ -129,6 +129,26 @@ describe("approvals paging", () => {
   });
 });
 
+describe("where the approvals begin", () => {
+  it("is the earliest start the pages state, kept across a read of older approvals and replaced by a fresh read", async () => {
+    const { client, store } = await connected();
+    const first = { events: [approved(2, 50)], next: "50:0", retained_from_ms: 1_000 };
+    const second = { events: [approved(1, 40)], next: null, retained_from_ms: 4_000 };
+    client.historyPages = { "": first, "50:0": second };
+    await loadApprovals(store);
+    expect(store.getSnapshot().approvalsBegins).toBe(1_000);
+    client.historyPages = { "": { ...first, next: null, retained_from_ms: 9_000 } };
+    await loadApprovals(store);
+    expect(store.getSnapshot().approvalsBegins).toBe(9_000);
+    client.historyPages = { "": { ...first, next: "50:0", retained_from_ms: 9_000 }, "50:0": { ...second, next: null, retained_from_ms: 9_000 } };
+    await loadApprovals(store);
+    client.historyPages = { "8:0": { events: [], next: null, retained_from_ms: 12_000 } };
+    store.patch({ approvalsNext: "8:0" });
+    await loadApprovals(store, true);
+    expect(store.getSnapshot().approvalsBegins).toBe(9_000);
+  });
+});
+
 describe("payouts after a reload, with no authorization held", () => {
   it("shows a payout the vault has paid as paid, and one it has not as waiting once that is read", async () => {
     const paid = await connected({ paid: true });

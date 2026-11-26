@@ -4,7 +4,7 @@
 
 import type { EngineEvent } from "@/lib/engine/types";
 import { describeEvent } from "@/lib/messages";
-import { emptySince, historyBeginsNote, historyBeginsOf } from "@/lib/store/history-begins";
+import { emptySince, historyBeginsNote } from "@/lib/store/history-begins";
 import { formatStamp } from "@/lib/time";
 
 import { useConsole } from "./ConsoleProvider";
@@ -17,9 +17,7 @@ const KIND: Partial<Record<EngineEvent["type"], string>> = {
 };
 
 export function HistoryList() {
-  const state = useConsole();
-  const { history, markets, wallet } = state;
-  const begins = historyBeginsOf(state);
+  const { history, historyBegins: begins, markets, wallet } = useConsole();
   const symbolOf = (id: number) => markets.find((m) => m.id === id)?.symbol ?? `market ${id}`;
   const rows = history.flatMap((entry) => {
     const text = describeEvent(entry, symbolOf);

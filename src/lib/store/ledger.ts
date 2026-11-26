@@ -11,7 +11,7 @@ import {
   addMessage, addPage, allocationsShort, atBound, closedBefore, emptyLedger, LEDGER_KINDS, ROW_KINDS,
   type LedgerData, type LedgerKind,
 } from "../ledger";
-import { earliestStart, readHistory } from "./history-begins";
+import { earliestStart } from "./history-begins";
 import type { ConsoleStore } from "./store";
 
 export interface LedgerState {
@@ -109,7 +109,7 @@ export class LedgerReads {
   }
 
   private page(account: string, kind: LedgerKind, before: string | null): Promise<HistoryPage> {
-    return readHistory(this.store, account, { kind, limit: PAGE[kind], ...(before === null ? {} : { before }) });
+    return this.store.deps.client.history(account, { kind, limit: PAGE[kind], ...(before === null ? {} : { before }) });
   }
 
   private async first(account: string): Promise<void> {

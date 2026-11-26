@@ -6,13 +6,13 @@
 
 import { EngineError } from "../engine/client";
 import { reissueTypedData } from "../engine/eip712";
-import type { HistoryEvent, PayoutEntry, SignedWithdrawal, WithdrawalAuthorization } from "../engine/types";
+import type { HistoryEvent, HistoryPage, PayoutEntry, SignedWithdrawal, WithdrawalAuthorization } from "../engine/types";
 import { fixedFromWire, type Fixed } from "../fixed";
 import { asSentence } from "../format";
 import { formatUsdc } from "../vault";
 import { abandoned, awaitsTrust, domainOf, errorText, notBusy, prompting, usableWallet } from "./signing";
 import { authorizationFor, keepLatest } from "./funds";
-import { readHistory } from "./history-begins";
+import { earliestStart } from "./history-begins";
 import { checksKept, checksOf } from "./payout-checks";
 import type { ConsoleState, PayoutCheck } from "./state";
 import type { ConsoleStore } from "./store";
@@ -107,8 +107,10 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
     const approvals = older ? [...store.getSnapshot().approvals] : [];
     let before = older ? (store.getSnapshot().approvalsNext ?? undefined) : undefined;
     let next: string | null = null;
+    const pages: HistoryPage[] = [];
     for (let page = 0; page < APPROVAL_PAGES; page++) {
-      const read = await readHistory(store, address, { kind: "withdrawal_approved", limit: APPROVALS_LIMIT, ...(before === undefined ? {} : { before }) });
+      const read = await store.deps.client.history(address, { kind: "withdrawal_approved", limit: APPROVALS_LIMIT, ...(before === undefined ? {} : { before }) });
+      pages.push(read);
       approvals.push(...read.events);
       next = read.next;
       if (next === null) break;
@@ -117,7 +119,7 @@ export async function loadApprovals(store: ConsoleStore, older = false): Promise
     const state = store.getSnapshot();
     // A read started later answers for the account as it is now; this one's answer is older.
     if (state.wallet?.address === address && state.approvalsGeneration === generation) {
-      store.patch({ approvals, approvalsNext: next });
+      store.patch({ approvals, approvalsNext: next, approvalsBegins: earliestStart(older ? store.getSnapshot().approvalsBegins : null, pages) });
       store.clearNotice("payoutReads");
     }
   } catch (error) {
