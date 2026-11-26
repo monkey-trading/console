@@ -23,6 +23,7 @@ const LIVE_DEV: RawDeploy = {
   origin: "https://127.0.0.1:8080",
   chainId: String(vectors.chain_id),
   vault: VAULT,
+  minter: VAULT,
   usdc: USDC,
   devOrigins: "https://127.0.0.1:8080",
   rpcUrl: "http://127.0.0.1:8545",

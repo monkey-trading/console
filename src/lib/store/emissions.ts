@@ -1,5 +1,5 @@
 /**
- * The connected account's MONKEY emissions: where its entitlement stands against the vault's
+ * The connected account's MONKEY emissions: where its entitlement stands against the minter's
  * record, the background read of that record, and the claim that closes the gap.
  */
 
@@ -50,13 +50,13 @@ const CLAIM_PROOF_ATTEMPTS = 3;
 export const WAITING_ON_VAULT = "This amount can be claimed once the vault has recorded the next snapshot.";
 
 /**
- * Reads the vault's record of the connected account's MONKEY through the wallet's chain provider:
- * what it has minted and its latest posted checkpoint seq. One read per wallet at a time; a read
- * already running, or a wallet that cannot read the vault, resolves at once. A failed read leaves
+ * Reads the minter's record of the connected account's MONKEY through the wallet's chain provider:
+ * what it has minted, and the vault's latest posted checkpoint seq. One read per wallet at a time; a read
+ * already running, or a wallet that cannot read the chain, resolves at once. A failed read leaves
  * the record unread and rejects with its own reason, which the MONKEY page's panel shows on the
  * card, and its next wallet read tries it again.
  * Error cases:
- * - the wallet's read of the vault fails, such as on another chain than the deployment's
+ * - the wallet's read of the minter or the vault fails, such as on another chain than the deployment's
  */
 export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> {
   const wallet = store.liveWallet;
@@ -73,8 +73,8 @@ export async function checkEmissionsClaimed(store: ConsoleStore): Promise<void> 
 }
 
 /**
- * Claims the connected account's MONKEY emissions on the vault. The wallet is asked to send what the
- * node's proof says, so the claim waits on a verdict that may sign: the vault checks the proof, and a
+ * Claims the connected account's MONKEY emissions on the minter. The wallet is asked to send what the
+ * node's proof says, so the claim waits on a verdict that may sign: the minter checks the proof against the vault's root, and a
  * node it has not judged could cost the user a reverted transaction's gas.
  */
 export async function claimEmissions(store: ConsoleStore): Promise<void> {
@@ -104,7 +104,7 @@ export async function claimEmissions(store: ConsoleStore): Promise<void> {
         // Checked last: the verdict may have ended while the reads above waited on the wallet.
         if (usableWallet(store, "claim MONKEY", "emissions") === null) return;
         const amount = formatMonkey(due);
-        await prompting(store, wallet, "emissions", `Confirm the request in your wallet to claim ${amount} from the vault.`, (progress) => claim(proof, progress));
+        await prompting(store, wallet, "emissions", `Confirm the request in your wallet to claim ${amount}.`, (progress) => claim(proof, progress));
         offered = wallet;
         break;
       }

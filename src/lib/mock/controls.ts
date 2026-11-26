@@ -104,16 +104,16 @@ export class MockControls {
     for (let i = state.queue.length - 1; i >= 0; i--) if (state.queue[i]?.account === key) state.queue.splice(i, 1);
   }
 
-  /** Stands in for the vault's `claimEmissions`, as the real wallet sends: records what the simulated vault minted. */
+  /** Stands in for the minter's `claimEmissions`, as the real wallet sends: records what the simulated minter minted. */
   claimEmissions(address: string, entitled: bigint): void {
     const { state } = this.client;
     const key = address.toLowerCase();
     const claimed = state.claimedMonkey.get(key) ?? 0n;
-    if (entitled <= claimed) throw new Error("In the demo, the vault has already paid at least that much MONKEY to this account.");
+    if (entitled <= claimed) throw new Error("In the demo, this account has already claimed at least that much MONKEY.");
     state.claimedMonkey.set(key, entitled);
   }
 
-  /** What the simulated vault has minted to `address` against its entitlement. */
+  /** What the simulated minter has minted to `address` against its entitlement. */
   monkeyClaimed(address: string): bigint {
     return this.client.state.claimedMonkey.get(address.toLowerCase()) ?? 0n;
   }

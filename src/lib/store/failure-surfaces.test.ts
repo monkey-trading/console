@@ -147,7 +147,7 @@ describe("a refused or failed action lands on its own surface", () => {
     });
     const stub = (rpc: Record<string, unknown>) => vi.stubGlobal("fetch", async (_input: unknown, init?: { body?: string }) => ({ ok: true, json: async () => rpc[(JSON.parse(init?.body ?? "{}") as { method: string }).method] }) as Response);
     try {
-      const deploy = parseDeploy({ mode: "live-dev", origin: "https://127.0.0.1:8080", chainId: String(vectors.chain_id), vault: VAULT, usdc: "0x00000000000000000000000000000000000000cc", devOrigins: "https://127.0.0.1:8080", rpcUrl: "http://127.0.0.1:8545" });
+      const deploy = parseDeploy({ mode: "live-dev", origin: "https://127.0.0.1:8080", chainId: String(vectors.chain_id), vault: VAULT, minter: VAULT, usdc: "0x00000000000000000000000000000000000000cc", devOrigins: "https://127.0.0.1:8080", rpcUrl: "http://127.0.0.1:8545" });
       stub(answers("refused"));
       const refused = await connected(FUNDED);
       expect(await fundWithAnvil(refused.store, deploy)).toBe(false);

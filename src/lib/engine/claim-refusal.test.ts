@@ -1,7 +1,7 @@
 import { toFunctionSelector } from "viem";
 import { describe, expect, it } from "vitest";
 
-import { claimFailure, withdrawalFailure } from "./claim-refusal";
+import { claimFailure, emissionsFailure, withdrawalFailure } from "./claim-refusal";
 import { walletError } from "./provider-errors";
 
 const revert = (message: string, extra: object = {}) => walletError(Object.assign(new Error(message), { code: 3 }, extra), "claim your MONKEY emissions");
@@ -38,6 +38,29 @@ describe("claimFailure", () => {
     const timeout = walletError(new Error("request timed out"), "claim");
     expect(claimFailure(declined)).toBe(declined);
     expect(claimFailure(timeout)).toBe(timeout);
+  });
+});
+
+describe("emissionsFailure", () => {
+  it.each([
+    ["UnknownCheckpoint()", "has not yet recorded the snapshot"],
+    ["InvalidSignerEpoch()", "signing key has changed"],
+    ["NoSigner()", "has no signing key"],
+    ["VaultNotSet()", "have not yet been opened"],
+    ["NothingToClaim(uint256,uint256)", "already claimed everything"],
+    ["InvalidEntitlementProof()", "proof provided by the server was not accepted"],
+  ])("names %s in plain words, by selector or by name", (signature, words) => {
+    for (const message of [`execution reverted: custom error ${selector(signature)}`, `execution reverted: ${signature.slice(0, signature.indexOf("("))}`]) {
+      const error = emissionsFailure(revert(message));
+      expect((error as Error).message).toContain(words);
+      expect((error as Error).message).not.toMatch(/0x|reverted|vault has already paid/);
+    }
+  });
+
+  it("says the claim did not match the proof for a revert it has no name for, and leaves a declined request alone", () => {
+    expect((emissionsFailure(revert("execution reverted: custom error 0xdeadbeef")) as Error).message).toBe("Your claim was not sent, because the MONKEY contract did not accept the proof provided by the server. Please try again shortly.");
+    const declined = walletError(Object.assign(new Error("no"), { code: 4001 }), "claim");
+    expect(emissionsFailure(declined)).toBe(declined);
   });
 });
 

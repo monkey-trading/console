@@ -43,18 +43,18 @@ export interface Wallet {
   /** Claims a signed withdrawal authorization on the vault and resolves with the transaction hash; `progress` as for `deposit`. */
   claim(withdrawal: SignedWithdrawal, progress?: Progress): Promise<string>;
   /**
-   * Claims the account's MONKEY emissions on the vault for what `proof`'s posted root entitles it
+   * Claims the account's MONKEY emissions on the minter for what `proof`'s posted root entitles it
    * to, and resolves with the transaction hash; `progress` as for `deposit`.
    */
   claimEmissions?(proof: EntitlementProof, progress?: Progress): Promise<string>;
   /**
-   * The vault's own record of this account's MONKEY — what it has minted against the entitlement
-   * so far and the seq of its latest posted checkpoint — from the wallet's chain reads. Absent
+   * The minter's record of this account's MONKEY and the vault's checkpoint — what it has minted against the entitlement
+   * so far and the seq of the vault's latest posted checkpoint — from the wallet's chain reads. Absent
    * from a wallet that reads no chain, such as a watched account's.
    */
   emissionsClaimed?(): Promise<{ claimed: bigint; latestSeq: number }>;
   /**
-   * Offers to add the vault's MONKEY token to the wallet so its balance shows there; resolves true
+   * Offers to add the minter's MONKEY token to the wallet so its balance shows there; resolves true
    * when the wallet added it. Absent from a wallet with no token to suggest, such as the mock's.
    */
   suggestMonkey?(): Promise<boolean>;

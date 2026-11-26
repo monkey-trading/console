@@ -12,7 +12,7 @@ import type { KeyStorage } from "../engine/session-key-store";
 import { settle } from "../engine/test-kit";
 import type { AccountView, CancelAllRequest, CancelRequest, CloseAllRequest, EligibilityClass, EligibilityRequest, HistoryPage, OrderRequest, PayoutsPage, PositionLevelsRequest, SessionKeyRequest, SessionKeyRevocationRequest, SignedWithdrawal, StreamMessage, WithdrawalRequest, MarketView } from "../engine/types";
 import type { MarkPage } from "../engine/mark-types";
-import { ACCOUNT, memoryStorage, StubProvider, type StubOptions } from "../engine/wallet-kit";
+import { ACCOUNT, MINTER, memoryStorage, StubProvider, type StubOptions } from "../engine/wallet-kit";
 import type { Wallet } from "../engine/wallet";
 import { saveChoice } from "../engine/wallet-persist";
 import { authorizeBrowser, connectWallet } from "./actions";
@@ -125,7 +125,7 @@ export class ActionClient implements EngineClient {
 export async function connected(options: StubOptions = {}) {
   const client = new ActionClient();
   const provider = new StubProvider(options);
-  const wallet: Wallet = new ProviderWallet(ACCOUNT, "Test wallet", provider, { chainId: vectors.chain_id, vault: VAULT, usdc: "0x00000000000000000000000000000000000000cc", add: null }, { wait: async () => {} });
+  const wallet: Wallet = new ProviderWallet(ACCOUNT, "Test wallet", provider, { chainId: vectors.chain_id, vault: VAULT, usdc: "0x00000000000000000000000000000000000000cc", minter: MINTER, add: null }, { wait: async () => {} });
   const store = new ConsoleStore({ client, wallets: { options: [], connect: async () => wallet }, history: () => [], initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
   store.start(0);
   await settle();
@@ -138,7 +138,7 @@ export async function connected(options: StubOptions = {}) {
 export async function tab(persistence: KeyStorage, options: StubOptions = {}) {
   const client = new ActionClient();
   const provider = new StubProvider(options);
-  const wallet: Wallet = new ProviderWallet(ACCOUNT, "Browser wallet", provider, { chainId: vectors.chain_id, vault: VAULT, usdc: null, add: null }, { wait: async () => {} });
+  const wallet: Wallet = new ProviderWallet(ACCOUNT, "Browser wallet", provider, { chainId: vectors.chain_id, vault: VAULT, usdc: null, minter: MINTER, add: null }, { wait: async () => {} });
   const store = new ConsoleStore({ client, wallets: { options: [], connect: async () => wallet }, persistence, history: () => [], initial: { markets: [BTC], house: { cash: "0", nav: "0", gross_exposure: "0" }, startMs: 0 } });
   store.start(0);
   await settle();

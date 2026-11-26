@@ -42,6 +42,8 @@ export interface WalletChain {
   staking?: string | null;
   /** The operator registry; null or absent when the build names none, and then nothing reads it. */
   registry?: string | null;
+  /** The MONKEY minter, which takes emissions claims and names the token; null or absent when the build names none, and then MONKEY claims are refused. */
+  minter?: string | null;
 }
 
 export interface ProviderWalletDeps {
@@ -156,15 +158,15 @@ export class ProviderWallet implements Wallet {
 
   /** Claims this account's MONKEY emissions for what the proof entitles it to; error cases as `claim`. */
   async claimEmissions(proof: EntitlementProof, progress: Progress = () => undefined): Promise<string> {
-    return claimEmissionsTx(this.address, (data, action, p) => this.send(this.chain.vault, data, action, p), proof, progress);
+    return claimEmissionsTx(this.address, this.chain.minter ?? null, (to, data, action, p) => this.send(to, data, action, p), proof, progress);
   }
 
-  /** The vault's record of this account's MONKEY; a background read, refused when the wallet sits on another chain. */
+  /** The minter's record of this account's MONKEY and the vault's latest checkpoint; a background read, refused when the wallet sits on another chain. */
   async emissionsClaimed(): Promise<{ claimed: bigint; latestSeq: number }> {
     return emissionsClaimedRead(this.address, this.chain, this.provider);
   }
 
-  /** Offers to add the vault's MONKEY token to the wallet; best-effort, as `suggestUsdc`. */
+  /** Offers to add the minter's MONKEY token to the wallet; best-effort, as `suggestUsdc`. */
   async suggestMonkey(): Promise<boolean> { return suggestMonkeyToken(() => this.ensureChain(), this.chain, this.provider); }
 
   /** The wallet's USDC and the vault's recent deposits to it, read without a chain switch; see `usdcBalanceRead` and `vaultDepositsRead`. */
