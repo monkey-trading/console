@@ -43,7 +43,7 @@ export function scheduleNotice(status: LedgerState["scheduleStatus"]): string | 
   return null;
 }
 
-/** What the header's totals cover, so a total over a part of the history says so. */
+/** What the header's totals cover, so a total over a part of the history says so; `begins` is where the results held are complete from, once every list is read to its end. */
 export function coverageNote(held: number, totals: LedgerTotals, more: boolean, full: boolean, begins: number | null = null): string {
   const results = `${groupThousands(held)} result${held === 1 ? "" : "s"}`;
   const covers = full
