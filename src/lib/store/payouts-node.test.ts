@@ -59,6 +59,33 @@ describe("the node's payouts", () => {
     ]);
   });
 
+  it("shows an approval that waits for a routine check with no time, whether the covering checkpoint is named or null, and leaves a malformed one at the plain wait (monkey-trading/console#535)", async () => {
+    const { client, store } = await connected();
+    store.patch({ now: NOW_MS, approvals: [approved(5, 90), approved(4, 80), approved(3, 70)] });
+    client.payoutsPage = page([
+      { nonce: 5, check: { waits: "check", checkpoint_seq: 812 } },
+      { nonce: 4, check: { waits: "check", checkpoint_seq: null } },
+      { nonce: 3, check: { waits: "check", checkpoint_seq: -1 } },
+    ]);
+    await loadPayouts(store);
+    expect(payoutsOf(store.getSnapshot()).map((p) => [p.nonce, p.status])).toEqual([
+      [5, { kind: "waiting", routine: true }], [4, { kind: "waiting", routine: true }], [3, { kind: "waiting" }],
+    ]);
+  });
+
+  it("keeps a routine check's row waiting beside an authorization the node says is not usable, and offers a claim once a later one arrives (monkey-trading/console#535)", async () => {
+    const { client, store } = await connected();
+    const base = signed(5, 2_000_000_000);
+    if (base.authorization === undefined) throw new Error("the fixture carries an authorization");
+    store.patch({ now: NOW_MS, approvals: [approved(5, 90)] });
+    client.payoutsPage = page([{ nonce: 5, withdrawal: base, check: { waits: "check", checkpoint_seq: null } }]);
+    await loadPayouts(store);
+    expect(payoutsOf(store.getSnapshot())[0]?.status).toEqual({ kind: "waiting", routine: true });
+    const later: SignedWithdrawal = { ...base, authorization: { ...base.authorization, signer_epoch: base.authorization.signer_epoch + 1 } };
+    store.patch(applyFeedEvent(store.getSnapshot(), { type: "withdrawal", withdrawal: later }) ?? {});
+    expect(payoutsOf(store.getSnapshot())[0]?.status.kind).toBe("claimable");
+  });
+
   it("keeps the check an answer names while the node is still loading, without taking an approval it omits as paid, and replaces it by the next complete answer", async () => {
     const { client, store } = await connected();
     store.patch({ now: NOW_MS, approvals: [approved(6, 100), approved(5, 90), approved(4, 80)] });

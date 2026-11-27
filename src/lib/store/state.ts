@@ -43,6 +43,8 @@ export interface PayoutsRead {
 export interface PayoutCheck {
   /** The time of the boundary it waits for, in milliseconds; null when it waits for an installation, which has no known time. */
   atMs: number | null;
+  /** Whether it waits for a routine check within the turn in effect (monkey-trading/console#535), which has no time either; `atMs` is then null. */
+  routine?: true;
   /** The signer epoch and expiry of the authorization held when the node named the check, which the node says is not usable; null when none was held. */
   held: { epoch: number; expiresAt: number } | null;
 }

@@ -30,4 +30,10 @@ describe("waitingWords", () => {
     expect(words).toBe("The withdrawal is waiting for the platform's operator to be confirmed. You can claim the withdrawal here once that has happened and the vault has recorded the next snapshot.");
     expect(words).not.toMatch(/UTC|due/);
   });
+
+  it("names a routine verification, with no time and no engine term, while a withdrawal waits for a check within the turn (monkey-trading/console#535)", () => {
+    const words = waitingWords(undefined, BOUNDARY, false, true);
+    expect(words).toBe("The withdrawal is waiting for a routine verification of the server's records, which usually completes within a few minutes. You can claim the withdrawal here once the verification is complete and the vault has recorded the next snapshot.");
+    expect(words).not.toMatch(/UTC|due|checkpoint|log check|seq|turn/i);
+  });
 });

@@ -25,6 +25,11 @@ export function waitsForInstallation(payouts: readonly Payout[]): boolean {
   return payouts.some(({ status }) => status.kind === "waiting" && status.installation === true);
 }
 
+/** Whether an unsigned payout waits for a routine check within the turn in effect, which no time is known for. */
+export function waitsForRoutineCheck(payouts: readonly Payout[]): boolean {
+  return payouts.some(({ status }) => status.kind === "waiting" && status.routine === true);
+}
+
 /** How long until the payouts are read for a check at `checkAtMs`, at the node's clock `nowMs`: just after a boundary ahead, and at the slow pace once it has passed. */
 export function checkReadDelay(checkAtMs: number, nowMs: number): number {
   // Never longer than a day: a timer past about 24.8 days fires at once, and a boundary that far off is the node's slip.
@@ -33,7 +38,7 @@ export function checkReadDelay(checkAtMs: number, nowMs: number): number {
 
 /**
  * The check each approval the node names a log check for waits on, with the authorization `held` when it named it: a check that waits for an
- * installation carries no time; any other counts as a boundary, as an older node's answer does, and only a well-formed time counts, so a bad
+ * installation, or for a routine check within the turn in effect (monkey-trading/console#535), carries no time; any other counts as a boundary, as an older node's answer does, and only a well-formed time counts, so a bad
  * answer leaves the row's plain wait. A later authorization overrides it where the status is worked out.
  */
 export function checksOf(entries: readonly PayoutEntry[], held: readonly SignedWithdrawal[]): Record<number, PayoutCheck> {
@@ -41,13 +46,20 @@ export function checksOf(entries: readonly PayoutEntry[], held: readonly SignedW
   for (const { nonce, check } of entries) {
     if (check === undefined) continue;
     let atMs: number | null = null;
+    const authorization = held.find((w) => w.nonce === nonce)?.authorization;
+    const heldNow = authorization === undefined ? null : { epoch: authorization.signer_epoch, expiresAt: authorization.expires_at };
+    if (check.waits === "check") {
+      // The covering checkpoint's number is null while none is due; any other value that is not a whole number is a bad answer.
+      if (check.checkpoint_seq !== null && !(Number.isSafeInteger(check.checkpoint_seq) && check.checkpoint_seq >= 0)) continue;
+      checks[nonce] = { atMs: null, routine: true, held: heldNow };
+      continue;
+    }
     if (check.waits !== "installation") {
       if (check.waits !== undefined && check.waits !== "boundary") continue;
       if (!Number.isSafeInteger(check.boundary_ms) || check.boundary_ms <= 0) continue;
       atMs = check.boundary_ms;
     }
-    const authorization = held.find((w) => w.nonce === nonce)?.authorization;
-    checks[nonce] = { atMs, held: authorization === undefined ? null : { epoch: authorization.signer_epoch, expiresAt: authorization.expires_at } };
+    checks[nonce] = { atMs, held: heldNow };
   }
   return checks;
 }
